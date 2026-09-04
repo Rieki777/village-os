@@ -49,9 +49,15 @@ function standInPool() {
         refs.delete(String(params[0]));
         return [{}];
       }
-      // Loud rather than quiet. A new query in the erasure path should break
-      // this stand-in and make somebody look, instead of silently returning
-      // nothing and turning a real behaviour into a passing test.
+      // Loud rather than quiet, and NARROWER THAN IT LOOKS. This throws on any
+      // query THESE TWO FUNCTIONS make that it does not model, so a new one in
+      // forgetMemberEverywhere or exportMemberEverywhere breaks here and makes
+      // somebody look. It guards nothing in the local sweep: this file never
+      // calls anonymizeMember, so the roughly thirty queries in
+      // server/lib/erasure.ts are covered by loop.e2e against a real database
+      // and by nothing here. Those are different properties. A real database
+      // says whether a query is CORRECT; this says whether anybody NOTICED a
+      // new one went in, and only the first half of the erasure path has both.
       throw new Error(`the stand-in pool was asked something it does not model: ${sql}`);
     },
   } as any;
