@@ -1,5 +1,7 @@
 # game-amora: architecture of the shipped system
 
+<!-- describes: server/index.ts server/lib/ server/routes/ shared/modules.ts shared/capabilities.ts shared/gameVariables.ts drizzle/ -->
+
 > The canonical description of what is actually running. Where an older
 > planning document disagrees with this file, this file wins; where this file
 > disagrees with the code, the code wins and this file has a bug: fix it.

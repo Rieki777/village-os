@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+<!-- describes: .github/workflows/ci.yml scripts/ server/lib/ledger.ts server/lib/economy.ts shared/modules.ts server/db/migrate.ts -->
+
 **game-amora** is a white-label village-coordination platform: React 19 + Vite + wouter client
 in `client/src`, one large Express server (`server/index.ts` + `server/lib/*`), MySQL with
 hand-written SQL migrations in `drizzle/` that a custom runner applies **at boot, fail-loud**
