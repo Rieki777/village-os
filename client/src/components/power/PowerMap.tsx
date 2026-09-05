@@ -117,6 +117,7 @@ export default function PowerMap({
   pulseSeatId,
   lenses,
   svgRef,
+  maxDepth,
 }: {
   data: PowerData;
   layout: NestedLayout;
@@ -134,6 +135,16 @@ export default function PowerMap({
   lenses?: ReactNode;
   /** The page exports SVG/PNG from this element (spec 14). */
   svgRef?: RefObject<SVGSVGElement | null>;
+  /*
+   * ONE LEVEL AT A TIME, WHICH IS WHAT A PHONE HAS ROOM FOR.
+   *
+   * Seventeen circles and their nested children in a 375px square is a
+   * picture nobody can use: at that size a grandchild circle is a few pixels
+   * across and its seats are smaller than a fingertip. Undefined draws every
+   * depth, which is what a desktop wants; a number draws that depth and
+   * above, and the breadcrumb is the way down.
+   */
+  maxDepth?: number;
 }) {
   const byId = useMemo(() => new Map(data.circles.map((c) => [c.id, c])), [data.circles]);
   const posById = useMemo(() => new Map(layout.circles.map((p) => [p.id, p])), [layout]);
@@ -253,6 +264,11 @@ export default function PowerMap({
   // The CONTAINER's aspect, measured, not the layout's (which is 1 by
   // construction). See useMeasuredBox above for what this was costing.
   const [svgEl, setSvgEl] = useState<SVGSVGElement | null>(null);
+  /* HOVER, SO A READER CAN SURVEY WITHOUT NAVIGATING.
+     Reading the shape of the village meant stepping into every circle and
+     back out again, which loses your place each time. Pointer only: a touch
+     device gets the tap, and hover would fire on the way to it. */
+  const [hoverId, setHoverId] = useState<string | null>(null);
   const box = useMeasuredBox(svgEl);
   const aspect = box.w > 0 && box.h > 0 ? box.h / box.w : layout.height / layout.width;
   /*
@@ -344,7 +360,9 @@ export default function PowerMap({
           })}
 
         {/* The circles, every shape, one loop. */}
-        {layout.circles.map((pos) => {
+        {layout.circles
+          .filter((pos) => maxDepth === undefined || pos.depth <= maxDepth)
+          .map((pos) => {
           const c = byId.get(pos.id);
           const forming = c?.status === "forming";
           const tone = toneOf(c);
@@ -354,6 +372,7 @@ export default function PowerMap({
           const dimForFilter = filtersOn && !circleAnyPass(pos.id) ? 0.2 : 1;
           const opacity = Math.min(dimForFocus, dimForFilter) * (forming ? 0.6 : 1);
           const isFocus = pos.id === focusId;
+          const hovered = hoverId === pos.id && interactive && !isFocus;
           const wrapped = wrapLabel(c?.name ?? pos.id, pos.r, pos.depth);
           // The world-unit size the layout asked for, converted to something
           // legible on THIS screen at THIS zoom. See fitLabelToScreen.
@@ -375,12 +394,14 @@ export default function PowerMap({
                 animate={{ cx: pos.x, cy: pos.y, r: pos.r }}
                 initial={false}
                 transition={morph}
-                style={{ fill: tone, fillOpacity: isFocus ? 0.16 : 0.1 }}
+                style={{ fill: tone, fillOpacity: isFocus ? 0.16 : hovered ? 0.2 : 0.1 }}
                 stroke={tone}
-                strokeOpacity={isFocus ? 0.9 : 0.45}
-                strokeWidth={isFocus ? 3 : 2}
+                strokeOpacity={isFocus ? 0.9 : hovered ? 0.85 : 0.45}
+                strokeWidth={isFocus ? 3 : hovered ? 3 : 2}
                 className={interactive ? "cursor-pointer focus:outline-none focus-visible:stroke-[4]" : ""}
                 pointerEvents={interactive ? undefined : "none"}
+                onMouseEnter={() => interactive && setHoverId(pos.id)}
+                onMouseLeave={() => setHoverId((h) => (h === pos.id ? null : h))}
                 role="button"
                 tabIndex={interactive ? 0 : -1}
                 aria-label={`${c?.name ?? pos.id}${forming ? ", still forming" : ""}${
@@ -405,7 +426,24 @@ export default function PowerMap({
                   }
                 }}
               />
-              {showLabel(pos.id) && (
+              {/* NESTING READS AS DEPTH, NOT AS ANOTHER OUTLINE.
+                  Three levels of flat rings collapse into noise: every edge
+                  is the same weight, so the eye cannot tell "inside" from
+                  "next to". A faint rim just within the edge gives the disc
+                  a lip, which is enough for containment to read at a glance
+                  and cheap enough that it costs no filter. */}
+              <circle
+                cx={pos.x}
+                cy={pos.y}
+                r={Math.max(0, pos.r - 1.5)}
+                fill="none"
+                stroke={tone}
+                strokeOpacity={0.16}
+                strokeWidth={3}
+                pointerEvents="none"
+              />
+
+              {(showLabel(pos.id) || hovered) && (
                 <motion.text
                   animate={{ x: pos.x, y: labelTop }}
                   initial={false}
@@ -450,6 +488,34 @@ export default function PowerMap({
                   }}
                 >
                   forming
+                </text>
+              )}
+
+              {/* WHAT HOVER ACTUALLY ANSWERS: is this the circle I want.
+                  Name plus the two counts a reader weighs before deciding to
+                  step in, so surveying the village no longer means entering
+                  and leaving every circle in turn. Pointer only, and never on
+                  the circle you are already inside. */}
+              {hovered && (
+                <text
+                  x={pos.x}
+                  y={labelTop + (label.lines.length - (hasChildren ? 0 : 1)) * label.lineHeight + (forming ? 30 : 16)}
+                  textAnchor="middle"
+                  className="fill-muted-foreground pointer-events-none"
+                  style={{
+                    fontSize: captionSize(label.fontSize, pxPerWorld),
+                    paintOrder: "stroke" as const,
+                    stroke: "var(--background)",
+                    strokeWidth: 3,
+                    strokeLinejoin: "round" as const,
+                  }}
+                >
+                  {(() => {
+                    const mine = data.roles.filter((r) => r.circleId === pos.id);
+                    const places = mine.reduce((n, r) => n + r.seats, 0);
+                    const openN = places - mine.reduce((n, r) => n + r.holderCount, 0);
+                    return `${mine.length} role${mine.length === 1 ? "" : "s"}${openN > 0 ? `, ${openN} open` : ""}`;
+                  })()}
                 </text>
               )}
 

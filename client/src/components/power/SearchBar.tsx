@@ -51,17 +51,51 @@ export function searchHits(data: Pick<PowerData, "circles" | "roles">, query: st
       });
     }
   }
+  // The circle each seat sits in, so a result can SAY where it lives.
+  const circleName = new Map(
+    (data.circles as PowerCircle[]).map((c) => [c.id, c.name] as const),
+  );
+
   for (const s of data.roles as PowerSeat[]) {
-    const body = [s.description ?? ""].join(" ");
+    /*
+     * SEARCH THE DOMAIN, NOT ONLY THE AIM.
+     *
+     * A reader types the thing they want done ("water", "money", "the
+     * kitchen"). Half the time that word is in the seat's DOMAIN, which is
+     * the field that says what the seat decides on, and this only ever read
+     * the aim. So the seat that owns the question was findable exactly when
+     * its aim happened to repeat its domain.
+     */
+    const body = [s.description ?? "", s.domain ?? "", ...(s.accountabilities ?? [])].join(" ");
     const score = scoreText(s.name, body);
     if (score) {
+      /*
+       * A RESULT THAT ANSWERS THE QUESTION IT WAS ASKED.
+       *
+       * This line used to read "3 of 4 held", which is true and is not what
+       * anybody typed a search to find out. The question behind the query is
+       * "who do I talk to about this", so the answer names the person where
+       * we are allowed to, and the circle always, because "Kitchen Lead, held
+       * by Ana, in the Gathering Circle" ends the search and a fraction does
+       * not.
+       *
+       * `holders` arrives empty for a reader without `map.viewPeople`, so the
+       * name half is absent rather than wrong, and the count carries it.
+       */
+      const named = s.holders.map((h) => h.name).filter(Boolean) as string[];
+      const where = s.circleId ? circleName.get(s.circleId) : null;
+      const who = s.vacant
+        ? "open call"
+        : named.length
+          ? `held by ${named.slice(0, 2).join(" and ")}${named.length > 2 ? ` and ${named.length - 2} more` : ""}`
+          : `${s.holderCount} of ${s.seats} held`;
       scored.push({
         score,
         hit: {
           kind: "role",
           id: s.id,
           title: s.name,
-          line: s.vacant ? "open call" : `${s.holderCount} of ${s.seats} held`,
+          line: where ? `${who}, in ${where}` : who,
           circleId: s.circleId,
         },
       });

@@ -10143,6 +10143,11 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
           id: r.id,
           name: r.name,
           description: r.aim ?? "",
+          // A role is its AIM (above, as `description`) and its DOMAIN. These
+          // were read every request and dropped here, so the seat card showed
+          // what a seat was for and never what it decides on.
+          domain: r.domain ?? null,
+          accountabilities: r.accountabilities ?? [],
           circleId: r.circleId ?? null,
           seats: r.seats,
           minStage: null,

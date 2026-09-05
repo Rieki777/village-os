@@ -30,6 +30,7 @@ import Legend from "@/components/power/Legend";
 import SearchBar, { type SearchHit } from "@/components/power/SearchBar";
 import FilterChips from "@/components/power/FilterChips";
 import HolderCard from "@/components/power/HolderCard";
+import CircleCard from "@/components/power/CircleCard";
 import ShapePicker from "@/components/power/ShapePicker";
 import CurrencyPicker from "@/components/power/CurrencyPicker";
 import DecideLens, { DecideKey } from "@/components/power/DecideLens";
@@ -191,6 +192,29 @@ export default function VillageMap() {
   const selectedCircle = selectedSeat?.circleId
     ? (data?.circles?.find((c) => c.id === selectedSeat.circleId) ?? null)
     : null;
+  /*
+   * THE CIRCLE YOU ARE STANDING IN.
+   *
+   * Stepping into a circle changed the picture and nothing else: the panel
+   * went on showing the village summary until a SEAT was tapped, so the
+   * question a reader arrives with (what does this circle do, who do I bring
+   * what to) had no surface anywhere. This is the focus, read as a circle,
+   * and it drives the inspector on both the standing panel and the sheet.
+   */
+  const focusedCircle = focusId ? (data?.circles?.find((c) => c.id === focusId) ?? null) : null;
+
+  /*
+   * HOW DEEP THE PHONE DRAWS.
+   *
+   * The village root is depth -1, so this is 0 there: only the top-level
+   * circles. Step into one and it becomes 1, which is that circle's
+   * children. Undefined on desktop, where there is room for the whole nest.
+   *
+   * Seventeen circles and their children in a 375px square is a picture
+   * nobody can use: a grandchild is a few pixels across and its seats are
+   * smaller than a fingertip.
+   */
+  const phoneMaxDepth = ((focusId ? layout?.circles.find((c) => c.id === focusId)?.depth : undefined) ?? -1) + 1;
 
   const mayDeclareVillage = !!data?.viewer.mayDeclare?.includes("village");
 
@@ -469,6 +493,13 @@ export default function VillageMap() {
                         </div>
                         <HolderCard seat={selectedSeat} circle={selectedCircle} data={data} onPickPerson={pickPerson} />
                       </div>
+                    ) : focusedCircle ? (
+                      <CircleCard
+                        circle={focusedCircle}
+                        data={data}
+                        onSelectSeat={(id) => setSelected({ kind: "role", id })}
+                        onOut={() => focusTo((focusedCircle.parentCircleId as string | null) ?? null)}
+                      />
                     ) : (
                       <VillageSummary
                         data={data}
@@ -512,6 +543,11 @@ export default function VillageMap() {
                       linesOn={linesOn}
                       pulseSeatId={pulseSeatId}
                       lenses={lensNodes}
+                      // The phone draws one level at a time; the breadcrumb
+                      // is the way down, and the accordion below carries the
+                      // rest. Seventeen circles and their children in a
+                      // 375px square is a picture nobody can use.
+                      maxDepth={phoneMaxDepth}
                     />
                   </div>
                 )}
@@ -521,11 +557,23 @@ export default function VillageMap() {
                 <CircleAccordion data={data} filters={filters} viewerUserId={viewerUserId} onSelect={setSelected} />
               </div>
 
-              {/* The card as a bottom sheet wherever the standing panel is not. */}
-              {selectedSeat && (
+              {/* The card as a bottom sheet wherever the standing panel is
+                  not. A tapped SEAT wins; otherwise the circle you stepped
+                  into gets the sheet, so a phone reaches the inspector the
+                  same way a desktop reaches the panel. */}
+              {(selectedSeat || focusedCircle) && (
                 <div className="md:hidden">
-                  <SeatSheet onClose={() => setSelected(null)}>
-                    <HolderCard seat={selectedSeat} circle={selectedCircle} data={data} onPickPerson={pickPerson} />
+                  <SeatSheet onClose={() => (selectedSeat ? setSelected(null) : focusTo(null))}>
+                    {selectedSeat ? (
+                      <HolderCard seat={selectedSeat} circle={selectedCircle} data={data} onPickPerson={pickPerson} />
+                    ) : (
+                      <CircleCard
+                        circle={focusedCircle!}
+                        data={data}
+                        onSelectSeat={(id) => setSelected({ kind: "role", id })}
+                        onOut={() => focusTo((focusedCircle!.parentCircleId as string | null) ?? null)}
+                      />
+                    )}
                   </SeatSheet>
                 </div>
               )}
