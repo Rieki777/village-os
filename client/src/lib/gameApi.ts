@@ -66,6 +66,8 @@ export interface PublicGameConfig {
      *  `useCatalyst` below and `shared/gameConfig.ts`. Absent on a server too
      *  old to serve it, which is why every reader goes through the hook. */
     catalystName?: string;
+    roleName?: string;
+    seatName?: string;
     location: string;
     adminPath: string;
     /** Blank = the village has no outside site; render no link. */
@@ -208,6 +210,8 @@ export function useVillageLinks(): {
  * `?? "Gratitude"` on the currency name.
  */
 export const CATALYST_FALLBACK = "Catalyst";
+export const ROLE_FALLBACK = "Role";
+export const SEAT_FALLBACK = "Seat";
 
 /**
  * "a" or "an" for a word a founder typed, by its first letter.
@@ -254,13 +258,41 @@ export interface CatalystLabel {
   plural: string;
 }
 
+/**
+ * One renameable word, with its article and its plural worked out once.
+ *
+ * `CatalystLabel` was always this shape and only ever had one caller. Three
+ * villages' worth of words now ride it (whoever runs the place, the position
+ * somebody holds, one person's occupancy of that position), so the derivation
+ * lives here and the hooks below are three lines each. Copying the article and
+ * plural logic per word is how two of them end up disagreeing about "an".
+ */
+export function villageWord(typed: unknown, fallback: string): CatalystLabel {
+  const name = String(typed ?? "").trim() || fallback;
+  const a = articleFor(name);
+  return { name, a, aName: `${a} ${name}`, aNameCap: a === "an" ? `An ${name}` : `A ${name}`, plural: pluralFor(name) };
+}
+
 /** The label, live. Reads the platform default until the config arrives. */
 export function useCatalyst(): CatalystLabel {
-  const config = useGameConfig();
-  const name = String(config?.project?.catalystName ?? "").trim() || CATALYST_FALLBACK;
-  const a = articleFor(name);
-  const aName = `${a} ${name}`;
-  return { name, a, aName, aNameCap: a === "an" ? `An ${name}` : `A ${name}`, plural: pluralFor(name) };
+  return villageWord(useGameConfig()?.project?.catalystName, CATALYST_FALLBACK);
+}
+
+/**
+ * What this village calls a POSITION somebody can hold. Default "Role".
+ *
+ * Separate from `useSeat` on purpose, and the separation is the point: a role
+ * exists whether or not anybody holds it, a seat is one person holding it for
+ * one season, and an org page that cannot say both cannot say who holds what
+ * since when. See shared/gameConfig.ts for the full argument.
+ */
+export function useRoleWord(): CatalystLabel {
+  return villageWord(useGameConfig()?.project?.roleName, ROLE_FALLBACK);
+}
+
+/** What this village calls one person's OCCUPANCY of a role. Default "Seat". */
+export function useSeatWord(): CatalystLabel {
+  return villageWord(useGameConfig()?.project?.seatName, SEAT_FALLBACK);
 }
 
 /** Live (brand-overlaid) hero image URLs, empty until loaded — callers fall back

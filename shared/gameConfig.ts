@@ -134,6 +134,28 @@ export interface GameConfig {
      * plane for behaviour, and nothing about this changes any behaviour.
      */
     catalystName: string;
+    /*
+     * THE POSITION, AND SOMEBODY'S OCCUPANCY OF IT. Two words, on purpose.
+     *
+     * A ROLE is the thing itself: water stewardship, the archivist, a seat on
+     * the land trust. It exists whether or not anybody holds it, it carries
+     * capabilities, and `org_roles` is its table.
+     *
+     * A SEAT is one person holding one role for one season. Mira, water
+     * steward, since June. `org_role_assignments` is its table, and it is what
+     * ends when a season lapses while the role goes on existing.
+     *
+     * A village that collapses these into one word loses the ability to say
+     * who holds what and since when, which is most of what an org page is for.
+     * So both are renameable and NEITHER inherits the other's word. A village
+     * calling roles "hats" and seats "terms" reads correctly everywhere.
+     *
+     * MEMBER-FACING ONLY. `roleId`, `seatId`, `roleCapabilities` and every
+     * query keep their names; renaming either of these changes no behaviour
+     * and no row, exactly like `catalystName` beside it.
+     */
+    roleName: string;
+    seatName: string;
     location: string;
     /** ISO 3166 alpha-2 country the project lives in (0083, P8). Blank means
      *  unsaid, and money display falls back to the universal CHF default. */
@@ -291,6 +313,12 @@ export const GAME_CONFIG: GameConfig = {
     // A village renames it in Admin and every member-facing sentence that
     // names an admin follows.
     catalystName: "Catalyst",
+    // Platform words, belonging to no village, so both are NEUTRAL to
+    // scripts/check-identity-keys.mjs rather than pending. Singular and
+    // capitalised: client/src/lib/gameApi.ts derives the article and the
+    // plural from one heuristic, so a village types the word once.
+    roleName: "Role",
+    seatName: "Seat",
     // Empty on purpose: there is no neutral location. A village sets its own
     // in Admin, Make This Yours. Graduated out of the identity guard's pending
     // list on 2026-09-03, AFTER confirming the live village stores its own

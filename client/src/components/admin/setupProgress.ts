@@ -116,6 +116,10 @@ export const IDENTITY_WIZARD_FIELDS = [
   ["tagline", "Tagline"],
   ["memberName", "What a member is called"],
   ["catalystName", "What whoever runs this village is called"],
+  // Both singular, because gameApi.ts derives the plural and the article. A
+  // village types "Hat" and reads "Hats", "a Hat", "A Hat" everywhere.
+  ["roleName", "What a position somebody can hold is called"],
+  ["seatName", "What one person's turn holding it is called"],
   ["location", "Location"],
 ] as const;
 
