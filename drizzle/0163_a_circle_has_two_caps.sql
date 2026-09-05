@@ -1,0 +1,32 @@
+-- 0163: a circle budget carries a per-cycle cap beside its per-season one.
+--
+-- 0084 gave a circle one envelope and said in its own header that a budget is
+-- a declared envelope and never a balance. That is still true of this column:
+-- nothing decrements either figure, and both are compared against a SUM taken
+-- over token_ledger at the instant somebody asks. server/lib/circleBurn.ts is
+-- the meter and it stores nothing.
+--
+-- WHY TWO CAPS RATHER THAN ONE LARGER ONE. A circle holds a right to ISSUE,
+-- and the right is bounded twice on purpose: once over a cycle and once over
+-- a season. Either can run out first, and which one runs out first is the
+-- whole information. A circle can burn a season's worth inside one busy
+-- cycle, and a circle pacing itself perfectly across a season can still be
+-- stopped in a single week. One cap cannot say both of those things.
+--
+-- amount_minor keeps its meaning exactly: the SEASON cap. The new column is
+-- the CYCLE cap.
+--
+-- NULLABLE, AND NULL MEANS NO CYCLE CAP. This is the expand-only shape the
+-- house rules require: the previous release never names this column, so a
+-- rollback over an already-migrated database reads and writes the table
+-- unchanged, and every village that has not set a cycle cap behaves exactly
+-- as it did before this file ran. NULL is deliberately not zero. A cap of
+-- zero admits nothing at all, which is the ledger's own rule ("Caps fail
+-- closed: 0 means zero, never unlimited"), so a DEFAULT 0 here would silence
+-- every circle in every village the moment this migration applied.
+--
+-- bigint to match amount_minor, which 0084 chose so that a currency with
+-- three decimals is not a rounding bug waiting to happen.
+
+ALTER TABLE `circle_budgets`
+  ADD COLUMN `cycle_amount_minor` bigint NULL AFTER `amount_minor`;
