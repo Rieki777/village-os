@@ -95,11 +95,30 @@ export const KIND_LABELS: Record<string, string> = {
  * floor, and the growth strip refuses to describe the impossible relation
  * (delivered running ahead of pooled) as a healthy one.
  *
- * WHEN THE HUB LANDS ITS FIX, flip this one constant to false and the language
- * goes with it. That is the whole undo, and it is why the language reads off a
+ * THE HUB LANDED ITS FIX ON 2026-09-05, so this is false and the language is
+ * gone with it. That was the whole undo, and it is why the language read off a
  * constant instead of being typed into six places.
+ *
+ * Their commit b835c28: the pledged total now counts accepted, fulfilled AND
+ * thanked, so delivered value stays in the number this page divides, and it no
+ * longer falls when a village succeeds. They fixed it on the CALLERS and not on
+ * the columns, deliberately, so nothing about the wire changed for us and this
+ * file's reader needed no edit. They also found a second stale-number path
+ * while chasing the deferral: their expiry sweep marked a claim expired and let
+ * its value go on counting as pledged indefinitely.
+ *
+ * WHAT WE ARE ASSERTING, precisely, because they were careful to hand us the
+ * weaker true claim rather than the stronger convenient one. Their CI ran the
+ * suite against real MySQL and their deploy succeeded. Neither of us has read
+ * the rendered number off a live campaign since. The residual after that is
+ * OURS and not theirs: this bridge caches for ninety seconds and a sync job
+ * writes a snapshot every ten minutes, so a floored figure can survive here for
+ * one sync window after their fix went live. It is self-healing and it only
+ * ever reads LOW, which is why flipping now is safe and leaving the hedge up
+ * would not have been: a qualifier that has stopped being true is the same
+ * stale sentence this build kept finding, just one we wrote ourselves.
  */
-export const HUB_PLEDGED_TOTAL_IS_A_FLOOR = true;
+export const HUB_PLEDGED_TOTAL_IS_A_FLOOR = false;
 
 /** The plain mechanics behind the word "pooled", on any surface. */
 export const PLEDGED_FLOOR_TIP = HUB_PLEDGED_TOTAL_IS_A_FLOOR
@@ -456,11 +475,25 @@ export function GrowthStrip({ percentDelivered, percentPledged }: { percentDeliv
         * The cause is the hub's accepted-only pledged sum
         * (HUB_PLEDGED_TOTAL_IS_A_FLOOR above), and the honest thing to print is
         * the contradiction, never an arithmetic patch over it.
+        *
+        * THIS BRANCH IS NOT GATED ON THAT CONSTANT AND MUST NOT BE. The hub
+        * fixed the cause we knew about on 2026-09-05, and the impossible pair
+        * is still impossible: if it appears again the reason will be a new one.
+        * What changed is the SENTENCE. It used to name the hub's defect and
+        * promise a fix, which was true then and would be a confident wrong
+        * answer now. It says what is observable instead, that one of the two
+        * figures is wrong and this page does not know which, because the page
+        * genuinely does not.
+        *
+        * It was also the one surface the flip did not reach: six read the
+        * constant and this one carried the word on its own, so removing the
+        * hedge everywhere else would have left it here alone, unqualified and
+        * pointing at a repair that had already happened.
         */}
       <p className="cp-growth-note">
         The ring holds the promise; the walls are what has arrived.
         {percentDelivered > percentPledged
-          ? ` More is standing than the pool records as pledged: ${percentPledged}% pooled against ${percentDelivered}% delivered. Both cannot be true, because delivered work was pledged first. The pooled figure is a floor and the hub is fixing it.`
+          ? ` More is standing than the pool records as pledged: ${percentPledged}% pooled against ${percentDelivered}% delivered. Both cannot be true, because delivered work was pledged first. One of the two figures is wrong and this page does not know which.`
           : percentPledged > percentDelivered
             ? ` Right now the ring runs ahead: ${percentPledged}% pooled, ${percentDelivered}% delivered and standing.`
             : ` Delivered work is keeping pace with the pool: ${percentDelivered}% standing.`}

@@ -57,31 +57,35 @@ const meter = (wanted: number, claimed: number, delivered: number) => {
 
 // ── Defect 1: the ring is a floor and says so ────────────────────────────────
 
-describe("the pledged figure is never presented as a total", () => {
+describe("the pledged figure carries no qualifier, now the hub counts delivered", () => {
   it("names the floor inside the ring and in what a screen reader hears", () => {
     const { container } = render(
       <GoldRing percentPledged={19} percentDelivered={4} label="Gathering the pool" />,
     );
     const texts = Array.from(container.querySelectorAll("text")).map((t) => t.textContent);
     expect(texts).toContain("19%");
-    expect(texts).toContain("pooled or more");
+    expect(texts).toContain("pooled");
+    expect(texts).not.toContain("pooled or more");
     expect(container.querySelector("svg")!.getAttribute("aria-label")).toBe(
-      "at least 19 percent pledged, 4 percent delivered",
+      "19 percent pledged, 4 percent delivered",
     );
   });
 
   it("names it on the list page's small ring too", () => {
     const { container } = render(<MiniRing percent={19} />);
-    expect(container.querySelector("svg")!.getAttribute("aria-label")).toBe("at least 19 percent pooled");
+    expect(container.querySelector("svg")!.getAttribute("aria-label")).toBe("19 percent pooled");
   });
 
   it("qualifies the money line both pages print", () => {
-    expect(pooledLine(20700, 107400, "USD")).toBe("at least $20,700 of $107,400");
+    expect(pooledLine(20700, 107400, "USD")).toBe("$20,700 of $107,400");
   });
 
-  it("explains the mechanics in the plaque and in the plain paragraph", () => {
-    expect(RING_TIP).toContain("floor");
-    expect(PLEDGED_FLOOR_PARAGRAPH).toContain("floor");
+  it("drops the floor explanation entirely, plaque and paragraph both", () => {
+    // The paragraph existed only to explain the hedge, so it goes to null and
+    // the page renders nothing in its place. The plaque keeps explaining what
+    // pooled MEANS, which was always true and is not about the hub defect.
+    expect(RING_TIP).not.toContain("floor");
+    expect(PLEDGED_FLOOR_PARAGRAPH).toBeNull();
   });
 
   /**
@@ -90,7 +94,11 @@ describe("the pledged figure is never presented as a total", () => {
    * that a one-line change instead of a hunt.
    */
   it("reads every one of those sentences off one constant", () => {
-    expect(HUB_PLEDGED_TOTAL_IS_A_FLOOR).toBe(true);
+    // Was `true` while the hub's pledged total dropped delivered value. Their
+    // fix landed 2026-09-05 (b835c28) and this is the whole undo: the sentences
+    // below assert the qualifiers are GONE, and they are the reason flipping
+    // one constant could not quietly leave one of six surfaces still hedging.
+    expect(HUB_PLEDGED_TOTAL_IS_A_FLOOR).toBe(false);
   });
 
   /**

@@ -106,16 +106,23 @@ describe("the campaign page, given a need the hub delivered twice", () => {
    * confirmed. The page prints the hub's own number and qualifies it. Nothing
    * here recomputes it.
    */
-  it("prints the hub's pooled figure and names it as a floor", async () => {
+  it("prints the hub's pooled figure plainly, with no floor language left", async () => {
     const { container } = render(<CrowdpoolCampaign />);
     await waitFor(() => expect(screen.getByText("Harmony Valley")).toBeTruthy());
-    const said = container.textContent ?? "";
-    expect(said).toContain("at least $5,000 of $100,000");
-    expect(said).toContain("what this page shows is a floor");
+    // WITHOUT THE STYLESHEET. `container.textContent` concatenates the contents
+    // of any `style` element too, so a bare word ban over it is testing the CSS
+    // as well as the copy, and this one failed on a rule name no member reads.
+    const chrome = container.cloneNode(true) as HTMLElement;
+    chrome.querySelectorAll("style").forEach((s) => s.remove());
+    const said = chrome.textContent ?? "";
+    expect(said).toContain("$5,000 of $100,000");
+    expect(said).not.toContain("at least $5,000");
+    expect(said).not.toContain("floor");
     // The ring still draws the hub's own percentage, uncorrected.
     const ring = Array.from(container.querySelectorAll("svg text")).map((t) => t.textContent);
     expect(ring).toContain("5%");
-    expect(ring).toContain("pooled or more");
+    expect(ring).toContain("pooled");
+    expect(ring).not.toContain("pooled or more");
   });
 
   it("refuses to narrate 40 percent delivered against 5 percent pooled as health", async () => {
