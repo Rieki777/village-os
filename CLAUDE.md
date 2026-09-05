@@ -10,9 +10,8 @@ code carries no village's brand — that rule is enforced mechanically (see Gate
 
 1. `docs/ARCHITECTURE.md` — the system map. Read it before touching anything.
 2. `docs/modules/` — the contract for whichever module you are changing. Filenames do not
-   follow module ids: map → `village-map.md`, exchange → `internal-exchange.md`, feed →
-   `gratitude-feed.md`, library → `material-library.md`, health → `health-dashboard.md`,
-   tools → `tools-hub.md`; some modules have no doc.
+   follow module ids; `MODULE_DOCS` in `server/lib/knowledge.ts` is the mapping, in both
+   directions, and some modules have no doc.
 3. `docs/FORK_RUNBOOK.md` — provisioning, env vars, seeds. **Any session that adds an env var,
    seed, or provisioning step appends one line there, same session.**
 4. `docs/FEEDBACK_HUB_CONTRACT.md` — only when touching the feedback relay.
@@ -29,33 +28,12 @@ in `.claude/skills/`.
 
 ## Gates — all of these before calling anything done
 
-```
-pnpm check                             # tsc --noEmit
-pnpm build                             # vite client + esbuild server -> dist/
-pnpm test:full                         # vitest run, and REFUSES to pass without a database
-node scripts/check-e2e-ports.mjs       # no two e2e suites can pick the same port
-node scripts/check-brand-refs.mjs      # brand ratchet (read $?, its last line is blank on failure)
-node scripts/check-voice.mjs           # house writing rules on shipped copy
-node scripts/check-hyphen-dash.mjs     # no em or en dashes anywhere (hyphens are fine)
-node scripts/check-auth-fetch.mjs      # a client call to a route that refuses strangers carries a token
-node scripts/check-admin-reach.mjs     # every admin WRITE route has a caller in the browser
-node scripts/check-save-honesty.mjs    # a control that says a change landed held the Response
-node scripts/check-repo-payloads.mjs   # every repo insert names the columns its table requires
-node scripts/check-mirror-annotations.mjs  # a hand-kept map of server values is keyed by the union
-node scripts/check-upload-strip.mjs    # nothing reaches the uploads volume without the strip
-node scripts/check-doc-links.mjs       # every path the builder docs name resolves on disk
-node scripts/check-token-doc.mjs       # docs/TOKENS.md is GENERATED; regenerate with generate-token-doc.mjs
-node scripts/check-route-reachability.mjs  # two ways in to every route (--table prints the doors)
-node scripts/check-map-routes.mjs      # the living map's SITE_PAGES allowlist still matches the router
-node scripts/check-migration-numbers.mjs   # no two migrations share a number; 9000+ is the village band
-node scripts/check-migration-compat.mjs    # a migration leaves the PREVIOUS release able to run
-node scripts/check-artifact-budget.mjs # the living map's disk and wire size
-node scripts/check-image-budget.mjs    # shipped images: WebP, 400 KB each, falling total
-node scripts/check-dist-budget.mjs     # main JS and total dist/public, measured the way CI measures
-```
+The authoritative list is printed straight from `.github/workflows/ci.yml`, in the order CI runs
+them, so it is right on the day you run it:
 
-`node scripts/module-facts.mjs` prints the gate list above straight from `.github/workflows/ci.yml`,
-so it is right on the day you run it. Prefer it to this block when the two disagree.
+```
+node scripts/module-facts.mjs
+```
 
 ### Running the suite honestly
 
@@ -71,7 +49,7 @@ so it is right on the day you run it. Prefer it to this block when the two disag
   - `pnpm test:full` (REQUIRE_TEST_DB=1) is still the stricter form and still what to
     run before a "green" claim: it also fails when the variable is SET and no schema
     was provisioned, which is a database that could not be reached.
-- **Build first.** The 41 e2e suites boot `dist/index.js`. A run whose bundle is older than
+- **Build first.** The e2e suites boot `dist/index.js`. A run whose bundle is older than
   the source it was built from is now refused by name (`server/db/distFreshness.ts`), so a
   green result cannot be about yesterday's code.
 - **Never read an exit code through a pipe.** `cmd | tail` reports tail's status, and tail
@@ -80,7 +58,7 @@ so it is right on the day you run it. Prefer it to this block when the two disag
 - **`pnpm test:unit`** excludes the e2e files. It is about a quarter of the wall clock and
   proves correspondingly less; it is an inner loop, not a gate.
 - **What it costs:** roughly 35 to 50 minutes locally depending on how many lanes share the
-  database, against about 7 in CI. The 41 e2e files are two thirds of it.
+  database, against about 7 in CI. The e2e files are two thirds of it.
 
 ### If you are one of several sessions: do NOT run the full suite
 
@@ -126,7 +104,7 @@ in 2 to 3 seconds having started nothing, and an npm outage failed one dependenc
 where everything else passed. And a cancelled run is not a red, since `ci.yml` cancels superseded
 runs per ref. Full detail, with the traps, in `SEASON2_FLEET_LEDGER.md` section 27d.
 
-Two CI budgets cap the client: main JS **700 KB** and total `dist/public` **6600 KB**, both
+Two CI budgets cap the client: main JS and total `dist/public`, both
 measured after `pnpm build`. Read the numbers off `MAX_MAIN_JS_KB` and `MAX_TOTAL_DIST_KB` in
 `.github/workflows/ci.yml`, which is the authority: this block said 6 MB for as long as the
 ceiling was 6000, and stayed at 6 MB when `dbb4f9c` raised it to 6600 for the catalog art.
@@ -197,9 +175,11 @@ run the app. `dropLegacyWoffFallback` in `vite.config.ts` strips the fallback fr
 list before vite resolves the url, which is what stops the file being emitted. Member-uploaded
 display faces are a different path and still accept `.woff` (`server/index.ts` sniffs `wOFF`).
 
-The build marker is stamped from the git SHA by `scripts/build-server.mjs` — never hand-edit
-it. Only `BUILD_LABEL` in `server/index.ts` is human-written; the SHA is appended at build
-time so `/health` cannot report a build that isn't running.
+The build marker is composed WHOLE in `scripts/build-server.mjs`, from the commit date and the
+git SHA, and injected as `__BUILD_MARKER__`; `server/index.ts` only reads that define and falls
+back to `"dev"`. Neither half is hand-written, which is why `/health` cannot report a build that
+isn't running, and `server/buildMarker.test.ts` fails if a date literal or a `BUILD_LABEL`
+constant comes back.
 
 ## Loop-test rules
 
@@ -211,8 +191,8 @@ time so `/health` cannot report a build that isn't running.
   Without it they skip, and an unfiltered run fails on the way out (`ALLOW_NO_TEST_DB=1`
   accepts the smaller suite). See "Running the suite honestly" above.
 - **Provisioning migrates once per run, not once per suite.** Every file in `drizzle/` provisions
-  a schema, and that count only grows (it was 44 when this line was written and `ls drizzle/*.sql
-  | wc -l` is the only figure worth trusting);
+  a schema, and that count only grows (`ls drizzle/*.sql | wc -l` is the only figure worth
+  trusting);
   the harness migrates into a `village_tpl_<hash>` template and clones it, so each suite
   still gets a private schema for a fraction of the cost. Every run prints what it paid, and
   `pnpm measure:provisioning` prints the template build, the per-clone cost and the
