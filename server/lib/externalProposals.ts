@@ -56,6 +56,7 @@
 import { createHash, randomUUID } from "crypto";
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { recordEvent } from "./events";
+import { userIdForSubjectRef } from "./subjectRefs";
 
 /**
  * What a vendor may propose. A closed vocabulary, checked in code.
@@ -540,7 +541,7 @@ export async function landProposal(pool: Pool, input: LandInput): Promise<LandRe
       );
       return { ok: true, id: String(existing?.id ?? ""), outcome: "duplicate", superseded: 0, nulled };
     }
-    // EVERY SUBJECT, RESOLVED ONCE, INSIDE THE SAME TRANSACTION.
+    // EVERY SUBJECT, RESOLVED ONCE, THROUGH THE ONE RESOLVER.
     //
     // Resolution happens here and not at read time because a reference that
     // resolves today may name a member who leaves tomorrow, and the answer
@@ -548,13 +549,29 @@ export async function landProposal(pool: Pool, input: LandInput): Promise<LandRe
     // not resolve is stored with a NULL member_id, which is an honest
     // 'this village cannot attribute this record' rather than an absence
     // that reads as nobody being named.
+    //
+    // IT RESOLVES A SUBJECT REFERENCE, NOT A MEMBER ID. This used to read
+    // `SELECT id FROM users WHERE id = ?`, which could only ever match if a
+    // vendor sent our internal member id, and the whole point of the reference
+    // scheme is that they never have it. So it resolved nothing a real vendor
+    // would send, and every honest reference landed unattributed.
+    //
+    // `userIdForSubjectRef` returns null both for a malformed reference and
+    // for one that does not resolve, and this caller deliberately does not
+    // tell them apart: the difference between "never existed" and "existed
+    // and was erased" is itself information about a person.
+    //
+    // Read on the pool rather than on `conn` on purpose. `subject_refs` is not
+    // written by this transaction, so there is nothing here to read back, and
+    // going through the shared resolver is worth more than keeping one extra
+    // statement inside the transaction.
     for (let i = 0; i < subjects.length; i += 1) {
       const ref = clip(subjects[i], 200);
       if (ref === null) continue;
-      const [who] = await conn.query<RowDataPacket[]>("SELECT id FROM users WHERE id = ? LIMIT 1", [ref]);
+      const memberId = await userIdForSubjectRef(pool, ref);
       await conn.query( // module-review-ok: this file is the enumerable home of external_proposals and its subject rows, per 0140's note
         "INSERT IGNORE INTO external_proposal_subjects (id, proposal_id, subject_ref, member_id, position) VALUES (?,?,?,?,?)",
-        [`eps-${randomUUID().slice(0, 12)}`, id, ref, who.length ? String(who[0].id) : null, i],
+        [`eps-${randomUUID().slice(0, 12)}`, id, ref, memberId, i],
       );
     }
 
@@ -850,4 +867,53 @@ export async function unattributedSubjectCount(pool: Pool): Promise<number> {
     "SELECT COUNT(*) AS n FROM external_proposal_subjects WHERE member_id IS NULL",
   );
   return Number(r?.n) || 0;
+}
+
+/**
+ * Re-resolve subject references that were stored before this village could
+ * resolve them, and say exactly what changed.
+ *
+ * WHY IT IS AN ACTION AND NOT A MIGRATION. Rows landed before the reference
+ * scheme existed carry a NULL attribution, which was TRUE at the time: the
+ * village genuinely could not say who the record was about. Filling that in
+ * later is not rewriting history, because the archival fact is `subject_ref`
+ * and this only fills an operational index. But doing it silently, inside a
+ * migration, across rows a steward may already have decided on, is the half of
+ * the objection that was right. So it is deliberate, counted, and somebody
+ * presses it.
+ *
+ * WHAT IT DOES NOT DO. It never clears an attribution. A row that resolves to
+ * nobody today is left exactly as it is, because the reason may be that the
+ * member has since been erased and their reference retired, and rewriting that
+ * to NULL again would say the same thing while destroying the evidence that it
+ * once resolved. Only NULL to a member id, never the reverse.
+ *
+ * `apply: false` is the "before" number: it counts what WOULD change and
+ * writes nothing, so the same call answers "is this worth doing" and "what did
+ * it do".
+ */
+export async function reresolveSubjects(
+  pool: Pool,
+  opts: { apply: boolean },
+): Promise<{ resolvable: number; updated: number }> {
+  // ONE SET-BASED STATEMENT, not a lookup per row. The landing path resolves
+  // one reference at a time through `userIdForSubjectRef`, which is right
+  // there because it resolves exactly one and wants that function's malformed
+  // guard. Here the question is asked of every unattributed row at once, and a
+  // join answers it identically: a malformed reference simply fails to join,
+  // which is the same null the resolver would have returned.
+  //
+  // It also never clears an attribution. `WHERE member_id IS NULL` is the whole
+  // safety property: a row that resolves to nobody today is left as it is,
+  // because the reason may be that the member was erased and their reference
+  // retired, and rewriting that to NULL would say the same thing while
+  // destroying the evidence that it once resolved.
+  const sql = opts.apply
+    ? "UPDATE external_proposal_subjects eps JOIN subject_refs sr ON sr.ref = eps.subject_ref " +
+      "SET eps.member_id = sr.user_id WHERE eps.member_id IS NULL"
+    : "SELECT COUNT(*) AS n FROM external_proposal_subjects eps " +
+      "JOIN subject_refs sr ON sr.ref = eps.subject_ref WHERE eps.member_id IS NULL";
+  const [r] = await pool.query<any>(sql); // module-review-ok: external_proposal_subjects has no repo above it, and this file is that table's one enumerable home, per 0140's note
+  const n = opts.apply ? Number(r?.affectedRows) || 0 : Number(r?.[0]?.n) || 0;
+  return { resolvable: n, updated: opts.apply ? n : 0 };
 }

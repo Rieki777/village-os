@@ -76,6 +76,8 @@ import {
   proposalQueue,
   proposalsInBatch,
   reopenProposalsFor,
+  reresolveSubjects,
+  unattributedSubjectCount,
   recentDrops,
   type ExternalProposalRow,
 } from "../lib/externalProposals";
@@ -486,6 +488,43 @@ export function register(app: Express, deps: Deps): void {
    * routes as deliberately doorless: the org-draft flow has no admin surface,
    * so putting this one there would have made a fix nobody could reach.
    */
+  /**
+   * How many vendor records this village cannot attribute to anybody, and the
+   * action that fixes the ones it now can.
+   *
+   * A record landed before the subject-reference scheme existed carries a NULL
+   * attribution, which was true when it was written and is no longer. Until it
+   * is filled in, that record is invisible to its subject's export and to
+   * their erasure, which is the same harm as dropping a reference at the door,
+   * with a date instead of an array position deciding who it happens to.
+   *
+   * GET reports. POST changes something. The GET is the "before" number and
+   * runs the same resolution without writing, so a steward can see what the
+   * button would do before pressing it, and see the number move afterwards.
+   * A backfill nobody watched is the thing this was deliberately not made.
+   */
+  app.get("/api/review/subjects/unattributed", async (req, res) => {
+    if (!(await guardCapability(req, res, "intake.moderate"))) return;
+    const total = await unattributedSubjectCount(getPool());
+    const dry = await reresolveSubjects(getPool(), { apply: false });
+    res.json({ unattributed: total, resolvableNow: dry.resolvable });
+  });
+
+  app.post("/api/review/subjects/reresolve", async (req, res) => {
+    if (!(await guardCapability(req, res, "intake.moderate"))) return;
+    const actor = await actorId(req);
+    if (!actor) return res.status(401).json({ error: "auth_required", message: "This needs a named person" });
+    const before = await unattributedSubjectCount(getPool());
+    const r = await reresolveSubjects(getPool(), { apply: true });
+    const after = await unattributedSubjectCount(getPool());
+    void recordEvent(getPool(), {
+      kind: "audit",
+      text: `subject references re-resolved: ${r.updated} record(s) now attributed, ${after} still not`,
+      actorUserId: actor,
+      audience: "admin",
+    });
+    res.json({ before, after, updated: r.updated });
+  });
   app.post("/api/review/drafts/:id/withdraw", async (req, res) => {
     if (!(await guardCapability(req, res, "intake.moderate"))) return;
     const actor = await actorId(req);
