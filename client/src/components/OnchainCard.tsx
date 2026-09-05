@@ -40,18 +40,18 @@ const TOKEN_ROLE: Record<string, string> = { equity: "Equity", voice: "Governanc
 function VillageFigure({ label, figure }: { label: string; figure: any }) {
   return (
     <div className="mt-2 first:mt-0">
-      <p className="text-xs text-gray-400">{label}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
       {figure ? (
         <>
-          <p className="text-lg font-semibold text-teal-deep">{figure.formatted}</p>
+          <p className="text-lg font-semibold text-card-foreground">{figure.formatted}</p>
           {figure.stale && (
-            <p className="text-xs text-amber-600">
+            <p className="text-xs text-notice">
               as of {new Date(figure.fetchedAt).toLocaleString()}. Base didn't answer just now, so this is the last true figure
             </p>
           )}
         </>
       ) : (
-        <p className="text-sm text-gray-400">not readable right now. Nothing is shown instead of a wrong number</p>
+        <p className="text-sm text-muted-foreground">not readable right now. Nothing is shown instead of a wrong number</p>
       )}
     </div>
   );
@@ -127,11 +127,11 @@ export default function OnchainCard() {
   const verified = !!data?.wallet?.verifiedAt;
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-8">
+    <div className="bg-card rounded-2xl shadow-lg p-8">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h2 className="text-2xl font-display font-bold text-teal-deep">On-chain holdings</h2>
+        <h2 className="text-2xl font-display font-bold text-card-foreground">On-chain holdings</h2>
         {verified ? (
-          <span className="inline-flex items-center gap-1.5 text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded-full">
+          <span className="inline-flex items-center gap-1.5 text-xs bg-open/10 text-open px-2 py-1 rounded-full">
             <ShieldCheck className="w-3.5 h-3.5" />
             {String(data.wallet.address).slice(0, 6)}…{String(data.wallet.address).slice(-4)} verified
           </span>
@@ -142,10 +142,10 @@ export default function OnchainCard() {
           </button>
         )}
       </div>
-      {error && <p role="alert" className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-3">{error}</p>}
+      {error && <p role="alert" className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2 mb-3">{error}</p>}
 
       {!verified ? (
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-muted-foreground">
           Equity and governance tokens live on Base and are shown here only
           against a wallet you have PROVEN you control: one free signature,
           no transaction, no cost.
@@ -156,22 +156,22 @@ export default function OnchainCard() {
             const b = data?.onchain?.[slug];
             const chain = chainToken(slug);
             return (
-              <div key={slug} className="border border-gray-100 rounded-xl p-4">
-                <p className="text-xs text-gray-400 mb-1">
+              <div key={slug} className="border border-border rounded-xl p-4">
+                <p className="text-xs text-muted-foreground mb-1">
                   {chain ? `${chain.name} (${chain.symbol})` : TOKEN_ROLE[slug]}
                 </p>
                 {b ? (
                   <>
-                    <p className="text-2xl font-bold text-teal-deep">{b.formatted}</p>
+                    <p className="text-2xl font-bold text-card-foreground">{b.formatted}</p>
                     {b.stale && (
-                      <p className="text-xs text-amber-600 mt-1">
+                      <p className="text-xs text-notice mt-1">
                         as of {new Date(b.fetchedAt).toLocaleString()}. The chain
                         didn't answer just now, so this is the last true value
                       </p>
                     )}
                   </>
                 ) : (
-                  <p className="text-sm text-gray-400">
+                  <p className="text-sm text-muted-foreground">
                     {slug === "equity" || slug === "voice" ? "not readable right now. Nothing is shown instead of a wrong number" : ""}
                   </p>
                 )}
@@ -193,12 +193,12 @@ export default function OnchainCard() {
         been read shows nothing. Never a zero the chain did not say.
       */}
       {(village?.tokens ?? []).length > 0 && (
-        <div className="mt-6 pt-5 border-t border-gray-100">
-          <h3 className="text-sm font-semibold text-gray-900">The village on Base</h3>
+        <div className="mt-6 pt-5 border-t border-border">
+          <h3 className="text-sm font-semibold text-card-foreground">The village on Base</h3>
           <div className="grid sm:grid-cols-2 gap-4 mt-3">
             {village.tokens.map((t: any) => (
-              <div key={t.slug} className="border border-gray-100 rounded-xl p-4">
-                <p className="text-xs text-gray-400 mb-1">
+              <div key={t.slug} className="border border-border rounded-xl p-4">
+                <p className="text-xs text-muted-foreground mb-1">
                   {t.name} ({t.symbol})
                 </p>
                 <VillageFigure label="Total supply" figure={t.totalSupply} />
@@ -211,7 +211,7 @@ export default function OnchainCard() {
 
       {data?.hypha?.configured && (
         <a href={data.hypha.links?.treasury} target="_blank" rel="noreferrer"
-          className="inline-flex items-center gap-1.5 text-sm text-teal-deep font-medium hover:underline mt-4">
+          className="inline-flex items-center gap-1.5 text-sm text-foreground font-medium hover:underline mt-4">
           Govern and move these on Hypha <ExternalLink className="w-3.5 h-3.5" />
         </a>
       )}

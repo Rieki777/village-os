@@ -20,6 +20,8 @@
  *     `img` tag.
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
+import type { PortraitSource } from "../../shared/characterPortraits";
+import { portraitsByArchetype } from "./characterPortraits";
 
 export const PRESENTATIONS = ["f", "m"] as const;
 export const TONES = ["deep", "olive", "light"] as const;
@@ -166,15 +168,49 @@ export interface PlayerCharacter {
   archetypeKey: string;
   presentation: Presentation;
   tone: Tone;
+  /**
+   * The picture to render. The member's own portrait when they have one this
+   * viewer is allowed to see, and the stock art otherwise.
+   */
   avatar: string | null;
+  /**
+   * The stock art alone, always. Kept beside `avatar` so a surface that wants
+   * to offer "back to the stock picture" has it without recomputing, and so a
+   * reader can tell which of the two `avatar` currently is.
+   */
+  stockAvatar: string | null;
+  /** Set only when a portrait of this member's own is being shown. */
+  portrait: { source: PortraitSource; published: boolean } | null;
   isPrimary: boolean;
   chosenAt: string | null;
 }
 
+/**
+ * One member's party, as a given viewer is allowed to see it.
+ *
+ * ── `viewerId` IS REQUIRED, AND THAT IS THE PRIVACY RULE ────────────────
+ *
+ * This function is the ONE read behind every party payload in the product:
+ * `/api/me/profile`, `/api/me/characters`, the two character writes, and both
+ * halves of `/api/profiles/:handle`. A member's own portrait is private until
+ * they publish it, so the question "who is looking" has to be answered on every
+ * one of those paths, and the cheapest way to guarantee that is to make it
+ * impossible to call this without answering.
+ *
+ * So there is no default. Pass the signed-in member's id, or `null` for an
+ * anonymous reader. `portraitsByArchetype` then reads a DIFFERENT query for a
+ * stranger, one whose WHERE clause carries `published_at IS NOT NULL`, so an
+ * unpublished filename is never fetched on a stranger's request at all.
+ *
+ * `PublicProfile.tsx` needs no rule of its own and has none. It renders
+ * `c.avatar`, and for a stranger `avatar` can only ever be the stock art or a
+ * portrait its owner published.
+ */
 export async function partyFor(
   pool: Pool,
   villageId: string,
   userId: string,
+  viewerId: string | null,
 ): Promise<PlayerCharacter[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
     "SELECT pc.`id`, pc.`archetype_key`, pc.`presentation`, pc.`tone`, pc.`chosen_at`, " +
@@ -183,15 +219,23 @@ export async function partyFor(
       "WHERE pc.`village_id` = ? AND pc.`user_id` = ? ORDER BY pc.`chosen_at`, pc.`id`",
     [villageId, userId],
   );
-  return rows.map((r) => ({
-    id: String(r.id),
-    archetypeKey: String(r.archetype_key),
-    presentation: String(r.presentation) as Presentation,
-    tone: String(r.tone) as Tone,
-    avatar: avatarFor(String(r.archetype_key), String(r.presentation), String(r.tone)),
-    isPrimary: r.primary_id != null && String(r.primary_id) === String(r.id),
-    chosenAt: r.chosen_at ? new Date(r.chosen_at).toISOString() : null,
-  }));
+  const mine = await portraitsByArchetype(pool, villageId, userId, viewerId);
+  return rows.map((r) => {
+    const key = String(r.archetype_key);
+    const stock = avatarFor(key, String(r.presentation), String(r.tone));
+    const own = mine.get(key) ?? null;
+    return {
+      id: String(r.id),
+      archetypeKey: key,
+      presentation: String(r.presentation) as Presentation,
+      tone: String(r.tone) as Tone,
+      avatar: own?.url ?? stock,
+      stockAvatar: stock,
+      portrait: own ? { source: own.source, published: own.published } : null,
+      isPrimary: r.primary_id != null && String(r.primary_id) === String(r.id),
+      chosenAt: r.chosen_at ? new Date(r.chosen_at).toISOString() : null,
+    };
+  });
 }
 
 export type CharacterOutcome =
@@ -268,7 +312,15 @@ export async function addCharacter(
         archetypeKey,
         presentation,
         tone,
+        // The look the member just picked, and nothing else. Walking a path
+        // does not read their portraits: this payload answers "what did that
+        // choice do", and every caller that renders a party rail re-reads
+        // `partyFor`, which is the one place the visibility rule lives. Adding
+        // a portrait lookup here would be a second answer to the same question,
+        // and the second one is always the one that goes stale.
         avatar: avatarFor(archetypeKey, presentation, tone),
+        stockAvatar: avatarFor(archetypeKey, presentation, tone),
+        portrait: null,
         isPrimary: true,
         chosenAt: row[0]?.chosen_at ? new Date(row[0].chosen_at).toISOString() : null,
       },

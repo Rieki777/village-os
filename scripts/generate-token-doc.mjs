@@ -1425,13 +1425,24 @@ export function render(f) {
   // "Two sources" and "Both are" until `reversal` joined the set on 2026-09-03,
   // and a hand-typed number inside a generated document is the exact failure
   // this generator exists to prevent. "Each is" replaces "Both are" so the
-  // shape holds at two entries or at ten, and a source with no reason on file
-  // still lists correctly instead of dropping out of the sentence.
+  // shape holds at two entries or at ten.
+  //
+  // AND A NEW SOURCE WITH NO SENTENCE STOPS THE BUILD. The count and the list
+  // read themselves out of the code; the GLOSS is the one part a human has to
+  // write, so a source arriving without one fails here instead of reaching a
+  // village as a bare slug in a paragraph about their own money.
   const negReason = {
     stay_night: "a stay burnt inside its grace window",
     payment_reversal: "the leg after a payment refund",
     reversal: "the clawback a reversal posts against value a member already spent",
   };
+  const negMissing = f.allowNegative.filter((s) => !negReason[s]);
+  if (negMissing.length) {
+    fail(
+      `token-doc: ALLOW_NEGATIVE_SOURCES gained ${negMissing.join(", ")} with no plain sentence. ` +
+        "Add one to negReason in this generator, so the document says what the exception is for.",
+    );
+  }
   const andList = (items) =>
     items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
   const negCount = f.allowNegative.length;

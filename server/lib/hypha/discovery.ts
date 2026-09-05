@@ -193,9 +193,9 @@ export async function discoverCandidates(input: {
  * these steps exist is a property of how discovery works and the two drift
  * apart the moment they live in different files.
  */
-export const HYPHA_FIRST_STEPS: readonly string[] = [
-  "Create your DAO on Hypha and create its tokens there.",
-  "Issue yourself any amount of each token. Issuance is what puts the contract on Base, and a lookup can only see what your account holds.",
-  "Copy your Base account address into the founder Base account address setting.",
-  "Come back here, look the tokens up, and confirm each contract yourself.",
-];
+/**
+ * Re-exported so every existing server import keeps working. The list itself
+ * moved to shared/hypha.ts because the admin panel needs it too, and it could
+ * not reach a server module. One list, two readers.
+ */
+export { HYPHA_FIRST_STEPS } from "../../../shared/hypha";

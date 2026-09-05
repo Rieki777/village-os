@@ -225,7 +225,7 @@ export default function Visit() {
                   className="w-full px-3 py-2 border border-stone-200 rounded-lg outline-none focus:border-teal-deep bg-white"
                 >
                   <option value="">Choose one</option>
-                  {cfg?.visit_types.map((v) => (
+                  {cfg?.visit_types?.map((v) => (
                     <option key={v.id} value={v.id}>{v.title}</option>
                   ))}
                 </select>

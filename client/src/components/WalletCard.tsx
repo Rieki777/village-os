@@ -87,15 +87,15 @@ export default function WalletCard() {
   if (!exchangeModule || !user) return null;
 
   return (
-    <div id="wallet" ref={section} className="bg-white rounded-2xl shadow-lg p-8 scroll-mt-24">
+    <div id="wallet" ref={section} className="bg-card rounded-2xl shadow-lg p-8 scroll-mt-24">
       <div className="flex items-center justify-between gap-4 mb-6">
-        <h3 className="text-xl font-display font-bold text-teal-deep flex items-center gap-2">
+        <h3 className="text-xl font-display font-bold text-card-foreground flex items-center gap-2">
           <WalletIcon className="w-6 h-6" />
           Wallet
         </h3>
         <Link
           href="/tokens"
-          className="text-sm font-medium text-teal-deep hover:underline flex items-center gap-1 shrink-0"
+          className="text-sm font-medium text-foreground hover:underline flex items-center gap-1 shrink-0"
         >
           The Exchange
           <ArrowRight className="w-4 h-4" />
@@ -103,24 +103,24 @@ export default function WalletCard() {
       </div>
 
       {status === "loading" ? (
-        <p className="text-sm text-gray-600">Loading your balances…</p>
+        <p className="text-sm text-muted-foreground">Loading your balances…</p>
       ) : status === "failed" ? (
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-muted-foreground">
           Couldn't load your balances.{" "}
-          <button type="button" onClick={load} className="text-teal-deep font-medium hover:underline">
+          <button type="button" onClick={load} className="text-foreground font-medium hover:underline">
             Retry
           </button>
         </p>
       ) : Object.keys(balances).length === 0 ? (
-        <p className="text-sm text-gray-600">Nothing yet. Contribution is where value starts.</p>
+        <p className="text-sm text-muted-foreground">Nothing yet. Contribution is where value starts.</p>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {Object.entries(balances).map(([slug, bal]) => (
-            <div key={slug} className="border border-gray-200 rounded-lg px-3 py-2">
-              <p className={`text-lg font-bold ${Number(bal) < 0 ? "text-coral" : "text-gray-900"}`}>
+            <div key={slug} className="border border-border rounded-lg px-3 py-2">
+              <p className={`text-lg font-bold ${Number(bal) < 0 ? "text-destructive" : "text-card-foreground"}`}>
                 {formatTokenAmount(Number(bal), decimalsOf(tokenDecimals, slug))}
               </p>
-              <p className="text-xs text-gray-500">{tokenNames[slug] ?? slug}</p>
+              <p className="text-xs text-muted-foreground">{tokenNames[slug] ?? slug}</p>
             </div>
           ))}
         </div>

@@ -168,8 +168,14 @@ export interface CalendarItem extends Gathering {
 
 /** The lunar position `/api/events` prints beside its window. */
 export interface LunarSummary {
-  /** 1-based month in the village's lunar year; 13 is the intercalary moon. */
+  /** 1-based month in the village's lunar year; 13 is the intercalary moon.
+   *  YEAR GEOMETRY, and it is what the moon's NAME is keyed by. It is no
+   *  longer what a surface prints as the moon number: that is the village's
+   *  own count, taken from `cycleNumber` below against the anchor. */
   monthIndex: number;
+  /** The settlement-independent lunation number, which is what the village
+   *  moon count is computed from (`shared/villageMoon.ts`). Never printed. */
+  cycleNumber: number;
   /** Twelve or thirteen: how many moons this lunar year holds. */
   monthCount: number;
   name: string;

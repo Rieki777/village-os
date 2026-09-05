@@ -15,7 +15,9 @@ given where each is described.
    change before voting on it. It is a product feature, not a test, and it is
    SHARED with governance. You build the economics half; the governance session
    owns the engine. Read that section before assuming its shape.
-4. **The decimals sweep**, last, with the dry run as the safety net.
+4. **Decimals: RULED. Village Credits to 2 decimals, the 4-across-the-board
+   sweep cancelled** (2026-09-04). The decision is made; the work is yours. It is
+   one token, not seven, and it is still not a column change. See deliverable 4.
 
 You are one of three sessions on this. **Read "The governance contract" below before deliverable 3**: it carries the founder's rulings that bind money to governance and the dry-run engine's interface. The governance session owns the shared
 simulation engine, the coordinator lands every merge, and there is a written plan
@@ -257,28 +259,68 @@ sessions landed the same lanes today by accident.
 ---
 
 
-## Deliverable 4: the decimals sweep, last
+## Deliverable 4: Village Credits to 2 decimals
 
-Rye has ruled that **all tokens move to 4 decimals**. The ledger is empty, which
-makes now the cheapest this will ever be. It is not a migration.
+**RULED 2026-09-04. The decision is made and the 4-across-the-board sweep is
+cancelled. The work is yours, and nobody else changes a token's scale.**
 
-`postTransfer` takes MINOR units, correctly, and of its 44 callers **5 convert
-and 39 hand it a human number**. Those 39 are not wrong today only because six of
-seven tokens sit at `decimals = 0`, where the two are the same number. `give()`
-posts `amount` straight through; set Gratitude to 4 without touching that line
-and every give posts **0.0020**.
+Rye's ruling, in his own shape: *if a bunch of work is already done to move them
+all to 4 decimals and we're already nearly there, then finish the work. If not,
+all I want is that currency-like tokens (the village credits) need to have 2
+decimals.*
 
-The obvious repair is also wrong. Converting inside `postTransfer` breaks
-`sweepBalances`, which reads balances that are ALREADY minor units and posts them
-unchanged, so a departing member's settlement is multiplied by ten thousand.
+**None of that work was done**, which is what settled it. Measured 2026-09-04:
+zero migrations change any token's `decimals`, `VOICE_DECIMALS` is still 3, and
+no token has moved. The only decimals-adjacent things that landed were `0126`
+widening `token_ledger.amount` to `bigint`, which was preparation, and the wallet
+and send-card fixes, which were bugs caused by Village Voice's EXISTING 3
+decimals rather than sweep work.
 
-**The units question has to be answered per caller, with a test per path.** Do
-this after deliverable 3, so the dry run is the net underneath it. And confirm
-the wallet decimals fix has landed first: today one token is wrong by 1000x on
-the wallet; after this sweep every token is wrong by 10,000x on any surface that
-does not divide.
+### The scope
+
+**In:** `credits`, from 0 to 2. Two decimals is what money looks like everywhere
+else, and a village currently cannot price anything at 12.50.
+
+**Out, unless you argue otherwise and Rye agrees:** `library-credit` and
+`stay-credit` are vouchers where a whole unit may be the honest shape, because
+half a stay credit may mean nothing. `village-voice` stays at 3; it is governance
+weight rather than currency, and its scale exists so a rule minting 0.1 voice
+does not post zero. `gratitude` is recognition and whole is right. The two Hypha
+mirrors are not ours to scale.
+
+### Why it is still not a column change
+
+`postTransfer` takes MINOR units. Most of its callers hand it a human number, and
+they are correct today only because `credits` sits at 0 where the two are the
+same number. **Walk every path that posts `credits`** and decide, per caller,
+whether it holds a human figure or minor units. The two obvious repairs are both
+wrong: `give()` posts straight through, so a scale change without touching it
+posts a hundredth; and converting inside `postTransfer` breaks `sweepBalances`,
+which reads balances that are ALREADY minor units and would multiply a departing
+member's settlement.
+
+Then the display half. Every surface that renders a credits amount must divide,
+and **every input beside one must convert back**. The rule that cost the most
+this week: *a surface that divides on one half of a pair and not the other is
+worse than one that divides on neither, because both raw at least agree.* A fix
+landed that divided a send card's balance and left its input posting minor units,
+so a member saw "You hold 10", typed 1, and moved 0.001. `client/src/lib/tokenAmount.ts`
+holds `formatTokenAmount`, `toMinorUnits`, `smallestUnit` and `decimalsOf`, with
+round-trip tests proving that what a member is shown, typed straight back, is
+what the ledger held. Use them and extend that file.
+
+A separate lane is already fixing five surfaces that render a ledger amount raw.
+Check what landed before touching a render site.
+
+### The order
+
+The ledger is empty (0 rows on production), so the migration itself is free and
+there is nothing to rescale. That will not be true forever. Do the caller sweep
+and the display pass FIRST, with tests, then change the column last, so the day
+the scale changes every path is already correct.
 
 ---
+
 
 ## How this codebase lies to you, and how to not be fooled
 

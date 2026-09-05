@@ -108,14 +108,14 @@ export default function LookPanel({ password }: { password: string }) {
               aria-checked={active}
               onClick={() => setTheme({ ...theme, character: active ? "" : c.id })}
               className={`text-left border px-3 py-2.5 transition-colors ${active ? "border-teal-deep ring-1 ring-teal-deep" : "border-gray-200 hover:border-gray-300"}`}
-              style={{ borderRadius: `${c.radiusRem}rem`, background: p?.vars["--tone-cream"] }}
+              style={{ borderRadius: `${c.radiusRem}rem`, background: p?.vars?.["--tone-cream"] }}
             >
               <span className="flex items-center gap-2">
-                <span aria-hidden="true" className="inline-block h-4 w-4 rounded-full" style={{ background: p?.vars["--tone-brand"] }} />
-                <span aria-hidden="true" className="inline-block h-4 w-4 rounded-full" style={{ background: p?.vars["--tone-sun"] }} />
-                <span className="text-sm font-semibold" style={{ color: p?.vars["--foreground"] }}>{c.label}</span>
+                <span aria-hidden="true" className="inline-block h-4 w-4 rounded-full" style={{ background: p?.vars?.["--tone-brand"] }} />
+                <span aria-hidden="true" className="inline-block h-4 w-4 rounded-full" style={{ background: p?.vars?.["--tone-sun"] }} />
+                <span className="text-sm font-semibold" style={{ color: p?.vars?.["--foreground"] }}>{c.label}</span>
               </span>
-              <span className="block text-xs mt-1" style={{ color: p?.vars["--muted-foreground"] }}>{c.hint}</span>
+              <span className="block text-xs mt-1" style={{ color: p?.vars?.["--muted-foreground"] }}>{c.hint}</span>
             </button>
           );
         })}

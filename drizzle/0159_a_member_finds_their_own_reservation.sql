@@ -1,0 +1,56 @@
+-- 0159: the resident path's ladder reads a member's own reservations, and
+-- until now that read was a full table scan.
+--
+-- ── WHAT WAS ALREADY TRUE, AND WHAT THIS BRIEF GOT WRONG ─────────────────
+-- This lane was briefed to "add a nullable user_id to housing_reservations".
+-- That column ALREADY EXISTS and has since 0077's first commit (41e9e5c). It
+-- is nullable there for the reason 0077 states in full: the form is reachable
+-- from the public housing pages by people with no account, and "an intent
+-- without a location is still an intent". `createReservation` in
+-- server/lib/housing.ts names it in its INSERT, the POST route fills it from
+-- `authedUser(req)` when somebody is signed in, and both readers select it
+-- back. So the column, the write and the reads were all already there and
+-- nothing about them needed changing.
+--
+-- What was NOT there is the only thing a per-member ladder actually needs: a
+-- way to find one member's rows without reading every row in the table.
+--
+-- ── WHY THE EXISTING INDEXES DO NOT SERVE THIS READ ──────────────────────
+-- 0077 ships two, and both are for somebody else's question:
+--
+--   housing_res_place_idx (village_id, structure_key, status)
+--     the live count for one hamlet, read on every public map config load
+--     when that hamlet's taken_source is 'reservations'. Leads with the
+--     PLACE, so it cannot serve a lookup that knows only the person.
+--   housing_res_email_idx (email)
+--     finds a lead by the address they typed, which is the founder's
+--     question and not the member's.
+--
+-- A member asking "where do I stand on the resident path" knows their user
+-- id and nothing else, so neither index applies and MySQL reads the table.
+-- That is cheap today and it is the profile page, which every signed-in
+-- member loads.
+--
+-- ── COLUMN ORDER, AND WHY status IS IN THE KEY ───────────────────────────
+-- (village_id, user_id, status) mirrors housing_res_place_idx exactly:
+-- scope first because every query in this table is scoped, then the thing
+-- the caller knows, then the thing it filters on. The resident ladder is
+-- derived from the status progression 0077 already defines
+-- (new | contacted | reserved | withdrawn, where only 'reserved' consumes a
+-- home), so status belongs in the index rather than in a filter after it.
+--
+-- Nothing here stores a rung. The member's position on the resident path
+-- stays a function of the rows that exist right now, which is what lets it
+-- fall when a reservation is withdrawn without anybody writing an update.
+--
+-- ── EXPAND, NEVER CONTRACT ───────────────────────────────────────────────
+-- A new NON-UNIQUE index on an existing table, which is the fourth row of
+-- the safe column in CLAUDE.md's table. It adds no column, narrows nothing,
+-- and the previous release neither knows nor cares that it exists: every
+-- statement that ran before this file runs identically after it. A unique
+-- key here would be wrong on its own terms as well as unsafe, because one
+-- member may hold several reservations and MySQL exempts the NULL user_ids
+-- that are most of this table.
+
+CREATE INDEX `housing_res_member_idx`
+  ON `housing_reservations` (`village_id`, `user_id`, `status`);

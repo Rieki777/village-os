@@ -68,6 +68,16 @@ export const STAGE_RULES = [
       "no new dependencies",
     ],
   },
+  {
+    // LAST on purpose. This one is repo-wide rather than diff-attributed, so a
+    // listing that also fails a stage above should hear about that first: the
+    // rule directly above names the line the contributor wrote, and this names
+    // a total. When it is the only failure the message still has to be
+    // actionable, which is why it says which way the number moves.
+    stage:
+      "Stage 6 (build and security review): the raw-SQL burn-down register grew. That register only shrinks; move the query into a repo under server/repos.",
+    patterns: ["the raw-SQL burn-down register only shrinks"],
+  },
 ];
 
 /**

@@ -1,0 +1,66 @@
+# CodeQL configuration.
+#
+# ONE QUERY IS FILTERED OUT, AND ONLY ONE. Everything else in the default suite
+# runs exactly as before: the injection, XSS, path-traversal and redirect rules
+# are the reason this workflow exists and none of them is touched here.
+#
+# ── WHY js/missing-rate-limiting IS NOT RUN ────────────────────────────────
+#
+# It cannot see how this codebase bounds a request, so it reports a wall.
+#
+# The query looks for express-rate-limit middleware. This server bounds
+# requests by calling `overLimit(bucket, max, windowMs)` inside the handler,
+# against a `rate_hits` table, and there are 38 such call sites placed
+# deliberately: IP-keyed on anything reachable without an account (`register`,
+# `bootstrap`, `setpw`, `submit`, `ics`), member-keyed on anything that creates
+# rows or sends messages (`forum-post`, `intents-create`, `meet-me`). The two
+# webhook routes bound themselves a third way again, with an in-memory bucket
+# that answers 429 before the request reaches the database. None of the three
+# shapes is middleware, so none of them is visible to the query.
+#
+# The result on 2026-09-04 was 98 open alerts, every one of which was read:
+#
+#     82  behind an auth guard (19 of those admin-only)
+#      8  already bounded by overLimit, invisible to the query
+#      9  genuinely public: 4 static file serves, the SPA catch-all, the OAuth
+#         start (already bounded), and 2 that were REAL and are now fixed
+#
+# Zero unauthenticated writes. The two real ones, `GET /api/og/quest/:id` and
+# `POST /api/map/walk-log`, are bounded in the same change that adds this file,
+# along with the OAuth callback.
+#
+# ── WHY FILTERED RATHER THAN DISMISSED ────────────────────────────────────
+#
+# Dismissing 82 alerts clears today's wall and rebuilds it: the next route
+# anybody writes produces alert 83, the check goes red again, and whoever reads
+# it learns the same lesson twice. `.github/workflows/codeql.yml` already states
+# the rule this follows, in its own words: "a gate which is red for a reason
+# nobody can fix gets deleted", and "a red one that always was red teaches
+# people to ignore red". A permanently-red check is worse than no check,
+# because the day it means something nobody is looking.
+#
+# ── WHAT ASKS THE QUESTION INSTEAD ────────────────────────────────────────
+#
+# `scripts/check-route-limits.mjs`, in ci.yml, in a form that fits the code: a
+# route fails when nothing it calls can answer 401 or 403, it creates something
+# or encodes an image or calls out on the village's behalf, and it never bounds
+# itself. It reads all 590 routes in about a third of a second, it knows all
+# three limiter shapes because it recognises the 429 rather than the helper,
+# and it takes a `limit-ok:` waiver with a written reason.
+#
+# It is also tested the way a guard should be: deleting the bound from
+# `/api/map/walk-log` and from `/api/og/quest/:id` each makes it name that
+# route. Both controls are in the pull request that added it, and both caught
+# a real false negative in earlier drafts of the script.
+#
+# ── PUTTING IT BACK ───────────────────────────────────────────────────────
+#
+# Delete the two lines under `query-filters` and this query runs again. Worth
+# doing the day CodeQL can be taught a custom rate limiter through a data
+# extension; today that needs a custom query pack, which needs the CodeQL CLI
+# in CI to compile, and a pack that fails to compile takes the whole analysis
+# down rather than one query.
+
+query-filters:
+  - exclude:
+      id: js/missing-rate-limiting

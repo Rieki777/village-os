@@ -13,7 +13,7 @@
 import { useEffect, useState } from "react";
 import { ExternalLink } from "lucide-react";
 import type { NestedLayout } from "@shared/mapLayout";
-import { authToken } from "@/lib/gameApi";
+import { authToken, useCatalyst } from "@/lib/gameApi";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -103,6 +103,9 @@ export function VisionGhosts({ layout, drafts }: { layout: NestedLayout; drafts:
 /** The panel: every open draft, its objectives, its progress, and the prompt
  *  that hands a HUMAN the existing publish button when conditions are met. */
 export function VisionPanel({ drafts, isAdmin }: { drafts: VisionDraft[]; isAdmin: boolean }) {
+  // Above the early return, as every hook must be. `isAdmin` still decides
+  // which half of the card renders; this only supplies the word.
+  const catalyst = useCatalyst();
   if (!drafts.length) {
     return (
       <div className="bg-card border border-border rounded-xl p-4 text-sm text-muted-foreground" data-power-vision-panel>
@@ -164,7 +167,7 @@ export function VisionPanel({ drafts, isAdmin }: { drafts: VisionDraft[]; isAdmi
                   Open the draft's publish button <ExternalLink className="w-3 h-3" aria-hidden="true" />
                 </a>
               ) : (
-                <p className="text-muted-foreground mt-1">An admin applies it from the drafts panel. Nothing applies itself.</p>
+                <p className="text-muted-foreground mt-1">{catalyst.aNameCap} applies it from the drafts panel. Nothing applies itself.</p>
               )}
             </div>
           )}

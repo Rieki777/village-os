@@ -150,7 +150,11 @@ export function lunarMonthArcs(year: number, anchor: YearAnchor, timeZone: strin
       if (e <= yearStart || s >= yearEnd) continue;
       out.push({
         key: `l${anchorYear}-${m.index}`,
-        label: `Moon ${m.index}`,
+        // The moon's POSITION IN THE LUNAR YEAR, said so plainly because
+        // the wheel prints the village count in the arc instead and a bare
+        // "Moon 3" here would be a second number waiting for a renderer to
+        // print it beside the first one.
+        label: `Moon ${m.index} of the year`,
         index: m.index,
         monthCount: ly.months.length,
         anchorYear,

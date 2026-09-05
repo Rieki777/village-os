@@ -800,3 +800,41 @@ export async function revertDraft(
     conn.release();
   }
 }
+
+/**
+ * Withdraw an open draft, which is the way OUT of one that cannot publish.
+ *
+ * WHY THIS HAD TO EXIST. Before it, the only status writes in this file were
+ * open to published and published to reverted. A draft carrying any blocked
+ * line cannot publish (`publishDraft` refuses on `preview.blocked > 0`), no
+ * change can be removed from an open draft, and nothing could close one. So a
+ * blocked draft was unpublishable AND unclosable, and it held one of the
+ * `openDraftCap` slots forever. Three of them jam org drafts permanently.
+ *
+ * That is not hypothetical. A vendor's first import is one large org batch:
+ * `addChange` applies no cap, so all of it is written, and then `previewDraft`
+ * blocks everything past `draftChangeCap`, or blocks a seat naming a circle
+ * that does not exist yet, which is the ordinary case for a first import.
+ *
+ * The status already allowed this. `org_drafts.status` has been
+ * enum('open','published','reverted','withdrawn') since 0056; the schema
+ * anticipated a withdraw and the code never wrote one. No migration.
+ *
+ * A withdrawn draft is kept rather than deleted, because it is the record of a
+ * reorganisation somebody proposed and abandoned, and its changes explain why.
+ */
+export async function withdrawDraft(
+  pool: Pool,
+  draftId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const [r] = await pool.query<any>(
+    "UPDATE org_drafts SET status = 'withdrawn' WHERE id = ? AND status = 'open'",
+    [draftId],
+  );
+  if (r?.affectedRows) return { ok: true };
+  // Say which of the two reasons it was, because "that did not work" on a
+  // draft a steward is trying to unjam is the least useful sentence available.
+  const [[d]] = await pool.query<any[]>("SELECT status FROM org_drafts WHERE id = ?", [draftId]);
+  if (!d) return { ok: false, error: "No such draft" };
+  return { ok: false, error: `This draft is ${d.status}, and only an open draft can be withdrawn` };
+}

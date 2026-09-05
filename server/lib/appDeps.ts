@@ -159,6 +159,18 @@ export interface AppDeps {
    */
   members: UsersRepo;
 
+  /**
+   * The safe shape of a member record for an API response.
+   *
+   * Strips the password hash, the session-revocation counter and the Google
+   * link, and fills every field a page reads so a legacy row never returns
+   * undefined where the client expects an array or a number. Passed for the
+   * reason the gates are: server/index.ts holds it at module scope and still
+   * calls it from several routes of its own, so exporting it would point the
+   * arrow back at the file this work exists to shrink.
+   */
+  publicUser(u: any): any;
+
   /** Quest claims. `consentedCounts()` is one grouped read for a whole list. */
   claimsRepo: ClaimsRepo;
 

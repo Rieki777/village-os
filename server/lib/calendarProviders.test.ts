@@ -79,7 +79,9 @@ describe.skipIf(!configured)("providers against a real schema", () => {
     // 2027-01-07 (the memo's solstice-year 2026->2027: 12).
     const items = await listCalendarItems(pool, { from: new Date("2026-12-01T00:00:00Z"), to: new Date("2027-02-01T00:00:00Z"), timezone: TZ, viewer: { userId: null, isAdmin: false }, kinds: ["sky"] });
     const anchor = items.find((i) => i.sourceId?.startsWith("sky:year-anchor:"))!;
-    expect(anchor.title).toBe("Moon 1 begins: a 12-moon year");
+    // The title names the YEAR and no longer numbers its first moon: the only
+    // moon number a member reads now is the village's own count.
+    expect(anchor.title).toBe("The village year begins: 12 moons");
     expect(anchor.startsAt.slice(0, 10)).toBe("2027-01-07");
     // Anyone may see the sky.
     expect(items.every((i) => i.layer === "village")).toBe(true);

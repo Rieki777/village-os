@@ -3,11 +3,16 @@
  * its print poster.
  *
  * Outer ring: the twelve Gregorian months. Inner ring: the year's true
- * lunations as arcs of real length, a new-moon tick at each boundary, each
- * arc labelled with its place in the village's lunar year (Moon 1 begins at
- * the first new moon after the year anchor; twelve or thirteen as the sky
- * gives). Four solar spokes cut both rings at the true instants. Today is a
- * hand. Tap a month arc to open that month; tap a moon arc to open that moon.
+ * lunations as arcs of real length, a new-moon tick at each boundary. Four
+ * solar spokes cut both rings at the true instants. Today is a hand. Tap a
+ * month arc to open that month; tap a moon arc to open that moon.
+ *
+ * TWO NUMBERS MEET IN THE INNER RING AND ONLY ONE IS DRAWN. The year still
+ * has twelve or thirteen moons, opening at the first new moon after the year
+ * anchor, and that position is what each moon's NAME belongs to. The number
+ * inside an arc is the village's own count since its first moon, which never
+ * resets, so a member reads one number for a moon wherever they meet it. An
+ * arc carries no number at all for a village that has not set a first moon.
  *
  * Grown from CycleClock.tsx, which already drew the year ring and the
  * lunation ring in the village's palette; the same tokens paint this.
@@ -17,7 +22,8 @@ import type { CalendarItem } from "@shared/gatherings";
 import type { YearAnchor } from "@shared/lunar";
 import { gregorianMonthArcs, instantYearAngle, lunarMonthArcs, solarSpokes, type Hemisphere } from "@shared/wheel";
 import PrintButton from "./PrintButton";
-import { kindColour, moonLabel, zoneNote, type EventsPayload } from "./calendarTime";
+import { kindColour, moonHeading, moonLabel, zoneNote, type EventsPayload } from "./calendarTime";
+import { villageMoonOrdinal } from "@shared/villageMoon";
 
 const T = {
   brand: "var(--tone-brand, #157f7d)",
@@ -54,6 +60,8 @@ export interface YearWheelProps {
   anchor: YearAnchor;
   hemisphere: Hemisphere;
   monthNames: EventsPayload["monthNames"];
+  /** The lunation this village calls Moon 1; null while it has none. */
+  moonOneCycle: number | null;
   /** Items to mark on the outer ring (gatherings and festivals). */
   items?: CalendarItem[];
   now?: Date;
@@ -61,7 +69,7 @@ export interface YearWheelProps {
   onPickMoon?: (startsAt: Date) => void;
 }
 
-export default function YearWheel({ year, timezone, anchor, hemisphere, monthNames, items = [], now = new Date(), onPickMonth, onPickMoon }: YearWheelProps) {
+export default function YearWheel({ year, timezone, anchor, hemisphere, monthNames, moonOneCycle, items = [], now = new Date(), onPickMonth, onPickMoon }: YearWheelProps) {
   const months = useMemo(() => gregorianMonthArcs(year), [year]);
   const moons = useMemo(() => lunarMonthArcs(year, anchor, timezone), [year, anchor, timezone]);
   const spokes = useMemo(() => solarSpokes(year, hemisphere, timezone), [year, hemisphere, timezone]);
@@ -123,10 +131,15 @@ export default function YearWheel({ year, timezone, anchor, hemisphere, monthNam
               {wide && (
                 <text x={lx} y={ly} textAnchor="middle" dominantBaseline="middle" fontSize="9.5" fill="#fff" fontWeight="700"
                   transform={`rotate(${mid * 360 > 90 && mid * 360 < 270 ? mid * 360 + 180 : mid * 360} ${lx} ${ly})`}>
-                  {m.index}
+                  {/* THE VILLAGE'S COUNT, or nothing. `villageMoonOrdinal`
+                      answers null for a village with no first moon and for
+                      any lunation before it, and an arc with no number is
+                      the honest drawing of both. It is never 0 and never
+                      negative, which is the whole rule this counter keeps. */}
+                  {villageMoonOrdinal(m.cycleNumber, moonOneCycle) ?? ""}
                 </text>
               )}
-              <title>{`Moon ${m.index} of ${m.monthCount}, ${moonLabel(m.index, monthNames).name}`}</title>
+              <title>{moonHeading(moonLabel(m.index, m.cycleNumber, moonOneCycle, monthNames))}</title>
             </g>
           );
         })}
@@ -153,7 +166,7 @@ export default function YearWheel({ year, timezone, anchor, hemisphere, monthNam
             : moonYears.map((y) => `${y.split(":")[1]} moons`).join(", then ")}
         </text>
         <text x={C} y={C + 20} textAnchor="middle" fontSize="7.5" fill={T.ink} opacity="0.6">
-          {`Moon 1 follows the ${anchorWords(anchor)}`}
+          {`The year's first moon follows the ${anchorWords(anchor)}`}
         </text>
         {/* today: a hand from the centre to the outer edge */}
         {showHand && (() => {

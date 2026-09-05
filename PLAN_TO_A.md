@@ -85,11 +85,13 @@ Then two members act at the same moment and it fails.
    Refuse a non-whole number of the token's minor units at save time in
    `queueRuleChange`, and have the mint report the units it posted rather than
    the human figure it read.
-7. **The decimals ruling itself.** Rye ruled 4 across the board. It is a sweep of
-   39 of `postTransfer`'s 44 callers, each needing a per-caller decision about
-   whether it holds a human number or minor units, with a test per path. Full
-   reasoning in `docs/ECONOMICS.md` section 6, including the two repairs that
-   look right and are not. Do this AFTER item 4.
+7. **Decimals: OWNED BY THE ECONOMICS ENGINE SESSION (2026-09-04).** Not this
+   plan's to close, and nobody else should change a token's scale. Rye ruled 4
+   across the board, then stopped that work, then clarified he wants 2 decimals
+   for currency-like tokens as the world standard, believing we already had it.
+   We do not: measured on production, `credits` is at 0 and is the only sendable
+   token, and only `village-voice` carries any scale at 3. Full history and the
+   narrowed question in `docs/ECONOMICS.md` section 11.
 
 ### To reach A
 
@@ -376,6 +378,17 @@ Some of this has to happen in order.
 
 ## How sessions coordinate
 
+- **Do NOT run the full suite in a lane.** Run your own test files, any suite
+  covering what you touched, and the gate scripts, then say you skipped the full
+  run and why. The session that merges runs it once on the composed tree.
+  Measured 2026-09-04: twelve machine-hours of lane full-suite runs across one
+  day, zero unique defects found, and several flakes that cost three agents real
+  effort to rule out. Full reasoning in `CLAUDE.md`.
+- **`git fetch origin` and branch from `origin/main`, never local `main`.** Prove
+  it with `git merge-base --is-ancestor origin/main HEAD` before you start. On
+  2026-09-04 three lanes branched from a stale local ref; one reimplemented a fix
+  that had landed 87 minutes earlier, and a verifier proved the reimplementation
+  measurably worse than what was already there.
 - **Claim a row** by putting your branch name next to it here.
 - **One session per directory.** Never `git checkout -b` in a tree another
   session is working in; that happened today and a lane checked out its branch

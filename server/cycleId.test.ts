@@ -15,10 +15,10 @@
  */
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
-import { cycleWindow, ensureVoiceToken, give, villageId } from "./lib/economy";
+import { allowanceFor, cycleWindow, ensureVoiceToken, give, HEARTS, keys, reverse, villageId } from "./lib/economy";
 import { budgetFor, sendGratitude, type GratitudeDeps } from "./lib/gratitude";
 import { cycleIdFor, dueCycles, settleCycle } from "./lib/gratitude-cycles";
-import { loadTokenRegistry, memberAccount } from "./lib/ledger";
+import { loadTokenRegistry, memberAccount, RECOGNITION_FAUCET } from "./lib/ledger";
 import { loadVariables } from "./lib/variables";
 import { seedEconomy } from "./lib/economySeed";
 import { gratitudeLogRepo } from "./repos/gratitude";
@@ -246,5 +246,82 @@ describe.skipIf(!configured)("one cycle, one name", () => {
 
     // And somebody else is entirely unaffected: the ceiling is per pair.
     expect((await ack(other, 25)).ok).toBe(true);
+  });
+
+  /**
+   * ONE ALLOWANCE, AFTER A REVERSAL, ASSERTED THROUGH BOTH DOORS.
+   *
+   * The same shape as this file's first test and one layer deeper. The two
+   * doors agreed on the TOTAL after R73, and they still disagreed about what
+   * was SPENT the moment a gift in the cycle was reversed: `budgetFor` was
+   * `total - sum(gratitude_log)` with no reversal term, and `allowanceFor` is
+   * `total - max(0, given - reversals)`. Reversing a gift refunded the
+   * allowance through one and left it spent through the other.
+   *
+   * Nobody had to choose between them, because /profile renders BOTH: the
+   * dashboard card says "Sending budget: N of 100 left this cycle" out of
+   * `budgetFor` and the sheet says "You can still give N Gratitude this moon"
+   * out of `allowanceFor`, with two different N on one page.
+   *
+   * The gift goes through the Hearts door because that is the door whose
+   * ledger posting carries a `gratitude.given:` key, and that prefix is what
+   * `allowanceFor` matches a reversal by.
+   *
+   * Last in the file, beside the other test that writes rows the settlement
+   * assertions above do not expect.
+   */
+  it("gives one number through both doors after a gift in the cycle is reversed", async () => {
+    const giver = await makeMember("cyc-rev-giver");
+    const friend = await makeMember("cyc-rev-friend");
+
+    // Both doors, asked the same question at the same moment. `depsOver`
+    // resolves the multiplier as 1 and so does the second argument here, so
+    // any difference between the two answers is the arithmetic and never the
+    // stage.
+    const bothDoors = async () => ({
+      budget: await budgetFor(depsOver(pool), { id: giver, name: giver }),
+      allowance: await allowanceFor(pool, giver, 1),
+    });
+
+    const gift = await give(
+      pool,
+      { fromUserId: giver, toUserId: friend, amount: 20, clientNonce: "rev-gift" },
+      async () => 1,
+    );
+    expect(gift.ok).toBe(true);
+    const noteId = gift.ok ? String(gift.noteId ?? "") : "";
+    expect(noteId).not.toBe("");
+
+    const spent = await bothDoors();
+    expect(spent.budget.spent).toBe(20);
+    expect(spent.budget.remaining).toBe(spent.allowance.remaining);
+
+    // Undo it. A refund is always a reversal (a fresh mint would inherit none
+    // of the ledger's guards), and the mirror carries its own key.
+    const back = await reverse(pool, keys.gratitudeGiven(villageId(), noteId), {
+      from: memberAccount(friend),
+      to: RECOGNITION_FAUCET,
+      tokenSlug: HEARTS,
+      amount: 20,
+      note: "given to the wrong person",
+    });
+    expect(back.ok).toBe(true);
+
+    const after = await bothDoors();
+    // The reversal hands the allowance back. This is `allowanceFor` doing what
+    // its own comment promises: the subtraction stops counting the gift, with
+    // nothing to remember to do.
+    expect(after.allowance.spent).toBe(0);
+    expect(after.allowance.remaining).toBe(after.allowance.total);
+
+    // THE ASSERTION THIS TEST EXISTS FOR. Before the fix `budgetFor` still
+    // read 20 spent and 80 remaining here, against 0 and 100 from the other
+    // door, and the profile page printed both of them.
+    expect(after.budget.total).toBe(after.allowance.total);
+    expect(after.budget.spent).toBe(after.allowance.spent);
+    expect(after.budget.remaining).toBe(after.allowance.remaining);
+    // And the two names for the cycle are still one string, which is what
+    // lets one of these be a rename of the other.
+    expect(after.budget.cycleId).toBe(after.allowance.cycleKey);
   });
 });

@@ -383,6 +383,14 @@ export function frozenSet<T>(values: readonly T[]): ReadonlySet<T> {
  * an account holding a debit from one of these sources, so that balance is
  * lawful at boot rather than a refusal to serve.
  *
+ * A negative balance is not a debt the platform collects. It is the honest
+ * statement that this member holds less than nothing until new earnings bring
+ * them back to zero, and the overdraft check below already refuses any further
+ * spend that would take an account under water, so a member at -5 simply
+ * cannot spend until they are back above it. It sits in the balance every
+ * surface already reads, and not in a suspense account beside it, which is the
+ * point: somebody has to be able to see it and ask.
+ *
  * Static ON PURPOSE: extending it is a one-line reviewed change to the
  * keystone, not a runtime registration that can race the boot invariant check.
  *
@@ -1097,6 +1105,42 @@ export async function postTransferOn(
   }
 
   return { ok: true, duplicate: false, toBalance: balances.get(input.to)! };
+}
+
+/**
+ * A LEDGER REFUSAL, TURNED INTO A SENTENCE A MEMBER CAN BE SHOWN.
+ *
+ * The sentences this file authors are AUDIT sentences and they are right to
+ * be. `insufficient village-voice: "mem:user-17885..." holds 9999 and cannot
+ * overdraft` names the account by its internal id and the balance in MINOR
+ * units, which is exactly what a steward reading a log needs.
+ *
+ * It is not what a member needs, and `/api/wallet/send` was handing it to one
+ * verbatim: the person who typed an amount into the send card was shown their
+ * own internal account id and a balance a thousand times the one the card
+ * printed an inch above the box, Voice riding in thousandths. Two defects in
+ * one string, and the second one grows with every token that gains a scale.
+ *
+ * So the route translates. `holds` is already in the member's own units (the
+ * caller divides through `fromLedgerUnits`) and `tokenName` is the village's
+ * own word, so the sentence a member reads matches the balance line beside it.
+ *
+ * The account-id sweep is exact rather than a pattern: the caller passes the
+ * ids it just built, and any refusal containing one of them is swallowed for a
+ * plain sentence rather than leaked. `account "..." does not exist` is caught
+ * that way too, and it must be, because it leaks the same id while meaning
+ * something entirely different from an insufficiency.
+ */
+export function refusalForMember(
+  error: string | undefined,
+  ctx: { accountIds: string[]; holds: string; tokenName: string },
+): string {
+  const said = String(error ?? "");
+  if (said.startsWith("insufficient ")) {
+    return `You hold ${ctx.holds} ${ctx.tokenName}, which is not enough to send that`;
+  }
+  if (ctx.accountIds.some((a) => a && said.includes(a))) return "That send did not go through, and nothing moved";
+  return said || "That send did not go through";
 }
 
 /**

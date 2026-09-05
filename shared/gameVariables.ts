@@ -21,6 +21,7 @@
 import { GAME_CONFIG } from "./gameConfig";
 import { STAGE_UNLOCKS } from "./capabilities";
 import { NEED_DEPTHS, NEED_DEPTH_LABELS } from "./needs";
+import { isAnchorDateAcceptable } from "./villageMoon";
 
 export type VariableType = "integer" | "decimal" | "percentage" | "boolean" | "choice" | "text";
 
@@ -139,7 +140,7 @@ export const VARIABLES: VariableDef[] = [
     category: "Ledger",
     label: "Issuance cap per lunar cycle",
     description:
-      "The most this village can bring into existence of one token in one lunar cycle, counted across every door and not by hand alone: hand-mints, co-signed grants, treasury stocking, stay-credit comps, purchases and adjustments, and the credits a work-exchange quest releases all spend the same number. It is counted NET, so a credit a member spends back into the faucet inside the same cycle stops counting and can be issued again. Two consequences worth knowing before you set it. A busy month of stays or quests can use the cap up before a steward has minted anything by hand, and the refusal a steward then meets says how much of the lunation's issuance came from those doors. And 0 disables every door that issues this token, because a cap of zero means zero.",
+      "The most this village can bring into existence of one token in one lunar cycle, counted across every door and not by hand alone: hand-mints, co-signed grants, treasury stocking, stay-credit comps, purchases and adjustments, and the credits a work-exchange quest releases all spend the same number. COUNTED IN WHOLE TOKENS, so 100 means a hundred of the token and not a hundred of whatever the ledger stores underneath. It is counted NET, so a credit a member spends back into the faucet inside the same cycle stops counting and can be issued again. Two consequences worth knowing before you set it. A busy month of stays or quests can use the cap up before a steward has minted anything by hand, and the refusal a steward then meets says how much of the lunation's issuance came from those doors. And 0 disables every door that issues this token, because a cap of zero means zero.",
     type: "integer",
     default: "10000",
     min: 0,
@@ -151,7 +152,7 @@ export const VARIABLES: VariableDef[] = [
     category: "Ledger",
     label: "Second steward needed above",
     description:
-      "A hand-mint larger than this waits for a SECOND steward to agree before any tokens move. The record keeps who asked, who agreed, when, and the exact amount and token, so nobody can change what was signed for afterwards. 0 turns the second signature off. Minting to your own account is refused at any amount and this dial does not reach that rule.",
+      "A hand-mint larger than this waits for a SECOND steward to agree before any tokens move. COUNTED IN WHOLE TOKENS, so 100 means a hundred of the token. Set it against what a large grant looks like in your village, and know that it is the only place a second pair of eyes is required. The record keeps who asked, who agreed, when, and the exact amount and token, so nobody can change what was signed for afterwards. 0 turns the second signature off. Minting to your own account is refused at any amount and this dial does not reach that rule.",
     type: "integer",
     default: "100",
     min: 0,
@@ -762,7 +763,7 @@ export const VARIABLES: VariableDef[] = [
     category: "Hypha",
     label: "Founder Base account address",
     description:
-      "The 0x address that created your DAO and issued its first tokens on Base. Used by Integrate DAO to discover your token contracts automatically: issue yourself even a tiny amount of each token, and the lookup finds the contract by the token's exact name in this account's transfer history.",
+      "The 0x address that created your DAO and issued its first tokens on Base. The Hypha Bridge panel reads it to list every token this account holds, so you can confirm which contract is which: issue yourself even a tiny amount of each token on Hypha first, because an issuance is what puts the contract on chain.",
     type: "text",
     default: "",
     ring: "founder",
@@ -1587,6 +1588,28 @@ export const VARIABLES: VariableDef[] = [
     max: 200,
     unit: "entries",
   },
+  {
+    // WHERE THIS VILLAGE STARTS COUNTING ITS OWN MOONS.
+    //
+    // Founder ring, and it belongs here rather than beside `calendar.*` for
+    // two reasons. The Village Calendar's `calendar.year_anchor` already owns
+    // the words "Moon 1", meaning the first moon of a lunar YEAR, which
+    // resets every year and is a different number from this one. And the
+    // calendar keys are hidden with the Village Calendar module, while every
+    // village counts moons whether or not it runs a calendar.
+    //
+    // Blank is the ordinary state and it is not the absence of an answer:
+    // blank means the village counts from the moon it launched under, which
+    // is the right default and needs no founder to type anything.
+    key: "village.first_moon_at",
+    category: "Village",
+    ring: "founder",
+    label: "The date this village counts Moon 1 from",
+    description:
+      "Leave blank and Moon 1 is the moon your village launched under, which is what almost every village wants. Set a date here to count from a different moon: the moon containing the date you give becomes Moon 1, and every moon after it counts on from there. A date in the future is allowed, and until it arrives your moons are shown with their dates and no number. Moon numbers are a label the platform works out each time it draws a screen, so moving this date renames what people see and changes nothing that has been recorded, settled or paid.",
+    type: "text",
+    default: "",
+  },
 
   // ── Health (H7) ───────────────────────────────────────────────────────────
   {
@@ -1721,7 +1744,11 @@ export const VARIABLES: VariableDef[] = [
     category: "Calendar",
     label: "The solar event that opens the village year",
     description:
-      "Moon 1 begins at the first new moon after this event. Twelve or thirteen moons follow, as the sky gives them, until the first new moon after the next one. Villages in the south often choose the June solstice.",
+      // This said "Moon 1 begins ...". Those are now the village count's
+      // words: Moon 1 is the village's first moon ever, set by
+      // `village.first_moon_at`, and it never comes round again. The year's
+      // first moon is a different thing and this dial is the one that moves it.
+      "The year's first moon begins at the first new moon after this event. Twelve or thirteen moons follow, as the sky gives them, until the first new moon after the next one. Villages in the south often choose the June solstice.",
     type: "choice",
     default: "december_solstice",
     choices: [
@@ -2223,6 +2250,13 @@ export function validateVariable(def: VariableDef, raw: string): string | null {
   }
   if (def.type === "text") {
     if (raw.length > 255) return "Too long (255 characters maximum).";
+    // The first moon must be a date the platform can read, or blank. A value
+    // it cannot read stops the whole village counting rather than guessing an
+    // anchor (server/lib/villageMoon.ts says why), so the typo is refused
+    // here, at the only door that writes it.
+    if (def.key === "village.first_moon_at" && !isAnchorDateAcceptable(raw)) {
+      return "Must be a date such as 2026-03-19, or blank to count from the moon this village launched under.";
+    }
     // Contract addresses must look like addresses, or a typo silently reads a
     // balance from nowhere and the member sees zero holdings.
     if (def.key.endsWith("_address") && raw !== "" && !/^0x[a-fA-F0-9]{40}$/.test(raw)) {

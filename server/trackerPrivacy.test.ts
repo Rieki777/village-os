@@ -102,8 +102,31 @@ describe("the founders' tracker ships nothing private in its chunk", () => {
 
   it("is reachable from the entry bundle, which is what makes the rest of this matter", () => {
     const { name } = trackerChunk();
-    const entry = chunkFiles().find((f) => f.startsWith("index-"));
-    expect(entry, "there must be an entry chunk").toBeTruthy();
+    /*
+     * THE ENTRY IS THE ONE index.html LOADS, not the first file whose name
+     * begins with "index-".
+     *
+     * That heuristic held only while exactly one such chunk existed. Rollup
+     * names a shared chunk after its source module, and several dependencies
+     * ship theirs as `index.mjs`, so the moment one of them becomes shared
+     * between two lazy routes the build emits a second `index-<hash>.js`.
+     * `readdirSync` sorts, so a 1 KB helper chunk can sort ahead of the real
+     * 500 KB entry and this assertion then reads the wrong file and fails
+     * with a diff full of somebody else's minified code.
+     *
+     * That is exactly what happened when an admin dialog began sharing a
+     * Radix helper: `index-BEomxUtR.js` (1160 bytes) sorted ahead of
+     * `index-W29OFxcX.js` (519281 bytes). Nothing about the tracker had
+     * changed. index.html names the real entry, which is what a browser
+     * loads and therefore what "reachable by an anonymous visitor" means.
+     */
+    const html = fs.readFileSync(path.resolve(process.cwd(), "dist/public/index.html"), "utf8");
+    const entry = html.match(/assets\/(index-[A-Za-z0-9_-]+\.js)/)?.[1];
+    expect(entry, "index.html must name an entry chunk").toBeTruthy();
+    expect(
+      chunkFiles(),
+      "the entry named by index.html must exist on disk",
+    ).toContain(entry!);
     expect(
       readChunk(entry!),
       "an anonymous visitor learns the tracker chunk's name from the entry bundle",

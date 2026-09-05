@@ -102,6 +102,7 @@ export const IDENTITY_KEYS = [
   "project.name",
   "project.tagline",
   "project.memberName",
+  "project.catalystName",
   "project.location",
   "project.country",
   "project.fiatCurrency",
@@ -141,6 +142,10 @@ export const IDENTITY_KEYS = [
 export const NEUTRAL = {
   "project.name": ["Unnamed Village"],
   "project.memberName": ["Village member", "Member"],
+  // What a village calls whoever runs it. "Catalyst" is the platform's word
+  // and names no village, the same standing as "Village member" above. A
+  // village that says founder or steward puts that in its own record.
+  "project.catalystName": ["Catalyst"],
   "project.adminPath": ["/admin"],
   // Retired from KNOWN_PENDING on 2026-08-31, in the order the list was built
   // for: the founder entered Amora's own tagline in the live Admin FIRST, so

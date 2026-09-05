@@ -300,8 +300,23 @@ describe.skipIf(!DB_CONFIGURED)("the pool token has somewhere to go", () => {
       body: { toEmail: annaEmail(), tokenType: CREDITS, amount: 500, clientNonce: "n-over" },
     });
     expect(over.status).toBe(409);
-    expect(String(over.json?.error)).toMatch(/insufficient credits/);
-    expect(String(over.json?.error)).toMatch(/cannot overdraft/);
+    /*
+     * WHAT A MEMBER IS TOLD, AND WHAT THEY ARE NOT.
+     *
+     * This used to assert the ledger's own sentence reached the member
+     * verbatim: `insufficient credits: "mem:user-17885..." holds 30 and cannot
+     * overdraft`. That sentence is right for a log and wrong for a person. It
+     * names the internal account id, and it states the balance in MINOR units,
+     * so on a token with a scale it contradicts the balance the send card
+     * prints an inch above the box.
+     *
+     * So the assertion is now in both directions: the member's own balance and
+     * the village's word for the token, and NO account id anywhere in it.
+     */
+    expect(String(over.json?.error)).toMatch(/You hold 30 /);
+    expect(String(over.json?.error)).toMatch(/not enough to send that/);
+    expect(String(over.json?.error)).not.toMatch(/mem:/);
+    expect(String(over.json?.error)).not.toMatch(/overdraft/);
     expect(await balance(benToken)).toBe(30);
     expect(await balance(annaToken)).toBe(70);
     await conserves();
@@ -390,6 +405,32 @@ describe.skipIf(!DB_CONFIGURED)("the pool token has somewhere to go", () => {
     // Nights remaining is read against the SNAPSHOT token. Against stay
     // credits, which she holds none of, it would have said zero.
     expect(row?.nightsRemaining).toBe(Math.floor(after / 8));
+
+    /*
+     * THE SCALE OF EVERY TOKEN A ROOM POSTS A RATE IN, on the same payload.
+     *
+     * `accommodation_prices.amount_minor` is the ledger's minor units, and
+     * /stay printed it raw fifty-eight lines under a balance line that
+     * divides. The page cannot divide what it is not sent, and it cannot read
+     * it off `mine.balances` either: that is null for a signed-out visitor and
+     * carries only tokens the member already HOLDS, so the person most likely
+     * to be reading a nightly rate is the one it is silent about.
+     *
+     * Derived from the ROOMS' own price keys, so this asserts the credits
+     * token is present because a room is priced in it, plus stay credits,
+     * which every stays deployment quotes whether or not any room posts one.
+     */
+    expect(mine.json?.priceTokens?.[CREDITS], "a token a room is priced in ships its scale").toBeTruthy();
+    expect(mine.json?.priceTokens?.[CREDITS]?.decimals).toBe(0);
+    expect(mine.json?.priceTokens?.[CREDITS]?.name).toBeTruthy();
+    expect(mine.json?.priceTokens?.["stay-credit"], "stay credits are always quoted").toBeTruthy();
+    expect(mine.json?.priceTokens?.usd, "money is not a ledger token and has its own formatter").toBeUndefined();
+
+    // The same payload reaches a signed-OUT visitor, who has no `mine` block
+    // at all and is exactly the reader a nightly rate is for.
+    const visitor = await call("GET", "/api/stays", { token: null });
+    expect(visitor.json?.mine).toBeNull();
+    expect(visitor.json?.priceTokens?.[CREDITS]?.name).toBe(mine.json?.priceTokens?.[CREDITS]?.name);
     await conserves();
   });
 

@@ -40,13 +40,21 @@ export interface GratitudeEntry {
 export interface GratitudeLogRepo {
   all(): Promise<GratitudeEntry[]>;
   add(e: GratitudeEntry): Promise<{ ok: boolean; duplicate: boolean }>;
-  /**
-   * What one member has spent this cycle, ACROSS ALL KINDS — hearts included,
-   * because feed.heart_amount can be greater than zero and the budget is one
-   * budget. Kind-filtering this would silently change every member's
-   * spendable total, so the two aggregates below deliberately differ.
+  /*
+   * `spentInCycle` USED TO LIVE HERE and it is deliberately gone.
+   *
+   * It summed `gratitude_log.amount` for one giver and one `cycle_id`, and
+   * `budgetFor` subtracted that from the cycle total to get a sending budget.
+   * It had no reversal term, so a reversed gift stayed spent, while
+   * `allowanceFor` in server/lib/economy.ts subtracted the cycle's reversals
+   * and handed the allowance back. Two answers to one question, and the
+   * profile rendered both of them side by side.
+   *
+   * `allowanceFor` is the one computation now (R73) and it reads its own two
+   * sums under whichever connection holds the lock, so nothing calls this and
+   * a new caller would be re-introducing the drift. It was also unscoped by
+   * `village_id`, which the replacement is not.
    */
-  spentInCycle(fromId: string, cycleId: string): Promise<number>;
   /**
    * How many of ONE kind have gone from one member to another this cycle.
    *
@@ -96,14 +104,6 @@ export function gratitudeLogRepo(pool: Pool): GratitudeLogRepo {
         cycleNumber: r.cycle_number == null ? null : Number(r.cycle_number),
         at: toIso(r.at),
       }));
-    },
-
-    async spentInCycle(fromId, cycleId) {
-      const [[row]] = await pool.query<any[]>(
-        "SELECT COALESCE(SUM(amount),0) AS s FROM gratitude_log WHERE from_id = ? AND cycle_id = ?",
-        [fromId, cycleId],
-      );
-      return Number(row.s);
     },
 
     async countPair(fromId, toId, cycleId, kind) {

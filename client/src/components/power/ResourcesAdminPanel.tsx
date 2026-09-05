@@ -173,7 +173,7 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
       note: rule.note.trim() || undefined,
     });
     if (ok) {
-      setRule({ ...EMPTY_RULE, unit: data?.defaultUnit ?? "", scopeId: data?.circles[0]?.id ?? "" });
+      setRule({ ...EMPTY_RULE, unit: data?.defaultUnit ?? "", scopeId: data?.circles?.[0]?.id ?? "" });
       setEditingRuleId(null);
       setNote("The rule is written.");
     }
@@ -204,7 +204,7 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
       note: budget.note.trim() || undefined,
     });
     if (ok) {
-      setBudget({ ...EMPTY_BUDGET, unit: data?.defaultUnit ?? "", circleId: data?.circles[0]?.id ?? "" });
+      setBudget({ ...EMPTY_BUDGET, unit: data?.defaultUnit ?? "", circleId: data?.circles?.[0]?.id ?? "" });
       setNote("The budget is written.");
     }
   };

@@ -20,7 +20,7 @@ import ModuleArt from "@/components/modules/ModuleArt";
 import ModuleAskDoor from "@/components/modules/ModuleAskDoor";
 import { type CatalogModule } from "@/components/modules/ModuleCard";
 import { useAuth } from "@/contexts/AuthContext";
-import { authToken } from "@/lib/gameApi";
+import { authToken, useCatalyst } from "@/lib/gameApi";
 import { prepareImageForUpload } from "@/lib/imagePrep";
 import { POOL_REASON_COPY } from "@shared/moduleCatalog";
 import type { ModuleDataClass } from "@shared/modules";
@@ -37,11 +37,13 @@ const DATA_CLASS_PLAIN: Record<ModuleDataClass, string> = {
   "member-pii": "Personal member data, protected",
 };
 
-const LIFECYCLE_LINE: Record<string, string> = {
-  preview: "In preview: only admins can see it.",
+/* A function of the village's word for whoever runs it, because the preview
+   line names those people. Everything else here is unchanged. */
+const lifecycleLine = (catalyst: string): Record<string, string> => ({
+  preview: `In preview: only ${catalyst} can see it.`,
   members: "Live for signed-in members.",
   public: "Live for everyone.",
-};
+});
 
 /** The admin's slice of /api/admin/modules this page acts on. */
 interface AdminModule {
@@ -68,6 +70,7 @@ interface AdminModule {
 }
 
 function AdminPanel({ id }: { id: string }) {
+  const catalyst = useCatalyst();
   const token = authToken() ?? "";
   const [all, setAll] = useState<AdminModule[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -176,7 +179,7 @@ function AdminPanel({ id }: { id: string }) {
       {m.lifecycle === "off" ? (
         <>
           <p className="text-sm text-muted-foreground">
-            Off right now. Turning it on opens a preview only admins can see; you go live from
+            Off right now. Turning it on opens a preview only {catalyst.plural} can see; you go live from
             there when it is ready.
           </p>
           {m.examplesAvailable && (
@@ -200,7 +203,7 @@ function AdminPanel({ id }: { id: string }) {
         </>
       ) : (
         <>
-          <p className="text-sm text-muted-foreground">{LIFECYCLE_LINE[m.lifecycle] ?? m.lifecycle}</p>
+          <p className="text-sm text-muted-foreground">{lifecycleLine(catalyst.plural)[m.lifecycle] ?? m.lifecycle}</p>
           {m.lifecycle === "preview" && m.setup !== "none" && m.ready && !m.ready.ready && (
             <p className="text-sm text-amber-700 mt-2">{m.ready.hint}. Then the go-live choice appears here.</p>
           )}

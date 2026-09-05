@@ -2290,27 +2290,32 @@ restored, the file passes 42 checks and the generator is byte-identical.
 
 ## 11. Open decisions
 
-1. **Decimals. SETTLED 2026-09-04, and the other way.** Rye had ruled 4 across
-   the board; he has now ruled whole numbers, in his words [Whole numbers, keep
-   code safe], with the earlier 3 on Village Voice described as future potential
-   for micro transactions. So every token carries 0 decimals, the ledger rescale
-   is cancelled, and the caller sweep is kept because scale-aware payloads and one
-   conversion helper are what stop a display and an input disagreeing at any scale.
-   **The migration that lowers Village Voice from 3 to 0 is itself a scale change,
-   downward, and must refuse rather than assume.** A stored 100 meaning 0.100
-   becomes 100 whole units the instant the column changes, so every holder inflates
-   by a thousand. That is safe on this village only by the accident of an empty
-   ledger, and it is not safe by construction. Assert that the token's issued supply
-   is zero before changing its decimals, and if it is not, either rescale in the
-   same transaction or stop and name the village. A fork that has been running for a
-   month is where this quietly becomes a thousandfold gift.
-   **And if the registry and the stored column cannot move in one transaction, the
-   REGISTRY MOVES LAST.** A stale registry over rescaled data reads too SMALL; a
-   fresh registry over unscaled data reads too LARGE. Only one of those is acted
-   on. A member whose balance reads a thousand times high spends it, claims it or
-   swaps it, and the repair afterwards is a clawback against somebody who did
-   nothing wrong. Section 7 opens with this, because that is where a reader who is
-   about to make the change will be standing.
+1. **Decimals. SETTLED 2026-09-04, AND SHIPPED. This entry stated the ruling
+   that was superseded and it is corrected here; section 7 is the live account.**
+   Rye asked for it in this shape: *if a bunch of work is already done to move
+   them all to 4 decimals and we're already nearly there, then finish the work.
+   If not, all I want is that currency-like tokens (the village credits) need to
+   have 2 decimals.* None of the 4-across-the-board work had been done, so the
+   narrow reading is the one that landed: **two decimals on the tokens a village
+   spends, prices and redeems, whole numbers for everything else, and Village
+   Voice at two.**
+
+   `0162` carries it. Four of the seven tokens hold `decimals = 2` and three hold
+   `0`; `shared/tokenScale.ts` is the one home for both numbers and every server
+   and client surface reads it. The migration selects BY KIND rather than by a
+   list of slugs, and it REFUSES over stored amounts instead of assuming.
+
+   **What stays open is not the scale, it is the rule for moving one.** A stored
+   100 meaning 0.100 becomes 100 whole units the instant the column changes, so
+   every holder inflates by a thousand, and that is safe on this village only by
+   the accident of an empty ledger. Assert the token's issued supply is zero
+   before changing its decimals, and if it is not, either rescale in the same
+   transaction or stop and name the village. **And if the registry and the stored
+   column cannot move in one transaction, the REGISTRY MOVES LAST**: a stale
+   registry over rescaled data reads too SMALL, a fresh registry over unscaled
+   data reads too LARGE, and only one of those is acted on. Section 7 opens with
+   this, because that is where a reader about to make the change will be standing.
+
 2. **Whether an audit event is a guarantee.** **76** `void recordEvent` calls post
    the audit trail without awaiting it, so a member who acts and immediately opens
    the audit feed can miss their own action. Fine as best effort, wrong if the feed

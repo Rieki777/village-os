@@ -116,7 +116,9 @@ describe("it counts routes on the shapes that broke the earlier drafts", () => {
   };
 
   it("does not treat a wildcard path string as the start of a block comment", () => {
-    // `"/assets/*"` and `"/org/*"` are real registrations in server/index.ts.
+    // `"/assets/*"` and `"/org/*"` were real registrations in server/index.ts
+    // until the Express 5 upgrade renamed them; the shape still has to parse,
+    // because a fork or an older branch can carry it.
     // The naive per-line block tracker read the last two characters of those
     // PATH STRINGS as a comment opener that never closed, and silently lost
     // every route after them. It reported 557 where there were 560.

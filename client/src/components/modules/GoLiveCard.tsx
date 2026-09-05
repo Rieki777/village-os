@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { storedText, writeStored } from "@/lib/safeStorage";
 import type { ModuleLifecycle } from "@shared/modules";
+import { useCatalyst } from "@/lib/gameApi";
 
 interface AdminModule {
   id: string;
@@ -66,6 +67,8 @@ export function GoLiveCard({
   token: string;
   onChanged?: () => void;
 }) {
+  // Above the three early returns below, as a hook has to be.
+  const catalyst = useCatalyst();
   const [busy, setBusy] = useState(false);
   const [notYet, setNotYet] = useState(
     () => storedText("session", `golive.notyet.${m.id}`) === "1",
@@ -114,7 +117,7 @@ export function GoLiveCard({
     <div className="mb-5 rounded-xl border border-teal-deep/30 bg-teal-deep/5 p-4 sm:p-5">
       <p className="font-semibold text-gray-900">{m.name} is set up. Go live?</p>
       <p className="text-sm text-gray-600 mt-1">
-        Right now only admins can see it. Choose who it opens to.
+        Right now only {catalyst.plural} can see it. Choose who it opens to.
       </p>
       {m.showingExamples && (
         <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2 inline-block">

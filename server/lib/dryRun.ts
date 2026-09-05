@@ -54,7 +54,9 @@
  */
 import { GAME_CONFIG } from "../../shared/gameConfig";
 import { cycleBoundsByNumber, cycleBoundsFor } from "../../shared/lunar";
+import type { VillageMoon } from "../../shared/villageMoon";
 import { formatCycleId } from "./gratitude-cycles";
+import { villageMoonForCycle } from "./villageMoon";
 import { cyclePoolProblem } from "./cyclePool";
 // `toLedgerUnits` is gone from this list on purpose: the conversion happens
 // inside `ceilingOutcome` now, so this module converts nothing of its own and
@@ -140,6 +142,8 @@ export interface DryRunTurn {
   cycleKey: string;
   startsAt: string;
   endsAt: string;
+  /** The village's own moon, which is what the report prints. */
+  moon: VillageMoon;
   findings: Finding[];
 }
 
@@ -209,6 +213,13 @@ export interface DryRunOptions {
    * rules, same allowance table, same jobs, same refusals.
    */
   audience?: "admin" | "member";
+  /**
+   * The lunation this village calls Moon 1, resolved by the caller (the route
+   * reads it; this function stays pure and clockless). Null on a village that
+   * is not counting yet, which is most villages reading this report: the whole
+   * point of a launch dry run is that the launch has not happened.
+   */
+  moonOneCycle?: number | null;
 }
 
 const DAY_MS = 86_400_000;
@@ -632,9 +643,12 @@ export function dryRun(input: DryRunSnapshot, options: DryRunOptions): DryRunRep
 
     turns.push({
       cycleNumber: cycle,
+      // The id stays in the payload as the key these turns are filed under.
+      // The page prints `moon` and no longer prints this.
       cycleKey: formatCycleId(cycle),
       startsAt: bounds.startsAt.toISOString(),
       endsAt: bounds.endsAt.toISOString(),
+      moon: villageMoonForCycle(cycle, options.moonOneCycle ?? null),
       findings,
     });
   }

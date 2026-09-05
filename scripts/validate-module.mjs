@@ -26,6 +26,17 @@
  * reviewer who is hand-grepping for `fetch(` is a reviewer who is not spending
  * their attention on intent, which is the half no script can take.
  *
+ * THE BURN-DOWN. Section 3b is the one check here that is NOT about the diff
+ * and not about a listing. The raw-SQL rule in section 3 was blind to a
+ * TypeScript type-argument list for as long as it existed, so `pool.query(...)`
+ * blocked and `pool.query<RowDataPacket[]>(...)` did not, for the identical
+ * violation. Fixing the pattern made 436 non-test call sites visible at once.
+ * Fixing them here would be unreviewable and waiving them would repeal the
+ * rule, so they are RECORDED, in a register that may only ever shrink
+ * (`scripts/sql-burndown.mjs`). It runs on every invocation, because a check
+ * that skips converts "unchecked" into "passed", which is the failure this
+ * whole file exists to avoid.
+ *
  * Usage:
  *   node scripts/validate-module.mjs             every listing in the registry
  *   node scripts/validate-module.mjs saberra     one module id
@@ -40,6 +51,7 @@ import os from "os";
 import path from "path";
 import ts from "typescript";
 import { CODE_RULES, addedLineNumbers, scanFileLines } from "./contribution-scan.mjs";
+import { BURNDOWN_CEILING, runBurndown } from "./sql-burndown.mjs";
 
 const ROOT = path.resolve(
   path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, "$1"),
@@ -487,6 +499,56 @@ if (wantDiff) {
   note(
     "The contribution checks did not run. Pass --diff to grep the changed files for raw fetch, raw SQL, " +
       "eval, protected-table writes, embedded credentials and new dependencies.",
+  );
+}
+
+// ── 3b. The raw-SQL burn-down, repo-wide ─────────────────────────────────────
+//
+// Section 3 answers "did YOU add this", which is the only fair question to
+// block a contributor on. This answers "is the platform's own total still
+// falling", which no diff can see: move a query from one file to another and
+// the diff-scoped rule reports a finding in the new place while the total
+// stands still.
+//
+// It runs on every invocation, including a bare `validate-module.mjs saberra`.
+// On a clean checkout it PASSES, because the register is committed beside the
+// code it measures; it only goes red when the tree has actually moved. The
+// alternative, hiding it behind `--diff`, would mean the repo-wide number is
+// unmeasured on most runs while the output still reads like a verdict.
+//
+// Test files are deliberately out of this register and still inside section
+// 3's rule. `scripts/sql-burndown.mjs` says why in its own header.
+
+console.log("\nRaw SQL burn-down (repo-wide, not the diff)");
+{
+  // A THROW here is a VIOLATION and never a crash, the same rule this file
+  // applies to MODULE_DOCS. `rawSqlRule` throws when the rule id has been
+  // renamed out from under the register, and `readBaseline` throws on a
+  // malformed JSON file. Both are real failures and both have to arrive as a
+  // line the intake summary can render, rather than as a stack trace that ends
+  // the run before sections 4 and 5 print.
+  let run = null;
+  try {
+    run = runBurndown();
+  } catch (e) {
+    bad(`read the raw-SQL burn-down register: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  if (run) {
+    console.log(
+      `    ${run.result?.total ?? "unmeasured"} call site(s) in ${Object.keys(run.counts).length} file(s) ` +
+        `of ${run.scanned} scanned; register ${run.result?.listedTotal ?? "?"}, ceiling ${BURNDOWN_CEILING}; ` +
+        `${run.waived} same-line waiver(s) in force.`,
+    );
+    if (run.refusals.length) {
+      for (const line of run.refusals) console.log(`    ${line}`);
+      bad(`the raw-SQL burn-down register only shrinks: ${run.refusals.length} refusal(s)`);
+    } else {
+      ok(`the raw-SQL burn-down register is unchanged or lower (${run.result.total} of a ceiling of ${BURNDOWN_CEILING})`);
+    }
+  }
+  note(
+    "Whether a registered call site is debt worth repaying or a query that genuinely belongs where it is. " +
+      "The register measures; it does not bless. A file listed there is not exempt from review, it is counted.",
   );
 }
 

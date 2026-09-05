@@ -18,7 +18,12 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { addedLineNumbers, parseAddedLineNumbers, scanFileLines } from "./contribution-scan.mjs";
+import {
+  RAW_SQL_RULE_ID,
+  addedLineNumbers,
+  parseAddedLineNumbers,
+  scanFileLines,
+} from "./contribution-scan.mjs";
 
 let failures = 0;
 let assertions = 0;
@@ -94,6 +99,90 @@ check(
   scanFileLines({ relPath: "docs/x.ts", body: BODY, addedSet: null }).findings.length,
   0,
 );
+
+// ── 2b. The type-argument hole ───────────────────────────────────────────────
+//
+// THE REGRESSION THIS SECTION EXISTS FOR. The raw-SQL rule read
+// `(?:query|execute)\s*\(`, and a TypeScript type-argument list sits exactly
+// between the method name and that paren. So `pool.query("...")` was a
+// violation and `pool.query<RowDataPacket[]>("...")` was not, for the
+// identical line of code, and which verdict a lane got came down to whether
+// they had happened to write a generic. 436 non-test call sites outside
+// `server/repos|db|seeds` were invisible to the gate on the day this was
+// written, 18 of them in `server/lib/ledger.ts` and 19 in `server/index.ts`.
+//
+// The hole was in a REGEX, and a regex has no failing state anybody can see:
+// it reports "no match" for a pattern that is wrong exactly as confidently as
+// for a file that is clean. So the fix is only half a fix without these cases.
+// The next person tightening this pattern gets a red instead of a silent
+// re-opening, which is the whole reason a guard has a guard.
+//
+// The negative cases are the other half. A pattern widened with `.*` would
+// catch every one of the generics below AND `if (db.query < n) f(`, and a
+// guard that fires on ordinary comparisons is one people learn to route
+// around. Both halves have to hold at once or the rule is not usable.
+
+/** Findings from the raw-SQL rule alone, on a one-line file the change added. */
+const sqlHits = (line) =>
+  scanFileLines({ relPath: "server/x.ts", body: line, addedSet: new Set([1]) }).findings.filter(
+    (f) => f.ruleId === RAW_SQL_RULE_ID,
+  ).length;
+
+const CAUGHT = [
+  ['the plain call, which always worked', 'const [r] = await pool.query("SELECT 1");'],
+  ["a generic call, the hole itself", 'const [r] = await pool.query<RowDataPacket[]>("SELECT 1");'],
+  ["the `any[]` spelling, the commonest form in this tree", 'const [r] = await pool.query<any[]>("SELECT 1");'],
+  ["two type arguments, one of them itself generic", 'await pool.query<RowDataPacket[], Foo<Bar>>(sql);'],
+  ["three levels of nesting", "await pool.query<Foo<Bar<Baz>>>(sql);"],
+  ["whitespace around the brackets", "await connection.query < RowDataPacket[] > ( sql );"],
+  ["execute, not just query", "await conn.execute<ResultSetHeader>(sql, args);"],
+  ["a union type argument keeps its single pipe", "await pool.query<A | B>(sql);"],
+  ["an intersection type argument keeps its single ampersand", "await pool.query<A & B>(sql);"],
+  ["an inline object type", "await c.execute<{ id: number }[]>(sql);"],
+  ["createPool, untouched by the widening", "const p = createPool({ host });"],
+  ["createConnection, untouched by the widening", "const p = createConnection({ host });"],
+];
+for (const [name, line] of CAUGHT) check(`CAUGHT: ${name}`, sqlHits(line), 1);
+
+const IGNORED = [
+  ["a longer method name is not `query`", "if (db.queryCount < max) run();"],
+  ["a bare less-than is a comparison", "if (db.execute < limit) { run(); }"],
+  ["`&&` cannot close a type-argument list", "const busy = c.query < max && pool.size > (limit);"],
+  ["`||` cannot either", "const busy = c.query < max || pool.size > (limit);"],
+  ["`<=` is not an open bracket", "if (pool.query <= n) f(1);"],
+  ["a ternary with calls in both arms", "const t = db.query < n ? f(1) : g(2);"],
+  ["an ordinary generic that is not a db handle", "const q = new Map<string, number>();"],
+  ["a react-query hook is not a raw query", "useQuery<Thing[]>({ queryKey });"],
+  ["a receiver whose name merely ends in `db`", "const n = await mydb.query(sql);"],
+  ["a helper that hides the query is somebody else's rule", "const rows = await getRows(sql);"],
+];
+for (const [name, line] of IGNORED) check(`IGNORED: ${name}`, sqlHits(line), 0);
+
+// The waiver, on a GENERIC hit, and the same-line rule three guards share.
+// A marker on the line above reads as a waiver to a human and as nothing at
+// all to the scanner, and that gap is worth a case rather than a convention.
+const genericWaived = scanFileLines({
+  relPath: "server/x.ts",
+  body: 'const [r] = await pool.query<RowDataPacket[]>(sql); // module-review-ok: proving the waiver reaches a generic',
+  addedSet: new Set([1]),
+});
+check("a same-line waiver suppresses a generic finding", genericWaived.findings.length, 0);
+check("and is counted", genericWaived.waived, 1);
+
+const waiverAbove = scanFileLines({
+  relPath: "server/x.ts",
+  body: ["// module-review-ok: a marker on the line above is not a waiver", "await pool.query<any[]>(sql);"].join("\n"),
+  addedSet: new Set([1, 2]),
+});
+check("a waiver on the line ABOVE does nothing", waiverAbove.findings.length, 1);
+check("and is not counted as a waiver", waiverAbove.waived, 0);
+
+// Attribution still holds for the newly visible form: making the rule see a
+// generic must not make it charge one to whoever opened the file.
+const genericBody = ['await pool.query<any[]>("SELECT 1");', 'await pool.query<any[]>("SELECT 2");'].join("\n");
+const genericUntouched = scanFileLines({ relPath: "server/x.ts", body: genericBody, addedSet: new Set() });
+check("an untouched generic hit is pre-existing, not a finding", genericUntouched.findings.length, 0);
+check("and is still counted as debt", genericUntouched.preExisting, 2);
 
 // ── 3. Against a real repository ─────────────────────────────────────────────
 //

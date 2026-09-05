@@ -1,18 +1,23 @@
-import { fetchGameMe, GameMe } from "@/lib/gameApi";
+import { authToken, gameFetch, GameMe } from "@/lib/gameApi";
 import { useTokenName } from "@/hooks/useTokenNames";
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { ArrowRight, CheckCircle2, Circle, Compass, Heart, Sparkles } from "lucide-react";
-import MoonProgress from "@/components/natural/MoonProgress";
+import { ArrowRight, Compass, Heart, Sparkles } from "lucide-react";
 import StageAdvanced from "@/components/StageAdvanced";
 import { claimMoment } from "@/lib/celebrated";
+import { onProfileRefresh } from "@/lib/profileRefresh";
 import { formatTokenAmount } from "@/lib/tokenAmount";
 
 const CLAIM_STATUS: Record<string, { label: string; cls: string }> = {
   claimed: { label: "In progress", cls: "bg-amber-100 text-amber-800" },
   submitted: { label: "Awaiting consent", cls: "bg-blue-100 text-blue-700" },
   consented: { label: "Completed", cls: "bg-emerald-100 text-emerald-700" },
-  declined: { label: "Not accepted", cls: "bg-stone-100 text-stone-500" },
+  // 4.39:1 at 12px, which is under the 4.5 floor for text this size, and the
+  // one chip on the row that has to be read carefully. stone-600 on the same
+  // stone-100 measures 7.00:1 and keeps the chip the quietest of the four.
+  // Both figures read off the SHIPPED stylesheet in Chromium, not off the
+  // token values, because the palette is oklch and the arithmetic is sRGB.
+  declined: { label: "Not accepted", cls: "bg-stone-100 text-stone-600" },
 };
 
 export default function GameDashboard() {
@@ -29,14 +34,91 @@ export default function GameDashboard() {
    * ledger is per browser.
    */
   const [advance, setAdvance] = useState<GameMe["lastAdvance"]>(null);
+  /**
+   * "Still coming", "here" and "the request failed" are three different facts.
+   *
+   * This component used to be `if (!me) return null`, and `fetchGameMe()`
+   * answers null for a dropped connection, a 500 and a signed-out reader
+   * alike. So one failed read silently deleted the next step, the balance,
+   * the sending budget and every quest chip, and the page rendered as though
+   * the member had no game state at all. `WalletCard` next door keeps the
+   * three apart for exactly this reason, and this is that pattern: the read
+   * is done here rather than through `fetchGameMe` because that helper
+   * collapses the three into one null before this file can see them.
+   */
+  const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
+
+  // `quiet` re-reads without blanking the card, which is what a refresh after
+  // a write on the same page wants. Only the first read and an explicit Retry
+  // show the loading line.
+  const load = (quiet = false) => {
+    // No token is not a failure, it is a reader who is not signed in. The
+    // profile page only mounts this behind a session, so this is the
+    // belt-and-braces branch, and it must not paint a Retry button.
+    if (!authToken()) {
+      setMe(null);
+      setStatus("ready");
+      return;
+    }
+    if (!quiet) setStatus("loading");
+    gameFetch("/api/game/me")
+      .then((r) => {
+        if (!r.ok) throw new Error(`game/me ${r.status}`);
+        return r.json();
+      })
+      .then((next: GameMe) => {
+        setMe(next);
+        setStatus("ready");
+        const fresh = next?.lastAdvance;
+        if (fresh && claimMoment(`stage:${fresh.toStage}:${fresh.at}`)) setAdvance(fresh);
+      })
+      .catch(() => setStatus("failed"));
+  };
 
   useEffect(() => {
-    fetchGameMe().then((next) => {
-      setMe(next);
-      const fresh = next?.lastAdvance;
-      if (fresh && claimMoment(`stage:${fresh.toStage}:${fresh.at}`)) setAdvance(fresh);
-    });
+    load();
   }, []);
+  // A write anywhere on the sheet moves the balance and the quest chips, and
+  // this card had no way to hear about it. See lib/profileRefresh.ts.
+  useEffect(() => onProfileRefresh(() => load(true)), []);
+
+  /*
+   * THESE TWO LINES SIT ON THE PAGE, NOT ON A CARD, so they take the semantic
+   * pair and not this file's stone/white pair. Every card below is a hardcoded
+   * `bg-white` holding hardcoded `text-stone-*`, and that pairing is safe
+   * because neither half answers to `.dark`. These paragraphs render straight
+   * onto Profile.tsx's `bg-background`, which DOES answer to it, so a frozen
+   * ink here would measure about 2.5:1 (stone-600) or 1.8:1 (teal-deep) at
+   * night. Measured in Chromium against the built stylesheet:
+   * text-muted-foreground 6.98 light / 6.49 dark, text-foreground 16.01 /
+   * 14.73.
+   *
+   * `role="status"` makes the arrival of each one audible, which is item 9's
+   * requirement for this card: the whole top of the sheet appearing or failing
+   * to appear was silent.
+   */
+  if (status === "loading") {
+    return (
+      <p role="status" className="text-sm text-muted-foreground">
+        Loading your next step…
+      </p>
+    );
+  }
+
+  if (status === "failed") {
+    return (
+      <p role="status" className="text-sm text-muted-foreground">
+        Couldn't load your next step.{" "}
+        <button
+          type="button"
+          onClick={() => load()}
+          className="min-h-11 font-medium text-foreground underline underline-offset-2"
+        >
+          Retry
+        </button>
+      </p>
+    );
+  }
 
   if (!me) return null;
 
@@ -70,70 +152,21 @@ export default function GameDashboard() {
         <ArrowRight className="w-5 h-5 shrink-0" />
       </Link>
 
-      {/* Path of Growth */}
-      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6">
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-3">
-            {/*
-              The first surface to speak the natural kit's language: the rail's
-              own position, drawn as a moon filling toward full. The stage
-              chips below carry the same reading in words, so the moon adds a
-              shape to something already stated and never replaces it.
-
-              stageIndex over the last index, because the last stage is arrival
-              and a member standing there is at a full moon rather than at
-              seven eighths of one. One stage alone reads as full, which is the
-              truthful answer when there is nowhere further to walk.
-            */}
-            <MoonProgress
-              value={me.stages.length > 1 ? me.stageIndex / (me.stages.length - 1) : 1}
-              size={40}
-              label="Path of Growth"
-              showNumber={false}
-            />
-            <h3 className="font-display text-xl font-bold text-teal-deep">Path of Growth</h3>
-          </div>
-          {/* sage, not teal-deep. The chip's own bg-teal-deep/10 composites over
-              the white card to rgb(231,242,242), which drops teal from 4.81 on
-              white to 4.21 and under the 4.5 floor. A tint you set on an element
-              is a backdrop for the text ON that element, and the two are chosen
-              together or not at all. sage measures 5.21 on the same backdrop. */}
-          <span className="text-sm font-semibold text-sage bg-teal-deep/10 px-3 py-1 rounded-full">
-            {me.stage.name}
-          </span>
-        </div>
-        <p className="text-sm text-stone-500 mb-5">{me.stage.description}</p>
-        <ol className="flex flex-wrap gap-y-3">
-          {me.stages.map((s, i) => {
-            const reached = i <= me.stageIndex;
-            const current = i === me.stageIndex;
-            return (
-              <li key={s.id} className="flex items-center" title={`${s.name}: ${s.description}`}>
-                <span
-                  className={`flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full ${
-                    current
-                      ? "bg-teal-deep text-white"
-                      : reached
-                      ? "text-teal-deep"
-                      : "text-stone-400"
-                  }`}
-                >
-                  {reached ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Circle className="w-3.5 h-3.5" />}
-                  {s.name}
-                </span>
-                {i < me.stages.length - 1 && <span className="mx-0.5 text-stone-300">·</span>}
-              </li>
-            );
-          })}
-        </ol>
-      </div>
+      {/* The stage ladder used to stand here as "Path of Growth". It moved to
+          `components/profile/MaturityLadder.tsx`, which the character sheet
+          renders as its own Maturity section. The move IS the fix: the rungs a
+          member had not reached were text-stone-400 at 2.52:1, the rung they
+          stood on was signalled by background colour with no aria-current, and
+          the separator between rungs was a literal middle dot that screen
+          readers announce. Drawing it in two places would have meant fixing it
+          in two places. */}
 
       {/* Gratitude + quests */}
       <div className="grid md:grid-cols-2 gap-4">
         <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6">
           <div className="flex items-center gap-2 mb-3">
             <Heart className="w-5 h-5 text-coral" />
-            <h3 className="font-display text-lg font-bold text-teal-deep">{currency}</h3>
+            <h2 className="font-display text-lg font-bold text-teal-deep">{currency}</h2>
           </div>
           {/* Recognition carries decimals 0 today, so this number does not
               move. It divides anyway: this is the biggest number on the
@@ -157,7 +190,7 @@ export default function GameDashboard() {
         <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6">
           <div className="flex items-center gap-2 mb-3">
             <Sparkles className="w-5 h-5 text-gold" />
-            <h3 className="font-display text-lg font-bold text-teal-deep">Quests</h3>
+            <h2 className="font-display text-lg font-bold text-teal-deep">Quests</h2>
           </div>
           {me.quests.length === 0 ? (
             <p className="text-sm text-stone-500 mb-4">You haven't claimed a quest yet.</p>

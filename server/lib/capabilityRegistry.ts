@@ -109,6 +109,12 @@ export const POWERS: readonly PowerEntry[] = [
     routes: ["/api/admin/org/roles/:id/holders", "/api/admin/org/seatings/:id"],
   },
   {
+    capability: "org.seatAgent",
+    title: "The village's software seats",
+    surface: "Seating a software agent in a seat, and taking it out of it",
+    routes: ["/api/admin/org/roles/:id/holders"],
+  },
+  {
     capability: "org.declare",
     title: "The village's own shape",
     surface: "Declaring the circles, the seats, and how each one decides",

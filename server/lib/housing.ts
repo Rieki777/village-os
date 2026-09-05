@@ -537,6 +537,33 @@ export async function listReservations(pool: Pool, limit = 200): Promise<Reserva
   }));
 }
 
+/**
+ * ONE MEMBER'S OWN INTENTS, which is what the resident path's ladder reads.
+ *
+ * `listReservations` above is the FOUNDER's read: every lead in the village,
+ * newest first, capped. This is the MEMBER's, and the difference is not the
+ * filter, it is who is allowed to see the result. These rows carry a name, an
+ * email and a phone number, so the founder read sits behind `map.publish` and
+ * this one must be scoped to the signed-in member by the caller. It takes a
+ * user id rather than a request for exactly that reason: there is no way to
+ * call it and accidentally get somebody else's leads.
+ *
+ * `user_id` has been on this table since 0077's first commit and the public
+ * POST has always filled it from `authedUser(req)` when somebody is signed
+ * in, so no backfill is involved and nothing changes for the anonymous leads
+ * this form exists to accept. What 0159 adds is the index that makes this
+ * query a prefix lookup instead of a scan.
+ *
+ * NO ladder position is computed here, and that is deliberate. A rung is a
+ * function of the rows this returns, evaluated when somebody looks, so a
+ * withdrawn reservation lowers the position on the next read with nothing
+ * written anywhere. The rungs themselves are not defined in this repository
+ * yet, so this returns the facts and names no position.
+ */
+// `reservationsForMember` now lives in server/repos/housing.ts, beside the
+// other two per-path readers. The rule wants a table's readers enumerable in
+// one known directory, which is what "stay in one file" was reaching for.
+
 /** Move an intent along. Only 'reserved' ever consumes a home. */
 export const RESERVATION_STATUSES = ["new", "contacted", "reserved", "withdrawn"] as const;
 export const isReservationStatus = (v: unknown): v is (typeof RESERVATION_STATUSES)[number] =>

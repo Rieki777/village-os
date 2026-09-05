@@ -524,7 +524,7 @@ function ThreadView({ id }: { id: string }) {
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: scrollBehavior(), block: "end" });
-  }, [thread?.messages.length]);
+  }, [thread?.messages?.length]);
 
   const send = async () => {
     const body = draft.trim();

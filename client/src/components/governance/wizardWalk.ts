@@ -48,7 +48,7 @@ export function walkFor(typeId: string | null | undefined): WalkStep[] {
 /** The fields this type renders in this step, in order. Empty is legal. */
 export function fieldsFor(typeId: string | null | undefined, step: StepKey) {
   const cfg = typeId ? typeConfig(typeId) : null;
-  return cfg?.steps[step]?.fields ?? [];
+  return cfg?.steps?.[step]?.fields ?? [];
 }
 
 /** Where a step sits in this type's walk, or -1 when the type skips it. */
