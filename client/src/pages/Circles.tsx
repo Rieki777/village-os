@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import CircleScene from "@/components/CircleScene";
+import CirclesMiniMap, { type MiniCircle, type MiniSeat } from "@/components/CirclesMiniMap";
 import InfoTip from "@/components/InfoTip";
 import { swatchFor } from "@/lib/swatch";
 import { gameFetch } from "@/lib/gameApi";
@@ -152,6 +153,10 @@ function CircleCard({ circle, expanded, onToggle, index }: {
 export default function Circles() {
   const [expandedCircle, setExpandedCircle] = useState<string | null>(null);
   const [circles, setCircles] = useState<CircleEntry[] | null>(null);
+  // The rows as they arrived, kept for the mini map. The cards flatten a
+  // circle into prose (`focus`, `members`) and drop the nesting and the
+  // seat states, which are exactly what the picture is made of.
+  const [raw, setRaw] = useState<{ circles: MiniCircle[]; seats: MiniSeat[] }>({ circles: [], seats: [] });
   const [failed, setFailed] = useState(false);
   const [people, setPeople] = useState<PeopleTier | null>(null);
   const [seatCounts, setSeatCounts] = useState({ seats: 0, held: 0 });
@@ -176,6 +181,10 @@ export default function Circles() {
           seatsByCircle.set(r.circleId, list);
         }
         setPeople(data.people ?? null);
+        setRaw({
+          circles: (data.circles as MiniCircle[]) ?? [],
+          seats: (data.roles as MiniSeat[]) ?? [],
+        });
         setSeatCounts({
           seats: (data.roles ?? []).reduce((n: number, r: any) => n + Number(r.seats ?? 0), 0),
           held: (data.roles ?? []).reduce((n: number, r: any) => n + Number(r.holderCount ?? 0), 0),
@@ -304,6 +313,16 @@ export default function Circles() {
                 </div>
               )}
             </div>
+
+            {/* The door to the map. A column of cards says what each circle
+                IS; only the picture says how they sit together, and which
+                seats are still waiting. Live, so it cannot go stale against
+                the village it draws. */}
+            {raw.circles.length > 0 && (
+              <div className="mb-14">
+                <CirclesMiniMap circles={raw.circles} seats={raw.seats} />
+              </div>
+            )}
 
             {today.length > 0 && (
               <div className="mb-16">
