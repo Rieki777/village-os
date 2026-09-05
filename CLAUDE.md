@@ -218,7 +218,8 @@ constant comes back.
   failure, not a comment.
 - `token_balances` is a cache: **recompute, never increment**.
 - Only faucet accounts go negative. Non-faucet exceptions exist only via
-  `ALLOW_NEGATIVE_SOURCES` (`stay_night`, `payment_reversal`) with `allowNegative` set.
+  `ALLOW_NEGATIVE_SOURCES` with `allowNegative` set. Read the set in
+  `server/lib/ledger.ts` rather than a list here: it named two for as long as it held three.
 - All movement goes through `postTransfer` / `postTransferPair` (+ `PairGuard`). No raw
   ledger writes, ever.
 
