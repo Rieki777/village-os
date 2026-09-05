@@ -181,10 +181,25 @@ export function kindOfSet(itemKinds: readonly string[]): GovernanceKind {
  * and a window on them is a seat nobody can remove.
  */
 export const NO_WINDOW_SUBJECTS: ReadonlySet<string> = new Set([
-  "role_seat",
-  "role_unseat",
   /*
-   * The Birthing, and it is here for a different reason from the two above.
+   * `role_seat` and `role_unseat` USED TO BE HERE, and Rye moved them out on
+   * 2026-09-04, approving the recommendation that they take the window and stay
+   * un-vetoable instead of skipping both.
+   *
+   * The danger the carve-out was built for is unchanged and is still closed: a
+   * steward whose removal waits inside a window THEY hold is a seat nobody can
+   * remove. Taking the window away closed it by removing the wait. Taking the
+   * DOOR away closes it by removing the veto, which is the narrower cut and the
+   * one 20.11 already made for the veto map. `SEAT_SUBJECTS` below carries them
+   * now, and `landingOf` reads it.
+   *
+   * R90 ("a seated steward can immediately act") survives intact, because it is
+   * about what a steward may do ONCE SEATED and never about how fast the
+   * seating lands. A seating that carries, waits its window, then seats a
+   * steward who acts with no further vote satisfies it exactly.
+   */
+  /*
+   * The Birthing, and after the move above it is the ONLY subject left here.
    *
    * A window is a door for a seated steward, and before the Birthing there is
    * no seat: the catalysts are seated as stewards BY the launch, at the moment
@@ -199,6 +214,65 @@ export const NO_WINDOW_SUBJECTS: ReadonlySet<string> = new Set([
 /** Does this subject skip the window entirely and execute the moment it carries? */
 export function executesAtPassWithNoWindow(subjectType: string): boolean {
   return NO_WINDOW_SUBJECTS.has(String(subjectType).toLowerCase());
+}
+
+/**
+ * SEATING AND UNSEATING: they wait like any Game change, and no seat may stop
+ * one (Rye, 2026-09-04).
+ *
+ * A separate set from `NO_WINDOW_SUBJECTS` because they are separate facts, and
+ * folding two facts into one flag is exactly what Phase 1b did here and what
+ * 20.11 had to undo. These keep their instant, their countdown and their
+ * notice, and lose only the door.
+ */
+export const SEAT_SUBJECTS: ReadonlySet<string> = new Set(["role_seat", "role_unseat"]);
+
+/** Is this a seating act, which waits its window and admits no veto? */
+export function isSeatSubject(subjectType: string): boolean {
+  return SEAT_SUBJECTS.has(String(subjectType).toLowerCase());
+}
+
+/**
+ * DOES THIS PAYOUT WAIT? (Rye, 2026-09-04.)
+ *
+ * "they go the moment they pass all conditions ... And then also another
+ * settings where you can say which payouts require a 3 day delay to confirm and
+ * set it above $1000 as a default."
+ *
+ * Strictly ABOVE, so a threshold of 1000 sends a payout of exactly 1000 at once
+ * and holds 1001. The setting's label says "above this amount", and a member
+ * reading that sentence and typing that number should get what it says.
+ *
+ * Fail-closed on an unreadable value: a threshold nobody can parse holds the
+ * payout rather than releasing it, which matches every cap in this codebase and
+ * matches the direction of the ruling, since the cost of holding a payout is a
+ * delay and the cost of releasing one is a send nobody could stop.
+ *
+ * NOTE FOR WHOEVER BUILDS THE PAYOUT CLOSER. Nothing calls this yet, and that
+ * is not an oversight: `token_send`, `quest_payout` and `founding_allocation`
+ * have no entry in `SUBJECT_CLOSERS`, so no payout ballot can close in this
+ * build at all. This is the rule waiting at the seam, with the dial already
+ * registered so a village can set it before the path exists.
+ */
+export function payoutWaitsForWindow(amount: unknown, thresholdRaw: unknown): boolean {
+  /*
+   * `Number.isFinite(Number(x))` IS NOT THE CHECK, and this function shipped
+   * with that mistake for about four minutes until its own test caught it.
+   * `Number(null)` and `Number("")` are both 0, which is finite, so a missing
+   * amount read as zero, compared as `0 > 1000`, and SENT. The one value that
+   * has to fail closed was the one that failed open, and it failed open
+   * silently, which is the whole shape of this defect class.
+   */
+  const readNumber = (v: unknown): number | null => {
+    if (v === null || v === undefined) return null;
+    if (typeof v === "string" && v.trim() === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const n = readNumber(amount);
+  const threshold = readNumber(thresholdRaw);
+  if (n === null || threshold === null) return true;
+  return n > threshold;
 }
 
 /** The floor the founder set, in hours, and the setting's own floor. */
@@ -239,6 +313,14 @@ export interface LandingInput {
    * notice to anybody, which is the harm the rule was written against.
    */
   notVetoable?: boolean;
+  /**
+   * WHY it cannot be stopped, for the sentence a member reads. `veto_map` is
+   * the 20.11 carve-out (the village deciding what the seat reaches);
+   * `out_of_tier_reach` is the 2026-09-04 setting (this size of decision is not
+   * in the seat's reach at all). Absent reads as `veto_map`, which is what
+   * every caller meant before the second reason existed.
+   */
+  notVetoableReason?: "veto_map" | "out_of_tier_reach";
   /**
    * TRUE WHEN THIS DECISION MAY ONLY LAND ON A BOUNDARY.
    *
@@ -314,9 +396,18 @@ export function landingFor(input: LandingInput): Landing {
     return boundary.getTime() >= at.getTime() ? boundary : at;
   };
 
+  /*
+   * TWO REASONS A DECISION CANNOT BE STOPPED, and a member is owed the right
+   * one. Both set the same flag, because the veto route and the notice only
+   * need the FACT, and both would read a second column as a second copy of it.
+   * The sentence is where they differ, and getting it wrong tells a village
+   * their routine brand edit is a decision "about the seat itself".
+   */
   const stopper = vetoable
     ? "A steward can stop it until then."
-    : "Nobody can stop this one: the village decided it about the seat itself, so the seat has no say in it.";
+    : input.notVetoableReason === "out_of_tier_reach"
+      ? "No steward can stop this one: the village has not put decisions of this size in the seat's reach."
+      : "Nobody can stop this one: the village decided it about the seat itself, so the seat has no say in it.";
 
   if (input.kind === "token_send" && input.timing === "at_acceptance" && !input.snapToBoundary) {
     return {

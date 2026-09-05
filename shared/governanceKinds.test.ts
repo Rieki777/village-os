@@ -9,7 +9,9 @@
  *  - anything chosen next_moon lands at the LATER of the next new moon and
  *    closes_at + 72 hours, which is the late-carry jump;
  *  - a bundle mixing the two is wholly a Game change;
- *  - the seat carve-out executes at pass with no window at all;
+ *  - the Birthing executes at pass with no window at all, and is now the only
+ *    subject that does: a seating WAITS its window and admits no veto
+ *    (Rye, 2026-09-04);
  *  - a veto at the landing instant is too late.
  */
 import { describe, expect, it } from "vitest";
@@ -19,16 +21,20 @@ import {
   defaultTimingFor,
   noCloserRefusal,
   executesAtPassWithNoWindow,
+  isSeatSubject,
+  NO_WINDOW_SUBJECTS,
   kindOfItem,
   kindOfSet,
   kindOfSubject,
   landingFor,
   lateVetoRefusal,
   timingOf,
+  payoutWaitsForWindow,
   vetoHoursFrom,
   vetoIsInTime,
   VETO_HOURS_FLOOR,
 } from "./governanceKinds";
+import { VARIABLES_BY_KEY } from "./gameVariables";
 
 const CLOSE = new Date("2026-09-10T12:00:00.000Z");
 const HOUR = 60 * 60 * 1000;
@@ -109,10 +115,41 @@ describe("when a carried decision lands", () => {
     expect(l.landsAt?.toISOString()).toBe(new Date(CLOSE.getTime() + 168 * HOUR).toISOString());
   });
 
-  it("executes a seating at pass with no window, so a seat cannot hold its own removal", () => {
-    expect(executesAtPassWithNoWindow("role_unseat")).toBe(true);
-    expect(executesAtPassWithNoWindow("role_seat")).toBe(true);
+  it("makes a seating WAIT its window and admit no veto, so a seat cannot hold its own removal", () => {
+    /*
+     * THIS TEST USED TO ASSERT THE OPPOSITE, and the change is Rye's, 2026-09-04:
+     * a seating takes the window and stays un-vetoable instead of skipping both.
+     *
+     * The PROTECTION in the old title is what survives and is what this still
+     * proves. A steward whose removal waits inside a window they hold is a seat
+     * nobody can remove; skipping the window closed that by deleting the wait,
+     * and closing the door closes it by deleting the veto. The second is the
+     * narrower cut and it is the one 20.11 had already made for the veto map.
+     */
+    expect(isSeatSubject("role_unseat")).toBe(true);
+    expect(isSeatSubject("role_seat")).toBe(true);
+    expect(isSeatSubject("mechanics")).toBe(false);
+    // And they are no longer in the no-window set, which is the half that moved.
+    expect(executesAtPassWithNoWindow("role_unseat")).toBe(false);
+    expect(executesAtPassWithNoWindow("role_seat")).toBe(false);
     expect(executesAtPassWithNoWindow("mechanics")).toBe(false);
+
+    const seating = landingFor({
+      closesAt: CLOSE, kind: "game_change", timing: "next_moon", vetoHours: 72,
+      nextBoundaryAfter: farMoon, notVetoable: true,
+    });
+    expect(seating.executesAtClose, "it waits now").toBe(false);
+    expect(seating.landsAt, "with an instant the village can read").not.toBeNull();
+    expect(seating.vetoable, "and no door, which is the protection").toBe(false);
+  });
+
+  it("still lets the Birthing carry the moment it passes, and it is the only one left", () => {
+    // Rye, 2026-09-04: "Leave it exempt! It passes the moment everyone votes
+    // yes!" Before the Birthing there is no seat, so a window would be 72 hours
+    // nobody could use, and it already needs every seat to vote and every one
+    // to say yes.
+    expect(executesAtPassWithNoWindow("village_launch")).toBe(true);
+    expect(Array.from(NO_WINDOW_SUBJECTS)).toEqual(["village_launch"]);
     const l = landingFor({ closesAt: CLOSE, kind: "game_change", timing: "next_moon", vetoHours: 72, nextBoundaryAfter: farMoon, noWindow: true });
     expect(l.executesAtClose).toBe(true);
     expect(l.landsAt).toBeNull();
@@ -242,5 +279,37 @@ describe("weight_allocation is a Game change, and the table says so once", () =>
     expect(kindOfItem("weight_allocation")).toBe("game_change");
     expect(kindOfSet(["weight_allocation"])).toBe("game_change");
     expect(kindOfSet(["token_send", "weight_allocation"])).toBe("game_change");
+  });
+});
+
+describe("which payouts wait, and which go at once", () => {
+  /*
+   * Rye, 2026-09-04: payouts go the moment they pass, and a village can name an
+   * amount above which one waits the three days instead, default 1000.
+   */
+  it("sends at or below the threshold and holds above it", () => {
+    expect(payoutWaitsForWindow(999, 1000)).toBe(false);
+    // Exactly the threshold GOES, because the setting reads "above this amount"
+    // and a founder typing 1000 should get what that sentence says.
+    expect(payoutWaitsForWindow(1000, 1000)).toBe(false);
+    expect(payoutWaitsForWindow(1001, 1000)).toBe(true);
+  });
+
+  it("holds every payout at zero, which is how every cap here fails closed", () => {
+    expect(payoutWaitsForWindow(1, 0)).toBe(true);
+    expect(payoutWaitsForWindow(0, 0)).toBe(false);
+  });
+
+  it("holds rather than sends when either number is unreadable", () => {
+    // The costs are not symmetric: holding a payout costs a delay, releasing
+    // one costs a send nobody could stop.
+    for (const bad of [undefined, null, "", "lots", NaN]) {
+      expect(payoutWaitsForWindow(bad, 1000), `amount ${String(bad)} must hold`).toBe(true);
+      expect(payoutWaitsForWindow(5000, bad), `threshold ${String(bad)} must hold`).toBe(true);
+    }
+  });
+
+  it("ships the founder's default, read from the registry so it cannot drift", () => {
+    expect(VARIABLES_BY_KEY["governance.payout_delay_over"]?.default).toBe("1000");
   });
 });

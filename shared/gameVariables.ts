@@ -512,6 +512,60 @@ export const VARIABLES: VariableDef[] = [
     type: "text",
     default: "all",
   },
+  /*
+   * THE SECOND HALF OF THE REACH, AND IT IS THE ONE THAT NARROWS BY DEFAULT.
+   *
+   * Rye, 2026-09-04: "for now as the default let's have constitutional able to
+   * be vetoed but let it be a setting in admin for which of these 3 categories
+   * a steward can veto".
+   *
+   * `steward_subjects` above names WHICH KINDS of decision are in reach. This
+   * names WHICH SIZES. A veto needs both: the subject in the first list and the
+   * tier in this one, so a village can say "the seat may pause a constitutional
+   * mechanics change and nothing else" without writing two half-rules that
+   * disagree.
+   *
+   * The default is deliberately narrower than the code shipped with. Every tier
+   * was stoppable before this; now the seat reaches the changes that reshape the
+   * village and stays out of the way of the rest, which is the founder's own
+   * framing that power sits with the community and the community governs the
+   * seat.
+   */
+  {
+    key: "governance.steward_veto_tiers",
+    category: "Governance",
+    label: "Which sizes of decision a steward can stop",
+    criticality: "constitutional",
+    description:
+      "Every decision carries a size: routine, structural, or constitutional. This names the sizes a steward may stop inside the window before a decision lands, and a veto needs the decision to be in reach on both this list and the one above. The default is constitutional on its own, so the seat can pause the changes that reshape the village and leaves the smaller ones alone. Write them separated by commas, or write all. Leave it empty and no steward can stop anything, which is a healthy village and not a broken one. Changing this is priced at the top tier and no steward can stop the change, because a seat that could veto an edit to its own limits would have none.",
+    type: "text",
+    default: "constitutional",
+  },
+  /*
+   * A PAYOUT GOES THE MOMENT IT PASSES, UNLESS IT IS BIG (Rye, 2026-09-04).
+   *
+   * Asked whether token sends should take the three-day window: "No, they go
+   * the moment they pass all conditions (minimum time set by the whole system
+   * for a proposal duration) quorum and unity) And then also another settings
+   * where you can say which payouts require a 3 day delay to confirm and set it
+   * above $1000 as a default."
+   *
+   * So the small payout keeps its speed, which is what makes a quest loop feel
+   * like a quest loop, and the size of payout that would hurt to get wrong
+   * waits where somebody can catch it. Zero delays every payout, which is the
+   * fail-closed direction this codebase already uses for every cap: zero means
+   * zero and never unlimited.
+   */
+  {
+    key: "governance.payout_delay_over",
+    category: "Governance",
+    label: "Payouts above this wait three days before they are sent",
+    criticality: "structural",
+    description:
+      "A payout the village votes through is sent the moment it passes. Above this amount it waits the steward window first, so somebody can catch a send that would empty a purse or reward the wrong work. The amount is counted in whole tokens of whatever token is being sent, so a village holding several tokens with very different sizes should set this against the one it actually pays people in. Zero makes every payout wait.",
+    type: "integer",
+    default: "1000",
+  },
   {
     key: "governance.steward_council",
     category: "Governance",

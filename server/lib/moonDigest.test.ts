@@ -44,6 +44,9 @@ const deps = (over: Partial<LandingDeps> = {}): LandingDeps => ({
   vetoHours: () => 72,
   autoApplyEnabled: () => true,
   stewardCouncil: () => false,
+  // This file is about the digest, never about the seat’s reach; "all" keeps
+  // every case here asserting exactly what it asserted before that reach existed.
+  stewardVetoTiers: () => "all",
   // A boundary exactly at CYCLE_ENDED, so a tick just after it crosses one.
   nextBoundaryAfter: (after: Date) => (after.getTime() < CYCLE_ENDED.getTime() ? CYCLE_ENDED : new Date(CYCLE_ENDED.getTime() + 28 * 24 * HOUR)),
   cycleNumberAt: () => 1,

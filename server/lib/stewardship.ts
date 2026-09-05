@@ -99,6 +99,7 @@
  * against an open-ended season rather than writing a term nothing will end.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Criticality } from "../../shared/governanceEngine";
 import type { Capability } from "../../shared/capabilities";
 import { kindOfSet, kindOfSubject, type GovernanceKind } from "../../shared/governanceKinds";
 import { cycleBoundsFor, cycleStartMs } from "../../shared/lunar";
@@ -177,13 +178,58 @@ export const VETO_MAP_KEYS: readonly string[] = [STEWARD_SUBJECTS_KEY, AUTO_EXEC
  * an unstoppable act on the cheapest possible clock, which was the opposite of
  * what the carve-out was for.
  */
+/**
+ * WHICH SIZES OF DECISION THE SEAT MAY STOP (Rye, 2026-09-04).
+ *
+ * "for now as the default let's have constitutional able to be vetoed but let
+ * it be a setting in admin for which of these 3 categories a steward can veto".
+ *
+ * The companion to `STEWARD_SUBJECTS_KEY`: that one names which KINDS are in
+ * reach, this one names which SIZES, and a veto needs both. It is veto-locked
+ * for the same reason every other limit on the seat is, which matters more here
+ * than anywhere else: a seat that could veto a narrowing of its own reach would
+ * be the only seat in the design that sets its own limits.
+ */
+export const STEWARD_VETO_TIERS_KEY = "governance.steward_veto_tiers";
+
 export const VETO_LOCKED_KEYS: readonly string[] = [
   STEWARD_SUBJECTS_KEY,
   AUTO_EXECUTE_SUBJECTS_KEY,
+  STEWARD_VETO_TIERS_KEY,
   STEWARD_COUNCIL_KEY,
   VETO_HOURS_KEY,
   HIGHEST_TIER_KEY,
 ];
+
+/**
+ * The tiers a steward may stop, read from the setting's raw text.
+ *
+ * FAIL CLOSED, in the direction that costs the village least. An unreadable or
+ * empty value yields the EMPTY set, so a typo takes the seat's reach away and
+ * never widens it: the cost of reading it wrong is a decision that lands with
+ * nobody able to pause it, against a seat that could stop things the village
+ * never put in its reach. Between those two, the village keeping its own
+ * decisions is the safer failure, and it is the one the founder's framing asks
+ * for.
+ *
+ * `all` is spelled out because `steward_subjects` already uses that word for
+ * the same idea, and two reach settings that spell the same concept two
+ * different ways is a trap for whoever writes the second one.
+ */
+export function stewardVetoTiersFrom(raw: unknown): ReadonlySet<Criticality> {
+  const text = String(raw ?? "").trim().toLowerCase();
+  if (text === "all") return new Set(["routine", "structural", "constitutional"] as Criticality[]);
+  const named = text
+    .split(/[\s,]+/)
+    .map((t) => t.trim())
+    .filter((t) => t === "routine" || t === "structural" || t === "constitutional");
+  return new Set(named as Criticality[]);
+}
+
+/** Is a decision of this size inside the seat's reach at all? */
+export function tierIsInStewardReach(tier: Criticality, raw: unknown): boolean {
+  return stewardVetoTiersFrom(raw).has(tier);
+}
 
 /** True when changing this setting is outside every steward's reach. */
 export function keyIsVetoLocked(key: string): boolean {

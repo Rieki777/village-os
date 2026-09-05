@@ -20,7 +20,7 @@
  * No TEST_DATABASE_URL: the database cases skip, the run fails on the way out
  * (house rule). Nothing here passes hollowly.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { castVote, closeBallot, openBallot, setSubjectCloserCheck, type BallotRow, type OpenBallotInput } from "./ballots";
@@ -45,7 +45,8 @@ import {
   type LandingDeps,
   type SubjectCloser,
 } from "./applyDue";
-import { STEWARD_VETO, VETO_WATCH_NOTICE_TYPES, stewardVetoStands, vetoWatchMarksDue, vetoesFor } from "./stewardship";
+import { STEWARD_VETO, VETO_WATCH_NOTICE_TYPES, keyIsVetoLocked, stewardVetoStands, tierIsInStewardReach, vetoWatchMarksDue, vetoesFor } from "./stewardship";
+import { VARIABLES_BY_KEY, criticalityOf } from "../../shared/gameVariables";
 import { floorForCriticality, thresholdSettingsFrom } from "../../shared/ballotSubjects";
 import { MOMENT_TYPE } from "./applyDue";
 
@@ -87,6 +88,7 @@ const FAR_MOON_DAYS = 20;
 /** What the executors did, so a test can count writes rather than guess. */
 let writes: string[] = [];
 let council = false;
+let vetoTiers = "all";
 let brakeOff = true;
 let throwOnExecute = false;
 
@@ -95,6 +97,10 @@ const deps = (over: Partial<LandingDeps> = {}): LandingDeps => ({
   vetoHours: () => 72,
   autoApplyEnabled: () => brakeOff,
   stewardCouncil: () => council,
+  // "all" keeps every case in this file asserting what it asserted before the
+  // tier reach existed. The SHIPPED default is "constitutional", and the cases
+  // that prove the new rule set it explicitly, so neither reading is assumed.
+  stewardVetoTiers: () => vetoTiers,
   nextBoundaryAfter: (after: Date) => new Date(after.getTime() + FAR_MOON_DAYS * 24 * HOUR),
   cycleNumberAt: () => 1,
   closerFor: (subjectType: string) => CLOSERS[subjectType],
@@ -1041,5 +1047,114 @@ describe.skipIf(!configured)("the window notice and the veto route give the same
       [plainOffers, lockedOffers],
       "the notice's promise and the veto route's answer must agree on every row",
     ).toEqual([plainVeto.ok, lockedVeto.ok]);
+  });
+
+  it("makes a role_seat ballot WAIT its window and lock the door, through the real landing path", async () => {
+    /*
+     * Rye, 2026-09-04, taking the recommendation: a seating takes the window
+     * and stays un-vetoable. Proved HERE and not only in governanceKinds,
+     * because the shared arithmetic knowing the rule proves nothing about
+     * whether landingOf passes it: the seat e2e goes through the direct
+     * role-seats route and never touches a landing at all, so the ballot path
+     * for a seating had no coverage of its own.
+     */
+    const b = await openOne({ subjectType: "role_seat", subjectRef: `seat-land-${++n}` });
+    const closed = await carry(b);
+    const landing = landingOf(deps(), { ballot: closed.ballot! });
+    expect(landing.executesAtClose, "it no longer carries at the close").toBe(false);
+    expect(landing.landsAt, "it has an instant the village can read").not.toBeNull();
+    expect(landing.vetoable, "and no steward can stop it").toBe(false);
+    expect(landing.because).toContain("the seat itself");
+  });
+});
+
+
+describe.skipIf(!configured)("which SIZES of decision the seat may stop", () => {
+  /**
+   * Rye, 2026-09-04: "for now as the default let's have constitutional able to
+   * be vetoed but let it be a setting in admin for which of these 3 categories
+   * a steward can veto".
+   *
+   * The rest of this file runs with the reach set to "all", which is what every
+   * case here asserted before the setting existed. These cases set it
+   * explicitly, so nothing below is a claim about a default it never read.
+   */
+  afterEach(() => { vetoTiers = "all"; });
+
+  it("ships the founder's default, and the registry is the thing asked", () => {
+    // Read from the registry rather than restated here, because a default
+    // written twice is a default that drifts. This is the assertion that fails
+    // if somebody widens the shipped reach without meaning to.
+    expect(VARIABLES_BY_KEY["governance.steward_veto_tiers"]?.default).toBe("constitutional");
+    expect(criticalityOf(VARIABLES_BY_KEY["governance.steward_veto_tiers"]!)).toBe("constitutional");
+  });
+
+  it("parses the list, and an unreadable value takes reach away instead of granting it", () => {
+    expect(tierIsInStewardReach("constitutional", "constitutional")).toBe(true);
+    expect(tierIsInStewardReach("routine", "constitutional")).toBe(false);
+    expect(tierIsInStewardReach("routine", "all")).toBe(true);
+    expect(tierIsInStewardReach("structural", "routine, structural")).toBe(true);
+    // FAIL CLOSED. Empty, blank, nonsense and undefined all mean the seat
+    // reaches nothing, never everything: a typo must cost the village a pause
+    // it could have had, and never hand the seat a decision it was not given.
+    for (const bad of ["", "   ", "everything", "CONSTITUTIONAL!", undefined, null, 7]) {
+      expect(tierIsInStewardReach("constitutional", bad), `"${String(bad)}" must not grant reach`).toBe(false);
+    }
+    // Case and spacing are a founder typing in a box, not a syntax error.
+    expect(tierIsInStewardReach("constitutional", "  Constitutional  ")).toBe(true);
+  });
+
+  it("locks the landing of a decision whose size is out of reach, and says why", async () => {
+    await seatSteward("u-steward");
+    vetoTiers = "constitutional";
+    // A brand field is routine (CRITICALITY_FOR_ITEM_KIND), so under the
+    // shipped default it is outside the seat's reach.
+    const ref = `tier-routine-${++n}`;
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO mechanics_proposals (id, title, rationale, status, proposer_user_id, change_set) VALUES (?,?,?,?,?,?)",
+      [ref, "Rename the welcome card", "why the village was asked", "onsite_vote", "u-a",
+        JSON.stringify([{ kind: "brand_field", key: "welcome_title", to: "Hello" }])],
+    );
+    const b = await openOne({ subjectRef: ref });
+    const closed = await carry(b);
+    await routeOutcome(deps(), closed.ballot!, "passed", "carried", "u-a", ["brand_field"]);
+
+    const row = await landingRow(pool, b.id);
+    expect(row?.landsAt, "it still waits its window, so the village reads it coming").not.toBeNull();
+    expect(row?.vetoLocked, "and the seat cannot stop it").toBe(true);
+
+    const stopped = await recordVeto(deps(), {
+      ballotId: b.id, stewardId: "u-steward", reason: "I would rather it stayed.",
+    });
+    expect(stopped.ok).toBe(false);
+    if (stopped.ok) return;
+    expect(stopped.error).toContain("no steward may stop it");
+  });
+
+  it("leaves a constitutional decision stoppable under that same default", async () => {
+    await seatSteward("u-steward");
+    vetoTiers = "constitutional";
+    const ref = `tier-const-${++n}`;
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO mechanics_proposals (id, title, rationale, status, proposer_user_id, change_set) VALUES (?,?,?,?,?,?)",
+      [ref, "Change how votes are counted", "why the village was asked", "onsite_vote", "u-a",
+        JSON.stringify([{ kind: "mode_switch", to: "one_member_one_vote" }])],
+    );
+    const b = await openOne({ subjectRef: ref });
+    const closed = await carry(b);
+    await routeOutcome(deps(), closed.ballot!, "passed", "carried", "u-a", ["mode_switch"]);
+
+    const row = await landingRow(pool, b.id);
+    expect(row?.vetoLocked, "a mode switch is constitutional, which IS in the default reach").toBe(false);
+    const stopped = await recordVeto(deps(), {
+      ballotId: b.id, stewardId: "u-steward", reason: "This needs another moon of talking first.",
+    });
+    expect(stopped.ok, "and the door the notice promises actually opens").toBe(true);
+  });
+
+  it("prices the reach setting itself out of the seat's own hands", () => {
+    // The one that matters most: a seat that could veto a NARROWING of its own
+    // reach would be the only seat here that sets its own limits.
+    expect(keyIsVetoLocked("governance.steward_veto_tiers")).toBe(true);
   });
 });

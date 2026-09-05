@@ -1535,9 +1535,11 @@ const PROSE = {
     "steward's own weight counts in the tally like anybody's. A token send has no window after it closes, so the " +
     "block has to happen while the ballot is open.",
   notVetoable:
-    "**What no steward may stop.** Seating and unseating a role that carries the veto, and any edit to the settings " +
-    "that say what a steward may stop, keep their timing and their window like any Game change and sit outside every " +
-    "steward's reach. A seat that could veto its own removal is a seat nobody can remove. A change set mixing one of " +
+    "**What no steward may stop.** Three things. EVERY seating and unseating, of any role and not only one that " +
+    "carries the veto (Rye, 2026-09-04). Any edit to the settings that say what a steward may stop. And any decision " +
+    "whose SIZE the village has not put in the seat's reach, which by default is everything below constitutional. " +
+    "All three keep their timing and their window like any Game change and lose only the door, so the village still " +
+    "reads them coming. A seat that could veto its own removal is a seat nobody can remove. A change set mixing one of " +
     "those elements with any other kind is refused when it is validated, naming both elements, so the carve-out " +
     "cannot carry anything else through beside it.",
   override:
@@ -1758,6 +1760,13 @@ const KNOWN_DIALS = [
   "governance.veto_hours",
   "governance.steward_council",
   "governance.highest_tier",
+  // The two Rye ruled on 2026-09-04, which together decide what the seat can
+  // actually stop. `steward_subjects` above names WHICH KINDS are in reach;
+  // this one names WHICH SIZES, and a veto needs both. It ships narrower than
+  // the code did: constitutional alone.
+  "governance.steward_veto_tiers",
+  // And the one that keeps a payout fast unless it is big enough to hurt.
+  "governance.payout_delay_over",
   // A passed decision that never lands stops being a promise (2026-09-03).
   "governance.landing_expiry_cycles",
   "governance.change_cooldown_days",
@@ -3106,10 +3115,11 @@ export function render(f) {
   p();
   p(
     `Read from the code: ${list(f.kinds.noWindowSubjects)} execute the moment they carry, with no window at all. ` +
-      "The ruling of 2026-09-03 asks for something narrower for the two seat acts, which is that they keep their " +
-      "timing and their window like any Game change and that no steward may stop them. The code gives them no window " +
-      "at all, which arrives at the same place by a shorter road, and the difference is written down here because the " +
-      "two are not the same sentence. The Birthing is on that list for a reason of its own: before it carries nobody " +
+      "That list used to hold the two seat acts as well, and the gap between the ruling and the code was recorded " +
+      "here: 2026-09-03 asked that a seating keep its timing and its window and simply admit no veto, while the code " +
+      "took the window away too, which arrived at the same place by a shorter road. Rye closed the gap on 2026-09-04 " +
+      "in favour of the ruling, so a seating now waits its window, the village reads it coming, and no steward may " +
+      "stop it. The Birthing is on that list for a reason of its own: before it carries nobody " +
       "holds a seat, so a window on it would be hours nobody could use, and it already asks every seat to vote and " +
       "every seat to say yes.",
   );

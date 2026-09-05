@@ -76,6 +76,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 import {
   defaultTimingFor,
   executesAtPassWithNoWindow,
+  isSeatSubject,
   kindOfSet,
   kindOfSubject,
   landingFor,
@@ -91,7 +92,9 @@ import { ballotById, votesFor, type BallotRow } from "./ballots";
 import { floorForCriticality, thresholdSettingsFrom, type ThresholdSettings } from "../../shared/ballotSubjects";
 import type { Criticality } from "../../shared/governanceEngine";
 import { numberVar, stringVar } from "./variables";
-import { keyIsVetoMap, recordVeto as recordStewardAct, stewardNoBlocks, stewardsSeated, vetoWatchMarksDue, type VetoWindowVerdict } from "./stewardship";
+import { keyIsVetoMap, recordVeto as recordStewardAct, stewardNoBlocks, stewardsSeated, tierIsInStewardReach, vetoWatchMarksDue, type VetoWindowVerdict } from "./stewardship";
+import { asChangeItem, pricingOf, type ChangeInput } from "./mechanics";
+import { criticalityOfItems } from "../../shared/ballotSubjects";
 /*
  * The digest composer is re-exported from beside the `composeDigest` dep that
  * takes it, so a caller wiring the landing job reaches one module for the job
@@ -144,6 +147,13 @@ export interface LandingDeps extends VetoDeps {
   autoApplyEnabled: () => boolean;
   /** Does a veto need a majority of the seated stewards? */
   stewardCouncil: () => boolean;
+  /**
+   * Which SIZES of decision the village has put in the seat's reach, raw text
+   * from `governance.steward_veto_tiers`. Parsed by `stewardVetoTiersFrom`,
+   * which fails closed to the empty set, so an unreadable value takes reach
+   * away and never grants it.
+   */
+  stewardVetoTiers: () => string;
   /**
    * The first boundary of the ACTIVE clock strictly after an instant.
    *
@@ -200,6 +210,14 @@ export interface StampInput {
    * and Phase 1b conflated them.
    */
   editsVetoMap?: boolean;
+  /**
+   * True when the village has not put decisions of THIS SIZE in the seat's
+   * reach (`governance.steward_veto_tiers`, Rye 2026-09-04). It reaches the
+   * same flag as `editsVetoMap` on purpose: the veto route and the notices need
+   * one fact, and two columns holding one fact is how the notice came to
+   * promise a door the route refused. Only the sentence differs.
+   */
+  outOfTierReach?: boolean;
   /** True when the set moves a number the running cycle is being settled against. */
   snapToBoundary?: boolean;
 }
@@ -221,9 +239,37 @@ export function landingOf(deps: LandingDeps, input: StampInput): Landing {
     vetoHours: vetoHoursFrom(deps.vetoHours()),
     nextBoundaryAfter: deps.nextBoundaryAfter,
     noWindow: executesAtPassWithNoWindow(b.subjectType),
-    notVetoable: !!input.editsVetoMap,
+    // A seating waits its window and admits no veto (2026-09-04). It reaches
+    // the same flag as the other two, because all three are one fact to the
+    // route and the notice: no steward may stop this row.
+    notVetoable: !!input.editsVetoMap || !!input.outOfTierReach || isSeatSubject(b.subjectType),
+    // The veto-map carve-out names itself first: a set that is BOTH edits the
+    // seat's own limits, and that is the more specific thing to tell a member.
+    notVetoableReason: input.editsVetoMap || isSeatSubject(b.subjectType) ? "veto_map" : "out_of_tier_reach",
     snapToBoundary: !!input.snapToBoundary,
   });
+}
+
+/**
+ * IS THIS DECISION'S SIZE INSIDE THE SEAT'S REACH?
+ *
+ * The tier is recomputed from the STORED change set rather than read from a
+ * column, because there is no column: the tier is a property of the elements,
+ * and `pricingOf` is the one function that prices them. A subject with no
+ * elements behind it is `routine`, which is the same answer `pricingOf` gives
+ * an unknown dial and the same answer the pricing path already relies on.
+ *
+ * The answer is taken ONCE, at close, and frozen into `ballots.veto_locked`
+ * with everything else the ballot freezes. A village that narrows the seat's
+ * reach tomorrow does not retroactively unlock a decision that carried today,
+ * which is the same discipline the electorate, the weights and the thresholds
+ * already follow.
+ */
+export async function outOfStewardTierReach(deps: LandingDeps, b: BallotRow): Promise<boolean> {
+  const set = await changeSetOf(deps.pool, b);
+  const tiers = set.map((c) => pricingOf(asChangeItem(c as ChangeInput)).criticality);
+  const tier: Criticality = criticalityOfItems(tiers);
+  return !tierIsInStewardReach(tier, deps.stewardVetoTiers());
 }
 
 /** A bundle takes its set's kind; a subject with no set takes the subject's. */
@@ -1120,6 +1166,7 @@ export async function routeOutcome(
     ballot: b,
     itemKinds,
     editsVetoMap: await editsVetoMap(deps, b),
+    outOfTierReach: await outOfStewardTierReach(deps, b),
     snapToBoundary: await snapsToBoundary(deps, b),
   });
   await stampLanding(deps, b, landing);

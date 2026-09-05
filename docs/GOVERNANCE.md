@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the code at commit `6ddf56b3bdd1e969e46772e8236ed585d619e93a`.
+It describes the code at commit `db6cc4f9b5a0c37958531edcef28bac95b56d2cc`.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -149,6 +149,8 @@ The dials a village holds, with the ring that says who may move each one and the
 | `governance.hub_url` | Governance hub URL | `founder` | `` | text | when it is written |
 | `governance.auto_apply_enabled` | Apply verified proposals automatically | `founder` | `true` | boolean | when it is written |
 | `governance.steward_subjects` | Which decisions a steward can stop | `open` | `all` | text | when it is written |
+| `governance.steward_veto_tiers` | Which sizes of decision a steward can stop | `open` | `constitutional` | text | when it is written |
+| `governance.payout_delay_over` | Payouts above this wait three days before they are sent | `open` | `1000` | integer | when it is written |
 | `governance.steward_council` | A veto needs a majority of the stewards | `open` | `false` | boolean | when it is written |
 | `governance.veto_hours` | How long a steward has to stop a change | `open` | `72` | 72 to 720 hours | when it is written |
 | `governance.landing_expiry_cycles` | Cycles a passed decision waits before it is written off | `open` | `3` | 1 to 12 cycles | when it is written |
@@ -186,7 +188,7 @@ The dials a village holds, with the ring that says who may move each one and the
 <!-- written by a person: dialsStorage -->
 Only CHANGED values are stored. An absent row means the platform default in the table above, so a fresh village starts with every one of these and no rows at all.
 
-11 settings across the whole registry wait for a cycle close instead of applying when they are written: `cycle.mode`, `economy.voice_claim_threshold`, `economy.claims_week_days`, `economy.claims_week_starts`, `gratitude.base_budget`, `gratitude.pool_per_cycle`, `gratitude.pool_token`, `gratitude.max_share_per_recipient`, `feed.heart_amount`, `feed.max_hearts_per_recipient_per_cycle`, `ledger.admin_mint_cycle_cap`. The per-stage sending multipliers carry the same timing through their own override, one for each rung of the ladder. None of the 41 settings above is one of them, so every governance dial takes effect the moment it is written.
+11 settings across the whole registry wait for a cycle close instead of applying when they are written: `cycle.mode`, `economy.voice_claim_threshold`, `economy.claims_week_days`, `economy.claims_week_starts`, `gratitude.base_budget`, `gratitude.pool_per_cycle`, `gratitude.pool_token`, `gratitude.max_share_per_recipient`, `feed.heart_amount`, `feed.max_hearts_per_recipient_per_cycle`, `ledger.admin_mint_cycle_cap`. The per-stage sending multipliers carry the same timing through their own override, one for each rung of the ladder. None of the 43 settings above is one of them, so every governance dial takes effect the moment it is written.
 
 ## What each kind of decision asks
 
@@ -300,9 +302,9 @@ The veto lives on the BALLOT, and a proposal's display of it derives from that p
 **A seated steward's no.** On a token-send ballot only, a seated steward voting no fails it at the close. Never on a ballot the steward is the subject of. It needs a reason under the veto's own rule, and the row closes as vetoed with the steward named, so the override and the dashboard's blocked-payouts row both reach it. The steward's own weight counts in the tally like anybody's. A token send has no window after it closes, so the block has to happen while the ballot is open.
 
 <!-- written by a person: notVetoable -->
-**What no steward may stop.** Seating and unseating a role that carries the veto, and any edit to the settings that say what a steward may stop, keep their timing and their window like any Game change and sit outside every steward's reach. A seat that could veto its own removal is a seat nobody can remove. A change set mixing one of those elements with any other kind is refused when it is validated, naming both elements, so the carve-out cannot carry anything else through beside it.
+**What no steward may stop.** Three things. EVERY seating and unseating, of any role and not only one that carries the veto (Rye, 2026-09-04). Any edit to the settings that say what a steward may stop. And any decision whose SIZE the village has not put in the seat's reach, which by default is everything below constitutional. All three keep their timing and their window like any Game change and lose only the door, so the village still reads them coming. A seat that could veto its own removal is a seat nobody can remove. A change set mixing one of those elements with any other kind is refused when it is validated, naming both elements, so the carve-out cannot carry anything else through beside it.
 
-Read from the code: `role_seat`, `role_unseat`, `village_launch` execute the moment they carry, with no window at all. The ruling of 2026-09-03 asks for something narrower for the two seat acts, which is that they keep their timing and their window like any Game change and that no steward may stop them. The code gives them no window at all, which arrives at the same place by a shorter road, and the difference is written down here because the two are not the same sentence. The Birthing is on that list for a reason of its own: before it carries nobody holds a seat, so a window on it would be hours nobody could use, and it already asks every seat to vote and every seat to say yes.
+Read from the code: `village_launch` execute the moment they carry, with no window at all. That list used to hold the two seat acts as well, and the gap between the ruling and the code was recorded here: 2026-09-03 asked that a seating keep its timing and its window and simply admit no veto, while the code took the window away too, which arrived at the same place by a shorter road. Rye closed the gap on 2026-09-04 in favour of the ruling, so a seating now waits its window, the village reads it coming, and no steward may stop it. The Birthing is on that list for a reason of its own: before it carries nobody holds a seat, so a window on it would be hours nobody could use, and it already asks every seat to vote and every seat to say yes.
 
 <!-- written by a person: override -->
 **The override.** A proposal that was stopped may be brought back. Passed again at the village's highest set tier, with the relation stated (`renews`, `overrides` or `replaces`) and the ballot actually PRICED at that tier, it lands whatever any steward says. The record links it to the decision that was stopped and the reason stays visible beside it. A renewal may not point at a decision that was stopped.
@@ -1028,7 +1030,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "6ddf56b3bdd1e969e46772e8236ed585d619e93a",
+  "commit": "db6cc4f9b5a0c37958531edcef28bac95b56d2cc",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -1230,6 +1232,28 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "ring": "open",
       "type": "text",
       "default": "all",
+      "min": null,
+      "max": null,
+      "choices": null,
+      "applyTiming": "instant"
+    },
+    {
+      "key": "governance.steward_veto_tiers",
+      "label": "Which sizes of decision a steward can stop",
+      "ring": "open",
+      "type": "text",
+      "default": "constitutional",
+      "min": null,
+      "max": null,
+      "choices": null,
+      "applyTiming": "instant"
+    },
+    {
+      "key": "governance.payout_delay_over",
+      "label": "Payouts above this wait three days before they are sent",
+      "ring": "open",
+      "type": "integer",
+      "default": "1000",
       "min": null,
       "max": null,
       "choices": null,
@@ -2100,8 +2124,6 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     },
     "absentMeans": "game_change",
     "executesAtPassWithNoWindow": [
-      "role_seat",
-      "role_unseat",
       "village_launch"
     ],
     "vetoHoursFloor": 72
