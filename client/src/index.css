@@ -118,6 +118,39 @@
      This block is a set of BACKGROUNDS for white text. As a foreground on a
      light surface use sage or coral, which clear AA on both. */
   --color-gold: #a06b1c;
+
+  /* ── THE CIRCLE PALETTE ────────────────────────────────────────────────
+     Eleven hues whose job is to keep eleven circles APART, on the power map
+     at /map/circles and in the window onto it on /circles. A categorical
+     palette is a different thing from a brand colour: shipping eleven greys
+     here would ship the exact bug this palette was added to fix, which was
+     seventeen circles drawn in one colour because a four-entry lookup missed
+     most of what the seed and the admin form write.
+
+     Declared here so a fork can retheme the map without touching code.
+     `shared/circleView.ts` reads each one as `var(--circle-<tone>, <hex>)`,
+     so overriding any of these moves BOTH lenses at once, and overriding
+     none of them draws the living map artifact's own CIRCLE_COL, which is
+     where these values come from. */
+  --circle-moss: #6fae52;
+  --circle-sage: #8fb573;
+  --circle-teal: #8ad0c0;
+  --circle-sky: #7f9fd0;
+  --circle-amber: #d0a94f;
+  --circle-olive: #b8b06a;
+  --circle-clay: #c98b4e;
+  --circle-ember: #d0785a;
+  --circle-rose: #c96a8a;
+  --circle-violet: #a98ad0;
+  --circle-stone: #9aa08f;
+  /* The map lens's own ground, ring and ink. This surface is the map's world
+     the way the artifact is, so these stay fixed against the site's light
+     chrome instead of following it. */
+  --circle-ground: #131a11;
+  --circle-ring: #8fb573;
+  --circle-ink: #e8dcbc;
+  --circle-ink-dim: #a8a081;
+  --circle-scrim: rgba(19, 26, 17, 0.95);
   /* --color-amber (--tone-sun) is derived in shared/brandTokens.ts to clear
      AA_LARGE (3:1) against INK, because its designed role is a background
      chip carrying ink text, never checked as small foreground text on a

@@ -729,7 +729,12 @@
      z 30 on top of it, so the lens could be toggled with nothing behind
      it to see. Both of these come AFTER the rule that shows the key, so
      they win on order at equal specificity. */
-  body.circles :is(#layers,#roleKey){display:none}
+  /* THE LAND'S OWN CHROME LEAVES WHEN THE CIRCLES ARRIVE.
+     The minimap draws a satellite plate of the ground and the Build button
+     edits structures on it. Both answer questions the org chart is not
+     asking, and the minimap in particular sat in the bottom-left corner
+     showing terrain while the reader was looking at governance. */
+  body.circles :is(#layers,#roleKey,#minimapWrap,#buildBtn){display:none}
   body.pocket #roleKey{display:none}
 
 
@@ -7636,7 +7641,19 @@ function setMapType(t,quiet){const circ=t==='circles';
   if(!quiet)toast(circ?'◎ The Circles. The same village as an organism; click any node to walk to its door.':'🏞 The Living Map. The land itself.')}
 window.setMapType=setMapType;
 $('msLiving').onclick=()=>setMapType('living');
-$('msCircles').onclick=()=>setMapType('circles');
+/* THE CIRCLES TAB OPENS THE REAL ORG CHART.
+   This used to call setMapType('circles'), which draws the halo-and-satellite
+   view below: one ring, one dot per role, names at about 4px, and no way to
+   step inside a circle, because a static artifact cannot reach live data.
+   /map/circles is the same village drawn from the same rows with seats you
+   can open, search, filters and the shapes. `siteNav` is the same door every
+   other link out of here uses, so the SPA shim upgrades it when it can and it
+   degrades to a normal navigation when it cannot. The in-artifact view stays
+   reachable at #/circles for anyone deep-linked to it. */
+$('msCircles').onclick=(ev)=>{
+  if(siteNav(ev,'/map/circles')===false)return;
+  location.href=siteHref('/map/circles');
+};
 let OVB=[0,0,1600,1050],ODRAG=null,oMoved=0;
 function orgApplyVB(){$('orgSvg').setAttribute('viewBox',OVB.join(' '))}
 function buildOrgMap(){

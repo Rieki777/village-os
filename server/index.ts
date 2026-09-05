@@ -86,6 +86,7 @@ import {
 import { buildThemeCss, sanitizeFontName } from "./lib/themeCss";
 import { applyTimingOf, ringOf, VARIABLES_BY_KEY } from "../shared/gameVariables";
 import { CONSTITUTION } from "../shared/constitution";
+import { circleViews } from "../shared/circleView";
 import { DEFAULT_MAP_SKIN, sanitiseMapSkin } from "../shared/mapSkin";
 import {
   DEFAULT_MAP_VOCABULARY,
@@ -10142,6 +10143,11 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
           id: r.id,
           name: r.name,
           description: r.aim ?? "",
+          // A role is its AIM (above, as `description`) and its DOMAIN. These
+          // were read every request and dropped here, so the seat card showed
+          // what a seat was for and never what it decides on.
+          domain: r.domain ?? null,
+          accountabilities: r.accountabilities ?? [],
           circleId: r.circleId ?? null,
           seats: r.seats,
           minStage: null,
@@ -10182,7 +10188,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
 
     const seasonNow = seasonState();
     res.json({
-      circles: circlesRepo.all(),
+      // The same projection `/api/org` serves, so the cards page and this map
+      // cannot disagree about what a circle is (shared/circleView.ts).
+      circles: circleViews(circlesRepo.all()),
       roles,
       quests: quests
         .filter((q: any) => String(q.status).toLowerCase() === "open")
@@ -26638,19 +26646,11 @@ ${inner}
       byRole.set(a.orgRoleId, list);
     }
 
-    const circles = circlesRepo
-      .all()
-      .map((c: any) => ({
-        id: c.id,
-        name: c.name,
-        purpose: c.purpose ?? null,
-        status: c.status ?? "active",
-        parentCircleId: c.parentCircleId ?? null,
-        // The fractal: this circle grew out of a seat that outgrew itself.
-        grownFromOrgRoleId: c.grownFromOrgRoleId ?? null,
-        order: Number(c.order ?? 0),
-        isExample: !!c.isExample,
-      }));
+    // ONE projection, shared with `/api/map` (shared/circleView.ts). The
+    // hand-picked object this replaces dropped `color` and `icon`, so the
+    // cards page could not draw a circle's colour however carefully the
+    // admin form had set it.
+    const circles = circleViews(circlesRepo.all());
 
     res.json({
       /*

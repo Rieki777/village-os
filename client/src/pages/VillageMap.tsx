@@ -30,6 +30,7 @@ import Legend from "@/components/power/Legend";
 import SearchBar, { type SearchHit } from "@/components/power/SearchBar";
 import FilterChips from "@/components/power/FilterChips";
 import HolderCard from "@/components/power/HolderCard";
+import CircleCard from "@/components/power/CircleCard";
 import ShapePicker from "@/components/power/ShapePicker";
 import CurrencyPicker from "@/components/power/CurrencyPicker";
 import DecideLens, { DecideKey } from "@/components/power/DecideLens";
@@ -191,6 +192,29 @@ export default function VillageMap() {
   const selectedCircle = selectedSeat?.circleId
     ? (data?.circles?.find((c) => c.id === selectedSeat.circleId) ?? null)
     : null;
+  /*
+   * THE CIRCLE YOU ARE STANDING IN.
+   *
+   * Stepping into a circle changed the picture and nothing else: the panel
+   * went on showing the village summary until a SEAT was tapped, so the
+   * question a reader arrives with (what does this circle do, who do I bring
+   * what to) had no surface anywhere. This is the focus, read as a circle,
+   * and it drives the inspector on both the standing panel and the sheet.
+   */
+  const focusedCircle = focusId ? (data?.circles?.find((c) => c.id === focusId) ?? null) : null;
+
+  /*
+   * HOW DEEP THE PHONE DRAWS.
+   *
+   * The village root is depth -1, so this is 0 there: only the top-level
+   * circles. Step into one and it becomes 1, which is that circle's
+   * children. Undefined on desktop, where there is room for the whole nest.
+   *
+   * Seventeen circles and their children in a 375px square is a picture
+   * nobody can use: a grandchild is a few pixels across and its seats are
+   * smaller than a fingertip.
+   */
+  const phoneMaxDepth = ((focusId ? layout?.circles.find((c) => c.id === focusId)?.depth : undefined) ?? -1) + 1;
 
   const mayDeclareVillage = !!data?.viewer.mayDeclare?.includes("village");
 
@@ -432,7 +456,14 @@ export default function VillageMap() {
                   accordion IS the page, with the card as a bottom sheet. */}
               {!listMode && (
                 <div className="hidden sm:flex gap-6 items-start">
-                  <div className="relative flex-1 min-w-0 aspect-square md:aspect-auto md:h-[74vh] md:min-h-[520px]" data-power-map-box>
+                  {/* The stage is HEIGHT-driven and the drawing is a disc, so
+                      this number is the one that decides how big the picture
+                      renders. At 74vh on a 720px screen the canvas was 533px
+                      tall inside an 864px-wide column: the disc fitted to the
+                      height, drew at 0.51x, and left 331px of width empty.
+                      Taller stage, bigger disc, and the width beside it is
+                      the gutter a long name is now allowed to use. */}
+                  <div className="relative flex-1 min-w-0 aspect-square md:aspect-auto md:h-[86vh] md:min-h-[560px] md:max-h-[980px]" data-power-map-box>
                     <PowerMap
                       data={data}
                       layout={layout}
@@ -462,6 +493,13 @@ export default function VillageMap() {
                         </div>
                         <HolderCard seat={selectedSeat} circle={selectedCircle} data={data} onPickPerson={pickPerson} />
                       </div>
+                    ) : focusedCircle ? (
+                      <CircleCard
+                        circle={focusedCircle}
+                        data={data}
+                        onSelectSeat={(id) => setSelected({ kind: "role", id })}
+                        onOut={() => focusTo((focusedCircle.parentCircleId as string | null) ?? null)}
+                      />
                     ) : (
                       <VillageSummary
                         data={data}
@@ -483,10 +521,15 @@ export default function VillageMap() {
               {/* The list: the phone's whole page, the tablet's under-map
                   companion, and the desktop's choice (spec 12). */}
               <div className={`${listMode ? "" : "sm:hidden"} space-y-4 mt-2`}>
-                {/* Spec 12(a): below 480 the accordion IS the page; from 480
-                    to sm the SVG rides above it. */}
+                {/* A PHONE GETS THE MAP TOO.
+                    This was `hidden min-[480px]:block`, so every handset
+                    narrower than 480 (which is most of them: 375 and 390 are
+                    the common widths) got the accordion and no picture at
+                    all. The map was measured live at 375px and drew nothing.
+                    A square stage is a good phone stage, and the label floor
+                    in PowerMap is what makes it readable at this size. */}
                 {!listMode && (
-                  <div className="relative aspect-square hidden min-[480px]:block" data-power-map-box>
+                  <div className="relative aspect-square block" data-power-map-box>
                     <PowerMap
                       data={data}
                       layout={layout}
@@ -500,6 +543,11 @@ export default function VillageMap() {
                       linesOn={linesOn}
                       pulseSeatId={pulseSeatId}
                       lenses={lensNodes}
+                      // The phone draws one level at a time; the breadcrumb
+                      // is the way down, and the accordion below carries the
+                      // rest. Seventeen circles and their children in a
+                      // 375px square is a picture nobody can use.
+                      maxDepth={phoneMaxDepth}
                     />
                   </div>
                 )}
@@ -509,11 +557,23 @@ export default function VillageMap() {
                 <CircleAccordion data={data} filters={filters} viewerUserId={viewerUserId} onSelect={setSelected} />
               </div>
 
-              {/* The card as a bottom sheet wherever the standing panel is not. */}
-              {selectedSeat && (
+              {/* The card as a bottom sheet wherever the standing panel is
+                  not. A tapped SEAT wins; otherwise the circle you stepped
+                  into gets the sheet, so a phone reaches the inspector the
+                  same way a desktop reaches the panel. */}
+              {(selectedSeat || focusedCircle) && (
                 <div className="md:hidden">
-                  <SeatSheet onClose={() => setSelected(null)}>
-                    <HolderCard seat={selectedSeat} circle={selectedCircle} data={data} onPickPerson={pickPerson} />
+                  <SeatSheet onClose={() => (selectedSeat ? setSelected(null) : focusTo(null))}>
+                    {selectedSeat ? (
+                      <HolderCard seat={selectedSeat} circle={selectedCircle} data={data} onPickPerson={pickPerson} />
+                    ) : (
+                      <CircleCard
+                        circle={focusedCircle!}
+                        data={data}
+                        onSelectSeat={(id) => setSelected({ kind: "role", id })}
+                        onOut={() => focusTo((focusedCircle!.parentCircleId as string | null) ?? null)}
+                      />
+                    )}
                   </SeatSheet>
                 </div>
               )}
