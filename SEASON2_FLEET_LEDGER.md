@@ -2932,6 +2932,11 @@ thorough.
   is a statement about what you EDITED; the suites worth running are the ones your change can be
   OBSERVED BY, which for a migration is every suite that provisions a schema and for a shared type
   is every consumer of it. Ask what a change crosses before you ask what it touches.
+  **And the practical form, because inferring them is exactly what failed twice: a lane BRIEF names
+  the crossed suites, rather than trusting the lane to work them out.** A lane knows the files it is
+  about to edit and cannot know what else in the repository observes them; whoever writes the brief
+  has the whole map in front of them and can. A brief that says "run your own tests" and nothing
+  more is asking a lane for a judgement it does not have the information to make.
 - The merge agent runs the touched suites and the guards, pushes, and **READS THE RUN**.
 - **At most one full local suite per LANDING**, never per merge step.
 - The one deliberate exception is a **pair-merge scratch**, because two branches merged together
