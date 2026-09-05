@@ -32,6 +32,7 @@ import {
 } from "react";
 import { motion } from "framer-motion";
 import { wrapLabel, type NestedLayout } from "@shared/mapLayout";
+import { colourForCircle } from "@shared/circleView";
 import { transition, viewBoxFor, viewFor, type CameraTarget, type CameraView } from "./camera";
 import SeatGlyph, { seatStateWords } from "./SeatGlyph";
 import { captionSize, fitLabelToScreen } from "./labelFit";
@@ -100,13 +101,21 @@ function useMeasuredBox(el: SVGSVGElement | null): { w: number; h: number } {
 // The label floor lives in `labelFit.ts` so it can be tested without a
 // browser. See that file for why a world-unit floor was the wrong floor.
 
-const TONE: Record<string, string> = {
-  sage: "var(--color-sage)",
-  amber: "var(--color-amber)",
-  coral: "var(--color-coral)",
-  teal: "var(--color-teal)",
-};
-const toneOf = (c: any): string => TONE[String(c?.color ?? "")] ?? "var(--color-teal-deep)";
+/*
+ * EVERY CIRCLE GETS ITS OWN COLOUR, AND SEVENTEEN OF THEM USED TO GET ONE.
+ *
+ * This was a four-entry `Record<string, string>` keyed by bare tone words
+ * (sage, amber, coral, teal) with `?? var(--color-teal-deep)` on the end.
+ * The seed writes eight words, four of which (rose, stone, sky, emerald)
+ * were not in it, and the admin form writes Tailwind classes (`bg-sage`),
+ * which matched nothing at all. So most circles fell to the fallback and the
+ * map drew one grey, throwing away the strongest wayfinding signal it owns.
+ *
+ * `colourForCircle` resolves both vocabularies onto a union the compiler
+ * checks, and the hues are the living map artifact's own `CIRCLE_COL`, so
+ * the two lenses agree about what colour a circle is.
+ */
+const toneOf = (c: any): string => colourForCircle({ id: String(c?.id ?? ""), color: c?.color ?? null });
 
 export default function PowerMap({
   data,

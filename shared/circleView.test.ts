@@ -12,7 +12,7 @@
  * still route through here at all.
  */
 import { describe, expect, it } from "vitest";
-import { circleView, circleViews, toneForCircle, CIRCLE_TONES } from "./circleView";
+import { circleView, circleViews, toneForCircle, CIRCLE_TONES, CIRCLE_TONE_HEX } from "./circleView";
 
 /** A row shaped like `circlesRepo.all()` returns one. */
 const row = (over: Record<string, unknown> = {}) => ({
@@ -87,10 +87,44 @@ describe("circleView carries the fields the old projection dropped", () => {
 });
 
 describe("toneForCircle resolves what villages actually stored", () => {
-  it("reads the Tailwind class the admin form writes, not a bare tone word", () => {
+  it("gives EVERY word the circles seed writes a real colour", () => {
+    // The defect this closes. PowerMap resolved this column through a
+    // four-entry map keyed by bare words (sage, amber, coral, teal), so of
+    // the eight words below, four fell to `var(--color-teal-deep)` and the
+    // map drew one grey across most of the village.
+    const seedWords = ["sage", "amber", "coral", "rose", "stone", "teal", "sky", "emerald"];
+    for (const word of seedWords) {
+      const tone = toneForCircle({ id: "seeded", color: word });
+      expect(CIRCLE_TONES, `"${word}" resolves to a known tone`).toContain(tone);
+      // and it must not be the hash fallback: a declared colour is honoured.
+      expect(tone, `"${word}" is not silently reassigned`).toBe(
+        toneForCircle({ id: "a-completely-different-id", color: word }),
+      );
+    }
+  });
+
+  it("gives every tone a hex, checked by the compiler and again here", () => {
+    for (const tone of CIRCLE_TONES) {
+      expect(CIRCLE_TONE_HEX[tone], `${tone} has a hue`).toMatch(/^#[0-9a-f]{6}$/i);
+    }
+    // Eleven distinct hues, so two circles never collide by construction.
+    expect(new Set(Object.values(CIRCLE_TONE_HEX)).size).toBe(CIRCLE_TONES.length);
+  });
+
+  it("matches the living map artifact's own palette", () => {
+    // These are CIRCLE_COL from docs/prototypes/grounds-v0.html. Crossing
+    // from the land to the circles should not feel like leaving the world.
+    expect(CIRCLE_TONE_HEX.moss).toBe("#6fae52"); // Land
+    expect(CIRCLE_TONE_HEX.clay).toBe("#c98b4e"); // Building
+    expect(CIRCLE_TONE_HEX.amber).toBe("#d0a94f"); // Community
+    expect(CIRCLE_TONE_HEX.sky).toBe("#7f9fd0"); // Learning
+    expect(CIRCLE_TONE_HEX.violet).toBe("#a98ad0"); // Wisdom
+  });
+
+  it("reads the Tailwind class the admin form writes, not just a bare word", () => {
     // The whole reason this function is not a one-line includes() check.
     expect(toneForCircle({ id: "x", color: "bg-sage" })).toBe("sage");
-    expect(toneForCircle({ id: "x", color: "bg-coral" })).toBe("clay");
+    expect(toneForCircle({ id: "x", color: "bg-coral" })).toBe("ember");
     expect(toneForCircle({ id: "x", color: "bg-forest" })).toBe("moss");
   });
 

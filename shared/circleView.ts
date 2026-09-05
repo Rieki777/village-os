@@ -121,31 +121,75 @@ export function circleViews(rows: any[]): CircleView[] {
  * reload, without storing anything. Sorting or renaming circles never
  * reshuffles the colours, which an index-based assignment would.
  */
-export const CIRCLE_TONES = ["sage", "teal", "amber", "rose", "violet", "clay", "moss"] as const;
+export const CIRCLE_TONES = [
+  "moss", "sage", "teal", "sky", "amber", "olive", "clay", "ember", "rose", "violet", "stone",
+] as const;
 export type CircleTone = (typeof CIRCLE_TONES)[number];
 
 /**
- * WHAT IS ACTUALLY STORED IN `circles.color`.
+ * THE LIVING MAP'S OWN PALETTE, WHICH THIS IS COPIED FROM ON PURPOSE.
  *
- * A Tailwind class name, typed into the Admin panel and rendered by
- * `client/src/lib/swatch.ts`: `bg-sage`, `bg-teal-deep`, `bg-coral`. It is
- * NOT a tone word, so a naive `CIRCLE_TONES.includes(color)` check misses
- * every value a village has ever saved and every circle falls through to the
- * hash. The cards page and the map would then agree with each other and
- * disagree with the admin form, which is a worse bug than the one being
- * fixed because it looks deliberate.
+ * `docs/prototypes/grounds-v0.html` carries `CIRCLE_COL`: eleven hues, one
+ * per circle, and it is the reason the artifact's Circles view reads as a
+ * place while the power map read as a diagram. These are those hex values,
+ * so crossing from the land to the circles does not feel like leaving the
+ * world.
  *
- * The swatch classes are grouped by hue, with the lightness suffixes
- * (`-light`, `-deep`, `-dark`) folded in: a village that chose sage gets
- * sage on both surfaces whichever shade it picked.
+ * Fixed hex, and NOT theme tokens, deliberately. This surface is the map's
+ * own world (dark ground, parchment ink) the way the artifact is, so a
+ * responsive token here would be a colour that changes out from under a
+ * palette the rest of the picture holds fixed. That is the "theme-frozen
+ * surface" trap in reverse and it is the same bug either way.
+ */
+export const CIRCLE_TONE_HEX: Readonly<Record<CircleTone, string>> = {
+  moss: "#6fae52",   // Land
+  sage: "#8fb573",
+  teal: "#8ad0c0",   // Healing
+  sky: "#7f9fd0",    // Learning
+  amber: "#d0a94f",  // Community
+  olive: "#b8b06a",  // Finance
+  clay: "#c98b4e",   // Building
+  ember: "#d0785a",  // Coordination
+  rose: "#c96a8a",   // Gathering
+  violet: "#a98ad0", // Wisdom
+  stone: "#9aa08f",  // the artifact's own fallback hue
+};
+
+/**
+ * WHAT IS ACTUALLY STORED IN `circles.color`, WHICH IS TWO DIFFERENT THINGS.
+ *
+ * `server/seeds/circles-seed.json` writes BARE TONE WORDS: sage, amber,
+ * coral, rose, stone, teal, sky, emerald. The Admin panel writes TAILWIND
+ * CLASSES, because `client/src/lib/swatch.ts` renders them: `bg-sage`,
+ * `bg-teal-deep`, `bg-coral`. Both are live in the same column.
+ *
+ * PowerMap used to resolve that column through a four-entry lookup keyed by
+ * bare words (sage, amber, coral, teal) with `?? var(--color-teal-deep)` on
+ * the end. So of the eight seeded circles, four got their colour and four
+ * (rose, stone, sky, emerald) fell silently to the fallback, along with
+ * every circle a village had coloured through the admin form, because a
+ * `bg-` class matched nothing. Seventeen circles, one grey.
+ *
+ * That is the `Record<string, T>` trap CLAUDE.md names: a hand-kept map
+ * keyed by loose strings is a promise nobody checks. Keyed by the union, as
+ * `CIRCLE_TONE_HEX` is, the compiler checks it instead.
+ *
+ * Lightness suffixes fold in, so a village that chose sage gets sage on
+ * every surface whichever shade it picked.
  */
 const TONE_BY_SWATCH: Readonly<Record<string, CircleTone>> = {
-  sage: "sage", forest: "moss", green: "moss", moss: "moss",
-  teal: "teal", aqua: "teal", cyan: "teal", "cyan-brand": "teal",
-  amber: "amber", gold: "amber", cream: "amber", yellow: "amber",
-  coral: "clay", clay: "clay", orange: "clay", rust: "clay",
-  rose: "rose", pink: "rose", plum: "rose",
-  violet: "violet", purple: "violet", indigo: "violet",
+  // the seed's own words come first, because they are what is in the database
+  sage: "sage", amber: "amber", coral: "ember", rose: "rose",
+  stone: "stone", teal: "teal", sky: "sky", emerald: "moss",
+  // and the rest of the swatch vocabulary the admin form can write
+  forest: "moss", green: "moss", moss: "moss", olive: "olive", lime: "moss",
+  aqua: "teal", cyan: "teal", mint: "teal", turquoise: "teal",
+  blue: "sky", indigo: "sky", azure: "sky",
+  gold: "amber", cream: "amber", yellow: "amber", sand: "olive",
+  clay: "clay", orange: "clay", rust: "ember", ember: "ember", terracotta: "ember",
+  pink: "rose", plum: "rose", magenta: "rose",
+  violet: "violet", purple: "violet", lilac: "violet", lavender: "violet",
+  grey: "stone", gray: "stone", slate: "stone", neutral: "stone",
 };
 
 export function toneForCircle(c: { id: string; color?: string | null }): CircleTone {
@@ -165,4 +209,9 @@ export function toneForCircle(c: { id: string; color?: string | null }): CircleT
   const id = String(c?.id ?? "");
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
   return CIRCLE_TONES[h % CIRCLE_TONES.length]!;
+}
+
+/** The hex a circle draws in, on the map and in the mini render. */
+export function colourForCircle(c: { id: string; color?: string | null }): string {
+  return CIRCLE_TONE_HEX[toneForCircle(c)];
 }
