@@ -32,7 +32,7 @@ import {
 } from "react";
 import { motion } from "framer-motion";
 import { wrapLabel, type NestedLayout } from "@shared/mapLayout";
-import { colourForCircle } from "@shared/circleView";
+import { cssColourForCircle } from "@shared/circleView";
 import { transition, viewBoxFor, viewFor, type CameraTarget, type CameraView } from "./camera";
 import SeatGlyph, { seatStateWords } from "./SeatGlyph";
 import { captionSize, fitLabelToScreen } from "./labelFit";
@@ -84,20 +84,6 @@ function useMeasuredBox(el: SVGSVGElement | null): { w: number; h: number } {
   return box;
 }
 
-/**
- * The smallest a circle's name is allowed to render, in SCREEN pixels.
- *
- * `wrapLabel` sizes a label in WORLD units and floors it at 9, which becomes
- * 4.6px on screen at 0.51x. Measured live, a "forming" caption was rendering
- * 6px tall. Nothing about the layout was wrong; the label simply inherited
- * whatever scale the camera happened to be at.
- *
- * So the floor belongs in the space legibility lives in, which is the screen.
- * A label under this size is scaled up until it clears it, and the scale is
- * capped at what the circle can hold so a rescued label never runs out over
- * its neighbours. A name that cannot clear the floor inside its own circle
- * goes OUTSIDE, on a leader line into the gutter the aspect fix just opened.
- */
 // The label floor lives in `labelFit.ts` so it can be tested without a
 // browser. See that file for why a world-unit floor was the wrong floor.
 
@@ -111,11 +97,11 @@ function useMeasuredBox(el: SVGSVGElement | null): { w: number; h: number } {
  * which matched nothing at all. So most circles fell to the fallback and the
  * map drew one grey, throwing away the strongest wayfinding signal it owns.
  *
- * `colourForCircle` resolves both vocabularies onto a union the compiler
+ * `cssColourForCircle` resolves both vocabularies onto a union the compiler
  * checks, and the hues are the living map artifact's own `CIRCLE_COL`, so
  * the two lenses agree about what colour a circle is.
  */
-const toneOf = (c: any): string => colourForCircle({ id: String(c?.id ?? ""), color: c?.color ?? null });
+const toneOf = (c: any): string => cssColourForCircle({ id: String(c?.id ?? ""), color: c?.color ?? null });
 
 export default function PowerMap({
   data,

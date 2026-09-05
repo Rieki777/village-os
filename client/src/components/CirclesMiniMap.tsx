@@ -26,7 +26,7 @@ import { Link } from "wouter";
 import { useMemo } from "react";
 import { ArrowRight } from "lucide-react";
 import { layoutNestedMap, type NestedInput } from "@shared/mapLayout";
-import { colourForCircle } from "@shared/circleView";
+import { cssColourForCircle, MAP_CHROME } from "@shared/circleView";
 
 export interface MiniCircle {
   id: string;
@@ -43,10 +43,10 @@ export interface MiniSeat {
   holderCount?: number;
 }
 
-/** The ground the map draws on, so this reads as a window and not a card. */
-const GROUND = "#131a11";
-const RING = "#8fb573";
-const INK = "#e8dcbc";
+/* The ground the map draws on, so this reads as a window and not a card.
+   Themeable with a shipped default (shared/circleView.ts): a fork sets
+   --circle-ground and this window follows its map. */
+const { ground: GROUND, ring: RING, ink: INK, inkDim: INK_DIM, scrim: SCRIM } = MAP_CHROME;
 
 export default function CirclesMiniMap({
   circles,
@@ -117,7 +117,7 @@ export default function CirclesMiniMap({
           <circle cx={v.x} cy={v.y} r={v.r} fill="none" stroke={RING} strokeOpacity={0.34} strokeWidth={3} />
           {layout.circles.map((pos) => {
             const c = byId.get(pos.id);
-            const hue = colourForCircle({ id: pos.id, color: c?.color ?? null });
+            const hue = cssColourForCircle({ id: pos.id, color: c?.color ?? null });
             return (
               <g key={pos.id}>
                 <circle
@@ -155,13 +155,13 @@ export default function CirclesMiniMap({
             deciding to walk through. */}
         <div
           className="absolute inset-x-0 bottom-0 p-4 flex items-end justify-between gap-3"
-          style={{ background: "linear-gradient(to top, rgba(19,26,17,.95), rgba(19,26,17,0))" }}
+          style={{ background: SCRIM }}
         >
           <div>
             <div className="font-semibold text-[15px]" style={{ color: INK }}>
               Walk the circles on the living map
             </div>
-            <div className="text-[13px]" style={{ color: "#a8a081" }}>
+            <div className="text-[13px]" style={{ color: INK_DIM }}>
               {circles.length} circle{circles.length === 1 ? "" : "s"}
               {openSeats > 0 ? `, ${openSeats} seat${openSeats === 1 ? "" : "s"} open` : ""}. Step inside any one of them.
             </div>

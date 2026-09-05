@@ -211,7 +211,47 @@ export function toneForCircle(c: { id: string; color?: string | null }): CircleT
   return CIRCLE_TONES[h % CIRCLE_TONES.length]!;
 }
 
-/** The hex a circle draws in, on the map and in the mini render. */
+/** The raw hex a circle draws in. For SVG export, tests and anything that
+ *  is not painted by a browser that could carry a village's theme. */
 export function colourForCircle(c: { id: string; color?: string | null }): string {
   return CIRCLE_TONE_HEX[toneForCircle(c)];
 }
+
+/**
+ * THE SAME COLOUR, THEMEABLE, FOR ANYTHING A BROWSER PAINTS.
+ *
+ * `scripts/check-theme-literals.mjs` is a CI gate (one CLAUDE.md's list does
+ * not mention) and it is right: a founder's colour compiled into a `.tsx`
+ * cannot be re-themed by a fork, and this platform is white-label. Its
+ * sanctioned escape is exactly this shape, `var(--token, #fallback)`, which
+ * `CircleScene`, `MoonGlyph`, `YearWheel` and `MobileFab` all already use.
+ *
+ * So the eleven hues ship as DEFAULTS a village can override, one variable
+ * each, declared in `client/src/index.css`. An untouched deployment draws
+ * the living map's palette; a village that wants its own sets eleven
+ * variables and both lenses move together, because both call this.
+ *
+ * A categorical palette is a different thing from a brand colour: its job is
+ * to keep eleven circles apart, so shipping eleven greys would be shipping
+ * the bug this palette was added to fix.
+ */
+export function cssColourForCircle(c: { id: string; color?: string | null }): string {
+  const tone = toneForCircle(c);
+  return `var(--circle-${tone}, ${CIRCLE_TONE_HEX[tone]})`;
+}
+
+/**
+ * The map lens's own ground, ring and ink.
+ *
+ * The circles surface is the map's world (dark ground, parchment ink) the
+ * way the artifact is, and these three carry that through the same themeable
+ * shape as the hues above.
+ */
+export const MAP_CHROME = {
+  ground: "var(--circle-ground, #131a11)",
+  ring: "var(--circle-ring, #8fb573)",
+  ink: "var(--circle-ink, #e8dcbc)",
+  inkDim: "var(--circle-ink-dim, #a8a081)",
+  /** The scrim under the invitation on the mini render. */
+  scrim: "linear-gradient(to top, var(--circle-scrim, rgba(19,26,17,.95)), transparent)",
+} as const;
