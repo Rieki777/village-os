@@ -112,6 +112,33 @@ async function balanceOf(token: string): Promise<number> {
   return Number(r.json?.mine?.balances?.[CREDITS] ?? 0);
 }
 
+/**
+ * THREE DOORS IN THIS FILE, AND THEY DO NOT AGREE ON THE UNIT.
+ *
+ * That is not a defect and it is why this helper has to exist. Each route
+ * matches its own client and says so at the call site:
+ *
+ *   POST /api/redemptions       HUMAN. Converted once with `toLedgerUnits`
+ *                               at server/routes/redemption.ts.
+ *   POST /api/admin/tokens/:slug/mint   HUMAN.
+ *   POST /api/wallet/send       MINOR. `SendTokensCard.tsx` converts with
+ *                               `toMinorUnits` beside the input, and the route
+ *                               carries a comment refusing to convert again.
+ *   GET  /api/exchange          MINOR in `mine.balances`, which `balanceOf`
+ *                               returns, so every arithmetic assertion in this
+ *                               file is in minor units.
+ *
+ * The literals here were written when credits carried NO decimals, and 0162
+ * moved every credit token to two. At that scale `before - 40` compares a
+ * minor-unit balance against a human-unit amount and is wrong by a hundred, so
+ * three cases went red on `wt/econ` with the product behaving correctly.
+ *
+ * SCALE IS READ OFF THE REGISTRY AND NEVER TYPED, so the day a village moves
+ * to four this file follows instead of going red again. Filled in `beforeAll`.
+ */
+let SCALE = 1;
+const minor = (human: number) => Math.round(human * SCALE);
+
 describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
   beforeAll(async () => {
     if (!fs.existsSync(DIST)) {
@@ -176,6 +203,12 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
     // somebody else. That is the mint flow's own rule and this file obeys it.
     await setVar("ledger.admin_mint_cosign_over", "0");
     await setVar("redemption.per_member_per_cycle", "5");
+    // The scale, from the registry the server is actually running.
+    const reg = await call("GET", "/api/admin/tokens", undefined, founderToken);
+    expect(reg.status, reg.text.slice(0, 200)).toBe(200);
+    const def = (reg.json?.tokens ?? []).find((t: any) => t.slug === CREDITS);
+    expect(def, `${CREDITS} must be in the registry`).toBeTruthy();
+    SCALE = 10 ** Number(def.decimals ?? 0);
   }, 300_000);
 
   afterAll(async () => {
@@ -248,7 +281,7 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
       expect(await balanceOf(ashToken)).toBe(10);
 
       const before = await balanceOf(wrenToken);
-      expect(before).toBeGreaterThanOrEqual(500);
+      expect(before).toBeGreaterThanOrEqual(minor(500));
 
       // MONDAY. Wren asks for 500 credits to become a bicycle.
       const asked = await call(
@@ -268,7 +301,9 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
       const sent = await call(
         "POST",
         "/api/wallet/send",
-        { to: ashId, tokenType: CREDITS, amount: 500, note: "for Ash" },
+        // MINOR, and the whole held amount: the case is that the credits
+        // spoken for by the redemption cannot also be sent.
+        { to: ashId, tokenType: CREDITS, amount: minor(500), note: "for Ash" },
         wrenToken,
       );
       // THIS IS THE WHOLE CASE, and every assertion about the hold is placed
@@ -281,7 +316,7 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
       expect(await balanceOf(ashToken)).toBe(10);
 
       expect(asked.json?.holds).toBe(true);
-      expect(await balanceOf(wrenToken)).toBe(before - 500);
+      expect(await balanceOf(wrenToken)).toBe(before - minor(500));
       const mine = await call("GET", "/api/redemptions", undefined, wrenToken);
       expect(Number(mine.json?.held?.[CREDITS] ?? 0)).toBe(500);
 
@@ -309,11 +344,11 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
 
       // The member's balance, read back off HTTP, and the retired figure, read
       // back off the admin panel's own route.
-      expect(await balanceOf(wrenToken)).toBe(before - 500);
+      expect(await balanceOf(wrenToken)).toBe(before - minor(500));
       const panel = await call("GET", "/api/admin/tokens", undefined, founderToken);
       expect(panel.status).toBe(200);
       const credits = (panel.json?.tokens ?? []).find((t: any) => t.slug === CREDITS);
-      expect(Number(credits?.retired ?? 0)).toBe(500);
+      expect(Number(credits?.retired ?? 0)).toBe(minor(500));
 
       // And the same two numbers straight out of the database.
       const [[held]] = await testDb!.conn.query<any[]>(
@@ -325,7 +360,7 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
         [CREDITS],
       );
       expect(Number(held.n)).toBe(0);
-      expect(Number(retired.n)).toBe(500);
+      expect(Number(retired.n)).toBe(minor(500));
 
       // A second press destroys nothing.
       const again = await call("POST", `/api/redemptions/${id}/confirm`, { note: "again" }, founderToken);
@@ -334,7 +369,7 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
         "SELECT COALESCE(balance,0) AS n FROM token_balances WHERE account_id = 'sys:redeemed' AND token_type = ?",
         [CREDITS],
       );
-      expect(Number(still.n)).toBe(500);
+      expect(Number(still.n)).toBe(minor(500));
     },
     420_000,
   );
@@ -368,7 +403,7 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
     const asked = await call("POST", "/api/redemptions", { token: CREDITS, amount: 40, askedFor: "a saw" }, wrenToken);
     expect(asked.status, asked.text.slice(0, 300)).toBe(201);
     const id = String(asked.json?.redemption?.id ?? "");
-    expect(await balanceOf(wrenToken)).toBe(before - 40);
+    expect(await balanceOf(wrenToken)).toBe(before - minor(40));
     const no = await call("POST", `/api/redemptions/${id}/refuse`, { note: "the village has no saw to give" }, founderToken);
     expect(no.status, no.text.slice(0, 300)).toBe(200);
     expect(no.json?.released).toBe(true);
@@ -385,7 +420,7 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
     const asked = await call("POST", "/api/redemptions", { token: CREDITS, amount: 25, askedFor: "a hat" }, wrenToken);
     expect(asked.status).toBe(201);
     const id = String(asked.json?.redemption?.id ?? "");
-    expect(await balanceOf(wrenToken)).toBe(before - 25);
+    expect(await balanceOf(wrenToken)).toBe(before - minor(25));
     // Not somebody else's to withdraw.
     expect((await call("POST", `/api/redemptions/${id}/withdraw`, undefined, ashToken)).status).toBe(404);
     const back = await call("POST", `/api/redemptions/${id}/withdraw`, undefined, wrenToken);
