@@ -405,8 +405,21 @@ async function readOne(
       atMs: at.getTime(), askMinor: ask, measurable: false,
     });
   }
-  const spend = await circleSpendIn(
-    conn, circleId, tokenType, new Date(window.startsAt), new Date(window.endsAt),
-  );
+  /*
+   * THE SUM STOPS AT `at`, AND THE RATE'S DENOMINATOR STOPS THERE TOO.
+   *
+   * They have to be the same instant or the rate is wrong by whatever sits
+   * between them. Reading a window that has not finished with the window's END
+   * as the upper bound counts rows the reading instant has not reached, which
+   * for a reading taken in the past means counting its own future, and divides
+   * that by the time elapsed up to `at`. An adversarial pass on this file
+   * found it: dropping the upper bound entirely changed no figure any test
+   * asserted, because no test had put a row between the instant and the end.
+   */
+  const from = new Date(window.startsAt);
+  const to = new Date(Math.min(at.getTime(), Date.parse(window.endsAt)));
+  const spend = to.getTime() <= from.getTime()
+    ? { issuedMinor: 0, returnedMinor: 0, netMinor: 0, rows: 0 }
+    : await circleSpendIn(conn, circleId, tokenType, from, to);
   return readCap({ scope, window, capMinor, spentMinor: spend.netMinor, atMs: at.getTime(), askMinor: ask });
 }
