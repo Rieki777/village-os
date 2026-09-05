@@ -121,19 +121,40 @@ FROM (
     ) AS `refusal`
   FROM `tokens` `t`
   JOIN (
-    SELECT `token_type` AS `slug` FROM `token_ledger`
-    UNION ALL SELECT `token_type` FROM `token_balances` WHERE `balance` <> 0
-    UNION ALL SELECT `token_slug` FROM `admin_mint_requests`
-    UNION ALL SELECT `token_slug` FROM `redemptions`
-    UNION ALL SELECT `token_type` FROM `accommodation_prices`
-    UNION ALL SELECT `seat_token` FROM `events` WHERE `seat_price` IS NOT NULL AND `seat_price` <> 0
-    UNION ALL SELECT `token_type` FROM `event_seat_charges`
-    UNION ALL SELECT `token_slug` FROM `currency_prices`
-    UNION ALL SELECT `token_slug` FROM `exchange_orders`
-    UNION ALL SELECT `pay_token_slug` FROM `exchange_orders`
-    UNION ALL SELECT `token_slug` FROM `payment_products`
-    UNION ALL SELECT `rate_snapshot_token` FROM `stays`
-  ) `used` ON `used`.`slug` = `t`.`slug`
+    -- EVERY BRANCH IS FORCED TO ONE COLLATION, AND THIS MACHINE COULD HAVE
+    -- TOLD US ALL ALONG.
+    --
+    -- These eleven tables do not share a collation. Seven migrations in this
+    -- repository pin a CHARSET on the tables they create and the rest inherit
+    -- the schema default, so on a database whose default is not the character
+    -- set's own default the branches disagree and MySQL refuses the whole
+    -- statement with "Illegal mix of collations for operation 'UNION'", and a
+    -- schema that cannot migrate provisions nothing, so it took out every
+    -- database-backed suite in CI.
+    --
+    -- I first wrote here that only CI could see it. That was wrong and it is the
+    -- more useful half: server/db/collation.test.ts provisions its OWN schema at
+    -- utf8mb4_general_ci and reproduces this exactly on the local MariaDB, five
+    -- passed and twelve skipped, the same shape CI reported. It was never an
+    -- engine gap. Nobody ran that suite, because it is in no lane's touched-file
+    -- set, which is the same reason a rhythm guard sat red across two pushes.
+    --
+    -- `utf8mb4_bin` because a token slug is an identifier: byte-exact is the
+    -- semantics we want, it is present on both engines, and it removes any
+    -- chance of two slugs differing only by case being treated as one.
+    SELECT `token_type` COLLATE utf8mb4_bin AS `slug` FROM `token_ledger`
+    UNION ALL SELECT `token_type` COLLATE utf8mb4_bin FROM `token_balances` WHERE `balance` <> 0
+    UNION ALL SELECT `token_slug` COLLATE utf8mb4_bin FROM `admin_mint_requests`
+    UNION ALL SELECT `token_slug` COLLATE utf8mb4_bin FROM `redemptions`
+    UNION ALL SELECT `token_type` COLLATE utf8mb4_bin FROM `accommodation_prices`
+    UNION ALL SELECT `seat_token` COLLATE utf8mb4_bin FROM `events` WHERE `seat_price` IS NOT NULL AND `seat_price` <> 0
+    UNION ALL SELECT `token_type` COLLATE utf8mb4_bin FROM `event_seat_charges`
+    UNION ALL SELECT `token_slug` COLLATE utf8mb4_bin FROM `currency_prices`
+    UNION ALL SELECT `token_slug` COLLATE utf8mb4_bin FROM `exchange_orders`
+    UNION ALL SELECT `pay_token_slug` COLLATE utf8mb4_bin FROM `exchange_orders`
+    UNION ALL SELECT `token_slug` COLLATE utf8mb4_bin FROM `payment_products`
+    UNION ALL SELECT `rate_snapshot_token` COLLATE utf8mb4_bin FROM `stays`
+  ) `used` ON `used`.`slug` = `t`.`slug` COLLATE utf8mb4_bin
   WHERE (`t`.`kind` = 'credit' AND `t`.`governance` = 'platform')
      OR (`t`.`slug` = 'village-voice')
 ) `offending`
