@@ -76,3 +76,54 @@ describe("the circle projection has exactly one implementation", () => {
     expect(src).toMatch(/import\s*\{[^}]*circleViews[^}]*\}\s*from\s*"\.\.\/shared\/circleView"/);
   });
 });
+
+/**
+ * A CHANGE MADE ON THE MAP REACHES EVERY OTHER SURFACE.
+ *
+ * The requirement is that editing the map edits the DATABASE, so the cards
+ * page, the role list and the mini render all move with it. Three things
+ * have to hold, and each one is a different way it could quietly fail:
+ *
+ *   1. the map's edit controls call the server, instead of keeping the
+ *      change in React state where a refresh loses it;
+ *   2. the routes they call mutate through `circlesRepo`, which is
+ *      write-through (`server/repos/store-db.ts`: MySQL first, then the
+ *      cache). Raw SQL against `circles` would leave every reader serving
+ *      the old rows until the process restarts, which is a defect this
+ *      repo has already paid for once;
+ *   3. both readers project through `circleView`, which the block above
+ *      already pins.
+ *
+ * Seats need no cache clause: `listOrgRoles` reads the table on every
+ * request, so an org_roles write is visible on the next read by
+ * construction.
+ */
+const setupWalk = fs.readFileSync(
+  path.resolve(__dirname, "../client/src/components/power/SetupWalk.tsx"),
+  "utf8",
+);
+
+describe("a map edit reaches the database, and so reaches every surface", () => {
+  it("sends its edits to the server instead of holding them in state", () => {
+    // Seating somebody, renaming a seat, and declaring how a circle decides.
+    expect(setupWalk).toContain("/api/admin/org/roles/");
+    expect(setupWalk).toMatch(/\/api\/org\/circles\/\$\{[^}]+\}\/decides/);
+    expect(setupWalk).toMatch(/method:\s*"(POST|PUT)"/);
+  });
+
+  it("mutates circles through the write-through store, never raw SQL", () => {
+    const decides = handler("put", "/api/org/circles/:id/decides");
+    expect(decides, "the decides route writes through circlesRepo").toMatch(/circlesRepo\.(replaceAll|update|insert)\(/);
+    expect(decides, "and does not reach past it to the table").not.toMatch(/UPDATE\s+circles\b/i);
+  });
+
+  it("re-reads the map after a change instead of trusting the local copy", () => {
+    const villageMap = fs.readFileSync(
+      path.resolve(__dirname, "../client/src/pages/VillageMap.tsx"),
+      "utf8",
+    );
+    // `onChanged={refetchMap}` is what makes the picture agree with the
+    // database it just wrote to.
+    expect(villageMap).toMatch(/onChanged=\{refetchMap\}/);
+  });
+});
