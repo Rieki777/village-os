@@ -9,15 +9,15 @@ import { onProfileRefresh } from "@/lib/profileRefresh";
 import { formatTokenAmount } from "@/lib/tokenAmount";
 
 const CLAIM_STATUS: Record<string, { label: string; cls: string }> = {
-  claimed: { label: "In progress", cls: "bg-amber-100 text-amber-800" },
-  submitted: { label: "Awaiting consent", cls: "bg-blue-100 text-blue-700" },
+  claimed: { label: "In progress", cls: "bg-notice/10 text-notice" },
+  submitted: { label: "Awaiting consent", cls: "bg-open/10 text-open" },
   consented: { label: "Completed", cls: "bg-emerald-100 text-emerald-700" },
   // 4.39:1 at 12px, which is under the 4.5 floor for text this size, and the
   // one chip on the row that has to be read carefully. stone-600 on the same
   // stone-100 measures 7.00:1 and keeps the chip the quietest of the four.
   // Both figures read off the SHIPPED stylesheet in Chromium, not off the
   // token values, because the palette is oklch and the arithmetic is sRGB.
-  declined: { label: "Not accepted", cls: "bg-stone-100 text-stone-600" },
+  declined: { label: "Not accepted", cls: "bg-muted text-muted-foreground" },
 };
 
 export default function GameDashboard() {
@@ -83,15 +83,23 @@ export default function GameDashboard() {
   useEffect(() => onProfileRefresh(() => load(true)), []);
 
   /*
-   * THESE TWO LINES SIT ON THE PAGE, NOT ON A CARD, so they take the semantic
-   * pair and not this file's stone/white pair. Every card below is a hardcoded
-   * `bg-white` holding hardcoded `text-stone-*`, and that pairing is safe
-   * because neither half answers to `.dark`. These paragraphs render straight
-   * onto Profile.tsx's `bg-background`, which DOES answer to it, so a frozen
-   * ink here would measure about 2.5:1 (stone-600) or 1.8:1 (teal-deep) at
-   * night. Measured in Chromium against the built stylesheet:
-   * text-muted-foreground 6.98 light / 6.49 dark, text-foreground 16.01 /
-   * 14.73.
+   * THESE TWO LINES SIT ON THE PAGE, NOT ON A CARD, and the whole file now
+   * takes the semantic pair. Measured in Chromium against the built
+   * stylesheet: text-muted-foreground 6.98 light / 6.49 dark, text-foreground
+   * 16.01 / 14.73.
+   *
+   * WHAT THIS PARAGRAPH USED TO SAY, AND WHY IT STOPPED BEING TRUE. It read:
+   * "every card below is a hardcoded bg-white holding hardcoded text-stone-*,
+   * and that pairing is safe because neither half answers to `.dark`". That
+   * was correct, and it stayed correct right up until Profile.tsx became a
+   * night ground. Then the frozen pair was still internally consistent and was
+   * two white slabs on black, which is the second-order trap in full: a frozen
+   * pair is safe until the page around it moves, and nothing warns you.
+   *
+   * It survived three sweeps because all three searched `gray` and `white`.
+   * This file's neutral is `stone`, and a whole family can hide behind the
+   * wrong noun. What found it was reading the LIVE page and asking which
+   * elements carrying `bg-white` were inside `.sheet-night`.
    *
    * `role="status"` makes the arrival of each one audible, which is item 9's
    * requirement for this card: the whole top of the sheet appearing or failing
@@ -163,37 +171,37 @@ export default function GameDashboard() {
 
       {/* Gratitude + quests */}
       <div className="grid md:grid-cols-2 gap-4">
-        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6">
+        <div className="bg-card rounded-2xl border border-border shadow-sm p-6">
           <div className="flex items-center gap-2 mb-3">
             <Heart className="w-5 h-5 text-coral" />
-            <h2 className="font-display text-lg font-bold text-teal-deep">{currency}</h2>
+            <h2 className="font-display text-lg font-bold text-card-foreground">{currency}</h2>
           </div>
           {/* Recognition carries decimals 0 today, so this number does not
               move. It divides anyway: this is the biggest number on the
               dashboard, and it is the one a member would quote back. See
               client/src/lib/tokenAmount.ts. */}
-          <p className="text-3xl font-display font-bold text-teal-deep mb-1">
+          <p className="text-3xl font-display font-bold text-notice mb-1">
             {formatTokenAmount(Number(me.gratitude.balance ?? 0), Number(me.gratitude.decimals ?? 0))}
           </p>
-          <p className="text-sm text-stone-500 mb-4">earned so far</p>
+          <p className="text-sm text-muted-foreground mb-4">earned so far</p>
           {me.gratitude.budget.total > 0 && (
-            <p className="text-sm text-stone-600 mb-4">
+            <p className="text-sm text-muted-foreground mb-4">
               Sending budget: <span className="font-semibold">{me.gratitude.budget.remaining}</span> of{" "}
               {me.gratitude.budget.total} left this cycle
             </p>
           )}
-          <Link href="/gratitude" className="inline-flex items-center gap-1.5 text-sm font-semibold text-teal-deep hover:text-teal transition-colors">
+          <Link href="/gratitude" className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground underline underline-offset-2 hover:text-notice transition-colors">
             Visit the {currency} Wall <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
 
-        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6">
+        <div className="bg-card rounded-2xl border border-border shadow-sm p-6">
           <div className="flex items-center gap-2 mb-3">
             <Sparkles className="w-5 h-5 text-gold" />
-            <h2 className="font-display text-lg font-bold text-teal-deep">Quests</h2>
+            <h2 className="font-display text-lg font-bold text-card-foreground">Quests</h2>
           </div>
           {me.quests.length === 0 ? (
-            <p className="text-sm text-stone-500 mb-4">You haven't claimed a quest yet.</p>
+            <p className="text-sm text-muted-foreground mb-4">You haven't claimed a quest yet.</p>
           ) : (
             <ul className="space-y-2 mb-4">
               {[...activeQuests, ...doneQuests].slice(0, 4).map((q) => (
@@ -208,7 +216,7 @@ export default function GameDashboard() {
                     href={`/quests/${q.questId}`}
                     className="flex items-center justify-between gap-2 text-sm group"
                   >
-                    <span className="text-stone-700 truncate group-hover:text-teal-deep transition-colors">
+                    <span className="text-card-foreground truncate group-hover:text-notice transition-colors">
                       {q.questTitle}
                     </span>
                     <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full ${CLAIM_STATUS[q.status]?.cls ?? ""}`}>
@@ -219,7 +227,7 @@ export default function GameDashboard() {
               ))}
             </ul>
           )}
-          <Link href="/quests" className="inline-flex items-center gap-1.5 text-sm font-semibold text-teal-deep hover:text-teal transition-colors">
+          <Link href="/quests" className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground underline underline-offset-2 hover:text-notice transition-colors">
             Browse open quests <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
