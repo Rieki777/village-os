@@ -2922,6 +2922,16 @@ Written by the Admin lane after landing PR #165, having run 26 of the 35 and bel
 thorough.
 
 - Lanes run **only their touched suites plus the guards**.
+- **NAME THE SUITES A CHANGE CROSSES, NOT THE FILES IT EDITS.** This is the rule that makes the
+  line above safe, and it has now bitten two lanes independently in two days. A migration unioning
+  a token slug across eleven tables that do not share a collation took out EVERY database-backed
+  suite; the lane first reported that only CI could see it, and that was wrong, because a collation
+  suite in this repository provisions its own schema and reproduces it exactly on this machine.
+  Nobody had run it, because it was in no lane's touched-file set. The same shape put a governance
+  guard red across two pushes: the file it failed on was in nobody's set either. A touched-file set
+  is a statement about what you EDITED; the suites worth running are the ones your change can be
+  OBSERVED BY, which for a migration is every suite that provisions a schema and for a shared type
+  is every consumer of it. Ask what a change crosses before you ask what it touches.
 - The merge agent runs the touched suites and the guards, pushes, and **READS THE RUN**.
 - **At most one full local suite per LANDING**, never per merge step.
 - The one deliberate exception is a **pair-merge scratch**, because two branches merged together
