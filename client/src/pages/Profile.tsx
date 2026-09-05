@@ -11,6 +11,7 @@ import SendTokensCard from "@/components/SendTokensCard";
 import MaturityLadder from "@/components/profile/MaturityLadder";
 import PowersMap from "@/components/profile/PowersMap";
 import PathsPanel, { type PathTile } from "@/components/profile/PathsPanel";
+import StandingRow from "@/components/profile/StandingRow";
 import MoonDock from "@/components/profile/MoonDock";
 import NightMotes from "@/components/profile/NightMotes";
 import { useAuth } from "@/contexts/AuthContext";
@@ -253,6 +254,29 @@ export default function Profile() {
                   handle={user.handle}
                   stageIndex={prog?.stageIndex ?? null}
                   stageCount={config?.stages?.length ?? null}
+                />
+                {/*
+                  WHERE YOU STAND, under the identity and above everything else.
+
+                  `held` is null on purpose and it is the honest null: the
+                  balance this page already prints below is a MINOR-unit column
+                  rendered raw, so a token with decimals reads too large, and
+                  the vessel is the piece that decides which of the four
+                  gratitude sources is canonical. Passing the wrong number here
+                  to fill the slot sooner would put the same defect in a second
+                  place. The row simply draws three figures until then.
+
+                  Powers open is counted from the catalogue's held flags, which
+                  is the same set PowersMap draws from, so the figure and the
+                  section below it can never disagree.
+                */}
+                <StandingRow
+                  standing={{
+                    held: null,
+                    powersOpen: prog ? prog.capabilityCatalogue.filter((c) => c.held).length : null,
+                    pathsWalked: user.paths.length,
+                    questsDone: prog?.consentedQuests ?? null,
+                  }}
                 />
               </div>
               <motion.button
