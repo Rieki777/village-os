@@ -128,7 +128,7 @@ import { SCENE_BODY_LIMIT } from "../shared/mapScene";
 import { publishedScene } from "./lib/mapScene";
 import { publicEntries as housingPublicEntries } from "./lib/housing";
 import { CALENDAR_KINDS, CALENDAR_LAYERS, toSchemaOrg } from "../shared/gatherings";
-import { recordWalkRows } from "./lib/walkLog";
+import { WALK_LOG_PER_IP_HOURLY, recordWalkRows } from "./lib/walkLog";
 import {
   createGathering,
   deleteGathering,
@@ -7014,7 +7014,7 @@ async function startServer() {
       res.json({ success: true, status: outcome.status, goingCount: outcome.goingCount });
     });
 
-    app.post(`${AGENT_V1}/intents`, async (req, res) => {
+    app.post(`${AGENT_V1}/intents`, async (req, res) => { // limit-ok: writes nothing yet, 404 behind AGENT_INTENT_WRITE and 501 in front of it. Bound it when L7 makes it write.
       if (!AGENT_INTENT_WRITE) return res.status(404).json({ error: "Not found", message: "Posting intents is not open on this deployment yet" });
       const resolved = await resolveAgent(req, res, "intents.write", "write");
       if (!resolved) return;
@@ -19675,7 +19675,7 @@ ${inner}
    */
   app.post("/api/map/walk-log", async (req, res) => {
     const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
-    if (!rows.length) return res.json({ recorded: 0 });
+    if (!rows.length || (await overLimit(`walk-log:${clientIp(req)}`, WALK_LOG_PER_IP_HOURLY, 60 * 60 * 1000))) return res.json({ recorded: 0 });
     const session = typeof req.body?.sessionKey === "string" ? req.body.sessionKey : "";
     if (!session) return res.status(400).json({ error: "sessionKey required" });
     const lang = typeof req.body?.lang === "string" ? req.body.lang : null;
@@ -19929,7 +19929,7 @@ ${inner}
   registerQuestRoutes(app, {
     isAdmin, authedUser, adminActor, getPool, uploadsDir: UPLOADS_DIR, members,
     questsRepo, claimsRepo, crewsRepo, firstName, notify, stageOf, loadRoles,
-    roleIdsFor, currentPatternId, questConsentRecipients,
+    roleIdsFor, currentPatternId, questConsentRecipients, overLimit, clientIp,
   });
 
   // Quests: team consent (value release is always human-gated)

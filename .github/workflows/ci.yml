@@ -614,6 +614,20 @@ jobs:
         # Dependency-free, no database.
         run: node scripts/check-server-index-size.mjs
 
+      - name: Route limits
+        # A route anybody can reach, that a stranger can turn into cost the
+        # village cannot refuse, has to be bounded.
+        #
+        # This replaces CodeQL's js/missing-rate-limiting, which is filtered
+        # out in .github/codeql/codeql-config.yml because it cannot see any of
+        # the three ways this server bounds a request and reported 98 alerts
+        # holding zero unauthenticated writes. This one recognises the 429
+        # rather than a helper's name, so all three shapes count, and it reads
+        # all 590 routes in about a third of a second.
+        #
+        # Dependency-free, no database.
+        run: node scripts/check-route-limits.mjs
+
       - name: Build
         id: build
         # Runs even behind a failed guard, for the same reason the suite does,

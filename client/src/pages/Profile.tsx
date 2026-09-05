@@ -11,6 +11,8 @@ import SendTokensCard from "@/components/SendTokensCard";
 import MaturityLadder from "@/components/profile/MaturityLadder";
 import PowersMap from "@/components/profile/PowersMap";
 import PathsPanel, { type PathTile } from "@/components/profile/PathsPanel";
+import MoonDock from "@/components/profile/MoonDock";
+import NightMotes from "@/components/profile/NightMotes";
 import { useAuth } from "@/contexts/AuthContext";
 import { gameFetch, useGameConfig, type ProgressionCapability } from "@/lib/gameApi";
 import { motion, AnimatePresence } from "framer-motion";
@@ -213,8 +215,21 @@ export default function Profile() {
         It is the same class on the loading branch above, so the page does not
         flash a daylight ground before the member lands.
       */}
-      <div className="sheet-night min-h-screen bg-background py-12">
-        <div className="container">
+      {/*
+        THE AIR AND THE MOON.
+
+        `relative` is new and it is load-bearing: NightMotes is
+        `absolute inset-0` and needs this element to be what it measures, or it
+        fills the viewport and scrolls away from the page it belongs to.
+
+        The motes sit BEFORE the container and behind it, so nothing on the
+        sheet has to know they exist. MoonDock is `fixed` and renders its own
+        layer, so it is placed last for source order: a keyboard reaches the
+        member's own page before it reaches an ornament.
+      */}
+      <div className="relative sheet-night min-h-screen bg-background py-12">
+        <NightMotes />
+        <div className="relative container">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
             {/*
               WHO YOU ARE PLAYING, FIRST.
@@ -538,6 +553,7 @@ export default function Profile() {
             </div>
           </motion.div>
         </div>
+        <MoonDock />
       </div>
     </Layout>
   );

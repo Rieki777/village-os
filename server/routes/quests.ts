@@ -86,6 +86,8 @@ type Deps = Pick<
   | "roleIdsFor"
   | "currentPatternId"
   | "questConsentRecipients"
+  | "overLimit"
+  | "clientIp"
 >;
 
 export function register(app: Express, deps: Deps): void {
@@ -106,6 +108,8 @@ export function register(app: Express, deps: Deps): void {
     roleIdsFor,
     currentPatternId,
     questConsentRecipients,
+    overLimit,
+    clientIp,
   } = deps;
 
   // Quests: public list
@@ -202,6 +206,29 @@ export function register(app: Express, deps: Deps): void {
     const hit = ogCache.get(cacheKey);
     if (hit) {
       return res.type("jpeg").set("Cache-Control", "public, max-age=3600").send(hit);
+    }
+    /*
+     * THE BOUND SITS AFTER THE CACHE, ON PURPOSE.
+     *
+     * This is the only route on the board that rasters an image for somebody
+     * with no account, and `sharp` is the most expensive thing the process
+     * does per request. The cache above makes a repeat fetch free, so a real
+     * crawler walking the board pays this once per quest and is never
+     * counted. What the bound catches is the miss flood: a caller cycling
+     * ids, or cache keys, to make the village raster on demand. 120 an hour
+     * is more posters than any village has.
+     *
+     * 429 with Retry-After, and NOT a redirect to a default poster: there is
+     * no default poster in `client/public` to redirect to, and inventing one
+     * would spend the image budget to make a rate limit look prettier. A
+     * crawler that is over 120 misses an hour is not a social platform
+     * fetching one card.
+     */
+    if (await overLimit(`og-quest:${clientIp(req)}`, 120, 60 * 60 * 1000)) {
+      return res
+        .status(429)
+        .set("Retry-After", "600")
+        .json({ error: "Too many poster requests. Try again shortly." });
     }
     const sharp = (await import("sharp")).default;
     // basename and nothing else: image_url is admin-typed and this reads disk.

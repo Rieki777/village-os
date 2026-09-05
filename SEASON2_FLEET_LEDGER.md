@@ -2922,6 +2922,21 @@ Written by the Admin lane after landing PR #165, having run 26 of the 35 and bel
 thorough.
 
 - Lanes run **only their touched suites plus the guards**.
+- **NAME THE SUITES A CHANGE CROSSES, NOT THE FILES IT EDITS.** This is the rule that makes the
+  line above safe, and it has now bitten two lanes independently in two days. A migration unioning
+  a token slug across eleven tables that do not share a collation took out EVERY database-backed
+  suite; the lane first reported that only CI could see it, and that was wrong, because a collation
+  suite in this repository provisions its own schema and reproduces it exactly on this machine.
+  Nobody had run it, because it was in no lane's touched-file set. The same shape put a governance
+  guard red across two pushes: the file it failed on was in nobody's set either. A touched-file set
+  is a statement about what you EDITED; the suites worth running are the ones your change can be
+  OBSERVED BY, which for a migration is every suite that provisions a schema and for a shared type
+  is every consumer of it. Ask what a change crosses before you ask what it touches.
+  **And the practical form, because inferring them is exactly what failed twice: a lane BRIEF names
+  the crossed suites, rather than trusting the lane to work them out.** A lane knows the files it is
+  about to edit and cannot know what else in the repository observes them; whoever writes the brief
+  has the whole map in front of them and can. A brief that says "run your own tests" and nothing
+  more is asking a lane for a judgement it does not have the information to make.
 - The merge agent runs the touched suites and the guards, pushes, and **READS THE RUN**.
 - **At most one full local suite per LANDING**, never per merge step.
 - The one deliberate exception is a **pair-merge scratch**, because two branches merged together
@@ -3034,6 +3049,41 @@ arrives at the same place and presents identically.
 node -e 'console.log(require("express/package.json").version)'
 git diff HEAD@{1} --name-only | grep pnpm-lock.yaml
 ```
+
+**A GUARD SEES IT NOW, and the paragraph above is what it was written against.**
+`server/db/installedDeps.ts` compares every runtime dependency's installed MAJOR against the one
+`package.json` asks for, and names the package, both versions and the command at the top of any
+test run in a drifted tree. It sits beside `assertFreshDist` in
+`server/db/provisioningReport.ts`'s setup and it WARNS rather than throwing: a stale bundle makes a
+green meaningless, a drifted install usually does not, and refusing to run anything would block work
+that has nothing to do with the package. Both directions are proved against fixture trees in
+`installedDeps.test.ts`, because a guard nobody has watched fire is a guard nobody should believe.
+
+**Two corrections to the entry above, from a second encounter on 2026-09-05.**
+
+The mechanism is one step worse than "no guard sees it": `scripts/build-server.mjs` builds with
+`packages: "external"`, so express is not in `dist/index.js` at all. The bundle requires it from
+`node_modules` at BOOT, which is why rebuilding changes nothing and why `assertFreshDist` is
+correct to stay quiet. The runtime version is whatever is installed when the server starts.
+
+And "a request fell through to the SPA fallback" is not quite what happens. Under express 4 the
+SPA catch-all `app.get("/{*splat}")` matches NOTHING EITHER, because `{` and `}` are literal
+characters to `path-to-regexp@0.1.12`. What answers is express's own built-in 404, which is
+`text/html`, so it looks like the SPA fallback and is not. Measured against one unchanged
+`dist/index.js`, install alone:
+
+```
+/profile                      404 -> 200
+/some-page-that-never-existed 404 -> 200
+/deep/path/that/never/existed 404 -> 200
+/quests                       200 -> 200   (an express-4-valid pattern, so it never broke)
+/quests/:id                   200 -> 200
+```
+
+**Every client route in the product was dead**, and the only test that noticed was one assertion in
+`server/quest-share.e2e.test.ts` about a retired quest. That is the shape to remember: a whole-app
+outage can present as a single obscure red, because the two routes with express-4-valid patterns go
+on working and every test that uses them stays green.
 
 **The rule that generalises past express: after pulling main, if the pull touched
 `pnpm-lock.yaml`, reinstall before you trust a local RED.** This matters MORE under the

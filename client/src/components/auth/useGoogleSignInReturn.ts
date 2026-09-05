@@ -44,6 +44,11 @@ function messageFor(reason: string, catalyst: string): string {
       return "Google sign-in is not set up on this village. Use your email and password.";
     case "bad_state":
       return "That sign-in link expired before it was finished. Start again.";
+    case "rate_limited":
+      // The only refusal here that a member fixes by WAITING, so the sentence
+      // has to say so. The default below says "try again", which from this
+      // address would fail again straight away.
+      return "Too many sign-in attempts from this connection. Wait a few minutes and try again, or sign in with your email and password.";
     default:
       return "Google sign-in did not finish. You can try again, or sign in with your email and password.";
   }

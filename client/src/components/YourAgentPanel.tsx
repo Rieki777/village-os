@@ -344,14 +344,19 @@ export default function YourAgentPanel() {
               className="w-full min-w-0 text-sm border border-border rounded-lg px-3 py-2 mb-2"
               maxLength={80}
             />
+            {/* Densest rows on the page and the smallest before this: 250x17 at
+                390px. A scope is a permission somebody grants an agent, so it is
+                worth a finger-sized row even though four of them get taller. The
+                comment sits OUT here: a map callback returns one element, and a
+                comment node beside the label is a second one. */}
             <div className="grid sm:grid-cols-2 gap-1.5 mb-2">
               {(setup?.scopes ?? []).map((s) => (
-                <label key={s} className="flex items-start gap-2 text-xs text-card-foreground">
+                <label key={s} className="flex min-h-11 items-start gap-3 py-2 text-xs text-card-foreground">
                   <input
                     type="checkbox"
                     checked={tokenScopes.includes(s)}
                     onChange={(e) => setTokenScopes(e.target.checked ? [...tokenScopes, s] : tokenScopes.filter((x) => x !== s))}
-                    className="mt-0.5"
+                    className="mt-0.5 h-4 w-4 shrink-0"
                   />
                   <span><code className="text-[11px]">{s}</code>: {SCOPE_WORDS[s] ?? s}</span>
                 </label>
@@ -490,8 +495,8 @@ export default function YourAgentPanel() {
               </label>
             ))}
           </div>
-          <label className="flex items-start gap-2 text-xs text-card-foreground">
-            <input type="checkbox" checked={profile.matchingConsent} onChange={(e) => saveProfile({ matchingConsent: e.target.checked })} className="mt-0.5" />
+          <label className="flex min-h-11 items-start gap-3 py-2 text-xs text-card-foreground">
+            <input type="checkbox" checked={profile.matchingConsent} onChange={(e) => saveProfile({ matchingConsent: e.target.checked })} className="mt-0.5 h-4 w-4 shrink-0" />
             <span>{consentSentence || "The assistant may use this note and my profile to suggest introductions."}</span>
           </label>
           {profileNote && <p className="text-xs text-muted-foreground mt-1">{profileNote}</p>}

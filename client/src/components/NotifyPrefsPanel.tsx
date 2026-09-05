@@ -175,9 +175,13 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
         <h2 className="font-display text-xl font-bold text-card-foreground">Notifications &amp; your data</h2>
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-card-foreground mb-4">
+      {/* min-h-11 is the TAP TARGET, not decoration: the label is what a finger
+          hits, and this row measured 294x20 at 390px. WCAG 2.5.8 asks 24x24 and
+          a thumb wants 44. The box grows with it so the check is findable. */}
+      <label className="flex min-h-11 items-center gap-3 text-sm text-card-foreground mb-4">
         <input
           type="checkbox"
+          className="h-4 w-4 shrink-0"
           checked={!prefs.emailsOff}
           disabled={saving}
           onChange={(e) => save({ emailsOff: !e.target.checked })}
@@ -214,7 +218,7 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
             wrapping <label> read the whole paragraph as this checkbox's name. */}
         <input
           type="checkbox"
-          className="mt-1"
+          className="mt-1 h-4 w-4 shrink-0"
           checked={prefs.celebrations !== "off"}
           disabled={saving}
           aria-label="Mark the rare moments on screen"
@@ -233,10 +237,10 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
 
       {contactable !== null && (
         <div className="mb-4">
-          <label className="flex items-center gap-2 text-sm text-card-foreground">
+          <label className="flex min-h-11 items-center gap-3 text-sm text-card-foreground">
             {/* The setting names the control. The parenthetical says who can
                 reach you and how, which is a description, not a name. */}
-            <input type="checkbox" checked={contactable} onChange={(e) => saveContactable(e.target.checked)}
+            <input type="checkbox" className="h-4 w-4 shrink-0" checked={contactable} onChange={(e) => saveContactable(e.target.checked)}
               aria-label="Contactable through the Village Map"
               aria-describedby="contactable-hint" />
             Contactable through the Village Map
