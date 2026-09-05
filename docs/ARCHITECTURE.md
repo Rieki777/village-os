@@ -1,11 +1,41 @@
-# game-amora — Architecture of the shipped system
+# game-amora: architecture of the shipped system
 
-> The canonical description of what is actually running. Everything here is
-> verified against the code in this repository as of build marker
-> `2026-07-28-s66-launch-round` (`server/index.ts:216`, platform `1.0.0` per
-> `server/lib/identity.ts:26`). Where an older planning document disagrees
-> with this file, this file wins; where this file disagrees with the code,
-> the code wins and this file has a bug — fix it.
+<!-- describes: server/index.ts server/lib/ server/routes/ shared/modules.ts shared/capabilities.ts shared/gameVariables.ts drizzle/ -->
+
+> The canonical description of what is actually running. Where an older
+> planning document disagrees with this file, this file wins; where this file
+> disagrees with the code, the code wins and this file has a bug: fix it.
+
+## 0. How to read this file, and how to add to it
+
+**It carries no line numbers and no verification date.** Both were tried and
+both failed inside a day. A hand-corrected pass on 2026-09-04 at 12:26 was
+stale again by 14:11, because `server/index.ts` lost roughly 2,500 lines to
+route extraction while the corrections were being written, and roughly twenty
+of the twenty-six citations landed on unrelated code. A header that says
+"verified as of build marker X" and is never re-stamped is a lie with a
+timestamp attached, and it named a marker that cannot exist:
+`server/buildMarker.test.ts` refuses any literal date in `BUILD_MARKER`.
+
+So every reference here is a path plus a thing you can search for: an exported
+symbol, a route, a constant, a table or a heading. That survives any edit short
+of a rename. `docs/GOVERNANCE_EVOLUTION_PROMPT.md` states the same rule for the
+governance brief: anchors are syntax and exported symbols, never line numbers.
+Follow it when you add to this file.
+
+**Figures a script derives are not copied here**, because a number nobody
+writes down cannot go stale. Run the script:
+
+```bash
+node scripts/module-facts.mjs             # module registry, capability keys, the ordered CI gate list,
+                                          # the module library contract version, the live CI budgets
+node scripts/check-server-index-size.mjs  # server/index.ts line count and route count, with the baseline
+node scripts/check-doc-links.mjs          # every path this file names still resolves on disk
+```
+
+The contract semver is `PLATFORM_VERSION` in `server/lib/identity.ts`. The
+running build is `BUILD_MARKER`, composed whole in `scripts/build-server.mjs`
+from the commit SHA and the commit date, never typed by hand.
 
 ---
 
@@ -14,10 +44,10 @@
 A white-label village-coordination platform. One Node process serves a React
 19 SPA and an Express API over MySQL. The product is a loop: someone arrives,
 finds a path, does useful work, a human consents to it, recognition carries
-value, they do more. Around that loop sit eleven optional modules — map,
-forum, feed, stays, exchange, library, badges, health, automation, network,
-tools — every one of which ships OFF and is enabled per deployment by an
-admin. Real value
+value, they do more. Around that loop sit the optional modules declared in
+`MODULES` in `shared/modules.ts`, every one of which ships OFF and is enabled
+per deployment by an admin. `node scripts/module-facts.mjs` counts them and
+says how many are core. Real value
 (equity, voice) lives on Hypha and is only ever displayed here; the
 platform's own ledger is double-entry-lite with conservation provable at
 every boot. "Amora" is merely the first tenant: identity is an overlay,
@@ -28,12 +58,13 @@ find-and-replace.
 
 ## 2. The one-page map
 
-**Processes.** Exactly one: `dist/index.js` (esbuild bundle of
-`server/index.ts`, `--packages=external`, see `package.json` `build`). It
-runs migrations, serves `/api/*`, serves the built SPA from `dist/public`,
-and hosts the scheduler. One process per deployment (Railway) is a
-load-bearing assumption: the S12 store caches are sound *because* there is
-no second writer (`server/repos/store-db.ts:21-23`). MySQL is the only
+**Processes.** Exactly one: `dist/index.js`, the esbuild bundle of
+`server/index.ts` built by `scripts/build-server.mjs`, which also stamps
+`BUILD_MARKER` into it. It runs migrations, serves `/api/*`, serves the built
+SPA from `dist/public`, and hosts the scheduler. One process per deployment
+(Railway) is a load-bearing assumption: the S12 store caches are sound
+*because* there is no second writer (the file header of
+`server/repos/store-db.ts`). MySQL is the only
 authority; the `data/` volume holds only uploads and archived JSON
 (`docs/FORK_RUNBOOK.md` "Backups").
 
@@ -41,76 +72,115 @@ authority; the `data/` volume holds only uploads and archived JSON
 
 | Path | What lives there |
 |---|---|
-| `server/index.ts` | The one Express server: auth, boot, and the routes not yet extracted. **28,330 lines, 413 route registrations**, measured 2026-09-04 by `scripts/check-server-index-size.mjs`, which ratchets both numbers downward. This row said "~8,400 lines" from some earlier era until that guard existed, and then said 545 routes when the script said 544; do not hand-edit these figures, run the script and copy `scripts/server-index-size-baseline.json`. |
+| `server/index.ts` | The one Express server: auth, boot, and the routes not yet extracted. Its line count and route count are ratcheted downward by `scripts/check-server-index-size.mjs` and stored in `scripts/server-index-size-baseline.json`. Both figures used to be written out here and both were wrong within a day of every correction, so they live in the script now: run it. |
 | `server/routes/*` | Route modules, one per domain, each exporting `register(app, deps)`. Where new routes go. |
 | `server/lib/*` | Domain libraries: ledger, modules, payments, exchange, notify, scheduler, events, secrets, identity, launch, feedback, exit, health, member tokens, the admin-gate marker, `appDeps` … |
-| `server/db/` | `migrate.ts` (the engine), `testDb.ts` (S5 harness), `pool.ts` (the connection). There is no schema.ts here: the schema is the numbered SQL in `drizzle/`. |
+| `server/db/` | `migrate.ts` (the engine), `testDb.ts` (S5 harness), `pool.ts` (the connection), `maintenanceMode.ts` (the page a failed migration serves), `provisioningReport.ts` (the run summary and the hollow-run verdict). There is no schema.ts here: the schema is the numbered SQL in `drizzle/`. |
 | `server/repos/` | `store-db.ts` (MySQL-authoritative, memory-cached, write-through stores), `users.ts`, `quests.ts`, `gratitude.ts` |
 | `server/seeds/` | Fork-onboarding seeds (content, quests) — a declared brand home |
 | `shared/` | Isomorphic registries: `modules.ts`, `capabilities.ts`, `gameVariables.ts`, `gameConfig.ts`, `launchRequirements.ts`, `hypha.ts`, `lunar.ts` |
 | `client/src/` | React 19 + Vite + wouter SPA; `client/src/modules/ModuleProvider.tsx` is the client's one module-truth source |
-| `drizzle/` | Numbered SQL migrations `0001`–`0031`, applied by the custom runner |
-| `scripts/` | `check-brand-refs.mjs` (the ratchet), `run-migration.ts`, `smoke-all-modules.mjs`, `enable-all-modules.mjs` |
+| `drizzle/` | Numbered SQL migrations, applied by the custom runner in `server/db/migrate.ts`. `ls drizzle/` is the range; do not trust a number written in prose (see trap 1) |
+| `scripts/` | `module-facts.mjs` (reads the registry and the workflow, and prints what this file refuses to restate), `check-brand-refs.mjs` (the ratchet), `run-migration.ts`, `smoke-all-modules.mjs`, `enable-all-modules.mjs` |
 | `docs/` | This file, `FORK_RUNBOOK.md`, `FEEDBACK_HUB_CONTRACT.md`, per-module design docs |
 
-**Request path.** SPA → `/api/*` → (1) the raw-body Stripe webhook, mounted
-*before* `express.json()` (`server/index.ts:2167`) → (2) `express.json()`
-(1 MB cap) → (3) automatic admin audit middleware — any non-GET under
-`/api/admin` that succeeds writes an attributed audit event
-(`server/index.ts:2186-2202`) → (4) CORS → (5) `requireModule(id)` for
-module-prefixed routes → (6) per-route auth (`authedUser` /
-`isAdmin`) and capability checks (`hasCapability` over `capabilityCtx`) →
-(7) handler → repos/pool. Async handler rejections are routed to the error
-pipeline by a one-time patch of the four registration verbs
-(`server/index.ts:2141-2156`); the terminal handler answers JSON 500.
+**Request path.** Registration order in `startServer()` is the order of the
+pipeline, and every step below is an `app.use` you can search for:
 
-**Boot sequence — in order, all fail-loud** (`startServer()`,
-`server/index.ts:1845`):
+1. The raw-body Stripe webhook, `POST /api/webhooks/stripe`, mounted *before*
+   `express.json()` so the HMAC sees the bytes Stripe signed. The Hypha voice
+   callback is mounted beside it for the same reason.
+2. `express.json()`, 1 MB, with a wider ceiling for `/api/map/draft` and
+   `/api/map/publish` (`SCENE_BODY_LIMIT`).
+3. The agent-token resolver: a `vat_` bearer is honoured under `/api/agent/v1`
+   and answers 401 anywhere else.
+4. Automatic admin audit: any non-GET under `/api/admin` that succeeds with an
+   attached admin account writes an attributed audit event.
+5. The admin default-deny gate under `/api/admin`, which refuses any admin
+   response that succeeded without a `markAdminGate` mark. `/bootstrap` is its
+   one exception.
+6. CORS, granted only to `FRONTEND_URL` when the operator named one.
+7. `requireModule(id)` for every prefix a module declares in `apiPrefixes`.
+8. Per-route auth (`authedUser` / `isAdmin`) and capability checks
+   (`guardCapability`, `mayAct`, `mayStillSee`, or `hasCapability` over
+   `capabilityCtx`).
+9. Handler, then repos and pool.
 
-1. **Migrations** (1852–1863). `applyPending` from `server/db/migrate.ts` —
-   the same engine the CLI (`pnpm db:migrate`) and the test harness use.
-   No `DATABASE_URL`, or any migration failure → the process throws and
-   never serves. Ledger table: `_migrations_applied`.
-2. **Token registry** (1868). `loadTokenRegistry` reads the `tokens` table
-   into memory; `ensureStayToken` / `ensureLibraryToken` create module
-   tokens even while their modules are off, so rewards never race an enable
-   click (1871–1872).
-3. **Ledger invariants refuse boot** (1873–1880). `checkLedgerInvariants`
-   (`server/lib/ledger.ts:575`); any problem → throw, do not serve. "A
-   server that boots over a broken ledger normalizes the break."
-4. **Stores + variables** (1883, `initStores` at 669). Every S12 repo cache
-   fills (roles, brand, season, settings, …) plus `loadVariables`.
-5. **Instance identity** (696). `ensureInstanceIdentity` mints-or-reads the
-   permanent UUID.
-6. **Secrets** (703). `loadSecrets`, plus a one-time migration of legacy
-   keys out of the email-config document (704–724).
-7. **Scheduler.** Twelve jobs registered, then `startScheduler`:
-   notification-digest, retention-sweep, stay-nightly, commerce-reap,
-   exchange-reconcile, feedback-relay, tools-link-check, library-sweep,
-   badge-expiry-sweep, term-watch, network-sync, recording-rss. Each
-   module-owned job checks `effectiveLifecycle` and sleeps while its module is
-   off, so a village that runs three modules pays for three. (This said
-   "Seven" for months while jobs were added around it; the count is worth
-   naming them out for, since a job registered and never listed is a job
-   nobody remembers is running.)
-8. **Module framework** (1946–1958). `loadModuleSettings`,
-   `assertModuleGraph` (loud demotion, one-seller-per-token assertion),
-   `wireModuleAuth`, then server-side `openStateCheck` closures are attached
-   to stays/exchange/badges/library.
-9. **Economy firewalls re-proven** (1963–2001). `assertExchangeFirewalls`,
-   `assertBadgeInvariants`, `assertLibraryInvariants`; then
-   `repairTaintedListings` (auto-delist, loudly — automated authority may
-   narrow the market, never widen it), `assertSwapFirewalls`,
-   `reconcileSwapOrders`.
-10. **Payment handlers** (2007–2106). stays and exchange register
-    settle/reversal with the trio.
-11. **Seeds** (2111). Quest library seeds only into an *empty* table.
-12. **Routes serve** (2130 onward). Express app, webhook seam, middleware,
-    413 route registrations in `server/index.ts` plus the `register(app,
-    deps)` calls for each `server/routes/*` module, static SPA fallback,
-    `server.listen` on `PORT || 3000`. (This said "~200 routes" until the
-    count was measured, and then 545 when the script said 544;
-    `scripts/server-index-size-baseline.json` owns the number now.)
+Express 5 forwards a rejected handler promise to the terminal error handler by
+itself, on every verb; that handler answers JSON 500. The hand-rolled wrapper
+around the registration verbs that Express 4 needed is gone.
+
+**Boot sequence, in order** (`startServer()` in `server/index.ts`). Read it
+top to bottom in that function; the stages below are the landmarks:
+
+1. **Crash reporting, ahead of everything.** `wireErrorReporting` and
+   `installCrashHandlers`. Deliberately first: a boot that dies on a failed
+   migration is exactly the crash nobody was watching for.
+2. **Migrations.** `applyPending` from `server/db/migrate.ts`, the same engine
+   the CLI (`pnpm db:migrate`) and the test harness use. Ledger table
+   `_migrations_applied`. No `DATABASE_URL` throws. A migration that FAILS no
+   longer refuses to bind: `startMaintenanceServer` binds the port and serves
+   one plain-language page saying what failed and that no data was lost,
+   because the old shape gave a steward who cannot read a stack trace a bare
+   502 after Railway gave up on three restarts.
+3. **Token registry and the economy's vocabulary.** `loadTokenRegistry` reads
+   the `tokens` table into memory. `ensureStayToken` and `ensureLibraryToken`
+   create module tokens even while their modules are off, so rewards never
+   race an enable click. `seedEconomy` upserts the archetypes and inserts the
+   starting rules only when absent, then the registry reloads and
+   `startEconomyEpoch` starts the clock before the first confirmed quest is
+   measured against it.
+4. **Ledger invariants refuse boot.** `checkLedgerInvariants` in
+   `server/lib/ledger.ts`; any problem throws and the process does not serve.
+   "A server that boots over a broken ledger normalizes the break."
+5. **Stores, variables, identity and secrets.** `initStores()` fills every S12
+   repo cache (roles, brand, season, settings and the rest) plus
+   `loadVariables`, then mints or reads the permanent instance UUID
+   (`ensureInstanceIdentity`), the document signing key (`ensureSigningKey`)
+   and the write-only secrets store (`loadSecrets`). Anything that reads a
+   game variable must sit AFTER this call or it silently reads the platform
+   default; `assertVoiceSecret` is the guard that learned it.
+6. **Scheduler jobs registered.** `registerJob` calls, and `startScheduler` is
+   deliberately NOT called here: arming the tick is the last thing boot does,
+   so a failure in a later stage can never leave a live scheduler on a dead
+   server. A job registered and never listed is a job nobody remembers is
+   running, so enumerate them rather than trusting a count in prose:
+
+   ```bash
+   grep -n 'registerJob(' server/index.ts server/lib/*.ts
+   ```
+
+   Each module-owned job checks `effectiveLifecycle` and sleeps while its
+   module is off, so a village that runs three modules pays for three.
+7. **Module framework.** `loadModuleSettings`, `loadExampleState`,
+   `wireExampleCaches`, `assertModuleGraph` (loud demotion, one-seller-
+   per-token assertion), `wireModuleAuth`, `initModuleUsage`, then the
+   server-side `openStateCheck` closures are attached to every module that
+   needs the pool.
+8. **Economy firewalls re-proven, and they QUARANTINE rather than refuse.**
+   `assertExchangeFirewalls`, `assertBadgeInvariants`,
+   `assertLibraryInvariants` and `assertCapabilityHoldingInvariants` each run
+   inside `quarantineOnInvariantFailure`, which turns that one module off and
+   lets the village serve. They used to throw straight out of `startServer()`
+   and take the forum, the map and the front door down over one bad listing
+   row, on deployments where nobody can run SQL against production. What
+   stays fatal is migrations and the ledger conservation check above: those
+   are village-wide truths with no single module to quarantine.
+   `repairTaintedListings` then auto-delists loudly (automated authority may
+   narrow the market, never widen it), `assertSwapFirewalls` still THROWS on a
+   problem and only warns on a stale legal card, and `reconcileSwapOrders`
+   reaps swaps whose legs already tell the truth.
+9. **Payment handlers.** `registerPaymentHandlers` for commerce, stays and
+   exchange.
+10. **Seeds.** The quest library seeds only into an *empty* table, then
+    `ensureDataFiles`, `seedExamplesAtBoot` and the `runOnce` data-migration
+    chain.
+11. **Routes serve.** Express app, the webhook seam, the middleware pipeline
+    above, the route registrations in `server/index.ts` plus the
+    `register(app, deps)` call for each `server/routes/*` module, the static
+    SPA fallback, the terminal JSON error handler, `startScheduler`, then
+    `server.listen` on `PORT || 3000` and `installShutdownHandlers` so a
+    Railway SIGTERM drains instead of cutting a settle in half.
 
 ---
 
@@ -121,7 +191,7 @@ pipeline by a one-time patch of the four registration verbs
 **What it is.** Every token movement is a transfer FROM one account TO
 another, amount a strictly positive integer, in `token_ledger`.
 `token_balances` is a cache. Two disciplines carried from regen-civics
-(file header, lines 14–20): **recompute, never increment** (both touched
+(the file header names them): **recompute, never increment** (both touched
 balances are rewritten from `SUM(transfers)` inside the posting
 transaction), and **every write carries an idempotency key** (the UNIQUE
 index is the dedupe; a replay returns `duplicate: true`, it never posts
@@ -137,42 +207,46 @@ stocked *fails*, out of stock is never a mint), `sys:exit-settlement`
 (0027), `sys:library-escrow/pool/sink` (0024). Conservation is therefore
 checkable: per token, `SUM(balance)` over all accounts ≡ 0.
 
-**`postTransfer`** (ledger.ts:212). One leg, one transaction: lock accounts
-`FOR UPDATE`, insert the transfer (UNIQUE key rejects replays), recompute
-both balances in sorted order (deadlock avoidance), overdraft-check the
-sender. Non-faucet accounts can only go negative when the caller sets
-`allowNegative` AND the source is in `ALLOW_NEGATIVE_SOURCES` — a static set
-of exactly `{"stay_night", "payment_reversal"}` (ledger.ts:144), extended
-only by a reviewed one-line change, never at runtime.
+**`postTransfer`**. One leg, one transaction: lock accounts `FOR UPDATE`,
+insert the transfer (UNIQUE key rejects replays), recompute both balances in
+sorted order (deadlock avoidance), overdraft-check the sender. Non-faucet
+accounts can only go negative when the caller sets `allowNegative` AND the
+source is in `ALLOW_NEGATIVE_SOURCES`, a static exported set, extended only by
+a reviewed one-line change and never at runtime. Read the set itself for its
+current members; §5 invariant 10 is the rule it enforces.
+`postTransferOn` is the same primitive on a caller's connection.
 
-**`postTransferPair` + `PairGuard`** (ledger.ts:333). Exactly two legs, one
-transaction — built for swaps, where sequential `postTransfer` calls could
-debit without crediting. Fixed at two legs on purpose: "a generic N-leg API
-is what makes a router easy to build, and a router is an automated market
-maker wearing a helper function." Rules enforced inside the primitive:
-`allowNegative` is illegal in a pair (a swap may never create debt, line
-366); the two keys must differ; one sorted `FOR UPDATE` over the deduped
-account union (lock first, create member accounts second — the shared-lock
-upgrade deadlock is designed out, 385–407); a partial idempotency collision
-(one of two keys already present) *refuses* rather than guesses (456–460);
-every non-faucet sender is overdraft-checked; deadlock victims retry up to
-three times. The `PairGuard` is a veto closure that runs *inside* the
-transaction after the locks — for limits living outside the ledger
-(per-cycle swap caps), so check-then-act races are impossible (418–424).
+**`postTransferPair` + `PairGuard`**. Exactly two legs, one transaction, built
+for swaps, where sequential `postTransfer` calls could debit without
+crediting. Fixed at two legs on purpose: "a generic N-leg API is what makes a
+router easy to build, and a router is an automated market maker wearing a
+helper function." Rules enforced inside the primitive: `allowNegative` is
+illegal in a pair (a swap may never create debt); the two keys must differ;
+one sorted `FOR UPDATE` over the deduped account union (lock first, create
+member accounts second, so the shared-lock upgrade deadlock is designed out);
+a partial idempotency collision, one of two keys already present, *refuses*
+instead of guessing; every non-faucet sender is overdraft-checked; deadlock
+victims retry up to three times. The `PairGuard` is a veto closure that runs
+*inside* the transaction after the locks, for limits living outside the ledger
+such as per-cycle swap caps, so check-then-act races are impossible.
 
 **Registry.** The `tokens` table is the registry; the in-memory map is a
-boot-loaded cache refreshed by `registerToken` (table first, then reload —
-"the table is the truth", ledger.ts:99–113). `tokenDef()` returning
-undefined means "not a token" and callers must fail loud: `validateLeg`
-refuses unknown slugs outright ("a typo that silently became 'gratitude'
-would be a mint bug wearing a coercion costume", 200–204) and refuses to
-move any `governance: 'hypha'` token.
+boot-loaded cache filled by `loadTokenRegistry` and refreshed by
+`registerToken` (table first, then reload: "the table is the truth").
+`tokenDef()` returning undefined means "not a token" and callers must fail
+loud: `validateLeg` refuses unknown slugs outright ("a typo that silently
+became 'gratitude' would be a mint bug wearing a coercion costume") and
+refuses to move any `governance: 'hypha'` token.
 
-**Boot invariants** (`checkLedgerInvariants`, 575–616), all five re-proven
-at every boot: (1) hypha tokens have zero ledger rows; (2) no orphan token
-slugs; (3) conservation ≡ 0 per token; (4) cache agrees with recomputation;
-(5) no non-faucet account is negative without an `ALLOW_NEGATIVE_SOURCES`
-debit explaining it.
+**Boot invariants** (`checkLedgerInvariants`), re-proven at every boot. The
+doc comment above that function is the list and is the thing to read; at the
+time of writing it holds six: hypha tokens have zero ledger rows; no orphan
+token slugs; conservation ≡ 0 per token; cache agrees with recomputation; no
+non-faucet account is negative without an `ALLOW_NEGATIVE_SOURCES` debit
+explaining it; and no recognition, equity or voice token is marked
+`transferable`, which shipped wrong in 0006 and sat unread for eighty-five
+migrations. It also reports `uncredited` as a FINDING that is deliberately not
+part of `ok`.
 
 **Extending it.** New issuance = a new `source` string and an idempotency
 key grammar (`ord:<id>:leg1`, `exit:<id>:sweep:<token>` are the house
@@ -182,17 +256,17 @@ is a reviewed edit to `ALLOW_NEGATIVE_SOURCES`, nothing less.
 
 ### 3.2 The module framework — `shared/modules.ts` + `server/lib/modules.ts`
 
-**What it is.** ONE registry of everything the platform can be
-(`MODULES`, shared/modules.ts:62): four core modules (quests, gratitude,
-progression, profiles — listed for catalogue honesty, not disableable in
-v1, always served `public`) and eleven optional ones (map, forum, feed,
-stays, automation, health, library, badges, exchange, network, tools). Per-module
-`<module>.enabled` game variables from older design docs are void:
-enablement lives in `module_settings` and nowhere else (file header, lines
-1–10).
+**What it is.** ONE registry of everything the platform can be: `MODULES` in
+`shared/modules.ts`. The core modules are listed for catalogue honesty, are
+not disableable in v1, and are always served `public`; everything else is
+optional. `node scripts/module-facts.mjs` prints how many of each there are,
+so the count is not written down here. Per-module `<module>.enabled` game
+variables from older design docs are void: enablement lives in
+`module_settings` and nowhere else (the file header).
 
 **Lifecycle.** `off | preview | members | public`, rank-ordered
-(`LIFECYCLE_RANK`). Semantics (server/lib/modules.ts:9–17): `off` → routes
+(`LIFECYCLE_RANK`). Semantics, spelled out in the header of
+`server/lib/modules.ts`: `off` → routes
 404, zero nav, variables hidden; `preview` → admins only, and non-admins
 get the *identical* 404 body so the catalogue of what a village is trying
 never leaks; `members` → signed-in only (anon gets 401 so the client can
@@ -201,17 +275,19 @@ prompt login); `public` → everyone, per-route capability checks still apply.
 module as off, and enabling is always a recorded admin act
 (`module_events`).
 
-**The gate.** `requireModule(id)` (modules.ts:167) is mounted once per API
+**The gate.** `requireModule(id)` is mounted once per API
 prefix declared in the registry's `apiPrefixes`. The Stripe settlement
 webhook is NEVER mounted behind it — in-flight orders must settle even when
 a module was just disabled.
 
-**Demotion, not bricking.** `effectiveLifecycle` (modules.ts:78) serves a
-module whose hard dependency is off as OFF regardless of its stored row;
-`assertModuleGraph` (125) logs demotions at fatal volume, lists orphan ids,
-and *throws* only for the one-selling-module-per-token violation.
+**Demotion, not bricking.** `effectiveLifecycle` serves a module whose hard
+dependency is off as OFF regardless of its stored row; `assertModuleGraph`
+logs demotions at fatal volume, lists orphan ids, and *throws* only for the
+one-selling-module-per-token violation. `quarantineModule` is the other way a
+module reads OFF without an admin touching it: a failed boot invariant
+quarantines that module alone (boot stage 8).
 
-**Writes.** `setModuleLifecycle` (203): core refuses; enabling requires
+**Writes.** `setModuleLifecycle`: core refuses; enabling requires
 every hard dep non-off (409 with `missing`); a `legalReview` module refuses
 to leave off while a shared password is the only admin credential (403);
 disabling refuses while dependents are non-off (409) or while
@@ -220,54 +296,64 @@ guidance). `setModuleConfig` runs the module's `validateConfig` first. Both
 append `module_events` rows.
 
 **The preview-leak guard.** Module code emits public activity through
-`moduleActivity` (303), which is a structural no-op below `members` — "a
-structural no-op beats a review-enforced rule."
+`moduleActivity`, which is a structural no-op below `members`: "a structural
+no-op beats a review-enforced rule."
 
-**Registry entry surface** (`ModuleDef`, shared/modules.ts:23–60): `id`,
-founder-facing `name`/`description` (platform copy, never a village brand),
-`core`, `requires` (hard, blocks both directions), `recommends` (warn only),
-`capabilities` (keys ADDED to the one gate — never a second permission
-mechanism), `variableKeys`, `apiPrefixes`, `hyphaLinks`, `legalReview`,
-`hyphaOnly`, `sellsToken` (at most one selling module per token,
-boot-asserted), `validateConfig`, `defaultConfig`, `openStateCheck`
-(attached server-side at boot for the four modules that need the pool,
-`server/index.ts:1955-1958` — the shared file stays import-clean for the
-client bundle).
+**Registry entry surface.** `ModuleDef` in `shared/modules.ts` is the type,
+and `node scripts/module-facts.mjs` prints every field in declaration order
+with which ones are required, so the list is not copied here. The parts worth
+knowing before you read it: `requires` is hard and blocks both directions,
+`recommends` only warns, `capabilities` names keys ADDED to the one gate and
+never a second permission mechanism, `sellsToken` allows at most one selling
+module per token and is boot-asserted, and `openStateCheck` is attached
+server-side in `startServer()` for the modules that need the pool, which keeps
+the shared file import-clean for the client bundle.
 
 ### 3.3 The ONE capability gate — `shared/capabilities.ts`
 
-Thirteen capability keys; `ALL_CAPABILITIES` is the canonical value the
-badge validator and unlock diffs iterate (keep the union and the array in
-lockstep, lines 38–55). `hasCapability` (93) is pure and isomorphic, and its
-order of authority IS the policy (Gate E, shipped S36):
+`ALL_CAPABILITIES` is the canonical value the badge validator and unlock
+diffs iterate; keep the union and the array in lockstep.
+`node scripts/module-facts.mjs` prints how many keys are in the gate, so the
+count is not written down here. `capabilityDecision` is the one implementation
+and it is pure and isomorphic; `hasCapability` is its yes-or-no projection and
+never a second copy of the order. That order IS the policy (Gate E, shipped
+S36, amended by 0098):
 
-1. `isAdmin` → true (the operator can always act — a real role on the user
-   record, never a parallel path);
-2. `badgeDenies`, ON A DENIABLE KEY → false (a warning badge's deny beats
-   role AND stage grants — "a warning that a role trivially overrides is not
-   a warning"; only admin outranks it). `DENIABLE` (0109, R65/R66) says which
-   keys a deny may reach: `ballot.vote` and `member.vouch` are a member's own
-   say in a decision, nothing takes one away, and the gate ignores a deny
-   that names one. The other 27 keys are unchanged;
-3. `roleCapabilities` → true (appointments);
-4. `badgeCapabilities` → true (earned/granted badges);
-5. stage unlock (`STAGE_UNLOCKS`, deliberately only a handful of real
+1. `isAdmin`, on a key the village does NOT hold → true. The operator can
+   always act on the scaffolding they are responsible for, through a real role
+   on the user record and never a parallel path.
+2. `isAdmin`, on a key the village DOES hold: with an explicit break-glass
+   → true, and the caller owes the village a record it can read
+   (`reachedPastVillage` says so); without one, the admin short-circuit does
+   not apply and the same admin is judged on steps 3 to 6 like anybody else.
+3. `badgeDenies`, ON A DENIABLE KEY → false. A warning badge's deny beats
+   role AND stage grants: "a warning that a role trivially overrides is not a
+   warning". `DENIABLE` (0109, R65/R66) says which keys a deny may reach;
+   `ballot.vote` and `member.vouch` are a member's own say in a decision,
+   nothing takes one away, and the gate ignores a deny that names one.
+4. `roleCapabilities` → true (appointments);
+5. `badgeCapabilities` → true (earned/granted badges);
+6. stage unlock (`STAGE_UNLOCKS`, deliberately only a handful of real
    gates) → true;
-6. otherwise false.
+7. otherwise false.
 
-Server side, `capabilityCtx(user)` (`server/index.ts:1237`) builds the
-context once per request; badge grants/denies are only queried while the
-badges module is non-off — off means the gate is byte-identical to its
-pre-badges self. Modules extend the union; they never invent a second
-mechanism.
+On a village-held key a warning badge's deny therefore reaches an ADMIN too,
+which is why the break-glass shipped in the same commit: a gate that can lock
+an operator out of a live village must never exist without its escape hatch.
+
+Server side, `capabilityCtx(user)` in `server/index.ts` builds the context
+once per request; badge grants and denies are only queried while the badges
+module is non-off, so off means the gate is byte-identical to its pre-badges
+self. Modules extend the union; they never invent a second mechanism.
 
 **A declared capability that no route enforces is not a capability.**
 `quest.consent` was granted by the seeded steward-circle role and displayed
 to members as authority they held, while both consent routes asked only
 `isAdmin` — so every unit of recognition a village released came from
 whoever held the founder password, which is the single-founder bottleneck
-this whole system exists to prevent. Consent now admits admin OR
-`hasCapability("quest.consent", …)`, and two things ride with that widening
+this whole system exists to prevent. Consent now asks
+`mayAct(req, "quest.consent")`, the acting door described in §4 step 4, and
+two things ride with that widening
 because releasing value is not an ordinary action: **no self-consent** (for
 admins too — consent mints from the faucet, grants stay credits and advances
 stages, so witnessing your own work must be structurally impossible), and an
@@ -290,8 +376,8 @@ planes.
    the stage ladder is a fork of the game, not a re-skin
    (`docs/FORK_RUNBOOK.md` "NOT overlayable").
 2. **Brand overlay — the `brand` document.** Edited by the admin Setup
-   Wizard, merged over gameConfig by `mergedConfig()`
-   (`server/index.ts:1090`): a blank field inherits the platform default,
+   Wizard, merged over gameConfig by `mergedConfig()` in `server/index.ts`:
+   a blank field inherits the platform default,
    so a fork overrides only what differs. Served through `/api/game/config`
    and read by every email, page and the network handshake.
 3. **Behaviour — `shared/gameVariables.ts` + `server/lib/variables.ts`.**
@@ -299,8 +385,9 @@ planes.
    from Admin without a deploy. **Delta-only**: only changed values are
    stored in `game_variables`; setting a value back to its default DELETES
    the override so the fork keeps inheriting future platform defaults
-   (variables.ts:94–99). Readers are synchronous against the boot-loaded
-   cache; unknown keys throw — "a typo must not read as 0" (37–41).
+   (`setVariable`). Readers (`variable`, `numberVar`, `boolVar`, `stringVar`)
+   are synchronous against the boot-loaded cache, and an unknown key throws:
+   "a typo must not read as 0".
 
    **The registry is THE single source of truth for game mechanics**
    (Game Mechanics initiative, Rye 2026-07-31). Three additions carry that:
@@ -384,9 +471,11 @@ planes.
    ledger, email config and the like go through `dbDocument` repos, while
    instance-identity and launch-state are raw INSERT/SELECT rows written
    directly by `server/lib/identity.ts` and `server/lib/launch.ts`;
-   and `server/lib/secrets.ts` (S63) for third-party keys:
-   `stripe_secret_key`, `stripe_webhook_secret`, `resend_api_key`,
-   `assistant_api_key`. The one rule: **a secret is write-only.** Reads
+   and `server/lib/secrets.ts` (S63) for third-party keys. `SECRET_KEYS` is
+   the list: a fixed base set (Stripe's two, Resend, the assistant, Riverside,
+   the governance hub, Basescan) plus a slot for every `vendor.secretKeys`
+   entry a `connected` module library listing declares, so the set grows with
+   the catalogue. The one rule: **a secret is write-only.** Reads
    return `{configured, last4, source, setBy, setAt}` and never the value;
    the value leaves the module only toward the service it belongs to.
    Resolution is admin-typed first, env fallback second (the env names
@@ -412,22 +501,26 @@ site through the conversion.
 public Pulse and the admin audit trail are the same `health_events` table
 split by `audience`. Every row can carry WHO (`actorUserId`) and WHAT
 (`entityType`/`entityRef`). Recording never throws into the caller — "an
-event is a trace of a mutation that already happened" (events.ts:8–10).
-Admin mutations under `/api/admin` are audited automatically by middleware
-(`server/index.ts:2186`); richer endpoints still write their own rows.
+event is a trace of a mutation that already happened" (the file header of
+`server/lib/events.ts`). Admin mutations under `/api/admin` are audited
+automatically by the middleware named in the request path above; richer
+endpoints still write their own rows.
 Module code must emit public activity via `moduleActivity`, never
 `recordEvent` directly, or preview leaks.
 
 ### 3.6 The notification spine — `server/lib/notify.ts`
 
-Fresh implementation of regen-civics' *rules* without its warts (header,
-lines 1–25): `dedupe_key` is NOT NULL with a real UNIQUE index (one stable
+Fresh implementation of regen-civics' *rules* without its warts (the file
+header lists them): `dedupe_key` is NOT NULL with a real UNIQUE index (one stable
 key per event+recipient; a retried producer inserts exactly once, forever);
 delivery is an explicit dispatch step after a fresh insert, never a side
 effect; preferences are one typed, junk-tolerant model
-(`resolveNotifyPrefs`). `DAILY_EMAIL_CAP = 20` per rolling 24 h — over the
-cap the in-app row still exists, only the email drops. Cadence per type
-(`emailCadenceFor`; read the switch, the line numbers here drifted twice):
+(`resolveNotifyPrefs`). The email cap is per member per rolling 24 h, read
+from the `notify.daily_email_cap` game variable with the `DAILY_EMAIL_CAP`
+constant as its fallback, so a village that tuned the dial is not described by
+the constant. Over the cap the in-app row still exists and only the email
+drops. Cadence per type, and read the switch in `emailCadenceFor` rather than
+this list, which has drifted twice:
 quests/roles/mentions/replies immediate by preference, gratitude/stage/
 `feedback` daily, `thread_activity` in-app only, `payments_alert`,
 `restorative_intake`, `moderation` and `submission_status` always immediate,
@@ -446,16 +539,22 @@ rule: every 5-minute tick, `UPDATE scheduled_jobs SET last_run_at = NOW()
 WHERE job = ? AND (last_run_at IS NULL OR last_run_at <= ?)` —
 `affectedRows` says who won. Restart-safe, multi-process-safe, runs when
 DUE not N ms after boot. **What it will never do, written down so nobody
-"helpfully" adds it** (24–31): it does NOT close gratitude cycles
+"helpfully" adds it**, in the file header: it does NOT close gratitude cycles
 (settlement releases value and is an explicit admin act, `POST
 /api/admin/cycles/close`), and it does NOT roll seasons (compute-on-read by
-design). Registered jobs (`server/index.ts:1887-1941`): notification-digest
-(24 h), retention-sweep (24 h), stay-nightly (1 h, idempotent by keyed
-ledger legs), exchange-reconcile (1 h — a reaper, never a settler),
-feedback-relay (15 min), network-sync (6 h — `syncPeers`,
-`server/index.ts:1928`, early-returns while the network module is off),
-recording-rss (6 h, purely additive ingestion). Jobs for off modules return
-early.
+design).
+
+The registry of jobs is the `registerJob` calls themselves, and it has grown
+faster than any list in this file could. Enumerate it:
+
+```bash
+grep -n 'registerJob(' server/index.ts server/lib/*.ts
+```
+
+Each call carries its own interval as its second argument. The shapes worth
+knowing: `stay-nightly` is idempotent by keyed ledger legs, `exchange-reconcile`
+is a reaper and never a settler, and every module-owned job early-returns while
+its module reads off, so a village that runs three modules pays for three.
 
 ### 3.8 The payments trio — `server/lib/payments.ts`
 
@@ -467,19 +566,20 @@ Built once (S32), consumed by every fiat module. Three responsibilities:
    `ceilMinor` what the member pays, `floorTokens` what the member receives;
    the property test asserts no round trip extracts value.
 2. **Settlement + reversal.** ONE raw-body webhook
-   (`POST /api/webhooks/stripe`, mounted before `express.json()`,
-   `server/index.ts:2167`). Signature verification is a manual HMAC of
-   Stripe's v1 scheme over the RAW body with a 5-minute replay tolerance and
-   `timingSafeEqual` (payments.ts:97–117). **Fail closed:** a missing
-   webhook secret is a misconfiguration, not permission — unsigned events
-   are rejected 400 and admins alerted (183–190). Event-level dedupe rides
-   the UNIQUE `stripe_event_id` in `payments_log`; a failed dispatch
-   *releases* the dedupe claim and answers 500 so Stripe retries — ledger
-   keys make the retries safe (266–277). Disputes and refunds are
+   (`POST /api/webhooks/stripe`, mounted before `express.json()`).
+   Signature verification is a manual HMAC of Stripe's v1 scheme over the RAW
+   body with a 5-minute replay tolerance and `timingSafeEqual`. **Fail
+   closed:** a missing webhook secret is a misconfiguration and not
+   permission, so unsigned events are rejected 400 and admins alerted. The
+   route also carries its own in-memory per-IP ceiling ahead of every other
+   guard, because each rejected request used to cost three database writes.
+   Event-level dedupe rides the UNIQUE `stripe_event_id` in `payments_log`; a
+   failed dispatch *releases* the dedupe claim and answers 500 so Stripe
+   retries, and ledger keys make the retries safe. Disputes and refunds are
    **mechanical**: the module's reversal handler claws back exactly what was
    granted (negative balances are the truthful state), the buyer is
-   auto-suspended on disputes — but not for refunds the village itself
-   issued (the `villageInitiated` check, 240–253) — and admins are notified.
+   auto-suspended on disputes, though not for refunds the village itself
+   issued (the `villageInitiated` check), and admins are notified.
    Never manual reconstruction.
 3. **Limits.** `assertCanPurchase` is one cross-module helper over
    `fiat_charges`: suspension check, per-order / 30-day / annual caps from
@@ -544,15 +644,16 @@ The retention sweep never deletes an unstamped row, at any age.
 
 ### 3.9 Data lifecycle — retention, export, anonymisation, exit
 
-- **Retention** (`runRetentionSweep`, `server/index.ts:1539`): daily job
+- **Retention** (`runRetentionSweep` in `server/index.ts`): daily job
   driven entirely by variables — `retention.submissions_days`,
   `map.contact_retention_days` (contact bodies), and
   `retention.notifications_days` (read rows only). 0 disables a sweep.
-- **Export** (`GET /api/profile/export`, 8432): everything the village
+- **Export** (`GET /api/profile/export`): everything the village
   holds on the member — profile minus secrets, stage, claims, gratitude
   both directions, full signed ledger, balances, stage events, submissions,
   notifications, preferences — as a downloadable JSON (Law 8968 posture).
-- **Anonymisation = deletion** (`anonymizeMember`, 1585). Value rows are
+- **Anonymisation = deletion** (`anonymizeMember` in
+  `server/lib/erasure.ts`). Value rows are
   NEVER deleted — conservation must keep holding — so the member row
   becomes a tombstone (name/email/handle scrubbed, password removed,
   `tokenVersion` bumped so every session dies) and every denormalised trace
@@ -590,24 +691,25 @@ Buy-only shop by default: stock moves `sys:mint → sys:treasury` (under the
 same per-cycle mint cap as hand-mints), sales `sys:treasury → buyer`; the
 treasury is not a faucet, so over-selling fails the settlement. The
 firewalls are enforced at write time AND re-proven at boot so a hand-edited
-row can never outlive a deploy (`tradingProblem`, 101–117): recognition
+row can never outlive a deploy (`tradingProblem`): recognition
 never trades; hypha tokens never trade; a token another module sells cannot
 be listed; `NEVER_LISTED` statically bans `library-credit` (backed by
 shelves). Swapping adds the structural faucet test
-(`faucetIssuedTokens`, 139–147): the rule is about **destination, not
+(`faucetIssuedTokens`): the rule is about **destination, not
 source names** — `faucet → sys:treasury` is stocking a shop; `faucet →
 anything else` is issuance, and an issued token is permanently unswappable
 at every privilege level ("a source-name allowlist rots"). Swap caps are
-**fail-closed: 0 means ZERO, never unlimited** (`ExchangeSettings`, 44–47).
-Trading itself is a per-deployment opt-in (`tradingEnabled` in module
-config) behind a version-stamped legal card — `TRADING_CARD_VERSION`
-(`server/index.ts:224`); an acceptance of any other card version is refused
-(2730–2739). At boot, `assertSwapFirewalls` treats trading enabled under
-shared-password posture as a PROBLEM and refuses to serve — it throws
-(exchange.ts:730–748); only a stale card version is a mere warning that
-closes swapping while the rest of the village keeps serving (739–744).
-Quote math is receive-driven, ceil-on-pay, BigInt throughout via `BigInt()`
-calls, not literals (exchange.ts:454–463).
+**fail-closed: 0 means ZERO, never unlimited** (`ExchangeSettings`, and the
+comment on `maxSwapOutPerCycle` says so). Trading itself is a per-deployment
+opt-in (`tradingEnabled` in module config) behind a version-stamped legal
+card, `TRADING_CARD_VERSION` in `server/index.ts`, and an acceptance of any
+other card version is refused. At boot, `assertSwapFirewalls` treats trading
+enabled under shared-password posture as a PROBLEM and throws, so the village
+refuses to serve; a stale card version is only a WARNING, which closes
+swapping while the rest of the village keeps serving, because a version bump
+is a docs change that must not brick every fork running trading. Quote math is
+receive-driven, ceil-on-pay, BigInt throughout via `BigInt()` calls and never
+literals (`quoteSwap`).
 
 ### 3.11 Instance identity — `server/lib/identity.ts` (S62)
 
@@ -617,10 +719,17 @@ once at first boot (`INSERT IGNORE` into `app_config`, re-read; idempotent
 under concurrent boots) and never regenerated. **Deliberately not
 configurable**: an admin-editable id lets deployments impersonate one
 another, an env var mints a new identity whenever an operator forgets to
-pin it (file header, 10–16). `PLATFORM_VERSION` (`1.0.0`) is the contract
+pin it (the file header). `PLATFORM_VERSION`, in this file, is the contract
 semver, distinct from each fork's `BUILD_MARKER`: peers and the hub compare
 versions, humans read markers. Bump MINOR for additive endpoint/field
-changes, MAJOR for anything a peer could break on.
+changes, MAJOR for anything a peer could break on. The constant carries a
+comment saying what its current bump was for; read it there rather than
+copying the number anywhere.
+
+The signing keypair is minted beside the id, by `ensureSigningKey`, for the
+same reason: everything cross-instance hangs off it, so it exists before any
+route serves. The boot log says whether the private half is sealed, because a
+line reading only "kid abc123" describes three very different villages.
 
 ### 3.12 Launch requirements — `shared/launchRequirements.ts` + `server/lib/launch.ts` (S62)
 
@@ -628,17 +737,26 @@ changes, MAJOR for anything a peer could break on.
 true (id, group, founder-facing copy, `severity`
 blocking/recommended/optional, `checkKey`, `fixAt`, optional
 `appliesWhenModule` and `runbookAnchor`); the server observes WHETHER it is,
-via check closures injected from `server/index.ts` (`launchDeps`, 4213 —
-they need the boot-loaded caches, and importing them into launch.ts would
-be a cycle). Three consumers render it — the Journey to Launch page, the
-admin banner, Maia's launch-guide mode — and none may invent an item.
-`manual:*` checks (DNS, backup drill) are confirmed by a named admin, who
-and when recorded. A registry entry with no wired resolver fails VISIBLY on
-the page as a platform bug rather than silently dropping (launch.ts:107–112).
-"Mark launched" is a one-way founder act gated on every blocking item; it is
-deliberately not auto-derived, and the flag's one consumer is the admin
-banner — nothing else may branch on it (launch.ts:14–19). Module-gated
-requirements appear and withdraw with the module's lifecycle.
+via check closures injected from `server/index.ts` (`launchDeps`; they need
+the boot-loaded caches, and importing them into `server/lib/launch.ts` would
+be a cycle). Three consumers render it, the Journey to Launch page, the admin
+banner and Maia's launch-guide mode, and none may invent an item. `manual:*`
+checks (DNS, backup drill) are confirmed by a named admin, with who and when
+recorded. A registry entry with no wired resolver fails VISIBLY on the page as
+a platform bug, with the state `missing`, instead of silently dropping.
+
+**Launching is a vote now, not a founder's press (R74).** The button opens the
+village's first ballot; `launchVoteBlocked` is what the checklist gates, and
+it gates whether the question may be PUT, never what the answer is. The flag
+is written by that ballot carrying, through `recordLaunchCarried`, which uses
+an INSERT IGNORE plus a guarded UPDATE rather than the read-edit-write every
+other writer in that file uses, so an admin ticking a manual confirmation in
+the same moment cannot lose the launch. `launchedAt` is read by the admin
+banner, by the Journey page, and by `server/lib/villageMoon.ts` for the moon
+counter, which goes through the exported `launchedAtOf` rather than growing a
+second query. The separate fact that token issuance is open lives in
+`server/lib/gameStart.ts`. Module-gated requirements appear and withdraw with
+the module's lifecycle.
 
 ### 3.13 The feedback spine — `server/lib/feedback.ts` (S66)
 
@@ -653,7 +771,13 @@ first, `relayed_at` set only on a 2xx, 10-second timeout, any failure is a
 log line and a natural retry — "the hub is a listener, not a dependency."
 The 40-hex `fingerprint` (sha256 prefix over kind + normalised text) lets
 the hub collapse forty villages hitting one crash into one counted issue.
-Hub URL: `FEEDBACK_HUB_URL` env, default the ReGen Civics hub. The hub-side
+Hub URL: the `FEEDBACK_HUB_URL` environment variable, **and there is no
+default**. The platform's own hub used to be the fallback, so a fork that
+configured nothing posted its members' bug reports to an organisation it had
+never heard of, every fifteen minutes, from the first submission; the dial
+that turns the relay on ships ON. With the variable unset, rows stay in the
+local queue, admins still see every one, and the form stops promising a
+sharing that is not happening. The hosted deployment must set it. The hub-side
 obligations (durable-store-then-2xx, idempotent on
 `(instanceId, localId)`, treat `name` as untrusted) live in
 `docs/FEEDBACK_HUB_CONTRACT.md`.
@@ -677,8 +801,8 @@ obligations (durable-store-then-2xx, idempotent on
 - **The overlay.** The Setup Wizard ("Make This Yours") writes the brand
   document; `mergedConfig()` overlays it on gameConfig; blank inherits.
   Wizard order and the not-overlayable list are in `FORK_RUNBOOK.md`.
-- **The handshake** — `GET /api/platform/info`
-  (`server/index.ts:4187-4206`): public, unauthenticated; name/tagline
+- **The handshake**, `GET /api/platform/info` in `server/index.ts`:
+  public, unauthenticated; name/tagline
   /location from the merged overlay (never a literal), `instanceId`,
   `version`, `build`, the served module list, and whether Hypha is
   configured. A future village directory reads it; the fork smoke test
@@ -686,8 +810,8 @@ obligations (durable-store-then-2xx, idempotent on
 - **The runbook** — `docs/FORK_RUNBOOK.md` is a living document: every
   session that adds an env var, seed, or provisioning step appends one
   line. Env table, token naming (Gate D), backups (restore-verified daily
-  dump), `enable-all-modules.mjs`, the 47-check
-  `smoke-all-modules.mjs`, and the trading caution table live there.
+  dump), `enable-all-modules.mjs`, `smoke-all-modules.mjs` (which prints its
+  own check count on every run), and the trading caution table live there.
 - **The Hypha boundary** — `shared/hypha.ts`: one root variable
   (`hypha.org_url`), four named deep links derived by convention, each
   overridable; blank root hides every Hypha surface so a dead governance
@@ -1093,11 +1217,16 @@ Four rules, each of which was a real defect first:
    re-encodes what is already there; anything new belongs in the uploads
    volume, which is stamped, cached correctly and swappable.
 
-4. **CI measures all three, not just one.** `MAX_MAIN_JS_KB` (700),
-   `MAX_TOTAL_DIST_KB` (6000) and `MAX_SINGLE_IMAGE_KB` (400) in
-   `.github/workflows/ci.yml`. The budget used to cover main JS alone, so
-   178 KB of CSS and 1.7 MB of images grew entirely unwatched. When one goes
-   red, split or compress — do not raise the number.
+4. **CI measures all three, not just one.** `MAX_MAIN_JS_KB`,
+   `MAX_TOTAL_DIST_KB` and `MAX_SINGLE_IMAGE_KB` are set in
+   `.github/workflows/ci.yml`; `node scripts/module-facts.mjs` prints the live
+   values and `node scripts/check-dist-budget.mjs` reproduces the measurement
+   locally, so the numbers are not copied here. The budget used to cover main
+   JS alone, so 178 KB of CSS and 1.7 MB of images grew entirely unwatched.
+   The two budgets point in opposite directions on purpose: main JS is real
+   bytes on one file, total dist is block-charged across the tree, so
+   splitting a route helps one and slightly costs the other. When one goes
+   red, split or compress. Do not raise the number.
 
 ### 3.20 Peer identity — `server/lib/network.ts` (0057)
 
@@ -1143,23 +1272,34 @@ Three properties worth keeping:
   cost is real and is the right way round: a village that rolls back pauses on
   its peers until somebody looks.
 
-### 3.21 The uploads volume — five writers, one reader, one sweep
+### 3.21 The uploads volume: many writers, one reader, one sweep
 
-`UPLOADS_DIR` is flat, it is a mounted disk, and five doors write into it. Any
-code that reasons about a file on it has to know all five, because a rule that
-knows four is a rule that eventually deletes a member's photograph.
+`UPLOADS_DIR` is flat, it is a mounted disk, and several doors write into it.
+Any code that reasons about a file on it has to know ALL of them, because a
+rule that knows all but one is a rule that eventually deletes a member's
+photograph. This section carried a hard count of five for months while three
+more doors were added around it, which is the failure it warns about, so the
+count is gone and the enumeration is a command:
 
-**The five writers, and where each one's reference lives.** Every byte goes
-through `server/lib/uploads.ts` (`sanitiseForVolume` + `writeToVolume`), which
-`scripts/check-upload-strip.mjs` enforces.
+```bash
+grep -rn 'writeToVolume(' server --include='*.ts' | grep -v uploads.ts
+```
+
+Every byte goes through `server/lib/uploads.ts` (`sanitiseForVolume` and
+`writeToVolume`), which `scripts/check-upload-strip.mjs` enforces, so that grep
+is exhaustive by construction. The table below is a reading aid for what the
+doors are FOR and where each reference lives; the grep is the list.
 
 | Door | Filename | The reference that keeps it |
 |---|---|---|
 | `POST /api/work-with-us/attachment` (public) | `proposal-<stamp>` | `submissions.data.attachment`, a **bare filename** with no `/api/uploads/` prefix |
-| `POST /api/admin/brand/image` | `brand-<stamp>.webp` and `brand-<stamp>.thumb.webp` | the `brand` document in `app_config`; the THUMBNAIL is named by nothing, because `BrandImageField` discards `data.thumbUrl` |
+| `POST /api/admin/brand/image` (`server/routes/brandUploads.ts`) | `brand-<stamp>.webp` and `brand-<stamp>.thumb.webp` | the `brand` document in `app_config`; the THUMBNAIL is named by nothing, because `BrandImageField` discards `data.thumbUrl` |
 | `POST /api/admin/brand/font` | `brand-font-<stamp><ext>` | `brand.theme.fontFaceUrl`, and the filename again inside `brand.theme.fontLicenceAck.file` |
 | `POST /api/admin/investor-docs/upload` | `<document's own name>-<stamp><ext>` | `investor_docs.url` (0099) |
 | `POST /api/places/:key/photos` | `place-<stamp>.webp` and `place-<stamp>.thumb.webp` | `place_photos.url` and `.thumb_url` |
+| `POST /api/me/portraits/:key/upload` and `/forge` (`server/lib/characterPortraits.ts`) | `portrait-<stamp>.webp` | `character_portraits.file_name` and `.candidate_file_name` (0158) |
+| The land imagery cache (`fetchAndCache`, `server/lib/satellite.ts`) | `land-<provider>-<stamp><ext>` | `village_land.imagery_filename` (0123) |
+| `POST /api/admin/site-pull/assets` (`server/routes/sitePull.ts`) | `sitepull-<stamp><ext>` | **nothing, until an admin pastes the URL somewhere.** The route hands back `/api/uploads/<name>` and persists no row, so a pulled picture nobody used is genuinely unreferenced and the orphan sweep is right about it |
 
 **The stamp is a contract, not a convention.** Every one of those names carries
 `-<13 digit millisecond>-<random>` before its extension, minted by
@@ -1230,8 +1370,8 @@ submission aged out.
    with `INSERT IGNORE`, and say in a comment whether each is a faucet and
    why (0009/0024 are the model).
 3. **Tokens.** If the module has a credit, create it via the token registry
-   (`registerToken` / an `ensure<X>Token` called at boot *before* the
-   invariant check, like `ensureStayToken`, `server/index.ts:1871`), and
+   (`registerToken`, or an `ensure<X>Token` called at boot *before* the
+   invariant check, the way `ensureStayToken` is), and
    issue only through `postTransfer` with idempotency keys. No private
    balance columns — the framework gives modules no place to keep one.
 4. **Routes** in `server/routes/<id>.ts`, **not** in `server/index.ts`,
@@ -1277,9 +1417,12 @@ submission aged out.
    `server/routes/faqs.ts`, `training.ts` and `milestones.ts` are the
    worked examples, in ascending order of how much they need.
 
-   **Why not `server/index.ts` any more.** That file is 28,330 lines with
-   413 route registrations in one `startServer` closure, and this recipe
-   telling every contributor to add to it is a large part of why. It is
+   **Why not `server/index.ts` any more.** That file holds tens of thousands
+   of lines and hundreds of route registrations in one `startServer` closure,
+   and this recipe telling every contributor to add to it is a large part of
+   why. Run `node scripts/check-server-index-size.mjs` for the two current
+   figures; they are deliberately not written down here, because every time
+   they were, they were wrong within a day. It is
    now ratcheted by `scripts/check-server-index-size.mjs`: its line count
    and its route count may only ever fall, `--update-baseline` refuses to
    write a higher number, and a file under `server/routes/` is capped at
@@ -1326,8 +1469,9 @@ submission aged out.
    notifications through `insertNotification` with a stable dedupe key and
    a cadence entry in `emailCadenceFor` if it should ever email.
 8. **openStateCheck**: if the module creates economic state that must
-   settle before disabling, attach the closure at boot next to the existing
-   four (`server/index.ts:1955`), and add the member-level equivalent to
+   settle before disabling, attach the closure in `startServer()` next to the
+   other `MODULES_BY_ID[...].openStateCheck =` lines, and add the
+   member-level equivalent to
    `exitOpenState` if a departing member could hold it.
 9. **Client**: page under `client/src/pages/`, gated by
    `useModules()`/`ModuleGate`; nav from the module manifest, never a
@@ -1424,9 +1568,10 @@ fork, but drop the row deliberately when you do it.
    human decision, and forks inherit new modules dormant.
 9. **Conservation ≡ 0 per token; recompute, never increment; every write
    carries an idempotency key.** The economy is checkable, not promised.
-10. **Non-faucet accounts never go negative** except through the two
-    statically-listed truthful-debt sources — a negative balance is a fact,
-    never a convenience.
+10. **Non-faucet accounts never go negative** except through the
+    statically-listed truthful-debt sources in `ALLOW_NEGATIVE_SOURCES`. A
+    negative balance is a fact, never a convenience, and that set is extended
+    only by a reviewed edit.
 11. **Funds-bearing modules refuse to enable under shared-password
     posture** — money needs attributable humans.
 12. **In-flight orders settle even when their module is off** — the webhook
@@ -1455,7 +1600,8 @@ fork, but drop the row deliberately when you do it.
 
 1. **Comment lines ending in `;` split SQL statements.** The migration
    runner splits on `;` at end of line and strips comment lines *before*
-   splitting (`server/db/migrate.ts:30-42`) — but only full comment lines.
+   splitting (`splitStatements` in `server/db/migrate.ts`), and only FULL
+   comment lines.
    Migration 0015 was cut in half by `-- …live in game_variables;`. Keep
    comments off statement tails; never end a comment line with `;`.
    **And a shipped migration file is never edited** — not a style rule, a
@@ -1468,25 +1614,29 @@ fork, but drop the row deliberately when you do it.
 2. **PowerShell `Set-Content -Encoding utf8` double-encodes.** UTF-8 text
    written through it becomes mojibake; several section rules in
    `server/index.ts` still carry the scars (`â”€â”€ Seasons â”€â”€`,
-   lines ~1260, ~4154). Write files with tools that respect the bytes;
+   line numbers left out on purpose, since the grep below finds every one).
+   Write files with tools that respect the bytes;
    verify with a grep for `â` after any scripted edit on Windows.
 3. **MySQL UNIQUE indexes exempt NULLs.** Multiple NULLs happily coexist
    under a unique index, which silently kills NULL-keyed dedupe. This is
-   why `notifications.dedupe_key` is NOT NULL with a real unique index
-   (`server/lib/notify.ts:6-8`). Any new dedupe column must be NOT NULL.
+   why `notifications.dedupe_key` is NOT NULL with a real unique index (the
+   first bullet of the `server/lib/notify.ts` header). Any new dedupe column
+   must be NOT NULL.
 4. **BigInt literals break the build.** The bundle targets below ES2020, so
-   `123n` fails; use `BigInt(123)` calls — the swap quote math does exactly
-   this on purpose (`server/lib/exchange.ts:454-458`).
+   `123n` fails; use `BigInt(123)` calls. The swap quote math does exactly
+   this on purpose, and says so in a comment (`quoteSwap` in
+   `server/lib/exchange.ts`).
 5. **Never filter the test run with `-t`.** `server/loop.e2e.test.ts` is
    order-dependent by design — each step of the loop builds on the last
    against one live server process. A `-t` filter skips earlier steps and
    fails later ones spuriously. Run the whole file or the whole suite.
-6. **Build before test.** The loop test boots `dist/index.js` and throws if
-   it is missing (`loop.e2e.test.ts:74-76`); CI orders build before test
-   for this reason (`.github/workflows/ci.yml`).
+6. **Build before test.** The loop test boots `dist/index.js` and throws
+   "Run `pnpm build` before the loop test" if it is missing (the `DIST`
+   constant in `server/loop.e2e.test.ts`); CI orders build before test for
+   this reason (`.github/workflows/ci.yml`).
 7. **`timezone: 'Z'` on every MySQL connection.** mysql2 defaults to local
    time; a timestamp written local and read Z shifts every lunar boundary
-   six hours (`server/db/migrate.ts:7-10`). The engine, the pool and the
+   six hours (the file header of `server/db/migrate.ts`). The engine, the pool and the
    harness all set it — so must any new connection.
 8. **`AUTH_TOKEN_SECRET` unset degrades silently** to per-process sessions:
    every restart logs everyone out. It is now a blocking launch requirement
@@ -1603,11 +1753,13 @@ gratitude lands → peer send → wall → Pulse → progression. It is
 order-dependent; never `-t`-filter it. If a change makes it fail, the
 change is wrong.
 
-Its port is derived from the pid, `3781 + process.pid % 2000`, for the same
-reason the schema name is: a shared fixed port is a shared mutable global with
-extra steps, and on 2026-08-01 two parallel sessions on 3781 took each other
-down. Do not expect the server on 3781, and do not hardcode a port when
-adding to this suite.
+Its port is derived from the pid, `17900 + (process.pid % 2000)`, for the
+same reason the schema name is: a shared fixed port is a shared mutable global
+with extra steps, and on 2026-08-01 two parallel sessions on the old fixed
+3781 took each other down. The second server's bind failed quietly, its health
+check answered from the FIRST session's server, and 43 failures of pure noise
+followed. Read `PORT` in `server/loop.e2e.test.ts` rather than expecting a
+number, and never hardcode one when adding to this suite.
 
 **Unit suites** live beside their subjects: `server/ledger.test.ts`,
 `server/swap.test.ts` (quote/conservation properties),
@@ -1618,28 +1770,41 @@ isomorphic `shared/*.test.ts` (capabilities, lunar, mapLayout). Vitest runs
 in node env, `fileParallelism: false` (one server process per file, no port
 fights), 120 s test timeout (`vitest.config.ts`).
 
-**The gate** — the same commands locally and in CI
-(`.github/workflows/ci.yml`), in this order:
+**The gate** is the same commands locally and in CI
+(`.github/workflows/ci.yml`). There are more than thirty of them and the list
+grows most weeks, so it is not transcribed here. Print it in the order CI runs
+it:
 
 ```bash
-pnpm check                        # tsc --noEmit
-node scripts/check-brand-refs.mjs # brand guard: hard-clean spotless, ratchet only burns down
-pnpm build                        # vite build + esbuild server bundle — BEFORE tests
+node scripts/module-facts.mjs   # ends with "Gates, in the order CI runs them"
+```
+
+The four that fail most often, and the order that matters:
+
+```bash
+pnpm check                        # tsc --noEmit; note it does NOT typecheck tests
+npx tsc -p tsconfig.tests.json --noEmit   # the tests, which the line above excludes
+pnpm build                        # vite build + the server bundle, BEFORE tests
 pnpm test                         # vitest run, the FULL suite, loop included
 ```
 
-CI adds two steps that BLOCK, both of which used to be advisory:
+Two of the CI steps have no local `pnpm test` equivalent and both BLOCK:
 
-- **Bundle budget** — the main JS bundle must stay under `MAX_MAIN_JS_KB`
-  (1400 KB today; it currently runs ~1345 KB). When it goes red the fix is
-  splitting a route, usually `React.lazy` on `/admin`, not raising the number.
-  A village on a phone on rural mobile data pays for every kilobyte.
-- **`pnpm audit --prod --audit-level high`** — blocking since the commerce
-  hardening. Advisories with no upstream fix that have been checked for
-  reachability are listed in `package.json` under `pnpm.auditConfig.ignoreGhsas`
-  AND explained in `docs/SECURITY_ADVISORIES.md`; an entry in one without the
-  other is not allowed. The first pass of this removed `axios` — a direct
-  dependency carrying thirteen high advisories that no file imported.
+- **The bundle budget**, a shell block in the workflow, reproduced locally by
+  `node scripts/check-dist-budget.mjs`. See §3.19 rule 4 for what it measures
+  and where the numbers live. When it goes red the fix is splitting a route,
+  usually `React.lazy` on a heavy page, and never raising the number. A
+  village on a phone on rural mobile data pays for every kilobyte.
+- **`node scripts/dependency-audit.mjs`**, blocking since the commerce
+  hardening. It blocks on an ANSWER carrying a high advisory and deliberately
+  not on a registry that will not answer, because `pnpm audit` returns one
+  exit code for both and a hung audits endpoint stopped every merge in this
+  repository on 2026-09-04 with nothing wrong in any code. Advisories with no
+  upstream fix that have been checked for reachability go in `package.json`
+  under `pnpm.auditConfig.ignoreGhsas` AND in `docs/SECURITY_ADVISORIES.md`;
+  an entry in one without the other is not allowed. The first pass of this
+  removed `axios`, a direct dependency carrying thirteen high advisories that
+  no file imported.
 Pushing `main` deploys production, so the gate is the release process:
 nothing merges red, and nothing green is assumed to work until the loop has
 closed against the artefact that ships.

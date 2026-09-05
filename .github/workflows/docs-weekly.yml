@@ -1,0 +1,112 @@
+# The weekly documentation pass, run by a machine so it cannot be forgotten.
+#
+# WHY A SCHEDULE AND NOT A GATE. Borrowed from codeql.yml's reasoning in this
+# same directory, inverted. There, the value of a scheduled run is that the
+# query suite changed rather than the code. Here it is that the CODE changed
+# under a document while nobody looked at the document.
+#
+# WHY THIS OPENS AN ISSUE AND NEVER FAILS A BUILD. A gate that fires on work
+# unrelated to the committer gets waived, and this repository has measured what
+# that costs: of 220 line-anchored citations in the docs, 33 fail, 29 pass and
+# 84 are unjudgeable, and 29 of 62 numeric anchors point into server/index.ts,
+# which took 387 commits in 90 days. Blocking on that means a route addition
+# turns dozens of citations red through nobody's fault, and the response is a
+# SKIPPED list that grows until the gate protects nothing while looking like it
+# does. So this produces a LIST somebody reads, and blocks no one.
+#
+# WHY WEEKLY RATHER THAN PER COMMIT. Per commit it fires constantly and teaches
+# people to ignore it, which is the same failure by a different route.
+#
+# WHAT THIS CANNOT DO, said plainly so nobody reads a green as an all-clear:
+# it cannot tell whether a paragraph is TRUE. It reports that a document makes
+# claims about code that moved while the document did not. That is a proxy. A
+# document can rot with no commit anywhere (a claim that was always wrong), and
+# a rename can move a file without invalidating a sentence. Both are fine in a
+# report and would be intolerable in a gate.
+name: docs-weekly
+
+on:
+  schedule:
+    # Sundays, 06:23 UTC. Off the hour on purpose: every scheduler on the
+    # planet fires at :00, and a run that lands in the queue with everyone
+    # else's waits behind them.
+    - cron: "23 6 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The report compares commit dates, so a shallow clone would make
+          # every document look untouched and every subject look unchanged.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      - name: Which documents describe code that moved
+        id: report
+        run: |
+          node scripts/check-doc-freshness.mjs --since 7 | tee /tmp/freshness.txt
+          {
+            echo 'body<<REPORT_EOF'
+            echo 'The weekly documentation pass. This is a report: nothing is blocked, and a name on this list does not mean the prose is wrong. It means the code a document describes moved while the document did not, so nobody has looked since the ground shifted.'
+            echo ''
+            echo 'Run it yourself with `node scripts/check-doc-freshness.mjs`.'
+            echo ''
+            echo '```'
+            cat /tmp/freshness.txt
+            echo '```'
+            echo ''
+            echo 'A document opts in by naming what it describes, on one line near its top:'
+            echo ''
+            echo '```'
+            echo '<!-- describes: server/index.ts shared/modules.ts -->'
+            echo '```'
+            echo ''
+            echo 'Coverage is a glob over every tracked markdown file, never a list, so a document that never opts in is reported as undeclared rather than skipped in silence.'
+            echo 'REPORT_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open or update the weekly issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = process.env.REPORT_BODY;
+            const title = "Weekly documentation pass";
+            // One issue, reused. A new issue every Sunday is a notification
+            // stream nobody reads; a single issue that changes is a thing with
+            // a history somebody can scroll.
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              labels: "documentation",
+              per_page: 100,
+            });
+            const mine = existing.data.find((i) => i.title === title);
+            if (mine) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: mine.number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ["documentation"],
+              });
+            }
+        env:
+          REPORT_BODY: ${{ steps.report.outputs.body }}
