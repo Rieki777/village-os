@@ -242,7 +242,18 @@ export default function Profile() {
             */}
             <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0 flex-1">
-                <ProfileHero name={user.name} handle={user.handle} />
+                {/* The ladder position comes from HERE and not from a second
+                    fetch inside the hero: `prog.stageIndex` is /api/game/me and
+                    `config.stages` is /api/game/config, both already read above.
+                    Two reads of one fact disagree for one render every time a
+                    rung turns. Null while either is loading, and the arc draws
+                    nothing rather than drawing zero. */}
+                <ProfileHero
+                  name={user.name}
+                  handle={user.handle}
+                  stageIndex={prog?.stageIndex ?? null}
+                  stageCount={config?.stages?.length ?? null}
+                />
               </div>
               <motion.button
                 whileHover={{ scale: 1.05 }}

@@ -1247,6 +1247,14 @@ button, a, [role="button"], input, textarea, select, summary {
      village's own --sheet-earned knob, so re-tinting what is earned re-tints
      every notice with it and nothing has to be set twice. */
   --sheet-notice: var(--sheet-earned, #dfab4d);
+
+  /* The two ends of the maturity arc, either side of the gold it is made from.
+     The ring is a gradient rather than a flat stroke so the far end reads as
+     lit and the near end as still in shadow, which is the whole reason it says
+     "coming from somewhere" instead of "a bar, bent". Both take the village's
+     own knobs, so a re-tinted gold arrives with a matching pair. */
+  --sheet-earned-deep: var(--sheet-earned-shadow, #6b4a15);
+  --sheet-earned-lit: var(--sheet-earned-highlight, #f2ce85);
   --destructive: var(--sheet-warn, #e0805e);
   --destructive-foreground: var(--sheet-ground, #0d1411);
 

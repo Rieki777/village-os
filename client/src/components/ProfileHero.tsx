@@ -14,10 +14,11 @@
  */
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { authToken } from "@/lib/gameApi";
+import { authToken, useGameConfig } from "@/lib/gameApi";
 import { Link } from "wouter";
 import { Star } from "lucide-react";
 import { announceProfileChange, onProfileRefresh } from "@/lib/profileRefresh";
+import { moonsOnLandPhrase } from "@shared/villageMoon";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -37,11 +38,74 @@ interface Archetype {
   subtitle: string;
 }
 
-export default function ProfileHero({ name, handle }: { name: string; handle?: string | null }) {
+/**
+ * THE ARC IS THE LADDER, DRAWN ROUND THE FACE.
+ *
+ * `stageIndex` and `stageCount` are passed in rather than fetched, because
+ * Profile.tsx already holds both: `stageIndex` off /api/game/me and `stages`
+ * off /api/game/config. A second read here would be a second opinion about
+ * the same fact, and the two would disagree for one render every time the
+ * page refreshed after a rung turned.
+ *
+ * Both are optional and the arc simply does not draw without them. A hero that
+ * renders a zero-length arc while it waits says "you have got nowhere", which
+ * is a lie told confidently; drawing nothing says nothing.
+ */
+/** The arc's own circumference, at the r=122 the viewBox is drawn for. */
+const CIRCUMFERENCE = 2 * Math.PI * 122;
+
+export default function ProfileHero({
+  name,
+  handle,
+  stageIndex,
+  stageCount,
+}: {
+  name: string;
+  handle?: string | null;
+  stageIndex?: number | null;
+  stageCount?: number | null;
+}) {
   const [party, setParty] = useState<Character[]>([]);
   const [archetypes, setArchetypes] = useState<Archetype[]>([]);
   const [title, setTitle] = useState<string | null>(null);
   const [moons, setMoons] = useState<number | null>(null);
+  const [joined, setJoined] = useState<string | null>(null);
+  const village = useGameConfig()?.project;
+
+  /*
+   * THE FRACTION, AND WHY IT IS NOT stageIndex / stageCount.
+   *
+   * A member standing on the first rung has index 0, and 0/12 draws an empty
+   * ring around somebody who has in fact arrived and been counted. The rungs
+   * are the GAPS between positions, so a twelve-rung ladder has eleven of
+   * them, and standing on the first means one position reached out of twelve.
+   * `(index + 1) / count` is what makes the ring read as "where I am" instead
+   * of "how much I have not done".
+   */
+  const known = typeof stageIndex === "number" && typeof stageCount === "number" && stageCount > 0;
+  const arc = known ? Math.max(0, Math.min(1, (stageIndex + 1) / stageCount)) : null;
+  const rung = known ? `Maturity ${stageIndex + 1} of ${stageCount}` : "";
+
+  /* The eyebrow is the village's own two words, so a fork reads its own. */
+  const eyebrow = [String(village?.name ?? "").trim(), String(village?.tagline ?? "").trim()]
+    .filter(Boolean)
+    .join(" · ");
+
+  /*
+   * "Joined March 2026". Month and year, never a day: the exact date is not
+   * something anybody needs off a profile, and a bare month reads as a season
+   * rather than as a record.
+   */
+  const joinedLine = (() => {
+    if (!joined) return "";
+    const d = new Date(joined);
+    if (!Number.isFinite(d.getTime())) return "";
+    try {
+      return `Joined ${new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" }).format(d)}`;
+    } catch {
+      return "";
+    }
+  })();
   const [broken, setBroken] = useState<Record<string, boolean>>({});
   /**
    * AN EMPTY PARTY IS A CLAIM, so it waits for an answer.
@@ -70,6 +134,9 @@ export default function ProfileHero({ name, handle }: { name: string; handle?: s
         setParty(d?.party ?? []);
         setTitle(d?.title ?? null);
         setMoons(typeof d?.moonsOnTheLand === "number" ? d.moonsOnTheLand : null);
+        // Already in this payload and never read until now: server/lib/profile.ts
+        // puts `joinedAt` in the profile lens. No new request for the join line.
+        setJoined(typeof d?.joinedAt === "string" ? d.joinedAt : null);
         setStatus("ready");
       })
       .catch(() => setStatus("failed"));
@@ -117,26 +184,67 @@ export default function ProfileHero({ name, handle }: { name: string; handle?: s
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
       <div className="flex flex-col gap-6 sm:flex-row sm:items-end">
-        {/* The hero. Tall card, so a three-quarter body portrait reads as a
-            character rather than as an avatar thumbnail. */}
-        <div className="h-56 w-44 shrink-0 overflow-hidden rounded-2xl border border-border bg-muted shadow-sm">
-          {primary?.avatar && !broken[primary.id] ? (
-            <img
-              src={primary.avatar}
-              alt={nameOf(primary.archetypeKey)}
-              onError={() => setBroken((b) => ({ ...b, [primary.id]: true }))}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center">
-              <div className="flex h-24 w-24 items-center justify-center rounded-full border-4 border-border text-3xl font-semibold text-foreground">
-                {primary ? initial(primary.archetypeKey) : name.slice(0, 1)}
+        {/*
+          THE PORTRAIT, ROUND, INSIDE THE LADDER.
+
+          `object-top` is load-bearing. Every portrait in this system is 3:4
+          body art, and a circle centred on a 3:4 figure is a crop of their
+          torso. Anchoring to the top puts the head in the circle, which is the
+          same crop server/lib/characterPortraits.ts applies to the bytes.
+
+          The arc is one circle with `stroke-dasharray` set to its whole
+          circumference and the offset carrying the fraction, rotated so it
+          starts at twelve o'clock. The track behind it is always whole, so the
+          shape reads as "this much of that" and never as a broken ring.
+        */}
+        <div className="relative h-44 w-44 shrink-0 sm:h-52 sm:w-52">
+          {arc !== null && (
+            <svg viewBox="0 0 260 260" className="absolute inset-0 h-full w-full" aria-hidden="true">
+              <defs>
+                <linearGradient id="maturityArc" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor="var(--sheet-earned-deep, #6b4a15)" />
+                  <stop offset="55%" stopColor="var(--sheet-notice, #dfab4d)" />
+                  <stop offset="100%" stopColor="var(--sheet-earned-lit, #f2ce85)" />
+                </linearGradient>
+              </defs>
+              <circle cx="130" cy="130" r="122" fill="none" stroke="var(--border)" strokeWidth="3" />
+              <circle
+                cx="130" cy="130" r="122" fill="none"
+                stroke="url(#maturityArc)" strokeWidth="6" strokeLinecap="round"
+                transform="rotate(-90 130 130)"
+                strokeDasharray={CIRCUMFERENCE.toFixed(1)}
+                strokeDashoffset={(CIRCUMFERENCE * (1 - arc)).toFixed(1)}
+              />
+            </svg>
+          )}
+          <div className="absolute inset-[7px] overflow-hidden rounded-full border border-border bg-muted">
+            {primary?.avatar && !broken[primary.id] ? (
+              <img
+                src={primary.avatar}
+                alt={nameOf(primary.archetypeKey)}
+                onError={() => setBroken((b) => ({ ...b, [primary.id]: true }))}
+                className="h-full w-full object-cover object-top"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center">
+                <span className="font-display text-4xl font-bold text-foreground">
+                  {primary ? initial(primary.archetypeKey) : name.slice(0, 1)}
+                </span>
               </div>
-            </div>
+            )}
+          </div>
+          {rung && (
+            <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-notice/60 bg-card px-3 py-1 text-[11px] font-medium uppercase tracking-widest text-notice">
+              {rung}
+            </span>
           )}
         </div>
 
         <div className="min-w-0 flex-1">
+          {/* The village's own two words. A fork reads its own, or nothing. */}
+          {eyebrow && (
+            <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.22em] text-muted-foreground">{eyebrow}</p>
+          )}
           <h1 className="mb-2 font-display text-3xl font-bold break-words text-foreground sm:text-4xl lg:text-5xl">{name}</h1>
           {primary ? (
             <p className="text-lg font-medium break-words text-foreground">
@@ -171,8 +279,9 @@ export default function ProfileHero({ name, handle }: { name: string; handle?: s
           )}
           {title ? <p className="mt-1 font-medium break-words text-foreground">{title}</p> : null}
           <p className="mt-2 break-words text-muted-foreground">
-            {handle ? `@${handle} · ` : ""}
-            {moons === null ? "" : moons === 0 ? "New on the land" : `${moons} moons on the land`}
+            {/* Every part is optional and the separators are joined rather than
+                typed, so a missing join date never leaves a stray middle dot. */}
+            {[handle ? `@${handle}` : "", joinedLine, moonsOnLandPhrase(moons)].filter(Boolean).join(" · ")}
           </p>
         </div>
       </div>
