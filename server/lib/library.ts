@@ -53,6 +53,7 @@
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { balanceOf, ledgerEntryExists, memberAccount, MINT_FAUCET, postTransfer, registerToken, tokenDef, TREASURY } from "./ledger";
+import { holdingFor, lockedShortfall, type TokenHolding } from "./holdings";
 import { fromLedgerUnits, toLedgerUnits } from "./economy";
 import { CURRENCY_DECIMALS } from "../../shared/tokenScale";
 import { numberVar } from "./variables";
@@ -310,6 +311,28 @@ export async function approveIntake(pool: Pool, itemId: string, approverId: stri
 
 // ── Loans ────────────────────────────────────────────────────────────────────
 
+/**
+ * WHAT A MEMBER HAS HERE, AND WHAT THEY CAN SPEND HERE.
+ *
+ * `balance` and `balanceDecimals` are exactly what `GET /api/library` sent
+ * before and are kept, so nothing reading the old shape has to move. What is
+ * added is the other three quarters of the reading: the deposits locked in
+ * items that are out, the total those add up to, and one entry per item saying
+ * which item and how to get the credits back.
+ *
+ * The arithmetic and the sentences live in server/lib/holdings.ts, because the
+ * same four numbers are owed on every holdings surface and a second
+ * implementation is a second place for them to disagree. This function is the
+ * library's window onto it.
+ */
+export async function libraryHoldingsFor(
+  pool: Pool,
+  userId: string,
+): Promise<TokenHolding & { balance: number; balanceDecimals: number }> {
+  const holding = await holdingFor(pool, userId, LIBRARY_CREDIT);
+  return { ...holding, balance: holding.spendableUnits, balanceDecimals: holding.decimals };
+}
+
 export function escrowFor(creditValue: number): number {
   const pct = Math.max(0, numberVar("library.escrow_pct"));
   // Rounding favors the pool (the village side): ceil what the member locks.
@@ -405,6 +428,30 @@ export async function reserveItem(
       // transaction and cannot join the one above.
       await pool.query("DELETE FROM library_loans WHERE id = ?", [loanId]);
       await pool.query("UPDATE library_items SET status = 'available' WHERE id = ?", [item.id]);
+      /*
+       * WHY THEY ARE SHORT, WHEN THE REASON IS SOMETHING THEY ARE HOLDING.
+       *
+       * A member with seventy credits and fifty locked in a camera has twenty
+       * to spend, and the sentence they used to meet said only that they need
+       * more. It was true and it was useless: they can remember earning the
+       * seventy, the page prints twenty, and nothing anywhere joined the two.
+       *
+       * `lockedShortfall` returns null when the locks would not have covered
+       * this anyway, so a member who is genuinely short still hears the
+       * ordinary sentence and is never sent to fetch an item that would not
+       * have been enough. This loan's own escrow was compensated above and its
+       * row is gone, so the reading below cannot count the deposit it just
+       * failed to take.
+       */
+      const holding = await holdingFor(pool, input.userId, LIBRARY_CREDIT);
+      const why = lockedShortfall(holding, toLedgerUnits(LIBRARY_CREDIT, escrow));
+      if (why) {
+        return {
+          ok: false,
+          status: 409,
+          error: `You need ${escrow} library credit(s) set aside to borrow this and ${holding.spendable} of yours are free. ${why}`,
+        };
+      }
       return { ok: false, status: 409, error: `You need ${escrow} library credit(s) set aside to borrow this. Earn them by contributing items or work` };
     }
   }

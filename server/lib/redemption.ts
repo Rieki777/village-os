@@ -116,6 +116,63 @@ export const HOLD_SOURCE = "redemption_hold";
 export const BURN_SOURCE = "redemption_burn";
 
 /**
+ * MODULE VOUCHERS A VILLAGE MAY STILL REDEEM.
+ *
+ * Rye, 2026-09-04: "Redeeming a stay token also destroys it, have this be the
+ * same structure as redeeming currency tokens." So a stay credit joins the
+ * currency path, and nothing about that path changes to carry it.
+ *
+ * A SECOND SET AND NOT AN EDIT TO `MODULE_VOUCHERS`, and the difference is the
+ * whole of the care here. That Set is asked three questions in
+ * server/lib/spending.ts and this file asks the fourth:
+ *
+ *   sendRefusal            may a member hand this to another member
+ *   mayToggleTransferable  may an admin open that by flipping a row
+ *   spendSinkFor           where does a spent one land
+ *   redeemableToken        may the village buy this one back and destroy it
+ *
+ * Only the fourth is ruled on. Taking `stay-credit` OUT of `MODULE_VOUCHERS`
+ * would answer all four at once: stay credits would become sendable between
+ * members and an admin could flip `transferable`, which is refused at the
+ * variables route in writing with a legal reason (e-money). So the voucher
+ * firewall stands and this names the one hole the founder opened in it.
+ *
+ * `library-credit` is deliberately absent. A library credit is a DEPOSIT
+ * against a specific shelf, it is locked while an item is out and it comes
+ * back when the item does, and no ruling exists on destroying one. Absent, not
+ * forgotten.
+ *
+ * ── CONSUMED IS NOT DESTROYED, AND A STAY CREDIT NOW DOES BOTH ─────────────
+ *
+ * This is the fact the surfaces must not blur, because it is the one place in
+ * the platform where the same token has two endings.
+ *
+ *   CONSUMED  a night. `postNightsForStay` posts to `spendSinkFor("stay-credit")`,
+ *             which IS `sys:mint`, the faucet that issued it. The faucet's
+ *             negative balance shrinks, the village may issue that credit
+ *             again, and `readCycleIssuance` subtracts the return from the
+ *             cycle's issuance for exactly that reason. Nothing is destroyed.
+ *   DESTROYED a redemption. `postBurn` posts to `sys:redeemed`, which is not a
+ *             faucet and only ever receives. The faucet is untouched, so
+ *             issued supply does not fall, and that credit can never be
+ *             presented for a night by anybody again.
+ *
+ * The two are told apart in the ledger by BOTH halves of the posting, so a
+ * reader needs neither a convention nor a comment: `stay_night` to `sys:mint`
+ * against `redemption_burn` to `sys:redeemed`.
+ *
+ * WHAT THIS COSTS, NAMED WHERE IT LANDS. server/lib/stays.ts opens by saying
+ * "Outstanding credit supply = -balanceOf(sys:mint, 'stay-credit'), for free".
+ * That reading is now one term short: a redeemed stay credit has left the
+ * member and never reached the faucet, so the faucet still counts it as out
+ * there. The honest figure is that minus `retiredSupply`, and
+ * `GET /api/admin/tokens` already prints the two side by side and refuses to
+ * net them. Any surface that prints outstanding stay credits from the faucet
+ * alone overstates by whatever this village has retired.
+ */
+export const REDEEMABLE_VOUCHERS: ReadonlySet<string> = new Set(["stay-credit"]);
+
+/**
  * CAN THIS BUILD CARRY A REDEMPTION TO A VILLAGE VOTE?
  *
  * `false` until the ballot subject type and its closer ship. A constant and not
@@ -213,8 +270,8 @@ export function redemptionTokenAllowlist(): ReadonlySet<string> {
  *
  * TWO TESTS, AND THE DIAL CAN ONLY EVER NARROW. The firewall is
  * `isPriceableToken` (platform governed, active, not a standing example, kind
- * `credit`) minus `MODULE_VOUCHERS`, and no value on `redemption.tokens` can
- * reach past it.
+ * `credit`) minus `MODULE_VOUCHERS` plus `REDEEMABLE_VOUCHERS`, and no value
+ * on `redemption.tokens` can reach past it.
  *
  * That is deliberate and it is the whole answer to two open questions. Equity
  * and voice are governed on Base and mirrored read only here, and
@@ -234,7 +291,7 @@ export function redemptionTokenAllowlist(): ReadonlySet<string> {
  */
 export function redeemableToken(slug: string): boolean {
   if (!isPriceableToken(slug)) return false;
-  if (MODULE_VOUCHERS.has(slug)) return false;
+  if (MODULE_VOUCHERS.has(slug) && !REDEEMABLE_VOUCHERS.has(slug)) return false;
   const allow = redemptionTokenAllowlist();
   return allow.size === 0 || allow.has(slug.toLowerCase());
 }
@@ -303,7 +360,7 @@ export function redemptionRefusal(ask: RedeemAsk): string | null {
       ? `${def.name} is recognition, and recognition is a record of what happened. There is nothing in it to redeem`
       : `${def.name} is a record of standing in this village, and standing is not value to be cashed`;
   }
-  if (MODULE_VOUCHERS.has(def.slug)) {
+  if (MODULE_VOUCHERS.has(def.slug) && !REDEEMABLE_VOUCHERS.has(def.slug)) {
     return `${def.name} buys one thing from the village, and that thing is what it is worth`;
   }
   if (!redeemableToken(def.slug)) {
