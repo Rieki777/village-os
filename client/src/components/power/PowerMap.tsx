@@ -134,6 +134,7 @@ export default function PowerMap({
   lenses,
   svgRef,
   maxDepth,
+  compact,
 }: {
   data: PowerData;
   layout: NestedLayout;
@@ -161,6 +162,21 @@ export default function PowerMap({
    * above, and the breadcrumb is the way down.
    */
   maxDepth?: number;
+  /*
+   * COMPACT: a stage too small to carry every name at a legible size.
+   *
+   * The screen floor makes each label readable on its own. On a 358px phone
+   * stage with fifteen sibling circles that is not enough: measured live at
+   * 1d0d869, the names cleared 12.5px and then collided into an unreadable
+   * pile, because legible and legible-together are different problems.
+   *
+   * So a compact stage draws a name only where it FITS INSIDE its circle. A
+   * name that would have to be promoted above the disc is dropped instead:
+   * the circle is still tappable, tapping it makes it the focus and gives it
+   * room, and the accordion underneath carries every name in full. Fewer
+   * words, all of them readable, beats fifteen words in a heap.
+   */
+  compact?: boolean;
 }) {
   const byId = useMemo(() => new Map(data.circles.map((c) => [c.id, c])), [data.circles]);
   const posById = useMemo(() => new Map(layout.circles.map((p) => [p.id, p])), [layout]);
@@ -511,7 +527,9 @@ export default function PowerMap({
                 pointerEvents="none"
               />
 
-              {(showLabel(pos.id) || hovered) && (
+              {/* On a compact stage a promoted label is dropped rather
+                  than piled on its neighbours. See `compact` above. */}
+              {(showLabel(pos.id) || hovered) && !(compact && fit.outside && !isFocus) && (
                 <motion.text
                   animate={{ x: pos.x, y: labelTop }}
                   initial={false}
@@ -580,7 +598,7 @@ export default function PowerMap({
                   ))}
                 </motion.text>
               )}
-              {forming && showLabel(pos.id) && (
+              {forming && showLabel(pos.id) && !(compact && fit.outside && !isFocus) && (
                 <text
                   x={pos.x}
                   y={labelTop + (label.lines.length - (hasChildren ? 0 : 1)) * label.lineHeight + (hasChildren ? 14 : 16)}

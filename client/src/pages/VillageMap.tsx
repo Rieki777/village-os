@@ -548,6 +548,10 @@ export default function VillageMap() {
                       // rest. Seventeen circles and their children in a
                       // 375px square is a picture nobody can use.
                       maxDepth={phoneMaxDepth}
+                      // And a name only where it fits INSIDE its circle. At
+                      // 358px the floor made every label legible and then
+                      // piled fifteen of them on top of each other.
+                      compact
                     />
                   </div>
                 )}
