@@ -453,6 +453,41 @@ export default function PowerMap({
                 </text>
               )}
 
+              {/* ── THE DOUBLE LINK, DRAWN ────────────────────────────────
+                  Sociocracy's one structural idea that a normal org chart
+                  cannot show: a circle is joined to its parent by a PERSON
+                  who sits in both. `representsCircle` marks that seat, and
+                  it has been on the wire since 0083 and said out loud only
+                  in the holder card, as a sentence, one seat at a time. A
+                  reader looking at the whole village could not see which
+                  seats hold it together.
+
+                  So the seat is joined to the circle it speaks into. Drawn
+                  before the glyphs, so the line passes UNDER them, and
+                  dashed so it never reads as the containment the solid
+                  rings mean. */}
+              {pos.roles.map((rp) => {
+                const seat = seatById.get(rp.id);
+                if (!seat?.representsCircle) return null;
+                const parentId = parentOf(pos.id);
+                const anchor = parentId ? posById.get(parentId) : layout.village;
+                if (!anchor) return null;
+                return (
+                  <line
+                    key={`dbl-${rp.id}`}
+                    x1={rp.x}
+                    y1={rp.y}
+                    x2={anchor.x}
+                    y2={anchor.y}
+                    stroke={tone}
+                    strokeOpacity={seatPasses(seat) ? 0.5 : 0.12}
+                    strokeWidth={1.6}
+                    strokeDasharray="5 4"
+                    pointerEvents="none"
+                  />
+                );
+              })}
+
               {/* The seats on this circle's ring. */}
               {pos.roles.map((rp) => {
                 const seat = seatById.get(rp.id);
@@ -471,7 +506,9 @@ export default function PowerMap({
                     role="button"
                     tabIndex={interactive ? 0 : -1}
                     pointerEvents={interactive ? undefined : "none"}
-                    aria-label={`${seat?.name ?? rp.id}, a role in ${c?.name ?? "this circle"}, ${words}. Press Enter to open it`}
+                    aria-label={`${seat?.name ?? rp.id}, a role in ${c?.name ?? "this circle"}, ${words}${
+                      seat?.representsCircle ? ", and it speaks for this circle where it links out" : ""
+                    }. Press Enter to open it`}
                     onClick={(e: ReactMouseEvent) => {
                       // A tap on a seat NEVER moves the camera (spec 1).
                       e.stopPropagation();
@@ -497,6 +534,22 @@ export default function PowerMap({
                       pulse={pulseSeatId === rp.id}
                     />
                     <TermArc x={0} y={0} r={dotR} termEnds={seat?.termEnds} />
+                    {/* The representative's badge, at the far end of the link
+                        drawn above. A second ring, so the mark survives
+                        greyscale and never depends on colour alone (spec 4's
+                        rule, applied to representation as well as to state). */}
+                    {seat?.representsCircle && (
+                      <circle
+                        cx={0}
+                        cy={0}
+                        r={dotR + 4}
+                        fill="none"
+                        stroke={tone}
+                        strokeOpacity={0.85}
+                        strokeWidth={1.4}
+                        pointerEvents="none"
+                      />
+                    )}
                     {selected?.kind === "role" && selected.id === rp.id && (
                       <circle cx={0} cy={0} r={dotR + 3} fill="none" stroke="var(--color-teal-deep)" strokeWidth={1.6} />
                     )}
