@@ -15,6 +15,8 @@
  * dimensions. It fails if the geometry regresses, and it says which of the
  * three parts moved: the scale, the crop, or the floor.
  */
+import fs from "fs";
+import path from "path";
 import { describe, expect, it } from "vitest";
 import { layoutNestedMap, wrapLabel, type NestedInput } from "@shared/mapLayout";
 import { viewFor, viewBoxFor, type CameraView } from "./camera";
@@ -148,6 +150,46 @@ describe("the label floor, at the sizes a reader actually gets", () => {
     const wrapped = { lines: ["Land"], fontSize: 12, lineHeight: 14 };
     expect(fitLabelToScreen(wrapped, 100, 0).fontSize).toBe(12);
     expect(fitLabelToScreen(wrapped, 100, 0).outside).toBe(false);
+  });
+});
+
+/**
+ * THE WIRING, WHICH IS WHERE THIS ACTUALLY BROKE.
+ *
+ * Every assertion above passed while the floor did nothing in production.
+ * `fitLabelToScreen` was correct; the component never handed it a real
+ * `pxPerWorld`, because the SVG's ref was an inline arrow. React treats a
+ * ref callback with a new identity as a different ref, so on every render it
+ * detached the old one and attached the new one, the element state thrashed,
+ * the ResizeObserver was rebuilt each time, and `box` stayed {0,0}.
+ *
+ * Measured live at build b865a34: pxPerWorld 0, every label at its raw
+ * wrapLabel size, the "forming" caption at its 9-unit fallback. A pure
+ * function with a green suite, doing nothing.
+ *
+ * There is no jsdom in this repo, so this is a source check. It guards the
+ * two properties the live defect turned on.
+ */
+describe("the component actually feeds the floor a measurement", () => {
+  const src = fs.readFileSync(path.resolve(__dirname, "PowerMap.tsx"), "utf8");
+
+  it("finds the file and its ref (the positive control)", () => {
+    expect(src).toContain("useMeasuredBox");
+    expect(src).toMatch(/ref=\{/);
+  });
+
+  it("attaches the SVG through a STABLE ref, never an inline arrow", () => {
+    // `ref={(el) => {...}}` is the defect. A named useCallback is the fix.
+    expect(src, "the svg ref is not an inline arrow").not.toMatch(/ref=\{\s*\(el\)\s*=>/);
+    expect(src).toMatch(/const\s+attachSvg\s*=\s*useCallback\(/);
+    expect(src).toMatch(/ref=\{attachSvg\}/);
+  });
+
+  it("refuses a zero measurement instead of dividing by it", () => {
+    // Two PowerMaps mount on this page and CSS hides one. The hidden one
+    // measures 0x0; taking that as the box zeroes pxPerWorld and hands every
+    // label back unchanged, which is the bug wearing a different hat.
+    expect(src).toMatch(/if\s*\(next\.w\s*<=\s*0\s*\|\|\s*next\.h\s*<=\s*0\)\s*return;/);
   });
 });
 
