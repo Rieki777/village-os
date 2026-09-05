@@ -239,6 +239,25 @@ describe("the component actually feeds the floor a measurement", () => {
     }
   });
 
+  it("positions each label line ONCE, not once per coordinate system", () => {
+    /*
+     * The floating names, finally explained.
+     *
+     * The <text> is moved to pos.x by framer's `animate={{x, y}}`, which is a
+     * transform. A tspan's `x` is ABSOLUTE inside that already-moved frame,
+     * so `x={pos.x}` on the tspan put every label at 2 x pos.x.
+     *
+     * Measured live at 9b41ae0: all 15 labels displaced, each by exactly its
+     * own `pos.x * scale`, with the tspan's x attribute equal to the
+     * transform's translateX to the decimal. This is why "Health & Healing
+     * Council" and "Development Circle" floated to the right of the ring in
+     * the first screenshot anybody took of this surface, which the plan for
+     * this work misread as "names too long for their circles".
+     */
+    expect(src, "tspans sit at the text's own origin").toMatch(/<tspan[^>]*\sx=\{0\}/);
+    expect(src, "no tspan re-applies the circle's absolute x").not.toMatch(/<tspan[^>]*\sx=\{pos\.x\}/);
+  });
+
   it("refuses a zero measurement instead of dividing by it", () => {
     // Two PowerMaps mount on this page and CSS hides one. The hidden one
     // measures 0x0; taking that as the box zeroes pxPerWorld and hands every

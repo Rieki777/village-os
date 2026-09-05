@@ -560,8 +560,21 @@ export default function PowerMap({
                       }
                     : {})}
                 >
+                  {/* x=0, NOT pos.x, AND THAT IS A BUG FIX.
+                      The <text> is already moved to pos.x by framer's
+                      `animate={{x, y}}`, which is a transform. A tspan's `x`
+                      is ABSOLUTE inside that already-moved frame, so setting
+                      it to pos.x again put every label at 2 x pos.x.
+                      Measured live at 9b41ae0: all 15 labels displaced, each
+                      by exactly its own `pos.x * scale`, and the tspan's x
+                      attribute equalled the transform's translateX to the
+                      decimal. This is why "Health & Healing Council" and
+                      "Development Circle" floated unanchored to the right of
+                      the ring in the very first screenshot of this surface.
+                      Zero re-centres each line on the text's own origin,
+                      which textAnchor="middle" then centres on the circle. */}
                   {label.lines.map((ln, i) => (
-                    <tspan key={ln + i} x={pos.x} dy={i === 0 ? 0 : label.lineHeight}>
+                    <tspan key={ln + i} x={0} dy={i === 0 ? 0 : label.lineHeight}>
                       {ln}
                     </tspan>
                   ))}
