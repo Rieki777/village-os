@@ -21,6 +21,7 @@
  * (which takes a `pad` for the outer ring).
  */
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -74,12 +75,27 @@ function useMeasuredBox(el: SVGSVGElement | null): { w: number; h: number } {
       // Round before comparing: a fractional resize that changes nothing
       // visible would otherwise re-render on every scroll on some browsers.
       const next = { w: Math.round(r.width), h: Math.round(r.height) };
+      // A HIDDEN instance measures ZERO, and zero is not a measurement.
+      //
+      // This page mounts TWO PowerMaps, one for the standing panel and one
+      // for the phone, and CSS hides whichever does not apply. The hidden
+      // one reports 0x0, and taking that as the box would divide the label
+      // floor by zero and hand every label back unchanged, which is exactly
+      // the bug this hook exists to prevent. Keep the last real size.
+      if (next.w <= 0 || next.h <= 0) return;
       setBox((prev) => (prev.w === next.w && prev.h === next.h ? prev : next));
     };
     read();
+    // The first paint can land before layout has given this subtree a size,
+    // so read again on the next frame. The observer covers every later
+    // change; this covers the one before it starts.
+    const raf = typeof requestAnimationFrame === "function" ? requestAnimationFrame(read) : null;
     const ro = new ResizeObserver(read);
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      if (raf !== null) cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
   }, [el]);
   return box;
 }
@@ -160,8 +176,28 @@ export default function PowerMap({
   const target: CameraTarget = useMemo(() => {
     const pos = focusId ? posById.get(focusId) : null;
     if (focusId && pos) return { id: focusId, cx: pos.x, cy: pos.y, r: pos.r };
-    return { id: null, cx: layout.village.x, cy: layout.village.y, r: layout.village.r };
-  }, [focusId, posById, layout]);
+    /*
+     * THE VILLAGE VIEW HAS TO CLEAR THE SEASON RING, WHICH DRAWS OUTSIDE IT.
+     *
+     * `viewFor` frames `2r + FOCUS_MARGIN`, which is 12 world units of
+     * clearance on each side. `SeasonRing` draws its dashed ring at r + 14
+     * and rides its LABEL on an arc at r + 20, so at the village level the
+     * season words along the top were being shaved by the frame. Measured
+     * live at 1280x800: the ring clipped by 2 units, the label arc by 8.
+     *
+     * It is only the village that needs this: the season ring draws once,
+     * around the whole village, and a focused circle has nothing outside it.
+     * So the allowance goes here instead of into FOCUS_MARGIN, which every
+     * other focus would then pay for as a smaller picture.
+     */
+    const seasonPad = data.season.current || data.season.nextRollAt ? 34 : 0;
+    return {
+      id: null,
+      cx: layout.village.x,
+      cy: layout.village.y,
+      r: layout.village.r + seasonPad,
+    };
+  }, [focusId, posById, layout, data.season]);
 
   const reduced =
     typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -263,7 +299,33 @@ export default function PowerMap({
 
   // The CONTAINER's aspect, measured, not the layout's (which is 1 by
   // construction). See useMeasuredBox above for what this was costing.
+  /*
+   * A STABLE REF CALLBACK, WHICH IS THE WHOLE DIFFERENCE.
+   *
+   * This was an inline arrow. React treats a ref callback with a new
+   * identity as a different ref, so on EVERY render it detached the old one
+   * (calling it with null) and attached the new one. The element state
+   * thrashed null/element every render, the effect below tore its
+   * ResizeObserver down and rebuilt it each time, and the measurement never
+   * settled: `box` stayed {0,0} in production.
+   *
+   * Measured live on 2026-09-05 at build b865a34: `pxPerWorld` was 0, so
+   * `fitLabelToScreen` returned every label unchanged and the "forming"
+   * caption sat at its 9-world-unit fallback. The label floor was shipped
+   * and doing nothing, on desktop and on mobile alike.
+   *
+   * `useCallback` keyed on the one prop it closes over gives React the same
+   * function every render, so the ref attaches once.
+   */
   const [svgEl, setSvgEl] = useState<SVGSVGElement | null>(null);
+  const attachSvg = useCallback(
+    (el: SVGSVGElement | null) => {
+      setSvgEl(el);
+      // `svgRef` is the caller's handle (export, print). Keep feeding it.
+      if (svgRef) (svgRef as { current: SVGSVGElement | null }).current = el;
+    },
+    [svgRef],
+  );
   /* HOVER, SO A READER CAN SURVEY WITHOUT NAVIGATING.
      Reading the shape of the village meant stepping into every circle and
      back out again, which loses your place each time. Pointer only: a touch
@@ -295,11 +357,7 @@ export default function PowerMap({
   return (
     <>
       <svg
-        ref={(el) => {
-          setSvgEl(el);
-          // `svgRef` is the caller's handle (export, print). Keep feeding it.
-          if (svgRef) (svgRef as { current: SVGSVGElement | null }).current = el;
-        }}
+        ref={attachSvg}
         viewBox={viewBoxFor(fittedView, aspect)}
         className="w-full h-full"
         preserveAspectRatio="xMidYMid meet"
