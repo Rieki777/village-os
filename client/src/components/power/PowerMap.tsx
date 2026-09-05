@@ -410,7 +410,7 @@ export default function PowerMap({
           </>
         )}
 
-        <SeasonRing cx={layout.village.x} cy={layout.village.y} r={layout.village.r} season={data.season} />
+        <SeasonRing cx={layout.village.x} cy={layout.village.y} r={layout.village.r} season={data.season} pxPerWorld={pxPerWorld} />
 
         {/* Pyramid connectors: child to parent, before the discs. */}
         {shape === "pyramid" &&

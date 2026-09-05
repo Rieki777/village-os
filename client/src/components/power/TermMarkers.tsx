@@ -27,16 +27,29 @@ export function TermArc({ x, y, r, termEnds }: { x: number; y: number; r: number
   );
 }
 
+/** The smallest the season line may render, in SCREEN pixels. */
+const MIN_SEASON_PX = 11;
+
 export function SeasonRing({
   cx,
   cy,
   r,
   season,
+  pxPerWorld = 0,
 }: {
   cx: number;
   cy: number;
   r: number;
   season: { current: { name?: string } | null; nextRollAt: string | null };
+  /*
+   * Screen pixels per world unit, so this label can be sized for a reader.
+   *
+   * The 11 below is WORLD units. On a 390px phone that measured 3.5px on
+   * screen, which is the same defect `labelFit.ts` exists to close, in the
+   * one place that did not go through it. Zero keeps the old behaviour for
+   * any caller that does not measure.
+   */
+  pxPerWorld?: number;
 }) {
   if (!season.current && !season.nextRollAt) return null;
   const days = daysUntil(season.nextRollAt);
@@ -55,7 +68,7 @@ export function SeasonRing({
       <circle cx={cx} cy={cy} r={r + 14} fill="none" stroke="var(--color-sage)" strokeWidth={1} strokeDasharray="2 5" opacity={0.6} />
       {/* The words ride the top of the ring, on their own arc. */}
       <path id={pathId} d={arcPath(cx, cy, r + 20, -Math.PI * 0.85, -Math.PI * 0.15)} fill="none" stroke="none" />
-      <text fontSize={11} className="fill-muted-foreground">
+      <text fontSize={pxPerWorld > 0 ? Math.max(11, MIN_SEASON_PX / pxPerWorld) : 11} className="fill-muted-foreground">
         <textPath href={`#${pathId}`} startOffset="50%" textAnchor="middle">
           {label}
         </textPath>
