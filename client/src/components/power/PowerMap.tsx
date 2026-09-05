@@ -452,7 +452,17 @@ export default function PowerMap({
                 animate={{ cx: pos.x, cy: pos.y, r: pos.r }}
                 initial={false}
                 transition={morph}
-                style={{ fill: tone, fillOpacity: isFocus ? 0.16 : hovered ? 0.2 : 0.1 }}
+                /* ATTRIBUTES, NOT STYLE, FOR THE SAME REASON AS THE LABEL.
+                   framer owns `style` on a motion component and does not
+                   reliably re-apply a static value that CHANGES between
+                   renders. `fillOpacity` changes on hover and on focus, so
+                   through `style` the hover lift would have been dead on
+                   arrival: the handler fires, React re-renders, framer keeps
+                   the first paint. `stroke` and the two below were already
+                   attributes, which is why they were going to work and this
+                   one was not. */
+                fill={tone}
+                fillOpacity={isFocus ? 0.16 : hovered ? 0.2 : 0.1}
                 stroke={tone}
                 strokeOpacity={isFocus ? 0.9 : hovered ? 0.85 : 0.45}
                 strokeWidth={isFocus ? 3 : hovered ? 3 : 2}
@@ -508,22 +518,47 @@ export default function PowerMap({
                   transition={morph}
                   textAnchor="middle"
                   className="fill-foreground font-semibold pointer-events-none"
-                  style={{
-                    fontSize: label.fontSize,
-                    // A label pushed outside its circle crosses whatever is
-                    // behind it, so it carries the page's own ground as a
-                    // halo. `paint-order` puts that stroke UNDER the glyphs;
-                    // without it the stroke is drawn over them and the text
-                    // thins out to nothing at small sizes.
-                    ...(fit.outside
-                      ? {
-                          paintOrder: "stroke" as const,
-                          stroke: "var(--background)",
-                          strokeWidth: 3.5,
-                          strokeLinejoin: "round" as const,
-                        }
-                      : null),
-                  }}
+                  /*
+                   * fontSize IS AN ATTRIBUTE HERE, NOT A STYLE, AND THAT IS
+                   * THE WHOLE FIX.
+                   *
+                   * framer-motion owns the `style` object on a motion
+                   * component. A static style value that CHANGES between
+                   * renders is not reliably re-applied: the first render
+                   * happens before the ResizeObserver has measured, so
+                   * pxPerWorld is 0, the label takes its raw wrapLabel size,
+                   * and framer wrote that. The second render computed the
+                   * correct size and framer kept the first one.
+                   *
+                   * Measured live at build f045f3c: the tspan `dy` (a plain
+                   * SVG attribute React owns) updated to the fitted 23 while
+                   * `font-size` stayed at the unfitted 12, on the same
+                   * element, in the same render. Two numbers from one object,
+                   * disagreeing, which is what named the cause. The "forming"
+                   * caption below is a plain <text> and was correct all along.
+                   *
+                   * `fontSize` as a presentation attribute goes through React,
+                   * not framer, so it tracks every render.
+                   */
+                  fontSize={label.fontSize}
+                  {...(fit.outside
+                    ? {
+                        // A label pushed outside its circle crosses whatever
+                        // is behind it, so it carries the page's own ground
+                        // as a halo. `paint-order` puts that stroke UNDER the
+                        // glyphs; without it the stroke draws over them and
+                        // the text thins to nothing at small sizes.
+                        //
+                        // Attributes, not style: `fit.outside` changes as the
+                        // camera moves, and framer would keep whichever value
+                        // the first render happened to produce, exactly as it
+                        // did with fontSize above.
+                        paintOrder: "stroke" as const,
+                        stroke: "var(--background)",
+                        strokeWidth: 3.5,
+                        strokeLinejoin: "round" as const,
+                      }
+                    : {})}
                 >
                   {label.lines.map((ln, i) => (
                     <tspan key={ln + i} x={pos.x} dy={i === 0 ? 0 : label.lineHeight}>

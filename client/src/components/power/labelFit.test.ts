@@ -185,6 +185,60 @@ describe("the component actually feeds the floor a measurement", () => {
     expect(src).toMatch(/ref=\{attachSvg\}/);
   });
 
+  it("keeps values that CHANGE out of framer's style prop", () => {
+    /*
+     * The second live defect, and the one that survived the first fix.
+     *
+     * framer-motion owns the `style` object on a motion component and does
+     * not reliably re-apply a static value that changes between renders. The
+     * first render happens before the ResizeObserver measures, so pxPerWorld
+     * is 0 and the label takes its raw size; the second render computes the
+     * right one and framer keeps the first.
+     *
+     * It was named by two numbers from ONE object disagreeing on one
+     * element: the tspan `dy` (a plain attribute React owns) updated to the
+     * fitted 23 while `font-size` stayed at the unfitted 12. The "forming"
+     * caption, a plain <text>, was correct the whole time.
+     *
+     * Same trap on the circle: `fillOpacity` changes on hover, so through
+     * `style` the hover lift would have been dead on arrival.
+     */
+    expect(src, "the label's size is an attribute").toMatch(/fontSize=\{label\.fontSize\}/);
+    expect(src, "the circle's fill is an attribute").toMatch(/fill=\{tone\}/);
+    expect(src, "the circle's fill opacity is an attribute").toMatch(/fillOpacity=\{isFocus/);
+
+    /*
+     * And no MOTION element carries a style at all on this canvas.
+     *
+     * The rule is about framer specifically. A plain <text> or <circle> is
+     * React's, and React re-applies a changed style every render, so
+     * `style={{ fontSize: captionSize(...) }}` on the forming caption is
+     * correct and was working live while the motion label beside it was not.
+     *
+     * So scope the check to motion tags, by walking each one's opening tag
+     * with brace depth rather than by regex, which cannot see where a tag
+     * ends and reported the plain elements as violations.
+     */
+    const motionTags: string[] = [];
+    for (let i = src.indexOf("<motion."); i !== -1; i = src.indexOf("<motion.", i + 1)) {
+      let depth = 0;
+      for (let j = i; j < src.length; j++) {
+        const ch = src[j];
+        if (ch === "{") depth++;
+        else if (ch === "}") depth--;
+        else if (ch === ">" && depth === 0) {
+          motionTags.push(src.slice(i, j + 1));
+          break;
+        }
+      }
+    }
+    expect(motionTags.length, "there are motion elements to check").toBeGreaterThan(0);
+    for (const tag of motionTags) {
+      const name = tag.slice(0, tag.indexOf("\n")).trim();
+      expect(tag.includes("style={{"), `${name} carries no style object`).toBe(false);
+    }
+  });
+
   it("refuses a zero measurement instead of dividing by it", () => {
     // Two PowerMaps mount on this page and CSS hides one. The hidden one
     // measures 0x0; taking that as the box zeroes pxPerWorld and hands every
