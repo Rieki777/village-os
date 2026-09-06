@@ -19,6 +19,7 @@ import {
   type CapReading,
   type CircleBurnReading,
   type MeteredReading,
+  type UngovernedReading,
   type WindowRef,
 } from "./circleBurn";
 
@@ -241,6 +242,49 @@ describe("four facts, four sentences, and no two the same", () => {
   it("THE PROPERTY: no two of the four share a sentence", () => {
     const all = [off, ungoverned, unspent, spentOut].map((r) => burnSentence(r, WORDS));
     expect(new Set(all).size).toBe(4);
+  });
+
+  it("COMPILE TIME: the ballot card cannot reach a metered field off an ungoverned reading", () => {
+    /*
+     * The strongest form of the promise, and the one a runtime assertion
+     * cannot make. `tsconfig.tests.json` typechecks this file in CI, so if
+     * `CircleBurnReading` ever grows a shared `cycle` field, or the ungoverned
+     * case is folded back into the metered one, these two lines stop being
+     * errors and `@ts-expect-error` turns the gate red.
+     */
+    /*
+     * ON THE UNGOVERNED TYPE ITSELF, and this is the version that bites.
+     * Written against the whole union it proved nothing: `module_off` carries
+     * no `cycle` either, so the directive stayed satisfied even with `cycle`
+     * folded onto `UngovernedReading`. A mutation run caught that.
+     */
+    const noFigures = (r: UngovernedReading): string => {
+      // @ts-expect-error an ungoverned reading has no cycle figure to render
+      void r.cycle;
+      // @ts-expect-error and no season figure either
+      void r.season;
+      return r.circleId;
+    };
+    expect(noFigures(ungoverned as UngovernedReading)).toBe("kitchen");
+
+    /* And every kind has to be answered by name, so a new one cannot inherit
+     * whichever branch happens to be last. */
+    const branch = (r: CircleBurnReading): string => {
+      switch (r.kind) {
+        case "module_off":
+          return "module_off";
+        case "ungoverned":
+          return "ungoverned";
+        case "metered":
+          return r.cycle.state;
+        default: {
+          const impossible: never = r;
+          return impossible;
+        }
+      }
+    };
+    expect(branch(ungoverned)).toBe("ungoverned");
+    expect(branch(unspent)).toBe("unspent");
   });
 
   it("keeps the ungoverned case apart BY TYPE, so a caller cannot render it as an absence", () => {
