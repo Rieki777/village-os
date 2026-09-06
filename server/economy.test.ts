@@ -976,12 +976,16 @@ describe.skipIf(!configured)("the village economy engine", () => {
       expect(out.minted.map((m) => m.token)).toContain(VILLAGE_VOICE);
 
       // AND IT REPORTS WHAT IT POSTED. The rule reads 0.1 and the ledger row
-      // holds 100 thousandths; this used to report the 0.1, which made the
-      // caller's log and the ledger two different accounts of one payment with
-      // nothing to reconcile them against. `runSettlement` already reported
-      // units, so the two mint paths disagreed with each other as well.
+      // holds that in the token's own minor units; this used to report the 0.1,
+      // which made the caller's log and the ledger two different accounts of
+      // one payment with nothing to reconcile them against. `runSettlement`
+      // already reported units, so the two mint paths disagreed as well.
+      //
+      // The scale comes OFF THE REGISTRY. This line read a bare 100, right
+      // while Voice carried three decimals and wrong the day `0162` moved it
+      // to two, which is the whole reason the helper above exists.
       const voice = out.minted.find((m) => m.token === VILLAGE_VOICE);
-      expect(voice?.units).toBe(100);
+      expect(voice?.units).toBe(Math.round(0.1 * (await scaleOf(pool, VILLAGE_VOICE))));
       expect(await balanceOf(pool, memberAccount(u), VILLAGE_VOICE)).toBe(voice?.units);
     });
 
@@ -1299,14 +1303,39 @@ describe.skipIf(!configured)("the village economy engine", () => {
       const tooFine = await queueRuleChange(pool, RULE, { amount: 0.0001 }, "admin-1");
       expect(tooFine.ok).toBe(false);
 
-      // AND THE GUARD'S TOLERANCE IS LOAD-BEARING, which 0.35 does not show:
-      // 0.35 * 1000 is exactly 350 in binary, so an exact test would accept it
-      // too. 1.001 is also a whole number of thousandths and 1.001 * 1000 is
-      // 1000.9999999999999, so an exact test refuses it — along with 175 other
-      // amounts below 10 in this token. The ceiling rides along because this
-      // rule's is 1 and the ceiling check runs first.
-      const drifts = await queueRuleChange(pool, RULE, { amount: 1.001, ceiling: 2 }, "admin-1");
-      expect(drifts.ok).toBe(true);
+      /*
+       * AND THE GUARD'S TOLERANCE IS LOAD-BEARING, which 0.35 does not show:
+       * 0.35 at two decimals is exactly 35 hundredths in binary, so an exact
+       * test would accept it too.
+       *
+       * THE WITNESS IS DERIVED, NOT TYPED. This line read `1.001`, chosen
+       * because 1.001 is a whole number of THOUSANDTHS while `1.001 * 1000` is
+       * 1000.9999999999999. `0162` moved Voice to hundredths, where 1.001 is
+       * not payable at all and the guard is right to refuse it, so the example
+       * stopped testing the tolerance and started testing the scale. The search
+       * below asks the same question of whatever scale the registry holds: the
+       * smallest amount above one whole token that IS a whole number of minor
+       * units and whose naive multiplication is not an integer. At two decimals
+       * that is 1.09; at three it is 1.001 again.
+       *
+       * At scale 1 no such amount exists, because every integer is exact, and
+       * there the tolerance genuinely is not load-bearing. The assertion says
+       * so rather than inventing a case.
+       */
+      const voiceScale = await scaleOf(pool, VILLAGE_VOICE);
+      let drifting = 0;
+      for (let k = voiceScale + 1; k < voiceScale * 10; k++) {
+        const human = k / voiceScale;
+        if (human * voiceScale !== k) { drifting = human; break; }
+      }
+      if (drifting) {
+        // The ceiling rides along because this rule's is 1 and the ceiling
+        // check runs first.
+        const drifts = await queueRuleChange(pool, RULE, { amount: drifting, ceiling: 2 }, "admin-1");
+        expect(drifts.ok, `an exact test would refuse ${drifting} at scale ${voiceScale}`).toBe(true);
+      } else {
+        expect(voiceScale, "no float drift exists at scale 1, so there is nothing to tolerate").toBe(1);
+      }
     });
 
     it("refuses a negative ceiling, and zero is a real answer", async () => {
