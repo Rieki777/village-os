@@ -47,7 +47,19 @@ const configured = testDbConfigured();
 const VILLAGE = villageId();
 
 let db: TestDb | undefined;
-let pool: mysql.Pool;
+let pool: mysql.Pool;
+
+/**
+ * A token's scale, read off the registry rather than typed. The seeded
+ * `quest.completed` rules pay 10 Voice and 25 Credits, both HUMAN numbers in
+ * `mint_rules.amount`, and `balanceOf` answers in MINOR units. Those were the
+ * same number until `0162`, which is why these assertions read as bare
+ * literals and why the literal is the wrong shape rather than the wrong value.
+ */
+async function scaleOf(slug: string): Promise<number> {
+  const [rows] = await pool.query<any[]>("SELECT `decimals` FROM `tokens` WHERE `slug` = ?", [slug]);
+  return 10 ** Number(rows[0]?.decimals ?? 0);
+}
 
 /** A member who can be paid. The mint needs a user row and a ledger account. */
 async function seatAMember(id: string): Promise<string> {
@@ -101,8 +113,9 @@ describe.skipIf(!configured)("the first confirmed quest in a village's life", ()
 
     // The sentence the server logged for every village's first quest.
     expect(res.skipped).toBeUndefined();
-    expect(await balanceOf(pool, memberAccount(u), CREDITS)).toBe(25);
-    expect(await balanceOf(pool, memberAccount(u), VILLAGE_VOICE)).toBe(10000);
+    // The seeded rule pays 25 Credits and 10 Voice, both whole tokens.
+    expect(await balanceOf(pool, memberAccount(u), CREDITS)).toBe(25 * (await scaleOf(CREDITS)));
+    expect(await balanceOf(pool, memberAccount(u), VILLAGE_VOICE)).toBe(10 * (await scaleOf(VILLAGE_VOICE)));
   });
 
   it("starts the clock at the claim, so the SECOND quest is paid the same as the first", async () => {
@@ -114,7 +127,7 @@ describe.skipIf(!configured)("the first confirmed quest in a village's life", ()
       confirmedAt: new Date(),
     });
     expect(res.skipped).toBeUndefined();
-    expect(await balanceOf(pool, memberAccount(u), CREDITS)).toBe(25);
+    expect(await balanceOf(pool, memberAccount(u), CREDITS)).toBe(25 * (await scaleOf(CREDITS)));
   });
 
   it("still refuses work from before the engine started", async () => {

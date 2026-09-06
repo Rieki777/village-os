@@ -595,13 +595,34 @@ describe.skipIf(!configured)("carrying voice to Hypha", () => {
      *
      * Every seeded rate is a whole number today, but the Mint lets a founder
      * type 0.5, and this codebase has already shipped one truncation bug of
-     * exactly this shape. 100.1 is here because 0.1 has no exact binary
-     * representation, which is the case that breaks a naive multiply.
+     * exactly this shape. One of the four shapes below is a single minor unit
+     * over a round number, because that is the case with no exact binary
+     * representation and the one that breaks a naive multiply.
      */
-    for (const [i, amount] of [137.5, 100.1, 250.125, 199.999].entries()) {
+    /*
+     * THE FOUR SHAPES, BUILT FROM THE SCALE INSTEAD OF TYPED AT ONE.
+     *
+     * This list read `[137.5, 100.1, 250.125, 199.999]`, every one a whole
+     * number of THOUSANDTHS, correct while Voice carried three decimals. After
+     * `0162` it carries two, where 250.125 is not payable at all: the conversion
+     * rounds it to 250.13 and the round trip this case exists to prove reports
+     * a loss the engine did not cause. The shapes are what matter, so each is
+     * derived from whatever scale the registry holds and every one is a whole
+     * number of minor units by construction.
+     */
+    const [voiceRow] = await pool.query<any[]>("SELECT `decimals` FROM `tokens` WHERE `slug` = ?", [VILLAGE_VOICE]);
+    const vScale = 10 ** Number((voiceRow as any[])[0]?.decimals ?? 0);
+    const shapes = [
+      137 * vScale + Math.floor(vScale / 2), // half a token, where the scale holds one
+      100 * vScale + 1,                      // one minor unit over a round number
+      251 * vScale - 1,                      // one minor unit under a round number
+      199 * vScale + Math.max(0, vScale - 1), // the largest fraction the scale can hold
+    ];
+    for (const [i, units] of shapes.entries()) {
+      const amount = fromLedgerUnits(VILLAGE_VOICE, units);
       const u = await makeMember(`vc-frac-${i}`);
       await giveVoice(u, amount);
-      const units = toLedgerUnits(VILLAGE_VOICE, amount);
+      expect(toLedgerUnits(VILLAGE_VOICE, amount), `${amount} must be payable at scale ${vScale}`).toBe(units);
       expect(await balanceOf(pool, memberAccount(u), VILLAGE_VOICE)).toBe(units);
 
       const out = await requestVoiceClaim(pool, u, true);

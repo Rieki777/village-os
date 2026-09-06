@@ -53,7 +53,22 @@ vi.mock("@/components/InfoTip", () => ({ default: () => null }));
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "usr-ora", name: "Ora" } }),
 }));
-vi.mock("@/lib/gameApi", () => ({ authToken: () => "a-session" }));
+/*
+ * `useGameConfig` IS A MERGE SEAM, and it is here for one line of Wallet.
+ *
+ * This file mocks `@/lib/gameApi` wholesale, so every export Wallet reaches
+ * for has to be listed. It listed one. The economics branch then gave Wallet
+ * `useGameConfig`, for the sentence that names the stage at which buying
+ * opens, and neither side could see the other: main had no such call and this
+ * branch had no such test.
+ *
+ * UNDEFINED IS THE HONEST STUB, not an invented config. It is what the real
+ * hook answers before the fetch lands, Wallet already reads it as
+ * `cfg?.stages ?? []`, and this file is about receipts rather than about
+ * stages. A fabricated stage list would make the sentence render a name no
+ * assertion here checks.
+ */
+vi.mock("@/lib/gameApi", () => ({ authToken: () => "a-session", useGameConfig: () => undefined }));
 vi.mock("@/components/Image", () => ({ Image: () => null }));
 vi.mock("@/components/ExamplesBanner", () => ({ ExamplesBanner: () => null }));
 vi.mock("@/components/ExampleRefusal", () => ({

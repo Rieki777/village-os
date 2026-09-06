@@ -57,7 +57,21 @@ if (!configured) {
   console.warn("[exitSplit] TEST_DATABASE_URL not set - this file SKIPPED. A skip is not a pass.");
 }
 
-/** decimals 0, registered by 0007. Credit kind. */
+/**
+ * Credit kind, and it is NOT decimals 0 any more.
+ *
+ * This constant was named for a property `0162` took away: `credits` carried no
+ * decimals when this file was written and carries two now. The name is kept,
+ * because every case here is about the credit KIND and renaming forty-two
+ * mentions would say nothing new, but the file no longer assumes the scale.
+ *
+ * WHAT THAT CHANGES, AND IT IS ONE THING. The fixtures still post MINOR units
+ * and the sweep still reads them, so the arithmetic and the flooring are
+ * unaffected at any scale. `captured.lines` and `swept` report HUMAN, because a
+ * person reads them off the exit record, so every expectation about those is
+ * stated through `fromLedgerUnits` rather than as a bare integer that was only
+ * ever right at scale 1.
+ */
 const WHOLE = CREDITS;
 /** decimals 3 today, registered by `ensureVoiceToken`. Voice kind. */
 const VOICE = VILLAGE_VOICE;
@@ -66,6 +80,29 @@ const FINE = "exit-split-fine";
 
 /** One integer, three scales. Seeded as MINOR, which is what the sweep reads. */
 const MINOR = 12_345;
+
+/** Read off the registry in `beforeAll`, because `0162` moves both of them. */
+let vDec = 0;
+let wDec = 0;
+
+/**
+ * MINOR Voice into MINOR credits, mirroring `convertedMinor` in
+ * server/lib/exit.ts exactly: BigInt throughout, floored by the division.
+ *
+ * WRITTEN OUT RATHER THAN APPROXIMATED. That function is not exported, and the
+ * obvious float spelling disagrees with it: `(12345 / 100) * 2.5 * 100` is
+ * 30862.500000000004 in IEEE 754, so a floor of the float and a floor of the
+ * exact ratio can differ by one at exactly the amounts this case is about. The
+ * point of these cases is the flooring, so the expectation has to floor the
+ * same way the engine does.
+ */
+function convertedCredits(voiceMinor: number, num: number, den: number): number {
+  const ten = BigInt(10);
+  return Number(
+    (BigInt(Math.trunc(voiceMinor)) * BigInt(num) * ten ** BigInt(wDec)) /
+      (BigInt(den) * ten ** BigInt(vDec)),
+  );
+}
 
 /** Every default reproduced, so a case changes exactly the dial it is about. */
 const DEFAULTS: ExitSplitPolicy = {
@@ -177,6 +214,9 @@ describe.skipIf(!configured)("a departure on dials a village actually moved", ()
       decimals: 4,
     });
     await loadTokenRegistry(pool);
+    const [dec] = await pool.query<any[]>("SELECT `slug`, `decimals` FROM `tokens` WHERE `slug` IN (?, ?)", [WHOLE, VOICE]);
+    vDec = Number((dec as any[]).find((r) => String(r.slug) === VOICE)?.decimals ?? 0);
+    wDec = Number((dec as any[]).find((r) => String(r.slug) === WHOLE)?.decimals ?? 0);
   });
 
   afterAll(async () => {
@@ -248,7 +288,12 @@ describe.skipIf(!configured)("a departure on dials a village actually moved", ()
 
     const whole = result.captured?.lines.find((l) => l.token === WHOLE);
     const fine = result.captured?.lines.find((l) => l.token === FINE);
-    expect(whole).toEqual({ token: WHOLE, kind: "credit", held: 7, kept: 2, moved: 5, to: EXIT_SETTLEMENT });
+    // MINOR in, HUMAN out: seven minor units are floored into two and five,
+    // and the captured line states them the way a reader sees them.
+    expect(whole).toEqual({
+      token: WHOLE, kind: "credit", to: EXIT_SETTLEMENT,
+      held: fromLedgerUnits(WHOLE, 7), kept: fromLedgerUnits(WHOLE, 2), moved: fromLedgerUnits(WHOLE, 5),
+    });
     // kept plus moved is EXACTLY held, at every scale, which is the property
     // the floor buys and the one conservation depends on.
     expect((fine!.kept + fine!.moved).toFixed(4)).toBe(fine!.held.toFixed(4));
@@ -275,7 +320,8 @@ describe.skipIf(!configured)("a departure on dials a village actually moved", ()
     // this run IS the first application, and a later retry must not rewrite it.
     expect(result.captured?.keep.credit).toBe(100);
     expect(result.captured?.lines[0]).toEqual({
-      token: WHOLE, kind: "credit", held: 500, kept: 500, moved: 0, to: EXIT_SETTLEMENT,
+      token: WHOLE, kind: "credit", to: EXIT_SETTLEMENT,
+      held: fromLedgerUnits(WHOLE, 500), kept: fromLedgerUnits(WHOLE, 500), moved: 0,
     });
     await conserves();
   });
@@ -333,7 +379,11 @@ describe.skipIf(!configured)("a departure on dials a village actually moved", ()
   it("CONVERT posts a pair: the Voice leaves and the credits arrive, under two keys", async () => {
     const u = await member("exit-split-convert");
     await give(memberAccount(u), VOICE, MINOR);
-    await give(TREASURY, WHOLE, 1_000);
+    // Funded from the arithmetic, not from a literal: at two decimals on both
+    // sides this conversion needs thirty thousand minor credits, and a fixed
+    // 1_000 left the treasury unable to pay a bill the engine was right about.
+    const paid = convertedCredits(MINOR, 25, 10);
+    await give(TREASURY, WHOLE, paid + 1_000);
     const exitId = await openExit(u);
     const treasuryBefore = await balanceOf(pool, TREASURY, WHOLE);
     const settlementBefore = await balanceOf(pool, EXIT_SETTLEMENT, VOICE);
@@ -349,12 +399,13 @@ describe.skipIf(!configured)("a departure on dials a village actually moved", ()
     });
     expect(result.errors).toEqual([]);
 
-    // 12345 minor Voice at 3 decimals is 12.345 Voice; at 2.5 credits each
-    // that is 30.8625 credits, and credits carry no decimals, so 30 arrive.
-    // The arithmetic is done in the smallest unit of BOTH tokens and floored.
-    expect(await balanceOf(pool, memberAccount(u), WHOLE)).toBe(30);
+    // The arithmetic is done in the smallest unit of BOTH tokens and floored,
+    // so the expectation is computed the same way at whatever scales the
+    // registry holds. It used to read a bare 30, which was 12.345 Voice at
+    // three decimals into whole credits, and both of those scales have moved.
+    expect(await balanceOf(pool, memberAccount(u), WHOLE)).toBe(paid);
     expect(await balanceOf(pool, memberAccount(u), VOICE)).toBe(0);
-    expect((await balanceOf(pool, TREASURY, WHOLE)) - treasuryBefore).toBe(-30);
+    expect((await balanceOf(pool, TREASURY, WHOLE)) - treasuryBefore).toBe(-paid);
     // The Voice itself went to the remainder account, so the village received
     // every unit of it and the treasury paid for it. That is the pair.
     expect((await balanceOf(pool, EXIT_SETTLEMENT, VOICE)) - settlementBefore).toBe(MINOR);
@@ -362,7 +413,7 @@ describe.skipIf(!configured)("a departure on dials a village actually moved", ()
     const keys = (await rowsFor(exitId)).map((r) => r.idempotency_key);
     expect(keys).toEqual([`exit:${exitId}:convert-credit:${VOICE}`, `exit:${exitId}:convert:${VOICE}`]);
     const line = result.captured?.lines.find((l) => l.token === VOICE);
-    expect(line?.converted).toBe(30);
+    expect(line?.converted).toBe(fromLedgerUnits(WHOLE, paid));
     expect(line?.convertedTo).toBe(WHOLE);
     expect(line?.kept).toBe(0);
     await conserves();
@@ -406,7 +457,11 @@ describe.skipIf(!configured)("a departure on dials a village actually moved", ()
   it("a rate too small to pay one unit converts nothing and says so", async () => {
     const u = await member("exit-split-convert-dust");
     await give(TREASURY, WHOLE, 1_000);
-    await give(memberAccount(u), VOICE, 100); // 0.1 Voice
+    // ONE MINOR UNIT of Voice, which is what "too small to pay one unit" means
+    // at any scale. It read 100 minor with a comment about 0.1 Voice against
+    // whole credits; at two decimals on both sides that pays 50 minor credits
+    // and converts perfectly well, so the case had stopped describing dust.
+    await give(memberAccount(u), VOICE, 1);
     const exitId = await openExit(u);
 
     const result = await sweepBalances(pool, {
@@ -415,15 +470,17 @@ describe.skipIf(!configured)("a departure on dials a village actually moved", ()
       policy: policy({
         keepPct: { credit: 0, voice: 100, recognition: 0, equity: 0 },
         voiceOnExit: "convert",
-        // 0.1 Voice at 0.5 credits per Voice is 0.05 credits, and credits have
-        // no decimals, so the honest answer is that nothing converts.
+        // Half a credit per Voice, so one minor unit of Voice buys half a
+        // minor unit of credit, and half a unit is nothing the ledger can hold.
         voiceConvertRate: "0.5",
       }),
     });
+    // The premise, stated rather than assumed: this really does floor to zero.
+    expect(convertedCredits(1, 5, 10), "the fixture must be dust at these scales").toBe(0);
     expect(result.errors).toEqual([
       `${VOICE}: this rate pays nothing on that share, so no Voice was converted.`,
     ]);
-    expect(await balanceOf(pool, memberAccount(u), VOICE)).toBe(100);
+    expect(await balanceOf(pool, memberAccount(u), VOICE)).toBe(1);
     expect(await balanceOf(pool, memberAccount(u), WHOLE)).toBe(0);
     await conserves();
   });
@@ -448,7 +505,8 @@ describe.skipIf(!configured)("a departure on dials a village actually moved", ()
 
   it("what this exit PAID the member is never swept back by a second settle", async () => {
     const u = await member("exit-split-paid-back");
-    await give(TREASURY, WHOLE, 1_000);
+    const paidBack = convertedCredits(MINOR, 25, 10);
+    await give(TREASURY, WHOLE, paidBack + 1_000);
     await give(memberAccount(u), VOICE, MINOR);
     const exitId = await openExit(u);
     const converting = policy({
@@ -460,10 +518,10 @@ describe.skipIf(!configured)("a departure on dials a village actually moved", ()
     const first = await sweepBalances(pool, { exitId, userId: u, policy: converting });
     expect(first.errors).toEqual([]);
     await appendNote(exitId, first.note);
-    expect(await balanceOf(pool, memberAccount(u), WHOLE)).toBe(30);
+    expect(await balanceOf(pool, memberAccount(u), WHOLE)).toBe(paidBack);
 
     // A second settle under a policy that takes sixty percent of credits. The
-    // thirty credits in the leaver's hands came from THIS exit, so they are
+    // the credits in the leaver's hands came from THIS exit, so they are
     // not a balance to settle: they are what the settlement already paid.
     const again = await sweepBalances(pool, {
       exitId,
@@ -472,7 +530,7 @@ describe.skipIf(!configured)("a departure on dials a village actually moved", ()
     });
     expect(again.paidOut).toContain(WHOLE);
     expect(again.swept).toEqual({});
-    expect(await balanceOf(pool, memberAccount(u), WHOLE)).toBe(30);
+    expect(await balanceOf(pool, memberAccount(u), WHOLE)).toBe(paidBack);
     await conserves();
   });
 
@@ -487,7 +545,8 @@ describe.skipIf(!configured)("a departure on dials a village actually moved", ()
       exitId, userId: u, policy: policy({ keepPct: { credit: 40, voice: 0, recognition: 0, equity: 0 } }),
     });
     await appendNote(exitId, first.note);
-    expect(first.swept[WHOLE]).toBe(600);
+    // `swept` is HUMAN, the figure the note prints for a person.
+    expect(first.swept[WHOLE]).toBe(fromLedgerUnits(WHOLE, 600));
     expect(first.captured?.keep.credit).toBe(40);
 
     /*
@@ -511,7 +570,8 @@ describe.skipIf(!configured)("a departure on dials a village actually moved", ()
     expect(second.policy.keepPct.credit).toBe(90);
     expect(second.captured?.keep.credit).toBe(40);
     expect(second.captured?.lines[0]).toEqual({
-      token: WHOLE, kind: "credit", held: 1_000, kept: 400, moved: 600, to: EXIT_SETTLEMENT,
+      token: WHOLE, kind: "credit", to: EXIT_SETTLEMENT,
+      held: fromLedgerUnits(WHOLE, 1_000), kept: fromLedgerUnits(WHOLE, 400), moved: fromLedgerUnits(WHOLE, 600),
     });
 
     // And a READER coming to the exit row cold reads the same 40, because the
@@ -520,7 +580,7 @@ describe.skipIf(!configured)("a departure on dials a village actually moved", ()
     expect(capturedSplit(row?.resolution)?.keep.credit).toBe(40);
     expect(row?.resolution).toContain("already settled under the policy recorded above");
     // The line the route has always written is still there, and still first.
-    expect(row?.resolution).toContain('balances swept: {"credits":600}');
+    expect(row?.resolution).toContain(`balances swept: {"credits":${fromLedgerUnits(WHOLE, 600)}}`);
     await conserves();
   });
 
@@ -552,7 +612,7 @@ describe.skipIf(!configured)("a departure on dials a village actually moved", ()
     // And the same exit settles once the days have passed.
     const after = await sweepBalances(pool, { exitId, userId: u, policy: cooling, now: new Date(opened + 15 * DAY) });
     expect(after.refusal).toBeNull();
-    expect(after.swept[WHOLE]).toBe(1_000);
+    expect(after.swept[WHOLE]).toBe(fromLedgerUnits(WHOLE, 1_000));
     await conserves();
   });
 
