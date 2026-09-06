@@ -411,7 +411,7 @@ export default function YourAgentPanel() {
               type="button"
               onClick={mint}
               disabled={minting || !tokenName.trim() || tokenScopes.length === 0}
-              className="text-sm bg-teal-deep text-white rounded-lg px-3 py-1.5 font-medium disabled:opacity-40"
+              className="text-sm border border-notice/70 bg-teal-deep text-white rounded-lg px-3 py-1.5 font-medium disabled:opacity-40"
             >
               {minting ? "Minting…" : "Mint token"}
             </button>
@@ -456,7 +456,7 @@ export default function YourAgentPanel() {
                     placeholder="https://your-agent.example/village"
                     className="flex-1 min-w-[12rem] text-sm border border-border rounded-lg px-3 py-2"
                   />
-                  <button type="button" onClick={saveInbox} disabled={inboxBusy || !inboxUrl.trim()} className="text-sm bg-teal-deep text-white rounded-lg px-3 py-1.5 font-medium disabled:opacity-40">Save</button>
+                  <button type="button" onClick={saveInbox} disabled={inboxBusy || !inboxUrl.trim()} className="text-sm border border-notice/70 bg-teal-deep text-white rounded-lg px-3 py-1.5 font-medium disabled:opacity-40">Save</button>
                   {inbox && <button type="button" onClick={testInbox} disabled={inboxBusy} className="text-sm border border-border rounded-lg px-3 py-1.5 disabled:opacity-40">Send a test</button>}
                   {inbox && <button type="button" onClick={removeInboxNow} className="text-sm text-destructive px-2 py-1.5">Remove</button>}
                 </div>
@@ -510,7 +510,7 @@ export default function YourAgentPanel() {
                 )}
               </div>
               {provider === "openai_compatible" && <p className="text-xs text-muted-foreground mb-2">OpenAI-compatible covers OpenRouter, Ollama and most gateways: a base URL, a key and a model name.</p>}
-              <button type="button" onClick={saveKey} disabled={keyBusy || keyValue.trim().length < 8} className="text-sm bg-teal-deep text-white rounded-lg px-3 py-1.5 font-medium disabled:opacity-40">
+              <button type="button" onClick={saveKey} disabled={keyBusy || keyValue.trim().length < 8} className="text-sm border border-notice/70 bg-teal-deep text-white rounded-lg px-3 py-1.5 font-medium disabled:opacity-40">
                 {keyBusy ? "Saving…" : keyView ? "Replace key" : "Save key"}
               </button>
               {keyNote && <p className="text-xs text-card-foreground mt-2">{keyNote}</p>}
@@ -575,7 +575,7 @@ export default function YourAgentPanel() {
                         placeholder="What is true instead"
                         className="flex-1 min-w-[10rem] text-sm border border-border rounded-lg px-3 py-1.5"
                       />
-                      <button type="button" onClick={() => decideStatement(s.id, "correct", correcting.text)} disabled={!correcting.text.trim()} className="text-sm bg-teal-deep text-white rounded-lg px-3 py-1.5 disabled:opacity-40">Save</button>
+                      <button type="button" onClick={() => decideStatement(s.id, "correct", correcting.text)} disabled={!correcting.text.trim()} className="text-sm border border-notice/70 bg-teal-deep text-white rounded-lg px-3 py-1.5 disabled:opacity-40">Save</button>
                       <button type="button" onClick={() => setCorrecting(null)} className="text-sm text-muted-foreground px-2">Cancel</button>
                     </div>
                   )}
@@ -599,7 +599,7 @@ export default function YourAgentPanel() {
                     <span className="block text-xs text-muted-foreground">proposed by the {d.source === "token" ? "agent" : "assistant"} · {when(d.createdAt)}</span>
                   </div>
                   <div className="flex gap-2">
-                    <button type="button" onClick={() => decideDraft(d.id, "confirm")} className="text-sm bg-teal-deep text-white rounded-lg px-3 py-1.5">Yes, send it</button>
+                    <button type="button" onClick={() => decideDraft(d.id, "confirm")} className="text-sm border border-notice/70 bg-teal-deep text-white rounded-lg px-3 py-1.5">Yes, send it</button>
                     <button type="button" onClick={() => decideDraft(d.id, "reject")} className="text-sm border border-border rounded-lg px-3 py-1.5">No</button>
                   </div>
                 </li>

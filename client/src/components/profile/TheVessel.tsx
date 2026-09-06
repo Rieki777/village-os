@@ -38,6 +38,7 @@ import { Heart } from "lucide-react";
 import { useTokenName } from "@/hooks/useTokenNames";
 import { formatTokenAmount } from "@/lib/tokenAmount";
 import { gameFetch, type GameMe, type GameStagePublic } from "@/lib/gameApi";
+import { announceProfileChange } from "@/lib/profileRefresh";
 
 /** "2 times" / "1 time", so a multiplier of one does not read as "1 times". */
 const times = (n: number): string => `${n} time${n === 1 ? "" : "s"}`;
@@ -86,12 +87,32 @@ export default function TheVessel({
     };
   }, []);
 
-  if (!gratitude) return null;
+  /*
+   * THE PANEL SURVIVES A FAILED REFRESH, AND SO DOES WHAT IT JUST TOLD YOU.
+   *
+   * This returned null whenever `gratitude` was null. After a SUCCESSFUL give,
+   * `onGiven` re-reads /api/game/me; if that read fails, the parent sets `me`
+   * to null, this panel unmounts, and the "Sent." confirmation for a transfer
+   * that really happened vanishes with it. The member is left believing
+   * nothing went through.
+   *
+   * So a panel that has already spoken keeps standing. `lastKnown` holds the
+   * figures from before the failed read, which are one give stale rather than
+   * absent, and the sentence below says so instead of pretending they are
+   * current.
+   */
+  const [lastKnown, setLastKnown] = useState<GameMe["gratitude"] | null>(null);
+  useEffect(() => {
+    if (gratitude) setLastKnown(gratitude);
+  }, [gratitude]);
+  const figures = gratitude ?? lastKnown;
+  const stale = !gratitude && Boolean(lastKnown);
+  if (!figures) return null;
 
-  const budget = gratitude.budget;
+  const budget = figures.budget;
   const total = Number(budget?.total ?? 0);
   const remaining = Number(budget?.remaining ?? 0);
-  const held = formatTokenAmount(Number(gratitude.balance ?? 0), Number(gratitude.decimals ?? 0));
+  const held = formatTokenAmount(Number(figures.balance ?? 0), Number(figures.decimals ?? 0));
 
   const give = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,6 +146,15 @@ export default function TheVessel({
       setAmount("");
       setMessage("");
       setSaid({ tone: "ok", text: `Sent. ${tokenName} is on its way.` });
+      /*
+       * TELL THE WHOLE PAGE, not just the parent. ProfileSheet's "you have not
+       * thanked anyone yet this season" and ProfileJourney's Recognition Flows
+       * both read their own endpoints on mount and both listen for this. Without
+       * it a member gives, sees "Sent.", and reads two cards below saying they
+       * have thanked nobody. `announceProfileChange` is the signal those cards
+       * already subscribe to; it simply was never fired from here.
+       */
+      announceProfileChange();
       onGiven?.();
     } catch {
       setSaid({ tone: "no", text: "Could not reach the village. Try again." });
@@ -154,6 +184,13 @@ export default function TheVessel({
       <p className="mt-2 text-sm text-muted-foreground">
         Held in all. Yours to keep, never spent.
       </p>
+      {/* Said out loud rather than shown by dimming, because a figure that is
+          one write behind looks exactly like a figure that is current. */}
+      {stale ? (
+        <p className="mt-1 text-sm text-notice">
+          These figures are from before your last send. Reload to see them settle.
+        </p>
+      ) : null}
 
       {total > 0 ? (
         <div className="mt-6">
@@ -248,18 +285,48 @@ export default function TheVessel({
         <button
           type="submit"
           disabled={sending || remaining <= 0}
-          className="mt-3 min-h-11 rounded-lg bg-teal-deep px-5 py-2 font-medium text-white disabled:opacity-50"
+          /*
+            THE EDGE, AND WHY THE FILL STAYS THE VILLAGE'S.
+
+            `bg-teal-deep` is the brand colour, which shared/brandTokens.ts
+            guarantees only to CARRY white text, which means it is dark. On this
+            night card it measured 1.58:1 against the panel: the label was
+            perfectly legible and the BUTTON was not a shape. WCAG 1.4.11 asks a
+            control's boundary to be findable, and a member scanning for
+            somewhere to press was reading text to find it.
+
+            The theme kept brand fills deliberately, so the fill is untouched
+            and the boundary is added. Same defect the allowance bar had, one
+            element over, and a text-only contrast pass cannot see either.
+
+            /70 AND NOT /50, because a border composites over the element's OWN
+            background: `background-clip` is `border-box`, so this edge sits on
+            top of the brand fill rather than on the card. At /50 it measured
+            2.99:1, which is a hair under the 3:1 WCAG 1.4.11 asks, and picking
+            a number that clears on BOTH readings costs nothing.
+          */
+          className="mt-3 min-h-11 rounded-lg border border-notice/70 bg-teal-deep px-5 py-2 font-medium text-white disabled:opacity-50"
         >
           {sending ? "Sending…" : remaining > 0 ? "Give" : "Nothing left to give this moon"}
         </button>
-        {said ? (
-          <p
-            role="status"
-            className={`mt-3 text-sm ${said.tone === "ok" ? "text-open" : "text-destructive"}`}
-          >
-            {said.text}
-          </p>
-        ) : null}
+        {/*
+          THE LIVE REGION IS ALWAYS MOUNTED, AND THAT IS THE WHOLE POINT.
+
+          It was rendered only when there was something to say, which means the
+          `role="status"` element was INSERTED at the same moment it got its
+          text. Assistive technology watches a live region for changes; a region
+          that did not exist a moment ago has no change to report, so the
+          server's own refusal ("Only 3 left in your budget this cycle", "No
+          member here with that id") was announced to nobody. It is mounted
+          empty from the first render now and only its text changes.
+        */}
+        <p
+          role="status"
+          aria-live="polite"
+          className={`mt-3 text-sm ${!said ? "sr-only" : said.tone === "ok" ? "text-open" : "text-destructive"}`}
+        >
+          {said?.text ?? ""}
+        </p>
       </form>
     </motion.section>
   );

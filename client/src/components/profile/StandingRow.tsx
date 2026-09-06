@@ -80,9 +80,22 @@ export default function StandingRow({ standing }: { standing: Standing }) {
   // as the number having changed.
   if (held === null && powersOpen === null && pathsWalked === null && questsDone === null) return null;
 
-  const n = (v: number | null) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
-  const heldUnits = held ? n(held.units) : 0;
-  const worthShowing = heldUnits > 0 || n(pathsWalked) > 0 || n(questsDone) > 0;
+  /*
+   * A FIGURE THIS COMPONENT HAS NOT READ IS NOT ZERO, AND WAS PRINTED AS ZERO.
+   *
+   * The early return above only fires when ALL FOUR are null, so a member with
+   * three paths, twelve powers and seven quests, arriving while
+   * /api/game/progression was slow or after it returned 500, read
+   * "0 Powers open / 3 Paths walked / 0 Quests done" as a settled fact. That is
+   * the exact discouragement the hide-until-non-zero rule exists to prevent,
+   * arriving through the back door.
+   *
+   * Unread figures are simply absent now. A row of two true numbers says less
+   * than a row of four, and it says nothing false.
+   */
+  const n = (v: number | null) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const heldUnits = held ? Number(held.units) || 0 : 0;
+  const worthShowing = heldUnits > 0 || (n(pathsWalked) ?? 0) > 0 || (n(questsDone) ?? 0) > 0;
   if (!worthShowing) return null;
 
   return (
@@ -94,9 +107,9 @@ export default function StandingRow({ standing }: { standing: Standing }) {
       {held ? (
         <Figure value={formatTokenAmount(held.units, held.decimals)} label={`${tokenName} held`} tone="gold" />
       ) : null}
-      <Figure value={String(n(powersOpen))} label="Powers open" tone="living" />
-      <Figure value={String(n(pathsWalked))} label="Paths walked" />
-      <Figure value={String(n(questsDone))} label="Quests done" />
+      {n(powersOpen) !== null ? <Figure value={String(n(powersOpen))} label="Powers open" tone="living" /> : null}
+      {n(pathsWalked) !== null ? <Figure value={String(n(pathsWalked))} label="Paths walked" /> : null}
+      {n(questsDone) !== null ? <Figure value={String(n(questsDone))} label="Quests done" /> : null}
     </motion.div>
   );
 }

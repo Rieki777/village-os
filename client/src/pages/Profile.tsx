@@ -328,6 +328,17 @@ export default function Profile() {
                   and `prog` carries where this member stands on it. */}
               {config && prog ? (
                 <MaturityLadder
+                  /*
+                    THE VESSEL SAYS THE ALLOWANCE SENTENCE NOW, SO THE LADDER
+                    MUST NOT. `showNext` was added with a default of true and
+                    then never passed, which meant the whole next-rung block,
+                    the allowance-multiplier line included, printed in both
+                    places. A member reading the same sentence twice on one
+                    page assumes they are two different facts. The prop existed
+                    for exactly this and was not used, which is worse than not
+                    having added it.
+                  */
+                  showNext={false}
                   stages={config.stages}
                   stageIndex={prog.stageIndex}
                   consentedQuests={prog.consentedQuests}

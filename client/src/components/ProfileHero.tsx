@@ -86,10 +86,21 @@ export default function ProfileHero({
   const arc = known ? Math.max(0, Math.min(1, (stageIndex + 1) / stageCount)) : null;
   const rung = known ? `Maturity ${stageIndex + 1} of ${stageCount}` : "";
 
-  /* The eyebrow is the village's own two words, so a fork reads its own. */
-  const eyebrow = [String(village?.name ?? "").trim(), String(village?.tagline ?? "").trim()]
-    .filter(Boolean)
-    .join(" · ");
+  /*
+   * THE VILLAGE'S NAME, AND NOT ITS TAGLINE.
+   *
+   * This joined name and tagline, the way the mockup did. The platform's
+   * DEFAULT tagline is "healing the land and ourselves, together"
+   * (shared/gameConfig.ts) and it is not empty, so every fork that had not
+   * written its own printed Amora's words across the top of its members'
+   * profiles. The QA screenshot said "UNNAMED VILLAGE - HEALING THE LAND AND
+   * OURSELVES, TOGETHER", a village with no name of its own wearing somebody
+   * else's motto, and it took an adversarial reader to notice.
+   *
+   * The name is always the village's own. A tagline is marketing copy and this
+   * is an identity line, so dropping it costs nothing and leaks nothing.
+   */
+  const eyebrow = String(village?.name ?? "").trim();
 
   /*
    * "Joined March 2026". Month and year, never a day: the exact date is not

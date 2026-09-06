@@ -296,7 +296,26 @@ export default function ProfileJourney() {
               {roleWord.plural} you hold
             </p>
           )}
-          {(prog.capabilities?.length > 0 || prog.roles?.length > 0) && (
+          {/*
+            THE HEADING LABELS THE ROLE CHIPS AND STOPPED THERE.
+
+            It was written above a container holding BOTH the role chips and
+            the capability chips, so a member with one role and eleven
+            capabilities read "Roles you hold" over twelve pills, eleven of
+            which are not roles. A screen reader hears the heading and then
+            twelve items under it. Splitting the containers is the fix; a
+            heading is a promise about what follows it.
+          */}
+          {(prog.roles ?? []).length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              {(prog.roles ?? []).map((r: { id: string; name: string }) => (
+                <span key={r.id} title={r.id} className="inline-flex items-center gap-1 text-xs bg-muted text-notice border border-notice/60 px-2.5 py-1 rounded-full font-medium">
+                  <Users className="w-3 h-3" aria-hidden="true" /> {r.name}
+                </span>
+              ))}
+            </div>
+          )}
+          {(prog.capabilities?.length > 0) && (
             <div className="flex flex-wrap gap-2 mb-5">
               {/* THE ROLE'S OWN NAME, which the seed has always carried.
                   This ran `prettySource` over the ID and printed
@@ -305,11 +324,7 @@ export default function ProfileJourney() {
                   sends `{ id, name }` now, so the chip reads the name a
                   founder typed and the id stays as the title for the one
                   reader who wants it. */}
-              {(prog.roles ?? []).map((r: { id: string; name: string }) => (
-                <span key={r.id} title={r.id} className="inline-flex items-center gap-1 text-xs bg-muted text-notice border border-notice/60 px-2.5 py-1 rounded-full font-medium">
-                  <Users className="w-3 h-3" /> {r.name}
-                </span>
-              ))}
+
               {/* WHAT A MEMBER CAN DO, IN WORDS. These rendered the raw keys,
                   in monospace, under a heading promising to say what somebody
                   had unlocked: eleven chips reading `map.viewPeople` and
