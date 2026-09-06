@@ -103,13 +103,18 @@ export interface TokenHolding {
  *
  * "locked up with the Camera, return the camera to unlock these tokens"
  *
- * THE ITEM NAME GOES IN BOTH SLOTS VERBATIM, which is a departure from his
- * capitalisation in the second slot and it is deliberate. Lowercasing the
- * second occurrence reproduces his example exactly and mangles every real item
- * name on the shelf: the seeded catalogue holds "Cordless drill, 18V, two
- * batteries", and lowercasing that prints "18v". A capital letter is a smaller
- * wrong than a mangled model number, and a member reading their own refusal
- * meets the item under the name it carries on the shelf either way.
+ * THE ITEM NAME GOES IN BOTH SLOTS VERBATIM, AND HE RULED IT. His example
+ * lowercased the second occurrence; this lane kept the name as written in both
+ * and flagged the difference rather than choosing silently, and he answered
+ * "keep the capitalization". So this is no longer a departure to defend, it is
+ * the ruling.
+ *
+ * The reason it was worth asking: lowercasing the second occurrence reproduces
+ * his example exactly and mangles every real item name on the shelf. The seeded
+ * catalogue holds "Cordless drill, 18V, two batteries", and lowercasing that
+ * prints "18v". A capital letter is a smaller wrong than a mangled model
+ * number, and a member meets the item under the name it carries on the shelf
+ * either way.
  *
  * NO TRAILING PERIOD. It is a fragment the surface frames, which is the
  * contract every refusal sentence in `server/lib/redemption.ts` carries.
