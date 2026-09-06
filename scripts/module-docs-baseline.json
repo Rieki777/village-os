@@ -1,16 +1,12 @@
 {
-  "undocumented": 10,
+  "undocumented": 6,
   "modules": 23,
   "ids": [
     "automation",
     "commerce",
     "forum",
     "governance",
-    "gratitude",
     "introductions",
-    "network",
-    "profiles",
-    "progression",
-    "quests"
+    "network"
   ]
 }
