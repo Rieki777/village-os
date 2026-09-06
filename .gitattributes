@@ -13,3 +13,13 @@ docs/prototypes/grounds-v0.html -text
 # strips carriage returns as well, so a hand edit in an editor that writes CRLF
 # still reads as content rather than as a whole-file difference.
 docs/TOKENS.md -text
+
+# docs/VARIABLES.md, docs/MODULES.md and docs/CAPABILITIES.md are GENERATED
+# (scripts/generate-*-doc.mjs) and each has a CI guard that regenerates and
+# compares. Same reason as docs/TOKENS.md above: `core.autocrlf` is true on the
+# Windows checkouts this repo is developed on, so without `-text` git would
+# store LF, hand back CRLF, and the guards would fail on one machine while
+# passing in CI. Bytes in, same bytes out, everywhere.
+docs/VARIABLES.md -text
+docs/MODULES.md -text
+docs/CAPABILITIES.md -text
