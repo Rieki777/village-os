@@ -137,7 +137,7 @@ export interface CircleBudgetRow {
   /** The SEASON cap. 0084's original column, meaning unchanged. */
   amountMinor: number;
   /**
-   * The CYCLE cap (0163). Null means the village set none, which is every
+   * The CYCLE cap (0168). Null means the village set none, which is every
    * village until it sets one and is why the column is nullable. Zero is a
    * real value and means zero: a circle with a cycle cap of 0 may issue
    * nothing this cycle, the same way every other cap in this build fails
@@ -713,7 +713,7 @@ export async function upsertBudget(pool: Pool, body: any, actorId: string | null
   const seasonId = body.seasonId ? String(body.seasonId).slice(0, 64) : null;
   const unit = String(body.unit);
   const amount = Number(body.amountMinor);
-  // Absent and null both mean "no cycle cap"; 0 means a cap of zero (0163).
+  // Absent and null both mean "no cycle cap"; 0 means a cap of zero (0168).
   const cycleAmount =
     body.cycleAmountMinor === undefined || body.cycleAmountMinor === null
       ? null
