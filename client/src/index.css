@@ -311,6 +311,25 @@
   --color-amber-on-band: #e8dcbc;
 }
 
+/* THE TWO SEMANTIC COLOURS THAT ARE NOT TOKENS.
+   `text-amber-700` (a term ending, an open call) and `text-red-600` (a
+   refusal) are fixed Tailwind utilities, so the scoped token block above
+   cannot reach them: they were picked against a white card and they are the
+   one thing that did not follow the lens onto its ground. Measured live at
+   build c8a533f, the open-calls line came out at 3.28:1, the single contrast
+   failure in the whole lens.
+
+   Overriding the utility keeps the MEANING (warning, refusal) and changes
+   only the reading. Measured on all three lens surfaces:
+     amber  #e0b062  ground 8.92  card 8.29  muted 7.37
+     danger #f08a72  ground 7.25  card 6.74  muted 5.99 */
+.circle-lens :is(.text-amber-700, .text-amber-600, .text-amber-800) {
+  color: #e0b062;
+}
+.circle-lens :is(.text-red-600, .text-red-700, .text-red-500) {
+  color: #f08a72;
+}
+
 .dark {
   /* Same neutral-gray-by-default rule as the light theme above: zero chroma,
      no hue, so an untouched fork's dark mode is nobody's brand either. */
