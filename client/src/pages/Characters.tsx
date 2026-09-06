@@ -36,7 +36,9 @@ import Layout from "@/components/Layout";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
+import { announceProfileChange } from "@/lib/profileRefresh";
 import { Star, X } from "lucide-react";
+import PortraitStudio, { type StudioPayload } from "@/components/characters/PortraitStudio";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -58,7 +60,11 @@ interface Character {
   archetypeKey: string;
   presentation: "f" | "m";
   tone: "deep" | "olive" | "light";
+  /** The member's own portrait when they have one, and the stock art otherwise. */
   avatar: string | null;
+  /** The stock art on its own, so a surface can still show the village face. */
+  stockAvatar: string | null;
+  portrait: { source: "forged" | "uploaded"; published: boolean } | null;
   isPrimary: boolean;
 }
 
@@ -76,6 +82,39 @@ const TONES: Array<{ key: Character["tone"]; label: string; swatch: string }> = 
 /** The thirty assets are named by class, presentation and tone. */
 const art = (key: string, p: string, t: string) => `/images/avatars/${key}-${p}-${t}.webp`;
 
+/**
+ * ARROW KEYS INSIDE A RADIOGROUP, because saying `role="radio"` is a promise.
+ *
+ * A group that announces itself as radios and then behaves like a row of
+ * buttons is worse than the row of buttons was: a screen reader user is told
+ * to expect arrow-key selection and does not get it. So the two groups below
+ * carry the whole pattern, which is this handler plus a roving tabindex
+ * (`tabIndex={selected ? 0 : -1}`), the same shape the ARIA authoring
+ * practices describe. Both groups always have exactly one selected value, so
+ * the roving index can never leave the group unreachable.
+ *
+ * Focus moves by index within the group's own DOM, so it does not care which
+ * of the two groups it is in or how many options that one has.
+ */
+function radioArrows<T>(
+  values: readonly T[],
+  current: T,
+  pick: (v: T) => void,
+): (e: React.KeyboardEvent<HTMLButtonElement>) => void {
+  return (e) => {
+    const forward = e.key === "ArrowRight" || e.key === "ArrowDown";
+    const back = e.key === "ArrowLeft" || e.key === "ArrowUp";
+    if (!forward && !back) return;
+    e.preventDefault();
+    const at = values.indexOf(current);
+    const nextAt = (at + (forward ? 1 : -1) + values.length) % values.length;
+    pick(values[nextAt]);
+    const group = e.currentTarget.closest("[role='radiogroup']");
+    const radios = group ? Array.from(group.querySelectorAll<HTMLElement>("[role='radio']")) : [];
+    radios[nextAt]?.focus();
+  };
+}
+
 export default function Characters() {
   const { user } = useAuth();
   const [archetypes, setArchetypes] = useState<Archetype[]>([]);
@@ -87,30 +126,93 @@ export default function Characters() {
   const [broken, setBroken] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  /**
+   * THREE READS, THREE STATES EACH.
+   *
+   * Every fetch on this page ended `.catch(() => {})`, so a failure was
+   * indistinguishable from an empty answer: a dropped paths read left the
+   * word "Looking." on screen permanently, and a dropped party read told a
+   * member who plays six characters that they play none, and offered them
+   * "Walk this path" for a class they already walk. An empty state is a
+   * claim about the member, so it waits until there is an answer to make it
+   * from.
+   */
+  const [castStatus, setCastStatus] = useState<"loading" | "ready" | "failed">("loading");
+  const [partyStatus, setPartyStatus] = useState<"loading" | "ready" | "failed">("loading");
+  const [pathsStatus, setPathsStatus] = useState<"loading" | "ready" | "failed">("loading");
+  /** The one polite region for this page. Set in every mutation handler. */
+  const [said, setSaid] = useState("");
+  /** The character whose Leave is armed, if any. An unconfirmed DELETE. */
+  const [leaving, setLeaving] = useState<string | null>(null);
+  const [studio, setStudio] = useState<StudioPayload | null>(null);
 
   const firstRun = useMemo(
     () => new URLSearchParams(window.location.search).get("first") === "1",
     [],
   );
 
-  useEffect(() => {
+  const loadCast = () => {
+    setCastStatus("loading");
     fetch("/api/archetypes")
-      .then((r) => (r.ok ? r.json() : []))
-      .then((list: Archetype[]) => {
-        setArchetypes(list);
-        if (list.length) setActiveKey((k) => k || list[0].key);
+      .then((r) => {
+        if (!r.ok) throw new Error(`archetypes ${r.status}`);
+        return r.json();
       })
-      .catch(() => {});
-  }, []);
+      .then((list: Archetype[]) => {
+        const cast = Array.isArray(list) ? list : [];
+        setArchetypes(cast);
+        if (cast.length) setActiveKey((k) => k || cast[0].key);
+        setCastStatus("ready");
+      })
+      .catch(() => setCastStatus("failed"));
+  };
+  useEffect(loadCast, []);
 
   const loadParty = () => {
     if (!user) return;
+    setPartyStatus("loading");
     fetch("/api/me/characters", { headers: headers() })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => d && setParty(d.party ?? []))
-      .catch(() => {});
+      .then((r) => {
+        if (!r.ok) throw new Error(`me/characters ${r.status}`);
+        return r.json();
+      })
+      .then((d) => {
+        setParty(d?.party ?? []);
+        setPartyStatus("ready");
+      })
+      .catch(() => setPartyStatus("failed"));
   };
   useEffect(loadParty, [user?.id]);
+
+  const loadPaths = (key: string) => {
+    setPaths(null);
+    setPathsStatus("loading");
+    fetch(`/api/archetypes/${encodeURIComponent(key)}/paths`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`paths ${r.status}`);
+        return r.json();
+      })
+      .then((d) => {
+        setPaths(d ?? null);
+        setPathsStatus("ready");
+      })
+      .catch(() => setPathsStatus("failed"));
+  };
+  /*
+   * The studio is its own read and not part of the party payload.
+   *
+   * The party is what a class LOOKS like and is fetched on four other
+   * surfaces; the budget is a fact about this member's gifts and belongs to
+   * this page alone. Putting the counters on the party would have shipped them
+   * to every profile that renders a party rail, including a stranger's.
+   */
+  useEffect(() => {
+    if (!user) return;
+    fetch("/api/me/portraits", { headers: headers() })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setStudio(d as StudioPayload))
+      .catch(() => {});
+  }, [user?.id]);
 
   useEffect(() => {
     if (!activeKey) return;
@@ -119,51 +221,92 @@ export default function Characters() {
       setPresentation(mine.presentation);
       setTone(mine.tone);
     }
-    setPaths(null);
-    fetch(`/api/archetypes/${encodeURIComponent(activeKey)}/paths`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then(setPaths)
-      .catch(() => {});
+    loadPaths(activeKey);
   }, [activeKey, party.length]);
 
   const active = useMemo(() => archetypes.find((a) => a.key === activeKey) ?? null, [archetypes, activeKey]);
   const playing = useMemo(() => party.some((c) => c.archetypeKey === activeKey), [party, activeKey]);
-  const heroSrc = activeKey ? art(activeKey, presentation, tone) : "";
-  const heroBroken = broken[`${activeKey}-${presentation}-${tone}`];
+  const stockSrc = activeKey ? art(activeKey, presentation, tone) : "";
+  /*
+   * A member who has made their own face for this class sees THEIR face on the
+   * stage, not the village's. The presentation and tone controls below still
+   * drive the stock art, which is what they are for, and the two swatch rows
+   * keep working for every class with no portrait.
+   */
+  const ownPortrait = studio?.portraits?.find((p) => p.archetypeKey === activeKey)?.url ?? null;
+  const heroSrc = ownPortrait ?? stockSrc;
+  const heroBroken = broken[`${activeKey}-${presentation}-${tone}`] && !ownPortrait;
 
-  /** A class's face for the rail: the one you play, or a default to meet. */
+  /** A class's face for the rail: yours if you made one, the one you play, or a default to meet. */
   const faceFor = (key: string) => {
+    const own = studio?.portraits?.find((p) => p.archetypeKey === key)?.url;
+    if (own) return own;
     const mine = party.find((c) => c.archetypeKey === key);
     return mine?.avatar ?? art(key, "f", "olive");
   };
 
   const walk = async () => {
     if (!activeKey || busy) return;
+    const label = active?.name ?? activeKey;
     setBusy(true);
     setError("");
-    const res = await fetch("/api/me/characters", {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({ archetypeKey: activeKey, presentation, tone }),
-    });
-    setBusy(false);
-    if (!res.ok) {
-      const b = await res.json().catch(() => ({}));
-      setError(b.error || "That did not save. Try again.");
-      return;
+    try {
+      const res = await fetch("/api/me/characters", {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ archetypeKey: activeKey, presentation, tone }),
+      });
+      if (!res.ok) {
+        const b = await res.json().catch(() => ({}));
+        const message = b.error || "That did not save. Try again.";
+        setError(message);
+        setSaid(message);
+        return;
+      }
+      loadParty();
+      setSaid(playing ? `${label} saved.` : `${label} joined your party.`);
+      announceProfileChange();
+    } catch {
+      // The `await fetch` here had no try at all, so a dropped connection
+      // threw out of a click handler: no message, no state change, and the
+      // button left disabled by a `setBusy(false)` that never ran.
+      const message = "That did not save. Try again.";
+      setError(message);
+      setSaid(message);
+    } finally {
+      setBusy(false);
     }
-    loadParty();
   };
 
-  const act = async (path: string, method: string) => {
+  /**
+   * One party write, and WHAT TO SAY EITHER WAY.
+   *
+   * This had no else branch: a refused or dropped DELETE produced no message
+   * and no state change, so the card stayed exactly as it was and the member
+   * had no way to tell a successful leave from a failed one. Failures now
+   * reach the same `role="alert"` the save error uses, and both outcomes go
+   * through the live region.
+   */
+  const act = async (path: string, method: string, done: string, failed: string) => {
     if (busy) return;
     setBusy(true);
-    const res = await fetch(path, { method, headers: headers() });
-    setBusy(false);
-    if (res.ok) {
+    setError("");
+    try {
+      const res = await fetch(path, { method, headers: headers() });
+      if (!res.ok) throw new Error(`${method} ${res.status}`);
       const d = await res.json().catch(() => null);
       if (d?.party) setParty(d.party);
       else loadParty();
+      setSaid(done);
+      // The hero, the quest chips and the journey on /profile all describe
+      // this party and all read once on mount. See lib/profileRefresh.ts.
+      announceProfileChange();
+    } catch {
+      setError(failed);
+      setSaid(failed);
+    } finally {
+      setBusy(false);
+      setLeaving(null);
     }
   };
 
@@ -219,21 +362,60 @@ export default function Characters() {
                     </div>
                   )}
                 </div>
-                {/* Name over the art, the way a select screen names its cast. */}
+                {/*
+                  Name over the art, the way a select screen names its cast.
+
+                  THE SCRIM IS THE ONLY THING HOLDING THIS TEXT UP, and the
+                  art behind it is thirty different portraits, so the worst
+                  case has to be measured against WHITE. `from-black/75
+                  to-transparent` fell linearly to nothing over the whole box,
+                  so the scrim behind the top of the name was down to 30% and
+                  the name measured 2.11:1 there. Holding the stop at
+                  70% until 60% of the height keeps the whole text block above
+                  the floor and leaves the fade where the art is. Measured in
+                  Chromium over a pure-white portrait, on the real 120px box:
+                  the name's worst pixel goes 2.11:1 to 8.53:1 and the
+                  subtitle's 3.15:1 to 11.49:1. Even if the position stop were
+                  ignored the via would land at 50% and the worst pixel would
+                  be 4.94:1, so this cannot regress below AA.
+
+                  The subtitle was `text-white/90`, which is the one line that
+                  sits highest in the old gradient and the one that was
+                  faded. Full white, and the size difference carries the
+                  hierarchy on its own.
+                */}
                 {active ? (
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-5 pb-4 pt-12">
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/70 via-60% to-transparent px-5 pb-4 pt-12">
                     <h2 className="text-3xl font-display font-bold text-white">{active.name}</h2>
-                    <p className="text-sm text-white/90">{active.subtitle}</p>
+                    <p className="text-sm text-white">{active.subtitle}</p>
                   </div>
                 ) : null}
               </div>
 
+              {/*
+                TWO CHOICES THAT SAID NOTHING ABOUT THEMSELVES.
+
+                Both groups conveyed which option was live by COLOUR ALONE:
+                no aria-pressed, no role, no grouping, so a screen reader
+                heard six unrelated buttons and could not tell which
+                presentation or which tone was selected either before or
+                after pressing. They are what a radio group is for, and the
+                only thing missing was saying so. The swatches also carried
+                bare colour names as their whole accessible name, so "Deep"
+                arrived with nothing to say what it was deep about, and they
+                were 40px where every sibling control on this page already
+                enforces the 44px floor.
+              */}
               <div className="mt-4 flex flex-wrap items-center justify-center gap-5">
-                <div className="flex items-center gap-2">
+                <div role="radiogroup" aria-label="Presentation" className="flex items-center gap-2">
                   {(["f", "m"] as const).map((p) => (
                     <button
                       key={p}
                       type="button"
+                      role="radio"
+                      aria-checked={presentation === p}
+                      tabIndex={presentation === p ? 0 : -1}
+                      onKeyDown={radioArrows(["f", "m"] as const, presentation, setPresentation)}
                       onClick={() => setPresentation(p)}
                       className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-medium ${
                         presentation === p
@@ -245,15 +427,23 @@ export default function Characters() {
                     </button>
                   ))}
                 </div>
-                <div className="flex items-center gap-3">
+                <div role="radiogroup" aria-label="Skin tone" className="flex items-center gap-3">
                   {TONES.map((t) => (
                     <button
                       key={t.key}
                       type="button"
-                      aria-label={t.label}
+                      role="radio"
+                      aria-checked={tone === t.key}
+                      aria-label={`${t.label} skin tone`}
+                      tabIndex={tone === t.key ? 0 : -1}
+                      onKeyDown={radioArrows(
+                        TONES.map((x) => x.key),
+                        tone,
+                        setTone,
+                      )}
                       onClick={() => setTone(t.key)}
                       style={{ background: t.swatch }}
-                      className={`h-10 w-10 rounded-full border-2 ${
+                      className={`h-11 w-11 rounded-full border-2 ${
                         tone === t.key ? "border-teal-deep ring-2 ring-teal-deep/40" : "border-gray-300"
                       }`}
                     />
@@ -274,8 +464,48 @@ export default function Characters() {
               </div>
             </section>
 
-            {/* THE CAST. Faces, not letters. */}
+            {/*
+              THE CAST. Faces, not letters.
+
+              THIRTY BUTTONS NAMED "S", "W" AND "H". Each button took its
+              accessible name from its contents, and the contents are the
+              image's `alt`, so the rail read correctly right up until a
+              portrait failed to load. `onError` replaces the image with a
+              single letter, and `title` is only consulted when there is no
+              content at all, so a broken sprite sheet silently renamed every
+              button in the rail to one letter. The name belongs on the
+              button, where it does not depend on whether a file arrived.
+
+              The star is the only signal that a class is already in the
+              party, and an icon carries no text. It is described rather than
+              folded into the name so the name stays the class, exactly as
+              the visible title does, and the note is read after it.
+            */}
             <nav aria-label="Classes" className="order-2 min-w-0 lg:order-1">
+              {castStatus === "failed" ? (
+                /*
+                  THIS LINE SITS ON THE PAGE, NOT ON A CARD, so it takes the
+                  semantic pair. Every card on this page is a hardcoded
+                  `bg-white` holding a frozen ink, which is safe because
+                  neither half answers to `.dark`. The page background does
+                  answer to it, and the frozen inks measure about 2.9:1
+                  (red-700) and 1.8:1 (teal-deep) there. Measured in Chromium
+                  on the semantic pair: 6.98 light / 6.49 dark, and 16.01 /
+                  14.73 for the control.
+                  No new `text-gray-*` anywhere in this edit either: that
+                  ratchet is at 1224 of 1224.
+                */
+                <p role="status" className="text-sm text-muted-foreground">
+                  The cast did not load.{" "}
+                  <button
+                    type="button"
+                    onClick={loadCast}
+                    className="min-h-11 font-medium text-foreground underline underline-offset-2"
+                  >
+                    Retry
+                  </button>
+                </p>
+              ) : null}
               <ul className="flex flex-wrap justify-center gap-3 lg:flex-nowrap lg:flex-col lg:justify-start">
                 {archetypes.map((a) => {
                   const chosen = party.some((c) => c.archetypeKey === a.key);
@@ -285,8 +515,13 @@ export default function Characters() {
                     <li key={a.key} className="shrink-0">
                       <button
                         type="button"
-                        onClick={() => setActiveKey(a.key)}
+                        onClick={() => {
+                          setActiveKey(a.key);
+                          setSaid(`${a.name} is on the stage.`);
+                        }}
                         aria-current={isActive ? "true" : undefined}
+                        aria-label={a.name}
+                        aria-describedby={chosen ? `in-party-${a.key}` : undefined}
                         title={a.name}
                         className={`relative block h-20 w-20 overflow-hidden rounded-xl border-2 bg-white transition ${
                           isActive
@@ -307,7 +542,15 @@ export default function Characters() {
                           />
                         )}
                         {chosen ? (
-                          <Star className="absolute right-1 top-1 h-4 w-4 fill-gold text-sage drop-shadow" />
+                          <>
+                            <Star
+                              className="absolute right-1 top-1 h-4 w-4 fill-gold text-sage drop-shadow"
+                              aria-hidden="true"
+                            />
+                            <span id={`in-party-${a.key}`} className="sr-only">
+                              In your party
+                            </span>
+                          </>
                         ) : null}
                       </button>
                     </li>
@@ -335,9 +578,29 @@ export default function Characters() {
                   <h3 className="mt-6 text-sm font-semibold uppercase tracking-wide text-teal-deep">
                     Open paths
                   </h3>
-                  {paths === null ? (
-                    <p className="mt-2 text-sm text-gray-600">Looking.</p>
-                  ) : paths.roles.length === 0 ? (
+                  {/*
+                    "Looking." WAS ALSO WHAT FAILURE LOOKED LIKE. The word was
+                    gated on `paths === null`, and the read set null on every
+                    outcome it did not like, so a 500 or a dropped connection
+                    left the panel looking for something it had already
+                    stopped looking for, permanently. The word now belongs to
+                    the loading state alone, and a failure says so and offers
+                    the one control that can help.
+                  */}
+                  {pathsStatus === "loading" ? (
+                    <p role="status" className="mt-2 text-sm text-gray-600">Looking.</p>
+                  ) : pathsStatus === "failed" ? (
+                    <p role="status" className="mt-2 text-sm text-red-700">
+                      The open paths did not load.{" "}
+                      <button
+                        type="button"
+                        onClick={() => loadPaths(activeKey)}
+                        className="min-h-11 font-medium text-teal-deep underline"
+                      >
+                        Retry
+                      </button>
+                    </p>
+                  ) : !paths || paths.roles.length === 0 ? (
                     <p className="mt-2 text-sm text-gray-700">
                       No roles carry this tag yet. Every role is still open to you.
                     </p>
@@ -371,8 +634,51 @@ export default function Characters() {
             </aside>
           </div>
 
-          {/* Your party. */}
-          {party.length > 0 ? (
+          {/* Your own face for this class. Below the stage, because the class
+              is what you came here to choose and the portrait is what you do
+              once you have chosen one. */}
+          {active ? (
+            <PortraitStudio
+              archetypeKey={active.key}
+              archetypeName={active.name}
+              presentation={presentation}
+              tone={tone}
+              stockArt={stockSrc}
+              studio={studio}
+              onChanged={(next) => {
+                setStudio(next);
+                // The party carries the portrait too, so a change here changes
+                // what the rail and the party row draw.
+                loadParty();
+              }}
+              authHeaders={headers}
+            />
+          ) : null}
+
+                    {/*
+            Your party.
+
+            The section is drawn whenever the read landed OR failed, because
+            "you have no party" and "we could not find out" are different
+            things and only the first of them is safe to render as silence.
+          */}
+          {partyStatus === "failed" ? (
+            <section className="mt-10">
+              <h2 className="text-lg font-display font-bold text-sage">Your party</h2>
+              {/* On the page background, so the semantic pair. See the cast
+                  failure line above for the measurements. */}
+              <p role="status" className="mt-2 text-sm text-muted-foreground">
+                Your party did not load, so nothing here is the whole story.{" "}
+                <button
+                  type="button"
+                  onClick={loadParty}
+                  className="min-h-11 font-medium text-foreground underline underline-offset-2"
+                >
+                  Retry
+                </button>
+              </p>
+            </section>
+          ) : party.length > 0 ? (
             <section className="mt-10">
               <h2 className="text-lg font-display font-bold text-sage">Your party</h2>
               <ul className="mt-3 flex flex-wrap gap-3">
@@ -401,28 +707,96 @@ export default function Characters() {
                         )}
                       </div>
                       <p className="truncate px-2 py-1.5 text-xs font-medium text-gray-800">{label}</p>
+                      {/*
+                        THE SECOND TAP THAT DID NOT EXIST.
+
+                        Leaving a character is a DELETE and it is not
+                        reversible: the row goes, and walking the path again
+                        starts a new character. It fired on the first tap of a
+                        28x28 target sitting four pixels from its Front twin,
+                        which is a mis-tap away from destroying something on
+                        every phone. The first tap now ARMS and the destructive
+                        control is a full-width labelled button underneath, so
+                        the irreversible act is never the one nearest the
+                        member's thumb. Both corner controls take the
+                        `pointer-coarse` floor `StageAdvanced` already uses.
+                      */}
                       <button
                         type="button"
                         aria-label={`Front ${label}`}
-                        onClick={() => act(`/api/me/characters/${c.id}/primary`, "POST")}
-                        className="absolute left-1 top-1 rounded-full bg-white/90 p-1.5 shadow"
+                        aria-pressed={c.isPrimary}
+                        onClick={() =>
+                          act(
+                            `/api/me/characters/${c.id}/primary`,
+                            "POST",
+                            `${label} now fronts your sheet.`,
+                            `${label} could not be fronted. Try again.`,
+                          )
+                        }
+                        className="absolute left-1 top-1 inline-flex items-center justify-center rounded-full bg-white/90 p-1.5 shadow pointer-coarse:min-h-11 pointer-coarse:min-w-11"
                       >
-                        <Star className={`h-4 w-4 ${c.isPrimary ? "fill-gold text-sage" : "text-gray-500"}`} />
+                        <Star
+                          className={`h-4 w-4 ${c.isPrimary ? "fill-gold text-sage" : "text-gray-500"}`}
+                          aria-hidden="true"
+                        />
                       </button>
                       <button
                         type="button"
-                        aria-label={`Leave ${label}`}
-                        onClick={() => act(`/api/me/characters/${c.id}`, "DELETE")}
-                        className="absolute right-1 top-1 rounded-full bg-white/90 p-1.5 shadow"
+                        aria-label={leaving === c.id ? `Keep ${label}` : `Leave ${label}`}
+                        onClick={() => setLeaving((id) => (id === c.id ? null : c.id))}
+                        className="absolute right-1 top-1 inline-flex items-center justify-center rounded-full bg-white/90 p-1.5 shadow pointer-coarse:min-h-11 pointer-coarse:min-w-11"
                       >
-                        <X className="h-4 w-4 text-gray-600" />
+                        <X className="h-4 w-4 text-gray-600" aria-hidden="true" />
                       </button>
+                      {leaving === c.id ? (
+                        <div className="px-2 pb-2">
+                          <p className="text-xs text-red-700">
+                            Leaving removes {label} from your party for good.
+                          </p>
+                          <div className="mt-1.5 flex gap-1.5">
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                act(
+                                  `/api/me/characters/${c.id}`,
+                                  "DELETE",
+                                  `${label} left your party.`,
+                                  `${label} could not leave. Try again.`,
+                                )
+                              }
+                              className="min-h-11 flex-1 rounded-lg bg-red-700 px-2 text-xs font-semibold text-white disabled:opacity-50"
+                            >
+                              Leave
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setLeaving(null)}
+                              className="min-h-11 flex-1 rounded-lg border border-gray-300 px-2 text-xs font-semibold text-teal-deep"
+                            >
+                              Keep
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
                     </li>
                   );
                 })}
               </ul>
             </section>
           ) : null}
+
+          {/*
+            ONE POLITE REGION FOR THE PAGE, and the page needed one badly:
+            picking a class swaps the entire stage, walking a path adds a card
+            to a section that may not even be on screen, and leaving one takes
+            a card away. All of it was silent. The region is always mounted so
+            a change to its text is spoken; a region inserted with its text
+            already in it announces nothing.
+          */}
+          <p aria-live="polite" className="sr-only">
+            {said}
+          </p>
         </div>
       </div>
     </Layout>

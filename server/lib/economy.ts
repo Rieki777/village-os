@@ -52,8 +52,10 @@ import {
   parseMintRuleKey,
   type MintRuleField,
 } from "../../shared/mintRuleKeys";
+import type { VillageMoon } from "../../shared/villageMoon";
 import { issuanceRefusal } from "./gameStart";
 import { currentCycle, currentCycleNumber, cycleIdFor, parseCycleId } from "./gratitude-cycles";
+import { moonOneCycle, villageMoonFor } from "./villageMoon";
 import { numberVar } from "./variables";
 import {
   memberAccount,
@@ -164,6 +166,18 @@ function decimalsOf(tokenSlug: string): number {
 }
 
 /** Human amount to ledger units. Rounds, because 0.1 * 1000 is not 100 in binary. */
+/**
+ * A number a human typed or set, into what the ledger stores.
+ *
+ * THE TWO HAND-MINT DIALS GO THROUGH HERE, and until 2026-09-04 they did not.
+ * `ledger.admin_mint_cycle_cap` and `ledger.admin_mint_cosign_over` were
+ * compared straight against a ledger amount. Every token in the registry but
+ * Village Voice carries 0 decimals, where a whole token and a ledger unit are
+ * the same number, so nothing looked wrong; Voice carries 3, so a cap of 10000
+ * was enforcing 10 Voice per lunar cycle while the dial's own description said
+ * "the most any admins can mint by hand". A founder reading the dial and a
+ * founder hitting its refusal were reading two different quantities.
+ */
 export function toLedgerUnits(tokenSlug: string, human: number): number {
   return Math.round(Number(human) * 10 ** decimalsOf(tokenSlug));
 }
@@ -970,7 +984,7 @@ async function writeGratitudeRowOnce(
      * land, and one member firing 40 gives against a 100 allowance spends
      * exactly 100.
      */
-    await conn.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
+    await conn.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"); // module-review-ok: a session isolation setting, not a table read. It has no rows and no repo it could live in, and it must run on THIS connection immediately before this transaction opens.
     await conn.beginTransaction();
 
     // The lock. Everything after this reads a world nobody else can move.
@@ -2044,7 +2058,14 @@ export async function applyPendingRules(pool: Pool, at: Date = new Date()): Prom
 }
 
 export interface MintView {
+  /**
+   * The stored cycle id. It stays here because it is the key every mint rule's
+   * `effective_from_cycle` is compared against, and the panel stopped printing
+   * it: `moon` below is what an admin now reads.
+   */
   cycleKey: string;
+  /** The village's own moon, worked out on read and never stored. */
+  moon: VillageMoon;
   rules: Array<{
     id: string;
     trigger: string;
@@ -2077,7 +2098,13 @@ export interface MintView {
 
 /** Everything the Mint panel shows, in one read. */
 export async function mintView(pool: Pool): Promise<MintView> {
-  const { key } = cycleWindow();
+  // ONE instant for both. Two `new Date()` calls either side of a new moon
+  // would put the id and the label on different lunations, and this panel's
+  // whole job is that a rule's effective-from and the moon a founder reads are
+  // the same moon.
+  const at = new Date();
+  const { key } = cycleWindow(at);
+  const moon = villageMoonFor(at, await moonOneCycle(pool));
   const [rules] = await pool.query<RowDataPacket[]>(
     "SELECT r.*, t.`name` AS token_name FROM `mint_rules` r " +
       "LEFT JOIN `tokens` t ON t.`slug` = r.`token_slug` " +
@@ -2107,6 +2134,7 @@ export async function mintView(pool: Pool): Promise<MintView> {
 
   return {
     cycleKey: key,
+    moon,
     rules: rules.map((r) => ({
       id: String(r.id),
       trigger: String(r.trigger),

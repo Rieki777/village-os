@@ -346,6 +346,34 @@ describe.skipIf(!DB_CONFIGURED)("standing examples: every guard, over HTTP", () 
     expect(Number(led[0].n), "no ledger row may be born from an example recipient").toBe(0);
   });
 
+  /*
+   * THE SAME REFUSAL THROUGH THE HANDLE DOOR.
+   *
+   * The wall's recipient field takes an @handle now, so the example guard has
+   * a second way in to cover. It is covered twice over: `userIdForHandle`
+   * matches `is_example = 0` and so never hands an example's id back, and the
+   * `isExampleUser` check inside `sendGratitude` still runs on whatever row
+   * does come back. The handle is read out of the seed rather than typed here,
+   * so a fork that renames its examples renames this test with them.
+   */
+  it("refuses gratitude sent TO an example identity by handle", async () => {
+    const seed = JSON.parse(
+      fs.readFileSync(path.resolve(process.cwd(), "server/seeds/examples-seed.json"), "utf8"),
+    );
+    const handle = seed?._identities?.users?.[0]?.handle;
+    expect(typeof handle, "the seed still names an example handle").toBe("string");
+
+    const r = await call("POST", "/api/game/gratitude/send", {
+      to: `@${handle}`, amount: 5, message: "for the test",
+    });
+    // 404 and not 409: the resolver treats an example as somebody who is not
+    // there, which is the same answer `/api/profiles/:handle` and the forum's
+    // own handle lookup give. An example is a demonstration and never a
+    // villager, so it has no handle anybody can reach.
+    expect(r.status, "an example handle must not resolve to a recipient").toBe(404);
+    expect(String(r.json?.error)).toContain("No villager with that handle");
+  });
+
   // ── Rule 1, second half: no example may hold open economic state ────────
 
   it("leaves every economic table empty after all that refusing", async () => {

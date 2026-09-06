@@ -42,6 +42,7 @@
 import { Handshake, KeyRound, Undo2 } from "lucide-react";
 import { Celebration } from "@/components/natural";
 import type { Ballot } from "./governanceApi";
+import { useCatalyst } from "@/lib/gameApi";
 
 /**
  * The date a member reads, from the timestamp the server sent.
@@ -102,6 +103,8 @@ export default function TransferCeremony({
 
 /** A power crossing to the village: the one ceremony that carries a moment. */
 function CrossingCard({ ballot, t, fresh }: { ballot: Ballot; t: PowerFacts; fresh: boolean }) {
+  // Before the early return below: a hook cannot sit behind a condition.
+  const catalyst = useCatalyst();
   const open = ballot.status === "open";
   const crossed = t.crossedHere !== null;
   const crossedOn = dayOf(t.crossedHere?.movedAt ?? null);
@@ -203,7 +206,7 @@ function CrossingCard({ ballot, t, fresh }: { ballot: Ballot; t: PowerFacts; fre
               {crossed ? "What changed that day" : "What changes on the day it crosses"}
             </dt>
             <dd className="mt-0.5 text-stone-900 leading-relaxed">
-              An administrator who is not seated in {toWhom} stops passing this gate by being an administrator. They
+              {catalyst.aNameCap} who is not seated in {toWhom} stops passing this gate by being {catalyst.aName}. They
               can still act on it, and every time they do, the village is told and the act goes on the village's own
               record. Handing it back is the same kind of act, in the open.
             </dd>
@@ -274,6 +277,7 @@ function CrossingCard({ ballot, t, fresh }: { ballot: Ballot; t: PowerFacts; fre
  * at the start of a journey is how a page starts nagging.
  */
 function GrantCard({ ballot, t }: { ballot: Ballot; t: PowerFacts }) {
+  const catalyst = useCatalyst();
   const open = ballot.status === "open";
   const carried = ballot.status === "passed";
   // A grant names a role, and a record without one is unreadable here.
@@ -332,7 +336,7 @@ function GrantCard({ ballot, t }: { ballot: Ballot; t: PowerFacts }) {
               {carried ? "What changed" : "What changes if this carries"}
             </dt>
             <dd className="mt-0.5 text-stone-900 leading-relaxed">
-              Anybody seated in {toWhom} can do this. The admin panel keeps it too, so an administrator can still do
+              Anybody seated in {toWhom} can do this. The admin panel keeps it too, so {catalyst.aName} can still do
               it and nothing about that changes here.
             </dd>
           </div>
@@ -392,6 +396,7 @@ function GrantCard({ ballot, t }: { ballot: Ballot; t: PowerFacts }) {
  * back says the true thing instead of claiming this vote did it.
  */
 function ReturnCard({ ballot, t }: { ballot: Ballot; t: PowerFacts }) {
+  const catalyst = useCatalyst();
   const open = ballot.status === "open";
   const carried = ballot.status === "passed";
   const stillHeld = t.heldNow !== null;
@@ -442,7 +447,7 @@ function ReturnCard({ ballot, t }: { ballot: Ballot; t: PowerFacts }) {
               {carried ? "What changed" : "What changes if this carries"}
             </dt>
             <dd className="mt-0.5 text-stone-900 leading-relaxed">
-              The admin panel carries this one again. An administrator passes this gate by being an administrator,
+              The admin panel carries this one again. {catalyst.aNameCap} passes this gate by being {catalyst.aName},
               and the village stops being told each time somebody acts on it. The role keeps the power itself, so the
               same people can still do it. What ends is the village holding it.
             </dd>

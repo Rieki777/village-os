@@ -33,7 +33,13 @@ import {
   forgetMemberEverywhere,
   registerMemberDriver,
 } from "./memberDrivers";
-import { looksLikeSubjectRef, subjectRefFor, userIdForSubjectRef } from "./subjectRefs";
+import {
+  halfErasedMembers,
+  looksLikeSubjectRef,
+  pendingErasureUserIds,
+  subjectRefFor,
+  userIdForSubjectRef,
+} from "./subjectRefs";
 
 const configured = testDbConfigured();
 
@@ -163,5 +169,63 @@ describe.skipIf(!configured)("the deletion and export bridge", () => {
     // know this member would make the deletion guarantee depend on an invariant
     // holding perfectly somewhere else.
     expect(spy.seen).toHaveLength(1);
+  });
+
+  describe("a member the village could not finish erasing", () => {
+    it("records WHICH store is owed from, and not only when", async () => {
+      registerMemberDriver("saberra", spyDriver({ confirm: false }).driver);
+      await subjectRefFor(pool, "u1");
+
+      await forgetMemberEverywhere(pool, "u1");
+
+      const owed = await halfErasedMembers(pool);
+      expect(owed.count).toBe(1);
+      // A date alone gives a steward the scale and nobody to press.
+      expect(owed.waitingOn).toEqual({ saberra: 1 });
+      expect(owed.oldestSince).toBeTruthy();
+    });
+
+    it("does not move the date forward when a retry also fails", async () => {
+      registerMemberDriver("saberra", spyDriver({ confirm: false }).driver);
+      await forgetMemberEverywhere(pool, "u1");
+      const first = (await halfErasedMembers(pool)).oldestSince;
+
+      await forgetMemberEverywhere(pool, "u1");
+
+      // The age is the age of the OBLIGATION and not of the last attempt. A
+      // number that resets whenever somebody tries never grows old enough for
+      // anyone to escalate it.
+      expect((await halfErasedMembers(pool)).oldestSince).toBe(first);
+    });
+
+    it("stops being owed when a later ask confirms, and the reference goes with it", async () => {
+      const failing = spyDriver({ confirm: false });
+      registerMemberDriver("saberra", failing.driver);
+      const ref = await subjectRefFor(pool, "u1");
+      await forgetMemberEverywhere(pool, "u1");
+      expect((await halfErasedMembers(pool)).count).toBe(1);
+
+      clearMemberDrivers();
+      registerMemberDriver("saberra", spyDriver({ confirm: true }).driver);
+      await forgetMemberEverywhere(pool, "u1");
+
+      expect((await halfErasedMembers(pool)).count).toBe(0);
+      expect(await userIdForSubjectRef(pool, ref)).toBeNull();
+    });
+
+    it("counts nobody when nothing is outstanding", async () => {
+      registerMemberDriver("saberra", spyDriver({ confirm: true }).driver);
+      await forgetMemberEverywhere(pool, "u1");
+      expect(await halfErasedMembers(pool)).toEqual({ count: 0, oldestSince: null, waitingOn: {} });
+    });
+
+    it("offers the retry the members it would re-ask about", async () => {
+      registerMemberDriver("saberra", spyDriver({ confirm: false }).driver);
+      await forgetMemberEverywhere(pool, "u1");
+      await forgetMemberEverywhere(pool, "u2");
+
+      const ids = await pendingErasureUserIds(pool);
+      expect(ids.sort()).toEqual(["u1", "u2"]);
+    });
   });
 });

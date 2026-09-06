@@ -25,7 +25,7 @@ untouched.
   assumed, raw uint256 kept raw with string math at the edge, an SSRF guard on the admin-typed
   RPC URL with a deliberate loopback exemption for a local node, and the rule that runs through
   everything here, **null on RPC failure, never zero**.
-- `POST /api/admin/hypha/find-token` discovered a contract from the founder's Base account.
+- `POST /api/admin/hypha/candidates` lists the contracts the founder's Base account holds. It replaced an exact-name `find-token` route, which is retired.
 
 ## The read-only boundary, and what would change it
 
@@ -266,8 +266,8 @@ worked and carries no call count. Neither of those is the meter.
 ## Routes
 
 `/api/hypha` mounts whole behind `requireModule("hypha")`. The admin routes sit under
-`/api/admin/hypha` **per route**, because that prefix already carries `find-token`, which predates
-this module and which every village reaches from the Integrate DAO panel today. Mounting the
+`/api/admin/hypha` **per route**, because that prefix already carries `/candidates`, which stays ungated for
+this module and which every village reaches from the Hypha Bridge panel today. Mounting the
 prefix wholesale would answer 404 for a working founder surface on the deploy that added this
 module.
 

@@ -18,3 +18,13 @@ docs/TOKENS.md -text
 # guarded the same way its sibling above is, so it needs the same byte pinning
 # for the same reason.
 docs/GOVERNANCE.md -text
+
+# docs/VARIABLES.md, docs/MODULES.md and docs/CAPABILITIES.md are GENERATED
+# (scripts/generate-*-doc.mjs) and each has a CI guard that regenerates and
+# compares. Same reason as docs/TOKENS.md above: `core.autocrlf` is true on the
+# Windows checkouts this repo is developed on, so without `-text` git would
+# store LF, hand back CRLF, and the guards would fail on one machine while
+# passing in CI. Bytes in, same bytes out, everywhere.
+docs/VARIABLES.md -text
+docs/MODULES.md -text
+docs/CAPABILITIES.md -text

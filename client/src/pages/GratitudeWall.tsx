@@ -27,7 +27,11 @@ export default function GratitudeWall() {
   // they may have had a full budget all along.
   const [me, setMe] = useState<GameMe | null | undefined>(undefined);
   const currency = useTokenName("Recognition");
-  const [form, setForm] = useState({ toEmail: "", amount: 10, message: "" });
+  // `to` carries whatever the member typed: an @handle, or an address for
+  // anyone who still knows one. The server tells the two apart and looks the
+  // handle up; see `recipientFor` in server/index.ts for why a handle is the
+  // one of the two a member can actually obtain.
+  const [form, setForm] = useState({ to: "", amount: 10, message: "" });
   const [sending, setSending] = useState(false);
   const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -40,6 +44,23 @@ export default function GratitudeWall() {
   };
 
   useEffect(load, []);
+
+  /* The one thing on this form the village decides. See the textarea below. */
+  const [requireMessage, setRequireMessage] = useState<boolean | null>(null);
+  useEffect(() => {
+    let alive = true;
+    gameFetch("/api/game/rules")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (alive && d) setRequireMessage(Boolean(d?.gratitude?.requireMessage));
+      })
+      .catch(() => {
+        /* stays optional, which is the server's own default posture */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const send = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,7 +76,7 @@ export default function GratitudeWall() {
         setFeedback({ ok: false, text: data.message ?? data.error ?? "Something went wrong" });
       } else {
         setFeedback({ ok: true, text: "Your appreciation is on the wall." });
-        setForm({ toEmail: "", amount: 10, message: "" });
+        setForm({ to: "", amount: 10, message: "" });
         // A real send is gratitude's retirement trigger server-side. The
         // stock seed writes no gratitude rows, so today this drops nothing;
         // it is here so a fork that seeds some is not left with a stale
@@ -112,11 +133,19 @@ export default function GratitudeWall() {
               </div>
               <div className="grid md:grid-cols-[1fr_110px] gap-3 mb-3">
                 <input
-                  type="email"
+                  // type="text", and that IS the fix. `type="email"` made the
+                  // browser refuse a handle before the form could be sent, so
+                  // the field could only take the one thing this site never
+                  // shows anybody.
+                  type="text"
                   required
-                  value={form.toEmail}
-                  onChange={(e) => setForm({ ...form, toEmail: e.target.value })}
-                  placeholder="Member's email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  value={form.to}
+                  onChange={(e) => setForm({ ...form, to: e.target.value })}
+                  aria-label="Who you are thanking, by handle"
+                  placeholder="Their @handle"
                   className="px-3 py-2 border border-stone-200 rounded-lg outline-none focus:border-teal-deep"
                 />
                 <input
@@ -131,8 +160,23 @@ export default function GratitudeWall() {
                   className="px-3 py-2 border border-stone-200 rounded-lg outline-none focus:border-teal-deep"
                 />
               </div>
+              {/*
+                THE VILLAGE'S OWN SETTING, NOT A HARDCODED TRUE.
+
+                The server gates this on `gratitude.require_message`
+                (server/lib/gratitude.ts, via boolVar), so a village that turned
+                it off still had a form here refusing to submit without a
+                message. A config knob the client ignores is a knob that does
+                not exist. /api/game/rules has carried the real answer all along
+                and nothing read it.
+
+                Null while the rule is in flight means OPTIONAL, which matches
+                the server's own posture: it refuses on the way in, so an
+                optimistic client costs a round trip and a sentence, while a
+                pessimistic one blocks a legitimate send outright.
+              */}
               <textarea
-                required
+                required={requireMessage === true}
                 value={form.message}
                 onChange={(e) => setForm({ ...form, message: e.target.value })}
                 placeholder="What are you thanking them for?"

@@ -24,6 +24,7 @@ import { authToken } from "@/lib/gameApi";
 import { CalendarDays, ChevronLeft, ChevronRight, ExternalLink, MapPin, Users, Video } from "lucide-react";
 import type { CalendarItem, RsvpStatus } from "@shared/gatherings";
 import { civilDate, lunarYearOf, type YearAnchor } from "@shared/lunar";
+import { moonCountLabel } from "@shared/villageMoon";
 import InfoTip from "@/components/InfoTip";
 import YearWheel from "@/components/calendar/YearWheel";
 import MonthView, { type GridMode } from "@/components/calendar/MonthView";
@@ -39,6 +40,7 @@ import {
   kindLabel,
   localSecondLine,
   lunarDayInfo,
+  moonHeading,
   moonLabel,
   todayIn,
   villageClock,
@@ -101,13 +103,19 @@ export default function Events() {
   const anchor = payload?.anchor ?? DEFAULT_ANCHOR;
   const hemisphere = payload?.hemisphere ?? "north";
   const monthNames = payload?.monthNames ?? [];
+  /* ONE MOON NUMBER FOR THE WHOLE PAGE. The wheel, the grid, the roll and the
+     day heading all count from this lunation, so a member reads the same
+     number for the same moon wherever they meet it. Null until the payload
+     lands, and null for good in a village that has set no first moon: the
+     surfaces then print windows and names with no number on them. */
+  const moonOneCycle = payload?.moonOneCycle ?? null;
   const today = useMemo(() => todayIn(timezone), [timezone]);
 
   const load = useCallback(() => {
     fetch("/api/events", { headers: headers() })
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((d: EventsPayload) => setPayload({ ...d, events: d.events ?? [] }))
-      .catch(() => setPayload((p) => p ?? { events: [], rsvpEnabled: true, timezone: "UTC", window: { from: "", to: "" }, lunar: null, anchor: DEFAULT_ANCHOR, hemisphere: "north", monthNames: [] }));
+      .catch(() => setPayload((p) => p ?? { events: [], rsvpEnabled: true, timezone: "UTC", window: { from: "", to: "" }, lunar: null, anchor: DEFAULT_ANCHOR, hemisphere: "north", monthNames: [], moonOneCycle: null }));
   }, []);
 
   /** The wheel, month and week read a whole year around the cursor. */
@@ -307,7 +315,7 @@ export default function Events() {
     return civilDayFor(y, m, d, timezone);
   })()) : null;
   const selectedLunar = selectedDay ? lunarDayInfo(selectedDay, anchor, timezone) : null;
-  const selectedMoonName = selectedLunar ? moonLabel(selectedLunar.monthIndex, monthNames) : null;
+  const selectedMoonName = selectedLunar ? moonLabel(selectedLunar.monthIndex, selectedLunar.cycleNumber, moonOneCycle, monthNames) : null;
   const skyToday = selectedItems.filter((i) => i.kind === "sky");
   const dayItems = selectedItems.filter((i) => i.kind !== "sky");
 
@@ -326,9 +334,15 @@ export default function Events() {
             <p className="mt-3 inline-flex items-center gap-2 text-sm text-foreground bg-card border border-border rounded-full px-3 py-1.5">
               <MoonGlyph phase={lunar.phase} size={16} hemisphere={hemisphere} title={lunar.phaseName} />
               <span>
-                Today is day {lunar.day} of {lunar.length} in Moon {lunar.monthIndex}
-                {lunar.name ? `, ${lunar.name}` : ""}
-                {lunar.isExampleName ? " (example name)" : ""}
+                Today is day {lunar.day} of {lunar.length}
+                {(() => {
+                  // The village's own count and the moon's name, with whichever
+                  // of the two this village has. A village that has not set a
+                  // first moon reads the name alone, and never a Moon 0.
+                  const said = [moonCountLabel(lunar.cycleNumber, moonOneCycle), lunar.name].filter(Boolean).join(", ");
+                  return said ? ` in ${said}` : "";
+                })()}
+                {lunar.name && lunar.isExampleName ? " (example name)" : ""}
               </span>
             </p>
           )}
@@ -398,6 +412,7 @@ export default function Events() {
                 anchor={anchor}
                 hemisphere={hemisphere}
                 monthNames={monthNames}
+                moonOneCycle={moonOneCycle}
                 items={span}
                 onPickMonth={(y, m) => { const d = civilDayFor(y, m, 1, timezone); setCursor(d); setSelectedKey(d.key); pickMode("months"); pickTab("month"); }}
                 onPickMoon={(startsAt) => {
@@ -409,18 +424,18 @@ export default function Events() {
               <p className="text-center text-xs text-muted-foreground mt-2">
                 Tap a month on the outer ring or a moon on the inner ring to open it.
               </p>
-              <MoonRoll year={cursor.year} anchor={anchor} timezone={timezone} monthNames={monthNames} onPick={(d) => { setCursor(d); setSelectedKey(d.key); pickMode("moons"); pickTab("month"); }} />
+              <MoonRoll year={cursor.year} anchor={anchor} timezone={timezone} monthNames={monthNames} moonOneCycle={moonOneCycle} onPick={(d) => { setCursor(d); setSelectedKey(d.key); pickMode("moons"); pickTab("month"); }} />
             </div>
           )}
 
           {payload && cursor && tab === "month" && (
             <MonthView mode={mode} cursor={cursor} today={today} selectedKey={selectedKey} timezone={timezone}
-              anchor={anchor} hemisphere={hemisphere} monthNames={monthNames} items={span} onSelectDay={selectDay} />
+              anchor={anchor} hemisphere={hemisphere} monthNames={monthNames} moonOneCycle={moonOneCycle} items={span} onSelectDay={selectDay} />
           )}
 
           {payload && cursor && tab === "week" && (
             <WeekView cursor={cursor} today={today} selectedKey={selectedKey} timezone={timezone}
-              anchor={anchor} hemisphere={hemisphere} monthNames={monthNames} items={span} onSelectDay={selectDay} />
+              anchor={anchor} hemisphere={hemisphere} monthNames={monthNames} moonOneCycle={moonOneCycle} items={span} onSelectDay={selectDay} />
           )}
 
           {payload && (tab === "month" || tab === "week") && selectedDay && (
@@ -430,7 +445,7 @@ export default function Events() {
                 {selectedLunar && selectedMoonName && (
                   <span className="text-sm font-normal text-muted-foreground inline-flex items-center gap-1.5">
                     <MoonGlyph phase={selectedLunar.phase} size={14} hemisphere={hemisphere} />
-                    {selectedMoonName.title}{selectedMoonName.name ? `, ${selectedMoonName.name}` : ""}, day {selectedLunar.day} of {selectedLunar.length}
+                    {moonHeading(selectedMoonName)}, day {selectedLunar.day} of {selectedLunar.length}
                   </span>
                 )}
               </h2>
@@ -460,16 +475,16 @@ export default function Events() {
   );
 }
 
-/** The moons of the year as a list under the wheel: number, name, dates, count said out loud. */
-function MoonRoll({ year, anchor, timezone, monthNames, onPick }: { year: number; anchor: YearAnchor; timezone: string; monthNames: EventsPayload["monthNames"]; onPick: (d: CivilDay) => void }) {
-  const rows: Array<{ key: string; index: number; count: number; startsAt: Date; endsAt: Date }> = [];
+/** The moons of the year as a list under the wheel: the village's count, the name and the dates. */
+function MoonRoll({ year, anchor, timezone, monthNames, moonOneCycle, onPick }: { year: number; anchor: YearAnchor; timezone: string; monthNames: EventsPayload["monthNames"]; moonOneCycle: number | null; onPick: (d: CivilDay) => void }) {
+  const rows: Array<{ key: string; index: number; cycleNumber: number; startsAt: Date; endsAt: Date }> = [];
   // Every moon that begins in this Gregorian year, from whichever lunar year it belongs to.
   for (const anchorYear of [year - 2, year - 1, year]) {
     const ly = lunarYearOf(anchorYear, anchor);
     if (!ly) continue;
     for (const m of ly.months) {
       if (civilDate(m.startsAt, timezone).year !== year) continue;
-      rows.push({ key: `${anchorYear}-${m.index}`, index: m.index, count: ly.months.length, startsAt: m.startsAt, endsAt: m.endsAt });
+      rows.push({ key: `${anchorYear}-${m.index}`, index: m.index, cycleNumber: m.cycleNumber, startsAt: m.startsAt, endsAt: m.endsAt });
     }
   }
   rows.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
@@ -478,15 +493,18 @@ function MoonRoll({ year, anchor, timezone, monthNames, onPick }: { year: number
   return (
     <ul className="mt-5 grid sm:grid-cols-2 gap-1.5 text-sm">
       {rows.map((r) => {
-        const label = moonLabel(r.index, monthNames);
+        const label = moonLabel(r.index, r.cycleNumber, moonOneCycle, monthNames);
         return (
           <li key={r.key}>
             <button type="button" onClick={() => { const c = civilDate(r.startsAt, timezone); onPick(civilDayFor(c.year, c.month, c.day, timezone)); }}
               className="w-full text-left flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-1.5 hover:bg-muted">
               <span className="min-w-0 truncate">
-                <span className="font-semibold">Moon {r.index}</span>
-                <span className="text-muted-foreground"> of {r.count}</span>
-                {label.name && <span className="text-muted-foreground">, {label.name}</span>}
+                {/* THE VILLAGE'S COUNT, and no "of twelve" behind it: the count
+                    since founding does not reset, so the size of the lunar year
+                    says nothing about where this moon sits. A village that is
+                    not counting yet reads the name and the dates. */}
+                {label.title && <span className="font-semibold">{label.title}</span>}
+                {label.name && <span className="text-muted-foreground">{label.title ? ", " : ""}{label.name}</span>}
                 {label.isExample && <span className="ml-1 text-[10px] uppercase tracking-wide text-amber-800">example</span>}
               </span>
               <span className="text-xs text-muted-foreground shrink-0">{fmt(r.startsAt)} to {fmt(new Date(r.endsAt.getTime() - 60_000))}</span>

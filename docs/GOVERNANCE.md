@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the code at commit `5d4e5b1130352ef02851ca17236916f5cd244a29`.
+It describes the code at commit `1b8e7f95c6c23c5226459b016276b6f86a84c59e`.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -417,6 +417,7 @@ Powers are keys, not job titles. A member holds one by climbing to the rung that
 | `ballot.vote` | Cast a vote on a ballot | `member` | **no** |
 | `member.vouch` | Vouch for an applicant | `contributor` | **no** |
 | `org.seat` | Seat and unseat the holders of the village's seats | never by rung; a role or a badge grants it | yes |
+| `org.seatAgent` | Seat and unseat the software agents that hold seats | never by rung; a role or a badge grants it | yes |
 | `dial.set` | Turn the village's own dials | never by rung; a role or a badge grants it | yes |
 
 ## The word steward means three things
@@ -1030,7 +1031,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "5d4e5b1130352ef02851ca17236916f5cd244a29",
+  "commit": "1b8e7f95c6c23c5226459b016276b6f86a84c59e",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -1721,6 +1722,12 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     {
       "key": "org.seat",
       "label": "Seat and unseat the holders of the village's seats",
+      "unlocksAtStage": null,
+      "deniableByBadge": true
+    },
+    {
+      "key": "org.seatAgent",
+      "label": "Seat and unseat the software agents that hold seats",
       "unlocksAtStage": null,
       "deniableByBadge": true
     },
@@ -2660,7 +2667,7 @@ The tables and columns the rules above rest on. The generator checks every one a
 | `delegations.accepted_at` | a delegation carries a choice only once the delegate accepts it |
 | `role_holder_terms` | a term survives an unrelated appointment |
 
-Checked against the 129 migration files in `drizzle/`.
+Checked against the 134 migration files in `drizzle/`.
 
 ## What this file is made from
 

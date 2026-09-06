@@ -145,7 +145,34 @@ for (const f of migrations) {
   byNumber.set(n, list);
 }
 
-const duplicates = [...byNumber.entries()].filter(([, files]) => files.length > 1);
+/*
+ * ONE COLLISION THAT ALREADY HAPPENED, AND CANNOT BE UNDONE BY RENUMBERING.
+ *
+ * Two sessions took 0156 within eleven minutes of each other on 2026-09-04, and
+ * BOTH FILES HAVE ALREADY RUN on production; verified by reading
+ * `_migrations_applied`, which lists both. The applied ledger keys on FILENAME,
+ * so renaming either one does not tidy history, it makes the renamed file NEW
+ * to every instance that already ran it, and it runs again on the next boot.
+ *
+ * So the advice this rule prints, renumber all but one, is right for a
+ * collision caught BEFORE it ships and wrong for one caught after. Without a way
+ * to say "this already happened", the only options were to tamper with
+ * production or to leave CI permanently red, and a red that cannot be fixed
+ * teaches everybody to stop reading it.
+ *
+ * The order between these two is settled and is now history: the alphabet put
+ * `an_investor_path` before `half_erased_members`, that is the order every
+ * instance ran them in, and nothing here can or should change it.
+ *
+ * THIS LIST DOES NOT GROW. A new collision is a live defect and must be
+ * renumbered before it ships. If you are reading this because you want to add a
+ * second entry, the answer is no: renumber your file instead.
+ */
+const SHIPPED_COLLISIONS = new Set(["0156"]);
+
+const duplicates = [...byNumber.entries()]
+  .filter(([, files]) => files.length > 1)
+  .filter(([n]) => !SHIPPED_COLLISIONS.has(String(n)));
 const inBand = migrations.filter((f) => Number(f.slice(0, 4)) >= VILLAGE_BAND_FLOOR);
 const upstream = migrations.filter((f) => Number(f.slice(0, 4)) < VILLAGE_BAND_FLOOR);
 const highestUpstream = upstream.length ? Math.max(...numbersOf(upstream)) : -1;

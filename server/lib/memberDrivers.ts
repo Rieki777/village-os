@@ -45,7 +45,7 @@
  */
 import type { Pool } from "mysql2/promise";
 import { callVendor } from "./integrations";
-import { dropSubjectRef, subjectRefFor } from "./subjectRefs";
+import { dropSubjectRef, markErasurePending, subjectRefFor } from "./subjectRefs";
 
 export interface ForgetOutcome {
   confirmed: boolean;
@@ -170,7 +170,14 @@ export async function forgetMemberEverywhere(pool: Pool, userId: string): Promis
   //
   // So the reference outlives a failed erasure ON PURPOSE, and dies with a
   // complete one.
-  if (out.unconfirmed.length === 0) await dropSubjectRef(pool, userId);
+  if (out.unconfirmed.length === 0) {
+    await dropSubjectRef(pool, userId);
+  } else {
+    // Kept, and RECORDED as kept. An obligation nobody can see is one nobody
+    // ends, and the stores that did not answer are named here because a date
+    // alone tells a steward the scale and gives them nobody to press.
+    await markErasurePending(pool, userId, out.unconfirmed);
+  }
 
   return out;
 }

@@ -171,9 +171,32 @@ export function register(app: Express, deps: Deps): void {
       // shown to a guest running low on stay credits as real, claimable work.
       (q) => !q.isExample && String(q.status).toLowerCase() === "open" && ((q.stayCreditReward ?? 0) > 0 || (tag && q.tags.includes(tag))),
     ).map((q) => ({ id: q.id, title: q.title, stayCreditReward: q.stayCreditReward ?? 0, gratitude: q.gratitude }));
+    /*
+     * THE NAME AND THE SCALE OF EVERY TOKEN ANY ROOM POSTS A RATE IN.
+     *
+     * `accommodation_prices.amount_minor` is the ledger's MINOR units, so a
+     * room at three Village Credits stores 300 once credits is at its ruled
+     * two decimals (docs/ECONOMICS.md section 11). The page
+     * printed that raw fifty-eight lines under a balance line that divides,
+     * which is one page answering the same question two ways.
+     *
+     * Derived from the ROOMS' own price keys rather than from `mine.balances`,
+     * which is where the token's name used to come from and could never have
+     * carried the rest: `mine` is null for a signed-out visitor and holds only
+     * tokens the member ALREADY has, so the person most likely to be reading a
+     * nightly rate is exactly the one it is silent about. `stay-credit` is in
+     * here too, because the credit rate, both tier lines and the work-exchange
+     * rewards are the same question again.
+     */
+    const pricedSlugs = [STAY_CREDIT, ...accommodations.flatMap((a) => Object.keys(a.prices ?? {}))]
+      .filter((slug, i, all) => slug !== "usd" && all.indexOf(slug) === i);
+    const priceTokens = Object.fromEntries(
+      pricedSlugs.map((slug) => [slug, { name: tokenDef(slug)?.name ?? slug, decimals: tokenDef(slug)?.decimals ?? 0 }]),
+    );
     res.json({
       accommodations,
       audience,
+      priceTokens,
       mine,
       earnQuests,
       guestBookingEnabled: boolVar("stay.guest_booking_enabled"),

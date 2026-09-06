@@ -210,6 +210,25 @@ export function register(app: Express, deps: GoogleAuthDeps): void {
     const state = readOAuthState(deps.authSecret, rawState);
     if (!state) return failTo(res, "bad_state");
 
+    /*
+     * BOUNDED AFTER THE STATE CHECK, WHICH IS THE ONLY PLACE IT BELONGS.
+     *
+     * `start` is already bounded, and a caller with no valid state is turned
+     * away above without costing anything, so the gap this closes is narrow
+     * and real: state is signed but not single-use, so ONE trip through
+     * `start` yields a token that can be replayed at this URL as often as
+     * somebody likes. Every replay is an outbound request to Google's token
+     * endpoint on the village's own OAuth client, and a client Google decides
+     * is abusive is a village whose sign-in stops working.
+     *
+     * Counting only requests that got past `bad_state` means garbage traffic
+     * never spends a real member's budget. 60 an hour from one address is far
+     * more sign-ins than a household makes and far fewer than a flood.
+     */
+    if (await deps.overLimit(`oauth-callback:${deps.clientIp(req)}`, 60, 60 * 60 * 1000)) {
+      return failTo(res, "rate_limited");
+    }
+
     let claims: Record<string, unknown> | null = null;
     try {
       const body = new URLSearchParams({

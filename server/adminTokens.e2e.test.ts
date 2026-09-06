@@ -449,10 +449,10 @@ describe.skipIf(!DB_CONFIGURED)("the tokens tab, and what a member sees afterwar
    * assertion above collapse onto that control and this case fails.
    *
    * THE AMOUNT IS IN MINOR UNITS because `POST /api/admin/tokens/:slug/mint`
-   * takes ledger units, not human ones. That is its own defect, reported as a
-   * handoff and deliberately not fixed here: this file is about what a member
-   * READS, and changing what an admin TYPES is a different change with a
-   * different blast radius.
+   * takes ledger units, not human ones. The ROUTE still does, deliberately:
+   * what changed since this was written is the admin SCREEN, which now
+   * converts what a steward types before it posts, so nobody types 10 and
+   * moves a hundredth. The handoff this comment recorded is taken.
    */
   it("shows ten Village Voice as ten on the wallet, the Exchange and the ledger", async () => {
     const VOICE = "village-voice";
@@ -465,14 +465,26 @@ describe.skipIf(!DB_CONFIGURED)("the tokens tab, and what a member sees afterwar
     expect(voiceRow, "the village voice token is seeded at boot").toBeTruthy();
     expect(voiceRow.decimals, "and it is the one token that rides in thousandths").toBe(3);
 
-    // Over the co-signature threshold, so it goes through the two-steward
-    // flow the cases above establish.
+    /*
+     * MINTED OUTRIGHT, and it used to go through the two-steward flow here.
+     *
+     * `ledger.admin_mint_cosign_over` defaults to 100 and was compared raw
+     * against a ledger amount, so for the one token that carries decimals it
+     * meant a tenth of a Voice, and TEN sailed over it. Both hand-mint dials
+     * are WHOLE tokens now, so the same 100 means a hundred Voice and a grant
+     * of ten is what it reads like: small, and one steward's to make.
+     *
+     * NO COVERAGE IS LOST. The two-steward flow has three cases of its own
+     * above, on tokens with no decimals where the dial's meaning did not
+     * move: "holds a grant over the threshold until a second steward signs
+     * it" and the two around it. This case was never about co-signing. It is
+     * about what a member READS, and the raise was scaffolding to get a
+     * balance in place.
+     */
     const raised = await call("POST", `/api/admin/tokens/${VOICE}/mint`, {
       toUserId: oraId, amount: TEN, reason: "ten voice, so there is a real balance to read",
     }, founderToken);
-    expect(raised.status, `raise: ${raised.text.slice(0, 200)}`).toBe(202);
-    const signed = await call("POST", `/api/admin/mint-requests/${String(raised.json?.requestId)}/approve`, {}, boToken);
-    expect(signed.status, `sign-off: ${signed.text.slice(0, 200)}`).toBe(200);
+    expect(raised.status, `raise: ${raised.text.slice(0, 200)}`).toBe(200);
 
     // 1. /api/wallet — behind the send card and the on-chain card.
     const wallet = await call("GET", "/api/wallet", undefined, oraToken);

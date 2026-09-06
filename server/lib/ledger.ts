@@ -557,6 +557,42 @@ export async function postTransferOn(
 }
 
 /**
+ * A LEDGER REFUSAL, TURNED INTO A SENTENCE A MEMBER CAN BE SHOWN.
+ *
+ * The sentences this file authors are AUDIT sentences and they are right to
+ * be. `insufficient village-voice: "mem:user-17885..." holds 9999 and cannot
+ * overdraft` names the account by its internal id and the balance in MINOR
+ * units, which is exactly what a steward reading a log needs.
+ *
+ * It is not what a member needs, and `/api/wallet/send` was handing it to one
+ * verbatim: the person who typed an amount into the send card was shown their
+ * own internal account id and a balance a thousand times the one the card
+ * printed an inch above the box, Voice riding in thousandths. Two defects in
+ * one string, and the second one grows with every token that gains a scale.
+ *
+ * So the route translates. `holds` is already in the member's own units (the
+ * caller divides through `fromLedgerUnits`) and `tokenName` is the village's
+ * own word, so the sentence a member reads matches the balance line beside it.
+ *
+ * The account-id sweep is exact rather than a pattern: the caller passes the
+ * ids it just built, and any refusal containing one of them is swallowed for a
+ * plain sentence rather than leaked. `account "..." does not exist` is caught
+ * that way too, and it must be, because it leaks the same id while meaning
+ * something entirely different from an insufficiency.
+ */
+export function refusalForMember(
+  error: string | undefined,
+  ctx: { accountIds: string[]; holds: string; tokenName: string },
+): string {
+  const said = String(error ?? "");
+  if (said.startsWith("insufficient ")) {
+    return `You hold ${ctx.holds} ${ctx.tokenName}, which is not enough to send that`;
+  }
+  if (ctx.accountIds.some((a) => a && said.includes(a))) return "That send did not go through, and nothing moved";
+  return said || "That send did not go through";
+}
+
+/**
  * One transfer, in a transaction of its own.
  *
  * THE RETRY IS NOT OPTIONAL AND USED TO BE MISSING. `postTransferPair` has

@@ -22,6 +22,7 @@ import { Link } from "wouter";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
+import { villageMoonSentence, type VillageMoon } from "@shared/villageMoon";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -43,7 +44,11 @@ interface Rule {
 }
 
 interface View {
+  /** The stored cycle id. Machinery: every rule's effective-from is compared
+   *  against it, and this panel does not print it. */
   cycleKey: string;
+  /** The village's own moon, which is what the page says out loud. */
+  moon: VillageMoon;
   rules: Rule[];
   supply: Array<{ token: string; source: string; issued: number }>;
   settlementPreview: { seats: number; mints: Array<{ token: string; units: number }> };
@@ -262,7 +267,7 @@ export default function Mint() {
             What this village pays for, and what it has issued. Every change here takes effect at
             the next moon, so nothing can be raised and lowered around a settlement.
           </p>
-          <p className="mt-1 text-sm text-sage">This moon is {view.cycleKey}.</p>
+          <p className="mt-1 text-sm text-sage">{villageMoonSentence(view.moon)}</p>
 
           {note ? (
             <p className="mt-4 rounded-lg border border-sage/40 bg-sage-light px-4 py-3 text-sm text-sage">

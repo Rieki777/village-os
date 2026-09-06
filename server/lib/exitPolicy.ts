@@ -37,6 +37,26 @@ export interface ExitPolicyInvoluntary {
   /** The circle that hears an appeal. Empty means unstated. */
   appealDomainId: string;
   process: string;
+  /**
+   * The questions a steward answers on the record when opening an involuntary
+   * exit. Each is answered yes, no, or does not apply.
+   *
+   * THE QUESTIONS ARE THE VILLAGE'S, WHICH IS WHY THEY LIVE IN THE POLICY.
+   * Asking somebody to leave is the heaviest act this software supports, and
+   * the grounds a village recognises for it are a community decision in
+   * exactly the way `process` above is. A list compiled into the platform
+   * would make every fork answer Amora's questions about their own members.
+   * The platform seeds a starting set and a village edits it here, the same
+   * arrangement `unwindSteps` and `restorative.steps` already have.
+   *
+   * DELIBERATELY NOT IN `EXIT_POLICY_TERMS`. That list gates publishing:
+   * `platformDefaultTerms` runs on every save where `placeholder` is false,
+   * so a fifth entry would start refusing edits from villages that published
+   * their policy before this field existed and have no idea it is now theirs
+   * to rewrite. Tightening that gate is a decision to take deliberately, not
+   * a side effect of adding a field.
+   */
+  grounds: string[];
 }
 
 export interface ExitPolicyRestorative {
@@ -75,6 +95,23 @@ export const DEFAULT_EXIT_POLICY: ExitPolicy = {
     appealDomainId: "",
     process:
       "To be decided by the community. Until then: a private conversation with the stewards precedes any formal step, always.",
+    /*
+     * A starting set, phrased as questions a steward can answer honestly
+     * about a real situation. The first one is first on purpose: it asks
+     * whether the village tried to repair the relationship before ending it,
+     * and a steward who has to answer "no" on the record has been told
+     * something by the form itself.
+     *
+     * The last two are the cases that are not conflict at all, and they are
+     * here because a village with no way to record them ends up filing a
+     * death or a long silence as though somebody had done something wrong.
+     */
+    grounds: [
+      "Has a non-violent dispute resolution process been attempted?",
+      "Is this an unexpected death?",
+      "Has this member been unreachable for twelve lunar months?",
+      "Is this for unpaid dues, fees or other obligations?",
+    ],
   },
   restorative: {
     intakeContactRole: "",
@@ -137,12 +174,64 @@ export function normalizeExitPolicy(body: any): ExitPolicy {
       decidingDomainId: text(i.decidingDomainId),
       appealDomainId: text(i.appealDomainId),
       process: text(i.process) || DEFAULT_EXIT_POLICY.involuntary.process,
+      /*
+       * Falls back to the platform's list when absent, which is what every
+       * policy document saved before this field existed looks like. An empty
+       * list would leave those villages with a form that asks nothing.
+       *
+       * A village CANNOT choose to ask nothing, and that is the one case
+       * this deliberately does not honour. `steps()` drops blank lines, so an
+       * emptied box is indistinguishable from a document saved before the
+       * field existed, and both get the seed back. It is the right way round:
+       * asking one question too many before removing a person is recoverable,
+       * and asking none is not. A village that wants different questions
+       * replaces them rather than clearing them.
+       */
+      grounds: steps(i.grounds).length ? steps(i.grounds) : [...DEFAULT_EXIT_POLICY.involuntary.grounds],
     },
     restorative: {
       intakeContactRole: text(r.intakeContactRole),
       steps: steps(r.steps).length ? steps(r.steps) : [...DEFAULT_EXIT_POLICY.restorative.steps],
     },
   };
+}
+
+/**
+ * A STORED policy, given whatever keys it was saved before existing.
+ *
+ * `dbDocument.get()` returns `cache ?? fallback` and never merges the two, so
+ * a village that has saved its exit policy even once holds a document frozen
+ * at the shape of the release that saved it. Adding a field to
+ * `DEFAULT_EXIT_POLICY` therefore reaches new instances and NO existing one:
+ * `involuntary.grounds` would read `undefined` on all thirteen live villages,
+ * and the form that asks a steward the village's own questions would quietly
+ * ask none.
+ *
+ * This is deliberately NOT `normalizeExitPolicy`, which is the write path.
+ * That function reads `placeholder: body?.placeholder === true`, so running it
+ * over a stored document missing that key would silently answer "this village
+ * adopted these terms as its own" on the village's behalf. A read must not be
+ * able to change what a village is on record as having decided. This fills
+ * gaps and touches nothing that is present.
+ */
+export function withPolicyDefaults(stored: any): ExitPolicy {
+  const d = DEFAULT_EXIT_POLICY;
+  const inv = stored?.involuntary ?? {};
+  return {
+    ...(stored ?? {}),
+    ...d,
+    ...(stored ?? {}),
+    voluntary: { ...d.voluntary, ...(stored?.voluntary ?? {}) },
+    involuntary: {
+      ...d.involuntary,
+      ...inv,
+      // Length-checked rather than presence-checked: a document saved with an
+      // explicit empty list is the same "nobody has chosen questions" state as
+      // one saved before the field existed, and both want the seed.
+      grounds: steps(inv.grounds).length ? steps(inv.grounds) : [...d.involuntary.grounds],
+    },
+    restorative: { ...d.restorative, ...(stored?.restorative ?? {}) },
+  } as ExitPolicy;
 }
 
 /**

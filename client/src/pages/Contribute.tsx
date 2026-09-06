@@ -17,6 +17,7 @@ import { authToken } from "@/lib/gameApi";
 import { CreditCard, ExternalLink, HeartHandshake, Loader2, Repeat } from "lucide-react";
 import { ExamplesBanner } from "@/components/ExamplesBanner";
 import { ExampleRefusal, readRefusal } from "@/components/ExampleRefusal";
+import { formatTokenAmount } from "@/lib/tokenAmount";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -143,7 +144,13 @@ export default function Contribute() {
                   {p.description && <p className="text-sm text-muted-foreground mt-0.5">{p.description}</p>}
                   {p.grantsToken && (
                     <p className="text-xs text-emerald-700 mt-1">
-                      Includes {p.grantsToken.amount} {p.grantsToken.name}
+                      {/* MINOR units, like every other ledger figure: a pack
+                          of ten Village Credits stores 1000 once credits is at
+                          its ruled two decimals, and this line said so out
+                          loud. The scale could not be fixed here alone: the
+                          products payload shipped the name and the amount and
+                          no `decimals` at all, so the server sends it first. */}
+                      Includes {formatTokenAmount(Number(p.grantsToken.amount ?? 0), Number(p.grantsToken.decimals ?? 0))} {p.grantsToken.name}
                       {p.recurring !== "none" ? " each period" : ""}
                     </p>
                   )}

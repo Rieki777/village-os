@@ -118,6 +118,39 @@
      This block is a set of BACKGROUNDS for white text. As a foreground on a
      light surface use sage or coral, which clear AA on both. */
   --color-gold: #a06b1c;
+
+  /* ── THE CIRCLE PALETTE ────────────────────────────────────────────────
+     Eleven hues whose job is to keep eleven circles APART, on the power map
+     at /map/circles and in the window onto it on /circles. A categorical
+     palette is a different thing from a brand colour: shipping eleven greys
+     here would ship the exact bug this palette was added to fix, which was
+     seventeen circles drawn in one colour because a four-entry lookup missed
+     most of what the seed and the admin form write.
+
+     Declared here so a fork can retheme the map without touching code.
+     `shared/circleView.ts` reads each one as `var(--circle-<tone>, <hex>)`,
+     so overriding any of these moves BOTH lenses at once, and overriding
+     none of them draws the living map artifact's own CIRCLE_COL, which is
+     where these values come from. */
+  --circle-moss: #6fae52;
+  --circle-sage: #8fb573;
+  --circle-teal: #8ad0c0;
+  --circle-sky: #7f9fd0;
+  --circle-amber: #d0a94f;
+  --circle-olive: #b8b06a;
+  --circle-clay: #c98b4e;
+  --circle-ember: #d0785a;
+  --circle-rose: #c96a8a;
+  --circle-violet: #a98ad0;
+  --circle-stone: #9aa08f;
+  /* The map lens's own ground, ring and ink. This surface is the map's world
+     the way the artifact is, so these stay fixed against the site's light
+     chrome instead of following it. */
+  --circle-ground: #131a11;
+  --circle-ring: #8fb573;
+  --circle-ink: #e8dcbc;
+  --circle-ink-dim: #a8a081;
+  --circle-scrim: rgba(19, 26, 17, 0.95);
   /* --color-amber (--tone-sun) is derived in shared/brandTokens.ts to clear
      AA_LARGE (3:1) against INK, because its designed role is a background
      chip carrying ink text, never checked as small foreground text on a
@@ -158,6 +191,24 @@
   --color-green-light: #dcecd6;
   --color-cream-dark: #e4e4e4;     /* Deeper neutral - reads as a card against --background #f2f2f2 */
   --color-teal-deep-dark: #262626; /* Hover partner for teal-deep - 13.6:1 vs white, so buttons stay AA while pressed */
+
+  /* THE TWO ACCENTS THE NIGHT SHEET IS BUILT ON, given utilities so a
+     component can reach them by name.
+
+     They are declared HERE and not only inside `.sheet-night` because a
+     utility that resolves to nothing outside its one page is a trap for
+     whoever reuses the component next: `text-open` on a light card has to
+     mean something, and what it means is the sage these surfaces already
+     use. `.sheet-night` sets --sheet-notice and --sheet-open, so on the
+     sheet the same two class names are the gold and the living green that
+     palette was measured for, and nothing about the component changes.
+
+     Values everywhere else are the two inks the light set already ships:
+     amber-ink 5.60:1 on white, sage 5.95:1 on white. On the sheet: gold
+     7.87:1 on the panel, living green 7.79:1 on the panel and 7.02:1 on the
+     raised panel. Both clear AA on every surface either one lands on. */
+  --color-notice: var(--sheet-notice, #8d5e19);
+  --color-open: var(--sheet-open, #3d6e4a);
 }
 
 :root {
@@ -197,6 +248,86 @@
   --sidebar-accent-foreground: #171717;
   --sidebar-border: #d4d4d4;
   --sidebar-ring: #404040;
+}
+
+/* ── THE CIRCLE LENS IS ITS OWN WORLD ──────────────────────────────────────
+   `/map/circles` draws the same village the living map draws, in the same
+   eleven hues, and it was doing it on a light page. Crossing from the land
+   to the circles meant leaving the world and arriving somewhere that shared
+   only the data.
+
+   This is a SCOPED THEME rather than a set of component overrides: every
+   surface inside the lens already speaks in semantic tokens (bg-card,
+   text-foreground, border-border), so redefining the tokens here re-themes
+   the search box, the chips, the panel, the legend, the accordion and the
+   sheet at once, and keeps every foreground paired with the background it
+   was written against. A component that hardcoded a colour would not follow,
+   which is the honest reason `check-theme-literals` is a gate.
+
+   Every pairing below is MEASURED against the ground or card it sits on:
+
+     parchment on ground   13.01      dim on ground    6.77
+     parchment on card     12.09      dim on card      6.29
+     sage on ground         7.63      dim on muted     5.59
+     gold on card           7.33
+
+   The worst is 5.59:1, so the whole lens clears AA, and the light theme it
+   replaces is untouched everywhere else on the site. */
+.circle-lens {
+  --background: var(--circle-ground, #131a11);
+  --foreground: var(--circle-ink, #e8dcbc);
+  --card: #1a2117;
+  --card-foreground: var(--circle-ink, #e8dcbc);
+  --popover: #1a2117;
+  --popover-foreground: var(--circle-ink, #e8dcbc);
+  --secondary: #222b1e;
+  --secondary-foreground: var(--circle-ink, #e8dcbc);
+  --muted: #222b1e;
+  --muted-foreground: var(--circle-ink-dim, #a8a081);
+  --accent: #2a3324;
+  --accent-foreground: var(--circle-ink, #e8dcbc);
+  --border: #39432f;
+  --input: #222b1e;
+  --primary: var(--circle-ring, #8fb573);
+  --primary-foreground: var(--circle-ground, #131a11);
+  --ring: var(--circle-ring, #8fb573);
+
+  /* The brand tone layer resolves to NEUTRAL GREYS on an unbranded fork
+     (#404040 and friends), which are invisible on this ground. These are the
+     lens's own readings of the same roles, so `text-teal-deep`, `bg-cream`
+     and the rest keep working inside it instead of disappearing. */
+  --color-teal-deep: var(--circle-ring, #8fb573);
+  --color-teal: #6fb7b0;
+  --color-teal-light: #8ad0c0;
+  --color-cream: #1a2117;
+  --color-cream-dark: #222b1e;
+  --color-amber: #d9a441;
+  --color-gold: #d9a441;
+  --color-sage: var(--circle-ring, #8fb573);
+  --color-forest: #6fae52;
+  --color-coral: #d0785a;
+  --color-gray-light: #222b1e;
+  --color-teal-band: #0e130d;
+  --color-amber-on-band: #e8dcbc;
+}
+
+/* THE TWO SEMANTIC COLOURS THAT ARE NOT TOKENS.
+   `text-amber-700` (a term ending, an open call) and `text-red-600` (a
+   refusal) are fixed Tailwind utilities, so the scoped token block above
+   cannot reach them: they were picked against a white card and they are the
+   one thing that did not follow the lens onto its ground. Measured live at
+   build c8a533f, the open-calls line came out at 3.28:1, the single contrast
+   failure in the whole lens.
+
+   Overriding the utility keeps the MEANING (warning, refusal) and changes
+   only the reading. Measured on all three lens surfaces:
+     amber  #e0b062  ground 8.92  card 8.29  muted 7.37
+     danger #f08a72  ground 7.25  card 6.74  muted 5.99 */
+.circle-lens :is(.text-amber-700, .text-amber-600, .text-amber-800) {
+  color: #e0b062;
+}
+.circle-lens :is(.text-red-600, .text-red-700, .text-red-500) {
+  color: #f08a72;
 }
 
 .dark {
@@ -1099,4 +1230,176 @@ button, a, [role="button"], input, textarea, select, summary {
 
 .focus-arrival:focus {
   outline: 2px solid var(--primary, #404040);
+}
+
+/*
+ * ============================================================================
+ * THE SHEET'S OWN WORLD: `.sheet-night`
+ * ============================================================================
+ *
+ * The character sheet is read at night, in BOTH themes, the way the living map
+ * is its own world whichever mode the rest of the app is in. There is no light
+ * variant and no dusk sibling on purpose: one palette, one contrast pass.
+ *
+ * WHY A CLASS, AND WHY IT BEATS THE BRAND OVERLAY
+ *
+ * Everything below is a CUSTOM PROPERTY redeclaration, so the whole section
+ * re-themes with no component edit. That works because Profile.tsx and
+ * client/src/components/profile/* were migrated to the semantic set
+ * (--background / --foreground / --card / --card-foreground / --muted /
+ * --muted-foreground / --border / --ring / --destructive) and because
+ * index.css's `@theme inline` block makes every generated utility reference
+ * the runtime variable rather than a compiled literal: `bg-card` is
+ * `background-color: var(--card)`, resolved on the element that carries the
+ * class, not on :root.
+ *
+ * That last sentence is also why a plain class wins against the server-emitted
+ * brand stylesheet. server/lib/themeCss.ts writes the village's palette at
+ * `:root:root`, doubling specificity so it beats index.css's `:root` whatever
+ * the load order. Specificity only arbitrates between declarations on the SAME
+ * element, and `:root:root` declares on <html> while `.sheet-night` declares
+ * on a descendant. A nearer ancestor always wins for its own subtree, so no
+ * specificity hack is needed here and none is used.
+ *
+ * PROMOTING IT LATER is therefore a move, not a rewrite: lift the declarations
+ * out of `.sheet-night` into `:root` and the whole app is night. That is the
+ * point of scoping it this way.
+ *
+ * A DEFAULT A VILLAGE CAN OVERRIDE
+ *
+ * Every value is `var(--sheet-<role>, <default>)`, the same shape the tone
+ * layer above uses (`--color-teal-deep: var(--tone-brand, #404040)`). A
+ * village re-tints the sheet by setting the --sheet-* layer from anywhere
+ * above this element, and changes nothing else. The literals here are the
+ * PLATFORM default, and they live in a stylesheet rather than in a className,
+ * which is why they are not what scripts/check-theme-literals.mjs counts.
+ *
+ * WHAT IS DELIBERATELY NOT REDEFINED
+ *
+ * --primary, --tone-brand and the rest of the tone layer are the VILLAGE's
+ * identity and stay exactly as the brand overlay derived them. The bio Save
+ * button (`bg-teal-deep text-white`) therefore keeps the village's colour, and
+ * white-on-brand is guaranteed to clear 4.5:1 by shared/brandTokens.ts's own
+ * search. --secondary and --accent are brand-derived too and nothing on this
+ * surface paints with them.
+ *
+ * --ring IS redefined, and that is the one judgement call. The overlay sets it
+ * to the seed colour; the platform default is #404040, which measures 1.58:1
+ * on the panel and 1.80:1 on the ground, against a 4.36:1 ring in dark mode
+ * today, so a focus indicator would be invisible here. That is a WCAG 2.4.11
+ * failure this palette would have INTRODUCED, so the ring takes the
+ * earned-gold instead (7.87:1 on the panel, 8.95:1 on the ground) and stays
+ * overridable through --sheet-earned like everything else.
+ *
+ * MEASURED, IN A REAL RENDER
+ *
+ * Read off getComputedStyle on the mounted page and normalised through a
+ * canvas, not computed from these hexes. Body text wants 4.5:1, large text and
+ * non-text boundaries want 3:1.
+ *
+ *   foreground / ground        15.96     foreground / panel         14.03
+ *   foreground / panel-raised  12.65     ground / foreground        15.96
+ *   ink-dim / ground            8.13     ink-dim / panel             7.15
+ *   ink-dim / panel-raised      6.45     warn / panel                5.80
+ *   edge / panel  3.94   edge / ground  4.49   edge / panel-raised   3.56
+ *   earned (ring) / panel  7.87         earned / ground              8.95
+ *
+ * The two border pairs are the defect this palette was the right moment to
+ * fix. `border-border` on `bg-card` measured 1.48 light and 1.36 dark, and now
+ * measures 3.94 in both; `border-border` on `bg-muted` measured 1.17 and 1.15,
+ * and now measures 3.56. Both sat under the 3:1 non-text floor, and PowersMap,
+ * PathsPanel and the bio textarea all draw on that convention.
+ */
+.sheet-night {
+  /* The night world, named by role. */
+  --background: var(--sheet-ground, #0d1411);          /* deep forest black */
+  --foreground: var(--sheet-ink, #e9efe6);             /* moonlight */
+  --card: var(--sheet-panel, #16221c);                 /* a shade above the ground */
+  --card-foreground: var(--sheet-ink, #e9efe6);
+  --popover: var(--sheet-panel, #16221c);
+  --popover-foreground: var(--sheet-ink, #e9efe6);
+  --muted: var(--sheet-panel-raised, #1c2b23);
+  --muted-foreground: var(--sheet-ink-dim, #9cb0a3);
+  --border: var(--sheet-edge, #6d8175);
+  --input: var(--sheet-edge, #6d8175);
+  --ring: var(--sheet-earned, #dfab4d);                /* gold: what is earned */
+  /* The same gold, reachable as `text-notice` / `border-notice`. It rides the
+     village's own --sheet-earned knob, so re-tinting what is earned re-tints
+     every notice with it and nothing has to be set twice. */
+  --sheet-notice: var(--sheet-earned, #dfab4d);
+
+  /* The two ends of the maturity arc, either side of the gold it is made from.
+     The ring is a gradient rather than a flat stroke so the far end reads as
+     lit and the near end as still in shadow, which is the whole reason it says
+     "coming from somewhere" instead of "a bar, bent". Both take the village's
+     own knobs, so a re-tinted gold arrives with a matching pair. */
+  --sheet-earned-deep: var(--sheet-earned-shadow, #6b4a15);
+  --sheet-earned-lit: var(--sheet-earned-highlight, #f2ce85);
+  --destructive: var(--sheet-warn, #e0805e);
+  --destructive-foreground: var(--sheet-ground, #0d1411);
+
+  /* The two accents this world is built on. --sheet-earned is live: it is the
+     focus ring, the ring on the fronted character, and (through --sheet-notice
+     above) every notice edge. --sheet-open now has the consumer this comment
+     used to say it was waiting for: OnchainCard's connected chip takes
+     `text-open`, so the sheet inherited the palette instead of a second green
+     being picked. Living green measures 7.79:1 on the panel, 8.86:1 on the
+     ground and 7.02:1 on the raised panel, a legible foreground on all three. */
+  --sheet-open: var(--sheet-living, #6fc48f);
+
+  /* Form controls, the caret, the selection and the scrollbar take the UA's
+     dark chrome. Without this the bio textarea keeps a light-mode caret and
+     selection on a near-black field, and no token can reach either. */
+  color-scheme: dark;
+
+  /*
+   * THE CARVED FACE.
+   *
+   * @fontsource/marcellus is already installed and already imported in
+   * main.tsx, so this costs no dependency and no font budget. It is the line
+   * that makes the sheet read as carved rather than administrative.
+   *
+   * The trade, stated plainly: this is a scoped override of --font-display, so
+   * a village that set its own display face in Admin -> Typography does not
+   * see it here unless it also sets --sheet-font-display. That is the same
+   * trade the colours above make, and it is what "the profile is its own
+   * world" costs.
+   */
+  --font-display: var(--sheet-font-display, "Marcellus", Georgia, "Times New Roman", serif);
+}
+
+/*
+ * Marcellus ships ONE weight (400 - @fontsource/marcellus/latin-400.css is the
+ * only import, because the family has no bold). Every `font-bold` heading on
+ * this page would therefore be a synthesised bold, which on a display serif
+ * reads as a smear rather than as emphasis. Size and the face carry the
+ * hierarchy instead, which is what the reference does.
+ *
+ * Unlayered on purpose: `font-bold` lives in @layer utilities, and an
+ * unlayered rule beats every layered one. Same mechanism .focus-arrival above
+ * already relies on. Scoped to the display face, so body copy marked semibold
+ * is untouched.
+ */
+.sheet-night :is(h1, h2, h3, h4, h5, h6),
+.sheet-night .font-display {
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+/*
+ * Depth, which the ground eats.
+ *
+ * Tailwind's `shadow-sm` is two layers of 10% black. On a light page that is a
+ * lift; on #0d1411 it is nothing at all, and every panel on this page carries
+ * it. Measured before this rule: the computed box-shadow was unchanged from
+ * the default, so the panels separated from the ground by their 1px edge alone.
+ *
+ * It has to be written as box-shadow, NOT as a --shadow-sm override on the
+ * scope. Tailwind v4 bakes the utility's literal into a per-element
+ * `--tw-shadow`, so an ancestor redeclaring --shadow-sm changes nothing --
+ * measured, then rewritten. Unlayered for the same reason as the weight rule
+ * above, and aimed only at the panels the sheet themes.
+ */
+.sheet-night .shadow-sm {
+  box-shadow: var(--sheet-shadow, 0 2px 4px rgb(0 0 0 / 0.4), 0 18px 40px -22px rgb(0 0 0 / 0.9));
 }

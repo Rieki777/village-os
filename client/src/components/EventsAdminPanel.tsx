@@ -332,7 +332,7 @@ export default function EventsAdminPanel({ password }: { password: string }) {
     });
     const d = await res.json().catch(() => ({}));
     if (!res.ok) { toast.error(d?.error ?? "That did not work"); return; }
-    toast.success(d.monthName?.isExample ? `Moon ${index} is back to its example name` : `Moon ${index} named`);
+    toast.success(d.monthName?.isExample ? `The year's moon ${index} is back to its example name` : `The year's moon ${index} named`);
     setNameDrafts((p) => { const n = { ...p }; delete n[index]; return n; });
     loadNames();
   };
@@ -734,18 +734,29 @@ export default function EventsAdminPanel({ password }: { password: string }) {
 
       {monthNames && (
         <div className="border border-gray-200 rounded-xl p-5 mt-8">
-          <h3 className="font-semibold text-gray-900 mb-1">The thirteen moons, by name</h3>
+          <h3 className="font-semibold text-gray-900 mb-1">The thirteen moons of the year, by name</h3>
+          {/*
+            THESE THIRTEEN ARE POSITIONS IN THE LUNAR YEAR, and they are the
+            one place a number 1 to 13 still belongs. A name comes round every
+            year, so it is keyed by where the moon sits in the year and cannot
+            be keyed by the village count, which never repeats a number. Every
+            member-facing surface now prints the village count instead, so this
+            copy says "of the year" on every slot: the two numbers sit two
+            clicks apart and nothing else tells them apart.
+          */}
           <p className="text-sm text-gray-500 mb-4">
-            Moon 1 begins at the first new moon after the year anchor (Game Variables, Calendar). The names ship as
-            almanac examples, which describe someone else's land: write the village's own word for each moon. Blank
-            restores the example. The thirteenth is the extra moon some years hold.
+            The year's first moon begins at the first new moon after the year anchor (Game Variables, Calendar). The
+            names ship as almanac examples, which describe someone else's land: write the village's own word for each
+            moon. Blank restores the example. The thirteenth is the extra moon some years hold. These are positions in
+            the year and they come round again; the moon number members read on the calendar counts from this
+            village's first moon and never resets.
           </p>
           <ul className="grid md:grid-cols-2 gap-2">
             {monthNames.map((m) => (
               <li key={m.index} className="flex items-center gap-2">
-                <span className="w-16 text-xs text-gray-500 shrink-0">Moon {m.index}</span>
+                <span className="w-28 text-xs text-gray-500 shrink-0">Moon {m.index} of the year</span>
                 <input
-                  aria-label={`Name of moon ${m.index}`}
+                  aria-label={`Name of moon ${m.index} of the lunar year`}
                   value={nameDrafts[m.index] ?? m.name}
                   onChange={(e) => setNameDrafts((p) => ({ ...p, [m.index]: e.target.value }))}
                   className={`${input} ${m.isExample && nameDrafts[m.index] === undefined ? "text-gray-500 italic" : ""}`}

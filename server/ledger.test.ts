@@ -29,6 +29,7 @@ import {
   postTransferPair,
   questCreditsFor,
   RECOGNITION_FAUCET,
+  refusalForMember,
   registerToken,
   tokenDef,
   TREASURY,
@@ -520,4 +521,54 @@ describe.skipIf(!configured)("the MySQL token ledger", () => {
     expect(theirs.get("claim-other-1")).toBe(7);
   });
 
+});
+
+/**
+ * THE SENTENCE A MEMBER IS SHOWN WHEN THE LEDGER SAYS NO.
+ *
+ * `postTransfer` authors an AUDIT sentence and is right to: it names the
+ * account by its internal id and the balance in MINOR units, which is what a
+ * steward reading a log needs. `/api/wallet/send` handed that string to a
+ * member verbatim, so somebody who typed an amount into the send card was
+ * shown their own `mem:user-...` id and a balance a thousand times the one the
+ * card printed an inch above the box.
+ *
+ * Needs no database: it is a pure translation, and it is tested pure so a run
+ * without TEST_DATABASE_URL still proves it.
+ */
+describe("a ledger refusal, translated for the person who caused it", () => {
+  const ANNA = "mem:user-17885-abcdef";
+  const BEN = "mem:user-90210-fedcba";
+  const ctx = { accountIds: [ANNA, BEN], holds: "9.999", tokenName: "Village Voice" };
+
+  it("states what the member holds, in the member's own units", () => {
+    const said = refusalForMember(
+      `insufficient village-voice: "${ANNA}" holds 9999 and cannot overdraft`,
+      ctx,
+    );
+    expect(said).toBe("You hold 9.999 Village Voice, which is not enough to send that");
+  });
+
+  it("never leaks an internal account id, whichever side of the send it names", () => {
+    for (const acct of [ANNA, BEN]) {
+      const said = refusalForMember(`account "${acct}" does not exist`, ctx);
+      expect(said).not.toContain(acct);
+      expect(said).not.toContain("mem:");
+      // And it does not pretend an absent account was an insufficiency, which
+      // is a different fact about a different problem.
+      expect(said).not.toContain("not enough");
+    }
+  });
+
+  it("passes through a refusal that is already a sentence for a member", () => {
+    // The issuance and veto refusals name a rule, not an account. Swallowing
+    // those would replace the only explanation a member gets with nothing.
+    expect(refusalForMember("This village has not started issuing yet", ctx))
+      .toBe("This village has not started issuing yet");
+  });
+
+  it("still says something when the ledger said nothing", () => {
+    expect(refusalForMember(undefined, ctx)).toBe("That send did not go through");
+    expect(refusalForMember("", ctx)).toBe("That send did not go through");
+  });
 });

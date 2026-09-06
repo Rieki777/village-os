@@ -50,9 +50,27 @@
  *
  * On first read, never at signup. A village that connects no module issues no
  * references at all, and this table stays empty for the life of the instance.
+ *
+ * ── WHERE THE STATEMENTS LIVE ────────────────────────────────────────────
+ *
+ * In `server/repos/subjectRefs.ts`, which is the table's enumerable home and
+ * holds nothing else. This file keeps the decisions: when a reference is
+ * issued, what shape it has, what an unknown one may be told apart from, and
+ * the order an erasure runs in. Those are the things a reviewer has to read
+ * together, and none of them is a query.
  */
 import { randomBytes } from "node:crypto";
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool } from "mysql2/promise";
+import {
+  deleteRefForUser,
+  insertRefIfAbsent,
+  pendingErasures,
+  refForUser,
+  refsForUsers,
+  setErasurePending,
+  userIdForRef,
+  userIdsPendingErasure,
+} from "../repos/subjectRefs";
 
 /** Prefixed so a reference is recognisable on sight in a log line or a payload. */
 const PREFIX = "sub_";
@@ -84,24 +102,15 @@ export function looksLikeSubjectRef(v: unknown): v is string {
  * one member means an erasure that clears one of them and reports success.
  */
 export async function subjectRefFor(pool: Pool, userId: string): Promise<string> {
-  const read = async (): Promise<string | null> => {
-    const [rows] = await pool.query<RowDataPacket[]>(
-      "SELECT `ref` FROM `subject_refs` WHERE `user_id` = ? LIMIT 1",
-      [userId],
-    );
-    const ref = rows[0]?.ref;
-    return typeof ref === "string" ? ref : null;
-  };
-
-  const existing = await read();
+  const existing = await refForUser(pool, userId);
   if (existing) return existing;
 
-  await pool.query( // module-review-ok: subject_refs has no repo cache above it and this file is the table's one enumerable home (the externalProposals.ts pattern). A dbCollection write would additionally send an explicit NULL for issued_at and violate its NOT NULL, which is the documented DEFAULT trap.
-    "INSERT IGNORE INTO `subject_refs` (`ref`, `user_id`) VALUES (?, ?)",
-    [newSubjectRef(), userId],
-  );
+  await insertRefIfAbsent(pool, newSubjectRef(), userId);
 
-  const issued = await read();
+  // Read back rather than trusting the insert. The reference this member ends
+  // up with is whichever row landed, which on a race is not necessarily the one
+  // minted a line above.
+  const issued = await refForUser(pool, userId);
   if (!issued) throw new Error("could not issue a subject reference");
   return issued;
 }
@@ -120,11 +129,7 @@ export async function subjectRefsFor(pool: Pool, userIds: string[]): Promise<Map
   const wanted = Array.from(new Set(userIds.filter((id) => typeof id === "string" && id !== "")));
   if (wanted.length === 0) return out;
 
-  const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT \`ref\`, \`user_id\` FROM \`subject_refs\` WHERE \`user_id\` IN (${wanted.map(() => "?").join(",")})`,
-    wanted,
-  );
-  for (const r of rows) out.set(String(r.user_id), String(r.ref));
+  for (const r of await refsForUsers(pool, wanted)) out.set(r.userId, r.ref);
 
   for (const id of wanted) {
     if (!out.has(id)) out.set(id, await subjectRefFor(pool, id));
@@ -143,12 +148,7 @@ export async function subjectRefsFor(pool: Pool, userIds: string[]): Promise<Map
  */
 export async function userIdForSubjectRef(pool: Pool, ref: string): Promise<string | null> {
   if (!looksLikeSubjectRef(ref)) return null;
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT `user_id` FROM `subject_refs` WHERE `ref` = ? LIMIT 1",
-    [ref],
-  );
-  const id = rows[0]?.user_id;
-  return typeof id === "string" ? id : null;
+  return userIdForRef(pool, ref);
 }
 
 /**
@@ -158,5 +158,99 @@ export async function userIdForSubjectRef(pool: Pool, ref: string): Promise<stri
  * names nobody.
  */
 export async function dropSubjectRef(pool: Pool, userId: string): Promise<void> {
-  await pool.query("DELETE FROM `subject_refs` WHERE `user_id` = ?", [userId]); // module-review-ok: subject_refs has no repo cache above it and this file is the table's one enumerable home (the externalProposals.ts pattern)
+  await deleteRefForUser(pool, userId);
+}
+
+/* ── HALF-ERASED MEMBERS (0156) ──────────────────────────────────────────
+ *
+ * When an erasure cannot confirm every store, the mapping is kept so the
+ * village can ask again. Kept state with nobody watching it is how "we still
+ * owe you a confirmation" becomes "kept forever" the first time a vendor goes
+ * dark, so the keeping is recorded rather than merely allowed.
+ *
+ * The record carries WHICH STORE and not only WHEN. A date alone gives a
+ * steward the scale and nobody to press.
+ */
+
+/** One store that has not confirmed, as the outcome already described it. */
+export interface UnconfirmedStore {
+  module: string;
+  detail: string;
+}
+
+export interface HalfErased {
+  count: number;
+  /** ISO instant of the OLDEST outstanding obligation, or null when there are none. */
+  oldestSince: string | null;
+  /** Module id to how many members are still waiting on it. */
+  waitingOn: Record<string, number>;
+}
+
+function parseUnconfirmed(v: unknown): UnconfirmedStore[] {
+  if (!v) return [];
+  const raw = typeof v === "string" ? safeParse(v) : v;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((r) => r && typeof r === "object")
+    .map((r: any) => ({ module: String(r.module ?? ""), detail: String(r.detail ?? "") }))
+    .filter((r) => r.module !== "");
+}
+
+function safeParse(s: string): unknown {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Record that this member's erasure is unfinished, and who it is waiting on.
+ *
+ * `erasure_pending_since` uses COALESCE so a retry that also fails does NOT
+ * move the date forward. The age is the age of the OBLIGATION and not of the
+ * last attempt, because a number that resets every time somebody tries is a
+ * number that never grows old enough for anyone to act on.
+ */
+export async function markErasurePending(
+  pool: Pool,
+  userId: string,
+  unconfirmed: readonly UnconfirmedStore[],
+): Promise<void> {
+  // Clipped HERE, beside the reason: an unbounded vendor string is how a strict
+  // MySQL turns one long detail into a LOST record rather than a truncated one.
+  await setErasurePending(
+    pool,
+    userId,
+    JSON.stringify(unconfirmed.map((u) => ({ module: u.module, detail: u.detail.slice(0, 300) }))),
+  );
+}
+
+/** The sentence a steward reads: how many, waiting on whom, and how long. */
+export async function halfErasedMembers(pool: Pool): Promise<HalfErased> {
+  const rows = await pendingErasures(pool);
+  const waitingOn: Record<string, number> = {};
+  for (const r of rows) {
+    for (const u of parseUnconfirmed(r.unconfirmed)) {
+      waitingOn[u.module] = (waitingOn[u.module] ?? 0) + 1;
+    }
+  }
+  // Oldest first is the read's order, so the first row IS the oldest.
+  const oldest = rows[0]?.pendingSince;
+  return {
+    count: rows.length,
+    oldestSince: oldest ? new Date(String(oldest)).toISOString() : null,
+    waitingOn,
+  };
+}
+
+/**
+ * The members a retry would re-ask about, oldest obligation first.
+ *
+ * A count with no way to act on it is a dashboard rather than a fix: nothing
+ * will erase these members a second time, because they are already gone. This
+ * is what the retry iterates.
+ */
+export async function pendingErasureUserIds(pool: Pool, limit = 200): Promise<string[]> {
+  return userIdsPendingErasure(pool, limit);
 }

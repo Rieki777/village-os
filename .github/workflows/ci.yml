@@ -621,6 +621,43 @@ jobs:
         # wrote. A reader nobody has proven can refuse is a reader that reports
         # green either way.
         run: node scripts/generate-governance-doc.test.mjs
+      - name: Game variables doc matches the registry
+        # Three documents nobody writes by hand. Each generator reads the real
+        # source by transpiling and IMPORTING it, never by regex, and each
+        # checker regenerates and byte-compares. The import matters: 28 of the
+        # 150 game variables are BUILT at module load from the stage tables, so
+        # a regex over the array literal would have emitted a document that
+        # looked complete while missing a fifth of the registry.
+        #
+        # These can be hard gates where a prose-freshness check could not be,
+        # because both sides are machine-derived and there is no sentence to
+        # judge. A failure here is never a matter of opinion: either the
+        # document was hand-edited (regenerate it) or the code moved and the
+        # document is now the stale description of it (regenerate it too).
+        run: node scripts/check-variables-doc.mjs
+
+      - name: Module registry doc matches the registry
+        run: node scripts/check-modules-doc.mjs
+
+      - name: Capability doc matches the gate
+        # The one that most needed writing. CLAUDE.md described this gate in
+        # five steps for two weeks after 0f8d041 gave it a sixth, and nothing
+        # could notice. The generator RUNS the real gate and tabulates its
+        # answers, so the document cannot drift from the decision it describes.
+        run: node scripts/check-capabilities-doc.mjs
+
+      - name: Every module has a contract doc
+        # Two directions. FORWARD is a ratchet on how many modules have no
+        # contract document, because ten of twenty-three did when this was
+        # written, including all four CORE modules a village cannot switch off:
+        # too many to fix at once and far too many to leave unmeasured.
+        # BACKWARD is a hard failure, because a MODULE_DOCS entry naming a file
+        # that is not there is a broken promise on the day it is written.
+        #
+        # The first run of this guard found docs/modules/messaging.md orphaned
+        # since 2026-08-10: written, committed, and routed to by nothing, so
+        # the assistant could not reach it and the module read as undocumented.
+        run: node scripts/check-module-docs.mjs
 
       - name: Server index size
         # The monolith ratchet: server/index.ts may only ever shrink, in lines
@@ -637,6 +674,20 @@ jobs:
         # instead of minutes, and a required check can point at it by name.
         # Dependency-free, no database.
         run: node scripts/check-server-index-size.mjs
+
+      - name: Route limits
+        # A route anybody can reach, that a stranger can turn into cost the
+        # village cannot refuse, has to be bounded.
+        #
+        # This replaces CodeQL's js/missing-rate-limiting, which is filtered
+        # out in .github/codeql/codeql-config.yml because it cannot see any of
+        # the three ways this server bounds a request and reported 98 alerts
+        # holding zero unauthenticated writes. This one recognises the 429
+        # rather than a helper's name, so all three shapes count, and it reads
+        # all 590 routes in about a third of a second.
+        #
+        # Dependency-free, no database.
+        run: node scripts/check-route-limits.mjs
 
       - name: Build
         id: build

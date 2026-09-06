@@ -131,6 +131,44 @@ export default function Wallet() {
    */
   const tokenDecimals: Record<string, number> = data?.mine?.tokenDecimals ?? {};
 
+  /**
+   * ONE QUANTITY ON A RECEIPT, in the village's own word for the token.
+   *
+   * The slug is history's identity and a machine name. Every other line on
+   * this page already says "Village Voice"; the receipts said "village-voice",
+   * so the one place a member goes to check what happened was the one place
+   * that named things differently.
+   *
+   * THE QUANTITY STAYS IN LEDGER UNITS, DELIBERATELY, and that is the harder
+   * half. `exchange_orders.quantity` and `pay_quantity` go into the ledger as
+   * the transfer amount, so they are MINOR units like the balance grid a
+   * hundred lines above. Dividing them HERE alone would have made this page
+   * contradict itself in three directions at once:
+   *
+   *   - SwapCard prints the same order back as a receipt banner the moment it
+   *     lands, from `payQuantity`/`receiveQuantity`, raw.
+   *   - Its quote sentence is composed on the server
+   *     (`quoteSwap` in server/lib/exchange.ts) with raw quantities in it, and
+   *     that sentence is the text a member consents to.
+   *   - The "How many" box beside it, and the Buy quantity box above, post
+   *     ledger units. A member who typed 1 would read a receipt saying 0.01.
+   *
+   * That last one is exactly the failure the send card shipped and had to be
+   * fixed for: a surface that divides at the display and not at the input is
+   * WORSE than one that divides at neither, because both-raw at least agree.
+   * The exchange is all-raw and therefore agrees with itself end to end today.
+   *
+   * Making it read in human units is a units pass over the exchange, not a
+   * render fix: `price_minor_each` is a price PER MINOR UNIT, and the ceiling
+   * that makes A->B->A unprofitable is proved over whole minor units. Six of
+   * the seven tokens sit at decimals 0 (drizzle/0126), and nothing decimal is
+   * swappable, so nothing on this page is wrong today. It goes wrong the day
+   * Village Credits moves to 2 (docs/ECONOMICS.md section 11), and it goes
+   * wrong on the server first: that is why the ruling tells the economics
+   * session to do the caller sweep and the display pass BEFORE the column.
+   */
+  const tokenOf = (slug: string): string => tokenNames[slug] ?? slug;
+
   return (
     <Layout>
       <section className="py-12 bg-gradient-to-b from-teal-deep/5 to-background">
@@ -297,8 +335,8 @@ export default function Wallet() {
                         dollar figure beside it would read as money taken. */}
                     #{o.receipt_no}:{" "}
                     {o.kind === "swap"
-                      ? `${o.pay_quantity} ${o.pay_token_slug} → ${o.quantity} ${o.token_slug}`
-                      : `${o.quantity} ${o.token_slug} · ${usd(o.amount_minor)}`}{" "}
+                      ? `${o.pay_quantity} ${tokenOf(o.pay_token_slug)} → ${o.quantity} ${tokenOf(o.token_slug)}`
+                      : `${o.quantity} ${tokenOf(o.token_slug)} · ${usd(o.amount_minor)}`}{" "}
                     ·{" "}
                     <span className={["disputed", "reversed"].includes(o.status) ? "text-red-600" : o.status === "paid" ? "text-emerald-600" : ""}>
                       {o.kind === "swap" && o.status === "paid" ? "swapped" : o.status}

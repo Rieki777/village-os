@@ -107,7 +107,12 @@ export default function Legend({
     // lands in the same bucket, which is where it belongs anyway.
     const word = String(s.state ?? (s.holderCount > 0 ? "filled" : "open"));
     counts[word !== "other" && word in counts ? word : "other"] += 1;
+    // Representation is a property OF a seat, not one of its states, so it
+    // tallies alongside rather than inside the state buckets. A seat that
+    // speaks for its circle is also open, or held, or forming.
+    if (s.representsCircle) counts.represents = (counts.represents ?? 0) + 1;
   }
+  counts.represents = counts.represents ?? 0;
 
   const rows: Array<{ kind: "open" | "partial" | "filled" | "forming" | "expired"; word: string }> = [
     { kind: "open", word: "open call" },
@@ -146,6 +151,19 @@ export default function Legend({
             <span className="ml-auto text-muted-foreground tabular-nums">{counts.other}</span>
           </li>
         )}
+        {/* THE DOUBLE LINK. Counted, so a village that has not named a
+            representative anywhere sees a zero and knows the mark exists,
+            instead of never meeting it. Sociocracy's one structural idea a
+            normal org chart cannot draw, so it is worth a line here. */}
+        <li className="flex items-center gap-2 text-xs text-foreground">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" className="shrink-0">
+            <line x1="0" y1="8" x2="4" y2="8" stroke="var(--color-teal-deep)" strokeWidth={1.2} strokeDasharray="2.5 2" />
+            <circle cx="9" cy="8" r="3" fill="var(--color-teal-deep)" />
+            <circle cx="9" cy="8" r="5.4" fill="none" stroke="var(--color-teal-deep)" strokeWidth={1} />
+          </svg>
+          <span>speaks for this circle where it links out</span>
+          <span className="ml-auto text-muted-foreground tabular-nums">{counts.represents}</span>
+        </li>
       </ul>
 
       {/* The spectrum (card A design 5): one strip from "one holds it" to

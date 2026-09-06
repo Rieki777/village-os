@@ -16,7 +16,7 @@
  *      A proposal here may have BEEN to a vote and come back: a missed quorum
  *      and a called-off ballot both send it to `open` holding its ballot id,
  *      and both settle nothing. The card says which, in the bell's own words,
- *      and links to the vote (BALLOT_RETURN below).
+ *      and links to the vote (`ballotReturn`, gameMechanicsBallotCopy.ts).
  *   4. The amendment history.
  *
  * WHERE THE BINDING VOTE HAPPENS IS THIS VILLAGE'S OWN ANSWER, and the page
@@ -52,7 +52,8 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import InfoTip from "@/components/InfoTip";
-import { useGameConfig, authToken } from "@/lib/gameApi";
+import { useCatalyst, useGameConfig, authToken } from "@/lib/gameApi";
+import { ballotReturn } from "./gameMechanicsBallotCopy";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFocusTarget } from "@/lib/useFocusTarget";
 
@@ -158,7 +159,7 @@ type ProposalStatus =
   | "applied";
 
 /** How the last ballot on a proposal ended (`ballots.status`). */
-type BallotStatus = "open" | "passed" | "failed" | "no_quorum" | "withdrawn";
+export type BallotStatus = "open" | "passed" | "failed" | "no_quorum" | "withdrawn";
 
 interface Proposal {
   id: string;
@@ -247,42 +248,6 @@ function statusChip(status: ProposalStatus): { label: string; cls: string } {
 }
 
 /**
- * WHY A PROPOSAL IS SITTING WHERE IT IS SITTING.
- *
- * A proposal back at `open` while holding a ballot id has BEEN to a vote and
- * come back, and until the close route was fixed there was no such thing: a
- * missed quorum wrote `failed` on the subject, so "too few of us were here"
- * went on the record as "the village rejected this". Two facts, and the second
- * one was false.
- *
- * Both ways back settle NOTHING, and the words have to carry that or the fix
- * only reached the database. The vocabulary is the bell's, deliberately:
- * `ballot_no_quorum` says too few of the roll answered and the question
- * stands, `ballot_withdrawn` says a vote was called off before it closed. One
- * event, one set of words, however a member meets it.
- *
- * `passed` and `failed` are here for the record only. The proposal's own
- * status already says what happened, so this adds the link and stays quiet.
- */
-export const BALLOT_RETURN: Record<BallotStatus, { chip: string | null; cls: string; line: string | null; tip: string | null }> = {
-  open: { chip: null, cls: "", line: null, tip: null },
-  passed: { chip: null, cls: "", line: null, tip: null },
-  failed: { chip: null, cls: "", line: null, tip: null },
-  no_quorum: {
-    chip: "too few spoke",
-    cls: "bg-stone-100 text-stone-600",
-    line: "Too few of the village voted for that ballot to settle anything. This stands where it stood, holding its supporters and every word of it, and it can go to a vote again.",
-    tip: "A vote settles something only when enough of the village answers it. Too few did, so that ballot decided nothing and this went back where it was. Going again means a new vote, frozen fresh on the day it opens.",
-  },
-  withdrawn: {
-    chip: "its vote was called off",
-    cls: "bg-stone-100 text-stone-600",
-    line: "The vote on this was called off before it closed, so nothing was decided. It holds its supporters and every word of it, and the reason is on that vote's record.",
-    tip: "Whoever opens a vote can call it off while nobody has answered it. Once even one vote stands, calling it off takes a proposal.decide holder or an admin, because cast votes belong to the people who cast them.",
-  },
-};
-
-/**
  * The chip that says a proposal has been to a vote and come back, beside the
  * chip that says where it stands now. Two chips, because they answer two
  * questions and folding them into one is how "waiting" became "rejected".
@@ -292,7 +257,8 @@ export const BALLOT_RETURN: Record<BallotStatus, { chip: string | null; cls: str
  * has not happened is the scorecard R55 rules out.
  */
 function BallotReturnChip({ proposal }: { proposal: Proposal }) {
-  const back = proposal.lastBallotStatus ? BALLOT_RETURN[proposal.lastBallotStatus] : null;
+  const catalyst = useCatalyst();
+  const back = proposal.lastBallotStatus ? ballotReturn(catalyst.aName)[proposal.lastBallotStatus] : null;
   if (!proposal.ballotId || !back?.chip) return null;
   return (
     <span className={`text-xs px-2 py-0.5 rounded-full ${back.cls}`}>
@@ -309,8 +275,9 @@ function BallotReturnChip({ proposal }: { proposal: Proposal }) {
  * being described instead of taking this page's word for it.
  */
 function BallotReturnNote({ proposal }: { proposal: Proposal }) {
+  const catalyst = useCatalyst();
   if (!proposal.ballotId) return null;
-  const back = proposal.lastBallotStatus ? BALLOT_RETURN[proposal.lastBallotStatus] : null;
+  const back = proposal.lastBallotStatus ? ballotReturn(catalyst.aName)[proposal.lastBallotStatus] : null;
   const live = proposal.lastBallotStatus === "open";
   const to = (
     <Link
@@ -518,6 +485,9 @@ function DialEditor({
 
 export default function GameMechanics() {
   const cfg = useGameConfig();
+  // A LABEL. Who may withdraw is unchanged: the route still checks
+  // proposal.decide and isAdmin, and this only says the village's word for it.
+  const catalyst = useCatalyst();
   const { user } = useAuth();
   const [snapshot, setSnapshot] = useState<MechanicsSnapshot | null>(null);
   const [failed, setFailed] = useState(false);
@@ -1299,7 +1269,7 @@ export default function GameMechanics() {
                               type="button"
                               onClick={() => act(`/api/game/mechanics/proposals/${p.id}/withdraw`)}
                               className="text-sm text-stone-400 hover:text-red-600 hover:underline"
-                              title="Proposer or admin only"
+                              title={`Proposer or ${catalyst.name} only`}
                             >
                               Withdraw
                             </button>

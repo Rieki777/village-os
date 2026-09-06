@@ -16,6 +16,7 @@ import {
 import { resolutionLine } from "@/lib/reportFeedback";
 import { ALL_CAPABILITIES, isDeniable } from "@shared/capabilities";
 import BreathingLoader from "@/components/natural/BreathingLoader";
+import { SeatSomebody } from "@/components/power/SeatSomebody";
 import Celebration from "@/components/natural/Celebration";
 import { useMomentWindow } from "@/components/natural/moments";
 import { playMoment } from "@/lib/sound";
@@ -39,9 +40,14 @@ import MapVocabularyPanel from "@/components/admin/MapVocabularyPanel";
 import EventsAdminPanel from "@/components/EventsAdminPanel";
 import ResourcesAdminPanel from "@/components/power/ResourcesAdminPanel";
 import { CrowdpoolAdminTab, ForumCategoriesEditor, ToolsCategoriesEditor } from "@/components/admin/ModuleConfigPanels";
-import { CONTENT_SECTIONS } from "@/components/admin/contentSections";
-import { navGroups, type NavGroup } from "@/components/admin/adminNavGroups";
-import { SETUP_STEPS, measureSetup, setupIsComplete } from "@/components/admin/setupProgress";
+import { CONTENT_SECTIONS, emptyContentFor } from "@/components/admin/contentSections";
+import { displayCurrencyProblem } from "@shared/money";
+import InvoluntaryExitDialog from "@/components/admin/InvoluntaryExitDialog";
+import ContentEditorTab from "@/components/admin/ContentEditorTab";
+import WorkWithUsTab from "@/components/admin/WorkWithUsTab";
+import { StepListEditor, stalePolicyTerms } from "@/components/admin/exitPolicyEditing";
+import { CONNECTIONS_GROUP_TITLE, MODULES_GROUP_TITLE, navGroups, type NavGroup } from "@/components/admin/adminNavGroups";
+import { IDENTITY_WIZARD_FIELDS, SETUP_STEPS, measureSetup, setupIsComplete } from "@/components/admin/setupProgress";
 import TokenNamingLink from "@/components/admin/TokenNamingLink";
 import TokensTab from "@/components/admin/TokensTab";
 import SetupSection from "@/components/admin/SetupSection";
@@ -1009,274 +1015,6 @@ function SubmissionsTab({ password }: { password: string }) {
   );
 }
 
-// ── Content Editor Tab ────────────────────────────────────────────────────────
-
-function ContentEditorTab({ password, sectionKey, sectionLabel }: {
-  password: string;
-  sectionKey: string;
-  sectionLabel: string;
-}) {
-  const [raw, setRaw] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [parseError, setParseError] = useState("");
-  /**
-   * The save's own answer, beside the save button.
-   *
-   * `parseError` renders inside the advanced JSON block, which is collapsed
-   * on the card editor, so a refusal reported there is a refusal nobody sees.
-   */
-  const [saveError, setSaveError] = useState("");
-  const [saved, setSaved] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/content/${sectionKey}`);
-      const data = await res.json();
-      setRaw(JSON.stringify(data, null, 2));
-    } catch {
-      setRaw("// Error loading content");
-    }
-    setLoading(false);
-  }, [sectionKey]);
-
-  // `saveError` clears with the rest: a refusal is about the section that was
-  // on screen when it happened, and carrying it onto the next one would make
-  // this panel lie in the other direction.
-  useEffect(() => { load(); setSaved(false); setSaveError(""); }, [load]);
-
-  const save = async () => {
-    setParseError("");
-    let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch (e: any) {
-      setParseError("Invalid JSON: " + e.message);
-      return;
-    }
-    // Blank list entries are trimmed HERE, not while typing — see the
-    // "one per line" textarea's comment. Typing must never rewrite what
-    // you just typed.
-    if (Array.isArray(parsed)) {
-      for (const card of parsed) {
-        if (card && typeof card === "object") {
-          for (const [k, v] of Object.entries(card)) {
-            if (Array.isArray(v)) card[k] = v.filter((x) => String(x ?? "").trim() !== "");
-          }
-        }
-      }
-    }
-    setSaving(true);
-    setSaveError("");
-    /*
-     * THE SAVE ASKS. It did not, and the button said "Saved!" whatever came
-     * back, which is the one thing an editor must never do.
-     *
-     * `fetch` resolves on a 403 and on a 500 the same way it resolves on a
-     * 200, so the old `catch` only ever caught a dead network. This route is
-     * behind `story.tell`, and a village that holds that power answers with a
-     * 409 the break-glass turns into a question. An operator who reads that
-     * question and chooses "Leave it" gets the 409 back, so a save that skips
-     * the status check prints "Saved!" over a change the operator just
-     * declined to make.
-     */
-    try {
-      const res = await fetch(`${API_BASE}/admin/content/${sectionKey}`, {
-        method: "PUT",
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify(parsed),
-      });
-      if (res.ok) {
-        setSaved(true);
-        setTimeout(() => setSaved(false), 3000);
-      } else {
-        const body = await res.json().catch(() => null);
-        setSaveError(refusal(body, `The server refused this save (${res.status}). The live page is unchanged.`));
-      }
-    } catch {
-      setSaveError("This save did not reach the server. The live page is unchanged.");
-    }
-    setSaving(false);
-  };
-
-  // Team gets a card editor: plain fields, the raw JSON demoted to "advanced".
-  // Editing mutates the PARSED array in place and re-serializes, so keys the
-  // form doesn't know about survive untouched — the JSON stays the ground
-  // truth. These cards feed the public /team page directly.
-  const isCards = sectionKey === "team";
-  const cardsData: any[] | null = isCards && raw ? (() => {
-    try { const p = JSON.parse(raw); return Array.isArray(p) ? p : null; } catch { return null; }
-  })() : null;
-  const mutateCards = (fn: (arr: any[]) => void) => {
-    const arr = JSON.parse(raw);
-    fn(arr);
-    setRaw(JSON.stringify(arr, null, 2));
-  };
-  // field spec: [key, label, kind, options?]
-  const CARD_FIELDS: Array<[string, string, "text" | "long" | "lines" | "select", string[]?]> = [
-    ["name", "Name", "text"],
-    ["role", "Role title", "text"],
-    ["circle", "Circle (shown under the title)", "text"],
-    ["photo", "Photo URL", "text"],
-    ["bio", "Bio", "long"],
-  ];
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">Edit: {sectionLabel}</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            Changes save to the server and go live immediately.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={load}
-            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
-          <button
-            onClick={save}
-            disabled={saving}
-            className="flex items-center gap-2 px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep/90 disabled:opacity-50 transition-colors"
-          >
-            <Save className="w-4 h-4" />
-            {saving ? "Saving..." : saved ? "Saved!" : "Save Changes"}
-          </button>
-        </div>
-      </div>
-
-      {saveError && (
-        <p role="alert" className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-          {saveError}
-        </p>
-      )}
-
-      {loading ? (
-        <div className="text-center py-12 text-gray-400">Loading...</div>
-      ) : (
-        <>
-          {/* Card editor — plain fields, no JSON in sight */}
-          {isCards && cardsData && (
-            <div className="mb-6 space-y-4">
-              {cardsData.map((card: any, idx: number) => (
-                <div key={idx} className="border border-gray-200 rounded-xl p-5 bg-gray-50">
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="font-semibold text-gray-800 text-sm">{card.name || `#${idx + 1}`}</p>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => mutateCards((a) => { if (idx > 0) { const [c] = a.splice(idx, 1); a.splice(idx - 1, 0, c); } })}
-                        disabled={idx === 0}
-                        title="Move up"
-                        className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-30"
-                      >
-                        <ArrowUp className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => mutateCards((a) => { if (idx < a.length - 1) { const [c] = a.splice(idx, 1); a.splice(idx + 1, 0, c); } })}
-                        disabled={idx === cardsData.length - 1}
-                        title="Move down"
-                        className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-30"
-                      >
-                        <ArrowDown className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => { if (window.confirm(`Remove "${card.name || "this entry"}"?`)) mutateCards((a) => a.splice(idx, 1)); }}
-                        className="text-xs text-gray-400 hover:text-red-600"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                  <div className="grid sm:grid-cols-2 gap-3">
-                    {CARD_FIELDS.map(([key, label, kind, options]) => (
-                      <div key={key} className={kind === "text" ? "" : "sm:col-span-2"}>
-                        <label className="text-xs font-medium text-gray-500 block mb-1">{label}</label>
-                        {kind === "lines" ? (
-                          <textarea
-                            rows={Math.max(3, (Array.isArray(card[key]) ? card[key].length : 3))}
-                            value={Array.isArray(card[key]) ? card[key].join("\n") : String(card[key] ?? "")}
-                            // NO .filter(Boolean): dropping empty lines means
-                            // the moment you press Enter to start a new item,
-                            // the trailing blank vanishes, the value
-                            // re-serializes identically, and the cursor jumps
-                            // to the end — you can never actually add a line.
-                            // Blanks are trimmed once, on save, not on keypress.
-                            onChange={(e) => mutateCards((a) => { a[idx][key] = e.target.value.split("\n"); })}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep/40 resize-none"
-                          />
-                        ) : kind === "select" ? (
-                          <select
-                            value={String(card[key] ?? (options?.[0] ?? ""))}
-                            onChange={(e) => mutateCards((a) => { a[idx][key] = e.target.value; })}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep/40 bg-white"
-                          >
-                            {(options ?? []).map((o) => (
-                              <option key={o} value={o}>
-                                {o === "open" ? "Open Seat" : o === "filled" ? "Filled" : o === "partial" ? "Partially Filled" : o === "forming" ? "Forming" : o}
-                              </option>
-                            ))}
-                          </select>
-                        ) : kind === "long" ? (
-                          <textarea
-                            rows={2}
-                            value={String(card[key] ?? "")}
-                            onChange={(e) => mutateCards((a) => { a[idx][key] = e.target.value; })}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep/40 resize-none"
-                          />
-                        ) : (
-                          <input
-                            type="text"
-                            value={String(card[key] ?? "")}
-                            onChange={(e) => mutateCards((a) => { a[idx][key] = e.target.value; })}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep/40"
-                          />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-              <button
-                onClick={() => mutateCards((a) => a.push(
-                  { name: "New team member", role: "", circle: "", photo: "", bio: "" },
-                ))}
-                className="text-sm text-teal-deep font-medium hover:underline"
-              >
-                + Add a team member
-              </button>
-              <p className="text-xs text-gray-400">
-                Remember to hit Save Changes above. Edits here go live only after saving.
-              </p>
-            </div>
-          )}
-
-          {/* Raw JSON editor, always shown, acts as ground truth */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                {isCards ? "Raw JSON (advanced edits)" : "Edit JSON"}
-              </label>
-              {parseError && (
-                <span role="alert" className="text-xs text-red-500">{parseError}</span>
-              )}
-            </div>
-            <textarea
-              value={raw}
-              onChange={(e) => { setRaw(e.target.value); setParseError(""); }}
-              rows={isCards ? 12 : 28}
-              spellCheck={false}
-              className="w-full px-4 py-3 text-xs font-mono border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-deep/40 bg-gray-900 text-green-300 resize-none"
-            />
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
 
 // ── Email Settings Tab ────────────────────────────────────────────────────────
 
@@ -2120,8 +1858,8 @@ function UploadedFilesTab({ password }: { password: string }) {
     setBusy(false);
   };
 
-  const orphans = report?.findings.filter((f) => f.verdict === "orphan") ?? [];
-  const unknowns = report?.findings.filter((f) => f.verdict === "unknown") ?? [];
+  const orphans = report?.findings?.filter((f) => f.verdict === "orphan") ?? [];
+  const unknowns = report?.findings?.filter((f) => f.verdict === "unknown") ?? [];
 
   return (
     <div>
@@ -4972,7 +4710,6 @@ function OrgChartTab({ password }: { password: string }) {
   const [draft, setDraft] = useState<Record<string, any>>({});
   const [circleDraft, setCircleDraft] = useState<Record<string, any>>({});
   const [newSeat, setNewSeat] = useState<Record<string, string>>({});
-  const [adding, setAdding] = useState<Record<string, string>>({});
   // Opened per seat, because the point of a journal is reading one node's
   // history before you change it, not scrolling a feed of everything.
   const [journal, setJournal] = useState<Record<string, any[] | "loading">>({});
@@ -5301,21 +5038,13 @@ function OrgChartTab({ password }: { password: string }) {
                       </div>
 
                       <div className="mt-2 flex flex-wrap gap-2 items-end">
-                        <label className="text-xs text-gray-500">Seat someone
-                          <select className={`${inputCls} mt-1`} value={adding[r.id] ?? ""}
-                            onChange={(e) => setAdding({ ...adding, [r.id]: e.target.value })}>
-                            <option value="">Choose a member…</option>
-                            {members.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                          </select>
-                        </label>
-                        <button
-                          className="text-sm bg-teal-deep text-white rounded-lg px-3 py-2 font-medium disabled:opacity-40"
-                          disabled={!adding[r.id]}
-                          onClick={async () => {
-                            const ok = await call(`/admin/org/roles/${r.id}/holders`, { userId: adding[r.id] });
-                            if (ok) { toast.success("Seated"); setAdding({ ...adding, [r.id]: "" }); void load(); }
-                          }}
-                        >Seat</button>
+                        <SeatSomebody
+                          roleId={r.id}
+                          members={members}
+                          call={call}
+                          onSeated={(what) => { toast.success(what); void load(); }}
+                          onFailed={(why) => toast.error(why)}
+                        />
                         <button
                           onClick={() => void openJournal(r.id)}
                           className="text-sm text-gray-500 hover:text-gray-800 px-2 py-2"
@@ -5703,7 +5432,7 @@ function CirclesMapTab({ password }: { password: string }) {
     return (
       <div>
         <h2 className="text-xl font-bold text-gray-900 mb-2">Circles &amp; Map</h2>
-        <p className="text-sm text-gray-500">The How Power Is Held module is off. Turn it on in the Module Library (top of The Game menu) first.</p>
+        <p className="text-sm text-gray-500">The How Power Is Held module is off. Turn it on in the Module Library (top of the {MODULES_GROUP_TITLE} group) first.</p>
       </div>
     );
   }
@@ -5937,7 +5666,7 @@ function ToolsAdminTab({ password }: { password: string }) {
         <h2 className="text-xl font-bold text-gray-900 mb-2">Tools</h2>
         <p className="text-sm text-gray-500">
           The Tools Hub module is off. Enable it (at least to Preview) in
-          Module Library (top of The Game menu), then come back here to add tools.
+          Module Library (top of the {MODULES_GROUP_TITLE} group), then come back here to add tools.
         </p>
       </div>
     );
@@ -6215,7 +5944,7 @@ function StaysAdminTab({ password, onOpenTab }: { password: string; onOpenTab: (
       <div>
         <h2 className="text-xl font-bold text-gray-900 mb-2">Stays & Payments</h2>
         <p className="text-sm text-gray-500">
-          The Stays module is off. Turn it on in the Module Library (top of The Game menu, it is
+          The Stays module is off. Turn it on in the Module Library (top of the {MODULES_GROUP_TITLE} group, it is
           funds-bearing, and the legal card will walk you through the posture),
           then come back here to post rooms and rates.
         </p>
@@ -6590,8 +6319,8 @@ function ExchangeAdminTab({ password }: { password: string }) {
       <div>
         <h2 className="text-xl font-bold text-gray-900 mb-2">Exchange</h2>
         <p className="text-sm text-gray-500">
-          The Exchange module is off. Turn it on in the Module Library (top of The Game
-          menu; it is funds-bearing, so the legal card applies), then list tokens and post prices here.
+          The Exchange module is off. Turn it on in the Module Library (top of the
+          {MODULES_GROUP_TITLE} group; it is funds-bearing, so the legal card applies), then list tokens and post prices here.
         </p>
       </div>
     );
@@ -7087,7 +6816,7 @@ function BadgesAdminTab({ password }: { password: string }) {
     return (
       <div>
         <h2 className="text-xl font-bold text-gray-900 mb-2">Badges</h2>
-        <p className="text-sm text-gray-500">The Badges module is off. Turn it on in the Module Library (top of The Game menu) first.</p>
+        <p className="text-sm text-gray-500">The Badges module is off. Turn it on in the Module Library (top of the {MODULES_GROUP_TITLE} group) first.</p>
       </div>
     );
   }
@@ -7355,7 +7084,7 @@ function LibraryAdminTab({ password, onOpenTab }: { password: string; onOpenTab:
     return (
       <div>
         <h2 className="text-xl font-bold text-gray-900 mb-2">Material Library</h2>
-        <p className="text-sm text-gray-500">The Material Library module is off. Turn it on in the Module Library (top of The Game menu) first.</p>
+        <p className="text-sm text-gray-500">The Material Library module is off. Turn it on in the Module Library (top of the {MODULES_GROUP_TITLE} group) first.</p>
       </div>
     );
   }
@@ -7605,7 +7334,7 @@ function HealthAdminTab({ password }: { password: string }) {
         <p className="text-sm text-gray-500">
           The Village Health module is off. Snapshot collection runs anyway
           (every cycle close freezes its numbers); enable the module in
-          Module Library (top of The Game menu) when there is enough history
+          Module Library (top of the {MODULES_GROUP_TITLE} group) when there is enough history
           to show, and to record regeneration entries here.
         </p>
       </div>
@@ -7684,85 +7413,6 @@ function HealthAdminTab({ password }: { password: string }) {
  * blocking badges, the balance sweep, the terminal resolve (refused with
  * named domains until clean), and the policy editor.
  */
-/**
- * An ordered list of sentences, editable. Used by the exit policy for the two
- * step lists /exit-policy prints as numbered lists.
- *
- * Rows are addressed by index, so a step keeps its position while it is being
- * retyped. Every control clears 44px and carries a text label, because "the
- * red one deletes" is not a label.
- */
-function StepListEditor({
-  label, hint, steps, onChange,
-}: {
-  label: string;
-  hint?: string;
-  steps: string[];
-  onChange: (next: string[]) => void;
-}) {
-  const set = (i: number, v: string) => onChange(steps.map((s, j) => (j === i ? v : s)));
-  const remove = (i: number) => onChange(steps.filter((_, j) => j !== i));
-  const move = (i: number, by: number) => {
-    const j = i + by;
-    if (j < 0 || j >= steps.length) return;
-    const next = [...steps];
-    [next[i], next[j]] = [next[j], next[i]];
-    onChange(next);
-  };
-  const btn = "min-h-[44px] min-w-[44px] px-3 text-xs rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-deep disabled:opacity-40";
-  // An HTML id may not contain whitespace, and the label is a sentence.
-  const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-  return (
-    <fieldset className="mb-4 border-0 p-0 m-0">
-      <legend className="text-xs font-medium text-gray-700">{label}</legend>
-      {hint && <p className="text-[11px] text-gray-500 mb-2">{hint}</p>}
-      <ol className="space-y-2">
-        {steps.map((s, i) => (
-          <li key={i} className="flex items-start gap-2">
-            <span className="text-xs text-gray-400 mt-3 w-4 text-right shrink-0">{i + 1}.</span>
-            <label className="sr-only" htmlFor={`step-${slug}-${i}`}>{`Step ${i + 1} of ${label}`}</label>
-            <textarea id={`step-${slug}-${i}`} rows={2} value={s} onChange={(e) => set(i, e.target.value)}
-              className="flex-1 min-h-[44px] border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-deep" />
-            <div className="flex flex-col gap-1 shrink-0">
-              <button type="button" className={btn} onClick={() => move(i, -1)} disabled={i === 0} aria-label={`Move step ${i + 1} up`}>Up</button>
-              <button type="button" className={btn} onClick={() => move(i, 1)} disabled={i === steps.length - 1} aria-label={`Move step ${i + 1} down`}>Down</button>
-            </div>
-            <button type="button" className={`${btn} text-red-600 border-red-200`} onClick={() => remove(i)} aria-label={`Remove step ${i + 1}`}>Remove</button>
-          </li>
-        ))}
-      </ol>
-      <button type="button" onClick={() => onChange([...steps, ""])}
-        className="mt-2 min-h-[44px] px-3 text-xs rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-deep">
-        Add a step
-      </button>
-    </fieldset>
-  );
-}
-
-/** Whitespace and case are formatting, so they never count as new words. */
-const sameWords = (a: unknown, b: unknown) =>
-  String(a ?? "").replace(/\s+/g, " ").trim().toLowerCase() === String(b ?? "").replace(/\s+/g, " ").trim().toLowerCase();
-
-const sameSteps = (a: unknown, b: unknown) => {
-  const x = Array.isArray(a) ? a : [];
-  const y = Array.isArray(b) ? b : [];
-  return x.length === y.length && x.every((s, i) => sameWords(s, y[i]));
-};
-
-/**
- * The rendered terms of the exit policy that are still word for word the
- * platform's. The same four the server checks, computed from the SAME defaults
- * the server sends down, so the editor can never disagree with the refusal.
- */
-function stalePolicyTerms(draft: any, defaults: any): string[] {
-  if (!draft || !defaults) return [];
-  const out: string[] = [];
-  if (sameWords(draft.voluntary?.valuationMethod, defaults.voluntary?.valuationMethod)) out.push("How contributed value is honored");
-  if (sameSteps(draft.voluntary?.unwindSteps, defaults.voluntary?.unwindSteps)) out.push("The steps of a voluntary departure");
-  if (sameWords(draft.involuntary?.process, defaults.involuntary?.process)) out.push("If the village asks someone to leave");
-  if (sameSteps(draft.restorative?.steps, defaults.restorative?.steps)) out.push("The restorative path");
-  return out;
-}
 
 function ExitsAdminTab({ password }: { password: string }) {
   const [data, setData] = useState<any>(null);
@@ -7777,6 +7427,13 @@ function ExitsAdminTab({ password }: { password: string }) {
   // the server's refusal can never drift apart.
   const [policyDefaults, setPolicyDefaults] = useState<any>(null);
   const [circles, setCircles] = useState<any[]>([]);
+  /**
+   * The involuntary-exit form. It used to be `window.prompt`, which is to say
+   * the browser's own one-line box, carrying the site's domain, for the act
+   * of asking a person to leave the village.
+   */
+  const [involuntaryOpen, setInvoluntaryOpen] = useState(false);
+  const [involuntaryBusy, setInvoluntaryBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -7863,12 +7520,32 @@ function ExitsAdminTab({ password }: { password: string }) {
                 </div>
               ))}
             </div>
+            {/* OUTSIDE `!openExit` on purpose: trigger and dialog were siblings
+                inside it, so a successful save unmounted both and Radix had no
+                element left to return focus to. Renders nothing while closed. */}
+            <InvoluntaryExitDialog
+              open={involuntaryOpen}
+              memberName={players.find((p: any) => p.id === selectedUser)?.name ?? ""}
+              /* The village's own questions, from the published policy.
+                 `policyDraft` is what the editor below is holding, so an
+                 unsaved edit is not offered here: `data.policy` is what
+                 the village has actually published. */
+              grounds={Array.isArray(data?.policy?.involuntary?.grounds) ? data.policy.involuntary.grounds : []}
+              busy={involuntaryBusy}
+              onCancel={() => setInvoluntaryOpen(false)}
+              onConfirm={async (note) => {
+                setInvoluntaryBusy(true);
+                const d = await call("/admin/exits", { userId: selectedUser, kind: "involuntary", note });
+                setInvoluntaryBusy(false);
+                if (d) { setInvoluntaryOpen(false); toast.success("Exit opened"); load(); loadState(selectedUser); }
+              }}
+                  />
             <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
               {!openExit ? (
                 <>
                   <button onClick={async () => { const d = await call("/admin/exits", { userId: selectedUser, kind: "voluntary" }); if (d) { toast.success("Exit opened"); load(); loadState(selectedUser); } }}
                     className="text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium">Open exit</button>
-                  <button onClick={async () => { const note = window.prompt("Involuntary exits follow the published process. Note for the record:"); if (note === null) return; const d = await call("/admin/exits", { userId: selectedUser, kind: "involuntary", note }); if (d) { toast.success("Exit opened"); load(); loadState(selectedUser); } }}
+                  <button onClick={() => setInvoluntaryOpen(true)}
                     className="text-sm border border-red-300 text-red-600 rounded-lg px-4 py-2 font-medium">Open involuntary…</button>
                 </>
               ) : (
@@ -7898,11 +7575,24 @@ function ExitsAdminTab({ password }: { password: string }) {
         <h3 className="font-semibold text-gray-900 mb-3">Departure record</h3>
         <div className="space-y-1.5">
           {(data?.exits ?? []).map((e: any) => (
-            <p key={e.id} className="text-sm text-gray-600">
-              <b className="text-gray-900">{e.userName}</b>: {e.kind}, {e.status}
-              <span className="text-xs text-gray-400"> · opened {new Date(e.openedAt).toLocaleDateString()}{e.resolvedAt ? `, closed ${new Date(e.resolvedAt).toLocaleDateString()}` : ""}</span>
-              {e.agreementRef && <span className="text-xs text-teal-deep"> · agreement: {e.agreementRef}</span>}
-            </p>
+            <div key={e.id}>
+              <p className="text-sm text-gray-600">
+                <b className="text-gray-900">{e.userName}</b>: {e.kind}, {e.status}
+                <span className="text-xs text-gray-400"> · opened {new Date(e.openedAt).toLocaleDateString()}{e.resolvedAt ? `, closed ${new Date(e.resolvedAt).toLocaleDateString()}` : ""}</span>
+                {e.agreementRef && <span className="text-xs text-teal-deep"> · agreement: {e.agreementRef}</span>}
+              </p>
+              {/* THE REASON, WHICH NOTHING SHOWED. `resolution` has been on the
+                  wire since the exits table existed; this record printed name,
+                  kind, status and dates and never the field that says WHY, so
+                  a steward's note went into the database and was read by
+                  nobody. pre-line because the form composes a reason and then
+                  one line per answered question, and that shape is the record. */}
+              {e.resolution && (
+                <p className="text-xs text-muted-foreground whitespace-pre-line border-l-2 border-gray-200 pl-3 ml-1 mt-1 mb-2">
+                  {e.resolution}
+                </p>
+              )}
+            </div>
           ))}
           {(data?.exits ?? []).length === 0 && <p className="text-sm text-gray-400">No departures yet, and the policy is already published. Good.</p>}
         </div>
@@ -7980,6 +7670,24 @@ function ExitsAdminTab({ password }: { password: string }) {
               onChange={(e) => setInv({ process: e.target.value })}
               className={`${inputCls} w-full mt-1`} />
           </label>
+
+          {/*
+            The questions a steward has to answer, on the record, before this
+            village asks anybody to leave. They are the village's own, so they
+            are edited here rather than compiled into the platform.
+
+            No stale badge beside this one, and that is deliberate: the badge
+            reports membership of EXIT_POLICY_TERMS, which gates publishing,
+            and this field is deliberately not in that list. A badge here
+            would promise a check that does not run. See the comment on
+            `grounds` in server/lib/exitPolicy.ts.
+          */}
+          <StepListEditor
+            label="Questions asked before an involuntary exit"
+            hint="A steward answers each one yes, no, or does not apply when opening a departure. The answers go on the record."
+            steps={Array.isArray(policyDraft.involuntary?.grounds) ? policyDraft.involuntary.grounds : []}
+            onChange={(next) => setInv({ grounds: next })}
+          />
 
           {/*
             Two ids that were stored, published to nobody and editable by
@@ -8152,7 +7860,7 @@ function CallsAdminTab({ password }: { password: string }) {
     return (
       <div>
         <h2 className="text-xl font-bold text-gray-900 mb-2">Call Automation</h2>
-        <p className="text-sm text-gray-500">The Call Automation module is off. Turn it on in the Module Library (top of The Game menu) first.</p>
+        <p className="text-sm text-gray-500">The Call Automation module is off. Turn it on in the Module Library (top of the {MODULES_GROUP_TITLE} group) first.</p>
       </div>
     );
   }
@@ -9289,6 +8997,37 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
   const [brand, setBrand] = useState<any>(null);
   const [defaults, setDefaults] = useState<any>(null);
   const [savingSection, setSavingSection] = useState<string | null>(null);
+  /**
+   * Which currency codes the daily rate table actually carries.
+   *
+   * Read live from the same route the member-facing picker reads, rather
+   * than from a list typed here, so this can never drift from what the
+   * village can really convert. Empty is a fine answer: the note below the
+   * field only speaks when it knows something.
+   *
+   * ABOVE THE EARLY RETURN, with the other hooks, and it has to stay there.
+   * A hook below `if (!brand || !defaults) return` is a hook the first render
+   * skips and the second runs, which is exactly the crash the Work With Us
+   * tab shipped with.
+   */
+  const [fxCovered, setFxCovered] = useState<string[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    fetch(`${API_BASE}/fx/rates`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((t) => {
+        if (!alive) return;
+        // ONLY when rates actually arrived. Seeding from `t.base` alone made
+        // `known` true with one entry, so a village whose daily job had not run
+        // was told there is no rate for USD, which is false.
+        const rates = Object.keys(t?.rates ?? {});
+        if (!rates.length) return;
+        setFxCovered([t.base, ...rates].filter(Boolean).sort());
+      })
+      .catch(() => { /* No table is not an error here; the note stays quiet. */ });
+    return () => { alive = false; };
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -9346,7 +9085,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
   /* `project` only. The two `currency` calls came out with the dead boxes, and
      narrowing the type is what stops a third one going back in by hand. */
   const brandField = (group: "project", key: string, label: string, defaultVal: string) => (
-    <div>
+    <div key={key}>
       <label className="text-xs font-medium text-gray-500 block mb-1">{label}</label>
       <input
         type="text"
@@ -9358,6 +9097,77 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
       <p className="text-[11px] text-gray-400 mt-0.5">Platform default: {defaultVal}</p>
     </div>
   );
+
+  /**
+   * The currency this village's money is quoted in.
+   *
+   * IT HAD NO FIELD ANYWHERE, which is why every fork shipped declaring
+   * Costa Rican colones: `shared/gameConfig.ts` defaults `fiatCurrency` to
+   * "CRC" and no screen in client/src let a founder say otherwise.
+   * `scripts/check-identity-keys.mjs` has been counting down a pending list
+   * whose last entry is this key, and whose stated exit condition is that the
+   * founder sets it in Admin. This is that screen.
+   *
+   * A FREE TEXT BOX WITH SUGGESTIONS, and deliberately not a dropdown. The
+   * daily rate table carries fourteen codes; the world has rather more, and
+   * the first village to use this platform is itself on one the table does
+   * not carry. A closed list would have made this village's own currency
+   * unreachable from the screen built to set it.
+   *
+   * The note is the honest half. `server/lib/fxRates.ts` fetches the ECB
+   * daily list, which does not carry CRC (measured 2026-08-21), so a village
+   * quoting in an uncovered currency shows amounts unconverted to anyone
+   * viewing in another until an admin records a manual rate. That is a real
+   * consequence of a choice made here, so it is said here, at the moment of
+   * choosing, rather than discovered later on a member's screen.
+   */
+  const currencyField = () => {
+    const raw = String(brand.project?.fiatCurrency ?? "");
+    const code = raw.trim().toUpperCase();
+    const problem = displayCurrencyProblem(raw.trim());
+    const known = fxCovered.length > 0;
+    const covered = known && fxCovered.includes(code);
+    return (
+      <div className="md:col-span-2">
+        <label className="text-xs font-medium text-gray-500 block mb-1" htmlFor="project-fiat-currency">
+          Currency your prices are in (three letter code)
+        </label>
+        <input
+          id="project-fiat-currency"
+          type="text"
+          // Tied to the box: a bare role="alert" is announced once and is then
+          // unreachable, so tabbing back gives the label and nothing about the
+          // problem. aria-invalid exposes a state the red text cannot.
+          aria-describedby="project-fiat-currency-note"
+          aria-invalid={problem ? true : undefined}
+          list="fiat-currency-options"
+          maxLength={3}
+          value={code}
+          // Uppercased on the way in, so "chf" and "CHF" cannot become two
+          // different villages' worth of stored value.
+          onChange={(e) => setField("project", "fiatCurrency", e.target.value.toUpperCase())}
+          placeholder={defaults.project?.fiatCurrency ?? ""}
+          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg uppercase"
+        />
+        <datalist id="fiat-currency-options">
+          {fxCovered.map((c) => <option key={c} value={c} />)}
+        </datalist>
+        {problem ? (
+          <p id="project-fiat-currency-note" role="alert" className="text-[11px] text-red-600 mt-0.5">{problem}</p>
+        ) : code && known && !covered ? (
+          <p id="project-fiat-currency-note" className="text-[11px] text-amber-700 mt-0.5">
+            There is no daily rate for {code}, so anyone viewing in another currency sees your
+            amounts unconverted until an admin records a rate by hand. Prices themselves are unaffected.
+          </p>
+        ) : (
+          <p id="project-fiat-currency-note" className="text-[11px] text-gray-400 mt-0.5">
+            Platform default: {defaults.project?.fiatCurrency ?? ""}. This sets what every price on the
+            site is quoted in, and what a member sees before choosing their own display currency.
+          </p>
+        )}
+      </div>
+    );
+  };
 
   const imageField = (key: string, label: string, altUnavailable?: string) => (
     <BrandImageField
@@ -9444,10 +9254,11 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
 
       <SetupSection {...step} id="identity" n={1} title="Identity" subtitle="What your project is called.">
         <div className="grid md:grid-cols-2 gap-4 mb-4">
-          {brandField("project", "name", "Project name", defaults.project.name)}
-          {brandField("project", "tagline", "Tagline", defaults.project.tagline)}
-          {brandField("project", "memberName", "What a member is called", defaults.project.memberName)}
-          {brandField("project", "location", "Location", defaults.project.location)}
+          {/* catalystName is a LABEL and not a role: renaming it changes no permission (see client/src/lib/gameApi.ts).
+              It is deliberately NOT one of the measured Identity fields in setupProgress.ts, because it ships with a
+              working default and counting it would leave Identity unfinished forever for a village happy with it. */}
+          {IDENTITY_WIZARD_FIELDS.map(([key, label]) => brandField("project", key, label, defaults.project[key] ?? ""))}
+          {currencyField()}
           {/*
             THE TWO CURRENCY BOXES ARE GONE, and they were dead when they were
             here. `mergedConfig()` (server/index.ts) computes
@@ -9571,7 +9382,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
   --set "ADMIN_PASSWORD=<pick-a-strong-one>" \\
   --set "JOURNEY_PASSWORD=<pick-a-strong-one>" \\
   --set "FRONTEND_URL=https://your-domain"`}</pre>
-            <p className="text-gray-500 mt-1">The Resend email API key is set later inside admin, under Notifications.</p>
+            <p className="text-gray-500 mt-1">The Resend email API key is set later inside admin, under {CONNECTIONS_GROUP_TITLE}.</p>
           </li>
           <li>
             <p className="font-medium text-gray-900">4. Point your domain</p>
@@ -9751,96 +9562,6 @@ function SettingsTab({ password }: { password: string }) {
   );
 }
 
-// ── Work With Us content tab (exchange types + Maia) ──────────────────────────
-
-function WorkWithUsTab({ password }: { password: string }) {
-  const [cfg, setCfg] = useState<any>(null);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    fetch(`${API_BASE}/admin/work-with-us-config`, { headers: authHeaders(password) })
-      .then((r) => r.json()).then(setCfg).catch(() => toast.error("Failed to load"));
-  }, [password]);
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      const res = await fetch(`${API_BASE}/admin/work-with-us-config`, {
-        method: "PUT",
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify(cfg),
-      });
-      if (!res.ok) throw new Error();
-      toast.success("Saved");
-    } catch { toast.error("Save failed"); }
-    setSaving(false);
-  };
-
-  if (!cfg) return <div className="text-center py-12 text-gray-400">Loading...</div>;
-
-  const opts = cfg.reciprocityOptions ?? [];
-  const setOpt = (i: number, patch: any) =>
-    setCfg({ ...cfg, reciprocityOptions: opts.map((o: any, j: number) => (j === i ? { ...o, ...patch } : o)) });
-  const addOpt = () => setCfg({ ...cfg, reciprocityOptions: [...opts, { value: "", title: "", desc: "" }] });
-  const removeOpt = (i: number) => setCfg({ ...cfg, reciprocityOptions: opts.filter((_: any, j: number) => j !== i) });
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">Work With Us</h2>
-          <p className="text-sm text-gray-500 mt-1">The intro, the reciprocity (exchange) options, and your AI guide's name and greeting.</p>
-        </div>
-        <button onClick={save} disabled={saving} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50">
-          {saving ? "Saving..." : "Save"}
-        </button>
-      </div>
-
-      <div className="space-y-5 max-w-2xl">
-        <div>
-          <label className="text-sm font-medium text-gray-700 block mb-1">Intro paragraph</label>
-          <textarea value={cfg.intro ?? ""} onChange={(e) => setCfg({ ...cfg, intro: e.target.value })} rows={3} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-y" />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-sm font-medium text-gray-700 block mb-1">AI guide's name</label>
-            <input type="text" value={cfg.assistantName ?? ""} onChange={(e) => setCfg({ ...cfg, assistantName: e.target.value })} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg" />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-gray-700 block mb-1">{useGameConfig()?.currency?.name ?? "recognition"} on accepted proposal</label>
-            <input type="number" min={0} value={cfg.acceptGratitude ?? 0} onChange={(e) => setCfg({ ...cfg, acceptGratitude: parseInt(e.target.value) || 0 })} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg" />
-          </div>
-        </div>
-
-        <div>
-          <label className="text-sm font-medium text-gray-700 block mb-1">Guide's opening greeting</label>
-          <textarea value={cfg.assistantGreeting ?? ""} onChange={(e) => setCfg({ ...cfg, assistantGreeting: e.target.value })} rows={2} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-y" />
-          <p className="text-[11px] text-gray-400 mt-0.5">Use {"{name}"} where the guide's name should appear.</p>
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-sm font-medium text-gray-700">Reciprocity (exchange) options</label>
-            <button onClick={addOpt} className="text-xs text-teal-deep font-medium hover:underline">+ Add option</button>
-          </div>
-          <div className="space-y-3">
-            {opts.map((o: any, i: number) => (
-              <div key={i} className="border border-gray-200 rounded-xl p-3 space-y-2">
-                <div className="flex gap-2">
-                  <input type="text" value={o.title} onChange={(e) => setOpt(i, { title: e.target.value })} placeholder="Title (shown)" className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg" />
-                  <input type="text" value={o.value} onChange={(e) => setOpt(i, { value: e.target.value })} placeholder="Value (stored)" className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg" />
-                  <button onClick={() => removeOpt(i)} className="p-2 text-gray-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
-                </div>
-                <textarea value={o.desc} onChange={(e) => setOpt(i, { desc: e.target.value })} rows={2} placeholder="Description" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-y" />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /**
  * S69: payment products — define what the village asks money for, watch

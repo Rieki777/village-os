@@ -22,8 +22,9 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import CircleScene from "@/components/CircleScene";
+import CirclesMiniMap, { type MiniCircle, type MiniSeat } from "@/components/CirclesMiniMap";
+import { cssColourForCircle } from "@shared/circleView";
 import InfoTip from "@/components/InfoTip";
-import { swatchFor } from "@/lib/swatch";
 import { gameFetch } from "@/lib/gameApi";
 import { PeopleLockNote, type PeopleTier } from "@/components/PeopleLock";
 
@@ -55,9 +56,27 @@ function CircleCard({ circle, expanded, onToggle, index }: {
   index: number;
 }) {
   const Icon = ICONS[circle.icon ?? ""] ?? CircleDot;
-  // The icon swatch and the focus-area pills below are both drawn on this
-  // colour, so the ink travels with it rather than being assumed to be white.
-  const swatch = swatchFor(circle.color);
+  /*
+   * THE CARD WEARS THE SAME COLOUR THE MAP DRAWS.
+   *
+   * These cards resolved colour through the brand tone layer, which is
+   * NEUTRAL GREY on a deployment that has not chosen a seed (index.css says
+   * so on purpose: an untouched fork renders nobody's brand). So the map was
+   * eleven hues and this page was half grey, and the two surfaces disagreed
+   * about what colour a circle is while agreeing about everything else.
+   *
+   * `cssColourForCircle` is the map's resolver, so a circle is one colour
+   * everywhere: here, on the canvas, in the mini render and in the accordion
+   * key. A categorical palette is not a brand, which is why it does not
+   * belong in the tone layer.
+   *
+   * THE INK IS ALWAYS DARK, and that is measured rather than assumed. All
+   * eleven hues are mid-tones: against the near-black foreground the worst
+   * is rose at 5.05:1 and the best is teal at 10.13:1, so every one clears
+   * AA. Against WHITE every one of them fails, the worst at 1.77:1, which is
+   * why `swatchFor`'s white-ink pairings cannot be reused here.
+   */
+  const hue = cssColourForCircle({ id: circle.id, color: circle.color ?? null });
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -76,8 +95,11 @@ function CircleCard({ circle, expanded, onToggle, index }: {
         <div className="p-6">
         <div className="flex items-start justify-between">
           <div className="flex items-start gap-4 flex-1">
-            <div className={`w-12 h-12 ${swatch.bg} rounded-lg flex items-center justify-center flex-shrink-0 mt-1`}>
-              <Icon className={`w-6 h-6 ${swatch.ink}`} />
+            <div
+              className="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 mt-1"
+              style={{ background: hue }}
+            >
+              <Icon className="w-6 h-6 text-foreground" />
             </div>
             <div>
               <h3 className="font-display text-xl font-bold text-foreground">
@@ -128,7 +150,7 @@ function CircleCard({ circle, expanded, onToggle, index }: {
                   <h4 className="font-semibold text-foreground mb-3">Key Focus Areas</h4>
                   <div className="flex flex-wrap gap-2">
                     {circle.focus.filter(Boolean).map((area) => (
-                      <span key={area} className={`px-3 py-1 rounded-full text-xs font-medium ${swatch.bg} ${swatch.ink} shadow-sm`}>
+                      <span key={area} className="px-3 py-1 rounded-full text-xs font-medium text-foreground shadow-sm" style={{ background: hue }}>
                         {area}
                       </span>
                     ))}
@@ -152,6 +174,10 @@ function CircleCard({ circle, expanded, onToggle, index }: {
 export default function Circles() {
   const [expandedCircle, setExpandedCircle] = useState<string | null>(null);
   const [circles, setCircles] = useState<CircleEntry[] | null>(null);
+  // The rows as they arrived, kept for the mini map. The cards flatten a
+  // circle into prose (`focus`, `members`) and drop the nesting and the
+  // seat states, which are exactly what the picture is made of.
+  const [raw, setRaw] = useState<{ circles: MiniCircle[]; seats: MiniSeat[] }>({ circles: [], seats: [] });
   const [failed, setFailed] = useState(false);
   const [people, setPeople] = useState<PeopleTier | null>(null);
   const [seatCounts, setSeatCounts] = useState({ seats: 0, held: 0 });
@@ -176,6 +202,10 @@ export default function Circles() {
           seatsByCircle.set(r.circleId, list);
         }
         setPeople(data.people ?? null);
+        setRaw({
+          circles: (data.circles as MiniCircle[]) ?? [],
+          seats: (data.roles as MiniSeat[]) ?? [],
+        });
         setSeatCounts({
           seats: (data.roles ?? []).reduce((n: number, r: any) => n + Number(r.seats ?? 0), 0),
           held: (data.roles ?? []).reduce((n: number, r: any) => n + Number(r.holderCount ?? 0), 0),
@@ -215,6 +245,20 @@ export default function Circles() {
               stage: String(c.status ?? "active") === "active" ? "today" : "future",
               // The seats a circle carries ARE its focus areas.
               focus: seats.map((s: any) => s.name).filter(Boolean),
+              /*
+               * These two travelled from the admin form into the database and
+               * were then deleted by `/api/org`'s projection, one line before
+               * the wire. Every card on this page drew the fallback swatch and
+               * the fallback glyph however carefully a village had chosen
+               * otherwise, and nothing anywhere reported a problem.
+               *
+               * `shared/circleView.ts` is the projection now and it carries
+               * both, so a colour set once shows up here, on the power map and
+               * in the mini render, which is the whole point of there being
+               * one projection.
+               */
+              icon: c.icon ?? undefined,
+              color: c.color ?? undefined,
               members: heldBy.length
                 ? Array.from(new Set(heldBy)).join(", ")
                 : seats.length
@@ -290,6 +334,16 @@ export default function Circles() {
                 </div>
               )}
             </div>
+
+            {/* The door to the map. A column of cards says what each circle
+                IS; only the picture says how they sit together, and which
+                seats are still waiting. Live, so it cannot go stale against
+                the village it draws. */}
+            {raw.circles.length > 0 && (
+              <div className="mb-14">
+                <CirclesMiniMap circles={raw.circles} seats={raw.seats} />
+              </div>
+            )}
 
             {today.length > 0 && (
               <div className="mb-16">

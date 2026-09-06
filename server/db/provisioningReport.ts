@@ -53,6 +53,7 @@ import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
 import { assertFreshDist } from "./distFreshness";
+import { warnOnDependencyDrift } from "./installedDeps";
 
 const CACHE_DIR = path.resolve(process.cwd(), "node_modules", ".cache");
 const LOG_PREFIX = "village-provisioning";
@@ -207,6 +208,10 @@ export async function setup(): Promise<void> {
     /* see noteProvision */
   }
   assertFreshDist();
+  // Beside assertFreshDist and for the same reason, one step further out: that
+  // one compares the bundle to its own inputs, and a DEPENDENCY is not one of
+  // them, because the server build leaves packages external. See installedDeps.
+  warnOnDependencyDrift();
   warnOnRuntimeMismatch();
 }
 

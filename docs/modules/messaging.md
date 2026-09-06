@@ -1,5 +1,7 @@
 # Module design: messaging
 
+Provenance: platform
+
 > Built 2026-08-10 as a platform primitive, deliberately ahead of the module that first wanted it.
 > Registry id `messaging`; the client page is `client/src/pages/Messages.tsx`; the repo layer is
 > `server/lib/messaging.ts`; the schema is `drizzle/0066_messaging.sql`.

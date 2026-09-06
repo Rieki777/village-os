@@ -19,6 +19,7 @@ import ModuleGate from "@/components/modules/ModuleGate";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useModule, useModules } from "@/modules/ModuleProvider";
 import { layoutForShape, type NestedInput } from "@shared/mapLayout";
+import { cssColourForCircle } from "@shared/circleView";
 import { authToken } from "@/lib/gameApi";
 import { rememberMapAvailable } from "@/lib/landing";
 import { ChevronDown, Download, Link2, List, Map as MapIcon, X } from "lucide-react";
@@ -30,6 +31,7 @@ import Legend from "@/components/power/Legend";
 import SearchBar, { type SearchHit } from "@/components/power/SearchBar";
 import FilterChips from "@/components/power/FilterChips";
 import HolderCard from "@/components/power/HolderCard";
+import CircleCard from "@/components/power/CircleCard";
 import ShapePicker from "@/components/power/ShapePicker";
 import CurrencyPicker from "@/components/power/CurrencyPicker";
 import DecideLens, { DecideKey } from "@/components/power/DecideLens";
@@ -187,10 +189,33 @@ export default function VillageMap() {
   };
 
   const selectedSeat: PowerSeat | null =
-    selected?.kind === "role" ? (data?.roles.find((r) => r.id === selected.id) ?? null) : null;
+    selected?.kind === "role" ? (data?.roles?.find((r) => r.id === selected.id) ?? null) : null;
   const selectedCircle = selectedSeat?.circleId
-    ? (data?.circles.find((c) => c.id === selectedSeat.circleId) ?? null)
+    ? (data?.circles?.find((c) => c.id === selectedSeat.circleId) ?? null)
     : null;
+  /*
+   * THE CIRCLE YOU ARE STANDING IN.
+   *
+   * Stepping into a circle changed the picture and nothing else: the panel
+   * went on showing the village summary until a SEAT was tapped, so the
+   * question a reader arrives with (what does this circle do, who do I bring
+   * what to) had no surface anywhere. This is the focus, read as a circle,
+   * and it drives the inspector on both the standing panel and the sheet.
+   */
+  const focusedCircle = focusId ? (data?.circles?.find((c) => c.id === focusId) ?? null) : null;
+
+  /*
+   * HOW DEEP THE PHONE DRAWS.
+   *
+   * The village root is depth -1, so this is 0 there: only the top-level
+   * circles. Step into one and it becomes 1, which is that circle's
+   * children. Undefined on desktop, where there is room for the whole nest.
+   *
+   * Seventeen circles and their children in a 375px square is a picture
+   * nobody can use: a grandchild is a few pixels across and its seats are
+   * smaller than a fingertip.
+   */
+  const phoneMaxDepth = ((focusId ? layout?.circles.find((c) => c.id === focusId)?.depth : undefined) ?? -1) + 1;
 
   const mayDeclareVillage = !!data?.viewer.mayDeclare?.includes("village");
 
@@ -275,13 +300,63 @@ export default function VillageMap() {
         </div>
       </section>
 
-      <section className="py-6 bg-background">
+      {/* THE LENS IS ITS OWN WORLD, and `circle-lens` is what makes it one.
+          It re-declares the semantic tokens for this subtree only (see
+          index.css), so every surface inside, the search box, the chips, the
+          panel, the legend, the accordion and the sheet, arrives on the
+          living map's ground with the pairing it was written against. The
+          rest of the site is untouched.
+
+          Crossing from the land to the circles used to mean leaving the world
+          and arriving somewhere that shared only the data. */}
+      <section className="circle-lens py-6 bg-background text-foreground">
         <div className="container max-w-7xl">
           {denied && (
             <p className="text-center text-muted-foreground py-16">Sign in to see the village map.</p>
           )}
           {data && layout && (
             <>
+              {/* THE MAP COMES FIRST ON A PHONE.
+                  It used to sit under the search box, the breadcrumb, the
+                  lens row and three rows of filter chips: measured on a
+                  390x844 handset, the picture began below the fold and the
+                  whole first screen was controls for a thing you could not
+                  see yet. A reader arriving at "how power is held" should
+                  meet the village, then the tools for filtering it.
+
+                  Phone only. From `sm` up the standing canvas below is the
+                  map and this is hidden, so the order here costs the desktop
+                  nothing. */}
+              {!listMode && (
+                <div className="sm:hidden -mx-4 mb-4">
+                  <div className="relative aspect-square block" data-power-map-box>
+                    <PowerMap
+                      data={data}
+                      layout={layout}
+                      shape={shape}
+                      focusId={focusId}
+                      onFocus={focusTo}
+                      selected={selected}
+                      onSelect={setSelected}
+                      filters={filters}
+                      viewerUserId={viewerUserId}
+                      linesOn={linesOn}
+                      pulseSeatId={pulseSeatId}
+                      lenses={lensNodes}
+                      // The phone draws one level at a time; the breadcrumb
+                      // is the way down, and the accordion below carries the
+                      // rest. Seventeen circles and their children in a
+                      // 375px square is a picture nobody can use.
+                      maxDepth={phoneMaxDepth}
+                      // And a name only where it fits INSIDE its circle. At
+                      // 358px the floor made every label legible and then
+                      // piled fifteen of them on top of each other.
+                      compact
+                    />
+                  </div>
+                                </div>
+              )}
+
               <SearchBar data={data} onPick={pickFromSearch} />
 
               <div className="flex items-center justify-between gap-2 flex-wrap mt-4 mb-2">
@@ -432,7 +507,14 @@ export default function VillageMap() {
                   accordion IS the page, with the card as a bottom sheet. */}
               {!listMode && (
                 <div className="hidden sm:flex gap-6 items-start">
-                  <div className="relative flex-1 min-w-0 aspect-square md:aspect-auto md:h-[74vh] md:min-h-[520px]" data-power-map-box>
+                  {/* The stage is HEIGHT-driven and the drawing is a disc, so
+                      this number is the one that decides how big the picture
+                      renders. At 74vh on a 720px screen the canvas was 533px
+                      tall inside an 864px-wide column: the disc fitted to the
+                      height, drew at 0.51x, and left 331px of width empty.
+                      Taller stage, bigger disc, and the width beside it is
+                      the gutter a long name is now allowed to use. */}
+                  <div className="relative flex-1 min-w-0 aspect-square md:aspect-auto md:h-[86vh] md:min-h-[560px] md:max-h-[980px]" data-power-map-box>
                     <PowerMap
                       data={data}
                       layout={layout}
@@ -462,6 +544,13 @@ export default function VillageMap() {
                         </div>
                         <HolderCard seat={selectedSeat} circle={selectedCircle} data={data} onPickPerson={pickPerson} />
                       </div>
+                    ) : focusedCircle ? (
+                      <CircleCard
+                        circle={focusedCircle}
+                        data={data}
+                        onSelectSeat={(id) => setSelected({ kind: "role", id })}
+                        onOut={() => focusTo((focusedCircle.parentCircleId as string | null) ?? null)}
+                      />
                     ) : (
                       <VillageSummary
                         data={data}
@@ -483,37 +572,29 @@ export default function VillageMap() {
               {/* The list: the phone's whole page, the tablet's under-map
                   companion, and the desktop's choice (spec 12). */}
               <div className={`${listMode ? "" : "sm:hidden"} space-y-4 mt-2`}>
-                {/* Spec 12(a): below 480 the accordion IS the page; from 480
-                    to sm the SVG rides above it. */}
-                {!listMode && (
-                  <div className="relative aspect-square hidden min-[480px]:block" data-power-map-box>
-                    <PowerMap
-                      data={data}
-                      layout={layout}
-                      shape={shape}
-                      focusId={focusId}
-                      onFocus={focusTo}
-                      selected={selected}
-                      onSelect={setSelected}
-                      filters={filters}
-                      viewerUserId={viewerUserId}
-                      linesOn={linesOn}
-                      pulseSeatId={pulseSeatId}
-                      lenses={lensNodes}
-                    />
-                  </div>
-                )}
                 <div className="sm:max-w-xl">
                   <Legend seats={data.roles} power={data.power} footer={<CurrencyPicker />} />
                 </div>
-                <CircleAccordion data={data} filters={filters} viewerUserId={viewerUserId} onSelect={setSelected} />
+                <CircleAccordion data={data} filters={filters} viewerUserId={viewerUserId} onSelect={setSelected} onFocus={focusTo} />
               </div>
 
-              {/* The card as a bottom sheet wherever the standing panel is not. */}
-              {selectedSeat && (
+              {/* The card as a bottom sheet wherever the standing panel is
+                  not. A tapped SEAT wins; otherwise the circle you stepped
+                  into gets the sheet, so a phone reaches the inspector the
+                  same way a desktop reaches the panel. */}
+              {(selectedSeat || focusedCircle) && (
                 <div className="md:hidden">
-                  <SeatSheet onClose={() => setSelected(null)}>
-                    <HolderCard seat={selectedSeat} circle={selectedCircle} data={data} onPickPerson={pickPerson} />
+                  <SeatSheet onClose={() => (selectedSeat ? setSelected(null) : focusTo(null))}>
+                    {selectedSeat ? (
+                      <HolderCard seat={selectedSeat} circle={selectedCircle} data={data} onPickPerson={pickPerson} />
+                    ) : (
+                      <CircleCard
+                        circle={focusedCircle!}
+                        data={data}
+                        onSelectSeat={(id) => setSelected({ kind: "role", id })}
+                        onOut={() => focusTo((focusedCircle!.parentCircleId as string | null) ?? null)}
+                      />
+                    )}
                   </SeatSheet>
                 </div>
               )}
@@ -626,11 +707,15 @@ function CircleAccordion({
   filters,
   viewerUserId,
   onSelect,
+  onFocus,
 }: {
   data: PowerData;
   filters: Filters;
   viewerUserId: string | null;
   onSelect: (s: Selection) => void;
+  /** Opening a circle also flies the map to it. On a phone the map sits
+   *  directly above this list now, so the two move together. */
+  onFocus: (id: string | null) => void;
 }) {
   const [open, setOpen] = useState<string>("");
   const decideLabel = (id: string | null | undefined) =>
@@ -644,12 +729,34 @@ function CircleAccordion({
         const method = decideLabel(c.decidesBy) ?? decideLabel(data.power.decidesBy);
         return (
           <div key={c.id} className={`bg-card border border-border rounded-xl ${c.status === "forming" ? "opacity-60" : ""}`}>
-            <button type="button" className="w-full flex items-center justify-between px-4 py-3" onClick={() => setOpen(isOpen ? "" : c.id)} aria-expanded={isOpen}>
-              <span className="font-semibold text-foreground text-sm text-left">
+            <button type="button" className="w-full flex items-center justify-between px-4 py-3" onClick={() => {
+              const next = isOpen ? "" : c.id;
+              setOpen(next);
+              onFocus(next || null);
+            }} aria-expanded={isOpen}>
+              <span className="font-semibold text-foreground text-sm text-left flex items-center gap-2 min-w-0">
+                {/* THE KEY BETWEEN THE PICTURE AND THE NAMES.
+                    On a phone the map draws colour and almost no text: at
+                    358px only one circle is big enough to hold a name, and
+                    the rest are 18 to 30px across. That is honest for the
+                    space and it left the picture unreadable as a legend,
+                    because nothing said which colour was which circle.
+                    Same hue, same resolver (shared/circleView.ts), so this
+                    row IS the map's key and cannot drift from it. */}
+                <span
+                  aria-hidden="true"
+                  className="w-2.5 h-2.5 rounded-full shrink-0 border"
+                  style={{
+                    background: cssColourForCircle({ id: c.id, color: c.color ?? null }),
+                    borderColor: cssColourForCircle({ id: c.id, color: c.color ?? null }),
+                  }}
+                />
+                <span className="min-w-0">
                 {c.name}
                 {c.status === "forming" && <span className="ml-2 text-xs text-muted-foreground">(forming)</span>}
                 {c.isExample && <ExampleChip className="ml-2 align-middle" />}
                 {method && <span className="ml-2 text-[10px] bg-teal-deep/10 text-teal-deep px-1.5 py-0.5 rounded-full">{method}</span>}
+                </span>
               </span>
               <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} aria-hidden="true" />
             </button>

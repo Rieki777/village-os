@@ -386,3 +386,68 @@ export function installShutdownHandlers(deps: ShutdownDeps): void {
   process.on("SIGTERM", () => start("SIGTERM"));
   process.on("SIGINT", () => start("SIGINT"));
 }
+
+/**
+ * THE TERMINAL HANDLER'S WHOLE ANSWER, so `server/index.ts` keeps two lines.
+ *
+ * ── WHY A CONFLICT IS NOT AN INTERNAL ERROR ────────────────────────────────
+ *
+ * `replaceAll` in server/repos/store-db.ts throws `StaleSnapshotError` when the
+ * snapshot a writer stamped has fallen out of the retained history, and NOTHING
+ * WAS WRITTEN. It was caught nowhere in the codebase, so it reached the terminal
+ * handler and answered 500. Whoever was seating a steward, or saving any other
+ * whole-collection write, saw an unexplained server error on a request that had
+ * done exactly the right thing and simply lost a race.
+ *
+ * It is answered from the ONE terminal handler rather than at the routes that
+ * happen to have met it, because it is not that two routes forgot: every route
+ * calling `replaceAll` can raise it, so catching it at two call sites would
+ * leave the rest answering 500 while the defect looked closed.
+ *
+ * 409 CONFLICT, because the request disagreed with the current state and
+ * retrying after a fresh read is exactly the right response. The error's own
+ * message names the table and both version numbers, which belongs in the log
+ * and never on a member's screen, so the sentence returned says what happened
+ * and what to do and nothing about our schema.
+ *
+ * Matched on the `code` field rather than with `instanceof`, so this module
+ * needs no dependency on the repo layer and a second copy of the class across a
+ * bundle boundary cannot make the check silently miss.
+ */
+export interface TerminalAnswer {
+  status: number;
+  body: { error: string; code?: string };
+  /** Which console channel this deserves. A lost race is not a fault. */
+  level: "warn" | "error";
+  /** What the log gets, which is always the full detail. */
+  detail: string;
+}
+
+export function terminalAnswerFor(err: unknown): TerminalAnswer {
+  const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
+  if ((err as { code?: unknown } | null | undefined)?.code === "stale_snapshot") {
+    return {
+      status: 409,
+      body: {
+        error:
+          "Somebody else changed this while you were working on it. Nothing was saved. " +
+          "Reload and make the change again.",
+        code: "stale_snapshot",
+      },
+      level: "warn",
+      detail,
+    };
+  }
+  return { status: 500, body: { error: "Internal server error" }, level: "error", detail };
+}
+
+/** Log it on the right channel and answer. The handler itself stays two lines. */
+export function respondToTerminalError(
+  err: unknown,
+  res: { status(code: number): { json(body: unknown): unknown } },
+): void {
+  const answer = terminalAnswerFor(err);
+  if (answer.level === "warn") console.warn("[route conflict]", answer.detail);
+  else console.error("[route error]", answer.detail);
+  res.status(answer.status).json(answer.body);
+}

@@ -36,6 +36,7 @@ import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, type TestDb, E2E_BOOT_DEADLINE_MS, waitForPortFree } from "./db/testDb";
 import { cycleBoundsFor } from "../shared/lunar";
+import { villageMoonLabel } from "../shared/villageMoon";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -387,6 +388,32 @@ describe.skipIf(!DB_CONFIGURED)("the test run before launch", () => {
       // at the precision it deserves.
       expect(j.cadence, `${j.name} has no cadence`).toMatch(/^every |^once a day$/);
       expect(typeof j.runsInSpan).toBe("string");
+    }
+  });
+
+  /*
+   * THE UNLAUNCHED CASE, ON THE ROUTE THAT MOST OFTEN MEETS IT.
+   *
+   * A village runs this report BEFORE it launches, which is the whole point
+   * of a dry run, so it has no first moon and therefore no moon numbers. The
+   * ordinal arithmetic is proved in `shared/villageMoon.test.ts`; what this
+   * holds is that the resolved anchor reaches the payload the card reads, and
+   * that an absent one arrives as an honest absence and never as Moon 0.
+   */
+  it("gives every turn a village moon, and gives an unlaunched village no number in it", async () => {
+    const r = await call("POST", "/api/admin/dry-run", { body: { moons: 6 } });
+    expect(r.status).toBe(200);
+    for (const t of r.json.turns) {
+      expect(t.moon, "the card reads t.moon by name").toBeTruthy();
+      expect(t.moon.cycleNumber).toBe(t.cycleNumber);
+      expect(t.moon.startsAt).toBe(t.startsAt);
+      expect(t.moon.endsAt).toBe(t.endsAt);
+      // This fixture has never launched and sets no override, so there is no
+      // Moon 1 to count from.
+      expect(t.moon.standing).toBe("unanchored");
+      expect(t.moon.ordinal).toBeNull();
+      expect(villageMoonLabel(t.moon), "dates, and no invented moon number").not.toContain("Moon");
+      expect(villageMoonLabel(t.moon).length).toBeGreaterThan(0);
     }
   });
 

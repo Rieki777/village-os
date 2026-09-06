@@ -1,5 +1,11 @@
 // Platform game API client. All project-specific naming comes from /api/game/config.
 import { useEffect, useState } from "react";
+// Both type-only, so neither module reaches the bundle. The server serves
+// these two unions verbatim, and re-typing their members here would be the
+// hand-kept mirror the house rules warn about: a branch added in `shared/`
+// and missed here renders nothing, with no error anywhere.
+import type { StageRule } from "@shared/gameConfig";
+import type { Capability } from "@shared/capabilities";
 
 /**
  * The ONE localStorage key for the session token. Exported so nothing else
@@ -56,6 +62,12 @@ export interface PublicGameConfig {
     name: string;
     tagline: string;
     memberName: string;
+    /** What this village calls whoever runs it. A LABEL, never a role: see
+     *  `useCatalyst` below and `shared/gameConfig.ts`. Absent on a server too
+     *  old to serve it, which is why every reader goes through the hook. */
+    catalystName?: string;
+    roleName?: string;
+    seatName?: string;
     location: string;
     adminPath: string;
     /** Blank = the village has no outside site; render no link. */
@@ -77,7 +89,7 @@ export interface PublicGameConfig {
   };
   images: BrandImages;
   paths: { id: string; label: string; role: string; route: string }[];
-  stages: { id: string; name: string; description: string }[];
+  stages: GameStagePublic[];
   season: SeasonState;
 }
 
@@ -174,6 +186,113 @@ export function useVillageLinks(): {
     mailTo: (subject: string) =>
       contactEmail ? `mailto:${contactEmail}?subject=${encodeURIComponent(subject)}` : "",
   };
+}
+
+/**
+ * THE VILLAGE'S OWN WORD FOR WHOEVER RUNS IT.
+ *
+ * "Catalyst" out of the box; a village that says founder, steward or elder
+ * sets its own in Admin, Make This Yours, and every member-facing sentence
+ * that names one follows.
+ *
+ * IT IS A LABEL AND NOTHING ELSE. There is no Catalyst role, no Catalyst
+ * capability and no gate anywhere reads this. Whoever could act before can
+ * act now, and `shared/capabilities.ts` is untouched. What changes is the
+ * word a member reads in a sentence about them.
+ *
+ * The ADMIN PANEL keeps its own name. A place is not a person: "the admin
+ * panel" is where the work happens and stays what it is called, `/admin`
+ * included; only the human takes the village's word.
+ *
+ * Why the fallback is a literal here rather than a null: this hook is read
+ * inside sentences, and a sentence with a hole in it while the config loads
+ * reads worse than one holding the platform default for a beat. Same shape as
+ * `?? "Gratitude"` on the currency name.
+ */
+export const CATALYST_FALLBACK = "Catalyst";
+export const ROLE_FALLBACK = "Role";
+export const SEAT_FALLBACK = "Seat";
+
+/**
+ * "a" or "an" for a word a founder typed, by its first letter.
+ *
+ * A HEURISTIC, and a knowingly imperfect one: it reads "Elder" correctly and
+ * would read a hypothetical "Union" wrongly. The alternative was to write
+ * every sentence around the article, which makes every render site read
+ * stiffly to avoid a case no village has asked for. Exported and pinned by
+ * `client/src/lib/catalystLabel.test.ts` rather than left to be inferred.
+ */
+export function articleFor(word: string): string {
+  return /^[aeiou]/i.test(String(word ?? "").trim()) ? "an" : "a";
+}
+
+/**
+ * The plural of a word a founder typed.
+ *
+ * English regular plurals only, which covers every word a village has plausibly
+ * chosen for this: Catalysts, Founders, Stewards, Elders, Keepers, Weavers,
+ * Guardians. The two irregular endings that do come up in practice are handled
+ * (a trailing consonant plus y takes "ies", a sibilant takes "es"); a genuinely
+ * irregular word would read wrongly, and rewriting every plural sentence to
+ * dodge it made them all read worse than the one case that might be wrong.
+ * Pinned by `client/src/lib/catalystLabel.test.ts`.
+ */
+export function pluralFor(word: string): string {
+  const w = String(word ?? "").trim();
+  if (!w) return w;
+  if (/[^aeiou]y$/i.test(w)) return `${w.slice(0, -1)}ies`;
+  if (/(s|x|z|ch|sh)$/i.test(w)) return `${w}es`;
+  return `${w}s`;
+}
+
+export interface CatalystLabel {
+  /** The word itself, capitalised as the village typed it. */
+  name: string;
+  /** "a" or "an", whichever this word takes. */
+  a: string;
+  /** The two together, because nearly every site needs both. */
+  aName: string;
+  /** The same, capitalised, for the start of a sentence. */
+  aNameCap: string;
+  /** More than one of them. */
+  plural: string;
+}
+
+/**
+ * One renameable word, with its article and its plural worked out once.
+ *
+ * `CatalystLabel` was always this shape and only ever had one caller. Three
+ * villages' worth of words now ride it (whoever runs the place, the position
+ * somebody holds, one person's occupancy of that position), so the derivation
+ * lives here and the hooks below are three lines each. Copying the article and
+ * plural logic per word is how two of them end up disagreeing about "an".
+ */
+export function villageWord(typed: unknown, fallback: string): CatalystLabel {
+  const name = String(typed ?? "").trim() || fallback;
+  const a = articleFor(name);
+  return { name, a, aName: `${a} ${name}`, aNameCap: a === "an" ? `An ${name}` : `A ${name}`, plural: pluralFor(name) };
+}
+
+/** The label, live. Reads the platform default until the config arrives. */
+export function useCatalyst(): CatalystLabel {
+  return villageWord(useGameConfig()?.project?.catalystName, CATALYST_FALLBACK);
+}
+
+/**
+ * What this village calls a POSITION somebody can hold. Default "Role".
+ *
+ * Separate from `useSeat` on purpose, and the separation is the point: a role
+ * exists whether or not anybody holds it, a seat is one person holding it for
+ * one season, and an org page that cannot say both cannot say who holds what
+ * since when. See shared/gameConfig.ts for the full argument.
+ */
+export function useRoleWord(): CatalystLabel {
+  return villageWord(useGameConfig()?.project?.roleName, ROLE_FALLBACK);
+}
+
+/** What this village calls one person's OCCUPANCY of a role. Default "Seat". */
+export function useSeatWord(): CatalystLabel {
+  return villageWord(useGameConfig()?.project?.seatName, SEAT_FALLBACK);
 }
 
 /** Live (brand-overlaid) hero image URLs, empty until loaded — callers fall back
@@ -273,7 +392,17 @@ export function useSeason(): SeasonState | null {
 }
 
 export function authToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+  // A browser with site data blocked has no usable localStorage, and reading it
+  // THROWS rather than returning null. Unguarded, that throw escaped into every
+  // gameFetch in the product: a member with cookies off got a crash where they
+  // should have got a signed-out page. It surfaced when a portrait control that
+  // asks for headers during render met a test jsdom with the same shape.
+  // No token and no storage are the same answer to the caller, so say it once.
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -282,7 +411,14 @@ export function authToken(): string | null {
  * left the notification bell and the module manifest permanently anonymous.
  */
 export function clearAuthToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // Same storage-blocked browser as authToken above. The read was guarded and
+    // the write was not, two lines apart, so a member with site data off loaded
+    // the page and then crashed on Sign Out. Dropping a session that was never
+    // storable has already happened.
+  }
 }
 
 export async function gameFetch(path: string, init: RequestInit = {}): Promise<Response> {
@@ -301,10 +437,26 @@ export interface GameStagePublic {
   id: string;
   name: string;
   description: string;
+  /**
+   * How this rung is earned, AS PLAYED. The server overlays the quests
+   * threshold from the variables registry before serving, so `min` is the
+   * number the gate compares against on this village and not the platform
+   * default. A rung with no numeric side ("granted", "membership") carries
+   * only its type.
+   */
+  rule: StageRule;
+  /**
+   * What this rung multiplies the base sending allowance by, AS PLAYED. Read
+   * off the variables registry before serving, the same as `rule` above, so a
+   * village that tuned it is never shown the platform default.
+   */
+  gratitudeMultiplier: number;
 }
 
 export interface GameMe {
-  stage: GameStagePublic & { gratitudeMultiplier: number };
+  // `gratitudeMultiplier` is on GameStagePublic itself now, so the old
+  // intersection here said the same thing twice.
+  stage: GameStagePublic;
   stageIndex: number;
   stages: GameStagePublic[];
   /** `balance` is MINOR units, `decimals` is its scale. See client/src/lib/tokenAmount.ts. */
@@ -313,6 +465,12 @@ export interface GameMe {
   journeys: Record<string, string[]>;
   membership: boolean;
   trainingComplete: boolean;
+  /**
+   * Consented quests to this member's name, which is what the one numeric
+   * rung counts. Read it against `stages[n].rule` to say how far along a
+   * quests rung somebody is; the two booleans above answer the other rungs.
+   */
+  consentedQuests: number;
   nextAction: { id: string; label: string; href: string };
   /**
    * The most recent rung this member crossed, and the capability keys it
@@ -320,6 +478,30 @@ export interface GameMe {
    * who has never advanced. The dashboard celebrates it once and never again.
    */
   lastAdvance: { fromStage: string; toStage: string; unlocked: string[]; at: string } | null;
+}
+
+/**
+ * ONE ROW OF THE CAPABILITY MAP, as `/api/game/progression` serves it.
+ *
+ * The payload used to carry only what a member HOLDS, which is a wall of
+ * chips with no direction in it. Every key this village runs is here now,
+ * closed ones included, each with the rung that opens it, so a profile can
+ * show where climbing leads. `key` is the shared union, so a capability
+ * added there and missed here is a type error and never a silent gap.
+ *
+ * `opens` is the EFFECTIVE rung, already resolved against this village's own
+ * unlock variables. `{ via: "appointment" }` means nobody climbs to it: a
+ * role, a badge or an admin grants it, and no amount of progress will.
+ *
+ * Keys of modules this village has switched off are absent entirely, because
+ * their routes stop mounting and a rung promising to open one would name a
+ * door with nothing behind it.
+ */
+export interface ProgressionCapability {
+  key: Capability;
+  label: string;
+  held: boolean;
+  opens: { via: "stage"; stage: string } | { via: "appointment" };
 }
 
 export interface QuestClaim {

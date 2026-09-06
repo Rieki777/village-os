@@ -95,6 +95,23 @@ async function writeState(pool: Pool, state: LaunchState): Promise<void> {
   );
 }
 
+/**
+ * The instant this village launched, or null.
+ *
+ * Exported for the village moon counter (`server/lib/villageMoon.ts`), which
+ * needs this one field and none of the checks. It reads the same document
+ * through the same reader rather than growing a second query for it: two
+ * SELECTs against one row is how two answers about the same fact start
+ * disagreeing.
+ *
+ * `launchStatus` is deliberately not the door for this. It runs every wired
+ * check, and the moon counter is on a display path that must not depend on
+ * whether an email provider answers.
+ */
+export async function launchedAtOf(pool: Pool): Promise<string | null> {
+  return (await readState(pool)).launchedAt;
+}
+
 /** Resolve every applicable requirement into live status. */
 export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<LaunchStatus> {
   const state = await readState(pool);

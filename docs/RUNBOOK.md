@@ -219,9 +219,10 @@ gh run list --workflow=db-backup.yml --limit 10
 
 Take the newest run that says `success`. A `success` here means more than a
 file was produced: on every run the workflow restores its own dump into a
-throwaway database and checks the row counts and a round-tripped timestamp
-against a manifest taken at dump time, and a separate job proves that check is
-able to fail by feeding it a deliberately corrupted copy. A green run is a
+throwaway database and checks that every table restored exactly the rows the
+dump carries, plus a timestamp that has to round-trip character for character,
+and a separate job proves that check is able to fail by feeding it a
+deliberately corrupted copy. A green run is a
 backup that has been restored once already.
 
 Note the run's id from that listing.
@@ -245,11 +246,16 @@ of it.
 ```bash
 gpg --output bundle.tar.gz --decrypt bundle.tar.gz.gpg
 tar xzf bundle.tar.gz          # gives dump.sql.gz and manifest.txt
-cat manifest.txt               # the row counts this dump was taken with
+cat manifest.txt               # live counts read just AFTER the dump, plus a probe
 ```
 
-Read `manifest.txt` now. It is four row counts and one timestamp probe, and it
-is how you check afterwards that the restore worked.
+Read `manifest.txt` now. It is four row counts and one timestamp probe.
+
+The probe is exact and you should check it. The four counts are not: they were
+read from live production a few minutes after the dump finished, so a busy
+village will have moved on by then and they are expected to sit a little above
+what the dump holds. Treat them as a sense of scale, not as a target. What you
+verify the restore against is the dump itself, in step 4.
 
 ### 4. Restore into a scratch database first
 
@@ -262,16 +268,31 @@ gunzip -c dump.sql.gz | mysql --host=<scratch-host> --port=<scratch-port> \
   --protocol=TCP --user=<user> --password=<pass> <scratch-db>
 ```
 
-Then check it against the manifest:
+Then check the restore against the dump. Not against `manifest.txt`, and not
+against production: the dump is the thing you are restoring, so it is the only
+comparison that can be exact.
+
+```bash
+zcat dump.sql.gz | grep -c '^INSERT INTO `users` '        # what the dump holds
+mysql --host=<scratch-host> --port=<scratch-port> --protocol=TCP \
+  --user=<user> --password=<pass> -N -B <scratch-db> \
+  -e 'SELECT COUNT(*) FROM users;'                        # what came back
+```
+
+Those two must match exactly, for any table you care to check. If they do not,
+this backup is not usable and you go back to step 1 with an older run.
+
+Also check the probe line in `manifest.txt` against the scratch database:
 
 ```bash
 mysql --host=<scratch-host> --port=<scratch-port> --protocol=TCP \
   --user=<user> --password=<pass> -N -B <scratch-db> \
-  -e 'SELECT COUNT(*) FROM users; SELECT COUNT(*) FROM token_ledger;'
+  -e "SELECT CONCAT(id, '|', DATE_FORMAT(joined_at, '%Y-%m-%dT%H:%i:%s')) FROM users ORDER BY id LIMIT 1"
 ```
 
-The numbers must match `manifest.txt`. If they do not, this backup is not
-usable and you go back to step 1 with an older run.
+That one must match character for character. A difference of a whole number of
+hours means the restore landed in a different time zone, which corrupts every
+timestamp in the database while every row count still looks perfect.
 
 ### 5. Point the village at it, or restore over the live database
 
@@ -388,11 +409,30 @@ the daily backup run stays red and says so.
 
 You need Railway access and GitHub repository settings access.
 
-1. **Make a token.** Any random 64 hex characters. On a Mac or Linux machine:
+1. **Make a token.** Any random 64 hex characters.
+
+   Mac, Linux, or Windows **Git Bash**, which ships `openssl` at
+   `/mingw64/bin/openssl`:
 
    ```bash
    openssl rand -hex 32
    ```
+
+   Windows **PowerShell** has no `openssl`, so use this instead:
+
+   ```powershell
+   $rng = New-Object System.Security.Cryptography.RNGCryptoServiceProvider; $b = New-Object byte[] 32; $rng.GetBytes($b); ($b | ForEach-Object { $_.ToString('x2') }) -join ''
+   ```
+
+   Do NOT reach for the shorter `[RandomNumberGenerator]::Fill($b)` you will
+   find in most examples. It does not exist in Windows PowerShell 5.1, and it
+   does not fail loudly: the byte array stays as it was created, all zeros, and
+   you get sixty-four `0` characters that look exactly like a token. Measured on
+   this machine while writing this section. `RNGCryptoServiceProvider` above is
+   the version that works there.
+
+   Whichever you use, check what you got before pasting it: sixty-four
+   characters, hex only, and obviously not all the same character.
 
    Keep the output somewhere you can paste it twice.
 

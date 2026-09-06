@@ -12,11 +12,12 @@
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { boolVar, numberVar } from "./variables";
-import { cycleIdFor, parseCycleId } from "./gratitude-cycles";
+import { parseCycleId } from "./gratitude-cycles";
 import { isExampleUser } from "./examples";
 import { issuanceRefusal } from "./gameStart";
 import { memberAccount, postTransferOn, RECOGNITION_FAUCET } from "./ledger";
-import { writeGratitudeRow, shareCapFor, recognitionName } from "./economy";
+import { allowanceFor, writeGratitudeRow, shareCapFor, recognitionName, type Allowance } from "./economy";
+import { userIdForHandle } from "./profile";
 import type { GratitudeLogRepo, GratitudeEntry } from "../repos/gratitude";
 import type { UsersRepo } from "../repos/users";
 
@@ -42,23 +43,62 @@ export interface GratitudeBudget {
   cycleId: string;
 }
 
-/** Budget = base variable × stage multiplier, minus what this cycle already spent. */
+/**
+ * The one allowance, wearing the field name this module's callers already read.
+ *
+ * `Allowance.cycleKey` and `GratitudeBudget.cycleId` are the SAME string:
+ * `cycleWindow().key` is `cycleIdFor()` and `server/cycleId.test.ts` fails the
+ * moment they stop being. Only the key's name differs, so this maps and
+ * computes nothing.
+ */
+export function asBudget(a: Allowance): GratitudeBudget {
+  return { total: a.total, spent: a.spent, remaining: a.remaining, cycleId: a.cycleKey };
+}
+
+/**
+ * What this member may still send this cycle.
+ *
+ * ONE ALLOWANCE (R73), AND THIS IS NO LONGER WHERE IT IS WORKED OUT. This
+ * function computed `total - spentInCycle` and had no reversal term, while
+ * `allowanceFor` in server/lib/economy.ts computed
+ * `total - max(0, given - reversals)`. Both totals were the same
+ * `gratitude.base_budget` times the same stage multiplier, and both summed the
+ * same `gratitude_log` rows, so the two agreed right up until a gift in the
+ * cycle was reversed. After that the profile rendered both of them at once,
+ * "Sending budget: N of 100 left this cycle" from this one and "You can still
+ * give N Gratitude this moon" from the other, with two different N.
+ *
+ * The comment at `allowanceFor` records the previous instance of this exact
+ * shape, when the engine read a flat `economy.giving_allowance_per_moon` and
+ * the acknowledgement flow read the stage-multiplied budget. It was resolved
+ * by keeping ONE computation, in the guarded engine that already holds the
+ * lock every gratitude write goes through, and that is the resolution here
+ * too. `shareCapFor` moved the same way and for the same reason, and this
+ * module still re-exports it.
+ *
+ * So this stays, as a shim over the one computation, and it maps one field
+ * name. Be clear about who reaches it: NOTHING IN THE HOST DOES any more,
+ * because `gratitudeBudget` in server/index.ts maps `allowanceFor` through
+ * `asBudget` itself. Three suites do (`cycleId`, `gratitude.concurrency`,
+ * `gratitude.gameStart`), and one of them asserts that the numbers out of
+ * here and the numbers out of `allowanceFor` are the same numbers after a
+ * reversal. That assertion is what this shim is for now. The number is not
+ * computed here.
+ */
 export async function budgetFor(deps: GratitudeDeps, user: any): Promise<GratitudeBudget> {
-  const total = Math.round(
-    numberVar("gratitude.base_budget") * (await deps.stageMultiplierFor(user)),
-  );
-  const cycleId = cycleIdFor(new Date());
-  // One indexed SUM, not a full-table read. This loaded EVERY gratitude row
-  // ever written — into memory, on every heart tap, budget check and send —
-  // and the wall/journal/export routes still use all() because they genuinely
-  // want the rows. Semantics preserved exactly: all kinds, no kind filter
-  // (feed.heart_amount can be > 0, and there is only one budget).
-  const spent = await deps.log.spentInCycle(user.id, cycleId);
-  return { total, spent, remaining: Math.max(0, total - spent), cycleId };
+  const multiplier = await deps.stageMultiplierFor(user);
+  return asBudget(await allowanceFor(deps.pool, user.id, multiplier));
 }
 
 export interface SendInput {
   fromUser: any;
+  /**
+   * WHAT A MEMBER TYPED into the wall's one recipient field: an `@handle`, or
+   * an address for anybody who still knows one. `toEmail` and `toId` below are
+   * the RESOLVED forms, which is what every other caller passes; this is the
+   * unresolved one, and `resolveTyped` turns it into one of them.
+   */
+  to?: string;
   toEmail?: string;
   toId?: string;
   amount: number;
@@ -74,6 +114,54 @@ export type SendOutcome =
   | { ok: false; status: number; error: string };
 
 /**
+ * WHO IT IS FOR, out of the one field a member types on the wall.
+ *
+ * That field asked for an EMAIL, and it asked with `type="email" required`, so
+ * the browser refused anything else. Nothing in this build ever shows a
+ * member's address: `publicView` (server/lib/profile.ts) serves a profile as
+ * handle, name, title, joined date and moons, the forum renders handles, and
+ * the wall itself renders first names. The form demanded a fact the person
+ * filling it in had no way to obtain.
+ *
+ * A picker would need a member DIRECTORY, and a list of everyone's names and
+ * ids readable by anyone signed in is a privacy surface with its own question
+ * to answer (that reasoning is written out at `/api/wallet/send` and it still
+ * stands). This needs neither. Handles are ALREADY public: `ProfileHero`
+ * prints `@handle` under a member's name and `/profile/:handle` is how a
+ * stranger reaches them. Somebody who can see the profile can read the handle
+ * off it, and a member who tells you their handle has published one fact about
+ * themselves on purpose. Nothing here can be asked for a LIST.
+ *
+ * Both spellings resolve, so nobody mid-flow is broken and every e2e suite and
+ * script that posts `toEmail` is untouched:
+ *   - an @ at the FRONT, or no @ at all, is a handle;
+ *   - an @ in the MIDDLE is an address, read the way it always was.
+ *
+ * EXAMPLES STAY UNREACHABLE THROUGH BOTH. `userIdForHandle` matches only
+ * `is_example = 0`, so a standing example's handle never resolves, and the
+ * `isExampleUser` guard below still runs on whatever row does come back.
+ */
+async function resolveTyped(
+  deps: GratitudeDeps,
+  typed: string,
+): Promise<{ ok: true; toId?: string; toEmail?: string } | { ok: false; status: number; error: string }> {
+  if (typed.includes("@") && !typed.startsWith("@")) return { ok: true, toEmail: typed };
+  // Handles are lowercase by construction (`slugifyHandle` lowercases and the
+  // handle pattern admits nothing else), so lowering what was typed costs
+  // nothing and saves a fork whose collation is case sensitive.
+  const handle = typed.replace(/^@+/, "").toLowerCase();
+  const toId = handle ? await userIdForHandle(deps.pool, handle) : null;
+  if (!toId) {
+    return {
+      ok: false,
+      status: 404,
+      error: "No villager with that handle. A member's handle sits under their name on their profile page.",
+    };
+  }
+  return { ok: true, toId };
+}
+
+/**
  * The one send path. Order of refusals is part of the contract (the loop test
  * asserts the guard messages): bad input → unknown recipient → self-send →
  * no budget → over budget → heart tap count → per-recipient share → whether
@@ -87,17 +175,31 @@ export async function sendGratitude(deps: GratitudeDeps, input: SendInput): Prom
   const user = input.fromUser;
   const kind = input.kind ?? "gratitude";
   const amt = Math.floor(Number(input.amount) || 0);
-  if ((!input.toEmail && !input.toId) || amt <= 0) {
+  const typed = String(input.to ?? "").trim();
+  if ((!typed && !input.toEmail && !input.toId) || amt <= 0) {
     return { ok: false, status: 400, error: "Recipient and a positive amount are required" };
   }
   if (kind === "gratitude" && boolVar("gratitude.require_message") && !String(input.message ?? "").trim()) {
     return { ok: false, status: 400, error: "A few words of appreciation are required" };
   }
 
-  const recipient = input.toId
-    ? await deps.members.byId(input.toId)
-    : await deps.members.byEmail(String(input.toEmail));
-  if (!recipient) return { ok: false, status: 404, error: "No member found with that email" };
+  const who = typed ? await resolveTyped(deps, typed) : { ok: true as const, ...input };
+  if (!who.ok) return who;
+
+  const recipient = who.toId
+    ? await deps.members.byId(who.toId)
+    : await deps.members.byEmail(String(who.toEmail));
+  // Named for the door the caller actually came through. A typed @handle is an
+  // id by the time it reaches here, so a member who typed a handle and whose
+  // recipient left the village between the two reads used to be told their
+  // email was wrong, about an email they never typed.
+  if (!recipient) {
+    return {
+      ok: false,
+      status: 404,
+      error: who.toId ? "No member here with that id" : "No member found with that email",
+    };
+  }
   if (recipient.id === user.id) return { ok: false, status: 400, error: `Send ${recognitionName()} to others` };
   // The example identities have fixed, public @examples.invalid addresses, so
   // without this any member can send to one: the sender's real budget is spent
@@ -317,5 +419,14 @@ export async function sendGratitude(deps: GratitudeDeps, input: SendInput): Prom
     });
   }
 
-  return { ok: true, entry, recipient, budget: await budgetFor(deps, user) };
+  // The same allowance the guard above decided against, re-read now that the
+  // row is written, and re-read with the multiplier THIS send already
+  // resolved: asking `budgetFor` would recompute the giver's stage (a MySQL
+  // quest count) to arrive at a number it already holds.
+  return {
+    ok: true,
+    entry,
+    recipient,
+    budget: asBudget(await allowanceFor(deps.pool, user.id, multiplier)),
+  };
 }

@@ -42,6 +42,13 @@ export default function QuestDetail() {
   const [related, setRelated] = useState<BoardQuest[]>([]);
   const [signs, setSigns] = useState<FieldSigns | null>(null);
   const [claims, setClaims] = useState<Record<string, QuestClaim>>({});
+  /**
+   * The recognition token's scale, off the same `/api/game/me` call the claims
+   * come from. A claim's `amount` and `credited` are ledger figures, so the
+   * payout line needs this to read as the number the member was actually paid.
+   * See client/src/lib/tokenAmount.ts.
+   */
+  const [payoutDecimals, setPayoutDecimals] = useState(0);
   const [roleName, setRoleName] = useState<string>("");
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -77,6 +84,7 @@ export default function QuestDetail() {
     fetchGameMe().then((me) => {
       if (!me) return;
       setClaims(currentClaims(me.quests));
+      setPayoutDecimals(Number(me.gratitude?.decimals ?? 0));
     });
   };
   useEffect(refreshClaims, []);
@@ -98,7 +106,7 @@ export default function QuestDetail() {
   }, [quest?.requiresRole, quest?.roleRequired]);
 
   const claim = quest ? claims[quest.id] : undefined;
-  const questSigns = quest ? signs?.perQuest[quest.id] : undefined;
+  const questSigns = quest ? signs?.perQuest?.[quest.id] : undefined;
   const active = questSigns?.active ?? 0;
   const done = questSigns?.done ?? 0;
   const completions = useMemo(
@@ -365,6 +373,7 @@ export default function QuestDetail() {
                 questId={quest.id}
                 signedIn={!!user}
                 claim={claim}
+                decimals={payoutDecimals}
                 onChanged={refreshClaims}
               />
             </div>
@@ -411,7 +420,7 @@ export default function QuestDetail() {
                   key={q.id}
                   quest={q}
                   claim={claims[q.id]}
-                  signs={signs?.perQuest[q.id]}
+                  signs={signs?.perQuest?.[q.id]}
                   stages={stages}
                   currencyName={currencyName}
                 />

@@ -95,6 +95,34 @@ export interface SetupStep {
   fields: readonly SetupField[];
 }
 
+/**
+ * THE IDENTITY BOXES THE WIZARD DRAWS, in order, as data.
+ *
+ * A SUPERSET of the identity step's `fields` below, and the difference is the
+ * point of having two lists. `fields` is what the progress readout MEASURES,
+ * so a field belongs there only when a village that has not filled it in is
+ * genuinely unfinished. This list is what a founder SEES, so it also carries
+ * the boxes that ship with a working default and are a rename rather than a
+ * blank: `catalystName` is the first of those. Counting a defaulted field
+ * would leave Identity reading unfinished forever for a village happy with
+ * the platform's word.
+ *
+ * It lives here beside `SETUP_STEPS` so the two are read together, and so
+ * `client/src/pages/Admin.tsx` stays under the monolith ratchet
+ * (`scripts/check-file-lines.mjs`) while gaining a box.
+ */
+export const IDENTITY_WIZARD_FIELDS = [
+  ["name", "Project name"],
+  ["tagline", "Tagline"],
+  ["memberName", "What a member is called"],
+  ["catalystName", "What whoever runs this village is called"],
+  // Both singular, because gameApi.ts derives the plural and the article. A
+  // village types "Hat" and reads "Hats", "a Hat", "A Hat" everywhere.
+  ["roleName", "What a position somebody can hold is called"],
+  ["seatName", "What one person's turn holding it is called"],
+  ["location", "Location"],
+] as const;
+
 export const SETUP_STEPS: readonly SetupStep[] = [
   {
     key: "identity",

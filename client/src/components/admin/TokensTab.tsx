@@ -31,6 +31,7 @@ import type { ModuleLifecycle } from "@shared/modules";
 import { ExampleChip, forgetExamplesCache } from "@/components/ExamplesBanner";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import { describeToken, tokenModule, tokenModuleIsOff, visibleTokens } from "@/components/admin/tokenCatalog";
+import { formatTokenAmount, toMinorUnits } from "@/lib/tokenAmount";
 
 /**
  * THE ONE PAGE WHERE A TOKEN IS NAMED.
@@ -55,6 +56,22 @@ export default function TokensTab({ password, lifecycles }: { password: string; 
   /** 0106: grants waiting for a second steward, and the ones already decided. */
   const [grants, setGrants] = useState<any[]>([]);
   const [cosignOver, setCosignOver] = useState<number>(0);
+
+  /*
+   * THIS SCREEN SPEAKS WHOLE TOKENS. The ledger does not.
+   *
+   * Every amount the server sends here is MINOR units, and every token in the
+   * registry except Village Voice carries 0 decimals, where the two are the
+   * same number. Voice carries 3, so this tab showed a grant of 10 Voice as
+   * "10,000" and its Amount box minted 0.010 Voice to a steward who typed 10.
+   *
+   * The box and the numbers beside it are converted TOGETHER and in the same
+   * commit, which is the whole discipline: a screen that divides its display
+   * and leaves its input posting minor units is worse than one that does
+   * neither, because both raw at least agree with each other.
+   */
+  const decimalsOfSlug = (slug: string): number =>
+    Number(tokens.find((t: any) => t.slug === slug)?.decimals ?? 0) || 0;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -167,7 +184,12 @@ export default function TokensTab({ password, lifecycles }: { password: string; 
       const res = await fetch(`${API_BASE}/admin/tokens/${mint.slug}/mint`, {
         method: "POST",
         headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ toUserId: mint.toUserId, amount: Number(mint.amount), reason: mint.reason }),
+        body: JSON.stringify({
+          toUserId: mint.toUserId,
+          // Typed in whole tokens, sent in the units the ledger moves.
+          amount: toMinorUnits(mint.amount, decimalsOfSlug(mint.slug)),
+          reason: mint.reason,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(refusal(data, "failed"));
@@ -383,7 +405,7 @@ export default function TokensTab({ password, lifecycles }: { password: string; 
                         ? <span className="text-gray-300">-</span>
                         : Object.entries(t.issuedBy).map(([acct, n]) => (
                             <div key={acct} className="text-xs">
-                              <span className="font-mono text-gray-400">{acct.replace("sys:", "")}</span>: {String(n)}
+                              <span className="font-mono text-gray-400">{acct.replace("sys:", "")}</span>: {formatTokenAmount(Number(n), Number(t.decimals ?? 0))}
                             </div>
                           ))}
                     </td>
@@ -476,7 +498,7 @@ export default function TokensTab({ password, lifecycles }: { password: string; 
                   <div key={g.id} className="flex flex-wrap items-center gap-3 border border-gray-100 rounded-lg px-3 py-2.5">
                     <div className="flex-1 min-w-64">
                       <p className="text-sm text-gray-900">
-                        <strong>{Number(g.amount).toLocaleString()} {g.tokenName}</strong>
+                        <strong>{formatTokenAmount(Number(g.amount), decimalsOfSlug(g.tokenSlug))} {g.tokenName}</strong>
                         {" to "}{g.toName ?? g.toUserId}
                       </p>
                       <p className="text-xs text-gray-500">

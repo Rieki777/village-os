@@ -13,6 +13,7 @@ import {
   blankTerms,
   normalizeExitPolicy,
   platformDefaultTerms,
+  withPolicyDefaults,
 } from "./exitPolicy";
 
 /** A whole policy in the village's own words, as a starting point to spoil. */
@@ -124,5 +125,58 @@ describe("a published policy cannot leave a term empty", () => {
   it("blankTerms names a term that somehow arrived empty", () => {
     const broken = { ...normalizeExitPolicy(own()), restorative: { intakeContactRole: "", steps: [] } };
     expect(blankTerms(broken)).toEqual(["The restorative path"]);
+  });
+});
+
+/**
+ * A field added to DEFAULT_EXIT_POLICY reaches new instances and no existing
+ * one, because `dbDocument.get()` answers `cache ?? fallback` and never merges
+ * the two. Thirteen villages are running documents frozen at the shape of
+ * whichever release last saved them, so this is the difference between a
+ * feature that works everywhere and one that works only on a fresh checkout.
+ */
+describe("a stored policy gets fields it was saved before", () => {
+  /** Exactly what a village that published before `grounds` existed holds. */
+  const preGrounds = () => ({
+    placeholder: false,
+    voluntary: { noticePeriodDays: 14, valuationMethod: "Our valuation.", unwindSteps: ["Our step"] },
+    involuntary: { decidingDomainId: "", appealDomainId: "", process: "Our process." },
+    restorative: { intakeContactRole: "", steps: ["Our repair step"] },
+  });
+
+  it("fills the questions a steward is asked, which would otherwise be empty on every live village", () => {
+    const filled = withPolicyDefaults(preGrounds());
+    expect(filled.involuntary.grounds).toEqual(DEFAULT_EXIT_POLICY.involuntary.grounds);
+    expect(filled.involuntary.grounds.length).toBeGreaterThan(0);
+  });
+
+  it("does not touch a single word the village wrote", () => {
+    const filled = withPolicyDefaults(preGrounds());
+    expect(filled.involuntary.process).toBe("Our process.");
+    expect(filled.voluntary.valuationMethod).toBe("Our valuation.");
+    expect(filled.voluntary.unwindSteps).toEqual(["Our step"]);
+    expect(filled.voluntary.noticePeriodDays).toBe(14);
+    expect(filled.restorative.steps).toEqual(["Our repair step"]);
+  });
+
+  it("never answers the placeholder question on the village's behalf", () => {
+    /*
+     * THE REASON THIS IS NOT normalizeExitPolicy. That function reads
+     * `placeholder: body?.placeholder === true`, so running it over a stored
+     * document that lacks the key would record "this village adopted these
+     * terms as its own", which is a claim only a founder can make. A READ must
+     * never change what a village is on record as having decided.
+     */
+    expect(withPolicyDefaults(preGrounds()).placeholder).toBe(false);
+    expect(withPolicyDefaults({ ...preGrounds(), placeholder: true }).placeholder).toBe(true);
+    const noKey: any = preGrounds();
+    delete noKey.placeholder;
+    expect(normalizeExitPolicy(noKey).placeholder, "normalize would have answered it").toBe(false);
+    expect(withPolicyDefaults(noKey).placeholder, "the read must leave it as the platform default").toBe(true);
+  });
+
+  it("keeps a village's own edited questions over the platform's", () => {
+    const theirs = { ...preGrounds(), involuntary: { ...preGrounds().involuntary, grounds: ["Only our question?"] } };
+    expect(withPolicyDefaults(theirs).involuntary.grounds).toEqual(["Only our question?"]);
   });
 });

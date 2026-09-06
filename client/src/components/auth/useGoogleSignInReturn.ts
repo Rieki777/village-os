@@ -15,7 +15,7 @@
  * more load costs nothing and starts the app in a clean signed-in state.
  */
 import { useEffect, useState } from "react";
-import { TOKEN_KEY } from "@/lib/gameApi";
+import { TOKEN_KEY, useCatalyst } from "@/lib/gameApi";
 
 export type GoogleReturnState =
   | { status: "none" }
@@ -30,20 +30,25 @@ export type GoogleReturnState =
  * to a plain sentence with a way forward, because a code a member cannot read
  * is the same as no message at all.
  */
-function messageFor(reason: string): string {
+function messageFor(reason: string, catalyst: string): string {
   switch (reason) {
     case "cancelled":
       return "That sign-in was cancelled. You can try again, or sign in with your email and password.";
     case "email_unverified":
       return "Google has not confirmed that email address belongs to you, so it cannot be used to sign in here. Use your email and password.";
     case "already_linked_elsewhere":
-      return "This account is already connected to a different Google account. Sign in with your email and password, or ask an admin for help.";
+      return `This account is already connected to a different Google account. Sign in with your email and password, or ask ${catalyst} for help.`;
     case "account_unavailable":
-      return "That account cannot be signed into. Ask an admin for help.";
+      return `That account cannot be signed into. Ask ${catalyst} for help.`;
     case "not_configured":
       return "Google sign-in is not set up on this village. Use your email and password.";
     case "bad_state":
       return "That sign-in link expired before it was finished. Start again.";
+    case "rate_limited":
+      // The only refusal here that a member fixes by WAITING, so the sentence
+      // has to say so. The default below says "try again", which from this
+      // address would fail again straight away.
+      return "Too many sign-in attempts from this connection. Wait a few minutes and try again, or sign in with your email and password.";
     default:
       return "Google sign-in did not finish. You can try again, or sign in with your email and password.";
   }
@@ -51,15 +56,29 @@ function messageFor(reason: string): string {
 
 export function useGoogleSignInReturn(): GoogleReturnState {
   const [state, setState] = useState<GoogleReturnState>({ status: "none" });
+  // Two of the refusals send a member to ask for help, and this is the word
+  // this village uses for whoever they would be asking.
+  const catalyst = useCatalyst();
+
+  /*
+   * THE REFUSAL, IN ITS OWN EFFECT, and the reason is the dependency array.
+   *
+   * Two of these sentences name whoever a member should ask for help, and that
+   * word arrives from `/api/game/config` a moment after mount. Reading it from
+   * the exchange effect below would mean either a message frozen at the
+   * platform default, or a dependency that re-runs a POST and a redirect every
+   * time the config resolves. Setting state twice with a better sentence costs
+   * nothing; running the exchange twice would not.
+   */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("oauth") !== "error") return;
+    setState({ status: "failed", message: messageFor(params.get("reason") ?? "", catalyst.aName) });
+  }, [catalyst.aName]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const mode = params.get("oauth");
-    if (mode === "error") {
-      setState({ status: "failed", message: messageFor(params.get("reason") ?? "") });
-      return;
-    }
-    if (mode !== "complete") return;
+    if (params.get("oauth") !== "complete") return;
 
     setState({ status: "working" });
     let alive = true;

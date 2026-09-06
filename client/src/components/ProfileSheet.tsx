@@ -44,8 +44,8 @@ interface Sheet {
  * a surface can only be wrong by forgetting to call it, which is visible.
  */
 
-const card = "bg-white rounded-2xl shadow-lg p-8";
-const heading = "text-2xl font-display font-bold text-teal-deep mb-6";
+const card = "bg-card rounded-2xl shadow-lg p-8";
+const heading = "text-2xl font-display font-bold text-card-foreground mb-6";
 
 export default function ProfileSheet() {
   const [sheet, setSheet] = useState<Sheet | null>(null);
@@ -82,13 +82,13 @@ export default function ProfileSheet() {
             {standing.map((s) => (
               <li
                 key={s.token}
-                className="rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-800"
+                className="rounded-full border border-border bg-muted px-4 py-2 text-sm font-medium text-card-foreground"
               >
                 {formatTokenAmount(s.balance, s.decimals)} {s.name}
               </li>
             ))}
           </ul>
-          <p className="mt-4 text-sm text-gray-600">
+          <p className="mt-4 text-sm text-muted-foreground">
             {tokenName}: held, never spent. A record of what the village noticed.
           </p>
         </motion.div>
@@ -97,7 +97,7 @@ export default function ProfileSheet() {
       {g ? (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className={card}>
           <h2 className={heading}>{tokenName}</h2>
-          <p className="text-gray-800">
+          <p className="text-card-foreground">
             {g.receivedThisSeason === 0
               ? "No thanks yet this season."
               : `Thanked by ${g.receivedThisSeason} members this season.`}
@@ -105,41 +105,29 @@ export default function ProfileSheet() {
           {/* Given sits beside received, never beneath it. Generosity is a
               status axis here, and a sheet showing one number teaches members
               to collect instead of to notice each other. */}
-          <p className="mt-1 text-gray-800">
+          <p className="mt-1 text-card-foreground">
             {g.givenThisSeason === 0
               ? "You have not thanked anyone yet this season."
               : `You thanked ${g.givenThisSeason} members in return.`}
           </p>
-          <p className="mt-3 text-sm text-gray-500">{g.lifetime} {tokenName} held in all.</p>
+          {/* The lifetime total moved to the vessel, which prints it WITH its
+              scale. This line printed `lifetime` raw, the same minor-unit
+              defect the 5xl figure had, and two cards showing one balance was
+              half of what made six gratitude sections feel like six. */}
         </motion.div>
       ) : null}
 
-      {a ? (
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className={card}>
-          <h2 className={heading}>This moon</h2>
-          <p className="text-gray-800">
-            {a.remaining === 0
-              ? "You have given everything you had to give this moon."
-              : `You can still give ${a.remaining} ${tokenName} this moon.`}
-          </p>
-          <div
-            className="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-100"
-            role="img"
-            aria-label={`${a.remaining} of ${a.total} left`}
-          >
-            <div
-              className="h-full rounded-full bg-teal-deep"
-              /* Clamped, because a dial lowered mid-cycle can leave spent above
-                 total and a bar wider than its track is a rendering bug that
-                 looks like a data one. */
-              style={{ width: `${Math.min(100, Math.max(0, (a.remaining / (a.total || 1)) * 100))}%` }}
-            />
-          </div>
-          <p className="mt-3 text-sm text-gray-500">
-            The allowance resets with the new moon. Nothing you were given is ever taken back.
-          </p>
-        </motion.div>
-      ) : null}
+      {/*
+        "THIS MOON" MOVED TO THE VESSEL, and its bar was invisible here.
+
+        The fill was `bg-teal-deep`, the village's brand colour, which
+        shared/brandTokens.ts guarantees only to carry WHITE text and which is
+        therefore dark. Measured on this night panel it was 1.43:1 against its
+        own track: a member could not see how much they had left to give. The
+        vessel draws the same bar in the sheet's gold at 7.10:1, beside the
+        balance and the send control, which is where somebody deciding whether
+        to give is actually looking.
+      */}
     </>
   );
 }

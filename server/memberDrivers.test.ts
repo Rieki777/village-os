@@ -25,6 +25,7 @@ import { looksLikeSubjectRef } from "./lib/subjectRefs";
  */
 function standInPool() {
   const refs = new Map<string, string>();
+  const pending: string[] = [];
   const pool = {
     async query(sql: string, params: any[] = []) {
       if (sql.startsWith("SELECT `ref`")) {
@@ -36,17 +37,31 @@ function standInPool() {
         if (!refs.has(String(userId))) refs.set(String(userId), String(ref));
         return [{}];
       }
+      if (sql.startsWith("UPDATE `subject_refs`")) {
+        // markErasurePending. Accepted and not modelled further: what it
+        // WRITES is asserted against a real database in
+        // server/lib/memberDriverReferences.test.ts, and these cases are about
+        // what the village says rather than about the mapping table.
+        pending.push(String(params[1]));
+        return [{}];
+      }
       if (sql.startsWith("DELETE FROM `subject_refs`")) {
         refs.delete(String(params[0]));
         return [{}];
       }
-      // Loud rather than quiet. A new query in the erasure path should break
-      // this stand-in and make somebody look, instead of silently returning
-      // nothing and turning a real behaviour into a passing test.
+      // Loud rather than quiet, and NARROWER THAN IT LOOKS. This throws on any
+      // query THESE TWO FUNCTIONS make that it does not model, so a new one in
+      // forgetMemberEverywhere or exportMemberEverywhere breaks here and makes
+      // somebody look. It guards nothing in the local sweep: this file never
+      // calls anonymizeMember, so the roughly thirty queries in
+      // server/lib/erasure.ts are covered by loop.e2e against a real database
+      // and by nothing here. Those are different properties. A real database
+      // says whether a query is CORRECT; this says whether anybody NOTICED a
+      // new one went in, and only the first half of the erasure path has both.
       throw new Error(`the stand-in pool was asked something it does not model: ${sql}`);
     },
   } as any;
-  return { pool, refs };
+  return { pool, refs, pending };
 }
 
 let db = standInPool();

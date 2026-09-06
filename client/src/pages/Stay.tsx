@@ -94,6 +94,29 @@ export default function Stay() {
 
   const audience = data?.audience ?? "guest";
   /**
+   * THE VILLAGE'S WORD FOR A PRICED TOKEN, AND ITS SCALE, off `priceTokens`.
+   *
+   * Every number in `a.prices` is `accommodation_prices.amount_minor`, the
+   * ledger's MINOR units. This page divided its balance line and printed every
+   * RATE raw, so a member could not work out how many nights they could afford
+   * from the two numbers in front of them, which is the only arithmetic anyone
+   * does on this page.
+   *
+   * `priceTokens` covers every token any room posts a rate in, including stay
+   * credits, and reaches a signed-out visitor. `mine.balances`, where the name
+   * used to come from, reaches neither. Falls back to the slug and to whole
+   * units, which is what an unregistered token honestly means.
+   */
+  const priceTokens: Record<string, { name?: string; decimals?: number }> = data?.priceTokens ?? {};
+  const tokenName = (slug: string): string => priceTokens[slug]?.name ?? slug;
+  const tokenScale = (slug: string): number => Number(priceTokens[slug]?.decimals ?? 0) || 0;
+  /**
+   * Stay credits' own scale. It is the SAME token as `mine.balanceDecimals` on
+   * the balance line above, read from `priceTokens` so a signed-out visitor
+   * reading a nightly rate gets the number a member gets.
+   */
+  const stayScale = tokenScale("stay-credit");
+  /**
    * 0092: every nightly rate a room posts that is neither stay credits nor
    * money, with the village's own name for each token.
    *
@@ -103,15 +126,16 @@ export default function Stay() {
    * "the prices that are not the two we already handle" is a rule, and a rule
    * spelled out once is a rule that stays true when a third one appears.
    */
-  const villagePrices = (a: any): Array<{ slug: string; name: string; amount: number }> =>
+  const villagePrices = (a: any): Array<{ slug: string; name: string; amount: string; units: number }> =>
     Object.entries(a.prices ?? {})
       .filter(([slug]) => slug !== "stay-credit" && slug !== "usd")
-      .map(([slug, tiers]: [string, any]) => ({
-        slug,
-        name: data?.mine?.balances?.[slug]?.name ?? slug,
-        amount: Number(tiers?.[audience] ?? tiers?.guest ?? 0),
-      }))
-      .filter((v) => v.amount > 0);
+      .map(([slug, tiers]: [string, any]) => {
+        const units = Number(tiers?.[audience] ?? tiers?.guest ?? 0);
+        return { slug, name: tokenName(slug), amount: formatTokenAmount(units, tokenScale(slug)), units };
+      })
+      // Filtered on the UNITS, not on the rendered string: "0.001" is truthy
+      // and a room posting one minor unit is still a room with a rate.
+      .filter((v) => v.units > 0);
 
   return (
     <Layout>
@@ -150,7 +174,11 @@ export default function Stay() {
                     <>Your stay request is with the stewards.</>
                   ) : (
                     <>
-                      Your stay is active at <b>{s.rateSnapshotCredits}</b> credit(s)/night
+                      {/* The snapshot is in the token the stay was ACTIVATED
+                          in, which is not always stay credits, so it reads
+                          against that token's scale and not against the one
+                          the balance line above uses. */}
+                      Your stay is active at <b>{formatTokenAmount(Number(s.rateSnapshotCredits ?? 0), tokenScale(s.rateSnapshotToken ?? "stay-credit"))}</b> credit(s)/night
                       {s.nightsRemaining != null && <>, about <b>{Math.max(0, s.nightsRemaining)}</b> night(s) covered</>}.
                     </>
                   )}
@@ -190,7 +218,12 @@ export default function Stay() {
                     {a.description && <p className="text-sm text-muted-foreground mb-3">{a.description}</p>}
                     <div className="mt-auto space-y-2">
                       <p className="text-sm text-foreground">
-                        {credit ? <><b>{credit}</b> credit(s)/night</> : <span className="text-muted-foreground">rate coming soon</span>}
+                        {/* Divides for the same reason the balance line at the
+                            top of this page divides: a rate and a balance a
+                            member is asked to compare have to be in one scale.
+                            Stay credits carry decimals 0 today, so this reads
+                            exactly as it always has. */}
+                        {credit ? <><b>{formatTokenAmount(credit, stayScale)}</b> credit(s)/night</> : <span className="text-muted-foreground">rate coming soon</span>}
                         {money ? <span className="text-muted-foreground"> · {usd(money)}/night</span> : null}
                         {/* 0092: a room can also post a nightly rate in the
                             village's own credits, which is where the cycle
@@ -207,8 +240,8 @@ export default function Stay() {
                       {tiered && (
                         <p className="text-xs text-muted-foreground">
                           {audience === "member"
-                            ? <>Visitors pay {guestCredit} credit(s)/night.</>
-                            : <>Members pay {memberCredit} credit(s)/night.</>}
+                            ? <>Visitors pay {formatTokenAmount(guestCredit, stayScale)} credit(s)/night.</>
+                            : <>Members pay {formatTokenAmount(memberCredit, stayScale)} credit(s)/night.</>}
                         </p>
                       )}
                       {user ? (
@@ -277,7 +310,7 @@ export default function Stay() {
                 {data.earnQuests.map((q: any) => (
                   <Link key={q.id} href="/quests" className="block text-sm text-muted-foreground hover:text-foreground">
                     <span className="font-medium text-foreground">{q.title}</span>
-                    {q.stayCreditReward > 0 && <>: {q.stayCreditReward} stay credit(s) on consent</>}
+                    {q.stayCreditReward > 0 && <>: {formatTokenAmount(q.stayCreditReward, stayScale)} stay credit(s) on consent</>}
                   </Link>
                 ))}
               </div>

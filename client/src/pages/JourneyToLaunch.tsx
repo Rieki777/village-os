@@ -38,6 +38,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import type { LaunchGroup } from "@shared/launchRequirements";
+import { villageMoonLabel, type VillageMoon } from "@shared/villageMoon";
 
 /**
  * S65: the launch guide. Same brain as the Work With Us guide, different
@@ -384,7 +385,10 @@ function StartTheGame({
  * would have told the founder nothing they needed.
  */
 interface DryRunFinding { area: string; outcome: "issued" | "refused" | "idle"; sentence: string }
-interface DryRunTurn { cycleNumber: number; cycleKey: string; startsAt: string; endsAt: string; findings: DryRunFinding[] }
+// `cycleKey` is the stored id and stays the React key for the list. `moon` is
+// what the founder reads: a village running this report has usually not
+// launched, so it carries dates and no number, which is the truth.
+interface DryRunTurn { cycleNumber: number; cycleKey: string; startsAt: string; endsAt: string; moon: VillageMoon; findings: DryRunFinding[] }
 interface DryRunReport {
   moons: number;
   spanDays: number;
@@ -538,7 +542,7 @@ function TestRun() {
                 {report.turns.map((t) => (
                   <li key={t.cycleKey}>
                     <p className="text-xs font-medium text-stone-900">
-                      {t.cycleKey} · {new Date(t.startsAt).toLocaleDateString()} to {new Date(t.endsAt).toLocaleDateString()}
+                      {villageMoonLabel(t.moon)}
                     </p>
                     <ul className="mt-1 space-y-1">
                       {t.findings.map((f, i) => (

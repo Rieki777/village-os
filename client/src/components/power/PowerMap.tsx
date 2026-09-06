@@ -21,19 +21,23 @@
  * (which takes a `pad` for the outer ring).
  */
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type TouchEvent as ReactTouchEvent,
   type ReactNode,
   type RefObject,
 } from "react";
 import { motion } from "framer-motion";
 import { wrapLabel, type NestedLayout } from "@shared/mapLayout";
+import { cssColourForCircle } from "@shared/circleView";
 import { transition, viewBoxFor, viewFor, type CameraTarget, type CameraView } from "./camera";
 import SeatGlyph, { seatStateWords } from "./SeatGlyph";
+import { captionSize, fitLabelToScreen } from "./labelFit";
 import { TermArc, SeasonRing } from "./TermMarkers";
 import RelationLines, { RelationArrowDef } from "./RelationLines";
 import type { Filters, PowerData, PowerSeat, Selection } from "./types";
@@ -42,13 +46,79 @@ import { anyFilterOn, seatPassesFilters } from "./types";
 /** Faces stop drawing outside the focus past this many seats (spec 13). */
 const AVATAR_SEAT_CAP = 400;
 
-const TONE: Record<string, string> = {
-  sage: "var(--color-sage)",
-  amber: "var(--color-amber)",
-  coral: "var(--color-coral)",
-  teal: "var(--color-teal)",
-};
-const toneOf = (c: any): string => TONE[String(c?.color ?? "")] ?? "var(--color-teal-deep)";
+/*
+ * ── HOW BIG THIS PICTURE ACTUALLY DRAWS, AND WHY IT WAS HALF SIZE ──────────
+ *
+ * The layout is a circle PACKING, so its content is a disc and its canvas is
+ * the square that hugs that disc. The SVG then fits that square into the
+ * element's real box with `xMidYMid meet`, which scales to whichever side is
+ * smaller. On a desktop column the box is landscape (measured 864x533), so
+ * the height wins, the whole drawing renders at 0.51x, and 331px of width
+ * (38% of the canvas) sits empty on either side of the disc.
+ *
+ * The viewBox was asking for the LAYOUT's aspect, which is 1 by construction
+ * and therefore told the browser nothing about the space available. Handing
+ * it the CONTAINER's aspect does two things: the world coordinate system now
+ * covers the full box, and the space beside the disc becomes addressable
+ * world space instead of dead margin. That space is where a name too long for
+ * its circle goes.
+ *
+ * It does NOT on its own make the disc bigger. A disc in a short wide box is
+ * height-limited whatever the viewBox says, which is why `md:h-[74vh]` moved
+ * too: the stage was capped at 533px while 864px wide.
+ */
+function useMeasuredBox(el: SVGSVGElement | null): { w: number; h: number } {
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const read = () => {
+      const r = el.getBoundingClientRect();
+      // Round before comparing: a fractional resize that changes nothing
+      // visible would otherwise re-render on every scroll on some browsers.
+      const next = { w: Math.round(r.width), h: Math.round(r.height) };
+      // A HIDDEN instance measures ZERO, and zero is not a measurement.
+      //
+      // This page mounts TWO PowerMaps, one for the standing panel and one
+      // for the phone, and CSS hides whichever does not apply. The hidden
+      // one reports 0x0, and taking that as the box would divide the label
+      // floor by zero and hand every label back unchanged, which is exactly
+      // the bug this hook exists to prevent. Keep the last real size.
+      if (next.w <= 0 || next.h <= 0) return;
+      setBox((prev) => (prev.w === next.w && prev.h === next.h ? prev : next));
+    };
+    read();
+    // The first paint can land before layout has given this subtree a size,
+    // so read again on the next frame. The observer covers every later
+    // change; this covers the one before it starts.
+    const raf = typeof requestAnimationFrame === "function" ? requestAnimationFrame(read) : null;
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    return () => {
+      if (raf !== null) cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+  }, [el]);
+  return box;
+}
+
+// The label floor lives in `labelFit.ts` so it can be tested without a
+// browser. See that file for why a world-unit floor was the wrong floor.
+
+/*
+ * EVERY CIRCLE GETS ITS OWN COLOUR, AND SEVENTEEN OF THEM USED TO GET ONE.
+ *
+ * This was a four-entry `Record<string, string>` keyed by bare tone words
+ * (sage, amber, coral, teal) with `?? var(--color-teal-deep)` on the end.
+ * The seed writes eight words, four of which (rose, stone, sky, emerald)
+ * were not in it, and the admin form writes Tailwind classes (`bg-sage`),
+ * which matched nothing at all. So most circles fell to the fallback and the
+ * map drew one grey, throwing away the strongest wayfinding signal it owns.
+ *
+ * `cssColourForCircle` resolves both vocabularies onto a union the compiler
+ * checks, and the hues are the living map artifact's own `CIRCLE_COL`, so
+ * the two lenses agree about what colour a circle is.
+ */
+const toneOf = (c: any): string => cssColourForCircle({ id: String(c?.id ?? ""), color: c?.color ?? null });
 
 export default function PowerMap({
   data,
@@ -64,6 +134,8 @@ export default function PowerMap({
   pulseSeatId,
   lenses,
   svgRef,
+  maxDepth,
+  compact,
 }: {
   data: PowerData;
   layout: NestedLayout;
@@ -81,6 +153,31 @@ export default function PowerMap({
   lenses?: ReactNode;
   /** The page exports SVG/PNG from this element (spec 14). */
   svgRef?: RefObject<SVGSVGElement | null>;
+  /*
+   * ONE LEVEL AT A TIME, WHICH IS WHAT A PHONE HAS ROOM FOR.
+   *
+   * Seventeen circles and their nested children in a 375px square is a
+   * picture nobody can use: at that size a grandchild circle is a few pixels
+   * across and its seats are smaller than a fingertip. Undefined draws every
+   * depth, which is what a desktop wants; a number draws that depth and
+   * above, and the breadcrumb is the way down.
+   */
+  maxDepth?: number;
+  /*
+   * COMPACT: a stage too small to carry every name at a legible size.
+   *
+   * The screen floor makes each label readable on its own. On a 358px phone
+   * stage with fifteen sibling circles that is not enough: measured live at
+   * 1d0d869, the names cleared 12.5px and then collided into an unreadable
+   * pile, because legible and legible-together are different problems.
+   *
+   * So a compact stage draws a name only where it FITS INSIDE its circle. A
+   * name that would have to be promoted above the disc is dropped instead:
+   * the circle is still tappable, tapping it makes it the focus and gives it
+   * room, and the accordion underneath carries every name in full. Fewer
+   * words, all of them readable, beats fifteen words in a heap.
+   */
+  compact?: boolean;
 }) {
   const byId = useMemo(() => new Map(data.circles.map((c) => [c.id, c])), [data.circles]);
   const posById = useMemo(() => new Map(layout.circles.map((p) => [p.id, p])), [layout]);
@@ -96,8 +193,28 @@ export default function PowerMap({
   const target: CameraTarget = useMemo(() => {
     const pos = focusId ? posById.get(focusId) : null;
     if (focusId && pos) return { id: focusId, cx: pos.x, cy: pos.y, r: pos.r };
-    return { id: null, cx: layout.village.x, cy: layout.village.y, r: layout.village.r };
-  }, [focusId, posById, layout]);
+    /*
+     * THE VILLAGE VIEW HAS TO CLEAR THE SEASON RING, WHICH DRAWS OUTSIDE IT.
+     *
+     * `viewFor` frames `2r + FOCUS_MARGIN`, which is 12 world units of
+     * clearance on each side. `SeasonRing` draws its dashed ring at r + 14
+     * and rides its LABEL on an arc at r + 20, so at the village level the
+     * season words along the top were being shaved by the frame. Measured
+     * live at 1280x800: the ring clipped by 2 units, the label arc by 8.
+     *
+     * It is only the village that needs this: the season ring draws once,
+     * around the whole village, and a focused circle has nothing outside it.
+     * So the allowance goes here instead of into FOCUS_MARGIN, which every
+     * other focus would then pay for as a smaller picture.
+     */
+    const seasonPad = data.season.current || data.season.nextRollAt ? 34 : 0;
+    return {
+      id: null,
+      cx: layout.village.x,
+      cy: layout.village.y,
+      r: layout.village.r + seasonPad,
+    };
+  }, [focusId, posById, layout, data.season]);
 
   const reduced =
     typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -196,13 +313,137 @@ export default function PowerMap({
   };
 
   const drawVillageRing = shape !== "pyramid";
-  const aspect = layout.height / layout.width;
+
+  // The CONTAINER's aspect, measured, not the layout's (which is 1 by
+  // construction). See useMeasuredBox above for what this was costing.
+  /*
+   * A STABLE REF CALLBACK, WHICH IS THE WHOLE DIFFERENCE.
+   *
+   * This was an inline arrow. React treats a ref callback with a new
+   * identity as a different ref, so on EVERY render it detached the old one
+   * (calling it with null) and attached the new one. The element state
+   * thrashed null/element every render, the effect below tore its
+   * ResizeObserver down and rebuilt it each time, and the measurement never
+   * settled: `box` stayed {0,0} in production.
+   *
+   * Measured live on 2026-09-05 at build b865a34: `pxPerWorld` was 0, so
+   * `fitLabelToScreen` returned every label unchanged and the "forming"
+   * caption sat at its 9-world-unit fallback. The label floor was shipped
+   * and doing nothing, on desktop and on mobile alike.
+   *
+   * `useCallback` keyed on the one prop it closes over gives React the same
+   * function every render, so the ref attaches once.
+   */
+  const [svgEl, setSvgEl] = useState<SVGSVGElement | null>(null);
+  const attachSvg = useCallback(
+    (el: SVGSVGElement | null) => {
+      setSvgEl(el);
+      // `svgRef` is the caller's handle (export, print). Keep feeding it.
+      if (svgRef) (svgRef as { current: SVGSVGElement | null }).current = el;
+    },
+    [svgRef],
+  );
+  /* HOVER, SO A READER CAN SURVEY WITHOUT NAVIGATING.
+     Reading the shape of the village meant stepping into every circle and
+     back out again, which loses your place each time. Pointer only: a touch
+     device gets the tap, and hover would fire on the way to it. */
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const box = useMeasuredBox(svgEl);
+  const aspect = box.w > 0 && box.h > 0 ? box.h / box.w : layout.height / layout.width;
+  /*
+   * THE VIEW WIDTH HAS TO GROW WITH A LANDSCAPE BOX, OR THE DISC IS CUT.
+   *
+   * `viewFor` asks for a world region `2r + margin` WIDE, and means a square
+   * region: the thing it is framing is a disc. Handing that width to a
+   * viewBox whose aspect is 0.62 asks for a region 38% SHORTER than it is
+   * wide, and the top and bottom of the village ring fall outside the
+   * picture. Correct aspect, cropped map, which is a worse bug than the one
+   * being fixed and would have looked like a layout error.
+   *
+   * So the region is widened until its HEIGHT covers the square the camera
+   * meant. The scale is unchanged by this (a disc in a short box is
+   * height-limited whatever the viewBox says); what it buys is that the
+   * space either side of the disc becomes addressable world space instead of
+   * dead margin, which is where a name too long for its circle now goes.
+   */
+  const fittedView: CameraView = aspect < 1 ? [view[0], view[1], view[2] / aspect] : view;
+  /*
+   * ── PINCH AND PAN, ON THE STAGE THAT NEEDS IT ─────────────────────────────
+   *
+   * A phone shows fifteen circles at 18 to 30px each. Tap-to-zoom answers
+   * "step into this one"; it does not answer "let me look closer at that
+   * corner", and the compact rule means most names only appear once you are
+   * inside. So the small stage gets a real camera the reader drives.
+   *
+   * ONE FINGER IS LEFT ALONE, deliberately. The map sits in a scrolling page
+   * now, and a canvas that swallows one-finger drag is a canvas a reader
+   * cannot scroll past: they reach the map and the page stops. Two fingers
+   * pinch and pan, which is the convention every embedded map uses for
+   * exactly this reason, and `touch-action: pan-y` keeps vertical scrolling
+   * with the page.
+   *
+   * The nudge is a DELTA on top of the camera, never a replacement for it:
+   * tapping a circle still flies there, and arriving resets the nudge, so
+   * the two ways of moving cannot fight over where the view is.
+   */
+  const [nudge, setNudge] = useState({ dx: 0, dy: 0, k: 1 });
+  useEffect(() => setNudge({ dx: 0, dy: 0, k: 1 }), [focusId, shape]);
+  const gesture = useRef<{ dist: number; mx: number; my: number } | null>(null);
+  const zoomable = !!compact;
+
+  // Screen pixels per world unit, at the camera's current width. Everything
+  // that has to hold a fixed size on screen divides by this.
+  const navView: CameraView = zoomable
+    ? [fittedView[0] + nudge.dx, fittedView[1] + nudge.dy, fittedView[2] / nudge.k]
+    : fittedView;
+  const pxPerWorld = box.w > 0 ? box.w / navView[2] : 0;
 
   return (
     <>
       <svg
-        ref={svgRef}
-        viewBox={viewBoxFor(view, aspect)}
+        ref={attachSvg}
+        viewBox={viewBoxFor(navView, aspect)}
+        style={zoomable ? { touchAction: "pan-y" } : undefined}
+        onTouchStart={
+          zoomable
+            ? (e: ReactTouchEvent) => {
+                // Two fingers only. One is the page's, so scrolling survives.
+                if (e.touches.length !== 2) { gesture.current = null; return; }
+                const [a, b] = [e.touches[0]!, e.touches[1]!];
+                gesture.current = {
+                  dist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY),
+                  mx: (a.clientX + b.clientX) / 2,
+                  my: (a.clientY + b.clientY) / 2,
+                };
+              }
+            : undefined
+        }
+        onTouchMove={
+          zoomable
+            ? (e: ReactTouchEvent) => {
+                const g = gesture.current;
+                if (!g || e.touches.length !== 2 || pxPerWorld <= 0) return;
+                e.preventDefault();
+                const [a, b] = [e.touches[0]!, e.touches[1]!];
+                const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+                const mx = (a.clientX + b.clientX) / 2;
+                const my = (a.clientY + b.clientY) / 2;
+                setNudge((n) => ({
+                  // Panning is the midpoint's travel, converted to world
+                  // units and inverted: dragging the picture right moves the
+                  // camera left.
+                  dx: n.dx - (mx - g.mx) / pxPerWorld,
+                  dy: n.dy - (my - g.my) / pxPerWorld,
+                  // Between 1x and 6x. Below 1 the reader zooms out past the
+                  // whole village into empty ground, which looks broken and
+                  // answers nothing.
+                  k: Math.min(6, Math.max(1, n.k * (g.dist > 0 ? dist / g.dist : 1))),
+                }));
+                gesture.current = { dist, mx, my };
+              }
+            : undefined
+        }
+        onTouchEnd={zoomable ? () => { gesture.current = null; } : undefined}
         className="w-full h-full"
         preserveAspectRatio="xMidYMid meet"
         role="group"
@@ -210,6 +451,31 @@ export default function PowerMap({
         data-power-map
         data-shape={shape}
         onClick={() => onFocus(parentOf(focusId))}
+        /*
+         * ESCAPE, WHICH THE LABELS HAVE BEEN PROMISING ALL ALONG.
+         *
+         * Every focused circle carries the aria-label "You are inside it;
+         * press Enter or Escape to go out one level", and spec 11 lists Esc
+         * among the keyboard paths. Enter was wired and Escape never was, so
+         * the one instruction a screen-reader user is given for leaving a
+         * circle did nothing. Verified live at build b9806ea: Enter cleared
+         * the focus, Escape left it exactly where it was.
+         *
+         * It sits on the SVG rather than on each node so it works from a
+         * seat as well as from a circle: key events bubble, and "go out one
+         * level" is the same act wherever focus happens to be.
+         *
+         * A selected seat closes FIRST. Escape means "back out of the thing
+         * I am in", and when a seat card is open that thing is the card, not
+         * the circle behind it.
+         */
+        onKeyDown={(e: ReactKeyboardEvent) => {
+          if (e.key !== "Escape") return;
+          e.preventDefault();
+          e.stopPropagation();
+          if (selected) onSelect(null);
+          else onFocus(parentOf(focusId));
+        }}
       >
         <defs>
           <RelationArrowDef />
@@ -238,7 +504,7 @@ export default function PowerMap({
           </>
         )}
 
-        <SeasonRing cx={layout.village.x} cy={layout.village.y} r={layout.village.r} season={data.season} />
+        <SeasonRing cx={layout.village.x} cy={layout.village.y} r={layout.village.r} season={data.season} pxPerWorld={pxPerWorld} />
 
         {/* Pyramid connectors: child to parent, before the discs. */}
         {shape === "pyramid" &&
@@ -262,7 +528,9 @@ export default function PowerMap({
           })}
 
         {/* The circles, every shape, one loop. */}
-        {layout.circles.map((pos) => {
+        {layout.circles
+          .filter((pos) => maxDepth === undefined || pos.depth <= maxDepth)
+          .map((pos) => {
           const c = byId.get(pos.id);
           const forming = c?.status === "forming";
           const tone = toneOf(c);
@@ -272,11 +540,20 @@ export default function PowerMap({
           const dimForFilter = filtersOn && !circleAnyPass(pos.id) ? 0.2 : 1;
           const opacity = Math.min(dimForFocus, dimForFilter) * (forming ? 0.6 : 1);
           const isFocus = pos.id === focusId;
-          const label = wrapLabel(c?.name ?? pos.id, pos.r, pos.depth);
+          const hovered = hoverId === pos.id && interactive && !isFocus;
+          const wrapped = wrapLabel(c?.name ?? pos.id, pos.r, pos.depth);
+          // The world-unit size the layout asked for, converted to something
+          // legible on THIS screen at THIS zoom. See fitLabelToScreen.
+          const fit = fitLabelToScreen(wrapped, pos.r, pxPerWorld);
+          const label = { lines: wrapped.lines, fontSize: fit.fontSize, lineHeight: fit.lineHeight };
           const hasChildren = data.circles.some((o) => o.parentCircleId === pos.id && posById.has(o.id));
-          const labelTop = hasChildren
-            ? pos.y - pos.r + 24
-            : pos.y - ((label.lines.length - 1) * label.lineHeight) / 2 + (forming ? -6 : 0);
+          const labelTop = fit.outside
+            ? // Above the disc, clear of its seat ring, where the circle's own
+              // width stops constraining the name.
+              pos.y - pos.r - 6 - (label.lines.length - 1) * label.lineHeight
+            : hasChildren
+              ? pos.y - pos.r + 24
+              : pos.y - ((label.lines.length - 1) * label.lineHeight) / 2 + (forming ? -6 : 0);
 
           return (
             <motion.g key={pos.id} animate={{ opacity }} transition={morph}>
@@ -285,12 +562,40 @@ export default function PowerMap({
                 animate={{ cx: pos.x, cy: pos.y, r: pos.r }}
                 initial={false}
                 transition={morph}
-                style={{ fill: tone, fillOpacity: isFocus ? 0.16 : 0.1 }}
+                /* ATTRIBUTES, NOT STYLE, FOR THE SAME REASON AS THE LABEL.
+                   framer owns `style` on a motion component and does not
+                   reliably re-apply a static value that CHANGES between
+                   renders. `fillOpacity` changes on hover and on focus, so
+                   through `style` the hover lift would have been dead on
+                   arrival: the handler fires, React re-renders, framer keeps
+                   the first paint. `stroke` and the two below were already
+                   attributes, which is why they were going to work and this
+                   one was not. */
+                fill={tone}
+                /*
+                 * THESE HUES WERE DRAWN FOR A DARK GROUND.
+                 *
+                 * They are the living map artifact's `CIRCLE_COL`, and the
+                 * artifact paints them on #131a11 where a tenth of a hue
+                 * still reads. This page is light, and at 0.1 a mid-tone on
+                 * white is within a few percent of white: measured on the
+                 * live phone at b711620 the ring was seventeen near-identical
+                 * pale discs, which is the same "one grey" the palette work
+                 * was supposed to end.
+                 *
+                 * A third of the hue reads as a tint on white and still sits
+                 * far behind the near-black label on top of it, so nothing
+                 * about legibility moves. The mini render on /circles is on
+                 * the dark ground and keeps its own lower value.
+                 */
+                fillOpacity={isFocus ? 0.42 : hovered ? 0.46 : 0.32}
                 stroke={tone}
-                strokeOpacity={isFocus ? 0.9 : 0.45}
-                strokeWidth={isFocus ? 3 : 2}
+                strokeOpacity={isFocus ? 0.9 : hovered ? 0.85 : 0.45}
+                strokeWidth={isFocus ? 3 : hovered ? 3 : 2}
                 className={interactive ? "cursor-pointer focus:outline-none focus-visible:stroke-[4]" : ""}
                 pointerEvents={interactive ? undefined : "none"}
+                onMouseEnter={() => interactive && setHoverId(pos.id)}
+                onMouseLeave={() => setHoverId((h) => (h === pos.id ? null : h))}
                 role="button"
                 tabIndex={interactive ? 0 : -1}
                 aria-label={`${c?.name ?? pos.id}${forming ? ", still forming" : ""}${
@@ -315,33 +620,173 @@ export default function PowerMap({
                   }
                 }}
               />
-              {showLabel(pos.id) && (
+              {/* NESTING READS AS DEPTH, NOT AS ANOTHER OUTLINE.
+                  Three levels of flat rings collapse into noise: every edge
+                  is the same weight, so the eye cannot tell "inside" from
+                  "next to". A faint rim just within the edge gives the disc
+                  a lip, which is enough for containment to read at a glance
+                  and cheap enough that it costs no filter. */}
+              <circle
+                cx={pos.x}
+                cy={pos.y}
+                r={Math.max(0, pos.r - 1.5)}
+                fill="none"
+                stroke={tone}
+                strokeOpacity={0.16}
+                strokeWidth={3}
+                pointerEvents="none"
+              />
+
+              {/* On a compact stage a promoted label is dropped rather
+                  than piled on its neighbours. See `compact` above. */}
+              {(showLabel(pos.id) || hovered) && !(compact && fit.outside && !isFocus) && (
                 <motion.text
                   animate={{ x: pos.x, y: labelTop }}
                   initial={false}
                   transition={morph}
                   textAnchor="middle"
                   className="fill-foreground font-semibold pointer-events-none"
-                  style={{ fontSize: label.fontSize }}
+                  /*
+                   * fontSize IS AN ATTRIBUTE HERE, NOT A STYLE, AND THAT IS
+                   * THE WHOLE FIX.
+                   *
+                   * framer-motion owns the `style` object on a motion
+                   * component. A static style value that CHANGES between
+                   * renders is not reliably re-applied: the first render
+                   * happens before the ResizeObserver has measured, so
+                   * pxPerWorld is 0, the label takes its raw wrapLabel size,
+                   * and framer wrote that. The second render computed the
+                   * correct size and framer kept the first one.
+                   *
+                   * Measured live at build f045f3c: the tspan `dy` (a plain
+                   * SVG attribute React owns) updated to the fitted 23 while
+                   * `font-size` stayed at the unfitted 12, on the same
+                   * element, in the same render. Two numbers from one object,
+                   * disagreeing, which is what named the cause. The "forming"
+                   * caption below is a plain <text> and was correct all along.
+                   *
+                   * `fontSize` as a presentation attribute goes through React,
+                   * not framer, so it tracks every render.
+                   */
+                  fontSize={label.fontSize}
+                  {...(fit.outside
+                    ? {
+                        // A label pushed outside its circle crosses whatever
+                        // is behind it, so it carries the page's own ground
+                        // as a halo. `paint-order` puts that stroke UNDER the
+                        // glyphs; without it the stroke draws over them and
+                        // the text thins to nothing at small sizes.
+                        //
+                        // Attributes, not style: `fit.outside` changes as the
+                        // camera moves, and framer would keep whichever value
+                        // the first render happened to produce, exactly as it
+                        // did with fontSize above.
+                        paintOrder: "stroke" as const,
+                        stroke: "var(--background)",
+                        strokeWidth: 3.5,
+                        strokeLinejoin: "round" as const,
+                      }
+                    : {})}
                 >
+                  {/* x=0, NOT pos.x, AND THAT IS A BUG FIX.
+                      The <text> is already moved to pos.x by framer's
+                      `animate={{x, y}}`, which is a transform. A tspan's `x`
+                      is ABSOLUTE inside that already-moved frame, so setting
+                      it to pos.x again put every label at 2 x pos.x.
+                      Measured live at 9b41ae0: all 15 labels displaced, each
+                      by exactly its own `pos.x * scale`, and the tspan's x
+                      attribute equalled the transform's translateX to the
+                      decimal. This is why "Health & Healing Council" and
+                      "Development Circle" floated unanchored to the right of
+                      the ring in the very first screenshot of this surface.
+                      Zero re-centres each line on the text's own origin,
+                      which textAnchor="middle" then centres on the circle. */}
                   {label.lines.map((ln, i) => (
-                    <tspan key={ln + i} x={pos.x} dy={i === 0 ? 0 : label.lineHeight}>
+                    <tspan key={ln + i} x={0} dy={i === 0 ? 0 : label.lineHeight}>
                       {ln}
                     </tspan>
                   ))}
                 </motion.text>
               )}
-              {forming && showLabel(pos.id) && (
+              {forming && showLabel(pos.id) && !(compact && fit.outside && !isFocus) && (
                 <text
                   x={pos.x}
                   y={labelTop + (label.lines.length - (hasChildren ? 0 : 1)) * label.lineHeight + (hasChildren ? 14 : 16)}
                   textAnchor="middle"
                   className="fill-muted-foreground pointer-events-none"
-                  style={{ fontSize: Math.max(9, label.fontSize - 4) }}
+                  style={{
+                    // This caption was the worst offender on the live page: a
+                    // hard floor of 9 WORLD units measured 6px on screen. Its
+                    // floor is a screen size now, like the name above it.
+                    fontSize: captionSize(label.fontSize, pxPerWorld),
+                  }}
                 >
                   forming
                 </text>
               )}
+
+              {/* WHAT HOVER ACTUALLY ANSWERS: is this the circle I want.
+                  Name plus the two counts a reader weighs before deciding to
+                  step in, so surveying the village no longer means entering
+                  and leaving every circle in turn. Pointer only, and never on
+                  the circle you are already inside. */}
+              {hovered && (
+                <text
+                  x={pos.x}
+                  y={labelTop + (label.lines.length - (hasChildren ? 0 : 1)) * label.lineHeight + (forming ? 30 : 16)}
+                  textAnchor="middle"
+                  className="fill-muted-foreground pointer-events-none"
+                  style={{
+                    fontSize: captionSize(label.fontSize, pxPerWorld),
+                    paintOrder: "stroke" as const,
+                    stroke: "var(--background)",
+                    strokeWidth: 3,
+                    strokeLinejoin: "round" as const,
+                  }}
+                >
+                  {(() => {
+                    const mine = data.roles.filter((r) => r.circleId === pos.id);
+                    const places = mine.reduce((n, r) => n + r.seats, 0);
+                    const openN = places - mine.reduce((n, r) => n + r.holderCount, 0);
+                    return `${mine.length} role${mine.length === 1 ? "" : "s"}${openN > 0 ? `, ${openN} open` : ""}`;
+                  })()}
+                </text>
+              )}
+
+              {/* ── THE DOUBLE LINK, DRAWN ────────────────────────────────
+                  Sociocracy's one structural idea that a normal org chart
+                  cannot show: a circle is joined to its parent by a PERSON
+                  who sits in both. `representsCircle` marks that seat, and
+                  it has been on the wire since 0083 and said out loud only
+                  in the holder card, as a sentence, one seat at a time. A
+                  reader looking at the whole village could not see which
+                  seats hold it together.
+
+                  So the seat is joined to the circle it speaks into. Drawn
+                  before the glyphs, so the line passes UNDER them, and
+                  dashed so it never reads as the containment the solid
+                  rings mean. */}
+              {pos.roles.map((rp) => {
+                const seat = seatById.get(rp.id);
+                if (!seat?.representsCircle) return null;
+                const parentId = parentOf(pos.id);
+                const anchor = parentId ? posById.get(parentId) : layout.village;
+                if (!anchor) return null;
+                return (
+                  <line
+                    key={`dbl-${rp.id}`}
+                    x1={rp.x}
+                    y1={rp.y}
+                    x2={anchor.x}
+                    y2={anchor.y}
+                    stroke={tone}
+                    strokeOpacity={seatPasses(seat) ? 0.5 : 0.12}
+                    strokeWidth={1.6}
+                    strokeDasharray="5 4"
+                    pointerEvents="none"
+                  />
+                );
+              })}
 
               {/* The seats on this circle's ring. */}
               {pos.roles.map((rp) => {
@@ -361,7 +806,9 @@ export default function PowerMap({
                     role="button"
                     tabIndex={interactive ? 0 : -1}
                     pointerEvents={interactive ? undefined : "none"}
-                    aria-label={`${seat?.name ?? rp.id}, a role in ${c?.name ?? "this circle"}, ${words}. Press Enter to open it`}
+                    aria-label={`${seat?.name ?? rp.id}, a role in ${c?.name ?? "this circle"}, ${words}${
+                      seat?.representsCircle ? ", and it speaks for this circle where it links out" : ""
+                    }. Press Enter to open it`}
                     onClick={(e: ReactMouseEvent) => {
                       // A tap on a seat NEVER moves the camera (spec 1).
                       e.stopPropagation();
@@ -387,6 +834,22 @@ export default function PowerMap({
                       pulse={pulseSeatId === rp.id}
                     />
                     <TermArc x={0} y={0} r={dotR} termEnds={seat?.termEnds} />
+                    {/* The representative's badge, at the far end of the link
+                        drawn above. A second ring, so the mark survives
+                        greyscale and never depends on colour alone (spec 4's
+                        rule, applied to representation as well as to state). */}
+                    {seat?.representsCircle && (
+                      <circle
+                        cx={0}
+                        cy={0}
+                        r={dotR + 4}
+                        fill="none"
+                        stroke={tone}
+                        strokeOpacity={0.85}
+                        strokeWidth={1.4}
+                        pointerEvents="none"
+                      />
+                    )}
                     {selected?.kind === "role" && selected.id === rp.id && (
                       <circle cx={0} cy={0} r={dotR + 3} fill="none" stroke="var(--color-teal-deep)" strokeWidth={1.6} />
                     )}
@@ -472,6 +935,21 @@ export default function PowerMap({
 
         {lenses}
       </svg>
+
+      {/* THE WAY BACK, which a camera the reader drives has to have.
+          Pinched in three levels and panned to a corner, there is no gesture
+          that means "start again"; double-tap is taken by the browser and a
+          pinch-out only walks back the way you came. It appears only once
+          the view has actually moved, so it costs nothing at rest. */}
+      {zoomable && (nudge.k !== 1 || nudge.dx !== 0 || nudge.dy !== 0) && (
+        <button
+          type="button"
+          onClick={() => setNudge({ dx: 0, dy: 0, k: 1 })}
+          className="absolute right-2 top-2 z-10 rounded-full bg-card/90 border border-border px-3 py-1.5 text-xs text-foreground shadow-sm"
+        >
+          Fit the village
+        </button>
+      )}
 
       <p className="sr-only" role="status" aria-live="polite">
         {announcement}

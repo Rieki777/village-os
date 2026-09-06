@@ -81,4 +81,82 @@ describe("navGroups", () => {
       if (!TAB_MODULE[key]) expect(kept.has(key), key).toBe(true);
     }
   });
+
+  /**
+   * THE RAIL READS TOP TO BOTTOM AS THE ORDER A VILLAGE IS SET UP IN.
+   *
+   * Rye, on finding Integrations filed under a group called Notifications:
+   * "Audit these and where they're placed and think about the order they would
+   * best go in for setting up a village so that it makes sense to work from
+   * top to bottom to fill it all out."
+   *
+   * The product already shipped a canonical setup order and nothing wired the
+   * nav to it: shared/launchRequirements.ts declares the seventeen items the
+   * Journey to Launch banner counts. Read against it, the old rail opened on
+   * day-two operations (Submissions), buried the two BLOCKING items that come
+   * first on the journey at position four of a twenty-eight item bucket, and
+   * put the tab SEVEN of the seventeen requirements point at, Integrations,
+   * in second place under a group named after email.
+   *
+   * Pinned as an exact sequence rather than as a set of rules, because the
+   * order IS the feature here. A rule-shaped test ("integrations comes before
+   * email-settings") passes on a rail that has been quietly scrambled around
+   * the rule.
+   */
+  const ORDER: Array<[string, string[]]> = [
+    ["Start here", ["setup"]],
+    ["Who runs this village", ["players", "game-roles", "org-chart", "handover", "governance-weights"]],
+    ["Make it yours", ["team", "legal", "covenant", "work-with-us", "faqs", "milestones", "visit-config", "investor-summary"]],
+    ["Connections", ["integrations", "email-settings"]],
+    ["What your village runs", [
+      "modules", "variables", "season", "seasons-patterns", "circles-map", "housing",
+      "events-admin", "quests-admin", "tools-admin", "library-admin", "badges-admin",
+      "stays-admin", "exchange-admin", "crowdpool-admin", "calls-admin", "intents-admin",
+      "health-admin",
+    ]],
+    ["Money and agreements", ["tokens", "ledger", "cycles", "products", "resources-admin", "exits-admin", "settings"]],
+    ["Day to day", ["submissions", "feedback", "quest-claims", "forum-moderation", "message-reports", "drafts", "brain"]],
+    ["Library and files", ["training-modules", "investor-vault", "uploaded-files"]],
+  ];
+
+  it("reads top to bottom as the order a founder sets a village up in", () => {
+    const groups = navGroups(false);
+    expect(groups.map((g) => g.title)).toEqual(ORDER.map(([t]) => t));
+    for (const [title, keys] of ORDER) {
+      expect(groups.find((g) => g.title === title)!.items.map((i) => i.key), title).toEqual(keys);
+    }
+  });
+
+  it("moved every tab and lost none of them", () => {
+    /*
+     * The reorder is a PERMUTATION. Every key the rail carried before is
+     * still on it, and nothing new appeared. A tab dropped here is a panel a
+     * founder can still deep-link to and can no longer find, which is the
+     * failure a reorder makes easy and silent.
+     */
+    const before = [
+      "setup", "submissions", "feedback", "forum-moderation", "message-reports", "products",
+      "team", "legal", "covenant", "email-settings", "integrations", "brain", "drafts",
+      "investor-vault", "uploaded-files", "training-modules", "modules", "quests-admin",
+      "quest-claims", "players", "game-roles", "handover", "org-chart", "governance-weights",
+      "seasons-patterns", "circles-map", "housing", "events-admin", "tools-admin",
+      "crowdpool-admin", "stays-admin", "exchange-admin", "badges-admin", "library-admin",
+      "health-admin", "resources-admin", "exits-admin", "calls-admin", "intents-admin",
+      "tokens", "ledger", "cycles", "variables", "season", "settings", "work-with-us",
+      "faqs", "milestones", "visit-config", "investor-summary",
+    ];
+    for (const setupComplete of [true, false]) {
+      expect(new Set(allKeys(setupComplete)), `setupComplete=${setupComplete}`).toEqual(new Set(before));
+    }
+  });
+
+  it("puts Integrations first in its own group, not second under email", () => {
+    // The specific thing Rye asked about, asserted on its own so a failure
+    // names it rather than pointing at a fifty-key sequence.
+    const groups = navGroups(true);
+    const home = groups.find((g) => g.items.some((i) => i.key === "integrations"))!;
+    expect(home.title).not.toBe("Notifications");
+    expect(home.items[0].key).toBe("integrations");
+  });
 });
+

@@ -301,6 +301,17 @@ export const MODULE_DOCS: Readonly<Record<string, string>> = {
   resources: "how-resources-flow.md",
   crowdpool: "crowdpool.md",
   hypha: "hypha.md",
+  // The doc has sat on the shelf since 2026-08-10 with nothing routing to it, so
+  // the assistant could not reach it and the module read as undocumented. Its
+  // own header names the registry id.
+  messaging: "messaging.md",
+  // The four CORE modules. A village cannot switch these off, so their
+  // contract docs are the ones a fork operator most needs and the last ones
+  // written: the gap ratchet counted all four until 2026-09-06.
+  quests: "quests.md",
+  gratitude: "gratitude.md",
+  progression: "progression.md",
+  profiles: "profiles.md",
 };
 
 /** Deterministic and close enough for a budget. Four characters per token. */

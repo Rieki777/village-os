@@ -169,15 +169,19 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
   if (!prefs) return null;
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-8">
+    <div className="bg-card rounded-2xl shadow-lg p-8">
       <div className="flex items-center gap-2 mb-4">
-        <Bell className="w-5 h-5 text-teal-deep" />
-        <h2 className="font-display text-xl font-bold text-gray-900">Notifications &amp; your data</h2>
+        <Bell className="w-5 h-5 text-notice" />
+        <h2 className="font-display text-xl font-bold text-card-foreground">Notifications &amp; your data</h2>
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-gray-700 mb-4">
+      {/* min-h-11 is the TAP TARGET, not decoration: the label is what a finger
+          hits, and this row measured 294x20 at 390px. WCAG 2.5.8 asks 24x24 and
+          a thumb wants 44. The box grows with it so the check is findable. */}
+      <label className="flex min-h-11 items-center gap-3 text-sm text-card-foreground mb-4">
         <input
           type="checkbox"
+          className="h-4 w-4 shrink-0"
           checked={!prefs.emailsOff}
           disabled={saving}
           onChange={(e) => save({ emailsOff: !e.target.checked })}
@@ -189,12 +193,12 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
         <div className="space-y-2.5 mb-6">
           {Object.keys(LABELS).map((key) => (
             <div key={key} className="flex items-center justify-between gap-3">
-              <span className="text-sm text-gray-600">{LABELS[key]}</span>
+              <span className="text-sm text-muted-foreground">{LABELS[key]}</span>
               <select
                 value={prefs[key]}
                 disabled={saving}
                 onChange={(e) => save({ [key]: e.target.value })}
-                className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
+                className="text-xs border border-border rounded-lg px-2 py-1.5 bg-card"
               >
                 {CADENCES[key].map((c) => (
                   <option key={c.v} value={c.v}>{c.label}</option>
@@ -209,12 +213,12 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
           when one of the four rare things happens: a stage crossed, a vote
           carried, a cycle settled, a quest consented. The notice itself lands
           in the bell either way, so turning this off loses no information. */}
-      <label className="flex items-start gap-2 text-sm text-gray-700 mb-4">
+      <label className="flex items-start gap-2 text-sm text-card-foreground mb-4">
         {/* The toggle names itself; the four moments are a description. A
             wrapping <label> read the whole paragraph as this checkbox's name. */}
         <input
           type="checkbox"
-          className="mt-1"
+          className="mt-1 h-4 w-4 shrink-0"
           checked={prefs.celebrations !== "off"}
           disabled={saving}
           aria-label="Mark the rare moments on screen"
@@ -223,33 +227,33 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
         />
         <span>
           Mark the rare moments on screen
-          <span id="celebrations-hint" className="block text-xs text-gray-600">
+          <span id="celebrations-hint" className="block text-xs text-muted-foreground">
             A stage crossed, a vote carried, a cycle settled, a quest consented. Four things, no sound.
           </span>
         </span>
       </label>
 
-      {notifyNote && <p role="alert" className="text-xs text-red-600 mb-4">{notifyNote}</p>}
+      {notifyNote && <p role="alert" className="text-xs text-destructive mb-4">{notifyNote}</p>}
 
       {contactable !== null && (
         <div className="mb-4">
-          <label className="flex items-center gap-2 text-sm text-gray-700">
+          <label className="flex min-h-11 items-center gap-3 text-sm text-card-foreground">
             {/* The setting names the control. The parenthetical says who can
                 reach you and how, which is a description, not a name. */}
-            <input type="checkbox" checked={contactable} onChange={(e) => saveContactable(e.target.checked)}
+            <input type="checkbox" className="h-4 w-4 shrink-0" checked={contactable} onChange={(e) => saveContactable(e.target.checked)}
               aria-label="Contactable through the Village Map"
               aria-describedby="contactable-hint" />
             Contactable through the Village Map
-            <span id="contactable-hint" className="text-xs text-gray-600">(role holders only; senders see a relay, never your email)</span>
+            <span id="contactable-hint" className="text-xs text-muted-foreground">(role holders only; senders see a relay, never your email)</span>
           </label>
-          {contactNote && <p role="alert" className="text-xs text-red-600 mt-1">{contactNote}</p>}
+          {contactNote && <p role="alert" className="text-xs text-destructive mt-1">{contactNote}</p>}
         </div>
       )}
 
-      <div className="border-t border-gray-100 pt-4 space-y-3">
+      <div className="border-t border-border pt-4 space-y-3">
         <a
           href="/api/profile/export"
-          className="inline-flex items-center gap-2 text-sm font-medium text-teal-deep hover:text-teal"
+          className="inline-flex items-center gap-2 text-sm font-medium text-foreground hover:text-foreground/80"
           onClick={(e) => {
             // Anchor downloads can't carry the auth header; fetch + blob it.
             e.preventDefault();
@@ -280,14 +284,14 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
         {/* Rendered OUTSIDE the delete-confirmation branch: `error` is shared
             with that flow, and its only renderer used to live in there, so an
             export failure was written to state nothing displayed. */}
-        {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
+        {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
 
         {farewell ? (
-          <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-            <p className="text-xs text-amber-900">{farewell}</p>
+          <div role="status" className="rounded-xl border border-notice/60 bg-muted p-4">
+            <p className="text-xs text-notice">{farewell}</p>
             <button
               onClick={() => { window.location.href = "/"; }}
-              className="text-sm text-amber-900 underline mt-2"
+              className="text-sm text-notice underline mt-2"
             >
               I have read this
             </button>
@@ -297,14 +301,14 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
             // Clear a stale export error on the way in, so it cannot appear
             // to be about the deletion the member is now considering.
             onClick={() => { setError(""); setConfirming(true); }}
-            className="inline-flex items-center gap-2 text-sm text-red-500 hover:text-red-600"
+            className="inline-flex items-center gap-2 text-sm text-destructive hover:text-destructive/80"
           >
             <ShieldOff className="w-4 h-4" />
             Delete my account
           </button>
         ) : (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-            <p className="text-xs text-red-800 mb-2">
+          <div className="rounded-xl border border-destructive/70 bg-destructive/10 p-4">
+            <p className="text-xs text-destructive mb-2">
               This anonymizes you permanently: your name, contact details and profile are
               scrubbed everywhere. The village's shared history (settlements, quest
               records) keeps its numbers, without your name on them. This cannot be undone.
@@ -315,18 +319,18 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Confirm your password"
-                className="text-sm border border-red-200 rounded-lg px-3 py-1.5"
+                className="text-sm border border-destructive/70 rounded-lg px-3 py-1.5"
               />
               <button onClick={deleteAccount} disabled={!password}
-                className="text-sm bg-red-600 text-white rounded-lg px-3 py-1.5 font-medium disabled:opacity-40">
+                className="text-sm bg-destructive text-destructive-foreground rounded-lg px-3 py-1.5 font-medium disabled:opacity-40">
                 Delete forever
               </button>
               <button onClick={() => { setConfirming(false); setPassword(""); setError(""); }}
-                className="text-sm text-gray-500">
+                className="text-sm text-muted-foreground">
                 Cancel
               </button>
             </div>
-            {error && <p role="alert" className="text-xs text-red-600 mt-2">{error}</p>}
+            {error && <p role="alert" className="text-xs text-destructive mt-2">{error}</p>}
           </div>
         )}
       </div>

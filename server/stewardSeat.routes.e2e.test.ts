@@ -53,8 +53,19 @@ if (!DB_CONFIGURED) {
 
 const DIST = path.resolve(process.cwd(), "dist/index.js");
 
-/** This suite's window, in the band above every other suite. `check-e2e-ports.mjs` is the survey. */
-const PORT = 30402 + (process.pid % 400);
+/**
+ * This suite's window, in the band above every other suite.
+ * `check-e2e-ports.mjs` is the survey.
+ *
+ * MOVED FROM 30402 ON MERGE. That window was claimed independently by
+ * `profilePaths.routes.e2e.test.ts`, which landed on main while this branch
+ * was building, and two suites on one window is two servers racing for a
+ * bind. Neither side could have seen the other: the port guard compares the
+ * working tree against its own base, which is the same blindness that let two
+ * lanes hold one migration number. This branch moves because the other one is
+ * already landed.
+ */
+const PORT = 30802 + (process.pid % 400);
 const BASE = `http://localhost:${PORT}`;
 const ADMIN = "steward-seat-admin";
 const PASSWORD = "StewardSeatTest123!";

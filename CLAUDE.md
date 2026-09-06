@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+<!-- describes: .github/workflows/ci.yml scripts/ server/lib/ledger.ts server/lib/economy.ts shared/modules.ts server/db/migrate.ts -->
+
 **game-amora** is a white-label village-coordination platform: React 19 + Vite + wouter client
 in `client/src`, one large Express server (`server/index.ts` + `server/lib/*`), MySQL with
 hand-written SQL migrations in `drizzle/` that a custom runner applies **at boot, fail-loud**
@@ -10,46 +12,30 @@ code carries no village's brand — that rule is enforced mechanically (see Gate
 
 1. `docs/ARCHITECTURE.md` — the system map. Read it before touching anything.
 2. `docs/modules/` — the contract for whichever module you are changing. Filenames do not
-   follow module ids: map → `village-map.md`, exchange → `internal-exchange.md`, feed →
-   `gratitude-feed.md`, library → `material-library.md`, health → `health-dashboard.md`,
-   tools → `tools-hub.md`; some modules have no doc.
+   follow module ids; `MODULE_DOCS` in `server/lib/knowledge.ts` is the mapping, in both
+   directions, and some modules have no doc.
 3. `docs/FORK_RUNBOOK.md` — provisioning, env vars, seeds. **Any session that adds an env var,
    seed, or provisioning step appends one line there, same session.**
 4. `docs/FEEDBACK_HUB_CONTRACT.md` — only when touching the feedback relay.
+5. **`SEASON2_FLEET_LEDGER.md` section 27, THE LANDING ORDER** — read it before you touch a
+   contended resource, and append a row when you claim one. Several sessions run against this
+   repository at once, and section 27 is where they stay out of each other's way: migration
+   numbers, the six ratchet baselines, `server/index.ts`, `ci.yml`, the shared integration
+   worktrees, plus the hazards that have actually cost time (removing a worktree can delete the
+   shared `node_modules`; a stale tree runs a major version behind the lockfile). It replaces a
+   coordinator session deliberately, because a file cannot hit a session limit mid-merge.
 
 `MODULES_MASTER_PLAN.md` Part 1 is known-stale; never trust it over code. The repo skill lives
 in `.claude/skills/`.
 
 ## Gates — all of these before calling anything done
 
-```
-pnpm check                             # tsc --noEmit
-pnpm build                             # vite client + esbuild server -> dist/
-pnpm test:full                         # vitest run, and REFUSES to pass without a database
-node scripts/check-e2e-ports.mjs       # no two e2e suites can pick the same port
-node scripts/check-brand-refs.mjs      # brand ratchet (read $?, its last line is blank on failure)
-node scripts/check-voice.mjs           # house writing rules on shipped copy
-node scripts/check-hyphen-dash.mjs     # no em or en dashes anywhere (hyphens are fine)
-node scripts/check-auth-fetch.mjs      # a client call to a route that refuses strangers carries a token
-node scripts/check-admin-reach.mjs     # every admin WRITE route has a caller in the browser
-node scripts/check-save-honesty.mjs    # a control that says a change landed held the Response
-node scripts/check-repo-payloads.mjs   # every repo insert names the columns its table requires
-node scripts/check-mirror-annotations.mjs  # a hand-kept map of server values is keyed by the union
-node scripts/check-upload-strip.mjs    # nothing reaches the uploads volume without the strip
-node scripts/check-doc-links.mjs       # every path the builder docs name resolves on disk
-node scripts/check-token-doc.mjs       # docs/TOKENS.md is GENERATED; regenerate with generate-token-doc.mjs
-node scripts/check-governance-doc.mjs  # docs/GOVERNANCE.md is GENERATED; regenerate with generate-governance-doc.mjs
-node scripts/check-route-reachability.mjs  # two ways in to every route (--table prints the doors)
-node scripts/check-map-routes.mjs      # the living map's SITE_PAGES allowlist still matches the router
-node scripts/check-migration-numbers.mjs   # no two migrations share a number; 9000+ is the village band
-node scripts/check-migration-compat.mjs    # a migration leaves the PREVIOUS release able to run
-node scripts/check-artifact-budget.mjs # the living map's disk and wire size
-node scripts/check-image-budget.mjs    # shipped images: WebP, 400 KB each, falling total
-node scripts/check-dist-budget.mjs     # main JS and total dist/public, measured the way CI measures
-```
+The authoritative list is printed straight from `.github/workflows/ci.yml`, in the order CI runs
+them, so it is right on the day you run it:
 
-`node scripts/module-facts.mjs` prints the gate list above straight from `.github/workflows/ci.yml`,
-so it is right on the day you run it. Prefer it to this block when the two disagree.
+```
+node scripts/module-facts.mjs
+```
 
 ### Running the suite honestly
 
@@ -65,7 +51,7 @@ so it is right on the day you run it. Prefer it to this block when the two disag
   - `pnpm test:full` (REQUIRE_TEST_DB=1) is still the stricter form and still what to
     run before a "green" claim: it also fails when the variable is SET and no schema
     was provisioned, which is a database that could not be reached.
-- **Build first.** The 41 e2e suites boot `dist/index.js`. A run whose bundle is older than
+- **Build first.** The e2e suites boot `dist/index.js`. A run whose bundle is older than
   the source it was built from is now refused by name (`server/db/distFreshness.ts`), so a
   green result cannot be about yesterday's code.
 - **Never read an exit code through a pipe.** `cmd | tail` reports tail's status, and tail
@@ -74,9 +60,53 @@ so it is right on the day you run it. Prefer it to this block when the two disag
 - **`pnpm test:unit`** excludes the e2e files. It is about a quarter of the wall clock and
   proves correspondingly less; it is an inner loop, not a gate.
 - **What it costs:** roughly 35 to 50 minutes locally depending on how many lanes share the
-  database, against about 7 in CI. The 41 e2e files are two thirds of it.
+  database, against about 7 in CI. The e2e files are two thirds of it.
 
-Two CI budgets cap the client: main JS **700 KB** and total `dist/public` **6600 KB**, both
+### If you are one of several sessions: do NOT run the full suite
+
+**A lane runs its own tests. The session that MERGES runs the full suite, once, on the
+composed tree.** Put this in every lane brief, verbatim:
+
+> Do NOT run the full suite. Run the test files you added, any existing suite covering the
+> files you touched, and the gate scripts. Say plainly that you skipped the full run and
+> why. The integrator runs it once on the composed tree.
+
+**Measured on 2026-09-04**, when the opposite was briefed: two lanes at 3h04m each with
+their work already committed, a third at 1h55m likewise, one lane running the suite three
+times and calling two of the three invalid itself. Roughly twelve machine-hours across the
+day, and **not one unique defect found by any full-suite run.** What caught things was the
+TypeScript compiler, targeted controls that break a fix and watch a NAMED test fail,
+rendered output, the gate scripts, live probes against a booted server, and production. What
+the full suites contributed was flakes that three separate agents each had to rule out.
+
+The reasoning is not only economic. **N greens on N sibling branches say nothing about the
+tree they merge into**, and that tree has to be tested anyway. A lane's suite is a tax on
+confidence you were already going to buy.
+
+Two things that follow:
+
+- **A lane that has finished and is running a suite looks exactly like a hung lane.** Before
+  concluding a session is stuck, check its worktree: `git status` and the commit count.
+  Twice on 2026-09-04 the work was committed and the tree clean while the panel showed 0/2.
+- **Stopping such a lane and taking its committed work is correct**, not a shortcut. Verify
+  the branch yourself with the gates plus the targeted suites, which is what should have
+  happened anyway.
+
+**And the integrator should PUSH the composed tree and read the run, rather than running the
+full suite locally.** Same rule, one step further, and it only became true when the repository
+went public: `verify` is 8 to 10 minutes on a clean machine with the pinned Node 22 and MySQL 8,
+against 25 minutes locally on a quiet box and 46.6 measured under load, and it now costs nothing.
+The composed tree is not an obstacle, because a composed tree can be pushed to a branch and CI
+will read it there. The one case with no ref to push is a pair-merge scratch, and even there run
+only the suites the two branches share.
+
+Two things that stop this producing a false green, both paid for on 2026-09-04. Read the STEP
+COUNT and WHICH step: a healthy `verify` is 45 steps, the billing outage produced runs that died
+in 2 to 3 seconds having started nothing, and an npm outage failed one dependency step on a run
+where everything else passed. And a cancelled run is not a red, since `ci.yml` cancels superseded
+runs per ref. Full detail, with the traps, in `SEASON2_FLEET_LEDGER.md` section 27d.
+
+Two CI budgets cap the client: main JS and total `dist/public`, both
 measured after `pnpm build`. Read the numbers off `MAX_MAIN_JS_KB` and `MAX_TOTAL_DIST_KB` in
 `.github/workflows/ci.yml`, which is the authority: this block said 6 MB for as long as the
 ceiling was 6000, and stayed at 6 MB when `dbb4f9c` raised it to 6600 for the catalog art.
@@ -147,9 +177,11 @@ run the app. `dropLegacyWoffFallback` in `vite.config.ts` strips the fallback fr
 list before vite resolves the url, which is what stops the file being emitted. Member-uploaded
 display faces are a different path and still accept `.woff` (`server/index.ts` sniffs `wOFF`).
 
-The build marker is stamped from the git SHA by `scripts/build-server.mjs` — never hand-edit
-it. Only `BUILD_LABEL` in `server/index.ts` is human-written; the SHA is appended at build
-time so `/health` cannot report a build that isn't running.
+The build marker is composed WHOLE in `scripts/build-server.mjs`, from the commit date and the
+git SHA, and injected as `__BUILD_MARKER__`; `server/index.ts` only reads that define and falls
+back to `"dev"`. Neither half is hand-written, which is why `/health` cannot report a build that
+isn't running, and `server/buildMarker.test.ts` fails if a date literal or a `BUILD_LABEL`
+constant comes back.
 
 ## Loop-test rules
 
@@ -161,8 +193,8 @@ time so `/health` cannot report a build that isn't running.
   Without it they skip, and an unfiltered run fails on the way out (`ALLOW_NO_TEST_DB=1`
   accepts the smaller suite). See "Running the suite honestly" above.
 - **Provisioning migrates once per run, not once per suite.** Every file in `drizzle/` provisions
-  a schema, and that count only grows (it was 44 when this line was written and `ls drizzle/*.sql
-  | wc -l` is the only figure worth trusting);
+  a schema, and that count only grows (`ls drizzle/*.sql | wc -l` is the only figure worth
+  trusting);
   the harness migrates into a `village_tpl_<hash>` template and clones it, so each suite
   still gets a private schema for a fraction of the cost. Every run prints what it paid, and
   `pnpm measure:provisioning` prints the template build, the per-clone cost and the
@@ -188,7 +220,8 @@ time so `/health` cannot report a build that isn't running.
   failure, not a comment.
 - `token_balances` is a cache: **recompute, never increment**.
 - Only faucet accounts go negative. Non-faucet exceptions exist only via
-  `ALLOW_NEGATIVE_SOURCES` (`stay_night`, `payment_reversal`) with `allowNegative` set.
+  `ALLOW_NEGATIVE_SOURCES` with `allowNegative` set. Read the set in
+  `server/lib/ledger.ts` rather than a list here: it named two for as long as it held three.
 - All movement goes through `postTransfer` / `postTransferPair` (+ `PairGuard`). No raw
   ledger writes, ever.
 
@@ -199,9 +232,15 @@ time so `/health` cannot report a build that isn't running.
   `off|preview|members|public` (`shared/modules.ts`); routes mount behind `requireModule()`
   (`server/lib/modules.ts`); missing dependencies demote a module to off at boot;
   `openStateCheck` refuses `off` while value is outstanding (settle first).
-- ONE capability gate (`shared/capabilities.ts`): **admin → badgeDenies → role →
-  badgeCapabilities → stage**. A badge deny beats role and stage; only admin outranks it.
-  Never gate anywhere else.
+- ONE capability gate (`shared/capabilities.ts`). Never gate anywhere else. The order of
+  authority IS the policy, it has SEVEN steps, and an admin is NOT automatically top of it:
+  on a key the village holds, the admin short-circuit does not apply, so a warning badge's
+  deny beats an admin unless they use the explicit break-glass (`adminOverride`). Do not
+  restate the order from memory: this bullet described the gate correctly when it was
+  written, then `0f8d041` (2026-08-22) added the break-glass step and the bullet was not
+  touched, so it spent two weeks reading as authoritative and being wrong.
+  `docs/CAPABILITIES.md` is generated from the gate itself and held to it by
+  `scripts/check-capabilities-doc.mjs`; read that.
 
 ## Five config planes — know which one before adding any knob
 

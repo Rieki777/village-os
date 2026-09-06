@@ -126,6 +126,25 @@ function when(iso: string | null): string {
   return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
+/**
+ * Which stores are still owed from, as a sentence a steward can act on.
+ * "saberra" gives them somebody to press; a bare count gives them nobody.
+ */
+function waitingSentence(waitingOn: Record<string, number>): string {
+  const names = Object.keys(waitingOn).sort();
+  if (names.length === 0) return "A connected service";
+  if (names.length === 1) return names[0];
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/** How long the OLDEST obligation has been outstanding, in whole days. */
+function agedFor(oldestSince: string | null): string {
+  if (!oldestSince) return "";
+  const days = Math.floor((Date.now() - new Date(oldestSince).getTime()) / 86400000);
+  if (!Number.isFinite(days) || days < 1) return ", asked today";
+  return days === 1 ? ", asked one day ago" : `, the oldest ${days} days ago`;
+}
+
 export default function Review() {
   const { user } = useAuth();
   const [queue, setQueue] = useState<Queue | null>(null);
@@ -145,10 +164,45 @@ export default function Review() {
   // the draft occupies one of the village's open-draft slots.
   const [stuck, setStuck] = useState<{ draftId: string; blocked: number } | null>(null);
 
+  /**
+   * Members whose erasure this village could not finish, because a connected
+   * store never confirmed it deleted its copy. Kept state that nobody watches
+   * is how "we still owe you a confirmation" becomes "kept forever".
+   */
+  const [owed, setOwed] = useState<{ count: number; oldestSince: string | null; waitingOn: Record<string, number> } | null>(null);
+  const [asking, setAsking] = useState(false);
+
   const headers = useCallback((): Record<string, string> => {
     const t = authToken();
     return t ? { Authorization: `Bearer ${t}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
   }, []);
+
+  /**
+   * Ask every unconfirmed store again. This is the only thing that can finish
+   * one of these, because nothing will erase these members a second time.
+   */
+  const askAgain = async () => {
+    setAsking(true);
+    try {
+      const r = await fetch("/api/review/erasure/retry", { method: "POST", headers: headers() });
+      const d = (await r.json().catch(() => ({}))) as { asked?: number; finished?: number; error?: string };
+      if (!r.ok) {
+        toast.error(d?.error ?? "That did not go through");
+        return;
+      }
+      const finished = d.finished ?? 0;
+      toast.success(
+        finished > 0
+          ? `${finished} of ${d.asked ?? 0} finished. The rest have still not confirmed.`
+          : `Asked about ${d.asked ?? 0}. None of them confirmed yet.`,
+      );
+      await load();
+    } catch {
+      toast.error("Could not reach the server");
+    } finally {
+      setAsking(false);
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -167,6 +221,13 @@ export default function Review() {
       setForbidden(false);
       setLoadError(null);
       setQueue(await r.json());
+      // A separate read, so a failure here can never empty the queue above it.
+      try {
+        const e = await fetch("/api/review/erasure", { headers: headers() });
+        setOwed(e.ok ? await e.json() : null);
+      } catch {
+        setOwed(null);
+      }
     } catch {
       setLoadError("Could not reach the server");
     } finally {
@@ -406,6 +467,29 @@ export default function Review() {
             a draft you can preview and undo.
           </p>
         </div>
+
+        {/* What the village still owes somebody who left. The only item on
+            this screen about a person already gone, and it is here because
+            nothing else will ever ask about them again. */}
+        {owed && owed.count > 0 && (
+          <div className={card}>
+            <h2 className="text-sm font-semibold text-foreground">
+              {owed.count === 1 ? "One member" : `${owed.count} members`} left, and this village is not finished on their behalf
+            </h2>
+            <p className="text-sm text-muted-foreground mt-2">
+              Their data is gone from here. {waitingSentence(owed.waitingOn)} has not confirmed deleting
+              its own copy{agedFor(owed.oldestSince)}. Nothing asks again on its own, because the people
+              this concerns have already left.
+            </p>
+            <button
+              className="mt-3 text-sm bg-teal-deep text-white rounded-lg px-3 py-2 font-medium disabled:opacity-40"
+              disabled={asking}
+              onClick={() => void askAgain()}
+            >
+              {asking ? "Asking" : "Ask again"}
+            </button>
+          </div>
+        )}
 
         {/* The drop count, printed out loud. On an empty queue it is the whole
             story, and it is the one number that cannot come from the rows. */}

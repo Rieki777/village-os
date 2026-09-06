@@ -16,7 +16,7 @@ import Layout from "@/components/Layout";
 import ModuleCard, { type CatalogModule } from "@/components/modules/ModuleCard";
 import ModuleShelf from "@/components/modules/ModuleShelf";
 import PoolStatement from "@/components/modules/PoolStatement";
-import { authToken } from "@/lib/gameApi";
+import { authToken, useCatalyst } from "@/lib/gameApi";
 import { Hammer } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -64,6 +64,7 @@ function BuilderCard({ guideUrl, poolUrl }: { guideUrl: string; poolUrl: string 
 }
 
 export default function Modules() {
+  const catalyst = useCatalyst();
   const [data, setData] = useState<CatalogPayload | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -84,7 +85,7 @@ export default function Modules() {
               live up here where a tooltip trigger is legal HTML. */}
           <p className="text-muted-foreground mt-2 max-w-2xl leading-relaxed">
             Everything this platform can be, one card at a time. A village{" "}
-            <InfoTip tip="Every module ships off. An admin turns one on for members or for everyone, and the four core modules are always there.">turns on</InfoTip>{" "}
+            <InfoTip tip={`Every module ships off. ${catalyst.aNameCap} turns one on for members or for everyone, and the four core modules are always there.`}>turns on</InfoTip>{" "}
             what it needs and leaves the rest on the shelf, and every card{" "}
             <InfoTip tip="On a card, connected means the module talks to an outside service, and managed means a vendor runs it for you. A card with neither pill runs entirely here.">wears its pills</InfoTip>{" "}
             so you can read it at a glance.

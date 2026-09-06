@@ -423,7 +423,7 @@ export default function Quests() {
                         <QuestCard
                           quest={quest}
                           claim={claims[quest.id]}
-                          signs={signs?.perQuest[quest.id]}
+                          signs={signs?.perQuest?.[quest.id]}
                           stages={stages}
                           currencyName={currencyName}
                           priority={ring === RING_ORDER[0] && index === 0}

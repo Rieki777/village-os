@@ -378,6 +378,17 @@ Some of this has to happen in order.
 
 ## How sessions coordinate
 
+- **Do NOT run the full suite in a lane.** Run your own test files, any suite
+  covering what you touched, and the gate scripts, then say you skipped the full
+  run and why. The session that merges runs it once on the composed tree.
+  Measured 2026-09-04: twelve machine-hours of lane full-suite runs across one
+  day, zero unique defects found, and several flakes that cost three agents real
+  effort to rule out. Full reasoning in `CLAUDE.md`.
+- **`git fetch origin` and branch from `origin/main`, never local `main`.** Prove
+  it with `git merge-base --is-ancestor origin/main HEAD` before you start. On
+  2026-09-04 three lanes branched from a stale local ref; one reimplemented a fix
+  that had landed 87 minutes earlier, and a verifier proved the reimplementation
+  measurably worse than what was already there.
 - **Claim a row** by putting your branch name next to it here.
 - **One session per directory.** Never `git checkout -b` in a tree another
   session is working in; that happened today and a lane checked out its branch

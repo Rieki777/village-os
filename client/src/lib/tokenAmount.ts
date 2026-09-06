@@ -8,15 +8,23 @@
  * hold ten thousand of something they earned ten of has been lied to by the
  * one page they came to trust.
  *
- * WHY THIS EXISTS BEFORE THE 4-DECIMALS SWEEP, AND NOT AS PART OF IT.
+ * WHY THIS EXISTS BEFORE THE SCALE MOVES, AND NOT AS PART OF IT.
  *
- * Rye has ruled that every token moves to 4 decimals. Today exactly one token
- * carries decimals at all, so exactly one number on one screen is wrong, and
- * it is wrong by 1000x. The day that ruling lands, EVERY token is wrong by
- * 10,000x on EVERY surface that does not divide, all at once, with no single
- * broken screen to point at. So the dividing goes in first, on every surface,
- * while there is still one token to check it against. Adding decimals to a
- * token after this is then a registry row and nothing else.
+ * This file was written under a ruling that every token would move to 4
+ * decimals. That was CANCELLED on 2026-09-04 and replaced with a narrower one:
+ * Village Credits goes from 0 to 2, and nothing else moves (docs/ECONOMICS.md
+ * section 11). The argument survives the change intact and gets sharper, so it
+ * is corrected here rather than deleted.
+ *
+ * Today exactly one token carries a scale, Village Voice at 3, so exactly one
+ * number on one screen was wrong and it was wrong by 1000x. `credits` is the
+ * token a room is priced in, the token members send each other and the token
+ * the cycle pool pays out: the day it moves, most of the surfaces in the
+ * product are wrong at once, with no single broken screen to point at. So the
+ * dividing goes in first, on every surface, while there is still one token to
+ * check it against. The ruling says the same thing in the other direction: the
+ * display pass comes BEFORE the column change. Moving a token's scale after
+ * that is a registry row and nothing else.
  *
  * A surface that renders a token amount calls `formatTokenAmount`. It does not
  * write its own division: two spellings of the same rule is how the profile

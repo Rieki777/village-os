@@ -20,12 +20,14 @@ import mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import {
   agentKeySlug,
+  claimSeating,
   listOrgAssignments,
   listOrgRoles,
   mayDeclare,
   peopleOnly,
   seatHolder,
   seatState,
+  unclaimedSeatingsFor,
   structuralLoad,
   type OrgAssignment,
 } from "./orgChart";
@@ -104,6 +106,71 @@ describe.skipIf(!configured)("an agent holds a seat", () => {
 
     const [rows] = await pool.query<any[]>("SELECT id FROM org_role_assignments"); // module-review-ok: same
     expect(rows).toHaveLength(0);
+  });
+
+  it("cannot be CLAIMED into a member account either, which is the same door by another route", async () => {
+    /*
+     * The seating route is not the only way a row becomes a member holding.
+     * `claimSeating` flips a documented seating to `holder_kind = 'member'`
+     * with a user id, gated only on the signed-in member's NAME matching the
+     * name written on the card. An agent is a documented holder, so before
+     * this guard a member called Scribe could claim a seat held by an agent
+     * called Scribe and arrive at exactly the state seatHolder refuses: paid
+     * by the settlement job and able to open the declare door.
+     *
+     * The name test is looser than it looks, which is what makes this worth a
+     * test rather than a comment: `unclaimedSeatingsFor` also matches when the
+     * recorded name equals the member's FIRST name, so an agent called Memory
+     * is offered to everybody first-named Memory.
+     */
+    await makeSeat("s1");
+    await pool.query( // module-review-ok: a fixture on the scratch schema this suite provisioned
+      "INSERT INTO users (id, name, email, password_hash, role) VALUES (?,?,?,?,'member')",
+      ["u-scribe", "Scribe", "scribe@example.test", "x"],
+    );
+    await seatHolder(pool, "s1", { displayName: "Scribe", isAgent: true, agentSlug: "scribe" });
+
+    // Never offered.
+    expect(await unclaimedSeatingsFor(pool, "Scribe")).toHaveLength(0);
+
+    // And refused even when the id is known, because the offer list must not
+    // be the only thing standing between an agent seat and an account.
+    const [[seating]] = await pool.query<any[]>( // module-review-ok: same
+      "SELECT id FROM org_role_assignments WHERE org_role_id = 's1'",
+    );
+    expect(await claimSeating(pool, seating.id, "u-scribe")).toBe(false);
+
+    const [[after]] = await pool.query<any[]>( // module-review-ok: same
+      "SELECT holder_kind, user_id, is_agent FROM org_role_assignments WHERE id = ?",
+      [seating.id],
+    );
+    expect(after.holder_kind).toBe("documented");
+    expect(after.user_id).toBeNull();
+    expect(Number(after.is_agent)).toBe(1);
+  });
+
+  it("still lets a real person claim the seat somebody wrote their name on", async () => {
+    // The guard above must not close the door it was not aimed at. A
+    // documented HUMAN is the whole reason claiming exists.
+    await makeSeat("s2");
+    await pool.query( // module-review-ok: a fixture on the scratch schema this suite provisioned
+      "INSERT INTO users (id, name, email, password_hash, role) VALUES (?,?,?,?,'member')",
+      ["u-ada", "Ada Vance", "ada@example.test", "x"],
+    );
+    await seatHolder(pool, "s2", { displayName: "Ada Vance" });
+
+    expect(await unclaimedSeatingsFor(pool, "Ada Vance")).toHaveLength(1);
+    const [[seating]] = await pool.query<any[]>( // module-review-ok: same
+      "SELECT id FROM org_role_assignments WHERE org_role_id = 's2'",
+    );
+    expect(await claimSeating(pool, seating.id, "u-ada")).toBe(true);
+
+    const [[after]] = await pool.query<any[]>( // module-review-ok: same
+      "SELECT holder_kind, user_id FROM org_role_assignments WHERE id = ?",
+      [seating.id],
+    );
+    expect(after.holder_kind).toBe("member");
+    expect(after.user_id).toBe("u-ada");
   });
 
   it("keeps an agent's key from colliding with a documented human of the same name", async () => {

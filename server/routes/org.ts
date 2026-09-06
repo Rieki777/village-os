@@ -502,6 +502,22 @@ export function register(app: Express, deps: Deps): void {
     // 0098: `org.seat`. Deciding who sits in the village's seats is the
     // archetypal power a village takes back, and it was an admin check.
     if (!(await guardCapability(req, res, "org.seat"))) return;
+    /*
+     * SEATING AN AGENT IS ITS OWN POWER, AND DELIBERATELY NOT A FLAG ON
+     * `org.seat`.
+     *
+     * The founder ruled that stewards hold this now and that a dedicated role
+     * gets it later. The governance mechanism moves a KEY from one role to
+     * another; it cannot split one. So a power that will need to move on its
+     * own has to be its own key from the day it exists, or that future is a
+     * code change and a migration instead of a vote.
+     *
+     * Both gates, and not one instead of the other: seating an agent is a
+     * narrower act than seating, so it needs the general power AND the
+     * specific one.
+     */
+    const wantsAgent = !!req.body?.isAgent;
+    if (wantsAgent && !(await guardCapability(req, res, "org.seatAgent"))) return;
     const role = (await listOrgRoles(getPool())).find((r) => r.id === req.params.id);
     if (!role) return res.status(404).json({ error: "Seat not found" });
     if (role.isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
@@ -542,6 +558,12 @@ export function register(app: Express, deps: Deps): void {
       seasonId: seasonState().current?.id ?? null,
       termEndsAt,
       grantedBy: actor?.id ?? null,
+      // `seatHolder` refuses `isAgent` together with a `userId`, which is the
+      // one refusal that keeps a seat-plane agent out of both the settlement
+      // job's member filter and the 0083 declare door. Passed through rather
+      // than re-checked here, so there is one place that decides.
+      isAgent: wantsAgent,
+      agentSlug: req.body?.agentSlug ?? null,
     });
     if (!r.ok) return res.status(409).json({ error: r.reason });
     // WHO was put in a seat is the history a village most wants when it opens

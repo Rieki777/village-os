@@ -21,6 +21,7 @@ import type { CalendarItem, CalendarKind } from "../../shared/gatherings";
 import { civilParts, zonedTimeToUtc, type YearAnchor } from "../../shared/lunar";
 import { expandOccurrences, type CalendarRow } from "./calendar";
 import { lunarSummaryFor, type MonthName } from "./lunarTable";
+import { moonCountLabel } from "../../shared/villageMoon";
 
 export interface IcsOptions {
   /** X-WR-CALNAME: what a subscriber's app shows. */
@@ -30,6 +31,10 @@ export interface IcsOptions {
   anchor: YearAnchor;
   hemisphere: "north" | "south";
   names: MonthName[];
+  /** The lunation this village calls Moon 1, or null while it has not set one.
+   *  REQUIRED rather than optional: a subscriber's calendar would otherwise
+   *  silently lose every moon number the day a caller forgot to pass it. */
+  moonOneCycle: number | null;
   /** UIDs are `<row id>@<host>`; the host is the village's. */
   host: string;
   /** Where an item's page lives, for URL. */
@@ -197,10 +202,24 @@ interface EventLines {
   colour?: string | null;
 }
 
+/*
+ * ONE MOON NUMBER, the village's own count, and no "of twelve" behind it.
+ *
+ * This read "Moon 8 of 12, Sturgeon Moon, day 11 of 29." The 8 was the moon's
+ * place in the lunar year and it reset every year, so two lines a year apart
+ * in a subscriber's calendar carried the same number for different moons. The
+ * count since founding does not reset, which makes "of 12" meaningless beside
+ * it: a lunar year still holds twelve or thirteen moons, and that is year
+ * geometry rather than a coordinate anybody dates a gathering by.
+ *
+ * A village with no first moon set prints the name and the day and no number,
+ * which is `moonCountLabel` returning an empty string.
+ */
 function moonLine(at: Date, opts: IcsOptions): string {
   const s = lunarSummaryFor(at, { anchor: opts.anchor, timezone: opts.timezone, hemisphere: opts.hemisphere, names: opts.names });
   if (!s) return "";
-  return `Moon ${s.monthIndex} of ${s.monthCount}${s.name ? `, ${s.name}` : ""}, day ${s.day} of ${s.length}.`;
+  const head = [moonCountLabel(s.cycleNumber, opts.moonOneCycle), s.name].filter(Boolean).join(", ");
+  return `${head ? `${head}, ` : ""}day ${s.day} of ${s.length}.`;
 }
 
 function vevent(e: EventLines, opts: IcsOptions, stamp: string): string[] {
