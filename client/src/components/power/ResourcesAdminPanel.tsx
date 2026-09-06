@@ -45,7 +45,10 @@ interface Budget {
   id: string;
   circleId: string;
   seasonId: string | null;
+  /** The SEASON cap. */
   amountMinor: number;
+  /** The CYCLE cap (0168). Null means the village set none. */
+  cycleAmountMinor: number | null;
   unit: string;
   note: string | null;
 }
@@ -99,7 +102,7 @@ const EMPTY_RULE = {
 };
 
 const EMPTY_SOURCE = { name: "", kind: "donations", sharePct: "", amountPerYear: "", unit: "", note: "" };
-const EMPTY_BUDGET = { circleId: "", seasonId: "", amount: "", unit: "", note: "" };
+const EMPTY_BUDGET = { circleId: "", seasonId: "", amount: "", cycleAmount: "", unit: "", note: "" };
 
 export default function ResourcesAdminPanel({ password }: { password: string }) {
   const auth = { Authorization: `Bearer ${password}` };
@@ -200,6 +203,10 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
       circleId: budget.circleId,
       seasonId: budget.seasonId.trim() || undefined,
       amountMinor: toMinor(budget.amount, budget.unit.trim()),
+      // Blank leaves the cycle cap unset. "0" is a real cap and means zero.
+      cycleAmountMinor: budget.cycleAmount.trim() === ""
+        ? null
+        : toMinor(budget.cycleAmount, budget.unit.trim()),
       unit: budget.unit.trim(),
       note: budget.note.trim() || undefined,
     });
@@ -455,8 +462,11 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
             {data.budgets.map((b) => (
               <div key={b.id} className="flex items-center justify-between gap-2 text-sm bg-muted/40 rounded-lg px-3 py-2">
                 <span className="text-foreground/90">
-                  <span className="font-semibold">{circleName(b.circleId)}</span> holds {money(b.amountMinor, b.unit)}
-                  {b.seasonId ? ` for season ${b.seasonId}` : " as a standing envelope"}
+                  <span className="font-semibold">{circleName(b.circleId)}</span> may issue up to {money(b.amountMinor, b.unit)}
+                  {b.seasonId ? ` in season ${b.seasonId}` : " a season"}
+                  {b.cycleAmountMinor === null
+                    ? ", with no cap on any one cycle"
+                    : `, and up to ${money(b.cycleAmountMinor, b.unit)} in any one cycle`}
                 </span>
                 <button type="button" className="text-xs text-red-600 font-medium shrink-0" onClick={() => act(`/api/admin/resources/budgets/${b.id}`, "DELETE")}>
                   Remove
@@ -479,8 +489,12 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
             <input className={input} value={budget.seasonId} onChange={(e) => setBudget({ ...budget, seasonId: e.target.value })} />
           </label>
           <label className={label}>
-            Amount (major units)
+            Most it may issue in a season (major units)
             <input className={input} type="number" min="0" step="any" value={budget.amount} onChange={(e) => setBudget({ ...budget, amount: e.target.value })} />
+          </label>
+          <label className={label}>
+            Most it may issue in one cycle (blank for no cycle cap, 0 for none at all)
+            <input className={input} type="number" min="0" step="any" value={budget.cycleAmount} onChange={(e) => setBudget({ ...budget, cycleAmount: e.target.value })} />
           </label>
           <label className={label}>
             Unit
