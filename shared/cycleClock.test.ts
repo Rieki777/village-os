@@ -28,7 +28,6 @@ import {
   formatLunarCycleId,
   hasArrived,
   joiningCycle,
-  landingFor,
   msRemaining,
   parseId,
   termEndAfter,
@@ -277,44 +276,26 @@ describe("governance instants: three days means 72 hours", () => {
     expect(effectiveVetoHours(168)).toBe(168);
   });
 
-  it("executes a token send at the close when the proposal chose acceptance", () => {
-    const l = landingFor({ closesAt: closes, timing: "at_acceptance", isGameChange: false });
-    expect(l.executesAtClose).toBe(true);
-    expect(l.landsAt.getTime()).toBe(closes.getTime());
-  });
 
-  it("still holds a Game change chosen at acceptance until its window shuts", () => {
-    const l = landingFor({ closesAt: closes, timing: "at_acceptance", isGameChange: true });
-    expect(l.executesAtClose).toBe(false);
-    expect(l.landsAt.toISOString()).toBe("2026-09-06T10:00:00.000Z");
-    expect(l.vetoClosesAt.getTime()).toBe(l.landsAt.getTime());
-  });
 
-  it("lands a new-moon choice at the later of the next boundary and the window", () => {
-    const l = landingFor({ closesAt: closes, timing: "next_moon", isGameChange: true, clock: LUNAR_CLOCK });
-    const boundary = LUNAR_CLOCK.nextBoundaryAfter(closes);
-    const window = vetoClosesAt(closes);
-    expect(l.landsAt.getTime()).toBe(Math.max(boundary.getTime(), window.getTime()));
-    expect(l.landsAt.getTime()).toBeGreaterThanOrEqual(window.getTime());
-  });
 
-  it("gives a vote that carries near a boundary its full window, the late-carry jump", () => {
-    const boundary = LUNAR_CLOCK.nextBoundaryAfter(closes);
-    const oneMinuteBefore = new Date(boundary.getTime() - 60_000);
-    const l = landingFor({ closesAt: oneMinuteBefore, timing: "next_moon", isGameChange: true, clock: LUNAR_CLOCK });
-    // The boundary is a minute away, so the window is what decides.
-    expect(l.landsAt.getTime()).toBe(vetoClosesAt(oneMinuteBefore).getTime());
-  });
 
   it("counts down with the same arithmetic the server tests due-ness with", () => {
-    const l = landingFor({ closesAt: closes, timing: "at_acceptance", isGameChange: true });
+    /*
+     * The four landing tests that used to sit above this one are GONE, with the
+     * duplicate landingFor they exercised. Their behaviour is covered against
+     * the surviving implementation in shared/governanceKinds.test.ts: the token
+     * send at close, the Game change held to its window, the new-moon choice,
+     * and the late-carry jump. This one stays because msRemaining and hasArrived
+     * are cycleClock's own, and it now takes its instant directly rather than
+     * through a landing function this file no longer owns.
+     */
+    const landsAt = vetoClosesAt(closes);
     const halfway = new Date(closes.getTime() + 36 * 3_600_000);
-    expect(msRemaining(halfway, l.landsAt)).toBe(36 * 3_600_000);
-    expect(hasArrived(halfway, l.landsAt)).toBe(false);
-    expect(msRemaining(l.landsAt, l.landsAt)).toBe(0);
-    expect(hasArrived(l.landsAt, l.landsAt)).toBe(true);
-    // Past the instant the countdown reads zero, never a negative number.
-    expect(msRemaining(new Date(l.landsAt.getTime() + 9_999), l.landsAt)).toBe(0);
+    expect(msRemaining(halfway, landsAt)).toBe(36 * 3_600_000);
+    expect(hasArrived(halfway, landsAt)).toBe(false);
+    expect(msRemaining(landsAt, landsAt)).toBe(0);
+    expect(hasArrived(landsAt, landsAt)).toBe(true);
   });
 });
 

@@ -61,8 +61,19 @@ export const GOVERNANCE_KINDS = ["token_send", "game_change"] as const;
 export type GovernanceKind = (typeof GOVERNANCE_KINDS)[number];
 
 /** The proposer's choice of when their decision starts. */
-export const PROPOSAL_TIMINGS = ["at_acceptance", "next_moon"] as const;
-export type ProposalTiming = (typeof PROPOSAL_TIMINGS)[number];
+/*
+ * ONE DEFINITION, IN `cycleClock`, RE-EXPORTED HERE.
+ *
+ * This file held its own copy of the union while cycleClock held another,
+ * alongside a duplicate `landingFor` that no production code called. The
+ * landing arithmetic is deleted and lives only here; the union lives only in
+ * cycleClock, because `shared/dryRun/` is allowed to name exactly one module
+ * outside itself and that module is the clock. Consumers of this file see no
+ * change: the same two names are exported from the same place they always
+ * imported them.
+ */
+export { PROPOSAL_TIMINGS, type ProposalTiming } from "./cycleClock";
+import { PROPOSAL_TIMINGS, type ProposalTiming } from "./cycleClock";
 
 /**
  * The default, and the founder's reason for it: "to carry a pattern of new

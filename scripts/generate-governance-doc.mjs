@@ -861,7 +861,14 @@ export function kindFacts(root = ROOT) {
   const rel = "shared/governanceKinds.ts";
   const abs = absOf(root, rel);
   const kinds = listConst(root, rel, "GOVERNANCE_KINDS");
-  const timings = listConst(root, rel, "PROPOSAL_TIMINGS");
+  /*
+   * READ FROM THE CLOCK, because that is where the union is DECLARED.
+   * governanceKinds re-exports it, and a re-export is not a declaration, so
+   * reading it here would fail on a file that still serves the name. The
+   * union sits in cycleClock because `shared/dryRun/` may name exactly one
+   * module outside itself and that module is the clock.
+   */
+  const timings = listConst(root, "shared/cycleClock.ts", "PROPOSAL_TIMINGS");
   const forSubject = recordConst(root, rel, "KIND_FOR_SUBJECT");
   const forItem = recordConst(root, rel, "KIND_FOR_ITEM_KIND");
   const defaultTiming = constAnywhere(abs, "DEFAULT_TIMING");

@@ -506,53 +506,43 @@ export function vetoClosesAt(closesAt: Date, vetoHours: number = VETO_HOURS_DEFA
  * WHEN A PROPOSAL CARRIES ITS CHOICE, per 19F. Every proposal picks one, and
  * the default is `next_moon` "to carry a pattern of new activities starting
  * then".
+ *
+ * THE UNION STAYS HERE while the landing arithmetic below does not, and the
+ * split is deliberate. `shared/dryRun/` may name exactly one module outside its
+ * own directory, this one, and a guard in `types.test.ts` pins that import list
+ * exactly. Moving the union would have forced the dry-run contract to reach
+ * into `governanceKinds`, which is a far larger surface than the seam is
+ * allowed to depend on. `governanceKinds` imports it FROM here instead, so
+ * there is one definition and the seam keeps its small door.
  */
 export const PROPOSAL_TIMINGS = ["at_acceptance", "next_moon"] as const;
 export type ProposalTiming = (typeof PROPOSAL_TIMINGS)[number];
 export const DEFAULT_PROPOSAL_TIMING: ProposalTiming = "next_moon";
 
-export interface LandingInput {
-  /** The frozen instant the ballot's window ended. Never a human press. */
-  closesAt: Date;
-  timing: ProposalTiming;
-  /** True when the decision changes the Game rather than sending tokens. */
-  isGameChange: boolean;
-  vetoHours?: number;
-  /** The village's clock. `next_moon` means this clock's next boundary. */
-  clock?: CycleClock;
-}
-
-export interface Landing {
-  /** When it takes effect. Null means the moment the ballot closed. */
-  landsAt: Date;
-  /** When a steward can no longer veto. Equal to landsAt for a Game change. */
-  vetoClosesAt: Date;
-  /** True when nothing waits: a token send chosen at acceptance. */
-  executesAtClose: boolean;
-}
-
-/**
- * THE ONE PIECE OF ARITHMETIC BEHIND THE VETO WINDOW AND THE COUNTDOWN.
+/*
+ * THE LANDING ARITHMETIC USED TO BE DUPLICATED HERE, and it is deleted rather
+ * than documented, because a second copy that nobody calls is only harmless
+ * until somebody finds it.
  *
- * A token send chosen `at_acceptance` executes at the close, and a seated
- * steward stops it by voting no while the ballot is still OPEN. Everything
- * else waits: a Game change chosen `at_acceptance` still cannot land before
- * its window shuts, and anything chosen `next_moon` lands at the later of the
- * village's next cycle boundary and the window's close.
+ * `landingFor`, `LandingInput`, `Landing`, `PROPOSAL_TIMINGS`,
+ * `ProposalTiming` and `DEFAULT_PROPOSAL_TIMING` lived here with ZERO
+ * production callers: the two real ones, `server/lib/applyDue.ts` and
+ * `server/lib/proposalDryRun.ts`, both import them from
+ * `shared/governanceKinds.ts`, which is the one the engine actually lands on.
+ *
+ * It was deleted the day another lane cited this copy as the source of the
+ * landing instant for the circle burn card. The two are NOT interchangeable:
+ * this one had no `snapToBoundary`, so a financial ask bundled with a
+ * cycle-timed element would have been projected at an instant EARLIER than the
+ * engine uses and therefore against the wrong window; it took `isGameChange` as
+ * a boolean, so every caller had to re-derive the bundle rule that a set with
+ * any Game-change element is wholly a Game change, which would have been a
+ * third copy; and its `vetoHours` was unfloored, so a village that had typed a
+ * short window would read one instant here and another in production.
+ *
+ * THE LANDING INSTANT COMES FROM `shared/governanceKinds.ts`. There is one.
  */
-export function landingFor(input: LandingInput): Landing {
-  const clock = input.clock ?? LUNAR_CLOCK;
-  const windowShuts = vetoClosesAt(input.closesAt, input.vetoHours ?? VETO_HOURS_DEFAULT);
-  if (!input.isGameChange && input.timing === "at_acceptance") {
-    return { landsAt: input.closesAt, vetoClosesAt: input.closesAt, executesAtClose: true };
-  }
-  if (input.timing === "at_acceptance") {
-    return { landsAt: windowShuts, vetoClosesAt: windowShuts, executesAtClose: false };
-  }
-  const boundary = clock.nextBoundaryAfter(input.closesAt);
-  const landsAt = new Date(Math.max(boundary.getTime(), windowShuts.getTime()));
-  return { landsAt, vetoClosesAt: landsAt, executesAtClose: false };
-}
+
 
 /**
  * Milliseconds left on a window, never negative. The member's countdown and
