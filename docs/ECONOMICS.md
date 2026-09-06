@@ -457,7 +457,7 @@ at the bridge, and something outside this repository has to confirm it.
 
 Voice does not keep. At the close of each cycle the settlement posts a
 percentage of every member's Voice to `sys:voice-decay`, a system account seeded
-by `drizzle/0148_voice_that_waned.sql` that is not a faucet and only ever
+by `drizzle/0165_voice_that_waned.sql` that is not a faucet and only ever
 receives, so its balance is all the Voice that has waned in this village to
 date. The rate is `economy.voice_decay_pct`, a percentage under The Mint that
 defaults to 1 and accepts 0 through 100, and `economy.voice_decay_basis` says
@@ -988,7 +988,7 @@ Conservation is checked against `token_balances`, which is a CACHE, and the cach
   (`token_ledger_amount_positive`, in `drizzle/0009_ledger_accounts_and_transfers.sql`).
   Re-verified 2026-09-04 at `1861f7d`, over 122 files: `grep -rn "FOREIGN KEY"
   drizzle/` returns exactly three lines and all three are `--` comments saying why
-  there is not one (0140, 0149, 0150), and `grep -rn "CHECK (" drizzle/*.sql`
+  there is not one (0140, 0166, 0167), and `grep -rn "CHECK (" drizzle/*.sql`
   returns the one constraint above. Every relational invariant here lives in
   application code, which is why the slug freeze had to be a code refusal.
 - **The units contract at each posting call site.** This bullet used to read "the
@@ -2265,7 +2265,7 @@ in this economy consults exactly that table, it sits inside a region marked
 GENERATED so it is trusted more than the prose around it, and three of the seven
 missing accounts are ESCROWS holding value that belongs to a member: a seat fee
 before the gathering, a loan deposit before the loan settles, tokens held against
-an open redemption. `sys:voice-decay` had been missing since `0148` landed it,
+an open redemption. `sys:voice-decay` had been missing since `0165` landed it,
 and `sys:redemption-hold` and `sys:redeemed` arrived in `0161` today and did not
 reach it either, which is what made the omission visible at all.
 
@@ -3165,8 +3165,8 @@ unchanged: four built, two not.** The readings, so the work is repeatable:
 
 | Ruling | Handle 1, a dial | Handle 2, a posting or table | Handle 3, a surface | Verdict |
 |---|---|---|---|---|
-| R1 needs | 5 keys `needs.*` in `shared/gameVariables.ts` | `village_needs`, `need_links` from `drizzle/0149_a_village_says_what_it_is_for.sql`; `shared/needs.ts` names 10 needs | `server/routes/needs.ts`, `client/src/components/admin/NeedsPanel.tsx` (which re-exports `NeedsSetupStep`) | built |
-| R3 voice decay | `economy.voice_decay_pct` default 1, `economy.voice_decay_basis` | `sys:voice-decay` seeded by `drizzle/0148_voice_that_waned.sql` with `faucet` 0; source `voice_decay`; `decayVoice` called from `runSettlement` | The Mint dials, and `publicSupply`'s `waned` beside `issued` | built |
+| R1 needs | 5 keys `needs.*` in `shared/gameVariables.ts` | `village_needs`, `need_links` from `drizzle/0166_a_village_says_what_it_is_for.sql`; `shared/needs.ts` names 10 needs | `server/routes/needs.ts`, `client/src/components/admin/NeedsPanel.tsx` (which re-exports `NeedsSetupStep`) | built |
+| R3 voice decay | `economy.voice_decay_pct` default 1, `economy.voice_decay_basis` | `sys:voice-decay` seeded by `drizzle/0165_voice_that_waned.sql` with `faucet` 0; source `voice_decay`; `decayVoice` called from `runSettlement` | The Mint dials, and `publicSupply`'s `waned` beside `issued` | built |
 | R4 exit levers | 10 keys `exit.*` | `sweepBalances` reads five of them; the convert branch posts a `postTransferPair` | `PUT` on the admin variables route and the governance apply loop, both through `setVariable` | built |
 | R9 unspent gratitude | none, and none is wanted: it is a measurement | `gratitude_allowance_total`, `_given`, `_unspent` in `shared/healthMetrics.ts`, written at close by `server/lib/health.ts` | the health dashboard | built |
 | R2 voice for contributions | none | `seedEconomy` is the ONLY `INSERT` into `mint_rules` in the tree; `queueRuleChange` and `applyPendingRules` write four pending columns and never `trigger` or `token_slug` | `POST /api/admin/tokens/:slug/mint` grants any platform token for any typed reason | **not enforced** |
@@ -3178,7 +3178,7 @@ unchanged: four built, two not.** The readings, so the work is repeatable:
 
 **Built.** The taxonomy is platform copy in `shared/needs.ts` (ten human needs,
 each with a label, a formal name, its expressions and a hue), the scope and the
-links live in `village_needs` and `need_links` from migration 0149, and
+links live in `village_needs` and `need_links` from migration 0166, and
 `server/lib/needs.ts` reads and writes both. `server/routes/needs.ts` carries
 the doors: `GET /api/needs/scope` and `/coverage` for any signed-in member,
 `PUT /api/admin/needs/scope`, `POST /api/admin/needs/retire`, the two link
@@ -3206,7 +3206,7 @@ rules read, so a village whose only enabled rule is `quest.completed` still
 wanes. The rate is `economy.voice_decay_pct`, default `1`, applied per cycle
 close; `economy.voice_decay_basis` says which Voice it measures against and
 offers one honest answer today, all of it. The sink is `sys:voice-decay`,
-seeded by migration 0148 with the faucet flag at 0, because a faucet flag there
+seeded by migration 0165 with the faucet flag at 0, because a faucet flag there
 would say the waning account had ISSUED Voice. The source is `voice_decay`, the
 occurrence key is `voice.decay:<village>:<cycleKey>:<userId>:<token>`, and the
 posting is deliberately NOT on the allow-negative list.

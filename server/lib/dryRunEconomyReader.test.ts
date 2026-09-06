@@ -598,7 +598,7 @@ describe.skipIf(!configured)("the seed fallback, and saying it is a seed", () =>
     // POINT. The list is pinned rather than counted or filtered because a
     // pinned enumeration costs exactly one red per legitimate addition, and
     // the alternative costs an addition nobody notices. It has already earned
-    // that once: `sys:voice-decay` arrived with drizzle/0148_voice_that_waned
+    // that once: `sys:voice-decay` arrived with drizzle/0165_voice_that_waned
     // from the decay lane, and this line is what said so. Twice now:
     // `sys:redemption-hold` and `sys:redeemed` arrived with
     // drizzle/0161_a_member_redeems_what_they_hold from the redemption lane, and

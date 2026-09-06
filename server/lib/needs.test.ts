@@ -5,7 +5,7 @@
  * are properties of the SCHEMA and not of this file's TypeScript: that the
  * unique key makes a second tick of the same box an update, that retiring
  * leaves `need_links` alone, that the derived reads join to `org_roles` and
- * `org_role_assignments` the way the settlement does, and that migration 0149
+ * `org_role_assignments` the way the settlement does, and that migration 0166
  * applied twice does nothing the second time. A stub pool would prove the
  * stub.
  *
@@ -242,7 +242,7 @@ describe.skipIf(!configured)("the needs store", () => {
     );
   };
 
-  describe("migration 0149 is safe to apply twice", () => {
+  describe("migration 0166 is safe to apply twice", () => {
     it("applies nothing the second time and leaves the schema alone", async () => {
       const schema = new URL(db.url).pathname.replace("/", "");
       const shapeOf = async () => {
@@ -273,7 +273,7 @@ describe.skipIf(!configured)("the needs store", () => {
       const again = await applyPending(db.conn);
       expect(again.failed).toBeNull();
       expect(again.applied, "a second run applies nothing").toEqual([]);
-      expect(again.skipped).toContain("0149_a_village_says_what_it_is_for.sql");
+      expect(again.skipped).toContain("0166_a_village_says_what_it_is_for.sql");
       expect(await shapeOf()).toEqual(before);
     }, 120_000);
 
@@ -562,7 +562,7 @@ describe.skipIf(!configured)("the needs store", () => {
 });
 
 /* ========================================================================== *
- * The member's own card. `member_needs` (0150), lane N4.
+ * The member's own card. `member_needs` (0167), lane N4.
  *
  * ITS OWN SCHEMA AND NOT N1's BLOCK ABOVE. The two lanes share this file and
  * a shared `beforeEach` would have made every one of N1's cases depend on a
@@ -573,7 +573,7 @@ describe.skipIf(!configured)("the needs store", () => {
  * SCHEMA: that the `visibility` enum admits ONE value so a raised row is
  * impossible even with the route removed, that the unique key makes a second
  * answer in one moon an update, that an over-long note is clipped before the
- * insert instead of losing the row to strict MySQL, and that 0150 applied
+ * insert instead of losing the row to strict MySQL, and that 0167 applied
  * twice does nothing. A stub pool would prove the stub.
  * ========================================================================== */
 
@@ -607,7 +607,7 @@ describe.skipIf(!configured)("the member's own needs card", () => {
     return rows;
   };
 
-  describe("migration 0150 is safe to apply twice", () => {
+  describe("migration 0167 is safe to apply twice", () => {
     it("applies nothing the second time and leaves the schema alone", async () => {
       const schema = new URL(db.url).pathname.replace("/", "");
       const shapeOf = async () => {
@@ -642,7 +642,7 @@ describe.skipIf(!configured)("the member's own needs card", () => {
       const again = await applyPending(db.conn);
       expect(again.failed).toBeNull();
       expect(again.applied, "a second run applies nothing").toEqual([]);
-      expect(again.skipped).toContain("0150_a_member_says_how_they_are.sql");
+      expect(again.skipped).toContain("0167_a_member_says_how_they_are.sql");
       expect(await shapeOf()).toEqual(before);
     }, 120_000);
 

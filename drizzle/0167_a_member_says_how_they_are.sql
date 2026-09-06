@@ -1,4 +1,4 @@
--- 0150: what one member says they need, and how they are doing on it. (R20; lane N4)
+-- 0167: what one member says they need, and how they are doing on it. (R20; lane N4)
 --
 -- R20, the founder's words: "Part of a profile onboarding is asking players to
 -- identify the depth and breadth of the needs they intend to meet - and a
@@ -7,7 +7,7 @@
 -- target (what we aggregate as all the needs we're wanting to meet together)
 -- and we have Realtime feedback for when we're failing to do so."
 --
--- 0149 carries the TARGET: `village_needs` is what the village said it is for.
+-- 0166 carries the TARGET: `village_needs` is what the village said it is for.
 -- This file carries the OTHER half: one row per member per need per moon,
 -- saying where that member actually is. The village never reads a row. It
 -- reads counts, and only above a floor.
@@ -34,7 +34,7 @@
 -- trap in CLAUDE.md). Shipping the column now, NOT NULL with a default and one
 -- legal value, is the safe half of the same decision.
 --
--- NO FOREIGN KEYS. This schema has zero of them on purpose, the same as 0149.
+-- NO FOREIGN KEYS. This schema has zero of them on purpose, the same as 0166.
 -- `user_id` is reconciled by the tombstone path, not by the database: exit
 -- resolve calls `anonymizeMember`, and `forgetMemberNeeds` in
 -- server/lib/needs.ts is what that path calls to take these rows with it.

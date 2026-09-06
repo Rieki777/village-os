@@ -357,16 +357,37 @@ check("F7: frozenSet wrapping anything but a literal array is still REFUSED", ()
   assert.match(out, /accepts exactly two shapes/);
 });
 
-check("F7: an HONEST widening is still exit 1, drift, with both sides printed", () => {
+check("F7: an HONEST edit to the list is still exit 1, drift, with both sides printed", () => {
   // The control that proves the cases above measure the SHAPE and not merely
-  // "the set changed". A village that really does widen the keystone gets the
+  // "the set changed". A village that really does edit the keystone gets the
   // ordinary drift failure, which is regenerated and reviewed.
-  const ledger = 'export const ALLOW_NEGATIVE_SOURCES: ReadonlySet<string> = new Set(["stay_night", "payment_reversal", "reversal", "spend"]);';
-  const { code, out } = runGuard(newTree("widen-honest", { ledger }));
-  assert.strictEqual(code, 1, `an honest edit is drift, not could-not-read. Got ${code}:\n${out}`);
+  //
+  // IT NARROWS RATHER THAN WIDENS, and the reason is the case directly below:
+  // the generator now REFUSES a source it has no sentence for, so a widening to
+  // an invented slug is exit 2 by design and would no longer measure drift at
+  // all. Dropping a member changes the list without changing the shape, which
+  // is exactly the control this case was written to be.
+  const ledger = 'export const ALLOW_NEGATIVE_SOURCES: ReadonlySet<string> = new Set(["stay_night", "payment_reversal"]);';
+  const { code, out } = runGuard(newTree("narrow-honest", { ledger }));
+  assert.strictEqual(code, 1, `an honest edit is drift, not could-not-read. Got ${code}:
+${out}`);
   assert.match(out, /have come apart/);
   assert.match(out, /the code says:/);
   assert.match(out, /the file says:/);
+});
+
+check("F7: a NEW source with no plain sentence stops the build and names it", () => {
+  // The other half of the same rule, and the reason the case above narrows.
+  // The count and the list read themselves out of the code; the one part a
+  // human has to write is the sentence saying what the exception is FOR. A
+  // source that arrives without one would otherwise reach a village as a bare
+  // slug in a paragraph about their own money, so the generator refuses.
+  const ledger = 'export const ALLOW_NEGATIVE_SOURCES: ReadonlySet<string> = new Set(["stay_night", "payment_reversal", "reversal", "spend"]);';
+  const { code, out } = runGuard(newTree("widen-unglossed", { ledger }));
+  assert.strictEqual(code, 2, `an unglossed source must stop the build. Got ${code}:
+${out}`);
+  assert.match(out, /with no plain sentence/);
+  assert.match(out, /spend/, "the refusal names the source it cannot describe");
 });
 
 check("F7 RUNTIME: every keystone set's value under NODE_ENV=production matches the document", () => {

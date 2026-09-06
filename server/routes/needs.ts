@@ -313,7 +313,7 @@ export function registerMemberCard(app: Express, deps: MemberDeps): void {
    *
    * A client that sends a `visibility` of anything but `private` is REFUSED by
    * name. Downgrading it silently would leave the member believing a setting
-   * exists, and the column in 0150 admits one value anyway, so a silent
+   * exists, and the column in 0167 admits one value anyway, so a silent
    * downgrade would also be the only reason the write did not simply fail.
    */
   app.put("/api/needs/mine", async (req, res) => {

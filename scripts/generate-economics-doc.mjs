@@ -938,7 +938,7 @@ const cell = (v) => String(v).replace(/\|/g, "\\|");
  * sits about four of the eleven places it can sit, and the doc guard could not
  * see it: a hand-kept list inside a generator is byte-identical on both sides
  * of the comparison however incomplete it is. `sys:voice-decay` had been
- * missing since 0148 and `sys:redemption-hold` and `sys:redeemed` arrived in
+ * missing since 0165 and `sys:redemption-hold` and `sys:redeemed` arrived in
  * 0161 without reaching it.
  *
  * This is the same reasoning that made `faucetAccounts(pool)` derive the faucet
