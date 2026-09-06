@@ -41,11 +41,33 @@ const DIST = path.resolve(process.cwd(), "dist/index.js");
 
 /**
  * This suite's port window, checked by `scripts/check-e2e-ports.mjs` rather
- * than surveyed by hand. It sits above every window that existed when this
- * file landed and clear of the 32768+ ephemeral range; change the number and
- * the script will tell you whether it still is.
+ * than surveyed by hand.
+ *
+ * MOVED from 30402 at the main merge: two suites that could not see each other
+ * took one window, and the guard refused.
+ *
+ * IT MOVED BELOW THE BLOCK, and the reason is worth leaving here because the
+ * next lane to add an e2e suite meets it immediately.
+ *
+ * 6000 to 32701 IS NOW FULL. Not nearly full: full. `redemption.routes` ends
+ * at 32701, the guard keeps every window clear of the 32768 ephemeral floor,
+ * and the two apparent gaps at 7400 and 9500 are `agent.routes` STUB_PORT and
+ * `backupUploads` PORT_NO_TOKEN, both derived as `SOMEPORT + n` and invisible
+ * to a grep for a literal base. This lane tried 8300 on exactly that mistaken
+ * survey and the guard refused it against `authGoogle.routes` GOOGLE_PORT,
+ * which is the guard doing its whole job.
+ *
+ * So this one goes BELOW the block instead, at 2600, which is clear of every
+ * service this repository or its tooling stands up: MySQL and the local
+ * MariaDB on 3306 and 3307, vite on 5173, the docker daemon on 2375 and 2376,
+ * and the 3000 range. There is no lower floor in the guard, only the ceiling.
+ *
+ * WHICH SUITE MOVED, and the rule it follows: the one that was NOT already on
+ * main. `profilePaths.routes.e2e.test.ts` had itself moved to 30402 when
+ * `review.routes` landed on main underneath it, and its comment records the
+ * same rule. This is that rule applied one turn later.
  */
-const PORT = 30402 + (process.pid % 400);
+const PORT = 2600 + (process.pid % 400);
 const BASE = `http://localhost:${PORT}`;
 const ADMIN = "exitlevers-admin";
 const PASSWORD = "ExitLevers123!";

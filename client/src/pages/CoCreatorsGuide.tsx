@@ -107,8 +107,7 @@ const buildHyphaActions = (villageName: string, tokenName: string) => [
   },
 ];
 
-// A function of the live token names and of the conversion sentence, so a
-// rename and a correction both reach the cards. See lib/moneyClaims.ts.
+// A function of the live token names AND of the conversion sentence (lib/moneyClaims.ts), so a rename and a correction both reach every card.
 const recognitionItems = (tokenName: string, valueName: string, villageName: string, conversionNote: string) => ({
   earn: [
     { label: "Quests", range: `40-300 ${tokenName}` },
@@ -486,10 +485,9 @@ export default function CoCreatorsGuide() {
                 The {tokenName} Economy
               </h2>
               <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-                Two tokens, two jobs. The work, time, and resources you contribute to
-                {villageName} are acknowledged in {tokenName}, the recognition signal, which carries
-                no financial value of its own. {valueName} are the tracked value: each cycle the community shares a
-                real pool of {valueName} across everyone's {tokenName}.{conversionNote ? ` ${conversionNote}` : ""}
+                Two tokens, two jobs. The work, time, and resources you contribute to {villageName} are acknowledged in
+                {tokenName}, the recognition signal, which carries no financial value of its own. {valueName} are the tracked
+                value: each cycle the community shares a real pool of {valueName} across everyone's {tokenName}.{conversionNote ? ` ${conversionNote}` : ""}
               </p>
             </div>
 
