@@ -42,6 +42,7 @@
 import { useEffect, useState } from "react";
 import { History } from "lucide-react";
 import { authToken, gameFetch } from "@/lib/gameApi";
+import { useSeatWord } from "@/lib/gameApi";
 
 /** Exactly what `/api/org/roles/:id/history` answers with, per row. */
 export interface SeatSeating {
@@ -139,6 +140,8 @@ export default function SeatHistory({
   roleId: string;
   canSeePeople: boolean;
 }) {
+  /* What this village calls one person's turn holding a role. Default "Seat". */
+  const seatWord = useSeatWord();
   const [rows, setRows] = useState<SeatSeating[] | null>(null);
   const [unreadable, setUnreadable] = useState(false);
 
@@ -178,7 +181,7 @@ export default function SeatHistory({
     if (authToken()) return null;
     return (
       <p className="text-xs text-muted-foreground">
-        Sign in to see who has held this seat before.
+        Sign in to see who has held this {seatWord.name.toLowerCase()} before.
       </p>
     );
   }

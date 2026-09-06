@@ -47,11 +47,14 @@ export default function TheVessel({
   gratitude,
   here,
   next,
+  failed,
   onGiven,
 }: {
   gratitude: GameMe["gratitude"] | null;
   here: GameStagePublic | null;
   next: GameStagePublic | null;
+  /** True when the read FAILED, which is a different thing from having nothing. */
+  failed?: boolean;
   /** Told after a successful give, so whatever else prints a balance re-reads. */
   onGiven?: () => void;
 }) {
@@ -96,18 +99,31 @@ export default function TheVessel({
    * that really happened vanishes with it. The member is left believing
    * nothing went through.
    *
-   * So a panel that has already spoken keeps standing. `lastKnown` holds the
-   * figures from before the failed read, which are one give stale rather than
-   * absent, and the sentence below says so instead of pretending they are
-   * current.
+   * FIXED AT THE SOURCE INSTEAD. This component first kept a `lastKnown` copy
+   * so it could keep standing, which worked and was the wrong place: the parent
+   * was still nulling a good payload, so the standing row's balance vanished
+   * anyway. Profile.tsx's reloadMe now refuses to overwrite a payload it has
+   * with a failure, which fixes every consumer at once. This note stays because
+   * the next person to see a null here should know it means an empty COLD read
+   * and never a failed refresh.
    */
-  const [lastKnown, setLastKnown] = useState<GameMe["gratitude"] | null>(null);
-  useEffect(() => {
-    if (gratitude) setLastKnown(gratitude);
-  }, [gratitude]);
-  const figures = gratitude ?? lastKnown;
-  const stale = !gratitude && Boolean(lastKnown);
-  if (!figures) return null;
+  const figures = gratitude;
+  /*
+   * A COLD FAILURE SAYS SO. `fetchGameMe` answers null for a non-ok response
+   * WITHOUT throwing, so "the read failed" and "there is nothing here" arrive
+   * as the same value. Returning null for both meant a member whose first read
+   * failed got a silent gap where the balance and the send control should be,
+   * directly under a dashboard card that says "Retry" off the same endpoint.
+   */
+  if (!figures) {
+    return failed ? (
+      <section className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
+        <p role="status" className="text-sm text-muted-foreground">
+          Could not read your {tokenName} just now. Reload the page to try again.
+        </p>
+      </section>
+    ) : null;
+  }
 
   const budget = figures.budget;
   const total = Number(budget?.total ?? 0);
@@ -184,13 +200,7 @@ export default function TheVessel({
       <p className="mt-2 text-sm text-muted-foreground">
         Held in all. Yours to keep, never spent.
       </p>
-      {/* Said out loud rather than shown by dimming, because a figure that is
-          one write behind looks exactly like a figure that is current. */}
-      {stale ? (
-        <p className="mt-1 text-sm text-notice">
-          These figures are from before your last send. Reload to see them settle.
-        </p>
-      ) : null}
+
 
       {total > 0 ? (
         <div className="mt-6">
@@ -263,6 +273,16 @@ export default function TheVessel({
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               required
+              /*
+               * WHOLE, AND AT LEAST ONE. `sendGratitude` does
+               * `Math.floor(Number(amount) || 0)`, so 2.5 was accepted here,
+               * posted as 2.5, and silently became 2. A member who typed a
+               * half and was charged a whole was never told. The browser
+               * refuses it now, before anybody is surprised by rounding.
+               */
+              type="number"
+              min={1}
+              step={1}
               inputMode="numeric"
               className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 tabular-nums text-card-foreground"
             />
@@ -307,7 +327,20 @@ export default function TheVessel({
           */
           className="mt-3 min-h-11 rounded-lg border border-notice/70 bg-teal-deep px-5 py-2 font-medium text-white disabled:opacity-50"
         >
-          {sending ? "Sending…" : remaining > 0 ? "Give" : "Nothing left to give this moon"}
+          {sending
+            ? "Sending…"
+            : remaining > 0
+              ? "Give"
+              : /*
+                 * SPENT IT, OR NEVER HAD IT. Two different sentences, because
+                 * a village can set a rung's multiplier to 0 (a documented,
+                 * supported setting), and telling somebody who has never been
+                 * given an allowance that they have "nothing left" describes a
+                 * spending they never did.
+                 */
+                total > 0
+                ? "Nothing left to give this moon"
+                : "This rung has no sending allowance yet"}
         </button>
         {/*
           THE LIVE REGION IS ALWAYS MOUNTED, AND THAT IS THE WHOLE POINT.

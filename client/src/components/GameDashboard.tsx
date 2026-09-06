@@ -11,7 +11,12 @@ import { formatTokenAmount } from "@/lib/tokenAmount";
 const CLAIM_STATUS: Record<string, { label: string; cls: string }> = {
   claimed: { label: "In progress", cls: "bg-notice/10 text-notice" },
   submitted: { label: "Awaiting consent", cls: "bg-open/10 text-open" },
-  consented: { label: "Completed", cls: "bg-emerald-100 text-emerald-700" },
+  /* The last frozen light pair on this sheet, and the only chip of the four
+     still wearing one: a near-white tint carrying dark green, which on the
+     night card is a bright slab beside three washes of the sheet's own
+     palette. The living green at 10% matches its siblings and measures
+     6.45:1. */
+  consented: { label: "Completed", cls: "bg-open/10 text-open" },
   // 4.39:1 at 12px, which is under the 4.5 floor for text this size, and the
   // one chip on the row that has to be read carefully. stone-600 on the same
   // stone-100 measures 7.00:1 and keeps the chip the quietest of the four.

@@ -100,8 +100,23 @@ export default function Profile() {
    * Read once here and passed down rather than fetched per card.
    */
   const [me, setMe] = useState<GameMe | null>(null);
+  const [meFailed, setMeFailed] = useState(false);
+  /*
+   * A FAILED RE-READ NEVER ERASES WHAT IS ALREADY IN HAND.
+   *
+   * `fetchGameMe` answers null for a non-ok response WITHOUT throwing, so a 500
+   * arrived down the SUCCESS path and ran setMe(null). After a give that really
+   * happened, that unmounted the vessel, the balance and the "Sent."
+   * confirmation together, leaving a member one plausible retry away from
+   * sending twice. `if (d)` is the whole fix, and it protects the standing row
+   * as well, which a guard inside the vessel could never have reached.
+   */
   const reloadMe = () => {
-    fetchGameMe().then((d) => setMe(d)).catch(() => setMe(null));
+    fetchGameMe()
+      .then((d) => {
+        if (d) { setMe(d); setMeFailed(false); } else setMeFailed(true);
+      })
+      .catch(() => setMeFailed(true));
   };
   useEffect(reloadMe, []);
 
@@ -469,6 +484,7 @@ export default function Profile() {
                 gratitude={me?.gratitude ?? null}
                 here={me?.stage ?? null}
                 next={me && me.stages ? (me.stages[me.stageIndex + 1] ?? null) : null}
+                failed={meFailed}
                 onGiven={reloadMe}
               />
 

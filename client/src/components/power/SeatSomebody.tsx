@@ -27,6 +27,7 @@
  * the server is what makes it safe.
  */
 import { useState } from "react";
+import { useSeatWord } from "@/lib/gameApi";
 
 const inputCls = "border border-gray-200 rounded-lg px-2 py-1.5 text-sm";
 
@@ -46,6 +47,8 @@ export function SeatSomebody({
   onSeated: (what: string) => void;
   onFailed?: (why: string) => void;
 }) {
+  /* What this village calls one person's turn holding a role. Default "Seat". */
+  const seatWord = useSeatWord();
   const [who, setWho] = useState("");
   const [agentName, setAgentName] = useState("");
   const seatingAnAgent = who === AGENT;
@@ -59,7 +62,7 @@ export function SeatSomebody({
     // Held rather than assumed. The control says a seating landed only when the
     // response said so, which is the whole of what the save-honesty rule asks.
     if (!ok) {
-      onFailed?.("That seat was not filled");
+      onFailed?.(`That ${seatWord.name.toLowerCase()} was not filled`);
       return;
     }
     onSeated(seatingAnAgent ? "Agent seated" : "Seated");
@@ -70,7 +73,7 @@ export function SeatSomebody({
   return (
     <>
       <label className="text-xs text-muted-foreground">
-        Seat someone
+        {seatWord.name} someone
         <select className={`${inputCls} mt-1`} value={who} onChange={(e) => setWho(e.target.value)}>
           <option value="">Choose a member...</option>
           {members.map((m: any) => (
