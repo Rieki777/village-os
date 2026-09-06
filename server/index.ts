@@ -20731,11 +20731,7 @@ ${inner}
    * of false: a tap is a gesture, not a message, and it was never meant to be
    * quoted here.
    */
-  // The hero of the wall, registered immediately before the wall itself so
-  // the two reads sit together. See server/routes/gratitudeVoices.ts for why
-  // this one may be anonymous where the enriched wall may not.
   registerGratitudeVoiceRoutes(app, { getPool });
-
   app.get("/api/game/gratitude/wall", async (_req, res) => {
     const log = await gratitudeRepo.all();
     const wall = log
@@ -26325,15 +26321,10 @@ ${inner}
     res.json({
       gratitude: {
         baseBudget: numberVar("gratitude.base_budget"),
-        // How many full-strength gifts an allowance holds, so the client
-        // cannot render a ceiling from it without knowing whose allowance it
-        // divides. `/api/game/me` carries that member's budget; this route is
-        // anonymous and describes the rule, never one person's ceiling.
-        //
-        // This replaced `maxSharePerRecipient` when the dial became a count.
-        // Emitting both was considered and refused: a percentage derived here
-        // would be a second figure for one rule, and two figures for one rule
-        // is how the caps this one replaced drifted apart in the first place.
+        // How many full-strength gifts an allowance holds. Anonymous, so it
+        // describes the RULE and never one person's ceiling; `/api/game/me`
+        // carries that member's own cap. Replaced `maxSharePerRecipient` when
+        // the dial became a count: see `shareCapFor` in server/lib/economy.ts.
         fullSendsPerCycle: numberVar("gratitude.full_sends_per_cycle"),
         requireMessage: boolVar("gratitude.require_message"),
         // The ReGen pool model: the community can always see how big the pool

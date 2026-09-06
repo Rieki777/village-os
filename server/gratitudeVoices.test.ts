@@ -55,7 +55,7 @@ describe("the sixteen default voices", () => {
     // that mentioned this village's currency would also be a lie in a fork
     // that renamed it.
     for (const v of voices) {
-      expect(v.message).not.toMatch(/gratitude|recognition|amora/i);
+      expect(v.message).not.toMatch(/gratitude|recognition|amora/i); // brand-ok: the assertion is that the voices do NOT carry this name
     }
   });
 
