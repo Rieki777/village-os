@@ -202,13 +202,84 @@ describe.skipIf(!configured)("the landing job composes it, and only when it can 
     expect(calls.length).toBe(1);
   });
 
+  it("CATCHES UP a moon whose tick was missed, which the edge trigger lost forever", async () => {
+    /*
+     * THE DEFECT THIS REPLACED: the job asked whether a boundary sat inside the
+     * last five-minute tick. A tick that arrived late, after a deploy or a
+     * restart or a slow run, left the boundary behind the look-back and nothing
+     * ever revisited it. That moon got no digest, ever, and the job reported
+     * the same answer a quiet Tuesday reports.
+     *
+     * Here the FIRST cycle is digested normally, then the job does not run
+     * again until three days past the SECOND boundary. Under the old trigger
+     * that second moon was lost. It is composed.
+     */
+    /*
+     * A REAL GRID, and this test is worthless without it. The file's shared
+     * stub clock caps at the second boundary, so `nextBoundaryAfter` answers
+     * with that same instant however late you ask, and the OLD edge trigger
+     * therefore finds it by accident. Written against the shared stub, this
+     * test passed with the defect restored, which is how it was caught. A clock
+     * that keeps producing boundaries is what makes a late tick genuinely late.
+     */
+    const CYCLE_MS = 28 * 24 * HOUR;
+    const gridClock = (after: Date): Date => {
+      const since = after.getTime() - CYCLE_ENDED.getTime();
+      const steps = Math.floor(since / CYCLE_MS) + 1;
+      return new Date(CYCLE_ENDED.getTime() + steps * CYCLE_MS);
+    };
+
+    const composed: string[] = [];
+    const perCycle = async (input: { pool: mysql.Pool; endedAt: Date; at: Date }) => {
+      composed.push(input.endedAt.toISOString());
+      return composeMoonDigest({
+        ...input,
+        cycleId: `lunar-${1200 + Math.round((input.endedAt.getTime() - CYCLE_ENDED.getTime()) / (28 * 24 * HOUR))}`,
+        startedAt: new Date(input.endedAt.getTime() - 28 * 24 * HOUR),
+      });
+    };
+
+    const first = await applyDueGovernance(
+      deps({ composeDigest: perCycle as any, nextBoundaryAfter: gridClock }),
+      new Date(CYCLE_ENDED.getTime() + 60_000),
+    );
+    expect(first.ran && first.digest, "the first moon composes as it always did").toBe("composed");
+
+    const secondBoundary = new Date(CYCLE_ENDED.getTime() + 28 * 24 * HOUR);
+    const wayLate = new Date(secondBoundary.getTime() + 3 * 24 * HOUR);
+    const second = await applyDueGovernance(
+      deps({ composeDigest: perCycle as any, nextBoundaryAfter: gridClock }),
+      wayLate,
+    );
+
+    expect(second.ran && second.digest, "the missed moon is picked up, not lost").toBe("composed");
+    expect(composed, "and it composed the SECOND boundary, not the first again").toEqual([
+      CYCLE_ENDED.toISOString(),
+      secondBoundary.toISOString(),
+    ]);
+  });
+
+  it("owes nothing once every ended cycle has its digest", async () => {
+    // The other half: catch-up must not compose the same moon twice, and must
+    // not invent one for a cycle that has not ended.
+    const calls: string[] = [];
+    await applyDueGovernance(deps({ composeDigest: composer(calls) as any }), new Date(CYCLE_ENDED.getTime() + 60_000));
+    expect(calls.length).toBe(1);
+    const again = await applyDueGovernance(
+      deps({ composeDigest: composer(calls) as any }),
+      new Date(CYCLE_ENDED.getTime() + 2 * HOUR),
+    );
+    expect(again.ran && again.digest).toBe("nothing_to_compose");
+    expect(calls.length, "the composer was not called a second time").toBe(1);
+  });
+
   it("composes nothing on a tick that crossed no boundary, and says which it was", async () => {
     const calls: string[] = [];
     const report = await applyDueGovernance(
       deps({ composeDigest: composer(calls) as any }),
       new Date(CYCLE_ENDED.getTime() - 10 * 24 * HOUR),
     );
-    expect(report.ran && report.digest).toBe("no_boundary_crossed");
+    expect(report.ran && report.digest).toBe("nothing_to_compose");
     expect(calls).toEqual([]);
   });
 });

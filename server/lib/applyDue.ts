@@ -637,7 +637,7 @@ export type ApplyDueReport =
       /** Rows written off after too many boundaries without landing. */
       expired: number;
       /** What the digest did on this tick, in one word a caller cannot ignore. */
-      digest: "not_asked" | "no_boundary_crossed" | "composed" | "already_composed" | "held";
+      digest: "not_asked" | "nothing_to_compose" | "composed" | "already_composed" | "held";
       notes: string[];
     }
   | { ran: false; why: string };
@@ -843,31 +843,48 @@ async function writeOffExpired(deps: LandingDeps, at: Date, notes: string[]): Pr
 /**
  * THE DIGEST, COMPOSED BY THIS JOB AND BY NOTHING ELSE.
  *
- * Only when this tick crossed a cycle boundary, and only after every row due
- * INSIDE the cycle that ended has been applied, vetoed or stalled. Composing it
- * with rows still resting in `pending` would publish "what changed this moon"
- * with the changes missing, and the digest is the one page a returning player
- * reads first.
+ * Only after every row due INSIDE the cycle that ended has been applied, vetoed
+ * or stalled. Composing it with rows still resting in `pending` would publish
+ * "what changed this moon" with the changes missing, and the digest is the one
+ * page a returning player reads first.
  *
  * "No digest composed" and "the digest was empty" are different answers and are
  * logged apart, because a village whose moon really did nothing and a village
  * whose digest never ran look identical from the feed.
+ *
+ * ── IT ASKS WHAT IS MISSING, NOT WHETHER A BOUNDARY JUST FELL ──────────────
+ *
+ * This used to be an EDGE TRIGGER: it asked the clock whether a boundary sat
+ * inside the last five-minute tick, and composed only then. Any tick that
+ * arrived late lost that moon's digest permanently, because the boundary was
+ * behind the look-back and nothing ever revisited it. A deploy, a restart, a
+ * slow tick or a container reschedule was enough. Worse, the answer it returned
+ * was `no_boundary_crossed`, which is exactly what a quiet Tuesday returns, so
+ * the loss was invisible in the one place somebody would look for it. That is
+ * the defect this module exists to prevent, in the module itself.
+ *
+ * It now asks a question about STATE instead: which ended cycle has no digest
+ * row. `governance_moon_digests` is keyed on the cycle, so the answer is a
+ * MAX(ended_at) and one step forward on the clock, and a missed moon is picked
+ * up on the next tick instead of being lost.
+ *
+ * ONE PER TICK, OLDEST FIRST. A village whose job was down for three moons
+ * catches up over fifteen minutes rather than posting three feed items at once,
+ * and each tick's work stays bounded whatever happened while it was away.
+ *
+ * A village with NO digests at all falls back to the edge test, deliberately.
+ * Walking forward needs somewhere to start, and the honest start is the first
+ * boundary this job actually saw: a fresh village must not retroactively
+ * compose digests for moons that passed before the feature existed.
  */
 async function composeDigestIfBoundaryCrossed(
   deps: LandingDeps,
   at: Date,
   notes: string[],
-): Promise<"not_asked" | "no_boundary_crossed" | "composed" | "already_composed" | "held"> {
+): Promise<"not_asked" | "nothing_to_compose" | "composed" | "already_composed" | "held"> {
   if (!deps.composeDigest) return "not_asked";
-  /*
-   * DID THIS TICK CROSS A BOUNDARY? The job runs every five minutes, so the
-   * boundary that ended the last cycle is the one strictly before now and at or
-   * after the previous tick. Asking the clock for the boundary after "one tick
-   * ago" answers it with no state kept anywhere.
-   */
-  const lookBack = new Date(at.getTime() - TICK_MS);
-  const boundary = deps.nextBoundaryAfter(lookBack);
-  if (boundary.getTime() > at.getTime()) return "no_boundary_crossed";
+  const boundary = await boundaryOwedADigest(deps, at);
+  if (!boundary) return "nothing_to_compose";
 
   const [unfinished] = await deps.pool.query<RowDataPacket[]>(
     "SELECT COUNT(*) AS n FROM ballots WHERE status = 'passed' AND landing_status IN ('pending','applying') " +
@@ -884,6 +901,46 @@ async function composeDigestIfBoundaryCrossed(
   const result = await deps.composeDigest({ pool: deps.pool, endedAt: boundary, at });
   notes.push(result.why);
   return result.composed ? "composed" : "already_composed";
+}
+
+/**
+ * THE ENDED CYCLE THAT HAS NO DIGEST, or null when nothing is owed.
+ *
+ * Two paths, and the split is the whole design.
+ *
+ * A village that has composed at least one digest walks FORWARD from the last
+ * one it wrote. The next boundary strictly after that ends the next cycle; if
+ * that instant has arrived, that cycle is owed a digest and no other question
+ * needs asking. It returns ONE, the oldest owed, so a long outage is caught up
+ * a tick at a time.
+ *
+ * A village that has composed NONE falls back to the edge test, because
+ * forward-walking has no honest starting point and the alternative is
+ * retroactively composing every moon since the village was founded.
+ *
+ * Reading MAX(ended_at) rather than counting rows keeps this one indexed lookup
+ * whatever the history is; `governance_moon_digests_ended_idx` is the index.
+ */
+async function boundaryOwedADigest(deps: LandingDeps, at: Date): Promise<Date | null> {
+  const [rows] = await deps.pool.query<RowDataPacket[]>(
+    "SELECT MAX(ended_at) AS last_ended FROM governance_moon_digests",
+  );
+  const raw = rows[0]?.last_ended ?? null;
+  if (raw === null || raw === undefined) {
+    // Never composed one. The edge test, exactly as it was.
+    const boundary = deps.nextBoundaryAfter(new Date(at.getTime() - TICK_MS));
+    return boundary.getTime() <= at.getTime() ? boundary : null;
+  }
+  const lastEnded = raw instanceof Date ? raw : new Date(String(raw));
+  if (Number.isNaN(lastEnded.getTime())) {
+    // An unreadable stamp must not silently mean "nothing owed", which would be
+    // the same silent loss this function was rewritten to remove. Fall back to
+    // the edge test, which is the answer that at worst misses nothing new.
+    const boundary = deps.nextBoundaryAfter(new Date(at.getTime() - TICK_MS));
+    return boundary.getTime() <= at.getTime() ? boundary : null;
+  }
+  const next = deps.nextBoundaryAfter(lastEnded);
+  return next.getTime() <= at.getTime() ? next : null;
 }
 
 /** How often the landing job ticks, and the window the digest looks back over. */
@@ -1439,6 +1496,36 @@ export async function isOverride(pool: Pool, subjectType: string, subjectRef: st
   return { of: String(r.sup) };
 }
 
+/**
+ * IS THIS PROPOSAL STOPPED RIGHT NOW, as opposed to ever having been stopped?
+ *
+ * `wasVetoed` below answers a question about HISTORY, and the override path is
+ * right to ask it: an override exists to answer a veto that happened, and it
+ * happened whatever came after.
+ *
+ * The renewal path needs the other question and was asking this one. A village
+ * that vetoed a change, then OVERRODE the veto at its highest bar and landed
+ * it, has that change running. `wasVetoed` still answers true forever, so a
+ * renewal of a decision the village explicitly reinstated was refused with the
+ * sentence "there is nothing running to keep running", which is false of it and
+ * unarguable, since the member is told to bring it back as an override when the
+ * override is the very thing that already carried.
+ *
+ * Stopped NOW is: at least one ballot on it was vetoed, and none of its ballots
+ * ever reached `applied`. A landing is what puts a change into force, so a
+ * proposal with one is running whatever its history holds.
+ */
+export async function stoppedAndNeverLanded(pool: Pool, proposalId: string): Promise<boolean> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT SUM(vetoed_at IS NOT NULL) AS vetoed, SUM(landing_status = 'applied') AS applied " +
+      "FROM ballots WHERE subject_type = 'mechanics' AND subject_ref = ?",
+    [proposalId],
+  );
+  const vetoed = Number(rows[0]?.vetoed ?? 0);
+  const applied = Number(rows[0]?.applied ?? 0);
+  return vetoed > 0 && applied === 0;
+}
+
 /** Was any ballot ever held on this proposal stopped by a steward? */
 export async function wasVetoed(pool: Pool, proposalId: string): Promise<boolean> {
   const [rows] = await pool.query<RowDataPacket[]>(
@@ -1484,7 +1571,8 @@ export async function supersedesRefusal(
   const rel = String(relation ?? "").trim().toLowerCase();
   if (!supersedesProposalId) return null;
   if (rel !== "renews") return null;
-  if (!(await wasVetoed(pool, String(supersedesProposalId)))) return null;
+  // STOPPED NOW, not ever stopped. See `stoppedAndNeverLanded`.
+  if (!(await stoppedAndNeverLanded(pool, String(supersedesProposalId)))) return null;
   return (
     "That decision was stopped by a steward, so it cannot be renewed: there is nothing running to keep running. " +
     "Bring it back as an override instead, which the village passes at the highest bar it has set for itself."

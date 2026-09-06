@@ -866,6 +866,45 @@ describe.skipIf(!configured)("the override is decided by the tier the resubmissi
     expect(await supersedesRefusal(pool, "overrides", ref), "an override may point at it").toBeNull();
   });
 
+  it("ALLOWS a renewal of a decision the village overrode and landed", async () => {
+    /*
+     * THE DEFECT: the refusal asked `wasVetoed`, which is a question about
+     * HISTORY and answers true forever. A village that vetoed a change, then
+     * overrode the veto at its highest bar and landed it, has that change
+     * RUNNING. Renewing it was refused with "there is nothing running to keep
+     * running", which is false of it, and the refusal told the member to bring
+     * it back as an override when the override was the thing that had already
+     * carried. Unarguable and circular.
+     */
+    const ref = `renew-landed-${++n}`;
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO mechanics_proposals (id, title, rationale, status, proposer_user_id, change_set) VALUES (?,?,?,?,?,?)",
+      [ref, "Stopped once, then reinstated", "why the village was asked", "open", "u-a", JSON.stringify([])],
+    );
+    await seatSteward("u-steward");
+
+    // The first ballot carries and a steward stops it.
+    const first = await openOne({ subjectRef: ref });
+    const firstClosed = await carry(first);
+    await routeOutcome(deps(), firstClosed.ballot!, "passed", "carried", "u-a");
+    await recordVeto(deps(), { ballotId: first.id, stewardId: "u-steward", reason: "Not yet, and here is why." });
+    expect(await wasVetoed(pool, ref), "the veto is on the record and stays there").toBe(true);
+    expect(await supersedesRefusal(pool, "renews", ref), "so a renewal is refused, correctly").toContain("cannot be renewed");
+
+    // The village answers the veto: a second ballot on the same proposal lands.
+    const second = await openOne({ subjectRef: ref });
+    const secondClosed = await carry(second);
+    await routeOutcome(deps(), secondClosed.ballot!, "passed", "carried", "u-a");
+    await pool.query("UPDATE ballots SET landing_status = 'applied' WHERE id = ?", [second.id]);
+
+    // History is unchanged. What is RUNNING is not.
+    expect(await wasVetoed(pool, ref), "history still says it was stopped once").toBe(true);
+    expect(
+      await supersedesRefusal(pool, "renews", ref),
+      "but there IS something running to keep running, so the renewal stands",
+    ).toBeNull();
+  });
+
   it("reads the tier the ballot actually froze, never the one the proposer meant", () => {
     const settings = thresholdSettingsFrom(() => Number.NaN);
     const floor = floorForCriticality("constitutional", settings);
