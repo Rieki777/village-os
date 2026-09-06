@@ -19,6 +19,7 @@ import ModuleGate from "@/components/modules/ModuleGate";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useModule, useModules } from "@/modules/ModuleProvider";
 import { layoutForShape, type NestedInput } from "@shared/mapLayout";
+import { cssColourForCircle } from "@shared/circleView";
 import { authToken } from "@/lib/gameApi";
 import { rememberMapAvailable } from "@/lib/landing";
 import { ChevronDown, Download, Link2, List, Map as MapIcon, X } from "lucide-react";
@@ -306,6 +307,47 @@ export default function VillageMap() {
           )}
           {data && layout && (
             <>
+              {/* THE MAP COMES FIRST ON A PHONE.
+                  It used to sit under the search box, the breadcrumb, the
+                  lens row and three rows of filter chips: measured on a
+                  390x844 handset, the picture began below the fold and the
+                  whole first screen was controls for a thing you could not
+                  see yet. A reader arriving at "how power is held" should
+                  meet the village, then the tools for filtering it.
+
+                  Phone only. From `sm` up the standing canvas below is the
+                  map and this is hidden, so the order here costs the desktop
+                  nothing. */}
+              {!listMode && (
+                <div className="sm:hidden -mx-4 mb-4">
+                  <div className="relative aspect-square block" data-power-map-box>
+                    <PowerMap
+                      data={data}
+                      layout={layout}
+                      shape={shape}
+                      focusId={focusId}
+                      onFocus={focusTo}
+                      selected={selected}
+                      onSelect={setSelected}
+                      filters={filters}
+                      viewerUserId={viewerUserId}
+                      linesOn={linesOn}
+                      pulseSeatId={pulseSeatId}
+                      lenses={lensNodes}
+                      // The phone draws one level at a time; the breadcrumb
+                      // is the way down, and the accordion below carries the
+                      // rest. Seventeen circles and their children in a
+                      // 375px square is a picture nobody can use.
+                      maxDepth={phoneMaxDepth}
+                      // And a name only where it fits INSIDE its circle. At
+                      // 358px the floor made every label legible and then
+                      // piled fifteen of them on top of each other.
+                      compact
+                    />
+                  </div>
+                                </div>
+              )}
+
               <SearchBar data={data} onPick={pickFromSearch} />
 
               <div className="flex items-center justify-between gap-2 flex-wrap mt-4 mb-2">
@@ -521,44 +563,10 @@ export default function VillageMap() {
               {/* The list: the phone's whole page, the tablet's under-map
                   companion, and the desktop's choice (spec 12). */}
               <div className={`${listMode ? "" : "sm:hidden"} space-y-4 mt-2`}>
-                {/* A PHONE GETS THE MAP TOO.
-                    This was `hidden min-[480px]:block`, so every handset
-                    narrower than 480 (which is most of them: 375 and 390 are
-                    the common widths) got the accordion and no picture at
-                    all. The map was measured live at 375px and drew nothing.
-                    A square stage is a good phone stage, and the label floor
-                    in PowerMap is what makes it readable at this size. */}
-                {!listMode && (
-                  <div className="relative aspect-square block" data-power-map-box>
-                    <PowerMap
-                      data={data}
-                      layout={layout}
-                      shape={shape}
-                      focusId={focusId}
-                      onFocus={focusTo}
-                      selected={selected}
-                      onSelect={setSelected}
-                      filters={filters}
-                      viewerUserId={viewerUserId}
-                      linesOn={linesOn}
-                      pulseSeatId={pulseSeatId}
-                      lenses={lensNodes}
-                      // The phone draws one level at a time; the breadcrumb
-                      // is the way down, and the accordion below carries the
-                      // rest. Seventeen circles and their children in a
-                      // 375px square is a picture nobody can use.
-                      maxDepth={phoneMaxDepth}
-                      // And a name only where it fits INSIDE its circle. At
-                      // 358px the floor made every label legible and then
-                      // piled fifteen of them on top of each other.
-                      compact
-                    />
-                  </div>
-                )}
                 <div className="sm:max-w-xl">
                   <Legend seats={data.roles} power={data.power} footer={<CurrencyPicker />} />
                 </div>
-                <CircleAccordion data={data} filters={filters} viewerUserId={viewerUserId} onSelect={setSelected} />
+                <CircleAccordion data={data} filters={filters} viewerUserId={viewerUserId} onSelect={setSelected} onFocus={focusTo} />
               </div>
 
               {/* The card as a bottom sheet wherever the standing panel is
@@ -690,11 +698,15 @@ function CircleAccordion({
   filters,
   viewerUserId,
   onSelect,
+  onFocus,
 }: {
   data: PowerData;
   filters: Filters;
   viewerUserId: string | null;
   onSelect: (s: Selection) => void;
+  /** Opening a circle also flies the map to it. On a phone the map sits
+   *  directly above this list now, so the two move together. */
+  onFocus: (id: string | null) => void;
 }) {
   const [open, setOpen] = useState<string>("");
   const decideLabel = (id: string | null | undefined) =>
@@ -708,12 +720,34 @@ function CircleAccordion({
         const method = decideLabel(c.decidesBy) ?? decideLabel(data.power.decidesBy);
         return (
           <div key={c.id} className={`bg-card border border-border rounded-xl ${c.status === "forming" ? "opacity-60" : ""}`}>
-            <button type="button" className="w-full flex items-center justify-between px-4 py-3" onClick={() => setOpen(isOpen ? "" : c.id)} aria-expanded={isOpen}>
-              <span className="font-semibold text-foreground text-sm text-left">
+            <button type="button" className="w-full flex items-center justify-between px-4 py-3" onClick={() => {
+              const next = isOpen ? "" : c.id;
+              setOpen(next);
+              onFocus(next || null);
+            }} aria-expanded={isOpen}>
+              <span className="font-semibold text-foreground text-sm text-left flex items-center gap-2 min-w-0">
+                {/* THE KEY BETWEEN THE PICTURE AND THE NAMES.
+                    On a phone the map draws colour and almost no text: at
+                    358px only one circle is big enough to hold a name, and
+                    the rest are 18 to 30px across. That is honest for the
+                    space and it left the picture unreadable as a legend,
+                    because nothing said which colour was which circle.
+                    Same hue, same resolver (shared/circleView.ts), so this
+                    row IS the map's key and cannot drift from it. */}
+                <span
+                  aria-hidden="true"
+                  className="w-2.5 h-2.5 rounded-full shrink-0 border"
+                  style={{
+                    background: cssColourForCircle({ id: c.id, color: c.color ?? null }),
+                    borderColor: cssColourForCircle({ id: c.id, color: c.color ?? null }),
+                  }}
+                />
+                <span className="min-w-0">
                 {c.name}
                 {c.status === "forming" && <span className="ml-2 text-xs text-muted-foreground">(forming)</span>}
                 {c.isExample && <ExampleChip className="ml-2 align-middle" />}
                 {method && <span className="ml-2 text-[10px] bg-teal-deep/10 text-teal-deep px-1.5 py-0.5 rounded-full">{method}</span>}
+                </span>
               </span>
               <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} aria-hidden="true" />
             </button>
