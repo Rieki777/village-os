@@ -167,8 +167,10 @@ describe("this screen speaks whole tokens", () => {
   const VOICE = { slug: "village-voice", name: "Village Voice", kind: "voice", governance: "platform", transferable: true, active: true, decimals: 3, issuedBy: { "sys:mint": 12345 } }; // 3 on purpose: not the shipped scale, see above
   const GRANT = {
     id: "amr-1", tokenSlug: "village-voice", tokenName: "Village Voice",
-    // 10 whole Voice, as the ledger stores it.
-    amount: 10000, toUserId: "u1", toName: "Wren", reason: "For the harvest",
+    // 10 whole Voice, as `admin_mint_requests.amount` stores it. That column
+    // holds WHOLE tokens: the mint route writes what the steward typed and
+    // converts only at the ledger post, so the grant list needs no dividing.
+    amount: 10, toUserId: "u1", toName: "Wren", reason: "For the harvest",
     status: "pending", requestedBy: "a1", requestedByName: "Sol", requestedAt: "2026-09-01T00:00:00.000Z",
   };
   let posted: any[];
@@ -187,7 +189,9 @@ describe("this screen speaks whole tokens", () => {
 
   it("renders a grant in whole tokens, not in ledger units", async () => {
     render(<TokensTab password="secret" lifecycles={{} as Record<string, ModuleLifecycle>} />);
-    // 10000 minor at 3 decimals is 10 Voice. "10,000" here is the bug.
+    // The stored 10 is ten whole Voice and reads as ten. Dividing it here by
+    // the token's scale would print 0.01, which is the mirror of the bug this
+    // case was written for and just as wrong.
     expect(await screen.findByText(/10 Village Voice/)).toBeTruthy();
     expect(screen.queryByText(/10,000 Village Voice/)).toBeNull();
   });
@@ -210,9 +214,21 @@ describe("this screen speaks whole tokens", () => {
 
   it("mints what the steward typed, in the units the ledger moves", async () => {
     /*
-     * THE PAIR. This is the assertion that fails if the displays above are
-     * divided and the box is left posting minor units: a steward reading "10"
-     * in the record, typing 10, and moving 0.010.
+     * THE PAIR, AND IT POINTS THE OTHER WAY NOW.
+     *
+     * The hazard is unchanged: a steward reading "10" in the record, typing
+     * 10, and moving 0.010. What changed is where the conversion lives. Two
+     * lanes fixed this at once, one in this screen and one at
+     * `POST /api/admin/tokens/:slug/mint`, which now does
+     * `toLedgerUnits(slug, amt)` on the way in. Only one of them may convert,
+     * and the route won, because it fixes every caller rather than this one
+     * screen.
+     *
+     * So the box posts WHAT WAS TYPED, and this assertion is what catches a
+     * re-added `toMinorUnits` here: the screen would send 1000, the route
+     * would scale it again, and a steward typing ten would mint a thousand.
+     * The end-to-end half is proved in `server/adminTokens.e2e.test.ts`, which
+     * types 10 and reads the ledger row back at 10 times the scale.
      */
     const user = (await import("@testing-library/user-event")).default.setup();
     render(<TokensTab password="secret" lifecycles={{} as Record<string, ModuleLifecycle>} />);
@@ -226,6 +242,6 @@ describe("this screen speaks whole tokens", () => {
     await user.click(screen.getByRole("button", { name: /^Mint$/ }));
 
     expect(posted).toHaveLength(1);
-    expect(posted[0].amount, "typing 10 Voice must move 10 Voice, not 0.010").toBe(10000);
+    expect(posted[0].amount, "the screen posts whole tokens; the route converts once").toBe(10);
   });
 });
