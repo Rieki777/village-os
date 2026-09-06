@@ -985,7 +985,7 @@ async function writeGratitudeRowOnce(
      * land, and one member firing 40 gives against a 100 allowance spends
      * exactly 100.
      */
-    await conn.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
+    await conn.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"); // module-review-ok: a session isolation setting, not a table read. It has no rows and no repo it could live in, and it must run on THIS connection immediately before this transaction opens.
     await conn.beginTransaction();
 
     // The lock. Everything after this reads a world nobody else can move.

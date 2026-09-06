@@ -36,6 +36,7 @@
  * is lossy, and an archive may not be.
  */
 import type { Pool, PoolConnection } from "mysql2/promise";
+import { draftStatus, withdrawDraftRow } from "../repos/orgDrafts";
 import { stageIndex } from "../../shared/gameConfig";
 import { listOrgAssignments, listOrgRoles, peopleOnly, seatState, type LapseContext, type OrgAssignment } from "./orgChart";
 
@@ -827,14 +828,10 @@ export async function withdrawDraft(
   pool: Pool,
   draftId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const [r] = await pool.query<any>(
-    "UPDATE org_drafts SET status = 'withdrawn' WHERE id = ? AND status = 'open'",
-    [draftId],
-  );
-  if (r?.affectedRows) return { ok: true };
+  if (await withdrawDraftRow(pool, draftId)) return { ok: true };
   // Say which of the two reasons it was, because "that did not work" on a
   // draft a steward is trying to unjam is the least useful sentence available.
-  const [[d]] = await pool.query<any[]>("SELECT status FROM org_drafts WHERE id = ?", [draftId]);
-  if (!d) return { ok: false, error: "No such draft" };
-  return { ok: false, error: `This draft is ${d.status}, and only an open draft can be withdrawn` };
+  const status = await draftStatus(pool, draftId);
+  if (status === null) return { ok: false, error: "No such draft" };
+  return { ok: false, error: `This draft is ${status}, and only an open draft can be withdrawn` };
 }
