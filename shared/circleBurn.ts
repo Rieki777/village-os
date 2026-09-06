@@ -22,7 +22,7 @@
  *
  * `burnFor` takes `at`. A proposal does not spend when a member reads it. It
  * spends when it LANDS, and the landing instant comes off the ballot's frozen
- * close (`landingFor` in shared/cycleClock.ts): a Game change lands at the
+ * close (`landingFor` in shared/governanceKinds.ts): a Game change lands at the
  * later of the next cycle boundary after the close and the close plus the veto
  * window. So a ballot closing late in a cycle lands in the NEXT one, against a
  * cycle cap that has reset by then.

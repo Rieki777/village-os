@@ -58,7 +58,7 @@ export function register(app: Express, deps: Deps): void {
      * A member reading a circle page wants now. A ballot card wants the
      * instant its proposal LANDS, which for a Game change is the later of the
      * next cycle boundary after the ballot closes and the close plus the veto
-     * window (`landingFor`, shared/cycleClock.ts). Those are different
+     * window (`landingFor`, shared/governanceKinds.ts). Those are different
      * questions and a route that only answered the first would make the
      * ballot surface shift the window itself, which is a second copy of the
      * arithmetic in server/lib/circleBurn.ts.

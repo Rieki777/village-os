@@ -276,7 +276,26 @@ export interface BurnQuery {
   circleId: string;
   /**
    * THE INSTANT THIS ANSWERS FOR, and never implicitly now. For a proposal
-   * this is the LANDING instant from `landingFor` in shared/cycleClock.ts, not
+   * WHICH `landingFor`, BECAUSE THERE WERE TWO AND THE OTHER WAS WRONG FOR US.
+   * A duplicate sat in shared/cycleClock.ts with ZERO production callers, and
+   * this contract originally named it. The governance session removed it and
+   * told us before we built against it. What the dead copy lacked is exactly
+   * the failure this parameter exists to prevent, arriving through the
+   * parameter itself: it had no `snapToBoundary`, so a financial ask bundled
+   * with an element that moves a number the running cycle is settled against
+   * would have been projected at an instant EARLIER than the engine uses, and
+   * therefore measured against the WRONG WINDOW. It also returned an unfloored
+   * veto window against a production path that floors at 72 hours, and exposed
+   * `isGameChange` as a boolean so every caller re-derived the rule that a set
+   * containing any Game-change element is wholly a Game change.
+   *
+   * The `ProposalTiming` union still comes from the clock, deliberately: the
+   * dry-run seam may name exactly one module outside its own directory and that
+   * module is the clock, so moving the union broke an import guard that was
+   * right to complain. `governanceKinds` re-exports it, so there is still one
+   * definition.
+   *
+   * this is the LANDING instant from `landingFor` in shared/governanceKinds.ts, not
    * the moment a member opened the page.
    */
   at: Date;
