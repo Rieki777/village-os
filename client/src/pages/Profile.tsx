@@ -23,6 +23,7 @@ import { useTokenName } from "@/hooks/useTokenNames";
 import { usePathLadders } from "@/hooks/usePathLadders";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
+import { onProfileRefresh } from "@/lib/profileRefresh";
 
 /**
  * THE CHARACTER SHEET.
@@ -119,6 +120,17 @@ export default function Profile() {
       .catch(() => setMeFailed(true));
   };
   useEffect(reloadMe, []);
+  /*
+   * ONE READ, AND IT RE-READS FOR EVERYBODY.
+   *
+   * GameDashboard kept its own /api/game/me and its own refresh listener, so
+   * the profile fetched that payload twice on every mount, and a give updated
+   * the two cards on two different round trips. The page owns the read now and
+   * hands it down, which halves the requests AND means the vessel and the
+   * dashboard can no longer disagree about a balance for the width of one
+   * fetch.
+   */
+  useEffect(() => onProfileRefresh(reloadMe), []);
 
   useEffect(() => {
     let live = true;
