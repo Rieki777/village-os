@@ -2233,11 +2233,15 @@ the way it was opened. That is the `ballots` snapshot law applied to one more
 thing, and a case in the suite turns the dial mid-flight and proves it.
 
 **Two things a village decides are deliberately not settled here.**
-`redemption.tokens` can only ever NARROW: equity, Voice, recognition, standing
-examples and module vouchers are refused by the firewall whatever a village types
-into it, so nothing on that dial can make this platform the source of truth for a
-cap table, and the standing ruling that all tokens are buyable is not answered by
-a side effect. And `redemption.confirmed_by` carries both of the founder's
+`redemption.tokens` can only ever NARROW: equity, Voice, recognition and standing
+examples are refused by the firewall whatever a village types into it, so nothing
+on that dial can make this platform the source of truth for a cap table, and the
+standing ruling that all tokens are buyable is not answered by a side effect.
+Module vouchers were in that list until 2026-09-04, when Rye ruled that "redeeming
+a stay token also destroys it, have this be the same structure as redeeming
+currency tokens". `REDEEMABLE_VOUCHERS` in `server/lib/redemption.ts` names the
+one hole that opened. `library-credit` is still refused, because a library credit
+is a deposit against a shelf and no ruling exists on destroying one. And `redemption.confirmed_by` carries both of the founder's
 choices, with the vote path refusing at the door while it is unbuilt
 (`VOTE_PATH_BUILT`, the same shape as `BRIDGE_DISPATCH_BUILT`), so a village on
 that setting is told instead of being left with a stranded hold. Section 16
@@ -3249,8 +3253,8 @@ landed, which is pinned against `origin/main`'s own postings.
 
 **R5, the redemption half.** Redemption ships for credit-kind tokens only, and it
 does NOT answer R5. `redeemableToken` is `isPriceableToken` minus
-`MODULE_VOUCHERS`, so Voice is refused by kind and no value on
-`redemption.tokens` can widen it. That is deliberate: if Voice can be bought, the
+`MODULE_VOUCHERS` plus `REDEEMABLE_VOUCHERS`, so Voice is refused by kind and no
+value on `redemption.tokens` can widen it. That is deliberate: if Voice can be bought, the
 symmetric question is whether it can be redeemed, and answering yes would settle
 the collision above as a side effect of shipping something else.
 `governanceWeights` refuses a purchasable token as the vote weight, and a token

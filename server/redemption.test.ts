@@ -32,12 +32,19 @@
  *   13  the three Stripe reversal legs   server/index.ts
  *   14  the clawback mirror              reverse / reversePair
  *
- * NINE OF THE FOURTEEN CANNOT REACH A LOCKED TOKEN AT ALL, and that is a fact
- * about the token firewall rather than about the lock. Only credit-kind,
- * platform-governed, non-voucher tokens are redeemable, so paths 3, 11
- * (library credit), 4, 10, 12 (stay credit) and 6, 7, 9 (village voice) can
- * never meet one. Path 13 debits whatever a Stripe purchase credited, which for
- * a stay purchase is stay credit.
+ * SIX OF THE FOURTEEN CANNOT REACH A LOCKED TOKEN AT ALL, and that is a fact
+ * about the token firewall and not about the lock. Paths 3 and 11 handle the
+ * library credit and 6, 7, 9 the village voice, and neither is redeemable.
+ *
+ * THAT COUNT WAS NINE UNTIL 2026-09-04 and the ruling that moved it is worth
+ * naming, because the number is the whole argument. Rye ruled that a stay
+ * credit may be redeemed, so `REDEEMABLE_VOUCHERS` admits it and paths 4, 10
+ * and 12 (and 13, which debits whatever a Stripe stay purchase credited) can
+ * now meet a locked token. Nothing new guards them and nothing needs to: the
+ * hold moved the tokens out of the member's account, which is the property
+ * this whole module was built on and the reason it is an account and not a
+ * reservation column. `server/stayRedeem.test.ts` drives path 4 against a real
+ * hold and reads the outcome out of the ledger.
  *
  * FIVE CAN, and this file drives four of them for real plus the chokepoint
  * every one of the sixteen ends at:
@@ -312,13 +319,25 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
     pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 10 });
     await loadTokenRegistry(pool);
     await loadVariables(pool);
-    // The stays module registers this at boot and a scratch schema has no
-    // boot, so the voucher branch below would otherwise be tested against an
-    // UNREGISTERED slug and pass for the wrong reason. Registered here exactly
-    // as server/lib/stays.ts registers it.
+    // The stays and library modules register these at boot and a scratch
+    // schema has no boot, so the voucher branches below would otherwise be
+    // tested against an UNREGISTERED slug and pass for the wrong reason.
+    // Registered here exactly as server/lib/stays.ts and server/lib/library.ts
+    // register them.
     await registerToken(pool, {
       slug: "stay-credit",
       name: "Stay Credit",
+      kind: "credit",
+      governance: "platform",
+      transferable: false,
+      isExample: false,
+    });
+    // The voucher that is still refused. Rye's 2026-09-04 ruling admitted the
+    // stay credit to redemption and said nothing about this one, so this is
+    // now the slug that carries the voucher refusal.
+    await registerToken(pool, {
+      slug: "library-credit",
+      name: "Library Credits",
       kind: "credit",
       governance: "platform",
       transferable: false,
@@ -376,7 +395,12 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
   });
 
   it("refuses a module voucher, and says what it is worth instead", () => {
-    const said = redemptionRefusal(baseAsk({ slug: "stay-credit" }));
+    // `library-credit` and NOT `stay-credit`. Rye ruled on 2026-09-04 that a
+    // stay credit may be redeemed, so `REDEEMABLE_VOUCHERS` carries it past
+    // this branch and `server/stayRedeem.test.ts` drives the whole path. The
+    // library credit is a deposit against a shelf, no ruling exists on
+    // destroying one, and it still meets this sentence.
+    const said = redemptionRefusal(baseAsk({ slug: "library-credit" }));
     expect(said).toContain("buys one thing from the village");
   });
 

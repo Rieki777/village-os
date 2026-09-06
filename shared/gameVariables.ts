@@ -201,7 +201,7 @@ export const VARIABLES: VariableDef[] = [
     category: "Ledger",
     label: "Which tokens may be redeemed",
     description:
-      "Leave this empty and every token this village issues as a spendable credit may be redeemed. Type a comma-separated list of token slugs to narrow it to exactly those. This dial can only ever NARROW. Tokens governed on Base, recognition, voice, standing examples, and the credits a module issues against its own service are refused whatever is typed here, so nothing set on this dial can make this platform the source of truth for a cap table, and nothing set here turns governance weight into money.",
+      "Leave this empty and every token this village issues as a spendable credit may be redeemed. Type a comma-separated list of token slugs to narrow it to exactly those. This dial can only ever NARROW. Tokens governed on Base, recognition, voice and standing examples are refused whatever is typed here, so nothing set on this dial can make this platform the source of truth for a cap table, and nothing set here turns governance weight into money. Of the credits a module issues against its own service, a stay credit may be redeemed and a library credit may not: a library credit is a deposit against a shelf and it comes back when the item does.",
     type: "text",
     default: "",
     ring: "founder",

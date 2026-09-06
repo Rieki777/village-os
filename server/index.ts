@@ -360,7 +360,7 @@ import {
   libraryItemById,
   libraryItems,
   libraryLoanById,
-  libraryOpenState,
+  libraryHoldingsFor, libraryOpenState,
   loansForUser,
   markPickedUp,
   markReturned,
@@ -16076,7 +16076,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       const stage = stageIndex(await stageOf(viewer));
       const roles = roleIdsFor(viewer.id);
       mine = {
-        balance: await balanceOf(getPool(), memberAccount(viewer.id), LIBRARY_CREDIT), balanceDecimals: tokenDef(LIBRARY_CREDIT)?.decimals ?? 0, // minor units + scale
+        ...(await libraryHoldingsFor(getPool(), viewer.id)), // spendable + locked + total (minor units + scale), and one entry per item holding a deposit
         loans: await loansForUser(getPool(), viewer.id),
         strikes: await noShowStrikes(getPool(), viewer.id),
         eligible: Object.fromEntries(items.map((i) => {
