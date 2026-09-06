@@ -113,7 +113,7 @@ const clearDelegations = async () => {
 
 /**
  * Give a delegation AND have it accepted, which is what makes it carry
- * (0138). The cases below that are about what the routes SAY about a
+ * (0175). The cases below that are about what the routes SAY about a
  * carrying delegation say the handshake in one line; the handshake itself is
  * proven through the routes further down.
  */
@@ -189,7 +189,7 @@ describe.skipIf(!configured)("delegation routes (MySQL)", () => {
     const handlers = handlersFor({ id: "u-ann" });
     const put = await call(handlers.get("PUT /api/governance/delegation")!, { body: { delegateId: "u-ben" } });
     expect(put.status).toBe(200);
-    // AN OFFER RESOLVES NOWHERE UNTIL IT IS ACCEPTED (0138). Ann named Ben,
+    // AN OFFER RESOLVES NOWHERE UNTIL IT IS ACCEPTED (0175). Ann named Ben,
     // and until Ben says yes nobody decides for her, which is what the answer
     // has to say or she will read a chain that is not carrying her voice.
     expect(put.body).toMatchObject({ delegateTo: "u-ben", delegateToName: "Ben", pending: true, hops: 0 });
@@ -234,7 +234,7 @@ describe.skipIf(!configured)("delegation routes (MySQL)", () => {
 
     const mine = await call(handlers.get("GET /api/governance/delegation")!);
     const here = mine.body.votes.find((v: any) => v.ballotId === (opened.ok ? opened.ballot.id : ""));
-    // THE ROW IS CAST AND THE CHOICE IS HELD BACK (0138). Ann reads that her
+    // THE ROW IS CAST AND THE CHOICE IS HELD BACK (0175). Ann reads that her
     // vote was cast and who decided it, and reads what it said at the close,
     // with everybody else's. Serving the choice here is the disclosure
     // channel acceptance and suppression exist to close.
@@ -277,7 +277,7 @@ describe.skipIf(!configured)("delegation routes (MySQL)", () => {
     });
   });
 
-  // ── 0138: the handshake, the withheld bloc, and taking a vote back ────────
+  // ── 0175: the handshake, the withheld bloc, and taking a vote back ────────
 
   it("offers a delegation rather than starting it, and shows the offer to both sides", async () => {
     await clearDelegations();

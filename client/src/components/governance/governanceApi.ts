@@ -153,7 +153,7 @@ export interface Ballot {
     crossedHere: { movedAt: string } | null;
   } | null;
   /**
-   * MY OWN ROW, AS THE SERVER LETS ME READ IT (0138).
+   * MY OWN ROW, AS THE SERVER LETS ME READ IT (0175).
    *
    * `choice` is NULL while a vote is running and the village hides choices
    * and somebody else decided this row: a delegated vote is cast, and what it
@@ -247,7 +247,7 @@ export interface BallotCard {
   quorum: number;
   votedCount: number;
   /**
-   * MY OWN ROW, AS THE SERVER LETS ME READ IT (0138).
+   * MY OWN ROW, AS THE SERVER LETS ME READ IT (0175).
    *
    * `choice` is NULL while a vote is running and the village hides choices
    * and somebody else decided this row: a delegated vote is cast, and what it

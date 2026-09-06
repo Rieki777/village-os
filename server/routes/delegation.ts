@@ -22,7 +22,7 @@
  *                                             village, with a ballot's own
  *                                             roll when one is named
  *
- * A DELEGATION IS A HANDSHAKE (0138). Naming somebody is an OFFER: both sides
+ * A DELEGATION IS A HANDSHAKE (0175). Naming somebody is an OFFER: both sides
  * see it, and it carries no choice into any ballot until the delegate accepts.
  * Without that, pointing a delegation at a member was enough to read their
  * hidden choice off your own ballot row, take the delegation back and vote
@@ -101,7 +101,7 @@ export function register(app: Express, deps: Deps): void {
    * feature working, and it stops being visible the moment this route reports
    * B alone.
    *
-   * THE PER-VOTE LIST HOLDS BACK AN OPEN BALLOT'S CHOICE (0138). Section 4
+   * THE PER-VOTE LIST HOLDS BACK AN OPEN BALLOT'S CHOICE (0175). Section 4
    * argued that secrecy resolved itself here, because a delegated vote is
    * your own vote in your own row. That was written while every ballot was
    * public. On a hidden ballot the same sentence describes a live window into
@@ -185,7 +185,7 @@ export function register(app: Express, deps: Deps): void {
   /**
    * OFFER a delegation, or move one that already stands.
    *
-   * It carries nothing yet (0138). The delegate accepts before any choice is
+   * It carries nothing yet (0175). The delegate accepts before any choice is
    * copied, because a delegation nobody agreed to is a window into their
    * ballot rather than a gift of yours. `pending: true` in the answer is the
    * whole difference, and the copy beside it says what happens next.
@@ -401,7 +401,7 @@ export function register(app: Express, deps: Deps): void {
     const rows = await effectiveConcentration(pool, roster);
     const names = await namesFor([...roster, ...rows.map((r) => r.decidedBy)]);
     /*
-     * ONE BALLOT'S OWN ROLL, WHEN THE CALLER NAMES ONE (0138).
+     * ONE BALLOT'S OWN ROLL, WHEN THE CALLER NAMES ONE (0175).
      *
      * The village-wide figure answers "how much of everybody does this member
      * decide". On a live vote the question is narrower and sharper: the roll

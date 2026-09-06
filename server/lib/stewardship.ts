@@ -82,7 +82,7 @@
  * ── WHY THE PERMISSION PLANE ───────────────────────────────────────────────
  *
  * Two planes shared only a word. `roles` and `role_holders` carry capabilities
- * and, until 0134, no term at all. `org_roles` and `org_role_assignments`
+ * and, until 0171, no term at all. `org_roles` and `org_role_assignments`
  * carry terms and no capabilities. A steward is a power, so the seat lives on
  * the plane that carries powers.
  *
@@ -864,7 +864,7 @@ export interface StewardHolding {
  * Has this holding run out?
  *
  * Pure, derived on every read, writes nothing. A null term never lapses, which
- * is why 0134 could add the column to every existing village without taking a
+ * is why 0171 could add the column to every existing village without taking a
  * single power away.
  */
 export function holdingHasLapsed(
@@ -1505,7 +1505,7 @@ export async function seatCatalystsAsStewards(
   return base;
 }
 
-// ── The per-term history (0139) ─────────────────────────────────────────────
+// ── The per-term history (0176) ─────────────────────────────────────────────
 
 export interface TermRow {
   id: string;

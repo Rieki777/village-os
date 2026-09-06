@@ -1363,7 +1363,7 @@ const roleHoldersRepo = dbCollection<RoleHolderRow>(getPool(), {
     { js: "userId", db: "user_id" },
     { js: "grantedBy", db: "granted_by" },
     { js: "grantedAt", db: "granted_at", kind: "time" },
-    // 0134. SPEC'D SO replaceAll CANNOT ERASE A TERM: that writer names every
+    // 0171. SPEC'D SO replaceAll CANNOT ERASE A TERM: that writer names every
     // spec'd column and only those, so a term left out here would return as
     // NULL on the next whole-table write and every mandate would silently
     // become permanent. The isExample line two specs up records the same trap.
@@ -2923,7 +2923,7 @@ function roleIdsFor(userId: string): string[] {
 /**
  * Every capability the member's UNLAPSED roles grant, deduplicated.
  *
- * A holding whose `term_ends_at` has passed grants nothing (0134). The founder
+ * A holding whose `term_ends_at` has passed grants nothing (0171). The founder
  * ruled it: "If they're not voted back in then they expire when they expire!"
  * A term used to be a note beside a power that kept working, which is a status
  * saying one thing while the power says another. `roleIdsFor` still reports
@@ -5730,7 +5730,7 @@ async function startServer() {
    *
    * The body is `runTermWatch` in server/lib/stewardship.ts, which sweeps both
    * planes: org-chart seatings, which carry no permissions and revoke nothing,
-   * and permission holdings, where a term genuinely ends the powers (0134).
+   * and permission holdings, where a term genuinely ends the powers (0171).
    * One notification per row per event, through stable dedupe keys, because a
    * mandate nobody has acted on is a governance problem a weekly ping does not
    * solve. Member holders only; a documented holder is a name on a card.
@@ -22514,7 +22514,7 @@ ${inner}
     if (problems.length) return res.status(400).json({ error: "The change-set has problems", problems });
     const id = `gmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const status = standing.qualified ? "open" : "draft";
-    // The proposer's timing (0135), frozen onto the ballot at open. Absent
+    // The proposer's timing (0172), frozen onto the ballot at open. Absent
     // means next_moon, the founder's default.
     await getPool().query(
       "INSERT INTO mechanics_proposals (id, title, rationale, change_set, proposer_user_id, status, timing, supersedes_proposal_id) VALUES (?,?,?,?,?,?,?,?)",

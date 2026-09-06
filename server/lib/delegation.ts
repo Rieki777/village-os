@@ -58,7 +58,7 @@
  * member who changed it, and a routine that tried to work out who those were
  * would be a second copy of the resolution rule.
  *
- * ── 0138: A DELEGATION IS A HANDSHAKE, AND A HIDDEN CHOICE STAYS HIDDEN ─────
+ * ── 0175: A DELEGATION IS A HANDSHAKE, AND A HIDDEN CHOICE STAYS HIDDEN ─────
  *
  * Everything above was written while every ballot was public. Choices are
  * hidden by default now, and four rules follow from that one change. Each of
@@ -222,7 +222,7 @@ export async function resolveDelegate(pool: Pool, userId: string): Promise<Resol
  * Pure and exported so the refusal can be proven without a database, and so
  * the route and the writer below cannot drift into two different rules.
  *
- * HAND IT THE OFFERED MAP, never the carrying one (0138). A loop made of
+ * HAND IT THE OFFERED MAP, never the carrying one (0175). A loop made of
  * offers nobody has accepted yet closes the moment they are accepted, in the
  * tally, where there is nobody left to refuse it.
  */
@@ -832,7 +832,7 @@ export async function votesFollowedBy(pool: Pool, userId: string, limit = 50): P
   }));
 }
 
-// ── 0138: WHAT A DELEGATOR MAY READ WHILE THE VOTE IS STILL RUNNING ─────────
+// ── 0175: WHAT A DELEGATOR MAY READ WHILE THE VOTE IS STILL RUNNING ─────────
 
 /**
  * The village setting that says whether choices are shown while a ballot runs.
@@ -931,7 +931,7 @@ export function hiddenChoiceView(input: {
   };
 }
 
-// ── 0138: THE WITHHELD BLOC, AND CONCENTRATION AGAINST THE PEOPLE ASKED ─────
+// ── 0175: THE WITHHELD BLOC, AND CONCENTRATION AGAINST THE PEOPLE ASKED ─────
 
 export interface BallotDelegationRow {
   userId: string;

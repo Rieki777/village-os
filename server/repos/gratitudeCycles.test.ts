@@ -1,5 +1,5 @@
 /**
- * A SETTLED CYCLE RECORDS THE CLOCK IT WAS PLAYED ON (migration 0132).
+ * A SETTLED CYCLE RECORDS THE CLOCK IT WAS PLAYED ON (migration 0169).
  *
  * Against a real scratch schema, because the whole point of the column is
  * that it survives a write and a re-read, and because a migration that was
@@ -45,9 +45,9 @@ describe.skipIf(!configured)("gratitude_cycles records its clock", () => {
     await pool.query("DELETE FROM gratitude_cycles");
   });
 
-  it("has the column 0132 adds, defaulting to the only clock any village has run", async () => {
+  it("has the column 0169 adds, defaulting to the only clock any village has run", async () => {
     const [cols] = await pool.query<any[]>("SHOW COLUMNS FROM gratitude_cycles LIKE 'clock'");
-    expect(cols.length, "migration 0132 has not run against this database").toBe(1);
+    expect(cols.length, "migration 0169 has not run against this database").toBe(1);
     expect(String(cols[0].Null)).toBe("NO");
     expect(String(cols[0].Default)).toBe("lunar");
   });
@@ -70,7 +70,7 @@ describe.skipIf(!configured)("gratitude_cycles records its clock", () => {
   });
 
   it("reads a row written without the column as lunar", async () => {
-    // Exactly what the release before 0132 sent: the six columns it knew.
+    // Exactly what the release before 0169 sent: the six columns it knew.
     await pool.query(
       "INSERT INTO gratitude_cycles (id, cycle_number, starts_at, ends_at, status, closed_at) VALUES (?,?,?,?,?,?)",
       ["lunar-000329", 329, "2026-07-14 19:01:00", "2026-08-12 00:00:00", "closed", "2026-08-12 02:00:00"],

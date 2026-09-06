@@ -615,7 +615,7 @@ describe.skipIf(!configured)("a term that runs out, and the vacancy it leaves", 
   });
 
   it("keeps the FIRST term when the same seat is filled again", async () => {
-    // The whole reason 0139 exists: UNIQUE (role_id, user_id) on role_holders
+    // The whole reason 0176 exists: UNIQUE (role_id, user_id) on role_holders
     // forbids a second row, so without this table the second seating erases
     // every trace of the first.
     await recordTermStarted(pool, {

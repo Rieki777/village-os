@@ -1,4 +1,4 @@
--- 0137: vote delegation. One table and one column.
+-- 0174: vote delegation. One table and one column.
 --
 -- WHAT A DELEGATION IS. A member hands their voice to another member they
 -- trust. The delegate's choice is COPIED into the delegator's own ballot_votes

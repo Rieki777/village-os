@@ -3,7 +3,7 @@
 --
 -- ── WHAT THE SECOND AUDIT FOUND, AND WHAT THIS FIXES ────────────────────────
 --
--- Migration 0135 gave `ballots` a landing status and a landing instant. Four
+-- Migration 0172 gave `ballots` a landing status and a landing instant. Four
 -- things were still missing and each one is a decision that quietly never
 -- happens.
 --
@@ -40,7 +40,7 @@
 --    that stamps the instant, so the veto route and every surface read one
 --    answer instead of recomputing it from the change set.
 --
--- ── THE TWO TABLES 0136 KEYED WRONG ────────────────────────────────────────
+-- ── THE TWO TABLES 0173 KEYED WRONG ────────────────────────────────────────
 --
 -- `governance_element_ledger` keyed on an autoincrement id with a plain index
 -- on (ballot_id, element_index), so a retried landing could write a second row

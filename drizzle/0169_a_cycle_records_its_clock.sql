@@ -1,4 +1,4 @@
--- 0132: a settled cycle records which clock it was played on.
+-- 0169: a settled cycle records which clock it was played on.
 --
 -- The founder reopened the rhythm setting on 2026-09-02 ("Yes the cycle
 -- structure can be changed"), so a village can move from lunations to

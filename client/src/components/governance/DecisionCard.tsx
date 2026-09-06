@@ -34,7 +34,7 @@ const CLOSED_WORD: Record<string, string> = {
 
 export default function DecisionCard({ ballot }: { ballot: BallotCardData }) {
   const open = ballot.status === "open";
-  // A DELEGATED ROW ON A LIVE VOTE HAS NO CHOICE TO SHOW (0138). It was cast,
+  // A DELEGATED ROW ON A LIVE VOTE HAS NO CHOICE TO SHOW (0175). It was cast,
   // and what it said belongs to the member who decided it until the vote
   // closes. So the card says it was cast and leaves the badge alone, rather
   // than reading a missing choice as "waiting on you", which would be the one

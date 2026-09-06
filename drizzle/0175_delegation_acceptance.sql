@@ -1,4 +1,4 @@
--- 0138: a delegation is a handshake. One nullable column.
+-- 0175: a delegation is a handshake. One nullable column.
 --
 -- WHY ACCEPTANCE EXISTS AT ALL. The delegation table shipped one-sided: a
 -- member named somebody and that member's choice started arriving in the
@@ -23,7 +23,7 @@
 -- carries nothing, which is the fail-safe direction.
 --
 -- WHERE THE OTHER HALF LIVES. Refusal (`/decline`) and revocation by either
--- side both stamp `revoked_at`, which 0137 already carries: declining is the
+-- side both stamp `revoked_at`, which 0174 already carries: declining is the
 -- delegate's revocation and needs no column of its own. One live row per
 -- member is still the primary key's job, so re-pointing a delegation at
 -- somebody new overwrites the row and lands it back at pending, because the
@@ -34,7 +34,7 @@
 -- reads this file, so adding an UPDATE that sets `accepted_at` here, or
 -- dropping the sentence above, turns red.
 --
--- No CHARSET clause, following 0137 and 0089: a datetime carries no
+-- No CHARSET clause, following 0174 and 0089: a datetime carries no
 -- collation, and the table inherits the database's.
 
 ALTER TABLE `delegations` ADD COLUMN `accepted_at` datetime NULL;

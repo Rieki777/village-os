@@ -328,7 +328,7 @@ export async function orgRoleHistory(pool: Pool, orgRoleId: string): Promise<Org
  * still a seating, the person keeps acting, and the seat says out loud that it
  * is waiting to be re-chosen. The founder's 2026-08-31 ruling that terms end
  * when they end lands on the PERMISSION plane, where a term genuinely ends the
- * powers (`role_holders.term_ends_at`, migration 0134, read by
+ * powers (`role_holders.term_ends_at`, migration 0171, read by
  * `roleCapabilitiesFor` and by `holdingHasLapsed` in server/lib/stewardship.ts).
  * Do not read "nothing is revoked" as a statement about the whole product.
  *

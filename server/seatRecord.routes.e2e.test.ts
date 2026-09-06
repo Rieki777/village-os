@@ -276,7 +276,7 @@ describe.skipIf(!DB_CONFIGURED)("the term a seating never carried", () => {
      * assertion below still pins. What changed is that the SEAT has to stop
      * reading as comfortably filled, because a seat nobody reviews is the harm
      * the lapse exists to surface. Real revocation lives on the permission
-     * plane (`role_holders.term_ends_at`, migration 0134) and is driven by
+     * plane (`role_holders.term_ends_at`, migration 0171) and is driven by
      * server/stewardship.db.test.ts and server/lib/seatLapse.test.ts.
      */
     const org = await call("GET", "/api/org", { token: memberToken });

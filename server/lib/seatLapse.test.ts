@@ -13,7 +13,7 @@
  *    so a lapsed seating is still a seating and the seat reads `expired`
  *    instead of `filled`. Nothing was revoked because there was nothing to
  *    revoke, which is a narrower claim than the one this file used to make.
- *  - PERMISSION HOLDINGS (`role_holders.term_ends_at`, migration 0134,
+ *  - PERMISSION HOLDINGS (`role_holders.term_ends_at`, migration 0171,
  *    `holdingHasLapsed`) carry the capabilities the gate reads. A term that
  *    has passed takes the POWERS with it. That is the new rule, and the second
  *    half of this file is what pins it.
@@ -209,7 +209,7 @@ describe("the permission plane, where a term takes the powers with it", () => {
     expect(holdingHasLapsed({ termEndsAt: new Date("2026-12-01T00:00:00Z") }, NOW)).toBe(false);
   });
 
-  it("never lapses a holding with no term, which is every holding written before 0134", () => {
+  it("never lapses a holding with no term, which is every holding written before 0171", () => {
     // The property that let the migration add the column to a live village
     // without taking one power away from anybody.
     expect(holdingHasLapsed({ termEndsAt: null }, NOW)).toBe(false);

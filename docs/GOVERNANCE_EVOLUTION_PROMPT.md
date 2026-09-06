@@ -2339,6 +2339,17 @@ so a coordinator that loses its context can pick it up.
 - **Migration numbers are reserved here, once.** `0127` to `0131` are held by other lanes on this
   machine; the governance build takes **`0132` to `0139`** in the order below. A lane that needs one
   more asks the coordinator; nobody counts `ls drizzle/`.
+- **THOSE NUMBERS ARE STALE AND THE PARAGRAPH ABOVE IS KEPT AS A RECORD, NOT AS INSTRUCTION.** The
+  reservation held against every other lane and expired anyway, because MAIN MOVED PAST IT while the
+  build worked: by 2026-09-05 the mainline reached `0159`, other lanes' refs reached `0164`, and
+  unpushed files on sibling worktrees reached `0168`. The gate could not see any of that, because it
+  compares a branch against the base ref that branch left behind. Nine files were renumbered at
+  landing, `0132`-`0139` and `0144` becoming `0169`-`0177` with their order preserved, and every
+  comment in live code naming an old number was rewritten with them. This paragraph is left standing
+  because rewriting it would erase the lesson: **a reservation stops two lanes colliding and reserves
+  nothing against the mainline advancing.** Take the number at landing, from a scan of every remote
+  ref AND of the sibling worktrees on disk, which are invisible to each other and to git. See
+  `SEASON2_FLEET_LEDGER.md` section 27b.
 - **Routes go in `server/routes/<domain>.ts`** exporting `register(app, deps)`, wired with exactly
   two lines in `server/index.ts` (the import and the register call, nothing adjacent), so the ratchet
   costs nothing. The close-dispatcher wrapper is the one exception and lives where `SUBJECT_CLOSERS`

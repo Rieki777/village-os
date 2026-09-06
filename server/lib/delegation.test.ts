@@ -4,7 +4,7 @@
  *
  * The rules pinned here are the ones the whole feature turns on:
  *
- *  - A DELEGATION CARRIES NOTHING UNTIL THE DELEGATE ACCEPTS IT (0138). The
+ *  - A DELEGATION CARRIES NOTHING UNTIL THE DELEGATE ACCEPTS IT (0175). The
  *    cases below that are about what a carrying delegation does say it in one
  *    line through `handed`; the acceptance rule itself is proven on its own.
  *  - WHILE A BALLOT IS OPEN AND CHOICES ARE HIDDEN, a delegated row reports
@@ -111,7 +111,7 @@ const clearDelegations = async () => {
 };
 
 /**
- * GIVE A DELEGATION AND HAVE IT ACCEPTED, which is what makes it carry (0138).
+ * GIVE A DELEGATION AND HAVE IT ACCEPTED, which is what makes it carry (0175).
  *
  * Two acts, said in one line, because most cases here are about what a
  * carrying delegation DOES and would read as noise if each of them spelled
@@ -425,7 +425,7 @@ describe.skipIf(!configured)("delegation (MySQL)", () => {
     expect(rows.reduce((sum, r) => sum + r.effectiveVotes, 0)).toBe(3);
   });
 
-  // ── 0138: consent, suppression, the uncast path, and the vote nobody
+  // ── 0175: consent, suppression, the uncast path, and the vote nobody
   // may delegate ─────────────────────────────────────────────────────────
 
   it("lands PENDING, and a pending delegation carries no choice at all", async () => {
@@ -747,7 +747,7 @@ describe.skipIf(!configured)("delegation (MySQL)", () => {
 });
 
 
-// ── 0138: CONSENT, SUPPRESSION, THE UNCAST PATH, AND THE VOTE NOBODY MAY
+// ── 0175: CONSENT, SUPPRESSION, THE UNCAST PATH, AND THE VOTE NOBODY MAY
 // DELEGATE ─────────────────────────────────────────────────────────────────
 
 describe("what a delegator may read (no database)", () => {

@@ -136,7 +136,7 @@ export default function VoteWidget({
         )}
       </div>
 
-      {/* A VOTE SOMEBODY ELSE DECIDED, WHILE THIS ONE IS STILL RUNNING (0138).
+      {/* A VOTE SOMEBODY ELSE DECIDED, WHILE THIS ONE IS STILL RUNNING (0175).
           The row is cast and the choice is not this member's to read yet, so
           none of the three buttons is lit and the state is said in a sentence
           instead. Voting here still works and takes the row back, which is the

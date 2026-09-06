@@ -205,7 +205,7 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   },
   term_expiring: {
     group: "decisions",
-    blurb: "The agreement to keep holding your seat is running out. On a seat that carries permissions those end with the term (0134), so it is the moment to renew or hand it on.",
+    blurb: "The agreement to keep holding your seat is running out. On a seat that carries permissions those end with the term (0171), so it is the moment to renew or hand it on.",
     many: "{n} of your terms are running out.",
     celebrate: false,
   },

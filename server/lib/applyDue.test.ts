@@ -674,7 +674,7 @@ describe.skipIf(!configured)("the claim runs against a real resting row", () => 
      * THE FAILURE: the inline cycle-close block that used to apply
      * `passed_verified` and `passed_onsite` rows is gone, and those rows carry
      * a NULL `lands_at`, so the new landing gate could not see them at all.
-     * Migration 0144 backfills them. This proves the backfilled shape is one
+     * Migration 0177 backfills them. This proves the backfilled shape is one
      * the loop can actually claim, and claims it once.
      */
     const b = await openOne({ subjectRef: `verified-${++n}` });

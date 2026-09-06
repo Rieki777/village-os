@@ -28,7 +28,7 @@
  *    window's instants when it does not. Nothing else in this file reads a
  *    window: a ballot already open runs to its own `closes_at` whatever the
  *    calendar does, and a vote already cast is never touched.
- *  - A DELEGATED VOTE IS A ROW FOR THE DELEGATOR (0137). Casting copies the
+ *  - A DELEGATED VOTE IS A ROW FOR THE DELEGATOR (0174). Casting copies the
  *    choice to everyone whose chain ends at the voter, stamped with who
  *    decided it, and the weight never moves. The rule itself lives in
  *    server/lib/delegation.ts; this file calls it from one place, after the
@@ -77,7 +77,7 @@ import {
 import { clockFor } from "../../shared/cycleClock";
 import { quorumPolicyFrom, seatFacts, ABSENT_CYCLES_DEFAULT } from "./nonHumanSeats";
 import { numberVar, stringVar } from "./variables";
-// Dispatcher lane: the proposal timing 0135 freezes onto the ballot at open.
+// Dispatcher lane: the proposal timing 0172 freezes onto the ballot at open.
 import { defaultTimingFor, kindOfSubject, noCloserRefusal, timingOf, type ProposalTiming } from "../../shared/governanceKinds";
 // Windows lane: the open path is gated, and only the open path (19E).
 import { openingRefusal } from "./governanceWindows";
@@ -101,7 +101,7 @@ export interface BallotRow {
   opensAt: string;
   closesAt: string;
   status: "open" | "passed" | "failed" | "no_quorum" | "withdrawn";
-  /** Dispatcher lane, 0135: the timing FROZEN at open, like the dials. */
+  /** Dispatcher lane, 0172: the timing FROZEN at open, like the dials. */
   timing: ProposalTiming;
   outcomeNote: string | null;
   closedBy: string | null;
@@ -230,7 +230,7 @@ export interface OpenBallotInput {
    * "the subject says it is being voted on" commit together or never.
    */
   onOpen?: (conn: PoolConnection, ballotId: string) => Promise<void>;
-  /** Dispatcher lane, 0135: at_acceptance or next_moon. Defaults to next_moon. */
+  /** Dispatcher lane, 0172: at_acceptance or next_moon. Defaults to next_moon. */
   timing?: ProposalTiming;
   /**
    * WINDOWS LANE (19E): what this opening carries, for the window gate below.
@@ -539,7 +539,7 @@ export async function castVote(
   if (ballot.method === "consent" && choice === "no" && !cleanReason) {
     return { ok: false, error: "A no in consent mode is an objection, and an objection carries its reasoning. Say why" };
   }
-  // DELEGATION (0137): `followed_user_id` NULL is what "I decided this myself"
+  // DELEGATION (0174): `followed_user_id` NULL is what "I decided this myself"
   // means, and it is written explicitly here so that a member who had been
   // following somebody takes their own row back the moment they vote. Every
   // delegation-derived row is guarded on that column being set, so an own vote
@@ -560,7 +560,7 @@ export async function castVote(
       await fileObjection(pool, ballotId, userId, cleanReason);
     }
   }
-  // DELEGATION (0137): everyone whose chain ends at this voter and who has not
+  // DELEGATION (0174): everyone whose chain ends at this voter and who has not
   // decided for themselves now carries this choice, stamped with who decided
   // it. Copying the choice keeps the weight where it froze, so this write
   // moves no frozen column and the participation count stays one row per
@@ -1115,12 +1115,12 @@ export async function uncastDelegatedVote(
 /**
  * A member's own vote, RAW, for the derivation and for anything counting.
  *
- * DELEGATION (0137): `followedUserId` is null on a vote this member made, and
+ * DELEGATION (0174): `followedUserId` is null on a vote this member made, and
  * otherwise names the member whose choice was copied here, at the END of the
  * chain. A member who handed their voice to B and was decided by C four hops
  * away reads C, because C is the concentration a delegator is owed a sight of.
  *
- * SERVE `ownVoteView` BELOW, NEVER THIS (0138). This function answers what is
+ * SERVE `ownVoteView` BELOW, NEVER THIS (0175). This function answers what is
  * in the row. While a ballot is open and choices are hidden, a delegated row's
  * choice is not the delegator's to read yet, and `ownVoteView` is the path
  * that holds it back. Sending this straight to a page reopens the disclosure
@@ -1141,7 +1141,7 @@ export async function voteOf(pool: Pool, ballotId: string, userId: string): Prom
 }
 
 /**
- * A MEMBER'S OWN ROW AS A PAGE MAY READ IT (0138). The serving path.
+ * A MEMBER'S OWN ROW AS A PAGE MAY READ IT (0175). The serving path.
  *
  * `voteOf` says what is in the row; this says what the member is owed right
  * now. The difference is one rule and it is the whole of it: while a ballot is
@@ -1219,7 +1219,7 @@ export async function votesFor(pool: Pool, ballotId: string) {
     choice: String(r.choice) as VoteChoice,
     weight: Number(r.weight),
     castAt: iso(r.cast_at),
-    // DELEGATION (0137): who decided this row, or null when the member did.
+    // DELEGATION (0174): who decided this row, or null when the member did.
     followedUserId: r.followed_user_id === null || r.followed_user_id === undefined ? null : String(r.followed_user_id),
   }));
 }

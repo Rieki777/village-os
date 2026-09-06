@@ -144,7 +144,7 @@ interface ProposalChange {
 }
 
 /** Every value `mechanics_proposals.status` can hold (0089 widened the enum to
- *  ten and this list carried eight, and 0135 added an eleventh; see STATUS_COPY). */
+ *  ten and this list carried eight, and 0172 added an eleventh; see STATUS_COPY). */
 type ProposalStatus =
   | "draft"
   | "open"
@@ -210,7 +210,7 @@ export const STATUS_COPY: Record<ProposalStatus, { label: string; cls: string }>
   // never varies and WaitingNote below says which of the three is holding it.
   passed_onsite: { label: "carried at the village vote", cls: "bg-violet-50 text-violet-700" },
   failed: { label: "did not pass", cls: "bg-stone-100 text-stone-500" },
-  vetoed: { label: "stopped by a steward, back with the proposer", cls: "bg-amber-50 text-amber-700" }, // 0135
+  vetoed: { label: "stopped by a steward, back with the proposer", cls: "bg-amber-50 text-amber-700" }, // 0172
   applied: { label: "applied", cls: "bg-teal-deep/10 text-teal-deep" },
 };
 

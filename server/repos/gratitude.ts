@@ -171,7 +171,7 @@ export function gratitudeCyclesRepo(pool: Pool): CyclesRepo {
         endsAt: toIso(r.ends_at),
         status: String(r.status) as CycleRecord["status"],
         closedAt: r.closed_at ? toIso(r.closed_at) : undefined,
-        // 0132. A row written before the column existed reads as lunar,
+        // 0169. A row written before the column existed reads as lunar,
         // which is the only clock any village has ever run.
         clock: String(r.clock ?? "lunar") === "calendar" ? "calendar" : "lunar",
       }));

@@ -97,7 +97,7 @@ export const DECIDES_BY: DecidesByDef[] = [
   { id: "elders_decide", label: "Elders decide", gloss: "The elders make the call." },
   { id: "founder_decides", label: "Founder decides", gloss: "The founder makes the call." },
   { id: "do_ocracy", label: "Do-ocracy", gloss: "Whoever does the work decides how it is done." },
-  // `delegated` had an engine behind it from 0137. A member hands their voice
+  // `delegated` had an engine behind it from 0174. A member hands their voice
   // to another member, the choice is COPIED into the delegator's own ballot
   // row and the weight never moves, chains are transitive, and a cycle is
   // refused when the delegation is given. The rule lives in
