@@ -190,6 +190,30 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} people sent you credits.",
     celebrate: false,
   },
+  /**
+   * The two ends of a redemption (`server/routes/redemption.ts`). A member
+   * asked for tokens to become something off the platform, and a steward has
+   * now said whether it happened.
+   *
+   * NEITHER IS CELEBRATED, and the confirmation least of all. A confirmation
+   * is a steward saying the off-platform half took place; the platform is the
+   * witness and never the guarantor, and a celebration would read as the
+   * platform vouching for a payment it cannot see. The refusal is not
+   * celebrated for the obvious reason, and it carries the steward's own note
+   * as its body, so the member is told why by the person who decided.
+   */
+  redemption_confirmed: {
+    group: "economy",
+    blurb: "A steward confirmed your redemption, and those tokens are gone from your balance.",
+    many: "{n} of your redemptions were confirmed.",
+    celebrate: false,
+  },
+  redemption_refused: {
+    group: "economy",
+    blurb: "A redemption was not confirmed, and the tokens it held are back in your wallet.",
+    many: "{n} of your redemptions were not confirmed.",
+    celebrate: false,
+  },
   exchange: {
     group: "economy",
     blurb: "An exchange order settled, and what you bought is in your wallet.",

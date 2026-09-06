@@ -1011,7 +1011,8 @@ export async function claimSeating(pool: Pool, assignmentId: string, userId: str
   const [r]: any = await pool.query(
     `UPDATE org_role_assignments
         SET holder_kind = 'member', user_id = ?, holder_key = ?
-      WHERE id = ? AND ended_at IS NULL AND holder_kind = 'documented' AND is_example = 0`,
+      WHERE id = ? AND ended_at IS NULL AND holder_kind = 'documented' AND is_example = 0
+        AND is_agent = 0`,
     [userId, userId, assignmentId],
   );
   return !!r?.affectedRows;
@@ -1036,7 +1037,8 @@ export async function unclaimedSeatingsFor(pool: Pool, fullName: string): Promis
   const first = name.split(/\s+/)[0];
   const [rows]: any = await pool.query(
     `SELECT ${ASSIGN_COLS} FROM org_role_assignments
-      WHERE ended_at IS NULL AND holder_kind = 'documented' AND is_example = 0`,
+      WHERE ended_at IS NULL AND holder_kind = 'documented' AND is_example = 0
+        AND is_agent = 0`,
   );
   return (rows as any[])
     .map(rowToAssignment)

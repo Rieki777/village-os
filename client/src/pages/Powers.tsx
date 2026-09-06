@@ -40,12 +40,15 @@
 import Layout from "@/components/Layout";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { authToken } from "@/lib/gameApi";
+import { authToken, useCatalyst } from "@/lib/gameApi";
 import { KeyRound } from "lucide-react";
 import { holderSentence, type PowerRow } from "@/lib/powersCopy";
 
 export default function Powers() {
   const { user } = useAuth();
+  // The word only. Reaching past a power the village holds is still the same
+  // act by the same people, and it still writes the same line on the feed.
+  const catalyst = useCatalyst();
   const [powers, setPowers] = useState<PowerRow[] | null>(null);
 
   useEffect(() => {
@@ -121,7 +124,7 @@ export default function Powers() {
                 answer: whoever sits in that role acts on their own account.
               </p>
               <p className="text-sm text-muted-foreground mt-2">
-                An admin can still reach past a power the village holds, on a day
+                {catalyst.aNameCap} can still reach past a power the village holds, on a day
                 something has gone wrong. Doing it writes a line on the village's own
                 feed naming the power and the person, and it tells whoever holds it.
                 That is the whole of the arrangement: the way back exists, and the

@@ -27,7 +27,11 @@ export default function GratitudeWall() {
   // they may have had a full budget all along.
   const [me, setMe] = useState<GameMe | null | undefined>(undefined);
   const currency = useTokenName("Recognition");
-  const [form, setForm] = useState({ toEmail: "", amount: 10, message: "" });
+  // `to` carries whatever the member typed: an @handle, or an address for
+  // anyone who still knows one. The server tells the two apart and looks the
+  // handle up; see `recipientFor` in server/index.ts for why a handle is the
+  // one of the two a member can actually obtain.
+  const [form, setForm] = useState({ to: "", amount: 10, message: "" });
   const [sending, setSending] = useState(false);
   const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -55,7 +59,7 @@ export default function GratitudeWall() {
         setFeedback({ ok: false, text: data.message ?? data.error ?? "Something went wrong" });
       } else {
         setFeedback({ ok: true, text: "Your appreciation is on the wall." });
-        setForm({ toEmail: "", amount: 10, message: "" });
+        setForm({ to: "", amount: 10, message: "" });
         // A real send is gratitude's retirement trigger server-side. The
         // stock seed writes no gratitude rows, so today this drops nothing;
         // it is here so a fork that seeds some is not left with a stale
@@ -112,11 +116,19 @@ export default function GratitudeWall() {
               </div>
               <div className="grid md:grid-cols-[1fr_110px] gap-3 mb-3">
                 <input
-                  type="email"
+                  // type="text", and that IS the fix. `type="email"` made the
+                  // browser refuse a handle before the form could be sent, so
+                  // the field could only take the one thing this site never
+                  // shows anybody.
+                  type="text"
                   required
-                  value={form.toEmail}
-                  onChange={(e) => setForm({ ...form, toEmail: e.target.value })}
-                  placeholder="Member's email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  value={form.to}
+                  onChange={(e) => setForm({ ...form, to: e.target.value })}
+                  aria-label="Who you are thanking, by handle"
+                  placeholder="Their @handle"
                   className="px-3 py-2 border border-stone-200 rounded-lg outline-none focus:border-teal-deep"
                 />
                 <input

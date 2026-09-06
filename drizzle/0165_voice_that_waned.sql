@@ -1,4 +1,4 @@
--- 0148: the account Voice wanes into (R3 and R15, 2026-09-03).
+-- 0165: the account Voice wanes into (R3 and R15, 2026-09-03).
 --
 -- The founder's ruling: Voice can decay, it starts at 1 percent of a lunar
 -- cycle by default, a village may set any percent, and the decay is uniform

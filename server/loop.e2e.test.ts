@@ -29,6 +29,7 @@ import os from "os";
 import path from "path";
 import { provisionTestDb, testDbConfigured, type TestDb, E2E_BOOT_DEADLINE_MS, waitForPortFree } from "./db/testDb";
 import { verifyDocument } from "./lib/villageExport";
+import { villageMoonLabel } from "../shared/villageMoon";
 
 /**
  * UNIQUE PER PROCESS, like the scratch schema (see testDb.ts). This was a
@@ -123,6 +124,51 @@ async function auditRowCount(text: string, waitMs = 10_000): Promise<number> {
     if (n > 0 || Date.now() >= deadline) return n;
     await new Promise((r) => setTimeout(r, 50));
   }
+}
+
+/**
+ * A TOKEN'S SCALE, READ OFF THE REGISTRY THE BOOT JUST MIGRATED, NEVER TYPED.
+ *
+ * `0162` moved every platform credit token and Village Voice to two decimals,
+ * and this file was written when credits carried none. The repair is not to
+ * correct 1000 to 100000: a corrected literal is a literal that goes wrong
+ * again the next time the scale is ruled on, and it has been ruled on twice in
+ * one week. So the expectations below say the HUMAN number times whatever the
+ * registry holds, and a later move to four decimals cannot re-red this file.
+ *
+ * READ LAZILY, because `stay-credit` and `library-credit` do not exist at boot:
+ * `ensureStayToken` and `ensureLibraryToken` register them the first time a
+ * village needs one. A miss is therefore not cached, or the first caller would
+ * pin a scale of 1 for the rest of the run.
+ *
+ * ── AND THERE IS NO SINGLE MULTIPLIER FOR THIS FILE ────────────────────────
+ *
+ * The doors disagree about units on purpose, so each assertion has to be read
+ * against the door it goes through and not against a uniform scale:
+ *
+ *   HUMAN   the cycle-close report (`credited`, `poolCredited`), the stays
+ *           catalogue's `prices`, the redemption and mint routes, which take a
+ *           human number and convert once on the way in.
+ *   MINOR   `/api/game/ledger` balances and entries, `/api/admin/economy`
+ *           supply, `/api/exchange`, `stays.rate_snapshot_credits`, and
+ *           `/api/wallet/send`, which takes minor because the client converts
+ *           before it posts and the route refuses to convert twice.
+ *
+ * That distinction is load-bearing rather than pedantic. A sibling lane found
+ * an assertion expecting a send of 500 to be REFUSED: 500 reached the send
+ * route as five credits, five were affordable, the send succeeded, and the
+ * assertion passed anyway. The door the whole hold design exists to shut was
+ * reporting itself open.
+ */
+const scaleCache = new Map<string, number>();
+async function scale(slug: string): Promise<number> {
+  const hit = scaleCache.get(slug);
+  if (hit !== undefined) return hit;
+  const [rows] = await testDb.conn.query<any[]>("SELECT `decimals` FROM `tokens` WHERE `slug` = ?", [slug]);
+  if (!rows.length) return 1; // not registered yet: do not cache the miss
+  const v = 10 ** Number(rows[0].decimals ?? 0);
+  scaleCache.set(slug, v);
+  return v;
 }
 
 beforeAll(async () => {
@@ -535,7 +581,11 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
 
     const me = await api("GET", "/api/game/me", undefined, peerToken);
     expect(me.status).toBe(200);
-    expect(me.json.roles).toContain("founders-circle");
+    // `roles` carries the name a member reads beside the id it is keyed by.
+    // It served bare ids until the profile ran a prettifier over one and
+    // printed "Founders-Circle" at somebody.
+    expect(me.json.roles.map((r: any) => r.id)).toContain("founders-circle");
+    expect(me.json.roles.find((r: any) => r.id === "founders-circle").name).toBe("Founders Circle");
     expect(me.json.capabilities).toContain("proposal.decide");
     expect(me.json.cycle.cycleNumber).toBeGreaterThan(300);
   });
@@ -624,11 +674,14 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // and the recognition (signal) balance did NOT change at close.
     const peerLedger = await api("GET", "/api/game/ledger", undefined, peerToken);
     expect(peerLedger.status).toBe(200);
-    expect(peerLedger.json.balances.credits?.balance).toBe(1000);
+    // MINOR from here down. The two figures above are the cycle-close report,
+    // which speaks whole credits, and they are the same thousand.
+    const credit = await scale("credits");
+    expect(peerLedger.json.balances.credits?.balance).toBe(1000 * credit);
     const poolEntry = peerLedger.json.entries.find((e: any) => e.source === "gratitude_pool");
     expect(poolEntry).toBeTruthy();
     expect(poolEntry.tokenType).toBe("credits");
-    expect(poolEntry.amount).toBe(1000);
+    expect(poolEntry.amount).toBe(1000 * credit);
 
     // Idempotent: closing again settles nothing further AND credits nothing
     // further — the pool cannot double-pay.
@@ -637,7 +690,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(again.json.cycles.map((c: any) => c.cycleNumber)).not.toContain(prevNumber);
     expect(again.json.poolCredited).toBe(0);
     const peerAfter = await api("GET", "/api/game/ledger", undefined, peerToken);
-    expect(peerAfter.json.balances.credits?.balance).toBe(1000);
+    expect(peerAfter.json.balances.credits?.balance).toBe(1000 * credit);
 
     // And the preview agrees with the deed: the settled lunation drops off
     // the due list, so the desk offers a second press nothing to promise.
@@ -799,6 +852,13 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // were held to different standards and a double credit passed.
     expect(peerFlows.json.totals.received, "the other side of the same 13").toBe(13);
     expect(peerFlows.json.totals.distinctAcknowledgers, "one sender, counted once").toBe(1);
+
+    // The member's own moons, on their own profile, by the same rule as the
+    // founders' report: the id is the key and the moon is the label.
+    for (const c of peerFlows.json.byCycle) {
+      expect(c.cycleId, "the key the row is filed under is still there").toBeTruthy();
+      expect(villageMoonLabel(c.moon), "and it is not what the profile prints").not.toContain(c.cycleId);
+    }
   });
 
   it("records every movement in the ledger, and the balance is a derived cache", async () => {
@@ -947,6 +1007,61 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       message: "Anonymous thanks.",
     });
     expect(unauthenticated.status).toBe(401);
+
+    /*
+     * THANKING SOMEBODY BY THE ONLY NAME THIS SITE EVER SHOWS YOU.
+     *
+     * The wall's recipient field was `type="email" required`, and no surface
+     * in this build prints a member's address: the browser refused everything
+     * a member could actually have obtained. A picker would want a member
+     * directory, which is its own privacy question, so the field takes the
+     * handle that is already public on every profile and the server resolves
+     * it. Both spellings still reach the same person.
+     */
+    const peerHandle = (await api("GET", "/api/profile", undefined, peerToken)).json.handle;
+    expect(typeof peerHandle).toBe("string");
+    expect(peerHandle.length).toBeGreaterThan(0);
+
+    const byHandle = await api(
+      "POST",
+      "/api/game/gratitude/send",
+      { to: `@${peerHandle}`, amount: 1, message: "By handle, which is all I can see." },
+      doerToken,
+    );
+    expect(byHandle.status).toBe(200);
+    expect(byHandle.json.entry.toId).toBe(peerId);
+
+    // Bare, with no leading @, reaches the same person: an address is the one
+    // with an @ in the MIDDLE.
+    const bareHandle = await api(
+      "POST",
+      "/api/game/gratitude/send",
+      { to: peerHandle, amount: 1, message: "Bare handle, same person." },
+      doerToken,
+    );
+    expect(bareHandle.status).toBe(200);
+    expect(bareHandle.json.entry.toId).toBe(peerId);
+
+    // A handle nobody wears says so, and says which of the two things the
+    // sender got wrong. A generic failure here sends somebody hunting for an
+    // email address they were never going to find.
+    const ghost = await api(
+      "POST",
+      "/api/game/gratitude/send",
+      { to: "@nobody-lives-here", amount: 1, message: "Into the void." },
+      doerToken,
+    );
+    expect(ghost.status).toBe(404);
+    expect(String(ghost.json.error)).toContain("No villager with that handle");
+
+    // An empty recipient is a 400 and never a lookup.
+    const nobody = await api(
+      "POST",
+      "/api/game/gratitude/send",
+      { to: "   ", amount: 1, message: "To whom?" },
+      doerToken,
+    );
+    expect(nobody.status).toBe(400);
   });
 
   it("S1: every admin mutation writes an audit row naming a real person", async () => {
@@ -1330,8 +1445,10 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
         .map((s: any) => [String(s.source), Number(s.issued)]),
     );
     // The cycle pool released the whole default pool at close, as asserted
-    // above in the settlement case.
-    expect(credits.gratitude_pool).toBe(1000);
+    // above in the settlement case. This door reports MINOR, and the close
+    // report that stated the same thousand reports whole credits.
+    const credit = await scale("credits");
+    expect(credits.gratitude_pool).toBe(1000 * credit);
     // THREE confirmed contributions at the seeded 25, and it used to read 50.
     //
     // The missing 25 was not a rounding choice, it was the bug: this suite
@@ -1347,13 +1464,13 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // engine, it was right about an engine that was wrong, so nothing in this
     // file ever looked like it needed checking. Boot now starts the clock. See
     // `startEconomyEpoch` and `server/lib/economyEpoch.test.ts`.
-    expect(credits.quest_consent).toBe(75);
+    expect(credits.quest_consent).toBe(75 * credit);
     // And nothing else issued a credit: the total over the faucet equals the
     // two sources named, so a third channel appearing fails here.
     expect(poolRow?.issuedToDate).toBe(
       Object.values(credits).reduce((n, v) => n + v, 0),
     );
-    expect(poolRow?.issuedToDate).toBe(1075);
+    expect(poolRow?.issuedToDate).toBe(1075 * credit);
   });
 
   it("S13: modules ship OFF, lifecycle guards hold, and preview never leaks", async () => {
@@ -2288,13 +2405,20 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
      * produces. Both writers derive it from `priceFor`, which stores minor
      * since the price route converts on write, and all three readers (the
      * settle mint, this file's refund debit and the chargeback clawback) post
-     * it back UNCONVERTED. At `decimals: 0` minor and whole coincide, so 10 is
-     * ten credits here; the assertions below compare the leg against the
-     * column rather than against a literal, so they hold at any scale.
+     * it back UNCONVERTED. So the fixture has to CARRY the scale: this row is
+     * written straight into the column, not through the price route that
+     * converts, and ten whole stay-credits is `10 * scale`. It used to be a
+     * bare 10, correct only while the token carried no decimals; after `0162`
+     * a bare 10 buys a tenth of a credit against a rate of 2, the guest can
+     * afford no nights at all, and the failure surfaces two hundred lines
+     * later as "posted 2, expected 3" with nothing pointing back here.
+     *
+     * `amount_minor` is FIAT cents and has nothing to do with the token scale.
      */
+    const stayCredit = await scale("stay-credit");
     await testDb.conn.query(
       "INSERT INTO stay_purchases (id, user_id, accommodation_id, nights, amount_minor, credits_granted, provider, status) VALUES (?,?,?,?,?,?,'stripe','pending')",
-      [orderId, guestId, accId, 5, 25000, 10],
+      [orderId, guestId, accId, 5, 25000, 10 * stayCredit],
     );
     const settleEvent = {
       id: "evt_loop_settle_1",
@@ -2327,7 +2451,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
 
     // Properly signed: settles, mints, records the fiat charge.
     expect((await webhook(settleEvent)).status).toBe(200);
-    expect((await api("GET", "/api/game/ledger", undefined, guestToken)).json.balances["stay-credit"]?.balance).toBe(10);
+    expect((await api("GET", "/api/game/ledger", undefined, guestToken)).json.balances["stay-credit"]?.balance).toBe(10 * stayCredit);
     /*
      * THE GRANT IS THE COLUMN, exactly. Asked as an identity and not as a
      * literal, so it stays true whatever `tokens.decimals` says and goes red
@@ -2351,12 +2475,15 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(replay.status).toBe(200);
     expect(replay.json.duplicate).toBe(true);
     expect((await webhook({ ...settleEvent, id: "evt_loop_settle_2" })).status).toBe(200);
-    expect((await api("GET", "/api/game/ledger", undefined, guestToken)).json.balances["stay-credit"]?.balance).toBe(10);
+    expect((await api("GET", "/api/game/ledger", undefined, guestToken)).json.balances["stay-credit"]?.balance).toBe(10 * stayCredit);
 
     // ── Activation snapshots rate + audience (a guest books at 2/night). ──
     const activated = await api("POST", `/api/admin/stays/${stayId}/activate`, {}, founderToken);
     expect(activated.status).toBe(200);
-    expect(activated.json.rateSnapshotCredits).toBe(2);
+    // MINOR, unlike the catalogue's `prices` above, which said the same 2 a
+    // night in whole credits. `server/lib/stays.ts` posts this column
+    // unconverted, so it is the ledger's unit.
+    expect(activated.json.rateSnapshotCredits).toBe(2 * stayCredit);
     expect(activated.json.audienceSnapshot).toBe("guest");
 
     /*
@@ -2392,7 +2519,8 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(posted.json.posted).toBe(3);
     expect((await api("POST", "/api/admin/stays/post-nights", {}, founderToken)).json.posted).toBe(0);
     const mineNow = await api("GET", "/api/stays", undefined, guestToken);
-    expect(mineNow.json.mine.balance).toBe(4); // 10 - 3 nights × 2
+    // MINOR, the same unit as the rate it is divided by two lines down.
+    expect(mineNow.json.mine.balance).toBe(4 * stayCredit); // 10 - 3 nights x 2
     // Look the stay up by id. Indexing [0] made this a coin flip: two stays for one
     // guest booked in the same second tie on created_at, so the order was undefined.
     const mineRow = mineNow.json.mine.stays.find((r: any) => r.id === stayId);
@@ -2406,7 +2534,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(grace.json.posted).toBe(4);
     expect(grace.json.stopped).toBe(1);
     const inDebt = await api("GET", "/api/stays", undefined, guestToken);
-    expect(inDebt.json.mine.balance).toBe(-4);
+    expect(inDebt.json.mine.balance).toBe(-4 * stayCredit);
     const debtRow = inDebt.json.mine.stays.find((r: any) => r.id === stayId);
     expect(debtRow?.status).toBe("active"); // never auto-ended
     // The economy still verifies: this negative is LEGAL (stay_night grace).
@@ -2421,7 +2549,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       data: { object: { id: "dp_loop_1", payment_intent: "pi_loop_1" } },
     });
     expect(dispute.status).toBe(200);
-    expect((await api("GET", "/api/game/ledger", undefined, guestToken)).json.balances["stay-credit"]?.balance).toBe(-14); // -4 - 10
+    expect((await api("GET", "/api/game/ledger", undefined, guestToken)).json.balances["stay-credit"]?.balance).toBe(-14 * stayCredit); // -4 - 10
     /*
      * AND THE CLAWBACK REVERSES THE SAME NUMBER, under the key the admin
      * refund route shares with it. An asymmetric units fix here takes back a
@@ -2465,7 +2593,11 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const manual = await api("POST", "/api/admin/stays/purchases/manual",
       { userId: guestId, accommodationId: accId, nights: 2, amountMinor: 10000 }, founderToken);
     expect(manual.status).toBe(200);
-    expect(manual.json.creditsGranted).toBe(4); // 2 nights × guest rate 2, derived server-side
+    // HUMAN, and deliberately NOT scaled. `creditsGranted` is the receipt
+    // number: server/routes/stays.ts converts it with `fromLedgerUnits` on the
+    // way out while the ledger leg two lines down stays minor. Same name, two
+    // units, one route.
+    expect(manual.json.creditsGranted).toBe(4); // 2 nights x guest rate 2, derived server-side
     /*
      * `creditsGranted` in the RESPONSE is the receipt number, whole credits,
      * which is why the literal above is right at any decimals. The column and
@@ -2562,15 +2694,21 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const consent = await api("POST", `/api/admin/quest-claims/${wClaim.json.id}/consent`, { approve: true, amount: 10 }, founderToken);
     expect(consent.status).toBe(200);
     const doerLedger = await api("GET", "/api/game/ledger", undefined, doerToken);
-    expect(doerLedger.json.balances["stay-credit"]?.balance).toBe(doerCreditsBefore + 3);
+    const questStayCredit = await scale("stay-credit");
+    expect(doerLedger.json.balances["stay-credit"]?.balance).toBe(doerCreditsBefore + 3 * questStayCredit);
     /*
      * `quests.stay_credit_reward` is a HUMAN number an admin typed on the quest
      * form, and the release at `server/index.ts` hands it to `mintStayCredits`,
-     * whose contract is MINOR. That conversion belongs to the index lane; at
-     * `decimals: 0` the two coincide, so this literal is correct today and has
-     * to move to the token's units when the registry flips.
+     * whose contract is MINOR.
+     *
+     * THE HANDOFF THIS COMMENT USED TO FILE IS TAKEN. It said the conversion
+     * belonged to the index lane and that the literal was correct until the
+     * registry flipped. The registry has flipped, and the call now reads
+     * `toLedgerUnits(STAY_CREDIT, stayReward)`, so the leg is minor and the
+     * three whole credits an admin typed arrive as three whole credits. The
+     * expectation says so at whatever scale the registry holds.
      */
-    expect(doerLedger.json.entries.some((e: any) => e.source === "quest_stay_reward" && e.amount === 3)).toBe(true);
+    expect(doerLedger.json.entries.some((e: any) => e.source === "quest_stay_reward" && e.amount === 3 * questStayCredit)).toBe(true);
     // And the earn path is visible on the stay page.
     const earn = await api("GET", "/api/stays", undefined, doerToken);
     expect(earn.json.earnQuests.some((q: any) => q.id === wq.json.id && q.stayCreditReward === 3)).toBe(true);
@@ -2578,7 +2716,10 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // Comp and adjust are ledgered, keyed admin acts; adjust refuses overdraft.
     const comp = await api("POST", "/api/admin/stays/comp", { userId: doerId, credits: 2, note: "Storm helper" }, founderToken);
     expect(comp.status).toBe(200);
-    expect(comp.json.balance).toBe(doerCreditsBefore + 5);
+    // The comp route TAKES whole credits and REPORTS the ledger's own minor
+    // balance, so only the right-hand side carries the scale. `credits: 2`
+    // above is untouched, and `doerCreditsBefore` was already read minor.
+    expect(comp.json.balance).toBe(doerCreditsBefore + 5 * questStayCredit);
     const overdraw = await api("POST", "/api/admin/stays/adjust", { userId: doerId, credits: -999, note: "typo" }, founderToken);
     expect(overdraw.status).toBe(409);
 
@@ -3133,6 +3274,19 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(peerRow.name).toBe("Grateful Peer");
     expect(peerRow.distinctSenders).toBe(1);
 
+    // AND IT NAMES A MOON, NEVER A ROW ID. This report is the one the founders
+    // carry outside the building, so the line at the top of it has to be
+    // readable by somebody who has never seen the database. The stored id
+    // stays in the payload as the key; nothing prints it.
+    for (const c of cc.json.settlement) {
+      expect(c.moon, "every settled cycle carries its village moon").toBeTruthy();
+      expect(c.moon.cycleNumber).toBe(c.cycleNumber);
+      const label = villageMoonLabel(c.moon);
+      expect(label.length, "the moon has something to say").toBeGreaterThan(0);
+      expect(label, "no stored id reaches the page").not.toContain("lunar-");
+      expect(label, "and no moon anybody could count to zero").not.toMatch(/Moon (0|-\d)/);
+    }
+
     // Module health mirrors stored intent vs what's actually served.
     const mods = Object.fromEntries(cc.json.modules.map((m: any) => [m.id, m]));
     expect(mods.badges.served).toBe("public"); // left on since S36
@@ -3356,7 +3510,9 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const rec = await api("GET", "/api/admin/ledger/reconciliation", undefined, founderToken);
     expect(rec.json.invariants.ok).toBe(true);
     const exitAcct = rec.json.systemAccounts.find((s: any) => s.id === "sys:exit-settlement" && s.tokenType === "library-credit");
-    expect(exitAcct?.balance).toBe(30);
+    // MINOR. The reconciliation panel reports the ledger's own number, and
+    // `library-credit` is a platform credit token, so `0162` scaled it too.
+    expect(exitAcct?.balance).toBe(30 * (await scale("library-credit")));
 
     // A deployment can never strand itself: no exit opens on the last founder.
     expect((await api("POST", "/api/admin/exits", { userId: founderId }, founderToken)).status).toBe(409);
@@ -4163,6 +4319,19 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // The public catalog shows all three; a donation below floor refuses.
     const catalog = (await api("GET", "/api/products")).json;
     expect(catalog.products.length).toBe(3);
+    /*
+     * A PACK'S GRANT SHIPS ITS SCALE, or /contribute cannot divide it.
+     *
+     * `payment_products.token_amount` is the ledger's MINOR units, and the
+     * payload carried the slug, the amount and the village's name for the
+     * token and no `decimals` at all. That is the one surface in the decimals
+     * sweep that could not be fixed at the render site: the page prints
+     * "Includes 10000 Cob Credit" and has nothing to divide by.
+     */
+    const packRow = catalog.products.find((p: any) => p.id === pack.json.id);
+    expect(packRow.grantsToken.amount, "minor units, as the row stores them").toBe(5);
+    expect(packRow.grantsToken.decimals, "the scale that turns them into what a member reads").toBe(0);
+    expect(typeof packRow.grantsToken.decimals).toBe("number");
     const donationId = donation.json.id;
     expect((await api("POST", `/api/products/${donationId}/checkout`, { amountMinor: 100 }, peerToken)).status).toBe(400);
 
@@ -5537,6 +5706,151 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
   });
 
   /*
+   * THE LADDER SAYS HOW EACH RUNG IS EARNED, and the map shows the closed doors.
+   *
+   * Two payload gaps the profile could not work around. Both serializers of
+   * the ladder stripped `rule`, so every surface knew the rungs' names and
+   * nothing about how any of them is reached: no page could say "two more
+   * consented quests opens Quest Seeker" because the only field answering it
+   * never left the server. And `/api/game/progression` sent only what a
+   * member HOLDS, which paints a wall of chips with no direction in it.
+   *
+   * The rule ships AS PLAYED. `computeStage` stopped reading `rule.min` when
+   * the threshold became a registry variable, so the config number is that
+   * variable's default now; serving it raw would be a figure styled like the
+   * gate's while the gate compared against a different one. This asserts the
+   * served number MOVES when a village turns the dial, which is the only
+   * assertion the raw-config bug could not have passed.
+   */
+  it("serves each rung's rule as played, the count it measures, and the closed doors", async () => {
+    const cfg = await api("GET", "/api/game/config");
+    const me = await api("GET", "/api/game/me", undefined, doerToken);
+    const prog = await api("GET", "/api/game/progression", undefined, doerToken);
+    expect(cfg.status).toBe(200);
+    expect(me.status).toBe(200);
+    expect(prog.status).toBe(200);
+
+    // BOTH ladder serializers carry it. They were separate copies of one
+    // map literal, which is exactly how a field reaches one payload and
+    // misses the other.
+    for (const [where, stages] of [["config", cfg.json.stages], ["me", me.json.stages]] as const) {
+      const seeker = stages.find((s: any) => s.id === "quest-seeker");
+      expect(seeker, `${where} serves the quest-seeker rung`).toBeTruthy();
+      expect(seeker.rule, `${where} says how it is earned`).toEqual({ type: "quests", min: 3 });
+      expect(stages.find((s: any) => s.id === "member").rule).toEqual({ type: "membership" });
+      expect(stages.find((s: any) => s.id === "co-creator").rule).toEqual({ type: "granted" });
+    }
+
+    // The count the numeric rung counts, on both authed payloads, so a
+    // profile reading either one can do the subtraction.
+    expect(typeof me.json.consentedQuests).toBe("number");
+    expect(prog.json.consentedQuests).toBe(me.json.consentedQuests);
+
+    // AS PLAYED, proven: move the village's dial and the served rule moves.
+    const dial = await api("PUT", "/api/admin/variables/progression.quests_for.quest-seeker",
+      { value: "7" }, founderToken);
+    expect(dial.status, JSON.stringify(dial.json)).toBe(200);
+    const tuned = await api("GET", "/api/game/me", undefined, doerToken);
+    expect(
+      tuned.json.stages.find((s: any) => s.id === "quest-seeker").rule,
+      "the rule a member reads is the rule the gate compares against",
+    ).toEqual({ type: "quests", min: 7 });
+    // Back to the platform default. There is no DELETE for a variable, so a
+    // reset is the default written back by hand.
+    expect((await api("PUT", "/api/admin/variables/progression.quests_for.quest-seeker",
+      { value: "3" }, founderToken)).status).toBe(200);
+
+    // THE CATALOGUE: every key this village runs, held or not, with the rung.
+    await api("PUT", "/api/admin/modules/forum/lifecycle", { lifecycle: "public" }, founderToken);
+    const withForum = await api("GET", "/api/game/progression", undefined, doerToken);
+    const rows: any[] = withForum.json.capabilityCatalogue;
+    expect(Array.isArray(rows)).toBe(true);
+
+    // `capabilities` is exactly the held rows. Both are projections of one
+    // filter, and this is what says so out loud.
+    expect(rows.filter((r) => r.held).map((r) => r.key).sort())
+      .toEqual([...withForum.json.capabilities].sort());
+
+    // A closed door names the rung that opens it, in words a member reads.
+    const post = rows.find((r) => r.key === "forum.post");
+    expect(post.label).toBe("Start a thread in the forum");
+    expect(post.opens).toEqual({ via: "stage", stage: "member" });
+
+    // A key nobody climbs to says so, instead of naming a rung that will
+    // never arrive. Publishing the land is an appointment on purpose.
+    expect(rows.find((r) => r.key === "map.publish").opens).toEqual({ via: "appointment" });
+
+    // AND AN OFF MODULE'S KEY IS NOT ADVERTISED AT ALL. Marking those rows
+    // closed would promise that climbing opens a route which stopped
+    // mounting the moment the module went off: the LANE Q defect wearing a
+    // different hat, on the surface LANE Q was written about.
+    await api("PUT", "/api/admin/modules/forum/lifecycle", { lifecycle: "off" }, founderToken);
+    const noForum = await api("GET", "/api/game/progression", undefined, doerToken);
+    const offRows: any[] = noForum.json.capabilityCatalogue;
+    expect(offRows.some((r) => r.key === "forum.post")).toBe(false);
+    expect(offRows.some((r) => r.key === "quest.consent"), "a core module's key stays").toBe(true);
+
+    // Roles carry the name a founder typed, beside the id they are keyed by.
+    const founderProg = await api("GET", "/api/game/progression", undefined, founderToken);
+    for (const r of founderProg.json.roles) {
+      expect(typeof r.id).toBe("string");
+      expect(typeof r.name).toBe("string");
+    }
+  });
+
+  /*
+   * THE ADMIN EXPLAINER NAMES THE RUNG THIS VILLAGE SET.
+   *
+   * `GET /api/admin/members/:id/capabilities` is where an admin goes to ask
+   * why somebody can or cannot do a thing, and it renders the deciding step
+   * as `stage (<rung>)`. It read `STAGE_UNLOCKS[cap]` raw while the gate it
+   * reports on read `ctx.stageUnlockOverrides?.[cap] ?? STAGE_UNLOCKS[cap]`,
+   * so on a village that had moved a rung the explainer named a rung the gate
+   * never compared against: a wrong figure styled like a right one, inside the
+   * one function whose header promises it READS the decision instead of
+   * guessing at it. The member-side catalogue above carried the same defect
+   * and was fixed first; this is its admin-side twin.
+   *
+   * The dial is MOVED here on purpose. An assertion against the platform
+   * default passes with the raw read still in place and proves nothing.
+   */
+  it("the admin explainer names the rung this village set, not the platform's", async () => {
+    const vouch = async () => {
+      const why = await api("GET", `/api/admin/members/${doerId}/capabilities`, undefined, founderToken);
+      expect(why.status).toBe(200);
+      const row = (why.json.capabilities ?? []).find((r: any) => r.capability === "member.vouch");
+      expect(row, "member.vouch must appear in the explainer").toBeTruthy();
+      return { held: row.held, source: String(row.source) };
+    };
+    const rung = async (value: string) => {
+      const set = await api("PUT", "/api/admin/variables/progression.unlock.member.vouch",
+        { value }, founderToken);
+      expect(set.status, JSON.stringify(set.json)).toBe(200);
+    };
+
+    // THE PREMISE, MEASURED AND NEVER ASSUMED. No seeded role and no badge in
+    // this run carries member.vouch, so the doer reaches it by climbing and by
+    // nothing else, which is what makes `stage` the deciding step at all.
+    expect(await vouch()).toEqual({ held: true, source: "stage (contributor)" });
+
+    // Move the rung to one the doer still clears. The ANSWER is unchanged and
+    // only the named rung moves, which is precisely the half a raw read of the
+    // platform table gets wrong and no default-valued assertion can see.
+    await rung("co-creator");
+    expect(await vouch()).toEqual({ held: true, source: "stage (co-creator)" });
+
+    // And the other way, so the row is the gate's own answer and never a label
+    // sitting beside it: a rung above the doer closes the door outright.
+    await rung("guide");
+    expect(await vouch()).toEqual({ held: false, source: "not granted" });
+
+    // Back to the platform default. There is no DELETE for a variable, so a
+    // reset is the default written back by hand.
+    await rung("contributor");
+    expect(await vouch()).toEqual({ held: true, source: "stage (contributor)" });
+  });
+
+  /*
    * LANE Q: only the decide route may write the decided shape.
    *
    * Client `meta` was spread AFTER the `{status: "open"}` default on create,
@@ -5857,12 +6171,39 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
      * one is a real round trip, which is all the yielding this needs.
      */
     let rollNotes: any[] = [];
-    for (let i = 0; i < 20; i++) {
+    let rollArrived = false;
+    let rollTries = 0;
+    /*
+     * BOUNDED BY TIME, NOT BY ROUND TRIPS, AND IT SAYS WHICH WAY IT ENDED.
+     *
+     * This was twenty round trips with no sleeps, on the reasoning that each
+     * read is real work and therefore all the yielding needed. That holds on an
+     * idle machine and stops holding under load, because the reads slow down
+     * alongside the insert they are waiting for, so twenty of them stops being
+     * a meaningful amount of time.
+     *
+     * Worse than being flaky, it was flaky ILLEGIBLY. When the poll ran out, the
+     * next line reported `expected [ 'ballot_opened' ] to include
+     * 'ballot_carried'`, which reads as "the village was told the wrong thing"
+     * when the truth was "we stopped waiting". Three separate agents hit this on
+     * three separate days and each spent real effort proving it was not their
+     * change. A wait that cannot say it timed out is the same defect this
+     * codebase keeps paying for: a check that reports the same thing when it did
+     * not finish as when it failed.
+     */
+    const rollDeadline = Date.now() + 10_000;
+    while (Date.now() < rollDeadline) {
+      rollTries += 1;
       const bell = await api("GET", "/api/notifications", undefined, voters[2].token);
       rollNotes = (bell.json.notifications ?? []).filter((n: any) => n.link === `/decisions/${ballot.id}`);
-      if (rollNotes.some((n: any) => n.type === "ballot_carried")) break;
+      if (rollNotes.some((n: any) => n.type === "ballot_carried")) { rollArrived = true; break; }
     }
     const rollTypes = rollNotes.map((n: any) => n.type);
+    expect(
+      rollArrived,
+      `the ballot_carried notice never arrived within 10s (${rollTries} reads, saw: ${rollTypes.join(", ") || "nothing"}). ` +
+        "notifyRoll is called without await on purpose, so this is a WAIT that ran out, not necessarily a wrong notice.",
+    ).toBe(true);
     expect(rollTypes, "a voter on the roll heard the vote open").toContain("ballot_opened");
     expect(rollTypes, "and heard what the village decided").toContain("ballot_carried");
     // The outcome note travels with it, so the bell carries the reasoning and

@@ -15,6 +15,8 @@ import {
   itemsByDay,
   kindColour,
   lunarDayInfo,
+  moonDayLine,
+  moonHeading,
   moonLabel,
   villageClock,
   weekOf,
@@ -33,6 +35,8 @@ export interface WeekViewProps {
   anchor: YearAnchor;
   hemisphere: "north" | "south";
   monthNames: EventsPayload["monthNames"];
+  /** The lunation this village calls Moon 1; null while it has none. */
+  moonOneCycle: number | null;
   items: CalendarItem[];
   onSelectDay: (day: CivilDay) => void;
 }
@@ -45,7 +49,7 @@ export default function WeekView(p: WeekViewProps) {
   const byDay = itemsByDay(filtered, p.timezone);
   const focus = days.find((d) => d.key === p.selectedKey) ?? p.cursor;
   const info = lunarDayInfo(focus, p.anchor, p.timezone);
-  const label = info ? moonLabel(info.monthIndex, p.monthNames) : null;
+  const label = info ? moonLabel(info.monthIndex, info.cycleNumber, p.moonOneCycle, p.monthNames) : null;
   const first = days[0];
   const last = days[6];
   const top = first.month === last.month
@@ -56,7 +60,7 @@ export default function WeekView(p: WeekViewProps) {
     <div>
       <StackedHeaders
         top={top}
-        bottom={info && label ? `${label.title}${label.name ? `, ${label.name}` : ""}, day ${info.day} of ${info.length}` : "Outside the lunar table"}
+        bottom={info && label ? `${moonHeading(label)}, day ${info.day} of ${info.length}` : "Outside the lunar table"}
         pill={label?.isExample ? "example name" : null}
       />
       <LayerChips present={present} off={off} toggle={toggle} />
@@ -75,7 +79,7 @@ export default function WeekView(p: WeekViewProps) {
               type="button"
               onClick={() => p.onSelectDay(day)}
               aria-pressed={selected}
-              aria-label={`${WEEKDAYS[day.weekday]} ${day.day} ${MONTHS[day.month - 1]}${li ? `, moon ${li.monthIndex} day ${li.day}` : ""}, ${list.length} item${list.length === 1 ? "" : "s"}`}
+              aria-label={`${WEEKDAYS[day.weekday]} ${day.day} ${MONTHS[day.month - 1]}${li ? `, ${moonDayLine(li, p.moonOneCycle)}` : ""}, ${list.length} item${list.length === 1 ? "" : "s"}`}
               className={`flex flex-col justify-start text-left rounded-lg border p-1 sm:p-2 min-h-[120px] transition-colors ${
                 selected ? "border-teal-deep bg-teal-deep/10" : "border-border bg-card hover:bg-muted/60"
               }`}
@@ -86,7 +90,7 @@ export default function WeekView(p: WeekViewProps) {
                 {li && <MoonGlyph phase={li.phase} size={14} hemisphere={p.hemisphere} />}
               </div>
               <div className="text-[10px] text-muted-foreground mt-0.5">
-                {li ? `moon ${li.monthIndex}, day ${li.day}` : ""}
+                {li ? moonDayLine(li, p.moonOneCycle) : ""}
                 {li?.newMoon && <span className="ml-1 font-medium text-foreground">new</span>}
               </div>
               <ul className="mt-1 space-y-1">

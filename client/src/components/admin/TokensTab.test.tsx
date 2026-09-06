@@ -142,4 +142,106 @@ describe("TokensTab", () => {
     expect(tokensCall).toBeTruthy();
     expect(tokensCall[1].headers.Authorization ?? tokensCall[1].headers["X-Admin-Password"]).toBeTruthy();
   });
+
+});
+
+/**
+ * THE SCALE OF EVERY NUMBER ON THIS SCREEN.
+ *
+ * When this was written Voice carried 3 decimals and every other token carried
+ * 0, so this tab showed a grant of 10 Voice as "10,000" and its Amount box
+ * minted 0.010 Voice to a steward who typed 10. The box and the numbers beside
+ * it are one pair, and a screen that divides one half is worse than one that
+ * divides neither, because both raw at least agree. These tests fail if either
+ * half is left behind.
+ *
+ * THE FIXTURE'S `decimals` IS DELIBERATELY NOT THE REGISTRY'S VALUE, and it
+ * must stay that way. Rye has since ruled currency-like tokens to two
+ * decimals, Voice among them. If this fixture were set to 2 it would be
+ * asserting against the same number the registry serves, and would stop being
+ * a control: a regression that hardcoded the live scale would pass. Pinning a
+ * scale nothing ships proves the conversion READS the token rather than
+ * knowing the answer. Do not "correct" it to match production.
+ */
+describe("this screen speaks whole tokens", () => {
+  const VOICE = { slug: "village-voice", name: "Village Voice", kind: "voice", governance: "platform", transferable: true, active: true, decimals: 3, issuedBy: { "sys:mint": 12345 } }; // 3 on purpose: not the shipped scale, see above
+  const GRANT = {
+    id: "amr-1", tokenSlug: "village-voice", tokenName: "Village Voice",
+    // 10 whole Voice, as `admin_mint_requests.amount` stores it. That column
+    // holds WHOLE tokens: the mint route writes what the steward typed and
+    // converts only at the ledger post, so the grant list needs no dividing.
+    amount: 10, toUserId: "u1", toName: "Wren", reason: "For the harvest",
+    status: "pending", requestedBy: "a1", requestedByName: "Sol", requestedAt: "2026-09-01T00:00:00.000Z",
+  };
+  let posted: any[];
+
+  beforeEach(() => {
+    posted = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: any) => {
+      if (init?.method === "POST") { posted.push(JSON.parse(init.body)); return { ok: true, json: async () => ({ remaining: 9990 }) }; }
+      if (String(url).includes("/admin/tokens")) return { ok: true, json: async () => ({ tokens: [...TOKENS, VOICE], mintCapPerCycle: 10000 }) };
+      if (String(url).includes("/admin/mint-requests")) return { ok: true, json: async () => ({ requests: [GRANT], cosignOver: 0 }) };
+      if (String(url).includes("/admin/players")) return { ok: true, json: async () => [{ id: "u1", name: "Wren" }] };
+      return { ok: true, json: async () => [] };
+    }));
+  });
+  afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
+
+  it("renders a grant in whole tokens, not in ledger units", async () => {
+    render(<TokensTab password="secret" lifecycles={{} as Record<string, ModuleLifecycle>} />);
+    // The stored 10 is ten whole Voice and reads as ten. Dividing it here by
+    // the token's scale would print 0.01, which is the mirror of the bug this
+    // case was written for and just as wrong.
+    expect(await screen.findByText(/10 Village Voice/)).toBeTruthy();
+    expect(screen.queryByText(/10,000 Village Voice/)).toBeNull();
+  });
+
+  it("renders issued-to-date in whole tokens", async () => {
+    render(<TokensTab password="secret" lifecycles={{} as Record<string, ModuleLifecycle>} />);
+    await screen.findByRole("table");
+    // 12345 minor at 3 decimals is 12.345.
+    expect(within(rowFor("Village Voice")).getByText(/12\.345/)).toBeTruthy();
+  });
+
+  it("leaves a token with no decimals exactly as it always read", async () => {
+    // The other half of the guarantee: gratitude and the credits are at 0
+    // decimals, where minor and whole are the same number, and this change
+    // must not move them by a digit.
+    render(<TokensTab password="secret" lifecycles={{} as Record<string, ModuleLifecycle>} />);
+    await screen.findByRole("table");
+    expect(within(rowFor("Library Credits")).getByText(/12/)).toBeTruthy();
+  });
+
+  it("mints what the steward typed, in the units the ledger moves", async () => {
+    /*
+     * THE PAIR, AND IT POINTS THE OTHER WAY NOW.
+     *
+     * The hazard is unchanged: a steward reading "10" in the record, typing
+     * 10, and moving 0.010. What changed is where the conversion lives. Two
+     * lanes fixed this at once, one in this screen and one at
+     * `POST /api/admin/tokens/:slug/mint`, which now does
+     * `toLedgerUnits(slug, amt)` on the way in. Only one of them may convert,
+     * and the route won, because it fixes every caller rather than this one
+     * screen.
+     *
+     * So the box posts WHAT WAS TYPED, and this assertion is what catches a
+     * re-added `toMinorUnits` here: the screen would send 1000, the route
+     * would scale it again, and a steward typing ten would mint a thousand.
+     * The end-to-end half is proved in `server/adminTokens.e2e.test.ts`, which
+     * types 10 and reads the ledger row back at 10 times the scale.
+     */
+    const user = (await import("@testing-library/user-event")).default.setup();
+    render(<TokensTab password="secret" lifecycles={{} as Record<string, ModuleLifecycle>} />);
+    await screen.findByRole("table");
+
+    const selects = screen.getAllByRole("combobox");
+    await user.selectOptions(selects.find((s) => within(s).queryByText("Village Voice"))!, "village-voice");
+    await user.selectOptions(selects.find((s) => s.querySelector('option[value=""]')?.textContent?.includes("Member"))!, "u1");
+    await user.type(screen.getByPlaceholderText("Amount"), "10");
+    await user.type(screen.getByPlaceholderText(/Reason/i), "For the harvest");
+    await user.click(screen.getByRole("button", { name: /^Mint$/ }));
+
+    expect(posted).toHaveLength(1);
+    expect(posted[0].amount, "the screen posts whole tokens; the route converts once").toBe(10);
+  });
 });

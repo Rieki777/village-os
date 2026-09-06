@@ -76,6 +76,12 @@ jobs:
           # language, so nothing here has to reproduce `pnpm build`, and this
           # workflow stays independent of the bundle work in `ci.yml`.
           build-mode: none
+          # Filters out exactly one query, js/missing-rate-limiting, and says at
+          # length why: it cannot see any of the three ways this server bounds a
+          # request, so it reported 98 alerts holding zero unauthenticated
+          # writes. scripts/check-route-limits.mjs asks the same question in a
+          # form that fits the code. Every other rule in the suite still runs.
+          config-file: .github/codeql/codeql-config.yml
 
       - name: Analyze
         uses: github/codeql-action/analyze@v3

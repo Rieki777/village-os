@@ -56,7 +56,21 @@ export default function WhyCostaRica() {
 
   if (loading) return null;
 
-  if (isPlaceholder || points.length === 0) {
+  /*
+   * A HEADING AND AN INTRO ARE PUBLISHED CONTENT, EVEN WITH NO CARDS.
+   *
+   * The gate was `points.length === 0`, so a founder who wrote this section's
+   * heading and its opening sentence, saved, and added no cards yet saw the
+   * "has not published" placeholder on their own live page. They had
+   * published. The block simply refused to show it, and nothing told them
+   * why, so the honest reading was that saving had not worked.
+   *
+   * The placeholder is for a village that has written NOTHING here, which is
+   * still the shipped state and still the right answer for it.
+   */
+  const wroteSomething = !!(overview?.heading?.trim() || overview?.intro?.trim() || points.length);
+
+  if (isPlaceholder || !wroteSomething) {
     return (
       <section className="bg-sage/15 py-20">
         <div className="container max-w-3xl mx-auto px-4">
@@ -94,6 +108,7 @@ export default function WhyCostaRica() {
             <p className="text-muted-foreground max-w-2xl mx-auto">{overview.intro}</p>
           )}
         </div>
+        {points.length > 0 && (
         <div className="grid md:grid-cols-2 gap-5">
           {points.map((p, i) => {
             const Icon = ICONS[i % ICONS.length];
@@ -115,6 +130,7 @@ export default function WhyCostaRica() {
             );
           })}
         </div>
+        )}
       </div>
     </section>
   );

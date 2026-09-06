@@ -93,8 +93,15 @@ export function lunarSummaryFor(date: Date, s: LunarSettings): LunarSummary | nu
   const phase = moonPhase(date);
   return {
     monthIndex: p.month.index,
+    cycleNumber: p.month.cycleNumber,
     monthCount: p.monthCount,
-    name: named?.name ?? `Moon ${p.month.index}`,
+    // BLANK, never `Moon <year index>`. That fallback put the moon's place
+    // in the lunar year into a field that is a NAME, and since the village
+    // moon count landed it would have read as a village moon number that is
+    // wrong by however many years the village has run. `listMonthNames`
+    // returns all thirteen with examples, so a caller reaching this line has
+    // handed in a short list and gets no name rather than a made-up one.
+    name: named?.name ?? "",
     isExampleName: named?.isExample ?? true,
     day: p.day,
     length: p.length,

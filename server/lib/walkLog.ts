@@ -45,6 +45,31 @@ export interface WalkLogWrite {
  * `stored` answer different questions, and collapsing them into a single
  * "recorded" is what let a replay claim it had written rows it had not.
  */
+/**
+ * How many walk-log batches one address may post in an hour.
+ *
+ * EVERYTHING ELSE HERE CAPS A SINGLE BATCH and nothing capped the number of
+ * batches. `recordWalkRows` slices to 2000 rows, the session key is clipped to
+ * 64 characters, the index and sequence are clamped, and the idempotency key
+ * dedupes a replay. All of that is per call. A caller minting a fresh
+ * `sessionKey` each time defeated every one of them and could write into
+ * `walk_log` without limit and without an account, because the route is
+ * unauthenticated on purpose: a walk runs before anybody signs in, which is
+ * exactly the person it measures.
+ *
+ * Found by scripts/check-route-limits.mjs on its first run, which is the whole
+ * argument for that script existing.
+ *
+ * THE ROUTE ANSWERS 200 AND `recorded: 0` RATHER THAN 429. The person a 429
+ * would reach is a first-time visitor looking at the map for the first time,
+ * and analytics is not worth an error in front of them. The map already reads
+ * this response as advisory. Same shape as the `toolclick` limit next door.
+ *
+ * 60 an hour: a real walk posts a handful of batches, and a household behind
+ * one address walking at the same time still fits inside it.
+ */
+export const WALK_LOG_PER_IP_HOURLY = 60;
+
 export async function recordWalkRows(
   pool: Pool,
   rows: readonly WalkLogInput[],

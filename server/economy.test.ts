@@ -787,6 +787,107 @@ describe.skipIf(!configured)("the village economy engine", () => {
     expect(await conserved(CREDITS)).toBe(0);
   });
 
+  it("refuses a reversal for an amount the original posting never moved", async () => {
+    // THE EXPLOIT THIS CLOSES. `reverse` took its amount, its token and both
+    // its accounts from the caller and checked only that SOME row carried the
+    // original key. An audit reversed a 25-credit posting into a 1,000,000
+    // payment to the same member and every invariant stayed green, because a
+    // mirror is two legs and conservation balances at any size.
+    const u = await makeMember("econ-rev-amount");
+    const key = keys.questCompleted(villageId(), "q-mint", "c-mint", u, HEARTS);
+    await mint(pool, {
+      toUserId: u, tokenSlug: HEARTS, amount: 25,
+      from: RECOGNITION_FAUCET, source: "quest_consent", idempotencyKey: key,
+    });
+
+    const inflated = await reverse(pool, key, {
+      from: RECOGNITION_FAUCET, to: memberAccount(u), tokenSlug: HEARTS, amount: 1_000_000,
+    });
+
+    expect(inflated.ok).toBe(false);
+    expect(inflated.ok === false && inflated.error).toMatch(/undoes exactly what was posted/);
+    // THE OUTCOME: nothing was paid, and the original still stands unreversed,
+    // so the honest correction is still available to whoever needs it.
+    expect(await balanceOf(pool, memberAccount(u), HEARTS)).toBe(25);
+    expect(await isReversed(pool, key)).toBe(false);
+  });
+
+  it("refuses a reversal that runs the wrong way, and one in the wrong token", async () => {
+    const u = await makeMember("econ-rev-shape");
+    const key = keys.questCompleted(villageId(), "q-shape", "c-shape", u, HEARTS);
+    await mint(pool, {
+      toUserId: u, tokenSlug: HEARTS, amount: 4,
+      from: RECOGNITION_FAUCET, source: "quest_consent", idempotencyKey: key,
+    });
+
+    // A mirror that pays the member AGAIN rather than clawing back.
+    const backwards = await reverse(pool, key, {
+      from: RECOGNITION_FAUCET, to: memberAccount(u), tokenSlug: HEARTS, amount: 4,
+    });
+    expect(backwards.ok).toBe(false);
+
+    // A mirror in a token the original never touched.
+    const wrongToken = await reverse(pool, key, {
+      from: memberAccount(u), to: RECOGNITION_FAUCET, tokenSlug: VILLAGE_VOICE, amount: 4,
+    });
+    expect(wrongToken.ok).toBe(false);
+
+    expect(await balanceOf(pool, memberAccount(u), HEARTS)).toBe(4);
+    expect(await balanceOf(pool, memberAccount(u), VILLAGE_VOICE)).toBe(0);
+  });
+
+  it("reads the mirror off the original row when the caller names nothing", async () => {
+    // The other half of the same rule: derived is not merely CHECKED against
+    // the caller, it is the source. A caller that asserts nothing still gets
+    // the true opposite of what was posted.
+    const u = await makeMember("econ-rev-derived");
+    const key = keys.questCompleted(villageId(), "q-derived", "c-derived", u, HEARTS);
+    await mint(pool, {
+      toUserId: u, tokenSlug: HEARTS, amount: 9,
+      from: RECOGNITION_FAUCET, source: "quest_consent", idempotencyKey: key,
+    });
+
+    const back = await reverse(pool, key);
+
+    expect(back.ok).toBe(true);
+    expect(await balanceOf(pool, memberAccount(u), HEARTS)).toBe(0);
+  });
+
+  it("claws back value the member has already spent, and says so as a negative", async () => {
+    // A correction that cannot complete is not a correction. This member was
+    // wrongly credited and has already spent it, so the clawback has to be
+    // able to take them below zero: the alternative is that the mistaken
+    // credit stands and the only repair left is a hand-written ledger row.
+    //
+    // What a negative balance MEANS: this member holds less than nothing until
+    // new earnings bring them back to zero. The ledger's overdraft check
+    // refuses any further spend that would take an account below zero, so they
+    // cannot spend while under water, and the figure sits in the balance every
+    // surface already reads rather than in a suspense account beside it.
+    const u = await makeMember("econ-rev-negative");
+    const key = keys.questCompleted(villageId(), "q-spent", "c-spent", u, HEARTS);
+    await mint(pool, {
+      toUserId: u, tokenSlug: HEARTS, amount: 12,
+      from: RECOGNITION_FAUCET, source: "quest_consent", idempotencyKey: key,
+    });
+    // Spent: it left their account and is not coming back on its own.
+    const spent = await postTransfer(pool, {
+      from: memberAccount(u), to: RECOGNITION_FAUCET, tokenType: HEARTS, amount: 12,
+      source: "manual", idempotencyKey: `spend:${key}`,
+    });
+    expect(spent.ok).toBe(true);
+    expect(await balanceOf(pool, memberAccount(u), HEARTS)).toBe(0);
+
+    const back = await reverse(pool, key);
+
+    // THE OUTCOME. Without `reversal` in ALLOW_NEGATIVE_SOURCES the overdraft
+    // check refuses this and the balance stays at 0 with the bad credit
+    // standing; with it the correction lands and the debt is visible.
+    expect(back.ok).toBe(true);
+    expect(await balanceOf(pool, memberAccount(u), HEARTS)).toBe(-12);
+    expect(await isReversed(pool, key)).toBe(true);
+  });
+
   // ── Two-party consent ────────────────────────────────────────────────────
 
   it("refuses a steward witnessing their own work", () => {
@@ -873,6 +974,19 @@ describe.skipIf(!configured)("the village economy engine", () => {
       });
       expect(out.skipped).toBeUndefined();
       expect(out.minted.map((m) => m.token)).toContain(VILLAGE_VOICE);
+
+      // AND IT REPORTS WHAT IT POSTED. The rule reads 0.1 and the ledger row
+      // holds that in the token's own minor units; this used to report the 0.1,
+      // which made the caller's log and the ledger two different accounts of
+      // one payment with nothing to reconcile them against. `runSettlement`
+      // already reported units, so the two mint paths disagreed as well.
+      //
+      // The scale comes OFF THE REGISTRY. This line read a bare 100, right
+      // while Voice carried three decimals and wrong the day `0162` moved it
+      // to two, which is the whole reason the helper above exists.
+      const voice = out.minted.find((m) => m.token === VILLAGE_VOICE);
+      expect(voice?.units).toBe(Math.round(0.1 * (await scaleOf(pool, VILLAGE_VOICE))));
+      expect(await balanceOf(pool, memberAccount(u), VILLAGE_VOICE)).toBe(voice?.units);
     });
 
     it("does not mint Hearts again, because consent already did", async () => {
@@ -1084,25 +1198,41 @@ describe.skipIf(!configured)("the village economy engine", () => {
   describe("a queued rule change", () => {
     // Self-contained: this suite never runs seedEconomy, so the block makes
     // the row it measures rather than assuming one a seeder would have left.
+    //
+    // ON VOICE, AND NOT ON GRATITUDE. This block measures the DEFERRAL, and it
+    // measures it with fractions (0.9, 0.7, 0.3, 0.4) because a fraction is
+    // easy to tell apart from a live value. Gratitude has decimals 0, so every
+    // one of those amounts rounds to nothing when it is posted, and
+    // `queueRuleChange` now refuses them at save time rather than letting a
+    // founder save a rule that pays nobody forever. Voice rides in thousandths,
+    // so the same fractions are whole numbers of its smallest unit and the
+    // deferral is still measured by the same numbers. The refusal itself is
+    // asserted below, on a whole-unit token, where it belongs.
+    //
+    // Its own trigger, too: `mint_rules` is unique on (village, trigger,
+    // token), and the confirmed-claim block above already owns
+    // (local, quest.completed, voice). Sharing it would make this INSERT an
+    // UPDATE of that row, leaving this block's own id absent and every
+    // assertion here measuring a rule that does not exist.
     const RULE = "rule-deferral-test";
     beforeAll(async () => {
       await pool.query(
         "INSERT INTO `mint_rules` (`id`, `village_id`, `trigger`, `token_slug`, `amount`, `ceiling`, `recipient`, `enabled`) " +
-          "VALUES (?,?,'quest.completed',?,0.1000,1,'claimant',1) ON DUPLICATE KEY UPDATE `amount` = 0.1000, " +
+          "VALUES (?,?,'deferral.probe',?,0.1000,1,'claimant',1) ON DUPLICATE KEY UPDATE `amount` = 0.1000, " +
           "`ceiling` = 1, `enabled` = 1, `pending_from_cycle` = NULL",
-        [RULE, villageId(), HEARTS],
+        [RULE, villageId(), VILLAGE_VOICE],
       );
     });
 
     it("does not touch the live numbers", async () => {
-      const before = (await rulesFor(pool, "quest.completed")).find((r) => r.id === RULE);
+      const before = (await rulesFor(pool, "deferral.probe")).find((r) => r.id === RULE);
       expect(before).toBeTruthy();
       const out = await queueRuleChange(pool, RULE, { amount: 0.9 }, "admin-1");
       expect(out.ok).toBe(true);
       // The whole point of the deferral. A rule cannot be raised, paid against
       // and lowered again around a settlement, and nobody's owed amount changes
       // under them mid-cycle.
-      const after = (await rulesFor(pool, "quest.completed")).find((r) => r.id === RULE);
+      const after = (await rulesFor(pool, "deferral.probe")).find((r) => r.id === RULE);
       expect(after?.amount).toBe(before?.amount);
     });
 
@@ -1124,6 +1254,88 @@ describe.skipIf(!configured)("the village economy engine", () => {
     it("refuses a fixed amount above its own ceiling", async () => {
       const out = await queueRuleChange(pool, RULE, { amount: 99 }, "admin-1");
       expect(out.ok).toBe(false);
+    });
+
+    it("refuses an amount that rounds away in the token it pays", async () => {
+      // MEASURED: `mint_rules.amount` is decimal(18,4) and Gratitude has
+      // decimals 0, so 0.4 saved cleanly, published as a live rule, and paid
+      // nothing for the rest of the village's life. The engine reported it as
+      // unpayable, but only after somebody had been promised it and gone
+      // unpaid, in a log the founder is not reading.
+      const WHOLE = "rule-rounding-test";
+      await pool.query(
+        "INSERT INTO `mint_rules` (`id`, `village_id`, `trigger`, `token_slug`, `amount`, `ceiling`, `recipient`, `enabled`) " +
+          "VALUES (?,?,'rounding.probe',?,1,100,'claimant',1) ON DUPLICATE KEY UPDATE `amount` = 1",
+        [WHOLE, villageId(), HEARTS],
+      );
+
+      // FIRST, THE HALF A ZERO-CHECK CANNOT CATCH, so that removing this guard
+      // fails here rather than on the easier case below. 1.5 rounds to 2
+      // units, so "does it round to nothing?" says it is fine and the rule
+      // silently pays 2 where the panel and the ballot both say 1.5. Only
+      // asking whether it is a WHOLE number of the token's smallest unit
+      // finds this one.
+      const rounded = await queueRuleChange(pool, WHOLE, { amount: 1.5 }, "admin-1");
+      expect(rounded.ok).toBe(false);
+      expect(rounded.ok === false && rounded.error).toMatch(/steps of 1/);
+
+      // Then the one that rounds to nothing at all, which is the measurement
+      // this defect was filed under.
+      const refused = await queueRuleChange(pool, WHOLE, { amount: 0.4 }, "admin-1");
+      expect(refused.ok).toBe(false);
+      // A sentence a founder can act on: it names the step to round to.
+      expect(refused.ok === false && refused.error).toMatch(/steps of 1/);
+
+      // THE OUTCOME: nothing was queued, so the rule still pays what it paid.
+      const view = await mintView(pool);
+      expect(view.rules.find((r) => r.id === WHOLE)?.pending ?? null).toBeNull();
+
+      // And a whole number still saves, so this refuses the broken case only.
+      expect((await queueRuleChange(pool, WHOLE, { amount: 2 }, "admin-1")).ok).toBe(true);
+    });
+
+    it("accepts a fraction the token can actually hold", async () => {
+      // The counterweight. Voice rides in thousandths, so 0.35 IS a whole
+      // number of its smallest unit and refusing it would be the same mistake
+      // pointed the other way.
+      const out = await queueRuleChange(pool, RULE, { amount: 0.35 }, "admin-1");
+      expect(out.ok).toBe(true);
+      const tooFine = await queueRuleChange(pool, RULE, { amount: 0.0001 }, "admin-1");
+      expect(tooFine.ok).toBe(false);
+
+      /*
+       * AND THE GUARD'S TOLERANCE IS LOAD-BEARING, which 0.35 does not show:
+       * 0.35 at two decimals is exactly 35 hundredths in binary, so an exact
+       * test would accept it too.
+       *
+       * THE WITNESS IS DERIVED, NOT TYPED. This line read `1.001`, chosen
+       * because 1.001 is a whole number of THOUSANDTHS while `1.001 * 1000` is
+       * 1000.9999999999999. `0162` moved Voice to hundredths, where 1.001 is
+       * not payable at all and the guard is right to refuse it, so the example
+       * stopped testing the tolerance and started testing the scale. The search
+       * below asks the same question of whatever scale the registry holds: the
+       * smallest amount above one whole token that IS a whole number of minor
+       * units and whose naive multiplication is not an integer. At two decimals
+       * that is 1.09; at three it is 1.001 again.
+       *
+       * At scale 1 no such amount exists, because every integer is exact, and
+       * there the tolerance genuinely is not load-bearing. The assertion says
+       * so rather than inventing a case.
+       */
+      const voiceScale = await scaleOf(pool, VILLAGE_VOICE);
+      let drifting = 0;
+      for (let k = voiceScale + 1; k < voiceScale * 10; k++) {
+        const human = k / voiceScale;
+        if (human * voiceScale !== k) { drifting = human; break; }
+      }
+      if (drifting) {
+        // The ceiling rides along because this rule's is 1 and the ceiling
+        // check runs first.
+        const drifts = await queueRuleChange(pool, RULE, { amount: drifting, ceiling: 2 }, "admin-1");
+        expect(drifts.ok, `an exact test would refuse ${drifting} at scale ${voiceScale}`).toBe(true);
+      } else {
+        expect(voiceScale, "no float drift exists at scale 1, so there is nothing to tolerate").toBe(1);
+      }
     });
 
     it("refuses a negative ceiling, and zero is a real answer", async () => {

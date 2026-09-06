@@ -16,6 +16,8 @@ import {
   kindColour,
   lunarDayInfo,
   lunarWeeks,
+  moonDayLine,
+  moonHeading,
   moonLabel,
   zoneNote,
   type CivilDay,
@@ -37,6 +39,8 @@ export interface MonthViewProps {
   anchor: YearAnchor;
   hemisphere: "north" | "south";
   monthNames: EventsPayload["monthNames"];
+  /** The lunation this village calls Moon 1; null while it has none. */
+  moonOneCycle: number | null;
   items: CalendarItem[];
   onSelectDay: (day: CivilDay) => void;
 }
@@ -86,12 +90,12 @@ export default function MonthView(p: MonthViewProps) {
   const { filtered, present, off, toggle } = useLayerFilter(p.items);
   const byDay = itemsByDay(filtered, p.timezone);
   const cursorLunar = lunarDayInfo(p.cursor, p.anchor, p.timezone);
-  const cursorLabel = cursorLunar ? moonLabel(cursorLunar.monthIndex, p.monthNames) : null;
+  const cursorLabel = cursorLunar ? moonLabel(cursorLunar.monthIndex, cursorLunar.cycleNumber, p.moonOneCycle, p.monthNames) : null;
   // The paper's own header (print.css shows it): zone and both month names.
   const printHeader = (
     <div className="print-header">
       {MONTHS[p.cursor.month - 1]} {p.cursor.year}
-      {cursorLunar && cursorLabel ? `, ${cursorLabel.title}${cursorLabel.name ? `, ${cursorLabel.name}` : ""}` : ""}
+      {cursorLunar && cursorLabel ? `, ${moonHeading(cursorLabel)}` : ""}
       <span className="print-header-sub">{zoneNote(p.timezone)}</span>
     </div>
   );
@@ -107,7 +111,7 @@ export default function MonthView(p: MonthViewProps) {
         type="button"
         onClick={() => p.onSelectDay(day)}
         aria-pressed={selected}
-        aria-label={`${day.key}, ${info ? `moon ${info.monthIndex} day ${info.day}` : ""}${list.length ? `, ${list.length} item${list.length === 1 ? "" : "s"}` : ""}`}
+        aria-label={`${day.key}, ${info ? moonDayLine(info, p.moonOneCycle) : ""}${list.length ? `, ${list.length} item${list.length === 1 ? "" : "s"}` : ""}`}
         className={`flex flex-col justify-start text-left min-h-[56px] sm:min-h-[76px] p-1 sm:p-1.5 border-t border-l border-border transition-colors ${
           selected ? "bg-teal-deep/10 ring-2 ring-inset ring-teal-deep" : "hover:bg-muted/60"
         } ${dim ? "opacity-45" : ""}`}
@@ -130,7 +134,7 @@ export default function MonthView(p: MonthViewProps) {
   if (p.mode === "moons") {
     const lw = lunarWeeks(p.cursor, p.anchor, p.timezone);
     if (!lw) return <p className="text-sm text-muted-foreground">The lunar table does not cover this date.</p>;
-    const label = moonLabel(lw.info.monthIndex, p.monthNames);
+    const label = moonLabel(lw.info.monthIndex, lw.info.cycleNumber, p.moonOneCycle, p.monthNames);
     const first = lw.days[0][0].day;
     const last = lw.days[lw.days.length - 1].slice(-1)[0].day;
     const span = first.month === last.month
@@ -140,7 +144,7 @@ export default function MonthView(p: MonthViewProps) {
       <div className="calendar-print">
         {printHeader}
         <StackedHeaders
-          top={`${label.title} of ${lw.info.monthCount}${label.name ? `, ${label.name}` : ""}`}
+          top={moonHeading(label)}
           bottom={span}
           pill={label.isExample ? "example name" : null}
         />
@@ -159,14 +163,14 @@ export default function MonthView(p: MonthViewProps) {
   }
 
   const weeks = gregorianWeeks(p.cursor.year, p.cursor.month, p.timezone);
-  const label = cursorLunar ? moonLabel(cursorLunar.monthIndex, p.monthNames) : null;
+  const label = cursorLunar ? moonLabel(cursorLunar.monthIndex, cursorLunar.cycleNumber, p.moonOneCycle, p.monthNames) : null;
   return (
     <div className="calendar-print">
       {printHeader}
       <StackedHeaders
         top={`${MONTHS[p.cursor.month - 1]} ${p.cursor.year}`}
         bottom={cursorLunar && label
-          ? `${label.title}${label.name ? `, ${label.name}` : ""}, day ${cursorLunar.day} of ${cursorLunar.length}`
+          ? `${moonHeading(label)}, day ${cursorLunar.day} of ${cursorLunar.length}`
           : "Outside the lunar table"}
         pill={label?.isExample ? "example name" : null}
       />
@@ -180,7 +184,7 @@ export default function MonthView(p: MonthViewProps) {
       <div className="grid grid-cols-7 border-r border-b border-border rounded-lg overflow-hidden bg-card">
         {weeks.flatMap((week) => week.map((day) => {
           const info = lunarDayInfo(day, p.anchor, p.timezone);
-          return cell(day, String(day.day), info ? `moon ${info.monthIndex} day ${info.day}` : "", day.month !== p.cursor.month, day.key);
+          return cell(day, String(day.day), info ? moonDayLine(info, p.moonOneCycle) : "", day.month !== p.cursor.month, day.key);
         }))}
       </div>
     </div>

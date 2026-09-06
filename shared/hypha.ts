@@ -50,3 +50,22 @@ export function hyphaLink(resolved: HyphaLinks, name: string): string {
   }
   return resolved.configured ? resolved.links[name as HyphaLinkName] : "";
 }
+
+/**
+ * What a founder does before this platform can find their token contracts.
+ *
+ * It lives here rather than beside the discovery code because BOTH sides need
+ * it and only one side could reach it. The server sends it on the status route
+ * and on the lookup's answers, and the admin panel reads it off the status
+ * route, which is behind the Hypha module gate. A fresh village ships that
+ * module OFF, so the panel had no source for these steps in exactly the state
+ * they exist to explain, and rendered an empty numbered list under the heading
+ * "Find your contracts on Base".
+ */
+export const HYPHA_FIRST_STEPS: readonly string[] = [
+  "Create your DAO on Hypha and create its tokens there.",
+  "Issue yourself any amount of each token. Issuance is what puts the contract on Base, and a lookup can only see what your account holds.",
+  "Copy your Base account address into the founder Base account address setting.",
+  "Come back here, look the tokens up, and confirm each contract yourself.",
+];
+

@@ -32,6 +32,10 @@ const opts = {
   anchor: "december_solstice" as const,
   hemisphere: "north" as const,
   names,
+  // The lunation this fixture village calls Moon 1. August 2026 is lunation
+  // 329, so 283 makes it the village's 47th moon and the descriptions below
+  // read one number that never resets rather than a place in a lunar year.
+  moonOneCycle: 283,
   host: "village.test",
   siteUrl: "https://village.test",
   from: new Date("2026-08-01T00:00:00Z"),
@@ -143,7 +147,11 @@ describe("the feed round-trips through ical.js (harm metric 4)", () => {
     const { events } = parse(ics);
     const one = events.find((e) => e.getFirstPropertyValue("uid") === "one@village.test")!;
     expect(one.getFirstPropertyValue("summary")).toBe("Harvest work party; bring gloves, hats");
-    expect(String(one.getFirstPropertyValue("description"))).toContain("Moon 8 of 12, Sturgeon Moon, day 11 of 29.");
+    // THE VILLAGE'S OWN COUNT, and no "of twelve" behind it. This read
+    // "Moon 8 of 12" while the number was the moon's place in the lunar year,
+    // so a subscriber's calendar carried the same 8 for a different moon every
+    // year. 329 - 283 + 1 = 47.
+    expect(String(one.getFirstPropertyValue("description"))).toContain("Moon 47, Sturgeon Moon, day 11 of 29.");
     expect(String(one.getFirstPropertyValue("description"))).toContain("Lunch on the commons.\nSecond line.");
     expect(one.getFirstPropertyValue("location")).toBe("The greenhouse");
     expect(one.getFirstPropertyValue("url")).toBe("https://village.test/events");
@@ -154,6 +162,25 @@ describe("the feed round-trips through ical.js (harm metric 4)", () => {
     const season = events.find((e) => e.getFirstPropertyValue("uid") === "season@village.test")!;
     expect(String(season.getFirstPropertyValue("dtstart"))).toBe("2026-09-22");
     expect(String(season.getFirstPropertyValue("dtend"))).toBe("2026-12-21");
+  });
+
+  it("gives an unanchored village the moon's name and its days with no number at all", () => {
+    // The three standings the counter defines are honoured on this surface too:
+    // a village that has not set a first moon has no Moon 1, so it gets no
+    // ordinal here. Never "Moon 0", never a negative, and never the moon's
+    // place in the lunar year standing in for a count it does not have.
+    const { events } = parse(buildIcs(rows, { ...opts, moonOneCycle: null }));
+    const one = events.find((e) => e.getFirstPropertyValue("uid") === "one@village.test")!;
+    const said = String(one.getFirstPropertyValue("description"));
+    expect(said).toContain("Sturgeon Moon, day 11 of 29.");
+    expect(said).not.toContain("Moon 0");
+    expect(said).not.toMatch(/Moon -?\d/);
+
+    // And a lunation earlier than the anchor reads as before the count, which
+    // is the second standing. 329 is well before a Moon 1 at lunation 400.
+    const early = parse(buildIcs(rows, { ...opts, moonOneCycle: 400 })).events
+      .find((e) => e.getFirstPropertyValue("uid") === "one@village.test")!;
+    expect(String(early.getFirstPropertyValue("description"))).toContain("Before Moon 1, Sturgeon Moon, day 11 of 29.");
   });
 
   it("expands the weekly RRULE through our VTIMEZONE to Tuesdays at 19:00 village time, with the exceptions out and the moved one bound", () => {

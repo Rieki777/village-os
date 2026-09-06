@@ -1,0 +1,318 @@
+{
+  "note": "Raw SQL call sites outside server/repos, recorded per file. A DEBT REGISTER, not an allowlist: a file listed here is measured, not blessed. This list only ever shrinks. Read scripts/sql-burndown.mjs before editing it, and lower BURNDOWN_CEILING in that file to match the total here. Test files are out of scope for the register and still in scope for the contribution rule; the header says why.",
+  "rule": "raw SQL outside server/repos",
+  "fix": "move the query into a repo under server/repos, so the caches above it stay correct and a table's readers stay enumerable",
+  "total": 762,
+  "counts": {
+    "server/index.ts": 47,
+    "server/lib/agentInbox.ts": 17,
+    "server/lib/agentProfile.ts": 13,
+    "server/lib/agentTokens.ts": 8,
+    "server/lib/assistantUsage.ts": 1,
+    "server/lib/badges.ts": 17,
+    "server/lib/ballots.ts": 19,
+    "server/lib/base-reads.ts": 5,
+    "server/lib/calendar.ts": 7,
+    "server/lib/calendarBrief.ts": 1,
+    "server/lib/calendarCommunity.ts": 39,
+    "server/lib/calendarProviders.ts": 8,
+    "server/lib/capabilityHolding.ts": 4,
+    "server/lib/characters.ts": 12,
+    "server/lib/crews.ts": 16,
+    "server/lib/drafts.ts": 4,
+    "server/lib/economy.ts": 24,
+    "server/lib/economySeed.ts": 7,
+    "server/lib/eventSeats.ts": 9,
+    "server/lib/events.ts": 2,
+    "server/lib/examples.ts": 1,
+    "server/lib/exchange.ts": 28,
+    "server/lib/exit.ts": 9,
+    "server/lib/externalCalendars.ts": 5,
+    "server/lib/externalProposals.ts": 6,
+    "server/lib/feedback.ts": 3,
+    "server/lib/forum.ts": 3,
+    "server/lib/fxRates.ts": 2,
+    "server/lib/gameStart.ts": 2,
+    "server/lib/gatherings.ts": 18,
+    "server/lib/governanceWeights.ts": 6,
+    "server/lib/gratitude.ts": 1,
+    "server/lib/health.ts": 18,
+    "server/lib/housing.ts": 11,
+    "server/lib/icsFeed.ts": 6,
+    "server/lib/identity.ts": 2,
+    "server/lib/integrations.ts": 1,
+    "server/lib/intents.ts": 31,
+    "server/lib/knowledge.ts": 1,
+    "server/lib/launch.ts": 4,
+    "server/lib/ledger.ts": 25,
+    "server/lib/library.ts": 28,
+    "server/lib/lunarTable.ts": 2,
+    "server/lib/map.ts": 9,
+    "server/lib/mapPromise.ts": 3,
+    "server/lib/mapScene.ts": 9,
+    "server/lib/mechanics.ts": 4,
+    "server/lib/memberSecrets.ts": 4,
+    "server/lib/messaging.ts": 37,
+    "server/lib/modules.ts": 6,
+    "server/lib/network.ts": 10,
+    "server/lib/notify.ts": 11,
+    "server/lib/orgChart.ts": 21,
+    "server/lib/orgDrafts.ts": 25,
+    "server/lib/orgRelations.ts": 8,
+    "server/lib/payments.ts": 11,
+    "server/lib/profile.ts": 4,
+    "server/lib/proposalDrafts.ts": 5,
+    "server/lib/questProposals.ts": 4,
+    "server/lib/recordings.ts": 8,
+    "server/lib/scheduler.ts": 4,
+    "server/lib/seasonPatterns.ts": 18,
+    "server/lib/seasonRetrospective.ts": 9,
+    "server/lib/secrets.ts": 1,
+    "server/lib/spending.ts": 2,
+    "server/lib/stays.ts": 13,
+    "server/lib/synthesisBatch.ts": 15,
+    "server/lib/synthesisWriter.ts": 3,
+    "server/lib/variables.ts": 3,
+    "server/lib/villageBrain.ts": 14,
+    "server/lib/villageExport.ts": 4,
+    "server/lib/villageReaders.ts": 1,
+    "server/lib/voiceClaim.ts": 14,
+    "server/lib/walkLog.ts": 3,
+    "server/routes/badges.ts": 2,
+    "server/routes/brandPreview.ts": 1,
+    "server/routes/land.ts": 3
+  },
+  "entries": {
+    "server/index.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/agentInbox.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/agentProfile.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/agentTokens.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/assistantUsage.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/badges.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/ballots.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/base-reads.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/calendar.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/calendarBrief.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/calendarCommunity.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/calendarProviders.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/capabilityHolding.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/characters.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/crews.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/drafts.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/economy.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/economySeed.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/eventSeats.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/events.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/examples.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/exchange.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/exit.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/externalCalendars.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/externalProposals.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/feedback.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/forum.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/fxRates.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/gameStart.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/gatherings.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/governanceWeights.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/gratitude.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/health.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/housing.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/icsFeed.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/identity.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/integrations.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/intents.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/knowledge.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/launch.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/ledger.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/library.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/lunarTable.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/map.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/mapPromise.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/mapScene.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/mechanics.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/memberSecrets.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/messaging.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/modules.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/network.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/notify.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/orgChart.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/orgDrafts.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/orgRelations.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/payments.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/profile.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/proposalDrafts.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/questProposals.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/recordings.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/scheduler.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/seasonPatterns.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/seasonRetrospective.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/secrets.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/spending.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/stays.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/synthesisBatch.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/synthesisWriter.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/variables.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/villageBrain.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/villageExport.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/villageReaders.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/voiceClaim.ts": {
+      "since": "2026-09-04"
+    },
+    "server/lib/walkLog.ts": {
+      "since": "2026-09-04"
+    },
+    "server/routes/badges.ts": {
+      "since": "2026-09-04"
+    },
+    "server/routes/brandPreview.ts": {
+      "since": "2026-09-04"
+    },
+    "server/routes/land.ts": {
+      "since": "2026-09-04"
+    }
+  }
+}

@@ -47,7 +47,15 @@
 import fs from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
-import { STATUS_COPY, BALLOT_RETURN, APPLYABLE, dialMatches } from "./GameMechanics";
+import { STATUS_COPY, APPLYABLE, dialMatches } from "./GameMechanics";
+import { ballotReturn } from "./gameMechanicsBallotCopy";
+
+/*
+ * The reading a village that never renamed anything would see. `ballotReturn`
+ * became a function of the village's word for whoever runs it, so this file
+ * binds the platform default once rather than restating it per assertion.
+ */
+const BALLOT_RETURN = ballotReturn("a Catalyst");
 
 const ROOT = path.resolve(__dirname, "../../..");
 
@@ -214,9 +222,11 @@ describe("the mechanics page speaks every state the server can send", () => {
   it("puts the withdrawal rule where a member meets it, before the refusal", () => {
     // An opener may call off a ballot nobody has answered; once a vote stands
     // it takes proposal.decide or an admin (withdrawBallot, server/lib/ballots.ts).
+    // The COPY says the village's word for that person, which is why this
+    // reads the label passed in above rather than the platform's own "admin".
     const tip = BALLOT_RETURN.withdrawn.tip ?? "";
     expect(tip).toMatch(/proposal\.decide/);
-    expect(tip).toMatch(/admin/i);
+    expect(tip).toMatch(/a Catalyst/);
     expect(tip.toLowerCase()).toContain("nobody has answered");
   });
 });

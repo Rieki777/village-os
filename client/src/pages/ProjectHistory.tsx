@@ -1,7 +1,8 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useVillageName } from "@/hooks/useVillageName";
-import { authToken } from "@/lib/gameApi";
+import { authToken, useCatalyst } from "@/lib/gameApi";
 import { readStoredJson, writeStoredJson } from "@/lib/safeStorage";
+import { villageMoonLabel } from "@shared/villageMoon";
 import { useState, useEffect, FormEvent } from "react";
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
@@ -497,6 +498,7 @@ function PasswordGate({ onUnlock }: { onUnlock: (pw: string) => void }) {
 // invariants. Read-and-steer: every action lives on its existing surface.
 
 export function EconomicsView({ headers }: { headers: (extra?: Record<string, string>) => Record<string, string> }) {
+  const catalyst = useCatalyst();
   const [data, setData] = useState<any>(null);
   const [failed, setFailed] = useState(false);
   const [copiedCycle, setCopiedCycle] = useState<number | null>(null);
@@ -511,7 +513,7 @@ export function EconomicsView({ headers }: { headers: (extra?: Record<string, st
 
   const copyForHypha = (cycle: any) => {
     const lines = [
-      `Cycle ${cycle.cycleNumber} settlement (closed ${cycle.closedAt ? new Date(cycle.closedAt).toLocaleDateString() : "date not recorded"})`,
+      `${villageMoonLabel(cycle.moon)} settlement (closed ${cycle.closedAt ? new Date(cycle.closedAt).toLocaleDateString() : "date not recorded"})`,
       ...cycle.totals.map((t: any) =>
         `${t.name}: ${t.received} received (${t.receivedHearts} gratitude + ${t.receivedAcks} acknowledgments) from ${t.distinctSenders} member(s)` +
         (t.credited ? ` → ${t.credited} ${cycle.poolToken ?? ""} credited` : ""),
@@ -523,8 +525,7 @@ export function EconomicsView({ headers }: { headers: (extra?: Record<string, st
     setTimeout(() => setCopiedCycle(null), 2000);
   };
 
-  if (failed) return <p className="text-sm text-stone-400 italic py-6 text-center">Could not load. Are you signed in as an admin?</p>;
-  if (!data) return <p className="text-sm text-stone-400 italic py-6 text-center">Loading…</p>;
+  if (failed || !data) return <p className="text-sm text-stone-400 italic py-6 text-center">{failed ? `Could not load. Are you signed in as ${catalyst.aName}?` : "Loading…"}</p>;
 
   const invariantsOk = !!data.reconciliation?.invariants?.ok;
 
@@ -555,9 +556,8 @@ export function EconomicsView({ headers }: { headers: (extra?: Record<string, st
         <div className="space-y-5">
           {data.settlement.map((c: any) => (
             <div key={c.cycleId}>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-semibold text-stone-700">
-                  Cycle {c.cycleNumber}
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mb-2">
+                <p className="text-sm font-semibold text-stone-700">{villageMoonLabel(c.moon)}
                   <span className="text-stone-400 font-normal"> · closed {c.closedAt ? new Date(c.closedAt).toLocaleDateString() : "date not recorded"}</span>
                   {c.poolCredited > 0 && <span className="text-teal-deep font-normal"> · pool released {c.poolCredited} {c.poolToken}</span>}
                 </p>
@@ -597,8 +597,7 @@ export function EconomicsView({ headers }: { headers: (extra?: Record<string, st
           <h3 className="text-sm font-bold text-stone-700 uppercase tracking-wide mb-1">Module health</h3>
           <p className="text-xs text-stone-400 mb-3">
             Turn modules on in{" "}
-            <Link href="/admin?tab=modules" className="text-teal-deep underline">Admin → Module Library</Link>
-            {" "}(top of The Game menu).
+            <Link href="/admin?tab=modules" className="text-teal-deep underline">Admin → Module Library</Link>.
           </p>
           <div className="space-y-1.5">
             {data.modules.map((m: any) => (
@@ -684,6 +683,7 @@ export function EconomicsView({ headers }: { headers: (extra?: Record<string, st
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function ProjectHistory() {
+  const catalyst = useCatalyst();
   const villageName = useVillageName();
   const buckets = buildBuckets(villageName);
   const WEEKS = buildWeeks(villageName);
@@ -1047,9 +1047,8 @@ export default function ProjectHistory() {
                   Working documents
                 </p>
                 <p className="text-xs text-stone-500 mb-3">
-                  Sheets, docs and boards this team works from. They are stored with the rest of
-                  this tracker and shown only to signed-in admins. Nothing here is built into the
-                  site, so a village that clones this platform starts with an empty list.
+                  Sheets, docs and boards this team works from. They are stored with the rest of this tracker and shown
+                  only to whoever is signed in as {catalyst.aName}. Nothing here is built into the site, so a village that clones this platform starts with an empty list.
                 </p>
                 <div className="space-y-2">
                   {resourceDraft.map((r, i) => (

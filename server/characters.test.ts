@@ -75,7 +75,7 @@ describe.skipIf(!configured)("the party", () => {
       });
       expect(t.ok).toBe(false);
     }
-    expect(await partyFor(pool, VILLAGE, u)).toHaveLength(0);
+    expect(await partyFor(pool, VILLAGE, u, u)).toHaveLength(0);
   });
 
   it("refuses an archetype this village does not have", async () => {
@@ -86,7 +86,7 @@ describe.skipIf(!configured)("the party", () => {
       archetypeKey: "necromancing", presentation: "f", tone: "deep",
     });
     expect(res.ok).toBe(false);
-    expect(await partyFor(pool, VILLAGE, u)).toHaveLength(0);
+    expect(await partyFor(pool, VILLAGE, u, u)).toHaveLength(0);
   });
 
   it("never builds an avatar path out of stored values", () => {
@@ -107,7 +107,7 @@ describe.skipIf(!configured)("the party", () => {
     const u = await makeMember("chr-dup");
     await addCharacter(pool, VILLAGE, u, { archetypeKey: "building", presentation: "f", tone: "deep" });
     await addCharacter(pool, VILLAGE, u, { archetypeKey: "building", presentation: "m", tone: "light" });
-    const party = await partyFor(pool, VILLAGE, u);
+    const party = await partyFor(pool, VILLAGE, u, u);
     // A second walk changes the look. It does not put a second copy of the
     // same class in the party row.
     expect(party).toHaveLength(1);
@@ -133,7 +133,7 @@ describe.skipIf(!configured)("the party", () => {
     const a = await addCharacter(pool, VILLAGE, u, { archetypeKey: "building", presentation: "f", tone: "deep" });
     const b = await addCharacter(pool, VILLAGE, u, { archetypeKey: "catalyzing", presentation: "m", tone: "light" });
     expect(a.ok && b.ok).toBe(true);
-    const ids = (await partyFor(pool, VILLAGE, u)).map((c) => c.id);
+    const ids = (await partyFor(pool, VILLAGE, u, u)).map((c) => c.id);
 
     await Promise.all([
       setPrimary(pool, VILLAGE, u, ids[0]),
@@ -143,7 +143,7 @@ describe.skipIf(!configured)("the party", () => {
 
     // One column, so both writers write the same place and the last one wins.
     // A boolean per character is what would let both win and leave two.
-    const party = await partyFor(pool, VILLAGE, u);
+    const party = await partyFor(pool, VILLAGE, u, u);
     expect(party.filter((c) => c.isPrimary)).toHaveLength(1);
     expect(ids).toContain(await primaryOf(u));
   });
@@ -171,7 +171,7 @@ describe.skipIf(!configured)("the party", () => {
     // Same transaction as the delete. Two steps would leave a window where the
     // profile points at a character that no longer exists and the header
     // renders nothing at all.
-    const left = await partyFor(pool, VILLAGE, u);
+    const left = await partyFor(pool, VILLAGE, u, u);
     expect(left).toHaveLength(1);
     expect(await primaryOf(u)).toBe(left[0].id);
     expect(left[0].isPrimary).toBe(true);
@@ -185,7 +185,7 @@ describe.skipIf(!configured)("the party", () => {
     // NULL is the honest state for somebody who has walked away from every
     // path, and the header draws a medallion for it.
     expect(await primaryOf(u)).toBeNull();
-    expect(await partyFor(pool, VILLAGE, u)).toHaveLength(0);
+    expect(await partyFor(pool, VILLAGE, u, u)).toHaveLength(0);
   });
 
   it("refuses to remove a character belonging to somebody else", async () => {
@@ -196,6 +196,6 @@ describe.skipIf(!configured)("the party", () => {
     });
     const removed = await removeCharacter(pool, VILLAGE, mine, t.ok ? t.character.id : "x");
     expect(removed).toBe(false);
-    expect(await partyFor(pool, VILLAGE, theirs)).toHaveLength(1);
+    expect(await partyFor(pool, VILLAGE, theirs, theirs)).toHaveLength(1);
   });
 });

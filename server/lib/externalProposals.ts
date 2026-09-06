@@ -70,6 +70,25 @@ export const EXTERNAL_PROPOSAL_KINDS = [
   "circle.proposed",
   "task.proposed",
   "quest.proposed",
+  /*
+   * `event.proposed` LANDS AND IS ACKNOWLEDGED, and does not create a calendar
+   * entry. The distinction is deliberate and worth stating where somebody will
+   * look for it.
+   *
+   * Creating an event is an inline admin route rather than an extracted
+   * function, so there is nothing an accept could call the way a quest accept
+   * calls `questsRepo.add`. Writing the insert here instead would be a second
+   * write path into the calendar, which is the one thing this whole surface is
+   * built to avoid: two writers of the same table disagree eventually, and the
+   * duplicate reward parsers in this repository are what that looks like after
+   * a year.
+   *
+   * So an event proposal behaves like a task or a tension: it lands with its
+   * evidence, a steward reads it and agrees it is true, and the decision is
+   * recorded. Turning that into a calendar entry is a human act with the admin
+   * form open, until somebody extracts a creation function worth calling.
+   */
+  "event.proposed",
   "risk.observed",
   "tension.observed",
   "commitment.observed",
@@ -256,6 +275,24 @@ export async function resolveReferences(
   return { payload: out, nulled };
 }
 
+/**
+ * Every subject a record names, deduped, in order, with the singular
+ * accepted as a one-element list so an older sender keeps working.
+ */
+export function subjectList(input: { subjectRef?: string | null; subjectRefs?: string[] | null }): string[] {
+  const raw = [...(input.subjectRefs ?? []), input.subjectRef];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of raw) {
+    if (typeof v !== "string") continue;
+    const t = v.trim();
+    if (t === "" || seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+  return out;
+}
+
 /** Quote and anchor, or anchor, or neither. Computed, never sent. */
 export function evidenceLevel(quote?: string | null, sourceRef?: string | null): EvidenceLevel {
   const hasQuote = typeof quote === "string" && quote.trim() !== "";
@@ -331,6 +368,15 @@ export interface LandInput {
   /** The vendor's clock: when the thing actually happened. */
   sourceOccurredAt?: string | null;
   subjectRef?: string | null;
+  /**
+   * Every person a record is about, in the order the vendor sent them.
+   * The work order publishes `subject_refs` as an array and a vendor's
+   * ordinary case names more than one: a risk about a named person where
+   * only the pattern stays in the record. Taking the first and dropping
+   * the rest makes the row invisible to everybody after the first, which
+   * their export and their erasure both depend on finding.
+   */
+  subjectRefs?: string[] | null;
   trustTier?: string | null;
   significance?: number | null;
   confidence?: number | null;
@@ -418,7 +464,14 @@ export async function landProposal(pool: Pool, input: LandInput): Promise<LandRe
   }
   // Before anything is normalised, hashed or written. A scan that ran after
   // the first write would be reporting a leak it had already caused.
-  if (containsEmail(input.payload) || containsEmail(input.quote ?? null) || containsEmail(input.subjectRef ?? null)) {
+  // Every subject, not only the first. A record whose SECOND reference is an
+  // email address used to land with that address stored.
+  const subjects = subjectList(input);
+  if (
+    containsEmail(input.payload) ||
+    containsEmail(input.quote ?? null) ||
+    subjects.some((r) => containsEmail(r))
+  ) {
     return refuse("contained_an_email");
   }
 
@@ -465,7 +518,7 @@ export async function landProposal(pool: Pool, input: LandInput): Promise<LandRe
           clip(input.quote, 8000),
           clip(input.sourceRef, 400),
           vendorInstant(input.sourceOccurredAt),
-          clip(input.subjectRef, 200),
+          clip(subjects[0] ?? input.subjectRef, 200),
           tier,
           input.significance ?? null,
           input.confidence ?? null,
@@ -487,6 +540,24 @@ export async function landProposal(pool: Pool, input: LandInput): Promise<LandRe
       );
       return { ok: true, id: String(existing?.id ?? ""), outcome: "duplicate", superseded: 0, nulled };
     }
+    // EVERY SUBJECT, RESOLVED ONCE, INSIDE THE SAME TRANSACTION.
+    //
+    // Resolution happens here and not at read time because a reference that
+    // resolves today may name a member who leaves tomorrow, and the answer
+    // this village acted on is the one worth keeping. A reference that does
+    // not resolve is stored with a NULL member_id, which is an honest
+    // 'this village cannot attribute this record' rather than an absence
+    // that reads as nobody being named.
+    for (let i = 0; i < subjects.length; i += 1) {
+      const ref = clip(subjects[i], 200);
+      if (ref === null) continue;
+      const [who] = await conn.query<RowDataPacket[]>("SELECT id FROM users WHERE id = ? LIMIT 1", [ref]);
+      await conn.query( // module-review-ok: this file is the enumerable home of external_proposals and its subject rows, per 0140's note
+        "INSERT IGNORE INTO external_proposal_subjects (id, proposal_id, subject_ref, member_id, position) VALUES (?,?,?,?,?)",
+        [`eps-${randomUUID().slice(0, 12)}`, id, ref, who.length ? String(who[0].id) : null, i],
+      );
+    }
+
     let res: any;
     try {
       [res] = await conn.query( // module-review-ok: external_proposals has no repo cache above it, and this file is the table's one enumerable home (the ballots.ts pattern)
@@ -674,4 +745,109 @@ export async function recentDrops(pool: Pool, days = 30): Promise<DropCount[]> {
     dropped: Number(r.dropped ?? 0),
     lastAt: iso(r.last_at),
   }));
+}
+
+/**
+ * Return every proposal that was accepted into one draft to the queue.
+ *
+ * The other half of `withdrawDraft`. Accepting marks each proposal 'accepted'
+ * and stamps `created_ref` with the draft id, so withdrawing that draft
+ * without this would leave those proposals accepted, out of the queue, and
+ * pointing at a draft that no longer applies. The steward would have no way
+ * back to them and the vendor would have no reason to resend: from their side
+ * the records were accepted.
+ *
+ * Scoped to `status = 'accepted'` so a proposal that was rejected, or
+ * superseded by a newer claim while the draft sat open, is left alone.
+ */
+export async function reopenProposalsFor(pool: Pool, createdRef: string): Promise<number> {
+  const [r] = await pool.query<any>(
+    "UPDATE external_proposals SET status = 'proposed', decided_by = NULL, decided_at = NULL, " +
+      "decided_note = NULL, created_ref = NULL WHERE created_ref = ? AND status = 'accepted'",
+    [createdRef],
+  );
+  return Number(r?.affectedRows) || 0;
+}
+
+/**
+ * Every vendor record this village can see is about one member.
+ *
+ * The export half of the leaving-well promise. `GET /api/profile/export` says
+ * "everything the village holds about me", and until this existed a vendor
+ * record naming somebody, holding a verbatim quote about them, was absent from
+ * it. Joined through the subject rows, so a record naming three people is
+ * found by all three rather than only the first.
+ */
+export async function proposalsAboutMember(pool: Pool, memberId: string) {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT p.id, p.module_id, p.kind, p.quote, p.source_ref, p.source_occurred_at, p.status, " +
+      "p.received_at, s.subject_ref FROM external_proposals p " +
+      "JOIN external_proposal_subjects s ON s.proposal_id = p.id WHERE s.member_id = ? " +
+      "ORDER BY p.received_at DESC",
+    [memberId],
+  );
+  return rows.map((r) => ({
+    id: String(r.id),
+    module: String(r.module_id),
+    kind: String(r.kind),
+    quote: r.quote ? String(r.quote) : null,
+    sourceRef: r.source_ref ? String(r.source_ref) : null,
+    sourceOccurredAt: r.source_occurred_at ?? null,
+    status: String(r.status),
+    receivedAt: r.received_at ?? null,
+    subjectRef: String(r.subject_ref),
+  }));
+}
+
+/**
+ * Take a departing member out of every vendor record that names them.
+ *
+ * TWO WRITES, AND THE SECOND IS THE ONE THAT MATTERS. Dropping the subject row
+ * de-attributes the record. It does not remove the person from it, and
+ * `anonymizeMember` already carries the reason in its own comment: the TEXT
+ * restates the person. A verbatim quote is the most restating thing a vendor
+ * ever sends, so it goes.
+ *
+ * The quote is cleared even when the record names somebody else too. A record
+ * about two people whose quote is about one of them cannot be half-kept, and
+ * between keeping words about a departed member and losing a sentence of
+ * context for a record that still has its payload, the promise wins.
+ *
+ * Returns what it did, because an erasure that reports nothing is the silent
+ * all-clear `memberDrivers.ts` was written to prevent.
+ */
+export async function forgetMemberInProposals(
+  pool: Pool,
+  memberId: string,
+): Promise<{ records: number; quotesCleared: number }> {
+  const [about] = await pool.query<RowDataPacket[]>(
+    "SELECT DISTINCT proposal_id FROM external_proposal_subjects WHERE member_id = ?",
+    [memberId],
+  );
+  const ids = about.map((r) => String(r.proposal_id));
+  if (!ids.length) return { records: 0, quotesCleared: 0 };
+
+  const holes = ids.map(() => "?").join(",");
+  const [q] = await pool.query<any>(
+    `UPDATE external_proposals SET quote = NULL WHERE id IN (${holes}) AND quote IS NOT NULL`,
+    ids,
+  );
+  await pool.query("DELETE FROM external_proposal_subjects WHERE member_id = ?", [memberId]); // module-review-ok: external_proposal_subjects has no repo cache above it, and this file is the table's one enumerable home (the ballots.ts pattern)
+  return { records: ids.length, quotesCleared: Number(q?.affectedRows) || 0 };
+}
+
+/**
+ * How many stored records name somebody this village cannot resolve.
+ *
+ * Not a defect report, a visibility one. A vendor sends its own opaque
+ * references and this village can only act on the ones it resolves, so an
+ * erasure or an export is complete only with respect to what could be
+ * attributed. A count of what could not is the difference between a promise
+ * kept and a promise that looks kept.
+ */
+export async function unattributedSubjectCount(pool: Pool): Promise<number> {
+  const [[r]] = await pool.query<RowDataPacket[]>(
+    "SELECT COUNT(*) AS n FROM external_proposal_subjects WHERE member_id IS NULL",
+  );
+  return Number(r?.n) || 0;
 }

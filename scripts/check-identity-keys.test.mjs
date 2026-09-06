@@ -260,6 +260,11 @@ function configSource({ project = {}, dropFavicon = false } = {}) {
     // refuse it. A test that wants tagline to violate passes its own string.
     tagline: "healing the land and ourselves, together",
     memberName: "Village member",
+    // Added 2026-09-03 with the key itself. "Catalyst" is the platform's own
+    // word for whoever runs a village and belongs to none of them, so it is a
+    // NEUTRAL value and a clean fixture carries it. A test that wants this key
+    // to violate passes its own string.
+    catalystName: "Catalyst",
     // Was "Somewhere the founder has not moved yet". project.location graduated
     // on 2026-09-03 and its platform default is EMPTY, because there is no
     // neutral location, so a clean fixture is empty here for the same reason

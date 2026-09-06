@@ -69,6 +69,7 @@ import { villageId } from "../lib/economy";
 import { readGameStart } from "../lib/gameStart";
 import { effectiveLifecycle } from "../lib/modules";
 import { registeredJobs } from "../lib/scheduler";
+import { moonOneCycle } from "../lib/villageMoon";
 
 /**
  * One person's budget, and the window it slides over.
@@ -176,7 +177,7 @@ export function register(app: Express, deps: Deps): void {
         jobs: registeredJobs(),
         modulesOff: MODULES.filter((m) => effectiveLifecycle(m.id) === "off").map((m) => ({ id: m.id, name: m.name })),
       },
-      { moons: asked, audience: wide ? "admin" : "member" },
+      { moons: asked, audience: wide ? "admin" : "member", moonOneCycle: await moonOneCycle(getPool()) },
     );
     res.json(report);
   });

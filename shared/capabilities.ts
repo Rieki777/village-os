@@ -63,6 +63,7 @@ export type Capability =
   // sentence "the village's ____ look after that"; it is not worth adding
   // for a route whose only holder could ever be the deployment operator.
   | "org.seat" // seat and unseat the people who hold the village's seats
+  | "org.seatAgent" // seat and unseat the software agents that hold seats
   | "intake.moderate" // work the queues strangers and members put things into
   | "library.keep" // keep the shared library: what comes in, what goes out
   | "story.tell" // say what the village is, in its own words, in public
@@ -129,6 +130,7 @@ export const ALL_CAPABILITIES: Capability[] = [
   "ballot.vote",
   "member.vouch",
   "org.seat",
+  "org.seatAgent",
   "intake.moderate",
   "library.keep",
   "story.tell",
@@ -181,6 +183,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "ballot.vote": "Cast a vote on a ballot",
   "member.vouch": "Vouch for an applicant",
   "org.seat": "Seat and unseat the holders of the village's seats",
+  "org.seatAgent": "Seat and unseat the software agents that hold seats",
   "intake.moderate": "Work the village's queues and act on what gets reported",
   "library.keep": "Keep the shared library and its loans",
   "story.tell": "Say what the village is, in public, in its own words",
@@ -357,6 +360,7 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   "library.keep": true,
   "story.tell": true,
   "org.seat": true,
+  "org.seatAgent": true,
   "dial.set": true,
   "event.manage": true,
   "exchange.manage": true,
@@ -569,6 +573,7 @@ export const DENIABLE: Record<Capability, boolean> = {
   "event.manage": true,
   "org.declare": true,
   "org.seat": true,
+  "org.seatAgent": true,
   "intake.moderate": true,
   // A job, and not a voice. Pausing it stops somebody putting paid work on
   // the board while a village works something out; it takes away nothing they

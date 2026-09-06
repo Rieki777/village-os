@@ -117,13 +117,20 @@ export async function ensureSky(pool: Pool, opts: SkyOptions): Promise<{ written
         }
       }
     }
-    // The year anchor: month 1 begins at the first new moon after the anchor
-    // event of this Gregorian year.
+    // The year anchor: the lunar year opens at the first new moon after the
+    // anchor event of this Gregorian year.
+    //
+    // THE TITLE NO LONGER SAYS "Moon 1", and the reason is the village moon
+    // count. This row lands on the calendar once a year, so a member reading
+    // "Moon 1 begins" every January would be reading a number that contradicts
+    // every other moon label on the same page: those count from the village's
+    // founding and never reset. The year still has a first moon and this row
+    // still marks it; what it no longer does is give that moon a number.
     const ly = lunarYearOf(year, opts.anchor);
     if (ly) {
       await write({
         sourceId: `sky:year-anchor:${iso(ly.startsAt)}`,
-        title: `Moon 1 begins: a ${ly.months.length}-moon year`,
+        title: `The village year begins: ${ly.months.length} moons`,
         description: `The first new moon after the ${opts.anchor.replace("_", " ")} opens the village year.`,
         startsAt: ly.startsAt,
         colour: "#0f766e",

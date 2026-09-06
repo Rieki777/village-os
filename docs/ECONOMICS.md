@@ -457,7 +457,7 @@ at the bridge, and something outside this repository has to confirm it.
 
 Voice does not keep. At the close of each cycle the settlement posts a
 percentage of every member's Voice to `sys:voice-decay`, a system account seeded
-by `drizzle/0148_voice_that_waned.sql` that is not a faucet and only ever
+by `drizzle/0165_voice_that_waned.sql` that is not a faucet and only ever
 receives, so its balance is all the Voice that has waned in this village to
 date. The rate is `economy.voice_decay_pct`, a percentage under The Mint that
 defaults to 1 and accepts 0 through 100, and `economy.voice_decay_basis` says
@@ -988,7 +988,7 @@ Conservation is checked against `token_balances`, which is a CACHE, and the cach
   (`token_ledger_amount_positive`, in `drizzle/0009_ledger_accounts_and_transfers.sql`).
   Re-verified 2026-09-04 at `1861f7d`, over 122 files: `grep -rn "FOREIGN KEY"
   drizzle/` returns exactly three lines and all three are `--` comments saying why
-  there is not one (0140, 0149, 0150), and `grep -rn "CHECK (" drizzle/*.sql`
+  there is not one (0140, 0166, 0167), and `grep -rn "CHECK (" drizzle/*.sql`
   returns the one constraint above. Every relational invariant here lives in
   application code, which is why the slug freeze had to be a code refusal.
 - **The units contract at each posting call site.** This bullet used to read "the
@@ -2265,7 +2265,7 @@ in this economy consults exactly that table, it sits inside a region marked
 GENERATED so it is trusted more than the prose around it, and three of the seven
 missing accounts are ESCROWS holding value that belongs to a member: a seat fee
 before the gathering, a loan deposit before the loan settles, tokens held against
-an open redemption. `sys:voice-decay` had been missing since `0148` landed it,
+an open redemption. `sys:voice-decay` had been missing since `0165` landed it,
 and `sys:redemption-hold` and `sys:redeemed` arrived in `0161` today and did not
 reach it either, which is what made the omission visible at all.
 
@@ -2290,27 +2290,32 @@ restored, the file passes 42 checks and the generator is byte-identical.
 
 ## 11. Open decisions
 
-1. **Decimals. SETTLED 2026-09-04, and the other way.** Rye had ruled 4 across
-   the board; he has now ruled whole numbers, in his words [Whole numbers, keep
-   code safe], with the earlier 3 on Village Voice described as future potential
-   for micro transactions. So every token carries 0 decimals, the ledger rescale
-   is cancelled, and the caller sweep is kept because scale-aware payloads and one
-   conversion helper are what stop a display and an input disagreeing at any scale.
-   **The migration that lowers Village Voice from 3 to 0 is itself a scale change,
-   downward, and must refuse rather than assume.** A stored 100 meaning 0.100
-   becomes 100 whole units the instant the column changes, so every holder inflates
-   by a thousand. That is safe on this village only by the accident of an empty
-   ledger, and it is not safe by construction. Assert that the token's issued supply
-   is zero before changing its decimals, and if it is not, either rescale in the
-   same transaction or stop and name the village. A fork that has been running for a
-   month is where this quietly becomes a thousandfold gift.
-   **And if the registry and the stored column cannot move in one transaction, the
-   REGISTRY MOVES LAST.** A stale registry over rescaled data reads too SMALL; a
-   fresh registry over unscaled data reads too LARGE. Only one of those is acted
-   on. A member whose balance reads a thousand times high spends it, claims it or
-   swaps it, and the repair afterwards is a clawback against somebody who did
-   nothing wrong. Section 7 opens with this, because that is where a reader who is
-   about to make the change will be standing.
+1. **Decimals. SETTLED 2026-09-04, AND SHIPPED. This entry stated the ruling
+   that was superseded and it is corrected here; section 7 is the live account.**
+   Rye asked for it in this shape: *if a bunch of work is already done to move
+   them all to 4 decimals and we're already nearly there, then finish the work.
+   If not, all I want is that currency-like tokens (the village credits) need to
+   have 2 decimals.* None of the 4-across-the-board work had been done, so the
+   narrow reading is the one that landed: **two decimals on the tokens a village
+   spends, prices and redeems, whole numbers for everything else, and Village
+   Voice at two.**
+
+   `0162` carries it. Four of the seven tokens hold `decimals = 2` and three hold
+   `0`; `shared/tokenScale.ts` is the one home for both numbers and every server
+   and client surface reads it. The migration selects BY KIND rather than by a
+   list of slugs, and it REFUSES over stored amounts instead of assuming.
+
+   **What stays open is not the scale, it is the rule for moving one.** A stored
+   100 meaning 0.100 becomes 100 whole units the instant the column changes, so
+   every holder inflates by a thousand, and that is safe on this village only by
+   the accident of an empty ledger. Assert the token's issued supply is zero
+   before changing its decimals, and if it is not, either rescale in the same
+   transaction or stop and name the village. **And if the registry and the stored
+   column cannot move in one transaction, the REGISTRY MOVES LAST**: a stale
+   registry over rescaled data reads too SMALL, a fresh registry over unscaled
+   data reads too LARGE, and only one of those is acted on. Section 7 opens with
+   this, because that is where a reader about to make the change will be standing.
+
 2. **Whether an audit event is a guarantee.** **76** `void recordEvent` calls post
    the audit trail without awaiting it, so a member who acts and immediately opens
    the audit feed can miss their own action. Fine as best effort, wrong if the feed
@@ -3160,8 +3165,8 @@ unchanged: four built, two not.** The readings, so the work is repeatable:
 
 | Ruling | Handle 1, a dial | Handle 2, a posting or table | Handle 3, a surface | Verdict |
 |---|---|---|---|---|
-| R1 needs | 5 keys `needs.*` in `shared/gameVariables.ts` | `village_needs`, `need_links` from `drizzle/0149_a_village_says_what_it_is_for.sql`; `shared/needs.ts` names 10 needs | `server/routes/needs.ts`, `client/src/components/admin/NeedsPanel.tsx` (which re-exports `NeedsSetupStep`) | built |
-| R3 voice decay | `economy.voice_decay_pct` default 1, `economy.voice_decay_basis` | `sys:voice-decay` seeded by `drizzle/0148_voice_that_waned.sql` with `faucet` 0; source `voice_decay`; `decayVoice` called from `runSettlement` | The Mint dials, and `publicSupply`'s `waned` beside `issued` | built |
+| R1 needs | 5 keys `needs.*` in `shared/gameVariables.ts` | `village_needs`, `need_links` from `drizzle/0166_a_village_says_what_it_is_for.sql`; `shared/needs.ts` names 10 needs | `server/routes/needs.ts`, `client/src/components/admin/NeedsPanel.tsx` (which re-exports `NeedsSetupStep`) | built |
+| R3 voice decay | `economy.voice_decay_pct` default 1, `economy.voice_decay_basis` | `sys:voice-decay` seeded by `drizzle/0165_voice_that_waned.sql` with `faucet` 0; source `voice_decay`; `decayVoice` called from `runSettlement` | The Mint dials, and `publicSupply`'s `waned` beside `issued` | built |
 | R4 exit levers | 10 keys `exit.*` | `sweepBalances` reads five of them; the convert branch posts a `postTransferPair` | `PUT` on the admin variables route and the governance apply loop, both through `setVariable` | built |
 | R9 unspent gratitude | none, and none is wanted: it is a measurement | `gratitude_allowance_total`, `_given`, `_unspent` in `shared/healthMetrics.ts`, written at close by `server/lib/health.ts` | the health dashboard | built |
 | R2 voice for contributions | none | `seedEconomy` is the ONLY `INSERT` into `mint_rules` in the tree; `queueRuleChange` and `applyPendingRules` write four pending columns and never `trigger` or `token_slug` | `POST /api/admin/tokens/:slug/mint` grants any platform token for any typed reason | **not enforced** |
@@ -3173,7 +3178,7 @@ unchanged: four built, two not.** The readings, so the work is repeatable:
 
 **Built.** The taxonomy is platform copy in `shared/needs.ts` (ten human needs,
 each with a label, a formal name, its expressions and a hue), the scope and the
-links live in `village_needs` and `need_links` from migration 0149, and
+links live in `village_needs` and `need_links` from migration 0166, and
 `server/lib/needs.ts` reads and writes both. `server/routes/needs.ts` carries
 the doors: `GET /api/needs/scope` and `/coverage` for any signed-in member,
 `PUT /api/admin/needs/scope`, `POST /api/admin/needs/retire`, the two link
@@ -3201,7 +3206,7 @@ rules read, so a village whose only enabled rule is `quest.completed` still
 wanes. The rate is `economy.voice_decay_pct`, default `1`, applied per cycle
 close; `economy.voice_decay_basis` says which Voice it measures against and
 offers one honest answer today, all of it. The sink is `sys:voice-decay`,
-seeded by migration 0148 with the faucet flag at 0, because a faucet flag there
+seeded by migration 0165 with the faucet flag at 0, because a faucet flag there
 would say the waning account had ISSUED Voice. The source is `voice_decay`, the
 occurrence key is `voice.decay:<village>:<cycleKey>:<userId>:<token>`, and the
 posting is deliberately NOT on the allow-negative list.

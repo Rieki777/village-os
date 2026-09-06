@@ -644,6 +644,20 @@ jobs:
         # Dependency-free, no database.
         run: node scripts/check-server-index-size.mjs
 
+      - name: Route limits
+        # A route anybody can reach, that a stranger can turn into cost the
+        # village cannot refuse, has to be bounded.
+        #
+        # This replaces CodeQL's js/missing-rate-limiting, which is filtered
+        # out in .github/codeql/codeql-config.yml because it cannot see any of
+        # the three ways this server bounds a request and reported 98 alerts
+        # holding zero unauthenticated writes. This one recognises the 429
+        # rather than a helper's name, so all three shapes count, and it reads
+        # all 590 routes in about a third of a second.
+        #
+        # Dependency-free, no database.
+        run: node scripts/check-route-limits.mjs
+
       - name: Build
         id: build
         # Runs even behind a failed guard, for the same reason the suite does,
@@ -763,12 +777,19 @@ jobs:
           exit $fail
 
       - name: Dependency audit
-        # BLOCKING as of the commerce work. It was advisory with a note saying
-        # "revisit before Block 6 (fiat)" — fiat shipped long ago and three
-        # funds-bearing modules are live, so a high-severity advisory now stops
-        # the deploy instead of scrolling past in a collapsed log.
+        # BLOCKING on FINDINGS, and deliberately not blocking on a registry that
+        # will not answer. Those are two different facts and `pnpm audit` returns
+        # one exit code for both.
+        #
+        # On 2026-09-04 registry.npmjs.org served its root in 0.34s while
+        # /-/npm/v1/security/audits hung, npm's status page said All Systems
+        # Operational, and every merge in this repository stopped, main included.
+        # Nothing was wrong with any code. scripts/dependency-audit.mjs now
+        # retries, then tells an ANSWER apart from a failure to ask, and only
+        # ever fails the build on an answer. Its reasoning is in its header and
+        # scripts/dependency-audit.test.mjs proves a high advisory still exits 1.
         #
         # If an advisory has no upstream fix, add a documented `pnpm.overrides`
-        # or an explicit ignore with a dated reason — do not re-add
-        # continue-on-error.
-        run: pnpm audit --prod --audit-level high
+        # or an explicit ignore with a dated reason. Do not re-add
+        # continue-on-error: it cannot tell the two cases apart either.
+        run: node scripts/dependency-audit.mjs

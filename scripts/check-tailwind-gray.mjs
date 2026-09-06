@@ -178,12 +178,47 @@ function scanFile(file) {
   return { count, waived, hits };
 }
 
+/**
+ * THE LIGHT-SURFACE ZONE, and why a numbered gray is the RIGHT answer inside it.
+ *
+ * Rye's ruling, 2026-09-04: the admin panel is a light-only workspace, on
+ * purpose. That is a product decision and not an oversight, and it changes
+ * what this guard should ask of the files below.
+ *
+ * Outside this zone a numbered gray is debt, because a member's page follows
+ * the theme the village chose and `text-gray-500` cannot. INSIDE it, a
+ * semantic token is the DEFECT: these surfaces paint a hardcoded `bg-white`
+ * (93 of them at the time of writing), so `text-foreground` on one of them
+ * renders near-white text on white the moment a founder switches to dark. The
+ * repo has already paid for that shape once, on Profile.tsx, where a
+ * responsive token on a frozen surface measured 2.76 to 1.
+ *
+ * So the zone is not an amnesty. It is this guard declining to push a file
+ * toward a bug. A file here must pair its colours consistently: fixed text on
+ * a fixed surface. Move any of this code onto a themed surface and it leaves
+ * the zone by path and is counted again, which is exactly what should happen.
+ *
+ * DELIBERATELY NARROW. Two entries, both unambiguously the founder's
+ * workspace. Profile.tsx is NOT here: it has the same frozen-surface problem
+ * and no ruling, so it stays counted and stays visible.
+ */
+const LIGHT_SURFACES = [
+  "client/src/pages/Admin.tsx",
+  "client/src/components/admin/",
+];
+
+const inLightSurfaceZone = (relPath) =>
+  LIGHT_SURFACES.some((p) => relPath === p || relPath.startsWith(p));
+
 const files = walk(SCAN_ROOT).sort();
 const counts = {};
 const details = {};
 let totalWaivers = 0;
+let zoneSkipped = 0;
 for (const file of files) {
   const r = rel(file);
+  // The founder's workspace is fixed-light by ruling; see LIGHT_SURFACES.
+  if (inLightSurfaceZone(r)) { zoneSkipped += 1; continue; }
   const { count, waived, hits } = scanFile(file);
   totalWaivers += waived;
   if (count > 0) { counts[r] = count; details[r] = hits; }
@@ -244,5 +279,8 @@ if (failures.length) {
 
 console.log(
   `Tailwind-gray guard passed. ${total} text-gray-* class(es) across ${Object.keys(counts).length} file(s) ` +
+  // The zone is PRINTED on every run. An exemption nobody sees is an
+  // exemption that outlives its reason.
+  `(${zoneSkipped} file(s) skipped as fixed-light admin surfaces) ` +
   `(baseline ${baselineTotal}); ${totalWaivers} waiver(s) in force.`,
 );

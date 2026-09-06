@@ -147,7 +147,7 @@ apply after it lands.
 | Hero sub | Appreciation, spoken out loud. Every month each member has a budget of gratitude to acknowledge the people building this village. | kept - but the NAME flag stands: "Every month" beside a budget that refills "when the lunar cycle turns" (:154) is a real contradiction. Which cadence is true depends on the village's `gratitude.monthlyBudget` cycle config, so the founder should rule the wording; suggested: "Each cycle, every member has a budget of gratitude..." |
 | Form head | Send gratitude · N / M left this cycle | kept |
 | Budget states | Your sending budget unlocks as you progress / We couldn't load your budget, reload to see it | kept |
-| Placeholders | Member's email · What are you thanking them for? | kept |
+| Placeholders | Member's email · What are you thanking them for? | "Member's email" is now "Their @handle". The field was `type="email" required` and no surface in this build ever shows a member's address, so it asked for a fact the sender could not get. Handles are already public (`ProfileHero`, `/profile/:handle`), the server resolves one to an id, and a typed address still works for anyone who knows one. |
 | Success | Your appreciation is on the wall. | kept |
 | Spent state | You've given your whole budget this cycle. It refills when the lunar cycle turns. | kept |
 | Signed-out | Sign in to send gratitude to a fellow member. | kept |

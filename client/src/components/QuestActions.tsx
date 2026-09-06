@@ -5,6 +5,7 @@ import { CheckCircle2, Send, Sparkles } from "lucide-react";
 import Celebration from "@/components/natural/Celebration";
 import { useCountUp, useMomentWindow } from "@/components/natural/moments";
 import { claimMoment } from "@/lib/celebrated";
+import { formatTokenAmount } from "@/lib/tokenAmount";
 import { playMoment } from "@/lib/sound";
 
 // questIdFromTitle is gone (S10): quest ids are REAL server references now.
@@ -33,10 +34,21 @@ import { playMoment } from "@/lib/sound";
  * positioned, so the row below stays clickable while it plays and the layout
  * does not move underneath a thumb.
  */
-function ConsentedReward({ claim }: { claim: QuestClaim }) {
+function ConsentedReward({ claim, decimals }: { claim: QuestClaim; decimals: number }) {
   const granted = claim.amount ?? 0;
   const credited = claim.credited ?? granted;
   const bonus = credited - granted;
+  /*
+   * WHAT SCALE THESE NUMBERS ARE IN. A quest pays the recognition token, and
+   * both `amount` and `credited` are ledger figures, so they are MINOR units
+   * like every other row. GameDashboard divides that same token's balance
+   * through this same formatter and ProfileJourney divides its ledger lines,
+   * so the biggest green number in the game was the one contradicting them.
+   *
+   * `seed` stays the raw INT deliberately: it picks which drawing plays and is
+   * never read as a quantity.
+   */
+  const show = (n: number) => formatTokenAmount(n, decimals);
   // Read once on mount: claiming the moment IS the check, so a re-render can
   // never re-open it, and two mounted copies cannot both play it.
   const [fresh] = useState(() => claimMoment(`quest:${claim.id}`));
@@ -65,19 +77,19 @@ function ConsentedReward({ claim }: { claim: QuestClaim }) {
             intensity="moment"
             size={88}
             seed={granted}
-            message={`Your quest was consented. ${credited} released.`}
+            message={`Your quest was consented. ${show(credited)} released.`}
           />
         </span>
       )}
       <span className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-700">
-        <CheckCircle2 className="w-4 h-4" /> Completed{credited ? ` · +${shown}` : ""}
+        <CheckCircle2 className="w-4 h-4" /> Completed{credited ? ` · +${show(shown)}` : ""}
       </span>
       {/* The bonus is information, so it stays after the drawing has gone. A
           badge holder was previously told the pre-multiplier grant and never
           saw the rest of what landed. */}
       {bonus > 0 && (
         <p className="text-xs text-emerald-800 mt-1">
-          {granted} granted, and {bonus} more for a standing badge you hold.
+          {show(granted)} granted, and {show(bonus)} more for a standing badge you hold.
         </p>
       )}
     </div>
@@ -88,11 +100,18 @@ export default function QuestActions({
   questId,
   signedIn,
   claim,
+  decimals = 0,
   onChanged,
 }: {
   questId: string;
   signedIn: boolean;
   claim: QuestClaim | undefined;
+  /**
+   * The recognition token's scale, from `/api/game/me`'s `gratitude.decimals`.
+   * Defaults to 0, which is what every token in the registry carried before
+   * Voice and what an unanswered payload honestly means.
+   */
+  decimals?: number;
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -205,7 +224,7 @@ export default function QuestActions({
           <Send className="w-4 h-4" /> Submitted, awaiting circle consent
         </span>
       ) : (
-        <ConsentedReward claim={claim} />
+        <ConsentedReward claim={claim} decimals={decimals} />
       )}
       {/* role="alert": claiming, submitting and abandoning a quest all
           report their refusal here, and it is the only report. Without the

@@ -98,6 +98,28 @@ check(
   STAGE("Stage 6 (build and security"),
 );
 
+// 3b. The burn-down register, which is repo-wide and not the contributor's
+// diff. It classified as "unrecognised" for as long as it had no rule, which
+// sends a builder to read output that is not about them.
+check(
+  "a grown raw-SQL register blocks at stage 6 and says which register",
+  classify({
+    listingText: violation("  the raw-SQL burn-down register only shrinks: 2 refusal(s)"),
+    listingExit: 1,
+  }).stage,
+  STAGE("Stage 6 (build and security review): the raw-SQL burn-down"),
+);
+// The register's own informational line is NOT a violation and must never
+// classify. It prints on every run, green or red, and it names the rule.
+check(
+  "the register's passing line does not block",
+  classify({
+    listingText: `${CLEAN}\n    764 call site(s) in 77 file(s) of 511 scanned; register 764, ceiling 764; 62 same-line waiver(s) in force.`,
+    listingExit: 0,
+  }).blocked,
+  false,
+);
+
 // 4. Earliest stage wins when several fail at once.
 const many = classify({
   listingText: `${violation("  vendor record present")}\n  raw fetch outside guardedFetchJson: 1  <-- VIOLATION`,
@@ -143,6 +165,11 @@ function STAGE(prefix) {
     "Stage 3 (data and legal): a member-pii listing must register a member driver, so a deletion reaches outside.",
     "Stage 5 (tier and commercials): the price, the licence slot and the pool rule are not consistent.",
     "Stage 6 (build and security review): the diff contains a pattern contract clause 13 refuses.",
+    // Two sentences now share the "build and security review" opening, and
+    // `find` returns the first. That is deliberate: the shorter prefix keeps
+    // naming the diff-attributed stage, which is the one a contributor is
+    // likelier to hit, and this one takes a prefix long enough to be unlike it.
+    "Stage 6 (build and security review): the raw-SQL burn-down register grew. That register only shrinks; move the query into a repo under server/repos.",
     "Stage 6 (build): a builder document points at a path that does not exist.",
   ];
   const hit = all.find((s) => s.startsWith(prefix));

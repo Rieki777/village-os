@@ -1,0 +1,107 @@
+[
+  {
+    "source": "saberra",
+    "type": "org.proposed",
+    "version": "1",
+    "tenant": "saberra-tenant-id",
+    "instance": "the instanceId we give you",
+    "event_id": "derive-this-from-YOUR-record-identity-never-from-a-timestamp",
+    "batch_id": "amora-first-import-2026-09",
+    "occurred_at": "2026-09-03T09:00:00.000Z",
+    "source_occurred_at": "2026-08-14T09:00:00.000Z",
+    "correlation_id": null,
+    "significance": 0.82,
+    "trust_tier": "extracted_unreviewed",
+    "subject_refs": [],
+    "evidence": {
+      "quote": "We keep saying the well needs one person answerable for it.",
+      "source_kind": "meeting",
+      "source_ref": "meeting-2026-08-14#42",
+      "source_at": "2026-08-14T09:00:00.000Z"
+    },
+    "payload": {
+      "title": "The land circle, as the August meetings describe it",
+      "rationale": "Three meetings in a row returned to water and nobody owned it.",
+      "seats": [
+        {
+          "id": "water-steward",
+          "name": "Water Steward",
+          "aim": "The well, the lines and the seasonal irrigation plan stay working.",
+          "domain": "Everything upstream of a tap.",
+          "accountabilities": [
+            "Test the well monthly and record it",
+            "Hold the irrigation plan for each season",
+            "Call the repair before it is an emergency"
+          ],
+          "whyItMatters": "Water is the one failure that stops everything else.",
+          "circleId": "land",
+          "seats": 1,
+          "criticality": "high",
+          "recruiting": true
+        },
+        {
+          "id": "orchard-keeper",
+          "name": "Orchard Keeper",
+          "aim": "The fruit trees are pruned, fed and harvested on time.",
+          "domain": "The orchard and its tools.",
+          "accountabilities": ["Prune in winter", "Organise the harvest"],
+          "circleId": "land",
+          "seats": 2,
+          "criticality": "normal"
+        }
+      ]
+    }
+  },
+  {
+    "source": "saberra",
+    "type": "role.proposed",
+    "version": "1",
+    "tenant": "saberra-tenant-id",
+    "instance": "the instanceId we give you",
+    "event_id": "another-stable-id-from-your-side",
+    "batch_id": "amora-first-import-2026-09",
+    "occurred_at": "2026-09-03T09:00:00.000Z",
+    "source_occurred_at": "2026-08-21T18:30:00.000Z",
+    "trust_tier": "machine_confirmed",
+    "subject_refs": [],
+    "evidence": {
+      "quote": "Somebody has to own the guest rooms or we will keep double booking.",
+      "source_kind": "meeting",
+      "source_ref": "meeting-2026-08-21#7",
+      "source_at": "2026-08-21T18:30:00.000Z"
+    },
+    "payload": {
+      "name": "Stay Keeper",
+      "aim": "Guests are expected, housed and accounted for.",
+      "domain": "The guest rooms and the booking calendar.",
+      "accountabilities": ["Hold the booking calendar", "Meet arrivals"],
+      "circleId": "hearth",
+      "seats": 1,
+      "criticality": "normal"
+    }
+  },
+  {
+    "source": "saberra",
+    "type": "tension.observed",
+    "version": "1",
+    "tenant": "saberra-tenant-id",
+    "instance": "the instanceId we give you",
+    "event_id": "a-third-stable-id",
+    "batch_id": "amora-first-import-2026-09",
+    "occurred_at": "2026-09-03T09:00:00.000Z",
+    "source_occurred_at": "2026-08-28T11:00:00.000Z",
+    "trust_tier": "extracted_unreviewed",
+    "significance": 0.4,
+    "subject_refs": [],
+    "evidence": {
+      "quote": "That is the third time we have deferred the water decision.",
+      "source_kind": "meeting",
+      "source_ref": "meeting-2026-08-28#19",
+      "source_at": "2026-08-28T11:00:00.000Z"
+    },
+    "payload": {
+      "observation": "A decision about water has been deferred in three consecutive meetings.",
+      "circleId": "land"
+    }
+  }
+]

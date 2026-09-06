@@ -26,13 +26,26 @@
  *      omits a store a driver could not read is the same defect the comment
  *      on the export route was written about, arriving by a new road.
  *
+ * WHAT A DRIVER IS GIVEN, AND WHY IT IS NOT A MEMBER ID. Both methods receive
+ * an OPAQUE SUBJECT REFERENCE (`server/lib/subjectRefs.ts`), never our internal
+ * member id. The module library contract has promised vendors exactly that
+ * since its first revision, and until the reference scheme existed this file
+ * quietly did the opposite: it handed `userId` to every driver.
+ *
+ * The reason this mattered more than it looked is ordering. The first driver
+ * ever registered will belong to an outside company, and the shape it takes on
+ * that day is the shape every later vendor copies. Changing it after one vendor
+ * has stored our member ids is not a refactor, it is a data recall.
+ *
  * WHAT IS RECORDED. Every call runs through `callVendor`, so an unconfirmed
  * erasure lands in `integration_health` as a failure with a correlation id,
  * exactly like any other failed outbound call. The caller additionally writes
  * an admin-audience audit event, because an erasure that did not complete is
  * a fact about an obligation and not only about an integration.
  */
+import type { Pool } from "mysql2/promise";
 import { callVendor } from "./integrations";
+import { dropSubjectRef, markErasurePending, subjectRefFor } from "./subjectRefs";
 
 export interface ForgetOutcome {
   confirmed: boolean;
@@ -52,9 +65,9 @@ export interface MemberDriver {
    * means having checked, not having sent. Contract stage 4 proves this by
    * reading back and getting nothing.
    */
-  forgetMember(userId: string): Promise<ForgetOutcome>;
+  forgetMember(subjectRef: string): Promise<ForgetOutcome>;
   /** Everything the outside store holds about this member, as plain data. */
-  exportMember(userId: string): Promise<unknown>;
+  exportMember(subjectRef: string): Promise<unknown>;
 }
 
 const drivers = new Map<string, MemberDriver>();
@@ -113,13 +126,28 @@ export function erasureSentence(o: ErasureOutcome): string {
  * refusing driver must not stop the others being asked, and must not stop the
  * local sweep that runs around this call.
  */
-export async function forgetMemberEverywhere(userId: string): Promise<ErasureOutcome> {
+export async function forgetMemberEverywhere(pool: Pool, userId: string): Promise<ErasureOutcome> {
   const out: ErasureOutcome = { asked: registeredMemberDrivers(), confirmed: [], unconfirmed: [] };
+
+  // Nothing outside holds anything, so there is nothing to ask and no reason to
+  // keep a reference alive for a conversation that will never happen.
+  if (out.asked.length === 0) {
+    await dropSubjectRef(pool, userId);
+    return out;
+  }
+
+  // Issue one if this member has never been referenced. It costs a row that
+  // this same call usually deletes again, and it buys the property that every
+  // registered driver is ALWAYS asked. Skipping the ask because we believe no
+  // vendor could know this member would make the deletion guarantee depend on
+  // an invariant holding perfectly everywhere else.
+  const ref = await subjectRefFor(pool, userId);
+
   for (const moduleId of out.asked) {
     const driver = drivers.get(moduleId)!;
     try {
       const r = await callVendor(moduleId, "forgetMember", async () => {
-        const answer = await driver.forgetMember(userId);
+        const answer = await driver.forgetMember(ref);
         // An unconfirmed answer is a FAILED call, so it lands in the health
         // record as one. A driver that returns "no" quietly would otherwise
         // look, to every later reader, exactly like a driver that succeeded.
@@ -131,6 +159,26 @@ export async function forgetMemberEverywhere(userId: string): Promise<ErasureOut
       out.unconfirmed.push({ module: moduleId, detail: String(e?.message ?? e).slice(0, 300) });
     }
   }
+
+  // THE MAPPING GOES LAST, AND ONLY WHEN THERE IS NOTHING LEFT TO CHASE.
+  //
+  // Rule 2 above says the village keeps owing an unconfirmed store that
+  // confirmation, and chasing it later means asking about this member again,
+  // which needs the reference to still resolve. Dropping it here would leave
+  // the village holding an obligation it can no longer name anybody in, which
+  // is a worse state than the one rule 2 was written to avoid.
+  //
+  // So the reference outlives a failed erasure ON PURPOSE, and dies with a
+  // complete one.
+  if (out.unconfirmed.length === 0) {
+    await dropSubjectRef(pool, userId);
+  } else {
+    // Kept, and RECORDED as kept. An obligation nobody can see is one nobody
+    // ends, and the stores that did not answer are named here because a date
+    // alone tells a steward the scale and gives them nobody to press.
+    await markErasurePending(pool, userId, out.unconfirmed);
+  }
+
   return out;
 }
 
@@ -146,12 +194,20 @@ export interface ExternalExport {
  * read is NAMED in the document. An export that silently drops one is the
  * defect the export route's own comment was written about.
  */
-export async function exportMemberEverywhere(userId: string): Promise<ExternalExport> {
+export async function exportMemberEverywhere(pool: Pool, userId: string): Promise<ExternalExport> {
   const out: ExternalExport = { stores: {}, unavailable: [] };
-  for (const moduleId of registeredMemberDrivers()) {
+  const moduleIds = registeredMemberDrivers();
+
+  // A village with no connected module issues no reference for a member who
+  // simply asked what is held about them.
+  if (moduleIds.length === 0) return out;
+
+  const ref = await subjectRefFor(pool, userId);
+
+  for (const moduleId of moduleIds) {
     const driver = drivers.get(moduleId)!;
     try {
-      out.stores[moduleId] = await callVendor(moduleId, "exportMember", () => driver.exportMember(userId));
+      out.stores[moduleId] = await callVendor(moduleId, "exportMember", () => driver.exportMember(ref));
     } catch (e: any) {
       out.unavailable.push({ module: moduleId, detail: String(e?.message ?? e).slice(0, 300) });
     }

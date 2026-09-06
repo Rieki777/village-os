@@ -5,6 +5,7 @@
  */
 import type { CalendarItem, LunarSummary } from "@shared/gatherings";
 import { civilDate, civilDateKey, lunarPositionFor, moonPhase, zonedTimeToUtc, type YearAnchor } from "@shared/lunar";
+import { moonCountLabel } from "@shared/villageMoon";
 
 /** What GET /api/events answers since 0085. */
 export interface EventsPayload {
@@ -16,6 +17,15 @@ export interface EventsPayload {
   anchor: YearAnchor;
   hemisphere: "north" | "south";
   monthNames: Array<{ index: number; name: string; isExample: boolean }>;
+  /**
+   * The lunation this village calls Moon 1, or null while it has not set one.
+   *
+   * Every moon number on this calendar is counted from here, so it travels
+   * with the payload and is read once for a whole grid. Null is the honest
+   * answer for a village that has not started counting, and a surface holding
+   * null prints a window with no number on it.
+   */
+  moonOneCycle: number | null;
 }
 
 export const DEFAULT_ANCHOR: YearAnchor = "december_solstice";
@@ -224,10 +234,50 @@ export function itemsByDay(items: CalendarItem[], timeZone: string): Map<string,
   return out;
 }
 
-/** The label of a lunar month: "Moon 8, Sturgeon Moon". */
-export function moonLabel(index: number, names: EventsPayload["monthNames"]): { title: string; name: string; isExample: boolean } {
+/**
+ * The label of a moon: THE VILLAGE'S OWN COUNT, and the moon's name.
+ *
+ * Two different numbers meet here and only one of them is printed. `index` is
+ * the moon's place in the lunar year, 1 to 13, and it is what the NAME is
+ * keyed by, because a village names the moons of its year and those names come
+ * round again. `cycleNumber` against `moonOneCycle` is the count since the
+ * village's first moon, which never resets, and that is the number a member
+ * reads. Dating something takes one number now and never a pair.
+ *
+ * `title` is EMPTY for a village with no first moon set, and reads "Before
+ * Moon 1" for a lunation earlier than the anchor. Neither is an accident and
+ * neither is ever "Moon 0": compose with `moonHeading` below and a surface
+ * with no count says the moon's name and its dates instead.
+ */
+export function moonLabel(
+  index: number,
+  cycleNumber: number,
+  moonOneCycle: number | null,
+  names: EventsPayload["monthNames"],
+): { title: string; name: string; isExample: boolean } {
   const n = names.find((m) => m.index === index);
-  return { title: `Moon ${index}`, name: n?.name ?? "", isExample: n?.isExample ?? false };
+  return {
+    title: moonCountLabel(cycleNumber, moonOneCycle),
+    name: n?.name ?? "",
+    isExample: n?.isExample ?? false,
+  };
+}
+
+/** "Moon 47, Sturgeon Moon", with whichever half this village has. */
+export function moonHeading(label: { title: string; name: string }): string {
+  return [label.title, label.name].filter(Boolean).join(", ") || "This moon";
+}
+
+/**
+ * The compact line a grid cell carries: the village's moon and the lunar day.
+ *
+ * "Moon 47, day 12" normally, "day 12" alone for a village that is not
+ * counting yet. The day is always there, because the day is a fact about the
+ * sky that no anchor is needed to state.
+ */
+export function moonDayLine(info: LunarDayInfo, moonOneCycle: number | null): string {
+  const count = moonCountLabel(info.cycleNumber, moonOneCycle);
+  return `${count ? `${count}, ` : ""}day ${info.day}`;
 }
 
 /** Kinds the sky writes; drawn as glyphs in cells rather than as list rows. */

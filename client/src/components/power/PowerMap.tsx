@@ -32,8 +32,10 @@ import {
 } from "react";
 import { motion } from "framer-motion";
 import { wrapLabel, type NestedLayout } from "@shared/mapLayout";
+import { cssColourForCircle } from "@shared/circleView";
 import { transition, viewBoxFor, viewFor, type CameraTarget, type CameraView } from "./camera";
 import SeatGlyph, { seatStateWords } from "./SeatGlyph";
+import { captionSize, fitLabelToScreen } from "./labelFit";
 import { TermArc, SeasonRing } from "./TermMarkers";
 import RelationLines, { RelationArrowDef } from "./RelationLines";
 import type { Filters, PowerData, PowerSeat, Selection } from "./types";
@@ -42,13 +44,64 @@ import { anyFilterOn, seatPassesFilters } from "./types";
 /** Faces stop drawing outside the focus past this many seats (spec 13). */
 const AVATAR_SEAT_CAP = 400;
 
-const TONE: Record<string, string> = {
-  sage: "var(--color-sage)",
-  amber: "var(--color-amber)",
-  coral: "var(--color-coral)",
-  teal: "var(--color-teal)",
-};
-const toneOf = (c: any): string => TONE[String(c?.color ?? "")] ?? "var(--color-teal-deep)";
+/*
+ * ── HOW BIG THIS PICTURE ACTUALLY DRAWS, AND WHY IT WAS HALF SIZE ──────────
+ *
+ * The layout is a circle PACKING, so its content is a disc and its canvas is
+ * the square that hugs that disc. The SVG then fits that square into the
+ * element's real box with `xMidYMid meet`, which scales to whichever side is
+ * smaller. On a desktop column the box is landscape (measured 864x533), so
+ * the height wins, the whole drawing renders at 0.51x, and 331px of width
+ * (38% of the canvas) sits empty on either side of the disc.
+ *
+ * The viewBox was asking for the LAYOUT's aspect, which is 1 by construction
+ * and therefore told the browser nothing about the space available. Handing
+ * it the CONTAINER's aspect does two things: the world coordinate system now
+ * covers the full box, and the space beside the disc becomes addressable
+ * world space instead of dead margin. That space is where a name too long for
+ * its circle goes.
+ *
+ * It does NOT on its own make the disc bigger. A disc in a short wide box is
+ * height-limited whatever the viewBox says, which is why `md:h-[74vh]` moved
+ * too: the stage was capped at 533px while 864px wide.
+ */
+function useMeasuredBox(el: SVGSVGElement | null): { w: number; h: number } {
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const read = () => {
+      const r = el.getBoundingClientRect();
+      // Round before comparing: a fractional resize that changes nothing
+      // visible would otherwise re-render on every scroll on some browsers.
+      const next = { w: Math.round(r.width), h: Math.round(r.height) };
+      setBox((prev) => (prev.w === next.w && prev.h === next.h ? prev : next));
+    };
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [el]);
+  return box;
+}
+
+// The label floor lives in `labelFit.ts` so it can be tested without a
+// browser. See that file for why a world-unit floor was the wrong floor.
+
+/*
+ * EVERY CIRCLE GETS ITS OWN COLOUR, AND SEVENTEEN OF THEM USED TO GET ONE.
+ *
+ * This was a four-entry `Record<string, string>` keyed by bare tone words
+ * (sage, amber, coral, teal) with `?? var(--color-teal-deep)` on the end.
+ * The seed writes eight words, four of which (rose, stone, sky, emerald)
+ * were not in it, and the admin form writes Tailwind classes (`bg-sage`),
+ * which matched nothing at all. So most circles fell to the fallback and the
+ * map drew one grey, throwing away the strongest wayfinding signal it owns.
+ *
+ * `cssColourForCircle` resolves both vocabularies onto a union the compiler
+ * checks, and the hues are the living map artifact's own `CIRCLE_COL`, so
+ * the two lenses agree about what colour a circle is.
+ */
+const toneOf = (c: any): string => cssColourForCircle({ id: String(c?.id ?? ""), color: c?.color ?? null });
 
 export default function PowerMap({
   data,
@@ -64,6 +117,7 @@ export default function PowerMap({
   pulseSeatId,
   lenses,
   svgRef,
+  maxDepth,
 }: {
   data: PowerData;
   layout: NestedLayout;
@@ -81,6 +135,16 @@ export default function PowerMap({
   lenses?: ReactNode;
   /** The page exports SVG/PNG from this element (spec 14). */
   svgRef?: RefObject<SVGSVGElement | null>;
+  /*
+   * ONE LEVEL AT A TIME, WHICH IS WHAT A PHONE HAS ROOM FOR.
+   *
+   * Seventeen circles and their nested children in a 375px square is a
+   * picture nobody can use: at that size a grandchild circle is a few pixels
+   * across and its seats are smaller than a fingertip. Undefined draws every
+   * depth, which is what a desktop wants; a number draws that depth and
+   * above, and the breadcrumb is the way down.
+   */
+  maxDepth?: number;
 }) {
   const byId = useMemo(() => new Map(data.circles.map((c) => [c.id, c])), [data.circles]);
   const posById = useMemo(() => new Map(layout.circles.map((p) => [p.id, p])), [layout]);
@@ -196,13 +260,47 @@ export default function PowerMap({
   };
 
   const drawVillageRing = shape !== "pyramid";
-  const aspect = layout.height / layout.width;
+
+  // The CONTAINER's aspect, measured, not the layout's (which is 1 by
+  // construction). See useMeasuredBox above for what this was costing.
+  const [svgEl, setSvgEl] = useState<SVGSVGElement | null>(null);
+  /* HOVER, SO A READER CAN SURVEY WITHOUT NAVIGATING.
+     Reading the shape of the village meant stepping into every circle and
+     back out again, which loses your place each time. Pointer only: a touch
+     device gets the tap, and hover would fire on the way to it. */
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const box = useMeasuredBox(svgEl);
+  const aspect = box.w > 0 && box.h > 0 ? box.h / box.w : layout.height / layout.width;
+  /*
+   * THE VIEW WIDTH HAS TO GROW WITH A LANDSCAPE BOX, OR THE DISC IS CUT.
+   *
+   * `viewFor` asks for a world region `2r + margin` WIDE, and means a square
+   * region: the thing it is framing is a disc. Handing that width to a
+   * viewBox whose aspect is 0.62 asks for a region 38% SHORTER than it is
+   * wide, and the top and bottom of the village ring fall outside the
+   * picture. Correct aspect, cropped map, which is a worse bug than the one
+   * being fixed and would have looked like a layout error.
+   *
+   * So the region is widened until its HEIGHT covers the square the camera
+   * meant. The scale is unchanged by this (a disc in a short box is
+   * height-limited whatever the viewBox says); what it buys is that the
+   * space either side of the disc becomes addressable world space instead of
+   * dead margin, which is where a name too long for its circle now goes.
+   */
+  const fittedView: CameraView = aspect < 1 ? [view[0], view[1], view[2] / aspect] : view;
+  // Screen pixels per world unit, at the camera's current width. Everything
+  // that has to hold a fixed size on screen divides by this.
+  const pxPerWorld = box.w > 0 ? box.w / fittedView[2] : 0;
 
   return (
     <>
       <svg
-        ref={svgRef}
-        viewBox={viewBoxFor(view, aspect)}
+        ref={(el) => {
+          setSvgEl(el);
+          // `svgRef` is the caller's handle (export, print). Keep feeding it.
+          if (svgRef) (svgRef as { current: SVGSVGElement | null }).current = el;
+        }}
+        viewBox={viewBoxFor(fittedView, aspect)}
         className="w-full h-full"
         preserveAspectRatio="xMidYMid meet"
         role="group"
@@ -262,7 +360,9 @@ export default function PowerMap({
           })}
 
         {/* The circles, every shape, one loop. */}
-        {layout.circles.map((pos) => {
+        {layout.circles
+          .filter((pos) => maxDepth === undefined || pos.depth <= maxDepth)
+          .map((pos) => {
           const c = byId.get(pos.id);
           const forming = c?.status === "forming";
           const tone = toneOf(c);
@@ -272,11 +372,20 @@ export default function PowerMap({
           const dimForFilter = filtersOn && !circleAnyPass(pos.id) ? 0.2 : 1;
           const opacity = Math.min(dimForFocus, dimForFilter) * (forming ? 0.6 : 1);
           const isFocus = pos.id === focusId;
-          const label = wrapLabel(c?.name ?? pos.id, pos.r, pos.depth);
+          const hovered = hoverId === pos.id && interactive && !isFocus;
+          const wrapped = wrapLabel(c?.name ?? pos.id, pos.r, pos.depth);
+          // The world-unit size the layout asked for, converted to something
+          // legible on THIS screen at THIS zoom. See fitLabelToScreen.
+          const fit = fitLabelToScreen(wrapped, pos.r, pxPerWorld);
+          const label = { lines: wrapped.lines, fontSize: fit.fontSize, lineHeight: fit.lineHeight };
           const hasChildren = data.circles.some((o) => o.parentCircleId === pos.id && posById.has(o.id));
-          const labelTop = hasChildren
-            ? pos.y - pos.r + 24
-            : pos.y - ((label.lines.length - 1) * label.lineHeight) / 2 + (forming ? -6 : 0);
+          const labelTop = fit.outside
+            ? // Above the disc, clear of its seat ring, where the circle's own
+              // width stops constraining the name.
+              pos.y - pos.r - 6 - (label.lines.length - 1) * label.lineHeight
+            : hasChildren
+              ? pos.y - pos.r + 24
+              : pos.y - ((label.lines.length - 1) * label.lineHeight) / 2 + (forming ? -6 : 0);
 
           return (
             <motion.g key={pos.id} animate={{ opacity }} transition={morph}>
@@ -285,12 +394,14 @@ export default function PowerMap({
                 animate={{ cx: pos.x, cy: pos.y, r: pos.r }}
                 initial={false}
                 transition={morph}
-                style={{ fill: tone, fillOpacity: isFocus ? 0.16 : 0.1 }}
+                style={{ fill: tone, fillOpacity: isFocus ? 0.16 : hovered ? 0.2 : 0.1 }}
                 stroke={tone}
-                strokeOpacity={isFocus ? 0.9 : 0.45}
-                strokeWidth={isFocus ? 3 : 2}
+                strokeOpacity={isFocus ? 0.9 : hovered ? 0.85 : 0.45}
+                strokeWidth={isFocus ? 3 : hovered ? 3 : 2}
                 className={interactive ? "cursor-pointer focus:outline-none focus-visible:stroke-[4]" : ""}
                 pointerEvents={interactive ? undefined : "none"}
+                onMouseEnter={() => interactive && setHoverId(pos.id)}
+                onMouseLeave={() => setHoverId((h) => (h === pos.id ? null : h))}
                 role="button"
                 tabIndex={interactive ? 0 : -1}
                 aria-label={`${c?.name ?? pos.id}${forming ? ", still forming" : ""}${
@@ -315,14 +426,46 @@ export default function PowerMap({
                   }
                 }}
               />
-              {showLabel(pos.id) && (
+              {/* NESTING READS AS DEPTH, NOT AS ANOTHER OUTLINE.
+                  Three levels of flat rings collapse into noise: every edge
+                  is the same weight, so the eye cannot tell "inside" from
+                  "next to". A faint rim just within the edge gives the disc
+                  a lip, which is enough for containment to read at a glance
+                  and cheap enough that it costs no filter. */}
+              <circle
+                cx={pos.x}
+                cy={pos.y}
+                r={Math.max(0, pos.r - 1.5)}
+                fill="none"
+                stroke={tone}
+                strokeOpacity={0.16}
+                strokeWidth={3}
+                pointerEvents="none"
+              />
+
+              {(showLabel(pos.id) || hovered) && (
                 <motion.text
                   animate={{ x: pos.x, y: labelTop }}
                   initial={false}
                   transition={morph}
                   textAnchor="middle"
                   className="fill-foreground font-semibold pointer-events-none"
-                  style={{ fontSize: label.fontSize }}
+                  style={{
+                    fontSize: label.fontSize,
+                    // A label pushed outside its circle crosses whatever is
+                    // behind it, so it carries the page's own ground as a
+                    // halo. `paint-order` puts that stroke UNDER the glyphs;
+                    // without it the stroke is drawn over them and the text
+                    // thins out to nothing at small sizes.
+                    ...(fit.outside
+                      ? {
+                          paintOrder: "stroke" as const,
+                          stroke: "var(--background)",
+                          strokeWidth: 3.5,
+                          strokeLinejoin: "round" as const,
+                        }
+                      : null),
+                  }}
                 >
                   {label.lines.map((ln, i) => (
                     <tspan key={ln + i} x={pos.x} dy={i === 0 ? 0 : label.lineHeight}>
@@ -337,11 +480,79 @@ export default function PowerMap({
                   y={labelTop + (label.lines.length - (hasChildren ? 0 : 1)) * label.lineHeight + (hasChildren ? 14 : 16)}
                   textAnchor="middle"
                   className="fill-muted-foreground pointer-events-none"
-                  style={{ fontSize: Math.max(9, label.fontSize - 4) }}
+                  style={{
+                    // This caption was the worst offender on the live page: a
+                    // hard floor of 9 WORLD units measured 6px on screen. Its
+                    // floor is a screen size now, like the name above it.
+                    fontSize: captionSize(label.fontSize, pxPerWorld),
+                  }}
                 >
                   forming
                 </text>
               )}
+
+              {/* WHAT HOVER ACTUALLY ANSWERS: is this the circle I want.
+                  Name plus the two counts a reader weighs before deciding to
+                  step in, so surveying the village no longer means entering
+                  and leaving every circle in turn. Pointer only, and never on
+                  the circle you are already inside. */}
+              {hovered && (
+                <text
+                  x={pos.x}
+                  y={labelTop + (label.lines.length - (hasChildren ? 0 : 1)) * label.lineHeight + (forming ? 30 : 16)}
+                  textAnchor="middle"
+                  className="fill-muted-foreground pointer-events-none"
+                  style={{
+                    fontSize: captionSize(label.fontSize, pxPerWorld),
+                    paintOrder: "stroke" as const,
+                    stroke: "var(--background)",
+                    strokeWidth: 3,
+                    strokeLinejoin: "round" as const,
+                  }}
+                >
+                  {(() => {
+                    const mine = data.roles.filter((r) => r.circleId === pos.id);
+                    const places = mine.reduce((n, r) => n + r.seats, 0);
+                    const openN = places - mine.reduce((n, r) => n + r.holderCount, 0);
+                    return `${mine.length} role${mine.length === 1 ? "" : "s"}${openN > 0 ? `, ${openN} open` : ""}`;
+                  })()}
+                </text>
+              )}
+
+              {/* ── THE DOUBLE LINK, DRAWN ────────────────────────────────
+                  Sociocracy's one structural idea that a normal org chart
+                  cannot show: a circle is joined to its parent by a PERSON
+                  who sits in both. `representsCircle` marks that seat, and
+                  it has been on the wire since 0083 and said out loud only
+                  in the holder card, as a sentence, one seat at a time. A
+                  reader looking at the whole village could not see which
+                  seats hold it together.
+
+                  So the seat is joined to the circle it speaks into. Drawn
+                  before the glyphs, so the line passes UNDER them, and
+                  dashed so it never reads as the containment the solid
+                  rings mean. */}
+              {pos.roles.map((rp) => {
+                const seat = seatById.get(rp.id);
+                if (!seat?.representsCircle) return null;
+                const parentId = parentOf(pos.id);
+                const anchor = parentId ? posById.get(parentId) : layout.village;
+                if (!anchor) return null;
+                return (
+                  <line
+                    key={`dbl-${rp.id}`}
+                    x1={rp.x}
+                    y1={rp.y}
+                    x2={anchor.x}
+                    y2={anchor.y}
+                    stroke={tone}
+                    strokeOpacity={seatPasses(seat) ? 0.5 : 0.12}
+                    strokeWidth={1.6}
+                    strokeDasharray="5 4"
+                    pointerEvents="none"
+                  />
+                );
+              })}
 
               {/* The seats on this circle's ring. */}
               {pos.roles.map((rp) => {
@@ -361,7 +572,9 @@ export default function PowerMap({
                     role="button"
                     tabIndex={interactive ? 0 : -1}
                     pointerEvents={interactive ? undefined : "none"}
-                    aria-label={`${seat?.name ?? rp.id}, a role in ${c?.name ?? "this circle"}, ${words}. Press Enter to open it`}
+                    aria-label={`${seat?.name ?? rp.id}, a role in ${c?.name ?? "this circle"}, ${words}${
+                      seat?.representsCircle ? ", and it speaks for this circle where it links out" : ""
+                    }. Press Enter to open it`}
                     onClick={(e: ReactMouseEvent) => {
                       // A tap on a seat NEVER moves the camera (spec 1).
                       e.stopPropagation();
@@ -387,6 +600,22 @@ export default function PowerMap({
                       pulse={pulseSeatId === rp.id}
                     />
                     <TermArc x={0} y={0} r={dotR} termEnds={seat?.termEnds} />
+                    {/* The representative's badge, at the far end of the link
+                        drawn above. A second ring, so the mark survives
+                        greyscale and never depends on colour alone (spec 4's
+                        rule, applied to representation as well as to state). */}
+                    {seat?.representsCircle && (
+                      <circle
+                        cx={0}
+                        cy={0}
+                        r={dotR + 4}
+                        fill="none"
+                        stroke={tone}
+                        strokeOpacity={0.85}
+                        strokeWidth={1.4}
+                        pointerEvents="none"
+                      />
+                    )}
                     {selected?.kind === "role" && selected.id === rp.id && (
                       <circle cx={0} cy={0} r={dotR + 3} fill="none" stroke="var(--color-teal-deep)" strokeWidth={1.6} />
                     )}

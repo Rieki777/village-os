@@ -55,9 +55,11 @@ describe("formatTokenAmount", () => {
     expect(formatTokenAmount(999_999, 3)).toBe("999.999");
   });
 
-  it("survives the ruling that moves every token to 4 decimals", () => {
-    // The reason this landed before that sweep and not inside it: after it,
-    // an undivided surface is wrong by 10,000x on every token at once.
+  it("holds at any scale a token could be given, ruled or not", () => {
+    // Kept at 4 after the across-the-board ruling was cancelled on 2026-09-04
+    // (docs/ECONOMICS.md section 11): the formatter is not allowed to have a
+    // largest scale it works at, and a scale nothing carries is the case a
+    // regression would reach first.
     expect(formatTokenAmount(100_000, 4)).toBe("10");
     expect(formatTokenAmount(100_000, 0)).toBe("100000");
     expect(formatTokenAmount(12_345, 4)).toBe("1.2345");
@@ -106,7 +108,7 @@ describe("decimalsOf", () => {
 describe("what a member sees, typed straight back, is what the ledger held", () => {
   const cases: Array<[number, number]> = [
     [10000, 3], // 10 Village Voice, the only token with decimals today
-    [10000, 4], // the same row after the 4-decimals ruling
+    [10000, 4], // a scale no token carries, so the formatter cannot special-case
     [25, 0],    // Village Credits as they ship now
     [1229, 4],  // deliberately not a round number of minor units
     [1, 0],
@@ -118,6 +120,60 @@ describe("what a member sees, typed straight back, is what the ledger held", () 
       expect(toMinorUnits(formatTokenAmount(units, d), d)).toBe(units);
     });
   }
+});
+
+/**
+ * THE FIGURES THE OTHER SURFACES CARRY, put through the same round trip.
+ *
+ * A nightly rate, a product's token grant, a quest payout and a badge bonus
+ * are all INT columns of minor units, and each now renders through
+ * `formatTokenAmount` on its own page. None of them has an input beside it
+ * that a member types into, so what the round trip proves here is narrower and
+ * still worth pinning: the rendered string is the SAME NUMBER as the row, not
+ * a rounded picture of it. A rate a member cannot type back exactly is a rate
+ * they cannot check against the balance printed above it.
+ *
+ * Checked at 2 and at 3, the two scales the registry will actually carry:
+ * Village Credits is ruled to 2 (docs/ECONOMICS.md section 11) and Village
+ * Voice already sits at 3.
+ */
+describe("a rate, a grant and a payout survive being read", () => {
+  const rows: Array<[string, number]> = [
+    ["a nightly rate of three", 3000],
+    ["a nightly rate the admin typed as 4500 minor units", 4500],
+    ["a product granting ten", 10_000],
+    ["a quest payout", 12_000],
+    ["a badge bonus of two", 2_000],
+    ["one minor unit, the smallest rate a room can post", 1],
+  ];
+  for (const [what, units] of rows) {
+    it(`${what} reads back exactly, at 2dp and at 3dp`, () => {
+      expect(toMinorUnits(formatTokenAmount(units, 2), 2)).toBe(units);
+      expect(toMinorUnits(formatTokenAmount(units, 3), 3)).toBe(units);
+    });
+  }
+
+  it("prints the numbers those surfaces actually show", () => {
+    // Pinned as strings, because "3" and "3.000" are the same number and not
+    // the same sentence, and a price tag on a night is the place that shows.
+    expect(formatTokenAmount(3000, 3)).toBe("3");
+    expect(formatTokenAmount(4500, 3)).toBe("4.5");
+    expect(formatTokenAmount(10_000, 3)).toBe("10");
+    expect(formatTokenAmount(1, 3)).toBe("0.001");
+    // Village Credits at its ruled scale: the price a village could not post
+    // before, which is the reason the ruling names two decimals at all.
+    expect(formatTokenAmount(1250, 2)).toBe("12.5");
+    expect(formatTokenAmount(1200, 2)).toBe("12");
+  });
+
+  it("leaves a token with no scale exactly as it always read", () => {
+    // Six of the seven tokens sit at decimals 0 (drizzle/0126). Every surface
+    // in this sweep divides unconditionally, so this is the assertion that
+    // nothing visibly moved on the day the dividing shipped.
+    for (const units of [0, 1, 3, 25, 4500, 10_000]) {
+      expect(formatTokenAmount(units, 0)).toBe(String(units));
+    }
+  });
 });
 
 describe("the send card's actual bug", () => {

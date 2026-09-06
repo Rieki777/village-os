@@ -140,7 +140,35 @@ export default function HolderCard({
         {circle && <p className="text-xs text-teal-deep">{circle.name}</p>}
       </div>
 
+      {/* AIM AND DOMAIN, THE PAIR THAT ANSWERS "IS THIS THE SEAT TO ASK".
+          Sociocracy defines a role by both: what it works toward, and what
+          it decides on. Only the aim was ever shown, so a reader could see
+          what a seat was FOR and not what it had authority over, which is
+          the half that tells you whether to bring it your question. */}
       {seat.description && <p className="text-sm text-muted-foreground mb-3">{seat.description}</p>}
+
+      {(seat.domain || (seat.accountabilities?.length ?? 0) > 0) && (
+        <dl className="mb-3 space-y-2">
+          {seat.domain && (
+            <div>
+              <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">Decides on</dt>
+              <dd className="text-sm text-foreground">{seat.domain}</dd>
+            </div>
+          )}
+          {(seat.accountabilities?.length ?? 0) > 0 && (
+            <div>
+              <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">Answerable for</dt>
+              <dd className="text-sm text-foreground">
+                <ul className="list-disc pl-4 space-y-0.5">
+                  {seat.accountabilities!.map((a, i) => (
+                    <li key={`${a}-${i}`}>{a}</li>
+                  ))}
+                </ul>
+              </dd>
+            </div>
+          )}
+        </dl>
+      )}
 
       <div className="text-xs text-muted-foreground space-y-1 mb-3">
         <p>

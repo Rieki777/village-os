@@ -31,6 +31,12 @@ interface Party {
   isPrimary: boolean;
 }
 
+/** Only the two fields this page needs off `/api/archetypes`. */
+interface Archetype {
+  key: string;
+  name: string;
+}
+
 interface PublicSheet {
   handle: string | null;
   name: string;
@@ -51,6 +57,15 @@ export default function PublicProfile() {
   const [, params] = useRoute("/profile/:handle");
   const [sheet, setSheet] = useState<PublicSheet | null>(null);
   const [missing, setMissing] = useState(false);
+  /**
+   * The class names, so a portrait can say WHICH path it shows.
+   *
+   * The public route, the same one ProfileHero and the character select
+   * already read without a token. A key that this list cannot place falls
+   * back to the key itself, which is a poor label and still infinitely
+   * better than the empty string that shipped.
+   */
+  const [archetypes, setArchetypes] = useState<Archetype[]>([]);
   const tokenName = useTokenName("Recognition");
 
   useEffect(() => {
@@ -63,19 +78,46 @@ export default function PublicProfile() {
       .catch(() => setMissing(true));
   }, [params?.handle]);
 
-  if (missing) {
+  useEffect(() => {
+    fetch("/api/archetypes")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list) => setArchetypes(Array.isArray(list) ? list : []))
+      .catch(() => {});
+  }, []);
+
+  const nameOf = (key: string) => archetypes.find((a) => a.key === key)?.name ?? key;
+
+  /**
+   * THE ONE POLITE REGION FOR THIS PAGE.
+   *
+   * Whose sheet this is arrives asynchronously, and following a link from the
+   * map or the forum swaps the entire page contents with nothing announced.
+   * The region has to OUTLIVE the three states to speak at all: a live region
+   * inserted into the DOM already holding its text announces nothing. So it
+   * is the FIRST CHILD OF `Layout` in every branch below, at the same
+   * position and the same element type, which is what makes React reconcile
+   * it in place across the state change instead of unmounting one region and
+   * mounting a silent new one. Its first paint is silent, which is right.
+   */
+  const said = missing
+    ? "Nobody here by that name."
+    : sheet
+      ? `${sheet.name}. Their sheet is open.`
+      : "Looking for that member.";
+
+  if (missing || !sheet) {
     return (
       <Layout>
-        <div className="mx-auto max-w-2xl px-4 py-16 text-center">
-          <h1 className="text-2xl font-semibold text-teal-deep">Nobody here by that name</h1>
-        </div>
-      </Layout>
-    );
-  }
-  if (!sheet) {
-    return (
-      <Layout>
-        <div className="mx-auto max-w-2xl px-4 py-16 text-center text-gray-700">Looking.</div>
+        <p aria-live="polite" className="sr-only">
+          {said}
+        </p>
+        {missing ? (
+          <div className="mx-auto max-w-2xl px-4 py-16 text-center">
+            <h1 className="text-2xl font-semibold text-teal-deep">Nobody here by that name</h1>
+          </div>
+        ) : (
+          <div className="mx-auto max-w-2xl px-4 py-16 text-center text-gray-700">Looking.</div>
+        )}
       </Layout>
     );
   }
@@ -84,11 +126,19 @@ export default function PublicProfile() {
 
   return (
     <Layout>
+      <p aria-live="polite" className="sr-only">
+        {said}
+      </p>
       <div className="mx-auto max-w-3xl px-4 py-10">
         <header className="flex flex-col items-center gap-5 sm:flex-row sm:items-end">
           <div className="h-40 w-32 overflow-hidden rounded-2xl border border-gray-200 bg-gray-50">
             {hero?.avatar ? (
-              <img src={hero.avatar} alt="" loading="lazy" className="h-full w-full object-cover" />
+              <img
+                src={hero.avatar}
+                alt={nameOf(hero.archetypeKey)}
+                loading="lazy"
+                className="h-full w-full object-cover"
+              />
             ) : (
               <div className="flex h-full w-full items-center justify-center">
                 <div className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-sage/60 text-2xl text-teal-deep">
@@ -111,6 +161,23 @@ export default function PublicProfile() {
           </div>
         </header>
 
+        {/*
+          THE PORTRAITS WERE THE ONLY CARRIER, AND THEY WERE DECORATIVE.
+
+          Every image here shipped `alt=""`, and no text named a single path,
+          so this whole section read to a screen reader as a heading followed
+          by an empty list: "Paths they walk", then nothing. Which paths a
+          member walks is the fact the section exists to carry, so it is now
+          carried twice: in the `alt`, and in a visible caption that also
+          helps anyone who cannot tell thirty near-identical portraits apart.
+
+          THE CAPTION IS `aria-hidden` AND THAT IS THE POINT. Two carriers of
+          one fact is two announcements of it, and "The Steward The Steward"
+          per portrait is its own defect. The `alt` is the accessible carrier
+          because it survives the caption being restyled or moved, and the
+          caption is the visual one. Whichever half a reader gets, they get
+          the name exactly once.
+        */}
         {sheet.party && sheet.party.length > 0 ? (
           <section className="mt-10">
             <h2 className="text-lg font-semibold text-sage">Paths they walk</h2>
@@ -122,9 +189,25 @@ export default function PublicProfile() {
                 >
                   <div className="aspect-[3/4] w-full">
                     {c.avatar ? (
-                      <img src={c.avatar} alt="" loading="lazy" className="h-full w-full object-cover" />
+                      <img
+                        src={c.avatar}
+                        alt={nameOf(c.archetypeKey)}
+                        loading="lazy"
+                        className="h-full w-full object-cover"
+                      />
                     ) : null}
                   </div>
+                  {/* text-teal-deep, which is what this file already puts on
+                      `bg-gray-50` for the standing chips below. 9.92:1 at the
+                      platform default, measured in Chromium against the built
+                      stylesheet, and no new `text-gray-*` on a ratchet with no
+                      headroom. */}
+                  <p
+                    aria-hidden="true"
+                    className="truncate px-2 py-1.5 text-xs font-medium text-teal-deep"
+                  >
+                    {nameOf(c.archetypeKey)}
+                  </p>
                 </li>
               ))}
             </ul>

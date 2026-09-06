@@ -236,7 +236,13 @@ describe.skipIf(!configured)("a departure on the shipped Exit defaults", () => {
       voice: "forfeit",
       rate: "0",
       cooling: 0,
-      lines: [{ token: WHOLE, kind: "credit", held: 100, kept: 0, moved: 100, to: EXIT_SETTLEMENT }],
+      // HUMAN. The fixture posts 100 MINOR and the captured line reports the
+      // figure a person reads off the exit record; the two coincided only while
+      // `credits` carried no decimals.
+      lines: [{
+        token: WHOLE, kind: "credit", to: EXIT_SETTLEMENT,
+        held: fromLedgerUnits(WHOLE, 100), kept: 0, moved: fromLedgerUnits(WHOLE, 100),
+      }],
     });
     // The reading came off the registry with no `exit.%` row anywhere, which
     // is the inherited-default state the first case in this file pinned.

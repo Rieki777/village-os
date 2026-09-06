@@ -63,6 +63,20 @@ here since 1.1.0. That is a large jump for one release, and it is the reason
 - **A failed update now shows a page that explains itself** instead of a blank
   error, and says that no data was lost.
 - **A new village gets artwork made from its own name.**
+- **Your village decides what it calls the people who run it.** The default is
+  Catalyst, and Admin, Make This Yours takes your own word for it: founder,
+  steward, elder, whatever the village says. Every sentence a member reads that
+  names one of those people follows. It is a name and nothing else: nobody
+  gains or loses any permission, and the admin panel keeps its own name,
+  because a place is not a person.
+- **One moon number, everywhere.** Dating something now takes one number,
+  "Moon 47", counted from your village's own first moon and never reset.
+  Screens used to show the moon's place in the lunar year instead, a number
+  that went back to 1 every year, so two moons a year apart carried the same
+  one. The calendar, the year wheel, the week and month grids and the
+  subscribable calendar feed all say the same number now. A village that has
+  not set its first moon reads the moon's name and its dates and no number,
+  which is the honest answer rather than "Moon 0".
 
 ### What you must do
 

@@ -111,34 +111,34 @@ export default function SendTokensCard() {
   const held = Number(balances[form.tokenType] ?? 0);
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-8">
-      <h3 className="text-xl font-display font-bold text-teal-deep flex items-center gap-2 mb-2">
+    <div className="bg-card rounded-2xl shadow-lg p-8">
+      <h3 className="text-xl font-display font-bold text-card-foreground flex items-center gap-2 mb-2">
         <Send className="w-6 h-6" />
         Send credits
       </h3>
-      <p className="text-sm text-gray-600 mb-5">
+      <p className="text-sm text-muted-foreground mb-5">
         Pay someone for a jar of honey, a haircut, an afternoon of help. It moves on the
         village ledger, so both of you can see it later.
       </p>
 
       <form onSubmit={send} className="space-y-3">
         <label className="block">
-          <span className="text-xs font-medium text-gray-500">Their email</span>
+          <span className="text-xs font-medium text-muted-foreground">Their email</span>
           <input
             type="email" required value={form.toEmail}
             onChange={(e) => setForm({ ...form, toEmail: e.target.value })}
-            className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+            className="mt-1 w-full border border-border rounded-lg px-3 py-2 text-sm"
             placeholder="name@example.com"
           />
         </label>
 
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className="text-xs font-medium text-gray-500">Which token</span>
+            <span className="text-xs font-medium text-muted-foreground">Which token</span>
             <select
               value={form.tokenType}
               onChange={(e) => setForm({ ...form, tokenType: e.target.value })}
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+              className="mt-1 w-full border border-border rounded-lg px-3 py-2 text-sm bg-card"
             >
               {sendable.map((t) => (
                 <option key={t.slug} value={t.slug}>{t.name}</option>
@@ -146,30 +146,30 @@ export default function SendTokensCard() {
             </select>
           </label>
           <label className="block">
-            <span className="text-xs font-medium text-gray-500">How much</span>
+            <span className="text-xs font-medium text-muted-foreground">How much</span>
             <input
               type="number"
               min={smallestUnit(decimalsOf(tokenDecimals, form.tokenType))}
               step={smallestUnit(decimalsOf(tokenDecimals, form.tokenType))}
               required value={form.amount}
               onChange={(e) => setForm({ ...form, amount: e.target.value })}
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+              className="mt-1 w-full border border-border rounded-lg px-3 py-2 text-sm"
             />
           </label>
         </div>
 
         <label className="block">
-          <span className="text-xs font-medium text-gray-500">What it is for (optional)</span>
+          <span className="text-xs font-medium text-muted-foreground">What it is for (optional)</span>
           <input
             type="text" maxLength={180} value={form.note}
             onChange={(e) => setForm({ ...form, note: e.target.value })}
-            className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+            className="mt-1 w-full border border-border rounded-lg px-3 py-2 text-sm"
             placeholder="Two jars of honey"
           />
         </label>
 
         <div className="flex items-center justify-between gap-3 pt-1">
-          <p className="text-xs text-gray-500">You hold {formatTokenAmount(held, decimalsOf(tokenDecimals, form.tokenType))}.</p>
+          <p className="text-xs text-muted-foreground">You hold {formatTokenAmount(held, decimalsOf(tokenDecimals, form.tokenType))}.</p>
           <button
             type="submit" disabled={busy || !form.toEmail || !form.amount}
             className="bg-teal-deep text-white text-sm font-medium rounded-lg px-4 py-2 disabled:opacity-50"
@@ -182,7 +182,7 @@ export default function SendTokensCard() {
       {result && (
         <p
           role={result.ok ? "status" : "alert"}
-          className={`mt-3 text-sm rounded-lg px-3 py-2 ${result.ok ? "text-teal-deep bg-teal-deep/10" : "text-red-600 bg-red-50"}`}
+          className={`mt-3 text-sm rounded-lg px-3 py-2 ${result.ok ? "text-open bg-open/10" : "text-destructive bg-destructive/10"}`}
         >
           {result.text}
         </p>

@@ -58,7 +58,7 @@
 -- numbers and leaves the third where it was.
 --
 -- `sys:redeemed` is therefore a SINK, not a faucet, exactly like `sys:voice-decay`
--- (0148). It only ever receives: its balance is positive and rising, and that
+-- (0165). It only ever receives: its balance is positive and rising, and that
 -- number is everything this village has retired. Issued supply does not fall.
 -- The admin token panel prints the two side by side.
 --

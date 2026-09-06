@@ -1,9 +1,9 @@
 {
   "threshold": 1000,
-  "totalLines": 15310,
+  "totalLines": 14935,
   "files": {
-    "client/src/pages/Admin.tsx": 10609,
-    "client/src/pages/CoCreatorsGuide.tsx": 1212,
+    "client/src/pages/Admin.tsx": 10236,
+    "client/src/pages/CoCreatorsGuide.tsx": 1210,
     "client/src/pages/GameMechanics.tsx": 1498,
     "client/src/pages/ProjectHistory.tsx": 1991
   }

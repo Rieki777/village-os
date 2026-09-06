@@ -54,9 +54,11 @@ import {
   parseMintRuleKey,
   type MintRuleField,
 } from "../../shared/mintRuleKeys";
+import type { VillageMoon } from "../../shared/villageMoon";
 import { issuanceRefusal, readGameStart } from "./gameStart";
 import { cycleIdFor, parseCycleId } from "./gratitude-cycles";
 import { openExitFor } from "./exit";
+import { moonOneCycle, villageMoonFor } from "./villageMoon";
 import { numberVar, stringVar } from "./variables";
 import {
   CLAWBACK_SOURCES,
@@ -118,7 +120,7 @@ export const VOICE_MINT = "sys:voice-mint";
 /** Not a faucet: voice held against an open claim came from a member. */
 export const VOICE_BRIDGE = "sys:voice-bridge";
 /**
- * Where Voice goes when it wanes. Seeded by 0148, and NOT a faucet.
+ * Where Voice goes when it wanes. Seeded by 0165, and NOT a faucet.
  *
  * A faucet's negative balance IS that token's issued supply, so a faucet flag
  * here would let this account go negative, and a negative balance here would
@@ -219,6 +221,18 @@ export function humanAtScale(units: number, decimals: number): number {
 }
 
 /** Human amount to ledger units. Rounds, because 0.1 * 1000 is not 100 in binary. */
+/**
+ * A number a human typed or set, into what the ledger stores.
+ *
+ * THE TWO HAND-MINT DIALS GO THROUGH HERE, and until 2026-09-04 they did not.
+ * `ledger.admin_mint_cycle_cap` and `ledger.admin_mint_cosign_over` were
+ * compared straight against a ledger amount. Every token in the registry but
+ * Village Voice carries 0 decimals, where a whole token and a ledger unit are
+ * the same number, so nothing looked wrong; Voice carries 3, so a cap of 10000
+ * was enforcing 10 Voice per lunar cycle while the dial's own description said
+ * "the most any admins can mint by hand". A founder reading the dial and a
+ * founder hitting its refusal were reading two different quantities.
+ */
 export function toLedgerUnits(tokenSlug: string, human: number): number {
   return unitsAtScale(human, decimalsFor(tokenSlug));
 }
@@ -1030,6 +1044,28 @@ function reversalDescription(note: string | undefined, originalKey: string): str
  * Refunds are always reversals. Never a fresh mint: a mint would inherit none
  * of these guards and would be a way to make the token it claims to return.
  *
+ * ── THE MIRROR IS READ OFF THE ORIGINAL ROW, NEVER TAKEN FROM THE CALLER ──
+ *
+ * This used to take `from`, `to`, `tokenSlug` and `amount` from its caller and
+ * check only that SOME row carried the original key. So it would reverse a
+ * 25-credit posting as a 1,000,000-credit payment to the same member, in a
+ * different token, in either direction, and nothing would notice: conservation
+ * still balances, because a mirror is two legs, and the audit reads "reversal
+ * of <key>" and believes it. An audit did exactly that and every invariant
+ * stayed green.
+ *
+ * Money that can be created has to be correctable. But a correction that can
+ * invent its own amount is not a correction, it is a mint with a nicer name.
+ * So the four numbers are DERIVED from the row the key names — amount, token,
+ * and both accounts, swapped — and a caller value that disagrees is refused
+ * rather than quietly overridden. Refused, because a caller passing a
+ * different amount believes something false about what it is undoing, and
+ * correcting it silently would leave that belief in place.
+ *
+ * The caller's fields are therefore OPTIONAL and are only ever an assertion.
+ * Callers that pass them get them checked; callers that pass nothing get the
+ * true mirror.
+ *
  * A CLAWBACK OF VALUE ALREADY SPENT COMPLETES, AND THE BALANCE GOES NEGATIVE.
  * A member paid 25 who spent all 25 reads -25 once the payment is undone, and
  * that is the truthful state. Refusing the reversal instead would leave the
@@ -1153,7 +1189,11 @@ export async function reverse(
     reverseClaimProblem("to", opts.to, mirror.to) ??
     reverseClaimProblem("tokenSlug", opts.tokenSlug, mirror.tokenType) ??
     reverseClaimProblem("amount", opts.amount, mirror.amount);
-  if (problem) return { ok: false, error: problem };
+  // ONE SENTENCE, BOTH HALVES. The head states the law a caller broke and the
+  // tail states the disagreement, so a refusal is readable without the source.
+  // Two lanes wrote this refusal independently and asserted on different parts
+  // of it; the sentence now carries what each of them was checking for.
+  if (problem) return { ok: false, error: `a reversal undoes exactly what was posted: ${problem}` };
 
   const res = await postClawbackMirror(pool, {
     from: mirror.from,
@@ -3248,6 +3288,52 @@ export async function queueRuleChange(
     if (ceiling > 0 && change.amount > ceiling) {
       return { ok: false, error: `${change.amount} is above this rule's ceiling of ${ceiling}` };
     }
+    /*
+     * ── AN AMOUNT THAT ROUNDS AWAY IS REFUSED AT SAVE TIME ────────────────
+     *
+     * `mint_rules.amount` is decimal(18,4) and most tokens here have decimals
+     * 0, so a founder could save 0.4 Village Credits, watch the form accept
+     * it, watch the Mint panel publish the rule as live, and have it pay
+     * nothing for the rest of the village's life. Both mint paths already
+     * report it — `mintForConfirmedClaim` and `runSettlement` name it as
+     * unpayable — but only once somebody has already been promised it and
+     * gone unpaid, in a log the founder is not reading.
+     *
+     * The column can hold it, the token cannot, and the honest place to say so
+     * is the moment it is typed. The refusal names the smallest amount this
+     * token CAN hold so the founder knows what to type instead.
+     */
+    const slug = String(rule.token_slug);
+    const step = 1 / 10 ** decimalsFor(slug);
+    /*
+     * A TOLERANCE, BECAUSE THE SCALING ITSELF DRIFTS. 1.001 is a whole number
+     * of Voice's thousandths and `1.001 * 1000` is 1000.9999999999999 in
+     * binary, so an exact whole-number test would refuse a perfectly payable
+     * amount — 175 of them below 10 in that token alone, measured. The test
+     * "accepts a fraction the token can actually hold" pins 1.001 for this.
+     *
+     * The number this comment used to carry, `0.3 * 1000`, is exactly 300 and
+     * proves nothing. It arrived from the lane this was ported from and was
+     * never checked.
+     */
+    const scaled = Number(change.amount) * 10 ** decimalsFor(slug);
+    const drift = Math.abs(scaled - Math.round(scaled));
+    if (drift > 1e-6 * Math.max(1, Math.abs(scaled))) {
+      return {
+        ok: false,
+        error:
+          `${change.amount} is not a whole number of this token's smallest unit. ` +
+          `${slug} is held in steps of ${step}, so round to the nearest one.`,
+      };
+    }
+    if (toLedgerUnits(slug, change.amount) <= 0) {
+      return {
+        ok: false,
+        error:
+          `${change.amount} is smaller than the smallest amount ${slug} can hold, ` +
+          `which is ${step}. A rule saved at this amount would pay nobody.`,
+      };
+    }
   }
 
   const fromCycle = cycleBoundsFor(new Date()).cycleNumber + 1;
@@ -3410,7 +3496,14 @@ export async function applyPendingRules(pool: Pool, at: Date = new Date()): Prom
 }
 
 export interface MintView {
+  /**
+   * The stored cycle id. It stays here because it is the key every mint rule's
+   * `effective_from_cycle` is compared against, and the panel stopped printing
+   * it: `moon` below is what an admin now reads.
+   */
   cycleKey: string;
+  /** The village's own moon, worked out on read and never stored. */
+  moon: VillageMoon;
   rules: Array<{
     id: string;
     trigger: string;
@@ -3466,7 +3559,13 @@ export interface MintView {
 
 /** Everything the Mint panel shows, in one read. */
 export async function mintView(pool: Pool): Promise<MintView> {
-  const { key } = cycleWindow();
+  // ONE instant for both. Two `new Date()` calls either side of a new moon
+  // would put the id and the label on different lunations, and this panel's
+  // whole job is that a rule's effective-from and the moon a founder reads are
+  // the same moon.
+  const at = new Date();
+  const { key } = cycleWindow(at);
+  const moon = villageMoonFor(at, await moonOneCycle(pool));
   const [rules] = await pool.query<RowDataPacket[]>(
     "SELECT r.*, t.`name` AS token_name FROM `mint_rules` r " +
       "LEFT JOIN `tokens` t ON t.`slug` = r.`token_slug` " +
@@ -3505,6 +3604,7 @@ export async function mintView(pool: Pool): Promise<MintView> {
 
   return {
     cycleKey: key,
+    moon,
     rules: rules.map((r) => {
       const slug = String(r.token_slug);
       const amount = r.amount === null ? null : Number(r.amount);

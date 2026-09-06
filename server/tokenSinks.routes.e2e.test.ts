@@ -118,10 +118,41 @@ async function mint(userId: string, amount: number): Promise<void> {
   expect(r.status, `mint ${amount} to ${userId}`).toBe(200);
 }
 
+/** MINOR units, which is what `/api/wallet` reports. See `scaleOf` below. */
 async function balance(token: string, slug = CREDITS): Promise<number> {
   const r = await call("GET", "/api/wallet", { token });
   expect(r.status).toBe(200);
   return Number(r.json?.ledger?.[slug] ?? 0);
+}
+
+/**
+ * THE SCALE, OFF THE REGISTRY, AND THE DOOR TABLE THAT GOES WITH IT.
+ *
+ * `0162` moved Village Credits to two decimals. This file was written when it
+ * carried none, where every door's number looked the same, and they are not the
+ * same. There is no single multiplier: each figure has to be read against the
+ * door it came through.
+ *
+ *   HUMAN  `POST /api/admin/tokens/:slug/mint` (`mint` above), the seat price
+ *          on an event and the `charged` and `refunded` it echoes back, and the
+ *          nightly rate a room posts.
+ *   MINOR  `balance` above, `POST /api/wallet/send` (the client converts before
+ *          it posts and the route refuses to convert twice), the `sent` figure
+ *          that echoes it, the wallet feed's line amounts, and
+ *          `stays.rate_snapshot_credits`.
+ *
+ * One RSVP response carries both at once: `charged` is the price a member reads
+ * and the balance it moved is minor, twelve and twelve hundred for one seat.
+ */
+let creditScale = 0;
+async function scaleOf(): Promise<number> {
+  if (creditScale) return creditScale;
+  const r = await call("GET", "/api/admin/tokens", {});
+  expect(r.status, `the registry must answer: ${JSON.stringify(r.json).slice(0, 200)}`).toBe(200);
+  const row = (r.json?.tokens ?? []).find((t: any) => t.slug === CREDITS);
+  expect(row, "credits must be registered").toBeTruthy();
+  creditScale = 10 ** Number(row.decimals ?? 0);
+  return creditScale;
 }
 
 /**
@@ -248,20 +279,25 @@ describe.skipIf(!DB_CONFIGURED)("the pool token has somewhere to go", () => {
   });
 
   it("SENDS credits between two members, both sides, with a note", async () => {
+    // `mint` takes HUMAN and `balance` reports MINOR: one hundred whole
+    // credits, read back as one hundred times the scale.
+    const S = await scaleOf();
     await mint(annaId, 100);
-    expect(await balance(annaToken)).toBe(100);
+    expect(await balance(annaToken)).toBe(100 * S);
     expect(await balance(benToken)).toBe(0);
 
     const sent = await call("POST", "/api/wallet/send", {
       token: annaToken,
-      body: { toEmail: benEmail(), tokenType: CREDITS, amount: 30, note: "Two jars of honey", clientNonce: "n-1" },
+      // MINOR: the send route takes the ledger's unit, and 30 whole credits
+      // is 30 times the scale. A bare 30 sends thirty hundredths.
+      body: { toEmail: benEmail(), tokenType: CREDITS, amount: 30 * S, note: "Two jars of honey", clientNonce: "n-1" },
     });
     expect(sent.status).toBe(200);
-    expect(sent.json?.sent).toBe(30);
+    expect(sent.json?.sent).toBe(30 * S);
     expect(sent.json?.to).toBe("Ben Orr");
 
-    expect(await balance(annaToken)).toBe(70);
-    expect(await balance(benToken)).toBe(30);
+    expect(await balance(annaToken)).toBe(70 * S);
+    expect(await balance(benToken)).toBe(30 * S);
     await conserves();
 
     // BOTH SIDES CAN SEE IT, and each names the OTHER person. The counterpart
@@ -269,41 +305,60 @@ describe.skipIf(!DB_CONFIGURED)("the pool token has somewhere to go", () => {
     // id on both halves and would have told Ben he sent himself money.
     const annaLedger = await call("GET", "/api/game/ledger", { token: annaToken });
     const annaLine = (annaLedger.json?.entries ?? []).find((e: any) => e.source === "member_send");
-    expect(annaLine.amount).toBe(-30);
+    expect(annaLine.amount).toBe(-30 * S);
     expect(annaLine.withName).toBe("Ben Orr");
     expect(annaLine.description).toBe("Two jars of honey");
 
     const benLedger = await call("GET", "/api/game/ledger", { token: benToken });
     const benLine = (benLedger.json?.entries ?? []).find((e: any) => e.source === "member_send");
-    expect(benLine.amount).toBe(30);
+    expect(benLine.amount).toBe(30 * S);
     expect(benLine.withName).toBe("Anna Vale");
   });
 
   it("pays ONCE when the same send is retried on the same nonce", async () => {
+    const S = await scaleOf();
     const again = await call("POST", "/api/wallet/send", {
       token: annaToken,
-      body: { toEmail: benEmail(), tokenType: CREDITS, amount: 30, note: "Two jars of honey", clientNonce: "n-1" },
+      body: { toEmail: benEmail(), tokenType: CREDITS, amount: 30 * S, note: "Two jars of honey", clientNonce: "n-1" },
     });
     expect(again.status).toBe(200);
     expect(again.json?.duplicate).toBe(true);
-    expect(await balance(annaToken)).toBe(70);
-    expect(await balance(benToken)).toBe(30);
+    expect(await balance(annaToken)).toBe(70 * S);
+    expect(await balance(benToken)).toBe(30 * S);
     await conserves();
   });
 
   it("REFUSES an overspend loudly, and moves nothing", async () => {
+    const S = await scaleOf();
     // Only faucets go negative, and a member is not a faucet. The ledger
     // recomputes the sender's balance inside the transaction and rolls the
     // whole thing back.
     const over = await call("POST", "/api/wallet/send", {
       token: benToken,
-      body: { toEmail: annaEmail(), tokenType: CREDITS, amount: 500, clientNonce: "n-over" },
+      body: { toEmail: annaEmail(), tokenType: CREDITS, amount: 500 * S, clientNonce: "n-over" },
     });
     expect(over.status).toBe(409);
-    expect(String(over.json?.error)).toMatch(/insufficient credits/);
-    expect(String(over.json?.error)).toMatch(/cannot overdraft/);
-    expect(await balance(benToken)).toBe(30);
-    expect(await balance(annaToken)).toBe(70);
+    /*
+     * WHAT A MEMBER IS TOLD, AND WHAT THEY ARE NOT.
+     *
+     * This used to assert the ledger's own sentence reached the member
+     * verbatim: `insufficient credits: "mem:user-17885..." holds 30 and cannot
+     * overdraft`. That sentence is right for a log and wrong for a person. It
+     * names the internal account id, and it states the balance in MINOR units,
+     * so on a token with a scale it contradicts the balance the send card
+     * prints an inch above the box.
+     *
+     * So the assertion is now in both directions: the member's own balance and
+     * the village's word for the token, and NO account id anywhere in it.
+     */
+    // The sentence names what the member HOLDS, in whole credits, which is the
+    // one figure in this refusal that is not the ledger's own unit.
+    expect(String(over.json?.error)).toMatch(new RegExp(`You hold ${30} `));
+    expect(String(over.json?.error)).toMatch(/not enough to send that/);
+    expect(String(over.json?.error)).not.toMatch(/mem:/);
+    expect(String(over.json?.error)).not.toMatch(/overdraft/);
+    expect(await balance(benToken)).toBe(30 * S);
+    expect(await balance(annaToken)).toBe(70 * S);
     await conserves();
   });
 
@@ -362,7 +417,10 @@ describe.skipIf(!DB_CONFIGURED)("the pool token has somewhere to go", () => {
       body: { tokenType: CREDITS, audience: "guest" },
     });
     expect(active.status).toBe(200);
-    expect(active.json?.rateSnapshotCredits).toBe(8);
+    // MINOR. The room posted 8 whole credits a night and this column holds the
+    // ledger's own unit, unconverted (`server/lib/stays.ts`).
+    const S = await scaleOf();
+    expect(active.json?.rateSnapshotCredits).toBe(8 * S);
     expect(active.json?.rateSnapshotToken).toBe(CREDITS);
 
     const before = await balance(annaToken);
@@ -379,7 +437,7 @@ describe.skipIf(!DB_CONFIGURED)("the pool token has somewhere to go", () => {
     expect(posted.json?.posted, "two nights owed since arrival").toBe(2);
 
     const after = await balance(annaToken);
-    expect(before - after, "two nights at the snapshot rate of 8").toBe(16);
+    expect(before - after, "two nights at the snapshot rate of 8").toBe(16 * S);
 
     // The night appears, priced in the token it was activated in.
     const mine = await call("GET", "/api/stays", { token: annaToken });
@@ -389,7 +447,38 @@ describe.skipIf(!DB_CONFIGURED)("the pool token has somewhere to go", () => {
     expect(row?.lastPostedOn).toBeTruthy();
     // Nights remaining is read against the SNAPSHOT token. Against stay
     // credits, which she holds none of, it would have said zero.
-    expect(row?.nightsRemaining).toBe(Math.floor(after / 8));
+    // Both sides MINOR: the balance and the snapshot rate it is divided by.
+    expect(row?.nightsRemaining).toBe(Math.floor(after / (8 * S)));
+
+    /*
+     * THE SCALE OF EVERY TOKEN A ROOM POSTS A RATE IN, on the same payload.
+     *
+     * `accommodation_prices.amount_minor` is the ledger's minor units, and
+     * /stay printed it raw fifty-eight lines under a balance line that
+     * divides. The page cannot divide what it is not sent, and it cannot read
+     * it off `mine.balances` either: that is null for a signed-out visitor and
+     * carries only tokens the member already HOLDS, so the person most likely
+     * to be reading a nightly rate is the one it is silent about.
+     *
+     * Derived from the ROOMS' own price keys, so this asserts the credits
+     * token is present because a room is priced in it, plus stay credits,
+     * which every stays deployment quotes whether or not any room posts one.
+     */
+    expect(mine.json?.priceTokens?.[CREDITS], "a token a room is priced in ships its scale").toBeTruthy();
+    // THE REGISTRY'S OWN SCALE, not a number typed here. This read `toBe(0)`,
+    // which was true of `credits` until `0162` and asserted the wrong thing
+    // even then: the property is that the payload ships whatever scale the
+    // token really carries, so the page can divide by it.
+    expect(10 ** Number(mine.json?.priceTokens?.[CREDITS]?.decimals)).toBe(S);
+    expect(mine.json?.priceTokens?.[CREDITS]?.name).toBeTruthy();
+    expect(mine.json?.priceTokens?.["stay-credit"], "stay credits are always quoted").toBeTruthy();
+    expect(mine.json?.priceTokens?.usd, "money is not a ledger token and has its own formatter").toBeUndefined();
+
+    // The same payload reaches a signed-OUT visitor, who has no `mine` block
+    // at all and is exactly the reader a nightly rate is for.
+    const visitor = await call("GET", "/api/stays", { token: null });
+    expect(visitor.json?.mine).toBeNull();
+    expect(visitor.json?.priceTokens?.[CREDITS]?.name).toBe(mine.json?.priceTokens?.[CREDITS]?.name);
     await conserves();
   });
 
@@ -426,9 +515,12 @@ describe.skipIf(!DB_CONFIGURED)("the pool token has somewhere to go", () => {
       token: annaToken, body: { status: "going" },
     });
     expect(going.status).toBe(200);
+    // HUMAN, and the balance below is MINOR. One response, both units: the
+    // price a member reads is twelve and the ledger moved twelve hundred.
+    const S = await scaleOf();
     expect(going.json?.charged).toBe(12);
     expect(going.json?.tokenName).toBe("Village Credits");
-    expect(await balance(annaToken)).toBe(before - 12);
+    expect(await balance(annaToken)).toBe(before - 12 * S);
     await conserves();
 
     // The price is on the card the member reads, not only in the charge.
@@ -454,6 +546,7 @@ describe.skipIf(!DB_CONFIGURED)("the pool token has somewhere to go", () => {
   });
 
   it("refuses a seat nobody can pay for, and seats them nowhere", async () => {
+    const S = await scaleOf();
     const listed = await call("GET", "/api/events", { token: benToken });
     const paid = (listed.json?.events ?? []).find((e: any) => (e.seatPrice ?? 0) > 0);
     expect(paid, "the priced gathering is on the calendar").toBeTruthy();
@@ -462,10 +555,10 @@ describe.skipIf(!DB_CONFIGURED)("the pool token has somewhere to go", () => {
     // is about the balance and nothing else.
     const drain = await call("POST", "/api/wallet/send", {
       token: benToken,
-      body: { toEmail: annaEmail(), tokenType: CREDITS, amount: 25, clientNonce: "n-drain" },
+      body: { toEmail: annaEmail(), tokenType: CREDITS, amount: 25 * S, clientNonce: "n-drain" },
     });
     expect(drain.status).toBe(200);
-    expect(await balance(benToken)).toBe(5);
+    expect(await balance(benToken)).toBe(5 * S);
 
     const refused = await call("POST", `/api/events/${paid.id}/rsvp`, {
       token: benToken, body: { status: "going" },
@@ -473,7 +566,7 @@ describe.skipIf(!DB_CONFIGURED)("the pool token has somewhere to go", () => {
     expect(refused.status).toBe(409);
     expect(refused.json?.reason).toBe("unpaid");
     expect(String(refused.json?.error)).toMatch(/12 Village Credits/);
-    expect(await balance(benToken), "nothing was taken").toBe(5);
+    expect(await balance(benToken), "nothing was taken").toBe(5 * S);
 
     const after = await call("GET", "/api/events", { token: benToken });
     const seat = (after.json?.events ?? []).find((e: any) => e.id === paid.id);
@@ -487,7 +580,7 @@ describe.skipIf(!DB_CONFIGURED)("the pool token has somewhere to go", () => {
     const before = await balance(annaToken);
 
     expect((await call("POST", `/api/events/${paid.id}/rsvp`, { token: annaToken, body: { status: "going" } })).status).toBe(200);
-    expect(await balance(annaToken)).toBe(before - 12);
+    expect(await balance(annaToken)).toBe(before - 12 * (await scaleOf()));
 
     const off = await call("PUT", `/api/admin/events/${paid.id}`, { body: { status: "cancelled" } });
     expect(off.status).toBe(200);

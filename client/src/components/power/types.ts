@@ -46,7 +46,12 @@ export type SeatStateWord = "open" | "filled" | "partial" | "forming" | "expired
 export interface PowerSeat {
   id: string;
   name: string;
+  /** The seat's AIM: what it works toward. */
   description: string;
+  /** The seat's DOMAIN: what it decides on. Sociocracy's other half. */
+  domain?: string | null;
+  /** What this seat is answerable for. */
+  accountabilities?: string[];
   circleId: string | null;
   seats: number;
   holderCount: number;

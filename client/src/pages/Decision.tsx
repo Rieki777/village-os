@@ -45,6 +45,7 @@ import VoteWidget from "@/components/governance/VoteWidget";
 import VoterRoll from "@/components/governance/VoterRoll";
 import WeightRecord from "@/components/governance/WeightRecord";
 import { subjectNoun } from "@/components/governance/wizardConfig";
+import { useCatalyst } from "@/lib/gameApi";
 import { weightText } from "@/components/governance/voteBars";
 import {
   castVote,
@@ -128,6 +129,10 @@ export const DECISION_WEIGHT_TIPS = WEIGHT_MODE_TIP;
 export default function Decision() {
   const params = useParams<{ id: string }>();
   const { user } = useAuth();
+  // The village's own word for whoever runs it. A LABEL and nothing more:
+  // nothing on this page gates on it, and who may close still comes from
+  // standing exactly as it did before.
+  const catalyst = useCatalyst();
   const modules = useModules();
   const governance = useModule("governance");
 
@@ -456,7 +461,7 @@ export default function Decision() {
                 <h2 className="text-base font-bold text-stone-900">Closing this</h2>
                 <p className="mt-1 text-sm text-stone-600 leading-relaxed">
                   {expired
-                    ? "The voting period has ended and this is waiting for a person. Its proposer, anyone who may decide proposals, or an admin can close it."
+                    ? `The voting period has ended and this is waiting for a person. Its proposer, anyone who may decide proposals, or ${catalyst.aName} can close it.`
                     : "The period is still running, and closing it early is yours to do as someone who decides proposals."}{" "}
                   Closing always means writing what the village decided.
                 </p>
@@ -499,7 +504,7 @@ export default function Decision() {
                 <p className="mt-2 text-sm text-stone-700 leading-relaxed">
                   {ballot.votes.length === 0
                     ? "Nobody has voted yet, so whoever opened this can call it off and no vote is thrown away."
-                    : `${ballot.votes.length} ${ballot.votes.length === 1 ? "member has" : "members have"} already voted. Calling it off discards ${ballot.votes.length === 1 ? "that vote" : "those votes"}, so it takes somebody who decides proposals or an admin. Closing it and recording the outcome keeps them.`}
+                    : `${ballot.votes.length} ${ballot.votes.length === 1 ? "member has" : "members have"} already voted. Calling it off discards ${ballot.votes.length === 1 ? "that vote" : "those votes"}, so it takes somebody who decides proposals or ${catalyst.aName}. Closing it and recording the outcome keeps them.`}
                 </p>
                 {!withdrawing ? (
                   <button

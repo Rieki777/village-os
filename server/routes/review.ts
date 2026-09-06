@@ -75,6 +75,7 @@ import {
   proposalById,
   proposalQueue,
   proposalsInBatch,
+  reopenProposalsFor,
   recentDrops,
   type ExternalProposalRow,
 } from "../lib/externalProposals";
@@ -84,6 +85,7 @@ import {
   draftChangeCap,
   openDraftCap,
   previewDraft,
+  withdrawDraft,
 } from "../lib/orgDrafts";
 import {
   acceptQuestProposal,
@@ -466,6 +468,40 @@ export function register(app: Express, deps: Deps): void {
   });
 
   /** One decision for a whole batch, after per-item edits. */
+  /**
+   * Withdraw a draft this queue produced, and put its proposals back.
+   *
+   * THE DEADLOCK THIS OPENS. A draft carrying any blocked line cannot publish,
+   * no change can be removed from an open draft, and until this route nothing
+   * could close one, so it held an openDraftCap slot forever. A first import
+   * from a vendor reaches that on the ordinary path: everything past
+   * draftChangeCap is blocked, and so is any seat naming a circle that does
+   * not exist yet, which is what a first org batch looks like.
+   *
+   * IT LIVES HERE AND NOT BESIDE publish AND revert, which are admin routes,
+   * because the person who hits this is the steward who just accepted the
+   * batch, and /review is capability-gated rather than admin-gated. Sending
+   * them to find an administrator to undo their own last action is how a
+   * queue stops being worked. check-admin-reach records the two admin draft
+   * routes as deliberately doorless: the org-draft flow has no admin surface,
+   * so putting this one there would have made a fix nobody could reach.
+   */
+  app.post("/api/review/drafts/:id/withdraw", async (req, res) => {
+    if (!(await guardCapability(req, res, "intake.moderate"))) return;
+    const actor = await actorId(req);
+    if (!actor) return res.status(401).json({ error: "auth_required", message: "Withdrawing a draft needs a named person" });
+    const draftId = String(req.params.id);
+    const r = await withdrawDraft(getPool(), draftId);
+    if (!r.ok) return res.status(409).json({ error: r.error });
+    const reopened = await reopenProposalsFor(getPool(), draftId);
+    void recordEvent(getPool(), {
+      kind: "org",
+      text: `a proposed reorganisation was withdrawn` + (reopened ? `, ${reopened} proposal(s) back in the queue` : ""),
+      actorUserId: actor,
+      audience: "admin",
+    });
+    res.json({ success: true, reopened });
+  });
   app.post("/api/review/batches/:batchId/accept", async (req, res) => {
     if (!(await guardCapability(req, res, "intake.moderate"))) return;
     const actor = await actorId(req);

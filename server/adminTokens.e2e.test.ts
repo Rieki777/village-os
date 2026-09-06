@@ -472,9 +472,15 @@ describe.skipIf(!DB_CONFIGURED)("the tokens tab, and what a member sees afterwar
     expect(voiceRow, "the village voice token is seeded at boot").toBeTruthy();
     expect(voiceRow.decimals, "and since the 2026-09-04 scale ruling it rides in hundredths").toBe(2);
 
-    // UNDER the co-signature threshold now that the amount is whole tokens,
-    // so this is the one-steward path. The two-steward flow is established by
-    // the cases above and is not what this case is about.
+    /*
+     * UNDER the co-signature threshold now that the amount is whole tokens,
+     * so this is the one-steward path.
+     *
+     * NO COVERAGE IS LOST. The two-steward flow has three cases of its own
+     * above, on tokens with no decimals where the dial's meaning did not
+     * move. This case was never about co-signing. It is about what a member
+     * READS, and the raise was scaffolding to get a balance in place.
+     */
     const minted = await call("POST", `/api/admin/tokens/${VOICE}/mint`, {
       toUserId: oraId, amount: WHOLE_TEN, reason: "ten voice, so there is a real balance to read",
     }, founderToken);

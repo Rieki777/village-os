@@ -7,8 +7,10 @@ import Celebration from "@/components/natural/Celebration";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import { useMomentWindow } from "@/components/natural/moments";
 import { capabilityLabel } from "@shared/capabilities";
+import { villageMoonLabel } from "@shared/villageMoon";
 import { claimMoment } from "@/lib/celebrated";
 import { playMoment } from "@/lib/sound";
+import { onProfileRefresh } from "@/lib/profileRefresh";
 import { formatTokenAmount } from "@/lib/tokenAmount";
 
 /**
@@ -19,15 +21,44 @@ import { formatTokenAmount } from "@/lib/tokenAmount";
  * per-cycle settlements, and the ledger provenance of every point of value.
  */
 
-async function authedGet(path: string): Promise<any | null> {
-  const token = authToken();
-  if (!token) return null;
+/**
+ * One read, and WHICH OF THE THREE THINGS HAPPENED.
+ *
+ * `authedGet` below answered null for a signed-out reader, a 500 and a
+ * dropped connection alike, which is why this page could not tell a member
+ * with nothing yet from a member whose data did not arrive. `state` keeps
+ * them apart:
+ *
+ *   ok      the server answered, and `data` is what it said
+ *   none    there is no session, so there was nothing to ask for
+ *   failed  the ask was made and did not come back
+ */
+type Read = { state: "ok"; data: any } | { state: "none" } | { state: "failed" };
+
+async function authedRead(path: string): Promise<Read> {
+  // `authToken()` reads localStorage, which THROWS rather than returning null
+  // in a browser with site data blocked. That throw used to escape into the
+  // Promise.all below as a rejection, which is the fail-fast path that took
+  // all three sections down together.
+  let token: string | null = null;
+  try {
+    token = authToken();
+  } catch {
+    return { state: "failed" };
+  }
+  if (!token) return { state: "none" };
   try {
     const res = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
-    return res.ok ? await res.json() : null;
+    if (!res.ok) return { state: "failed" };
+    return { state: "ok", data: await res.json() };
   } catch {
-    return null;
+    return { state: "failed" };
   }
+}
+
+async function authedGet(path: string): Promise<any | null> {
+  const r = await authedRead(path);
+  return r.state === "ok" ? r.data : null;
 }
 
 function prettySource(s: string): string {
@@ -102,15 +133,15 @@ function FirstTimes({ firsts }: { firsts?: { vote?: string | null; objection?: s
   ].filter((r) => !!r.at);
   if (rows.length === 0) return null;
   return (
-    <div className="mb-5 border-b border-gray-100 pb-4">
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">The first time</p>
+    <div className="mb-5 border-b border-border pb-4">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">The first time</p>
       <ul className="space-y-1.5">
         {rows.map((r) => (
           <li key={r.key} className="flex items-start gap-3 text-sm">
-            <span className="mt-1.5 w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+            <span className="mt-1.5 w-2 h-2 rounded-full bg-notice shrink-0" />
             <span>
-              <span className="text-gray-900">{r.label}</span>
-              <span className="block text-xs text-gray-400 mt-0.5">
+              <span className="text-card-foreground">{r.label}</span>
+              <span className="block text-xs text-muted-foreground mt-0.5">
                 {new Date(String(r.at)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
               </span>
             </span>
@@ -121,6 +152,13 @@ function FirstTimes({ firsts }: { firsts?: { vote?: string | null; objection?: s
   );
 }
 
+/** The three reads, in the order they are drawn. */
+const SECTIONS = [
+  { key: "prog", path: "/api/game/progression", label: "Your Progression" },
+  { key: "flows", path: "/api/game/gratitude/flows", label: "Recognition Flows" },
+  { key: "ledger", path: "/api/game/ledger", label: "Where It Came From" },
+] as const;
+
 export default function ProfileJourney() {
   const [prog, setProg] = useState<any | null>(null);
   const [flows, setFlows] = useState<any | null>(null);
@@ -128,15 +166,45 @@ export default function ProfileJourney() {
   const bloom = useGratitudeBloom();
   const blooming = useMomentWindow(bloom !== null);
   const [settled, setSettled] = useState(false);
+  /** Which of the three did not come back. Named, so the page can say so. */
+  const [failed, setFailed] = useState<string[]>([]);
   const tokenNameLower = useTokenNameLower();
 
+  /**
+   * THREE READS THAT NO LONGER SHARE A FATE.
+   *
+   * This was `Promise.all([...]).finally(...)` with no `.catch`, and
+   * `Promise.all` fails fast: one rejection abandoned the other two
+   * regardless of whether they had already answered, left all three states
+   * null, and the component returned null. A member lost stage history,
+   * recognition flows AND the ledger because one of the three was slow to
+   * fail. `allSettled` waits for all three and reports each one separately,
+   * so a section draws whenever its own read landed.
+   */
+  const load = (quiet = false) => {
+    // `quiet` re-reads without dropping back to the loader, which is what a
+    // refresh after a write on the same page wants.
+    if (!quiet) setSettled(false);
+    setFailed([]);
+    Promise.allSettled(SECTIONS.map((s) => authedRead(s.path))).then((results) => {
+      const read = (i: number): Read =>
+        results[i]?.status === "fulfilled"
+          ? (results[i] as PromiseFulfilledResult<Read>).value
+          : { state: "failed" };
+      const reads = SECTIONS.map((_, i) => read(i));
+      setProg(reads[0].state === "ok" ? reads[0].data : null);
+      setFlows(reads[1].state === "ok" ? reads[1].data : null);
+      setLedger(reads[2].state === "ok" ? reads[2].data : null);
+      setFailed(SECTIONS.filter((_, i) => reads[i].state === "failed").map((s) => s.label));
+      setSettled(true);
+    });
+  };
+
   useEffect(() => {
-    Promise.all([
-      authedGet("/api/game/progression").then(setProg),
-      authedGet("/api/game/gratitude/flows").then(setFlows),
-      authedGet("/api/game/ledger").then(setLedger),
-    ]).finally(() => setSettled(true));
+    load();
   }, []);
+  // A write elsewhere on the sheet changes the ledger and the flows.
+  useEffect(() => onProfileRefresh(() => load(true)), []);
 
   // Waiting, said as a breath. The page showed nothing at all until all three
   // reads landed, which on a slow connection is a profile that looks empty
@@ -150,27 +218,62 @@ export default function ProfileJourney() {
     );
   }
 
-  if (!prog && !flows && !ledger) return null;
+  // Nothing landed and nothing failed: a reader with no session. Silence is
+  // the right answer for that one, and only that one.
+  if (!prog && !flows && !ledger && failed.length === 0) return null;
 
   return (
     <div className="space-y-8">
+      {/*
+        WHAT DID NOT ARRIVE, SAID OUT LOUD, with the one control that can do
+        anything about it. Before this the sections simply were not drawn, so
+        a failed read and an empty account looked identical, and the page's
+        own promise ("every point of value, from the ledger itself") quietly
+        became false. `role="status"` announces it, which is item 9 for this
+        card. Semantic pair, not the stone/white pair the cards below use:
+        this banner sits on the page's own themed background.
+      */}
+      {failed.length > 0 && (
+        <div
+          role="status"
+          className="rounded-2xl border border-border bg-muted px-5 py-4 text-sm text-muted-foreground"
+        >
+          <p>
+            Could not load: {failed.join(", ")}. The rest of your journey is below.{" "}
+            <button
+              type="button"
+              onClick={() => load()}
+              className="min-h-11 font-medium text-foreground underline underline-offset-2"
+            >
+              Retry
+            </button>
+          </p>
+        </div>
+      )}
       {/* Progression: capabilities, roles, and the history of stage turns */}
       {prog && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-2xl shadow-lg p-8"
+          className="bg-card rounded-2xl shadow-lg p-8"
         >
           <div className="flex items-center gap-2 mb-4">
-            <TrendingUp className="w-5 h-5 text-teal-deep" />
-            <h2 className="text-2xl font-display font-bold text-teal-deep">Your Progression</h2>
+            <TrendingUp className="w-5 h-5 text-notice" />
+            <h2 className="text-2xl font-display font-bold text-card-foreground">Your Progression</h2>
           </div>
 
           {(prog.capabilities?.length > 0 || prog.roles?.length > 0) && (
             <div className="flex flex-wrap gap-2 mb-5">
-              {(prog.roles ?? []).map((r: string) => (
-                <span key={r} className="inline-flex items-center gap-1 text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full font-medium">
-                  <Users className="w-3 h-3" /> {prettySource(r)}
+              {/* THE ROLE'S OWN NAME, which the seed has always carried.
+                  This ran `prettySource` over the ID and printed
+                  "Founders-Circle", because a prettifier can title-case an
+                  id and can never learn where the words break. The payload
+                  sends `{ id, name }` now, so the chip reads the name a
+                  founder typed and the id stays as the title for the one
+                  reader who wants it. */}
+              {(prog.roles ?? []).map((r: { id: string; name: string }) => (
+                <span key={r.id} title={r.id} className="inline-flex items-center gap-1 text-xs bg-muted text-notice border border-notice/60 px-2.5 py-1 rounded-full font-medium">
+                  <Users className="w-3 h-3" /> {r.name}
                 </span>
               ))}
               {/* WHAT A MEMBER CAN DO, IN WORDS. These rendered the raw keys,
@@ -183,7 +286,7 @@ export default function ProfileJourney() {
                   out of two. The key stays as the title, for the one reader
                   who wants it. */}
               {(prog.capabilities ?? []).map((c: string) => (
-                <span key={c} className="inline-flex items-center gap-1 text-xs bg-teal-deep/10 text-teal-deep px-2.5 py-1 rounded-full" title={c}>
+                <span key={c} className="inline-flex items-center gap-1 text-xs bg-teal-deep/10 text-foreground px-2.5 py-1 rounded-full" title={c}>
                   <ShieldCheck className="w-3 h-3" /> {capabilityLabel(c)}
                 </span>
               ))}
@@ -193,7 +296,7 @@ export default function ProfileJourney() {
           <FirstTimes firsts={prog.firsts} />
 
           {(prog.history ?? []).length === 0 ? (
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-muted-foreground">
               Your stage turns will be recorded here. Each one names what it unlocked.
             </p>
           ) : (
@@ -202,19 +305,19 @@ export default function ProfileJourney() {
                 <li key={i} className="flex items-start gap-3 text-sm">
                   <span className="mt-1.5 w-2 h-2 rounded-full bg-teal-deep shrink-0" />
                   <div>
-                    <span className="font-medium text-gray-900">
+                    <span className="font-medium text-card-foreground">
                       {prettySource(h.fromStage)} → {prettySource(h.toStage)}
                     </span>
-                    {h.reason && <span className="text-gray-500">: {h.reason}</span>}
+                    {h.reason && <span className="text-muted-foreground">: {h.reason}</span>}
                     {/* An array interpolated straight into JSX rendered as
                         `forum.post,message.send`. The same labels the stage
                         celebration reads turn it back into language. */}
                     {Array.isArray(h.unlocked) && h.unlocked.length > 0 && (
-                      <span className="block text-xs text-teal-deep mt-0.5">
+                      <span className="block text-xs text-foreground mt-0.5">
                         Unlocked: {h.unlocked.map(capabilityLabel).join(", ")}
                       </span>
                     )}
-                    <span className="block text-xs text-gray-400 mt-0.5">
+                    <span className="block text-xs text-muted-foreground mt-0.5">
                       {new Date(h.at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
                     </span>
                   </div>
@@ -231,11 +334,11 @@ export default function ProfileJourney() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
-          className="bg-white rounded-2xl shadow-lg p-8"
+          className="bg-card rounded-2xl shadow-lg p-8"
         >
           <div className="flex items-center gap-2 mb-4">
-            <Heart className="w-5 h-5 text-coral" />
-            <h2 className="text-2xl font-display font-bold text-teal-deep">Recognition Flows</h2>
+            <Heart className="w-5 h-5 text-destructive" />
+            <h2 className="text-2xl font-display font-bold text-card-foreground">Recognition Flows</h2>
             {blooming && bloom && (
               <span className="ml-auto shrink-0">
                 <Celebration
@@ -248,33 +351,44 @@ export default function ProfileJourney() {
             )}
           </div>
           {bloom && (
-            <div className="mb-5 rounded-xl border border-coral/30 bg-coral/5 px-4 py-3">
-              <p className="text-sm font-semibold text-gray-900">{bloom.name} thanked you</p>
-              {bloom.message && <p className="text-sm text-gray-600 mt-0.5">{bloom.message}</p>}
+            <div className="mb-5 rounded-xl border border-destructive/70/30 bg-destructive/5 px-4 py-3">
+              <p className="text-sm font-semibold text-card-foreground">{bloom.name} thanked you</p>
+              {bloom.message && <p className="text-sm text-muted-foreground mt-0.5">{bloom.message}</p>}
             </div>
           )}
           <div className="grid grid-cols-3 gap-4 mb-5">
             <div className="text-center bg-teal-deep/5 rounded-xl py-4">
-              <p className="text-2xl font-display font-bold text-teal-deep">{flows.totals?.received ?? 0}</p>
-              <p className="text-xs text-gray-500 mt-1">received</p>
+              <p className="text-2xl font-display font-bold text-card-foreground">{flows.totals?.received ?? 0}</p>
+              <p className="text-xs text-muted-foreground mt-1">received</p>
             </div>
             <div className="text-center bg-teal-deep/5 rounded-xl py-4">
-              <p className="text-2xl font-display font-bold text-teal-deep">{flows.totals?.sent ?? 0}</p>
-              <p className="text-xs text-gray-500 mt-1">sent</p>
+              <p className="text-2xl font-display font-bold text-card-foreground">{flows.totals?.sent ?? 0}</p>
+              <p className="text-xs text-muted-foreground mt-1">sent</p>
             </div>
-            <div className="text-center bg-amber-50 rounded-xl py-4" title="How many different people have thanked you. Breadth is the real signal of community health">
-              <p className="text-2xl font-display font-bold text-amber-700">{flows.totals?.distinctAcknowledgers ?? 0}</p>
-              <p className="text-xs text-gray-600 mt-1">people thanked you</p>
+            <div className="text-center bg-muted rounded-xl py-4" title="How many different people have thanked you. Breadth is the real signal of community health">
+              <p className="text-2xl font-display font-bold text-notice">{flows.totals?.distinctAcknowledgers ?? 0}</p>
+              <p className="text-xs text-muted-foreground mt-1">people thanked you</p>
             </div>
           </div>
           {(flows.byCycle ?? []).length > 0 && (
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">By lunar cycle</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">By moon</p>
               <div className="space-y-1.5">
+                {/*
+                  The row is keyed by the stored cycle id and LABELLED by the
+                  village's own moon. A key is machinery and a label is a
+                  sentence to a member; this row used to print the key.
+                */}
                 {flows.byCycle.slice(0, 6).map((c: any) => (
-                  <div key={c.cycleId} className="flex items-center justify-between text-sm border border-gray-100 rounded-lg px-3 py-2">
-                    <span className="text-gray-500 font-mono text-xs">{c.cycleId}</span>
-                    <span className="text-gray-700">
+                  <div key={c.cycleId} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm border border-border rounded-lg px-3 py-2">
+                    {/*
+                      A row whose stored id this build cannot place gets no
+                      moon, and the honest thing to print there is that it has
+                      none. The old id in its place would be a leak, and a
+                      blank span would read as a rendering fault.
+                    */}
+                    <span className="text-muted-foreground text-xs">{villageMoonLabel(c.moon) || "Moon not known"}</span>
+                    <span className="text-card-foreground">
                       {c.received} received · {c.distinctSenders} sender{c.distinctSenders === 1 ? "" : "s"}
                     </span>
                   </div>
@@ -291,36 +405,36 @@ export default function ProfileJourney() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-white rounded-2xl shadow-lg p-8"
+          className="bg-card rounded-2xl shadow-lg p-8"
         >
           <div className="flex items-center gap-2 mb-1">
-            <ScrollText className="w-5 h-5 text-teal-deep" />
-            <h2 className="text-2xl font-display font-bold text-teal-deep">Where It Came From</h2>
+            <ScrollText className="w-5 h-5 text-notice" />
+            <h2 className="text-2xl font-display font-bold text-card-foreground">Where It Came From</h2>
           </div>
-          <p className="text-sm text-gray-500 mb-5">
+          <p className="text-sm text-muted-foreground mb-5">
             Every movement of {ledger.currency ?? "recognition"} on your account, from the ledger itself.
           </p>
           {(ledger.entries ?? []).length === 0 ? (
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-muted-foreground">
               Nothing yet. Consented quests and received {tokenNameLower} will appear here.
             </p>
           ) : (
             <div className="space-y-1.5">
               {ledger.entries.slice(0, 12).map((e: any, i: number) => (
-                <div key={i} className="flex items-center justify-between gap-3 text-sm border border-gray-100 rounded-lg px-3 py-2">
+                <div key={i} className="flex items-center justify-between gap-3 text-sm border border-border rounded-lg px-3 py-2">
                   <div className="min-w-0">
-                    <span className="text-gray-800">
+                    <span className="text-card-foreground">
                       {prettySource(e.source)}
                       {/* 0092: a send names the other person. Without it the
                           line reads as a bare number with a caption and no
                           counterpart, on the one surface whose job is to make
                           a balance explainable. */}
                       {e.withName && (
-                        <span className="text-gray-500">{e.amount < 0 ? ` to ${e.withName}` : ` from ${e.withName}`}</span>
+                        <span className="text-muted-foreground">{e.amount < 0 ? ` to ${e.withName}` : ` from ${e.withName}`}</span>
                       )}
                     </span>
                     {e.description && (
-                      <span className="block text-xs text-gray-400 truncate">{e.description}</span>
+                      <span className="block text-xs text-muted-foreground truncate">{e.description}</span>
                     )}
                   </div>
                   {/* MINOR UNITS. `amount` is `token_ledger.amount` verbatim,
@@ -328,7 +442,7 @@ export default function ProfileJourney() {
                       printed ten thousand. The sign is taken before formatting
                       so a negative renders "-0.5" and never "-0.-5". See
                       client/src/lib/tokenAmount.ts. */}
-                  <span className={`shrink-0 font-semibold ${e.amount < 0 ? "text-red-500" : "text-teal-deep"}`}>
+                  <span className={`shrink-0 font-semibold ${e.amount < 0 ? "text-destructive" : "text-foreground"}`}>
                     {e.amount > 0 ? "+" : e.amount < 0 ? "-" : ""}
                     {formatTokenAmount(Math.abs(Number(e.amount)), Number(e.decimals ?? 0))}
                   </span>

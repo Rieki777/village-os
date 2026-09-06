@@ -16,10 +16,20 @@
  *  browser, and every one of those edits would be lost at the next pull.
  *
  *  Where a village's own identity goes instead: Admin, Make This Yours. It
- *  writes the `data/brand.json` overlay, which `mergedConfig()` layers OVER
- *  this file and serves at `/api/game/config`. A blank field here inherits
- *  nothing and shows nothing, which is the correct behaviour for a slot no
- *  village has filled. docs/PROVISIONING.md step 7 is the walkthrough.
+ *  writes the `brand` DOCUMENT IN `app_config`, read through
+ *  `dbDocument(getPool(), "brand", ...)` in `server/index.ts`, which
+ *  `mergedConfig()` layers OVER this file and serves at `/api/game/config`.
+ *  A blank field here inherits nothing and shows nothing, which is the
+ *  correct behaviour for a slot no village has filled.
+ *  docs/PROVISIONING.md step 7 is the walkthrough.
+ *
+ *  THIS PARAGRAPH SAID `data/brand.json` UNTIL 2026-09-03 AND THERE IS NO
+ *  SUCH FILE. There is no `data/` directory in this repository and no code
+ *  anywhere reads a brand file from disk: the overlay has been a database
+ *  row for as long as the Setup Wizard has existed. The wrong name sent at
+ *  least one session looking for a file to edit, which is the same failure
+ *  the three numbered steps above caused, so it is corrected here rather
+ *  than left as a small inaccuracy in a header everybody reads first.
  *
  *  WHAT THIS FILE IS FOR, then: the neutral fallback a village sees before
  *  its founder has set anything, and the platform-level game design (the
@@ -103,6 +113,27 @@ export interface GameConfig {
     tagline: string;
     /** What a committed member is called (e.g. Amora Family member, Citizen, Villager). */
     memberName: string;
+    /**
+     * WHAT THIS VILLAGE CALLS THE PEOPLE WHO RUN IT (Rye, 2026-09-03).
+     *
+     * A LABEL AND NOTHING ELSE. It is not a role, it is not a capability, and
+     * nothing reads it to decide who may do what. `isAdmin` and the one
+     * capability gate in `shared/capabilities.ts` are untouched by whatever a
+     * village types here: the same people can do the same things, and the
+     * member-facing copy says the village's own word for them instead of the
+     * platform's. "Catalyst" is the default; a village that says founder,
+     * steward or elder sets it in Admin, Make This Yours.
+     *
+     * Singular, capitalised, and it takes an article in a sentence ("a
+     * Catalyst can close it"). `client/src/lib/gameApi.ts` holds the article
+     * rule so one heuristic serves every render site.
+     *
+     * It sits in this plane, the brand overlay, because it answers "whose
+     * village is this and what does it call things", which is the same
+     * question as `memberName` beside it. `shared/gameVariables.ts` is the
+     * plane for behaviour, and nothing about this changes any behaviour.
+     */
+    catalystName: string;
     location: string;
     /** ISO 3166 alpha-2 country the project lives in (0083, P8). Blank means
      *  unsaid, and money display falls back to the universal CHF default. */
@@ -255,6 +286,11 @@ export const GAME_CONFIG: GameConfig = {
     // case, as he wrote it.
     tagline: "healing the land and ourselves, together",
     memberName: "Village member",
+    // The platform's own word, belonging to no village, so it is a NEUTRAL
+    // value in `scripts/check-identity-keys.mjs` rather than a pending one.
+    // A village renames it in Admin and every member-facing sentence that
+    // names an admin follows.
+    catalystName: "Catalyst",
     // Empty on purpose: there is no neutral location. A village sets its own
     // in Admin, Make This Yours. Graduated out of the identity guard's pending
     // list on 2026-09-03, AFTER confirming the live village stores its own
@@ -492,4 +528,55 @@ export function getStage(id: string | null | undefined): GameStage {
 /** Stage index for ordering comparisons (later stages have higher index). */
 export function stageIndex(id: string): number {
   return GAME_CONFIG.stages.findIndex((s) => s.id === id);
+}
+
+/**
+ * The answer from `claimPaths`. `paths` is undefined when the caller sent no
+ * `paths` key at all, which means "leave my paths alone" and is not an error.
+ */
+export type PathClaim =
+  | { ok: true; paths: string[] | undefined }
+  | { ok: false; error: string };
+
+/**
+ * VALIDATE A SUBMITTED PATH LIST. Paths are an enum on the wire, and the one
+ * route a member can reach used to write whatever JSON arrived: a bare string,
+ * an object, an array of ids nothing has ever defined. Registration already
+ * demanded an array, so the door a member could open twice a day was the
+ * looser of the two.
+ *
+ * `held` is the member's CURRENT list, and every id in it stays claimable even
+ * when this build's config no longer names it. A village that renames or
+ * retires a path would otherwise lock every member holding the old id out of
+ * the control completely: their own stored value would fail validation and
+ * take the whole request down with it, including the part that drops the dead
+ * id. The profile states the same rule for rendering, where an id this build
+ * does not know is read and never dropped. Dropping stays possible either way,
+ * because dropping means leaving the id out of the array.
+ *
+ * Duplicates collapse and order is the caller's. Nothing reads path order, so
+ * echoing back what was sent is what makes a round trip legible.
+ *
+ * `held` is typed `unknown` and checked rather than trusted, because the rows
+ * this guard exists to stop already exist. The unvalidated route wrote a bare
+ * string and an object into that column for as long as it stood, the users
+ * repo's `fromJsonCol` returns whatever JSON it finds without asking for an
+ * array, and a `held.map` on one of those would answer a member's first claim
+ * with a 500. A stored value that is not a list of ids adds nothing to the
+ * claimable set, which leaves the member able to claim anything on offer.
+ */
+export function claimPaths(input: unknown, held: unknown = []): PathClaim {
+  if (input === undefined) return { ok: true, paths: undefined };
+  if (!Array.isArray(input)) return { ok: false, error: "Paths must be a list of path ids" };
+  const claimable = new Set<string>([
+    ...GAME_CONFIG.paths.map((p) => p.id),
+    ...(Array.isArray(held) ? held.filter((p): p is string => typeof p === "string") : []),
+  ]);
+  const paths: string[] = [];
+  for (const raw of input) {
+    if (typeof raw !== "string") return { ok: false, error: "Every path is named by its id" };
+    if (!claimable.has(raw)) return { ok: false, error: `No such path: ${raw}` };
+    if (!paths.includes(raw)) paths.push(raw);
+  }
+  return { ok: true, paths };
 }

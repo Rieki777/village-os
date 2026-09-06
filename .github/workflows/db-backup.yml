@@ -164,11 +164,11 @@ jobs:
           DB_PORT="${hostport#*:}"
           echo "Dumping schema '$DB_NAME' from $DB_HOST:$DB_PORT"
           mysqldump --host="$DB_HOST" --port="$DB_PORT" --user="$DB_USER" --password="$DB_PASS" \
-            --single-transaction --set-gtid-purged=OFF --no-tablespaces "$DB_NAME" > dump.sql
+            --single-transaction --set-gtid-purged=OFF --no-tablespaces --skip-extended-insert "$DB_NAME" > dump.sql
           gzip -9 dump.sql
           ls -la dump.sql.gz
 
-      - name: Write fidelity manifest (counts + a timestamp, at dump time)
+      - name: Record live production counts (read AFTER the dump, see the drill)
         env:
           DB_URL: ${{ secrets.PROD_DATABASE_URL }}
         run: |
@@ -301,30 +301,86 @@ jobs:
           mysql --host=127.0.0.1 --port=3306 --protocol=TCP --user=root --password=drill restored < dump.sql
           echo "Restore completed."
 
-      - name: Assert fidelity against the manifest
+      - name: Assert fidelity, exactly against the artifact and loosely against production
         run: |
           MYSQL="mysql --host=127.0.0.1 --port=3306 --protocol=TCP --user=root --password=drill -N -B restored"
           fail=0
-          while IFS='=' read -r key want; do
-            case "$key" in
-              users|token_ledger|health_events|quests)
-                got=$($MYSQL -e "SELECT COUNT(*) FROM $key");;
-              probe)
-                got=$($MYSQL -e "SELECT CONCAT(id, '|', DATE_FORMAT(joined_at, '%Y-%m-%dT%H:%i:%s')) FROM users ORDER BY id LIMIT 1");;
-              *) continue;;
-            esac
+
+          # THE CHECK THAT DECIDES THE DRILL: does the artifact restore to
+          # itself? The expectation is derived from dump.sql, so both sides
+          # describe the same instant and nothing can move underneath them.
+          # --skip-extended-insert on the dump makes it exact: one row, one
+          # INSERT line. This is strictly stronger than comparing against
+          # production, because it also catches rows dropped by the RESTORE
+          # rather than by the dump, which the old comparison could not see.
+          #
+          # The comparisons are string equality on purpose. `[ "$got" -lt 1 ]`
+          # on a non-numeric operand writes an error to stderr and returns 2,
+          # which an `if` reads as false, so a numeric form would print ok when
+          # the count could not be read at all. Measured: an empty or garbage
+          # value fails here, as it must.
+          for t in users token_ledger health_events quests; do
+            want=$(grep -c "^INSERT INTO \`$t\` " dump.sql || true)
+            got=$($MYSQL -e "SELECT COUNT(*) FROM \`$t\`")
             if [ "$got" != "$want" ]; then
-              echo "MISMATCH $key: dumped='$want' restored='$got'"
+              echo "MISMATCH $t: the dump carries $want rows, the restore produced '$got'"
               fail=1
             else
-              echo "ok $key = $got"
+              echo "ok $t = $got (dump and restore agree exactly)"
             fi
-          done < manifest.txt
+          done
+
+          # The value round-trip, still exact and still fatal. This is the one
+          # that catches a time zone shifting under the restore.
+          want=$(grep -m1 '^probe=' manifest.txt | cut -d= -f2-)
+          got=$($MYSQL -e "SELECT CONCAT(id, '|', DATE_FORMAT(joined_at, '%Y-%m-%dT%H:%i:%s')) FROM users ORDER BY id LIMIT 1")
+          if [ -z "$want" ]; then
+            echo "MISMATCH probe: manifest.txt carries no probe line at all"
+            fail=1
+          elif [ "$got" != "$want" ]; then
+            echo "MISMATCH probe: manifest '$want', restored '$got'"
+            fail=1
+          else
+            echo "ok probe = $got"
+          fi
+
           if [ "$fail" = "1" ]; then
             echo "RESTORE DRILL FAILED, this backup does not faithfully restore."
             exit 1
           fi
-          echo "Restore drill passed: counts match and the probe timestamp round-tripped exactly, from an encrypted artifact decrypted with the drill key alone."
+
+          # Advisory from here down. It must never fail the drill.
+          #
+          # manifest.txt holds live production counts read AFTER mysqldump
+          # finished, over separate connections outside its snapshot, so they
+          # legitimately differ from what the dump captured. There is no exact
+          # comparison available from outside the snapshot and pretending
+          # otherwise is what produced the false red.
+          #
+          # Run 33923245260 failed on exactly this: health_events was one
+          # ahead, every run, because the uploads export audits itself into the
+          # event spine (server/index.ts, "GET /api/admin/backup/
+          # uploads-archive") and its job runs concurrently with the dump. The
+          # backup was faithful each time. Switching the uploads backup on is
+          # what started it, which is why this was green for weeks first.
+          echo "---"
+          echo "Live production counts from manifest.txt, for reference only."
+          echo "These were read after the dump finished, so drift is expected"
+          echo "and is not evidence of anything wrong with the backup:"
+          while IFS='=' read -r key want; do
+            case "$key" in
+              users|token_ledger|health_events|quests) ;;
+              *) continue;;
+            esac
+            got=$($MYSQL -e "SELECT COUNT(*) FROM \`$key\`")
+            if [ "$got" = "$want" ]; then
+              echo "  $key: dump $got, live $want, no drift"
+            else
+              echo "  $key: dump $got, live $want, drifted while the dump ran"
+            fi
+          done < manifest.txt
+
+          echo "Restore drill passed: every table restored exactly the rows the dump carries, the probe timestamp round-tripped exactly, and the artifact was decrypted with the drill key alone."
 
   restore-drill-negative-control:
     # Proves the drill is not a rubber stamp: a tampered artifact must be
@@ -535,9 +591,23 @@ jobs:
           # these from the same plan object it writes MANIFEST.txt from, so
           # they cannot disagree; carrying both means the drill can catch an
           # archive substituted for another village's.
+          #
+          # Fold the header NAME only, never the value. Field names are
+          # case-insensitive and the drill greps them with a case-SENSITIVE
+          # '^x-uploads-...:', so the name has to be lowered here. The values
+          # are case-sensitive data: takenAt is an ISO-8601 instant whose 'T'
+          # and 'Z' are literal characters, and canary is a filename.
+          #
+          # Run 33923245260 lowered the whole LINE. tr is a stream editor with
+          # no idea where the name stops, so the drill compared a value it had
+          # corrupted itself against the untouched copy in MANIFEST.txt and
+          # called a healthy archive unfaithful. That was this job's first
+          # execution against a real village: the uploads backup had been off
+          # since the job was written, so the fold shipped and sat unrun.
           tr -d '\r' < raw-headers.txt \
             | grep -iE '^x-uploads-(taken-at|files|bytes|canary|canary-sha256):' \
-            | tr 'A-Z' 'a-z' > uploads-headers.txt || true
+            | awk '{ i = index($0, ":"); if (i) print tolower(substr($0, 1, i - 1)) substr($0, i) }' \
+            > uploads-headers.txt || true
           rm -f raw-headers.txt
           if [ ! -s uploads-headers.txt ]; then
             echo "The export answered 200 but carried none of the x-uploads-* manifest" >&2

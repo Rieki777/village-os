@@ -126,6 +126,25 @@ function when(iso: string | null): string {
   return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
+/**
+ * Which stores are still owed from, as a sentence a steward can act on.
+ * "saberra" gives them somebody to press; a bare count gives them nobody.
+ */
+function waitingSentence(waitingOn: Record<string, number>): string {
+  const names = Object.keys(waitingOn).sort();
+  if (names.length === 0) return "A connected service";
+  if (names.length === 1) return names[0];
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/** How long the OLDEST obligation has been outstanding, in whole days. */
+function agedFor(oldestSince: string | null): string {
+  if (!oldestSince) return "";
+  const days = Math.floor((Date.now() - new Date(oldestSince).getTime()) / 86400000);
+  if (!Number.isFinite(days) || days < 1) return ", asked today";
+  return days === 1 ? ", asked one day ago" : `, the oldest ${days} days ago`;
+}
+
 export default function Review() {
   const { user } = useAuth();
   const [queue, setQueue] = useState<Queue | null>(null);
@@ -140,11 +159,50 @@ export default function Review() {
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [rewards, setRewards] = useState<Record<string, { gratitude: string; stayCreditReward: string }>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  // A draft this queue just made that cannot publish. Held so the steward has
+  // a way out of it without leaving the page, because until they withdraw it
+  // the draft occupies one of the village's open-draft slots.
+  const [stuck, setStuck] = useState<{ draftId: string; blocked: number } | null>(null);
+
+  /**
+   * Members whose erasure this village could not finish, because a connected
+   * store never confirmed it deleted its copy. Kept state that nobody watches
+   * is how "we still owe you a confirmation" becomes "kept forever".
+   */
+  const [owed, setOwed] = useState<{ count: number; oldestSince: string | null; waitingOn: Record<string, number> } | null>(null);
+  const [asking, setAsking] = useState(false);
 
   const headers = useCallback((): Record<string, string> => {
     const t = authToken();
     return t ? { Authorization: `Bearer ${t}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
   }, []);
+
+  /**
+   * Ask every unconfirmed store again. This is the only thing that can finish
+   * one of these, because nothing will erase these members a second time.
+   */
+  const askAgain = async () => {
+    setAsking(true);
+    try {
+      const r = await fetch("/api/review/erasure/retry", { method: "POST", headers: headers() });
+      const d = (await r.json().catch(() => ({}))) as { asked?: number; finished?: number; error?: string };
+      if (!r.ok) {
+        toast.error(d?.error ?? "That did not go through");
+        return;
+      }
+      const finished = d.finished ?? 0;
+      toast.success(
+        finished > 0
+          ? `${finished} of ${d.asked ?? 0} finished. The rest have still not confirmed.`
+          : `Asked about ${d.asked ?? 0}. None of them confirmed yet.`,
+      );
+      await load();
+    } catch {
+      toast.error("Could not reach the server");
+    } finally {
+      setAsking(false);
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -163,6 +221,13 @@ export default function Review() {
       setForbidden(false);
       setLoadError(null);
       setQueue(await r.json());
+      // A separate read, so a failure here can never empty the queue above it.
+      try {
+        const e = await fetch("/api/review/erasure", { headers: headers() });
+        setOwed(e.ok ? await e.json() : null);
+      } catch {
+        setOwed(null);
+      }
     } catch {
       setLoadError("Could not reach the server");
     } finally {
@@ -242,6 +307,28 @@ export default function Review() {
    * Every edit the steward has made in this batch rides along, keyed by
    * proposal id, so accepting the batch accepts the corrected versions.
    */
+  const withdrawStuck = async () => {
+    if (!stuck) return;
+    setBusy(stuck.draftId);
+    try {
+      const res = await fetch(`/api/review/drafts/${stuck.draftId}/withdraw`, {
+        method: "POST",
+        headers: headers(),
+      }).catch(() => null);
+      const d = res ? await res.json().catch(() => ({})) : {};
+      if (!res || !res.ok) {
+        toast.error((d as { error?: string })?.error ?? "That draft could not be withdrawn");
+        return;
+      }
+      const n = (d as { reopened?: number }).reopened ?? 0;
+      toast.success(n > 0 ? `Withdrawn, and ${n} proposal(s) are back in the queue` : "Withdrawn");
+      setStuck(null);
+      await load();
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const acceptBatch = async (batch: Batch) => {
     const payloads: Record<string, unknown> = {};
     for (const item of batch.items) {
@@ -264,9 +351,26 @@ export default function Review() {
         toast.error((d as { error?: string })?.error ?? "That batch did not go through");
         return;
       }
-      const body = d as { accepted?: number; refused?: Array<{ error: string }> };
-      const refused = body.refused?.length ?? 0;
-      toast.success(refused > 0 ? `${body.accepted} accepted, ${refused} left in the queue` : `${body.accepted} accepted`);
+      // READ `blocked`, WHICH THE SERVER SENDS. This used to read `refused`,
+      // a field no route has ever returned, so it was always 0 and the toast
+      // always said a flat "N accepted". The server sends `blocked` and says
+      // in its own comment that a blocked line means the draft cannot publish
+      // until somebody deals with it. Swallowing that here produced exactly
+      // the failure that comment was written to prevent: a steward told forty
+      // seats were accepted, finding out at the publish button that none of
+      // them can apply.
+      const body = d as { accepted?: number; blocked?: number; noted?: number; draftId?: string };
+      const blocked = body.blocked ?? 0;
+      if (blocked > 0 && body.draftId) setStuck({ draftId: body.draftId, blocked });
+      if (blocked > 0) {
+        toast.error(
+          `${body.accepted} accepted, and ${blocked} of the seats cannot apply. This draft will not publish ` +
+            `until those are dealt with. Open it in the admin org panel to see which, or withdraw it to put ` +
+            `these proposals back in the queue.`,
+        );
+      } else {
+        toast.success(`${body.accepted} accepted`);
+      }
       await load();
     } finally {
       setBusy(null);
@@ -363,6 +467,29 @@ export default function Review() {
             a draft you can preview and undo.
           </p>
         </div>
+
+        {/* What the village still owes somebody who left. The only item on
+            this screen about a person already gone, and it is here because
+            nothing else will ever ask about them again. */}
+        {owed && owed.count > 0 && (
+          <div className={card}>
+            <h2 className="text-sm font-semibold text-foreground">
+              {owed.count === 1 ? "One member" : `${owed.count} members`} left, and this village is not finished on their behalf
+            </h2>
+            <p className="text-sm text-muted-foreground mt-2">
+              Their data is gone from here. {waitingSentence(owed.waitingOn)} has not confirmed deleting
+              its own copy{agedFor(owed.oldestSince)}. Nothing asks again on its own, because the people
+              this concerns have already left.
+            </p>
+            <button
+              className="mt-3 text-sm bg-teal-deep text-white rounded-lg px-3 py-2 font-medium disabled:opacity-40"
+              disabled={asking}
+              onClick={() => void askAgain()}
+            >
+              {asking ? "Asking" : "Ask again"}
+            </button>
+          </div>
+        )}
 
         {/* The drop count, printed out loud. On an empty queue it is the whole
             story, and it is the one number that cannot come from the rows. */}
@@ -466,6 +593,23 @@ export default function Review() {
             >
               Accept all {batch.items.length}, with my edits
             </button>
+
+            {stuck ? (
+              <div className="mt-4 rounded-lg border border-border p-3">
+                <p className="text-sm text-foreground">
+                  The draft this made cannot publish: {stuck.blocked} of its seats are blocked.
+                  Withdrawing puts these proposals back in the queue so you can accept fewer at a
+                  time, or make the circles they name first.
+                </p>
+                <button
+                  disabled={busy === stuck.draftId}
+                  onClick={() => void withdrawStuck()}
+                  className="text-sm border border-border rounded-lg px-4 py-2 mt-3 min-h-[44px] font-medium"
+                >
+                  Withdraw that draft
+                </button>
+              </div>
+            ) : null}
           </div>
         ))}
 

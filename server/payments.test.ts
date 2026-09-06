@@ -68,10 +68,22 @@ describe("webhook signature verification", () => {
 
 describe("the allow-negative whitelist stays tight", () => {
   it("holds exactly the three debt-creating sources", () => {
-    // Growing this set is a deliberate keystone change, never a side effect.
-    // `reversal` joined on 2026-09-03 so that a clawback of value the member
-    // has already spent completes and reads negative, which is the truthful
-    // state, instead of being refused (PLAN_TO_A.md section 1 item 5).
-    expect(Array.from(ALLOW_NEGATIVE_SOURCES).sort()).toEqual(["payment_reversal", "reversal", "stay_night"]);
+    // Growing this set is a deliberate keystone change, never a side effect,
+    // and this line is what makes it deliberate: adding a source without
+    // coming here and saying why is a failing test, not a quiet widening.
+    //
+    // `reversal` joined them when `reverse()` in server/lib/economy.ts learned
+    // to complete a clawback of value the member had already spent. Refusing
+    // that correction left the mistaken credit standing and a hand-written
+    // ledger row as the only repair; allowing it puts the member's balance
+    // below zero, which is the true statement of what they hold and clears
+    // itself as they earn.
+    //
+    // The ruling is PLAN_TO_A.md section 1 item 5.
+    expect(Array.from(ALLOW_NEGATIVE_SOURCES).sort()).toEqual([
+      "payment_reversal",
+      "reversal",
+      "stay_night",
+    ]);
   });
 });

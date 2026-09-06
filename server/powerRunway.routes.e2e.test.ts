@@ -654,9 +654,36 @@ describe.skipIf(!DB_CONFIGURED)("STEP TWO: the village takes the power on, still
      * admin runway, `capability:moved:` is the admin handover. What IS here
      * are the ballot-written ones.
      */
-    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-      "SELECT text, actor_user_id FROM health_events WHERE audience = 'admin' AND entity_ref IN ('library.keep','steward-circle')",
-    );
+    /*
+     * WAITED FOR, NOT SNAPSHOT. recordEvent() is fire-and-forget by design
+     * (server/lib/events.ts: a trace must never fail the mutation it traces),
+     * and the capability:moved-by-ballot: write is the last thing the apply
+     * does before it returns, so the response can beat its own audit row out
+     * of the door. A bare read here lost that race under load: every
+     * assertion about the crossing itself passed and only the trail looked
+     * empty. Same defect and same remedy as the auditRowCount helper in
+     * server/loop.e2e.test.ts, which carries the note "reading the admin view
+     * first raced it and lost in CI".
+     *
+     * This cannot weaken the two ABSENCE assertions below. A longer window
+     * gives a forbidden role:capabilities: row MORE time to appear, never
+     * less, so waiting makes those two stricter. And a row that never lands
+     * still fails, on whatever rows were actually found.
+     */
+    let rows: any[] = [];
+    const deadline = Date.now() + 10_000;
+    for (;;) {
+      const [found] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "SELECT text, actor_user_id FROM health_events WHERE audience = 'admin' AND entity_ref IN ('library.keep','steward-circle')",
+      );
+      rows = found;
+      const have = rows.map((r) => String(r.text));
+      const both =
+        have.some((t) => t.startsWith("role:capabilities-by-ballot:")) &&
+        have.some((t) => t.startsWith("capability:moved-by-ballot:"));
+      if (both || Date.now() >= deadline) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
     const texts = rows.map((r) => String(r.text));
     expect(texts.some((t) => t.startsWith("role:capabilities-by-ballot:"))).toBe(true);
     expect(texts.some((t) => t.startsWith("capability:moved-by-ballot:"))).toBe(true);

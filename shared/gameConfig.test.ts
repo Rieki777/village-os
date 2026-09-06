@@ -30,7 +30,7 @@
  * for whoever owns the season config rather than a line to add quietly here.
  */
 import { beforeAll, describe, expect, it } from "vitest";
-import { GAME_CONFIG } from "./gameConfig";
+import { claimPaths, GAME_CONFIG } from "./gameConfig";
 
 /**
  * The guard's rule, loaded from the guard rather than restated.
@@ -163,5 +163,71 @@ describe("the guard reading the same file this test imports", () => {
 
     const disagreements = IDENTITY_KEYS.filter((key) => parsed![key] !== valueAt(key));
     expect(disagreements, "the text reader and the real object must see the same values").toEqual([]);
+  });
+});
+
+describe("claimPaths: what may reach a member's paths column", () => {
+  /*
+   * PUT /api/profile used to be `if (paths) u.paths = paths` and wrote
+   * whatever arrived. These are the cases that used to land in the database.
+   * The route-level proof that a refusal writes nothing lives in
+   * server/profilePaths.routes.e2e.test.ts; this half runs with no database
+   * and therefore runs on every commit.
+   */
+  const offered = GAME_CONFIG.paths.map((p) => p.id);
+
+  it("takes every id this build offers", () => {
+    expect(claimPaths(offered)).toEqual({ ok: true, paths: offered });
+  });
+
+  it("reads an absent field as leave-my-paths-alone", () => {
+    expect(claimPaths(undefined)).toEqual({ ok: true, paths: undefined });
+  });
+
+  it("reads an empty list as drop them all, which [] being truthy hid", () => {
+    expect(claimPaths([])).toEqual({ ok: true, paths: [] });
+  });
+
+  it("refuses an id nothing has ever defined", () => {
+    const out = claimPaths(["wizard"]);
+    expect(out.ok).toBe(false);
+    expect(out.ok === false && out.error).toContain("wizard");
+  });
+
+  it("refuses everything that is not a list of strings", () => {
+    for (const junk of [null, "investor", 7, { id: "investor" }, [7], [null], [["investor"]]]) {
+      expect(claimPaths(junk as unknown).ok, JSON.stringify(junk)).toBe(false);
+    }
+  });
+
+  it("collapses duplicates and keeps the order it was given", () => {
+    expect(claimPaths(["steward", "investor", "steward"])).toEqual({
+      ok: true,
+      paths: ["steward", "investor"],
+    });
+  });
+
+  it("survives a held value that is not a list of ids", () => {
+    // The rows the unvalidated route already wrote. `fromJsonCol` in the users
+    // repo hands back whatever JSON it finds, so these reach the guard as they
+    // stand, and a `held.map` on one of them would answer a member's first
+    // claim with a 500 rather than a saved path.
+    for (const junk of [null, "investor", 7, { a: 1 }, undefined]) {
+      expect(claimPaths(["steward"], junk as unknown)).toEqual({ ok: true, paths: ["steward"] });
+    }
+    // A list that is only PARTLY ids keeps the ids and ignores the rest.
+    expect(claimPaths(["hermit"], ["hermit", 7, null]).ok).toBe(true);
+  });
+
+  it("lets a member keep an id this build no longer offers", () => {
+    // A village that retires a path must not lock the members holding it out
+    // of the control entirely: their own stored value would fail validation
+    // and take down the request that drops it.
+    expect(claimPaths(["hermit", "steward"], ["hermit"])).toEqual({
+      ok: true,
+      paths: ["hermit", "steward"],
+    });
+    // And it stays theirs alone. Nobody else can claim it.
+    expect(claimPaths(["hermit"], []).ok).toBe(false);
   });
 });
