@@ -1,0 +1,73 @@
+-- 0169: the per-recipient ceiling becomes a COUNT, and the count is seven.
+--
+-- WHAT THE CODE DID IN THE SAME CHANGE
+--
+--   gratitude.max_share_per_recipient   a percentage (25) of the giver's own
+--                                       allowance, divided back out at every
+--                                       read to answer "how many people does
+--                                       it take to spend this".
+--   gratitude.full_sends_per_cycle      that same N, held directly. Default 7.
+--
+-- shareCapFor now computes floor(allowance / full_sends) where it computed
+-- floor(allowance * share / 100). Identical arithmetic, one fewer round trip
+-- through a unit nobody says out loud. The comment on that function had been
+-- making the argument for two releases: "a cap of 1/N is the sentence 'at
+-- least N people' written as one number."
+--
+-- The Gratitude wall draws this N as hearts, one heart per person, and reads
+-- it from the same helper the ceiling comes from. That is the reason the dial
+-- had to change rather than the page carrying its own figure: a wall that
+-- drew a count while the engine enforced a percentage would be two numbers
+-- for one rule, which is exactly how the two caps 0110 retired drifted apart.
+--
+-- gratitude.base_budget also moves, 100 to 105, and it is a CODE default with
+-- no row to migrate. 105 divides evenly by 7, so a full send is a whole 15 at
+-- Guest and 75 at Sage. A village that had explicitly chosen 100 holds no row
+-- for it either, because setting a variable back to its default deletes the
+-- row, so every village that never touched the dial moves from 100 to 105 and
+-- gains five percent of allowance. That is a deliberate ruling, not a
+-- side effect: whole numbers matter more here than the old figure did.
+--
+-- WHY THIS TRANSLATES WHERE 0110 DELETED
+--
+-- 0110 refused to carry three retired dials forward, and it was right to: a
+-- per-moon amount of 10 and a share of 25 percent are answers to different
+-- questions, and inventing one from the other would have been the platform
+-- writing a rule the village never voted for.
+--
+-- This is the opposite case. A share of 1/N and a count of N are the SAME
+-- constraint in inverse units, so round(100 / share) is a faithful reading of
+-- what the village already decided and not a new decision. 25 becomes 4, 10
+-- becomes 10, 50 becomes 2, 100 becomes 1. A village that tuned concentrated
+-- voice keeps exactly the ceiling it tuned.
+--
+-- WHAT WAS MEASURED BEFORE WRITING THIS FILE
+--
+-- The number: 0168 was the highest claimed across all 628 local and remote
+-- refs at the moment this file was created, so this is 0169. The ledger's own
+-- rule is that such a reading expires in minutes, and it was taken immediately
+-- before the file was written.
+--
+-- The row: game_variables holds DELTAS ONLY, so a row exists for this key only
+-- where a founder moved it off 25. The UPDATE below therefore does nothing at
+-- all on any village still running the platform default, which on the one
+-- deployment that existed at 0110 was every one of them.
+--
+-- ROLLING BACK ONTO THE PREVIOUS RELEASE
+--
+-- The previous release reads gratitude.max_share_per_recipient out of its own
+-- code registry, so after this runs it finds no override row and falls back to
+-- its compiled default of 25. It starts, it serves, and its ceiling is the
+-- platform default instead of the village's tuned one. Degraded and never
+-- broken, which is the bar. No column is dropped, no type narrows, and no
+-- unique key is added, so nothing here can refuse a boot.
+--
+-- The amendment ledger (mechanics_changes) keeps every historical change to
+-- the retired key untouched, so a founder can still read what their village
+-- chose and when.
+
+UPDATE `game_variables`
+SET `config_key` = 'gratitude.full_sends_per_cycle',
+    `value` = CAST(GREATEST(1, ROUND(100 / GREATEST(1, CAST(`value` AS UNSIGNED)))) AS CHAR),
+    `value_type` = 'integer'
+WHERE `config_key` = 'gratitude.max_share_per_recipient';

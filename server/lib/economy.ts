@@ -746,14 +746,27 @@ export interface GiveInput {
 /**
  * The most one member may put on ONE other member this cycle (R73).
  *
- * A share of the giver's own allowance, so it means the same thing at 100 and
- * at 500 and a village that doubles `gratitude.base_budget` does not silently
- * double how much of one person's standing can come from one relationship. A
- * cap of 1/N is the sentence "at least N people" written as one number.
+ * A fraction of the giver's own allowance, so it means the same thing at 105
+ * and at 525 and a village that doubles `gratitude.base_budget` does not
+ * silently double how much of one person's standing can come from one
+ * relationship.
  *
- * The floor of 1 is a bound, never a guess: 1% of an allowance of 50 rounds to
- * zero, and a zero here would refuse every send in the village while both
- * dials still read as sane numbers. It is stated on the dial itself.
+ * THE DIAL IS THE COUNT NOW, and this comment used to argue for it before the
+ * registry caught up: "a cap of 1/N is the sentence 'at least N people' written
+ * as one number." It was carrying a percentage and dividing it back out, which
+ * is the same arithmetic with a worse unit on the founder's screen. 25% and
+ * "4 people" are the same rule, and only one of them is a sentence anybody
+ * says out loud. `gratitude.full_sends_per_cycle` is N directly, so the
+ * division happens once, here, and the hearts a member sees on the wall are
+ * this same N rather than a second figure that could drift from it.
+ *
+ * Sending to MORE than N people stays allowed, because this bounds the amount
+ * one person may receive and never the number of sends. Past N the allowance
+ * is simply spread thinner, which is the honest shape of a wider circle.
+ *
+ * The floor of 1 is a bound, never a guess: an allowance of 5 across 7 sends
+ * rounds to zero, and a zero here would refuse every send in the village while
+ * both dials still read as sane numbers. It is stated on the dial itself.
  *
  * LIVES HERE, not in `server/lib/gratitude.ts`, as of the concurrency fix
  * below: this file is the guarded engine both gratitude doors write through
@@ -764,8 +777,34 @@ export interface GiveInput {
  */
 export function shareCapFor(allowanceTotal: number): number {
   if (allowanceTotal <= 0) return 0;
-  const share = numberVar("gratitude.max_share_per_recipient");
-  return Math.max(1, Math.floor((allowanceTotal * share) / 100));
+  // Guarded rather than trusted: the dial's own min is 1, and a village that
+  // reaches the column some other way must not divide by zero and hand every
+  // member an Infinity ceiling, which reads as "no limit" and is the one
+  // failure this function exists to prevent.
+  const fullSends = Math.max(1, Math.floor(numberVar("gratitude.full_sends_per_cycle")));
+  return Math.max(1, Math.floor(allowanceTotal / fullSends));
+}
+
+/**
+ * How many full-strength gifts this allowance holds, which is what the wall
+ * draws as hearts.
+ *
+ * Derived from the cap rather than read off the dial, and that is the whole
+ * point. `shareCapFor` floors, so an allowance of 100 across 7 sends gives a
+ * ceiling of 14 and SEVEN of those is 98: the dial says 7 and the allowance
+ * genuinely holds 7. But an allowance of 5 across 7 sends floors the ceiling
+ * to the bound of 1, and five 1s is all there is, so the honest answer is 5
+ * and not the 7 on the dial. Reading the dial directly would have drawn two
+ * hearts a member could never fill, which is the displayed-number-versus-
+ * actual-behaviour defect this codebase keeps finding.
+ */
+export function fullSendsIn(allowanceTotal: number): number {
+  const cap = shareCapFor(allowanceTotal);
+  if (cap <= 0) return 0;
+  return Math.min(
+    Math.max(1, Math.floor(numberVar("gratitude.full_sends_per_cycle"))),
+    Math.floor(allowanceTotal / cap),
+  );
 }
 
 /**

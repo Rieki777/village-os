@@ -51,6 +51,7 @@ import {
 import { allVariables, boolVar, numberVar, rawValue, setVariable, stringVar } from "./lib/variables";
 import { adminGateWasConsulted, markAdminGate } from "./lib/adminGate";
 import { type FaqPathway, register as registerFaqRoutes } from "./routes/faqs";
+import { register as registerGratitudeVoiceRoutes } from "./routes/gratitudeVoices";
 import { register as registerLandRoutes } from "./routes/land";
 import { register as registerMilestonesRoutes } from "./routes/milestones";
 import { register as registerTrainingRoutes } from "./routes/training";
@@ -20392,7 +20393,7 @@ ${inner}
    * `/api/game/gratitude/send` is the acknowledgement flow and this is the
    * Hearts economy, and both now read `gratitude.base_budget` times the
    * giver's stage multiplier for the allowance and
-   * `gratitude.max_share_per_recipient` for how much of it one person may
+   * `gratitude.full_sends_per_cycle` for how much of it one person may
    * receive. They always summed their spending out of the same table; what
    * they disagreed about was the total, so the flat 30 here quietly won for
    * anyone who came through this door. The two doors differ now only in what
@@ -20730,6 +20731,11 @@ ${inner}
    * of false: a tap is a gesture, not a message, and it was never meant to be
    * quoted here.
    */
+  // The hero of the wall, registered immediately before the wall itself so
+  // the two reads sit together. See server/routes/gratitudeVoices.ts for why
+  // this one may be anonymous where the enriched wall may not.
+  registerGratitudeVoiceRoutes(app, { getPool });
+
   app.get("/api/game/gratitude/wall", async (_req, res) => {
     const log = await gratitudeRepo.all();
     const wall = log
@@ -26319,11 +26325,16 @@ ${inner}
     res.json({
       gratitude: {
         baseBudget: numberVar("gratitude.base_budget"),
-        // A SHARE of the sender's own allowance, so the client cannot render
-        // it as an amount without knowing whose allowance it is a share of.
-        // `/api/game/me` carries that member's budget; this route is
+        // How many full-strength gifts an allowance holds, so the client
+        // cannot render a ceiling from it without knowing whose allowance it
+        // divides. `/api/game/me` carries that member's budget; this route is
         // anonymous and describes the rule, never one person's ceiling.
-        maxSharePerRecipient: numberVar("gratitude.max_share_per_recipient"),
+        //
+        // This replaced `maxSharePerRecipient` when the dial became a count.
+        // Emitting both was considered and refused: a percentage derived here
+        // would be a second figure for one rule, and two figures for one rule
+        // is how the caps this one replaced drifted apart in the first place.
+        fullSendsPerCycle: numberVar("gratitude.full_sends_per_cycle"),
         requireMessage: boolVar("gratitude.require_message"),
         // The ReGen pool model: the community can always see how big the pool
         // is and what it pays — but a member's SHARE is unknowable before

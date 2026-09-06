@@ -1014,8 +1014,8 @@ acknowledgement flow does, in Admin under Gratitude:
 
 | key | default | what it sets |
 |---|---|---|
-| `gratitude.base_budget` | 100 | The allowance a member may give each cycle, before their stage multiplier |
-| `gratitude.max_share_per_recipient` | 25 % | The most of that allowance any one person may receive |
+| `gratitude.base_budget` | 105 | The allowance a member may give each cycle, before their stage multiplier |
+| `gratitude.full_sends_per_cycle` | 7 | How many people it takes to give that allowance away, so the most any one person may receive is a seventh of it |
 
 It shipped with a second pair of its own, `economy.giving_allowance_per_moon`
 (a flat 30) and `economy.hearts_per_recipient_per_moon` (10 to one person),
