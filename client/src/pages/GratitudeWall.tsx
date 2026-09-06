@@ -45,6 +45,23 @@ export default function GratitudeWall() {
 
   useEffect(load, []);
 
+  /* The one thing on this form the village decides. See the textarea below. */
+  const [requireMessage, setRequireMessage] = useState<boolean | null>(null);
+  useEffect(() => {
+    let alive = true;
+    gameFetch("/api/game/rules")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (alive && d) setRequireMessage(Boolean(d?.gratitude?.requireMessage));
+      })
+      .catch(() => {
+        /* stays optional, which is the server's own default posture */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const send = async (e: React.FormEvent) => {
     e.preventDefault();
     setSending(true);
@@ -143,8 +160,23 @@ export default function GratitudeWall() {
                   className="px-3 py-2 border border-stone-200 rounded-lg outline-none focus:border-teal-deep"
                 />
               </div>
+              {/*
+                THE VILLAGE'S OWN SETTING, NOT A HARDCODED TRUE.
+
+                The server gates this on `gratitude.require_message`
+                (server/lib/gratitude.ts, via boolVar), so a village that turned
+                it off still had a form here refusing to submit without a
+                message. A config knob the client ignores is a knob that does
+                not exist. /api/game/rules has carried the real answer all along
+                and nothing read it.
+
+                Null while the rule is in flight means OPTIONAL, which matches
+                the server's own posture: it refuses on the way in, so an
+                optimistic client costs a round trip and a sentence, while a
+                pessimistic one blocks a legitimate send outright.
+              */}
               <textarea
-                required
+                required={requireMessage === true}
                 value={form.message}
                 onChange={(e) => setForm({ ...form, message: e.target.value })}
                 placeholder="What are you thanking them for?"

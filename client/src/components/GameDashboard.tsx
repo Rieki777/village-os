@@ -169,32 +169,19 @@ export default function GameDashboard() {
           readers announce. Drawing it in two places would have meant fixing it
           in two places. */}
 
-      {/* Gratitude + quests */}
-      <div className="grid md:grid-cols-2 gap-4">
-        <div className="bg-card rounded-2xl border border-border shadow-sm p-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Heart className="w-5 h-5 text-coral" />
-            <h2 className="font-display text-lg font-bold text-card-foreground">{currency}</h2>
-          </div>
-          {/* Recognition carries decimals 0 today, so this number does not
-              move. It divides anyway: this is the biggest number on the
-              dashboard, and it is the one a member would quote back. See
-              client/src/lib/tokenAmount.ts. */}
-          <p className="text-3xl font-display font-bold text-notice mb-1">
-            {formatTokenAmount(Number(me.gratitude.balance ?? 0), Number(me.gratitude.decimals ?? 0))}
-          </p>
-          <p className="text-sm text-muted-foreground mb-4">earned so far</p>
-          {me.gratitude.budget.total > 0 && (
-            <p className="text-sm text-muted-foreground mb-4">
-              Sending budget: <span className="font-semibold">{me.gratitude.budget.remaining}</span> of{" "}
-              {me.gratitude.budget.total} left this cycle
-            </p>
-          )}
-          <Link href="/gratitude" className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground underline underline-offset-2 hover:text-notice transition-colors">
-            Visit the {currency} Wall <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
+      {/*
+        THE GRATITUDE CARD MOVED TO THE VESSEL, and quests took the width.
 
+        This card printed the balance, the sending budget and a link to the
+        Wall. All three live in TheVessel now, beside the send control, which is
+        the point of consolidating them: a member looking at what they have left
+        to give is the member most likely to want to give it.
+
+        The two-column grid went with it. Two cards side by side was a layout
+        for two cards; one card in a two-column grid is a card with a hole
+        beside it.
+      */}
+      <div>
         <div className="bg-card rounded-2xl border border-border shadow-sm p-6">
           <div className="flex items-center gap-2 mb-3">
             <Sparkles className="w-5 h-5 text-gold" />
