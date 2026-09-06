@@ -382,6 +382,31 @@ export default function PowerMap({
         data-power-map
         data-shape={shape}
         onClick={() => onFocus(parentOf(focusId))}
+        /*
+         * ESCAPE, WHICH THE LABELS HAVE BEEN PROMISING ALL ALONG.
+         *
+         * Every focused circle carries the aria-label "You are inside it;
+         * press Enter or Escape to go out one level", and spec 11 lists Esc
+         * among the keyboard paths. Enter was wired and Escape never was, so
+         * the one instruction a screen-reader user is given for leaving a
+         * circle did nothing. Verified live at build b9806ea: Enter cleared
+         * the focus, Escape left it exactly where it was.
+         *
+         * It sits on the SVG rather than on each node so it works from a
+         * seat as well as from a circle: key events bubble, and "go out one
+         * level" is the same act wherever focus happens to be.
+         *
+         * A selected seat closes FIRST. Escape means "back out of the thing
+         * I am in", and when a seat card is open that thing is the card, not
+         * the circle behind it.
+         */
+        onKeyDown={(e: ReactKeyboardEvent) => {
+          if (e.key !== "Escape") return;
+          e.preventDefault();
+          e.stopPropagation();
+          if (selected) onSelect(null);
+          else onFocus(parentOf(focusId));
+        }}
       >
         <defs>
           <RelationArrowDef />
