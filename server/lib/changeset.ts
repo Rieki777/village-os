@@ -413,7 +413,10 @@ export async function recordElement(pool: Pool, input: ElementLedgerInput): Prom
       ],
     );
   } catch (e) {
-    console.error(`[governance] the element ledger refused a row for ballot ${input.ballotId} (the change stands)`, e);
+    // The id is an ARGUMENT and never part of the format string. `console.error`
+    // reads %s and %j in its first argument, so an id carrying one would consume
+    // the error object and the line would report a failure with no failure in it.
+    console.error("[governance] the element ledger refused a row (the change stands)", { ballotId: input.ballotId }, e);
   }
 }
 
@@ -755,7 +758,9 @@ export async function recordMechanicsChangeRow(
       ],
     );
   } catch (e) {
-    console.error(`[mechanics] amendment ledger write failed for ${key} (change stands)`, e);
+    // Same shape, and this is the one CodeQL named: `key` arrives from a change
+    // set, so it is a user-provided value in a format string. Passed as data.
+    console.error("[mechanics] amendment ledger write failed (change stands)", { key }, e);
   }
 }
 
