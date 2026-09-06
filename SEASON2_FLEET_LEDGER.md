@@ -2790,6 +2790,40 @@ to main's copy and lower from there**: `--update-baseline` REFUSES, because from
 correct value is a raise. Never clear a red baseline with `--update-baseline` — the gate is red
 about committed work, not about your change.
 
+**THERE IS A SEVENTH RATCHET AND IT IS NOT IN `scripts/`, WHICH IS WHY NOBODY CLAIMS IT.**
+`scripts/module-sql-pending.json` is a per-file debt register of raw SQL call sites outside
+`server/repos`, and its own header says it "only ever shrinks". That is a ratchet by any other name,
+it currently stands at 762 across dozens of files, and it is contended exactly like the six above.
+
+**It is enforced by a gate `module-facts.mjs` cannot see.** `scripts/sql-burndown.mjs` runs from
+`scripts/validate-module.mjs`, which is invoked by `.github/workflows/module-intake.yml` and NOT by
+`ci.yml`. So the script this section tells you to trust for the gate list is blind to it, exactly as
+27d warns, and the consequence is concrete rather than theoretical: a whole ratchet that no lane
+knows to claim, because the tool everyone uses to enumerate gates reads one workflow of five.
+
+**AND THE GATE IS PATH-FILTERED, so it does not run when its own guard changes.**
+`module-intake.yml` fires on seven paths: three files in `shared/`, two in `server/lib/`,
+`scripts/enable-all-modules.mjs` and `docs/modules/**`. Neither `scripts/sql-burndown.mjs` nor
+`scripts/module-sql-pending.json` is among them. So the pull request that FIXED the burn-down guard
+did not run intake at all, while a pull request editing one module doc did, and was handed six files
+of somebody else's debt. **The gate is blind to changes to itself and fires on the population least
+likely to have caused the problem.** Both halves were measured on real runs, not reasoned about.
+
+The fix is not to widen the trigger, and the lane that owns it worked out why before doing it: adding
+the guard's own files to intake's paths makes intake run on the pull request that fixes intake, which
+then fails on the debt that pull request deliberately did not touch. **Pay the debt, then widen, and
+widen as a REPORT before a gate.** The same ordering as everything else in this section.
+
+**And the trap in it armed itself while somebody was FIXING it, which is the sharpest version of
+this shape anyone has produced.** The guard compared GRAND TOTALS while the register is PER FILE, so
+a fall in one file silently blessed growth in others. The lane fixing it waived one genuine false
+positive, which took the tree to exactly 762, equal to the register, and the old code then wrote the
+whole scan while printing "register lowered to 762". **The thing that spends the margin is not
+carelessness, it is somebody doing the right thing.** A guard whose failure mode is triggered by
+correct work will not be caught by being careful. Fixed by refusing per file BEFORE the total, and
+pinned by a test that builds the hole exactly: one file falling six to one paying for another
+growing three to four, so the total falls while a file grows.
+
 **Some of those ratchets are PER FILE, and that is the half that bites an extraction.** Moving code
 out of a file carrying a grandfathered allowance into a file that has none turns settled lines into
 new violations with nobody having written a new one. `check-tailwind-gray` took a lane red on two
