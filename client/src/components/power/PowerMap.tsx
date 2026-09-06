@@ -503,7 +503,23 @@ export default function PowerMap({
                    attributes, which is why they were going to work and this
                    one was not. */
                 fill={tone}
-                fillOpacity={isFocus ? 0.16 : hovered ? 0.2 : 0.1}
+                /*
+                 * THESE HUES WERE DRAWN FOR A DARK GROUND.
+                 *
+                 * They are the living map artifact's `CIRCLE_COL`, and the
+                 * artifact paints them on #131a11 where a tenth of a hue
+                 * still reads. This page is light, and at 0.1 a mid-tone on
+                 * white is within a few percent of white: measured on the
+                 * live phone at b711620 the ring was seventeen near-identical
+                 * pale discs, which is the same "one grey" the palette work
+                 * was supposed to end.
+                 *
+                 * A third of the hue reads as a tint on white and still sits
+                 * far behind the near-black label on top of it, so nothing
+                 * about legibility moves. The mini render on /circles is on
+                 * the dark ground and keeps its own lower value.
+                 */
+                fillOpacity={isFocus ? 0.42 : hovered ? 0.46 : 0.32}
                 stroke={tone}
                 strokeOpacity={isFocus ? 0.9 : hovered ? 0.85 : 0.45}
                 strokeWidth={isFocus ? 3 : hovered ? 3 : 2}
