@@ -71,8 +71,18 @@ export default function CycleClock({ hemisphere = "north" }: { hemisphere?: Hemi
           return (
             <g key={`${q.month}-${q.day}`}>
               <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={T.brand} strokeWidth="2.5" />
+              {/*
+                AND THE OUTER LABELS SIT ON THE PAGE, SO THEY TAKE THE PAGE'S
+                INK. The exact mirror of the centre above, and it was wrong the
+                same way round: `T.brand` is frozen dark, which reads on the
+                light pages this clock was built for and measures 3.5:1 at
+                7.5px on the wall's night ground, under the 4.5:1 these need.
+                `--foreground` is the token that answers to whatever world the
+                clock has been put in, and this text has no surface of its own
+                between it and that world.
+              */}
               <text x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
-                fontSize="7.5" fill={T.brand} opacity="0.9">
+                fontSize="7.5" fill="var(--foreground, #1a3a39)" opacity="0.9">
                 {q.label === "Equal Day & Night" ? "Equinox" : "Solstice"}
               </text>
             </g>
@@ -86,14 +96,56 @@ export default function CycleClock({ hemisphere = "north" }: { hemisphere?: Hemi
           strokeDasharray={`${lunarSweep * 2 * Math.PI * 58} ${2 * Math.PI * 58}`}
           strokeLinecap="round" transform="rotate(-90 110 110)" />
         {/* the centre: the village's season, the cycle's truth */}
-        <circle cx="110" cy="110" r="46" fill={T.cream} opacity="0.85" />
+        {/*
+          OPAQUE, so the ink above it has one known ground.
+
+          At 0.85 this disc composited with whatever was behind the clock, so
+          its real colour was the village's cream on a light page and a muddier,
+          darker cream on the wall's night ground. Text contrast cannot be
+          reasoned about, or measured once and trusted, against a surface that
+          changes with the page under it.
+        */}
+        <circle cx="110" cy="110" r="46" fill={T.cream} />
         <text x="110" y="98" textAnchor="middle" fontSize="10" fill={T.brand} fontWeight="600">
           {season || "This season"}
         </text>
-        <text x="110" y="114" textAnchor="middle" fontSize="8.5" fill="var(--foreground, #1a3a39)" opacity="0.8">
+        {/*
+          THE CENTRE SITS ON A FROZEN SURFACE, SO IT TAKES A FROZEN INK.
+
+          These two lines were `var(--foreground)` at 0.8 and 0.6 opacity, and
+          that is the theme-frozen pairing bug in its purest form: the disc
+          under them is `T.cream`, which comes off the tone layer and is light
+          in EVERY theme, while `--foreground` is redeclared per theme. On a
+          light page it resolved near-black on cream and read fine, which is
+          why it shipped. The moment this clock was placed on the Gratitude
+          wall's night ground it resolved to MOONLIGHT on that same cream disc
+          and measured 1.05:1, which is invisible rather than merely low.
+
+          `T.brand` is the village's own colour and `shared/brandTokens.ts`
+          searches for a value that clears AA against white, so it is dark by
+          construction on this disc for the platform default and for any seed a
+          village picks. Opacity is gone with it: a fill at 0.6 undoes the
+          guarantee that search made, and the hierarchy is carried by size and
+          weight instead, the same way `.sheet-night` carries it for Marcellus.
+        */}
+        {/*
+          `--color-sage` and not the brand, for these two only. The brand token
+          is derived to clear AA against WHITE, and this disc is CREAM, which is
+          darker: measured on a real render it lands at 3.94:1, under the 4.5:1
+          that 8px text needs. `--color-sage` is a frozen ink chosen for exactly
+          this job and index.css records its measurements (5.95 on white, 5.32
+          on the body), so it holds on cream whatever seed a village picks.
+
+          The season name above keeps the brand deliberately. It is the
+          village's own identity in the middle of the village's own clock, it
+          measures the same 3.94:1, and retinting it here would be this file
+          overruling a village's colour choice. That one is Rye's call and it
+          is reported rather than quietly changed.
+        */}
+        <text x="110" y="114" textAnchor="middle" fontSize="8.5" fill="var(--color-sage, #3d6e4a)">
           {moonPhaseName(phase)}
         </text>
-        <text x="110" y="128" textAnchor="middle" fontSize="8" fill="var(--foreground, #1a3a39)" opacity="0.6">
+        <text x="110" y="128" textAnchor="middle" fontSize="8" fill="var(--color-sage, #3d6e4a)">
           {daysLeft === null ? "Counting the days" : `${daysLeft} day${daysLeft === 1 ? "" : "s"} to cycle close`}
         </text>
       </svg>
