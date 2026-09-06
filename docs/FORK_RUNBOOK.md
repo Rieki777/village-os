@@ -131,6 +131,12 @@ above the size of a gathering, not to the size of one person's usage.
   the real seeds above, so it never displaces your starter content. Clear early
   with `POST /api/admin/modules/:id/examples/clear`; prove inertness with
   `node scripts/check-examples.mjs`. See `docs/STANDING_EXAMPLES.md`.
+  The `gratitude` block is the one exception to "retired by the first real
+  item": its sixteen `voices` are the HERO of the wall, so they retire when
+  the village has `HERO_SLOTS` written acknowledgments of its own and not on
+  the first one, which would take a new village from sixteen voices to one.
+  They seed into `gratitude_voices` (0170) and never into `gratitude_log`,
+  because a gratitude row posts to the ledger at creation.
 - `tokens` table rows (a fresh village seeds gratitude/equity/voice/credits,
   and stay-credit, library-credit and village-voice arrive at first boot) - a
   fork renames its recognition token HERE AND NOWHERE ELSE, through Admin,

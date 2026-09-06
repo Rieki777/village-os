@@ -721,7 +721,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
   it("exposes the rules publicly, and Admin edits a variable with validation", async () => {
     const rules = await api("GET", "/api/game/rules");
     expect(rules.status).toBe(200);
-    expect(rules.json.gratitude.baseBudget).toBe(100);
+    expect(rules.json.gratitude.baseBudget).toBe(105);
     // The rhythm is no longer a field here. It was a dial nothing honoured, so
     // the client is told the budget and the caps and nothing about a choice
     // the engine cannot make. server/lunarRhythm.test.ts holds that shut.

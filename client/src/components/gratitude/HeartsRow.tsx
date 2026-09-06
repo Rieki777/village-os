@@ -34,13 +34,24 @@
  * IS, and says plainly that leaving them open costs nothing. Unused allowance
  * does not roll over and it never was value; it is permission to speak.
  *
- * ── PAST THE FLOOR ───────────────────────────────────────────────────────
+ * ── PAST THE FLOOR, THE ROW FILLS AGAIN IN A NEW COLOUR ──────────────────
  *
- * Sending to more people than the count is allowed and always was: the
- * ceiling bounds the amount one person may receive, never the number of sends.
- * Those hearts are drawn in the living green rather than the earned gold,
- * because they are not more gratitude given. They are the same allowance
- * spread wider, and the colour says "wider" instead of "more".
+ * Sending to more people than the count is allowed and always was: the ceiling
+ * bounds the amount one person may receive, never the number of sends. So the
+ * row does not grow a tail. It REFILLS: at eight people the row is one heart
+ * of the next colour over six of the last, and it fills across again from
+ * there. The same seven slots, painted a second time.
+ *
+ * That shape is honest about what a wider circle actually is. A tail would
+ * read as more gratitude given, and there is no more: it is one allowance,
+ * spread thinner every time the row starts over. The colour says "again",
+ * never "more", and the caption says which time around this is.
+ *
+ * Three tones and then they cycle, which is a deliberate limit. A fourth and
+ * fifth colour would be inventing distinctions nobody can name, and the
+ * caption carries the count for anyone who has gone round more than three
+ * times. Every tone is a token this palette already defines and already
+ * measures, so none of them is a new colour on the night ground.
  */
 import type { ReactElement } from "react";
 
@@ -48,17 +59,29 @@ import type { ReactElement } from "react";
 const HEART_D =
   "M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z";
 
-type Tone = "given" | "open" | "beyond";
+/**
+ * The lap colours, in order. Keyed by position and read modulo its own length
+ * so a member on their ninth time around gets a colour and never a blank.
+ */
+const LAP_CLASS = [
+  "fill-notice stroke-notice",       // earned gold
+  "fill-open stroke-open",           // living green
+  "fill-foreground stroke-foreground", // moonlight
+] as const;
 
-const TONE_CLASS: Record<Tone, string> = {
-  given: "fill-notice stroke-notice",
-  open: "fill-none stroke-border",
-  beyond: "fill-open stroke-open",
-};
+const OPEN_CLASS = "fill-none stroke-border";
 
-function Heart({ tone }: { tone: Tone }): ReactElement {
+const lapClass = (lap: number): string =>
+  LAP_CLASS[((lap % LAP_CLASS.length) + LAP_CLASS.length) % LAP_CLASS.length] ?? LAP_CLASS[0];
+
+/** "the second time around", for a caption and for a screen reader. */
+const ORDINALS = ["", "second", "third", "fourth", "fifth"] as const;
+const timesAround = (lap: number): string =>
+  ORDINALS[lap] ?? `${lap + 1}th`;
+
+function Heart({ cls }: { cls: string }): ReactElement {
   return (
-    <svg viewBox="0 0 24 24" strokeWidth={1.6} className={`h-7 w-7 shrink-0 ${TONE_CLASS[tone]}`} aria-hidden="true">
+    <svg viewBox="0 0 24 24" strokeWidth={1.6} className={`h-7 w-7 shrink-0 ${cls}`} aria-hidden="true">
       <path d={HEART_D} />
     </svg>
   );
@@ -80,8 +103,16 @@ export default function HeartsRow({
   // caption about ceilings is noise on a page whose subject is gratitude.
   if (fullSends <= 0) return null;
 
-  const reached = Math.min(people, fullSends);
-  const beyond = Math.max(0, people - fullSends);
+  // How many complete times round, and how far into the current one. At
+  // exactly `fullSends` this is lap 1 with nothing in it yet, which draws as a
+  // full row of the FIRST colour and is right: the lap is finished, and the
+  // next one has not been started.
+  const lap = Math.floor(people / fullSends);
+  const filled = people % fullSends;
+  // What the slots behind the filling edge show: open on the first time round,
+  // and the previous lap's colour on every one after, because those hearts
+  // were genuinely earned and the row is being repainted over them.
+  const behindClass = lap === 0 ? OPEN_CLASS : lapClass(lap - 1);
 
   return (
     <div className="mb-5">
@@ -90,21 +121,16 @@ export default function HeartsRow({
         role="img"
         aria-label={
           `${people} ${people === 1 ? "person" : "people"} thanked this cycle. ` +
-          `${fullSends} is the fewest that can take your whole allowance, at up to ${cap} each.`
+          `${fullSends} is the fewest that can take your whole allowance, at up to ${cap} each.` +
+          (lap > 0 ? ` This is the ${timesAround(lap)} time round the row.` : "")
         }
       >
-        {Array.from({ length: reached }, (_, i) => <Heart key={`g${i}`} tone="given" />)}
-        {Array.from({ length: fullSends - reached }, (_, i) => <Heart key={`o${i}`} tone="open" />)}
-        {beyond > 0 && (
-          <>
-            <span aria-hidden="true" className="mx-1.5 h-6 w-px bg-border" />
-            {Array.from({ length: beyond }, (_, i) => <Heart key={`b${i}`} tone="beyond" />)}
-          </>
-        )}
+        {Array.from({ length: filled }, (_, i) => <Heart key={`f${i}`} cls={lapClass(lap)} />)}
+        {Array.from({ length: fullSends - filled }, (_, i) => <Heart key={`b${i}`} cls={behindClass} />)}
       </div>
       <p className="mt-2 text-sm text-muted-foreground">
-        {beyond > 0
-          ? `Past the ${fullSends} it takes to give everything, which is fine. The circle is wider and each gift is smaller.`
+        {lap > 0
+          ? `The ${timesAround(lap)} time round: you have thanked more than ${fullSends} people this cycle. The row fills again, and each gift gets smaller as the circle widens.`
           : `One heart, one person. An open heart is allowance you still hold, and leaving it open at the turn of the cycle costs you nothing.`}
       </p>
     </div>
