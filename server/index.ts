@@ -290,7 +290,7 @@ import { addCharacter, avatarFor, listArchetypes, openPathsFor, partyFor, remove
 import { loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
 import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requestVoiceClaim, settleVoiceClaim } from "./lib/voiceClaim";
-import { installCrashHandlers, installShutdownHandlers, reachedSomebody, reportError, reportErrorWithin, wireErrorReporting } from "./lib/errors";
+import { respondToTerminalError, installCrashHandlers, installShutdownHandlers, reachedSomebody, reportError, reportErrorWithin, wireErrorReporting } from "./lib/errors";
 import {
   STAY_CREDIT,
   ensureStayToken,
@@ -28032,9 +28032,8 @@ ${inner}
   // Terminal error handler. Express 5 forwards a rejected handler promise
   // here by itself, on every verb. JSON, because every consumer is the SPA.
   app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
-    console.error("[route error]", err);
     if (res.headersSent) return next(err);
-    res.status(500).json({ error: "Internal server error" });
+    respondToTerminalError(err, res);
   });
 
   const port = parseInt(String(process.env.PORT || 3000), 10);
