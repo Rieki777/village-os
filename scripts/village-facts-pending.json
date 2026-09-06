@@ -1,6 +1,6 @@
 {
   "note": "Village facts welded into client copy, recorded per file and per rule. This list only ever shrinks. Read scripts/check-village-facts.mjs before editing it, and lower PENDING_CEILING in that file to match the total here.",
-  "total": 35,
+  "total": 34,
   "rules": {
     "money": {
       "what": "a currency amount in display text",
@@ -32,7 +32,7 @@
     "client/src/config/mobileNav.ts::token-name": 1,
     "client/src/config/nav.ts::token-name": 1,
     "client/src/pages/Admin.tsx::money": 3,
-    "client/src/pages/Admin.tsx::token-name": 4,
+    "client/src/pages/Admin.tsx::token-name": 3,
     "client/src/pages/Admin.tsx::unit": 2,
     "client/src/pages/CoCreatorsGuide.tsx::token-name": 2,
     "client/src/pages/Contribute.tsx::money": 1,

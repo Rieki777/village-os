@@ -109,8 +109,39 @@ export function resolveNotifyPrefs(prefs: any): NotifyPrefs {
   };
 }
 
+/**
+ * THE THREE STEWARD WINDOW NOTICES, PINNED, and they sit above the global
+ * switch on purpose.
+ *
+ * A carried decision lands at its instant whether or not anybody is looking,
+ * and these three are the only warning the one person who can stop it gets:
+ * at the carry, at the half-way point, and two hours out. Every other
+ * governance type resolves to `governanceEmail`, which defaults to DAILY, so
+ * riding that preference meant the last warning arrived hours after the change
+ * had landed.
+ *
+ * WHY ABOVE `emailsOff` AS WELL. The preference route refuses to turn mail off
+ * while a member holds a steward-capable role (`stewardMailRefusal`), so the
+ * only way a seated steward reaches this line with mail off is by having
+ * turned it off BEFORE the village seated them. A silence they chose about
+ * something they were not yet accountable for is not consent to miss the
+ * window, and the seat is one they can hand back at any time.
+ */
+const STEWARD_WINDOW_TYPES: ReadonlySet<string> = new Set([
+  "veto_window_opened",
+  "veto_window_halfway",
+  "veto_window_closing",
+]);
+
+/**
+ * The refusal that keeps the pin honest lives beside the seat it is about:
+ * `stewardMailRefusal` in server/lib/stewardship.ts, called by the preference
+ * route before it writes.
+ */
+
 /** Which email cadence a type resolves to. Unknown types: in-app only. */
 export function emailCadenceFor(type: string, p: NotifyPrefs): "immediate" | "daily" | "off" {
+  if (STEWARD_WINDOW_TYPES.has(type)) return "immediate";
   if (p.emailsOff) return "off";
   switch (type) {
     case "gratitude":
@@ -147,6 +178,15 @@ export function emailCadenceFor(type: string, p: NotifyPrefs): "immediate" | "da
     case "ballot_withdrawn":
     case "ballot_advisory_closed":
     case "ballot_expired":
+    // A steward's veto is the same conversation as the ballot it is about, so
+    // it rides the same preference. REGISTERED HERE ON PURPOSE: a kind with no
+    // case in this switch is in-app only and silently so, which for the one
+    // act that stops a decision the village carried would mean the proposer
+    // finds out by refreshing a page.
+    case "ballot_vetoed":
+    // The calendar the terms hang on. Governance, because that is what it is
+    // about: a stopped season is a steward's mandate that cannot end.
+    case "season":
       return p.governanceEmail;
     // A lunation's pool landed in somebody's wallet. Fixed daily for the
     // same reason stage_advanced is: welcome, never urgent, and nobody is
@@ -270,7 +310,22 @@ async function maybeEmailImmediate(deps: NotifyDeps, n: NotifyInput & { id: stri
   if (!user?.email || !user.passwordHash) return; // tombstones and claim-pending accounts get no email
   const prefs = resolveNotifyPrefs(user.prefs);
   if (emailCadenceFor(n.type, prefs) !== "immediate") return;
-  if (!(await underDailyCap(deps.pool, n.userId))) return;
+  /*
+   * THE DAILY CAP IS THE LAST DOOR THE WINDOW NOTICE FELL THROUGH.
+   *
+   * `STEWARD_WINDOW_TYPES` already outranks the governance preference and the
+   * global `emailsOff` switch, for the reason written above it: these three are
+   * the only warning the one person who can stop a landing ever gets. The cap
+   * was the remaining silent drop, and it is the worst of the three, because it
+   * fires precisely on the busiest stewards and drops the two-hours-left
+   * warning while the decision lands anyway.
+   *
+   * A cap exists to stop a member being flooded. This is not volume: it is at
+   * most three notices per carried decision, each on a deadline the recipient
+   * cannot extend, and a dropped one cannot be caught up by tomorrow's digest
+   * because the thing it warned about has already happened.
+   */
+  if (!STEWARD_WINDOW_TYPES.has(n.type) && !(await underDailyCap(deps.pool, n.userId))) return;
 
   const url = deps.origin() + (n.link ?? "/profile");
   await deps.sendEmail({

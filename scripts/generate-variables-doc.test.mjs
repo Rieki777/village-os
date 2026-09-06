@@ -87,6 +87,7 @@ function registrySource({ variables = [DIAL], types = TYPES, extraField = "", he
   return `${header}export type VariableType = ${types.map((t) => `"${t}"`).join(" | ")};
 export type VariableRing = "open" | "founder";
 export type VariableApplyTiming = "instant" | "cycle-close";
+export type Criticality = "routine" | "structural" | "constitutional";
 
 export interface VariableDef {
   key: string;
@@ -101,6 +102,7 @@ export interface VariableDef {
   unit?: string;
   ring?: VariableRing;
   applyTiming?: VariableApplyTiming;
+  criticality?: Criticality;
 ${extraField}}
 
 export const VARIABLES: VariableDef[] = ${JSON.stringify(variables, null, 2)};
@@ -115,6 +117,10 @@ export function ringOf(def: VariableDef): VariableRing {
 
 export function applyTimingOf(def: VariableDef): VariableApplyTiming {
   return def.applyTiming ?? "instant";
+}
+
+export function criticalityOf(def: VariableDef): Criticality {
+  return def.criticality ?? "routine";
 }
 
 export function validateVariable(_def: VariableDef, _raw: string): string | null {

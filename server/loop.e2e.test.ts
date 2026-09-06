@@ -5821,7 +5821,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(listed.json.find((p: any) => p.id === proposal.json.id)?.status).toBe("to_hypha");
   });
 
-  it("G1: stage, support, open, vote, human close, THE ONE APPLY — no SQL touched", async () => {
+  it("G1: stage, support, open, vote, the clock closes it, THE ONE APPLY, and no SQL in the decision", async () => {
     // Turn the engine on. Everything below runs through the product.
     const enable = await api("PUT", "/api/admin/modules/governance/lifecycle", { lifecycle: "public" }, founderToken);
     expect(enable.status, JSON.stringify(enable.json)).toBe(200);
@@ -5923,6 +5923,17 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     await api("PUT", "/api/admin/variables/governance.unity_pct", { value: "100" }, founderToken);
     await api("PUT", "/api/admin/variables/governance.quorum_pct", { value: "100" }, founderToken);
 
+    /*
+     * THE CLOCK ENDS THE WINDOW, and the only SQL in this case is what makes
+     * time pass. A ballot passes when its window ends and never before
+     * (2026-09-03), because `lands_at` derives from the frozen `closes_at`
+     * and an early close would hand the steward's window to whoever pressed
+     * the button. `governance.vote_days` has a floor of one day, so no route
+     * can bring a window forward and there is nothing here for the product to
+     * expose. Every step of the DECISION below is still a product route.
+     */
+    await testDb.conn.query("UPDATE ballots SET closes_at = DATE_SUB(NOW(), INTERVAL 1 HOUR) WHERE id = ?", [ballot.id]);
+
     // CLOSE: a human act with a required outcome note.
     const noteless = await api("POST", `/api/governance/ballots/${ballot.id}/close`, {}, founderToken);
     expect(noteless.status).toBe(400);
@@ -5938,9 +5949,24 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(closed.json.outcome).toBe("passed");
     expect(closed.json.tallies).toMatchObject({ yesW: 4, noW: 1, abstainW: 0 });
     expect(closed.json.unity).toBe(80);
-    expect(closed.json.held).toBeNull();
-    // THE ONE APPLY ran, from the close, with no SQL in sight.
-    expect(closed.json.applied).toContain("governance.sensing_days");
+    /*
+     * THE CLOSE STAMPS, AND THE LANDING WRITES. A change to a dial changes
+     * the Game, so it is given a landing instant and a steward may stop it
+     * until then. Nothing is applied at the close any more, and the sentence
+     * the close returns says when it lands instead. The window runs out with
+     * nobody stopping it, and the landing path is the five-minute job, whose
+     * other caller is the cycle close route used here.
+     */
+    expect(closed.json.applied).toEqual([]);
+    expect(String(closed.json.held)).toContain("lands at");
+    await testDb.conn.query(
+      "UPDATE ballots SET lands_at = DATE_SUB(NOW(), INTERVAL 1 HOUR), veto_closes_at = DATE_SUB(NOW(), INTERVAL 1 HOUR) " +
+        "WHERE id = ? AND lands_at IS NOT NULL",
+      [ballot.id],
+    );
+    const landed = await api("POST", "/api/admin/cycles/close", {}, founderToken);
+    expect(landed.status, JSON.stringify(landed.json)).toBe(200);
+    expect(landed.json.governanceLanding?.landed, "THE ONE APPLY ran, from the landing path").toBe(1);
 
     // The variable moved for real, served by the game itself.
     const rules = await api("GET", "/api/game/rules");
@@ -6014,18 +6040,25 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(String(rollNotes.find((n: any) => n.type === "ballot_carried")?.body)).toContain("longer sensing");
 
     /*
-     * AND THE PROPOSER IS NOT TOLD TWICE. They already have "Your proposal was
-     * applied", worded for them, so the roll's general "Carried:" line is
-     * withheld. Two rows for one event, sitting next to each other in the same
-     * group of the bell, is exactly the noise that makes a bell not worth
-     * opening.
+     * AND THE PROPOSER HEARS TWO DIFFERENT THINGS, ONCE EACH.
+     *
+     * The carry and the landing became separate moments on 2026-09-03. The
+     * village carries a change, and it lands at an instant a steward could
+     * have stopped it before. So the proposer hears the carry with the rest of
+     * the roll, because withholding it would make them the one person on the
+     * roll not told their own proposal passed, and hears "was applied" in
+     * their own words when it actually lands.
+     *
+     * What is still refused, and is what this assertion was written for, is
+     * two rows for ONE moment sitting next to each other in the same group of
+     * the bell. The carry line appears exactly once.
      */
     const proposerBell = await api("GET", "/api/notifications", undefined, founderToken);
     const proposerNotes = proposerBell.json.notifications ?? [];
     expect(
       proposerNotes.filter((n: any) => n.link === `/decisions/${ballot.id}` && n.type === "ballot_carried"),
-      "the proposer is not told the outcome twice",
-    ).toHaveLength(0);
+      "the proposer hears the carry once, with the roll",
+    ).toHaveLength(1);
     expect(
       proposerNotes.some((n: any) => n.type === "governance" && String(n.title).includes("was applied")),
       "they were told in their own words instead",

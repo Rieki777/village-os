@@ -53,6 +53,13 @@ function splitTop(block: string): string[] {
  * The `type:` VALUE is taken whole and every literal inside it is collected,
  * because one call site picks its type with a ternary and a regex anchored on
  * `type: "` would have read one arm and silently missed the other.
+ *
+ * A FOURTH SHAPE: `type: TABLE[key]`, where the table is a const in the same
+ * file mapping a moment to a type. `tellStewards` sends one of three window
+ * types that way, and a scanner that read only literals reported all three as
+ * blurbs with no producer while the server was sending them every hour. When
+ * the arm holds no literal and reads as an index into a local const, that
+ * const's own string values are collected.
  */
 function producedTypes(): Set<string> {
   const files: string[] = [];
@@ -100,7 +107,18 @@ function producedTypes(): Set<string> {
         // type by testing `result.outcome === "passed"` would otherwise
         // report "passed" as a notification type, which it is not.
         const arms = kv[1].replace(/[!=]==?\s*"[a-z_]+"/g, "");
-        for (const lit of arms.matchAll(/"([a-z_]+)"/g)) found.add(lit[1]);
+        let any = false;
+        for (const lit of arms.matchAll(/"([a-z_]+)"/g)) {
+          found.add(lit[1]);
+          any = true;
+        }
+        if (any) continue;
+        // `type: TABLE[key]`: read TABLE's own values out of the same file.
+        const table = arms.trim().match(/^([A-Za-z_$][\w$]*)\s*\[/);
+        if (!table) continue;
+        const decl = src.match(new RegExp(`\\b${table[1]}\\b[^=]*=\\s*\\{([\\s\\S]*?)\\n\\};`));
+        if (!decl) continue;
+        for (const lit of decl[1].matchAll(/"([a-z_]+)"/g)) found.add(lit[1]);
       }
     }
   }

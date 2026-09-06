@@ -46,16 +46,14 @@ import {
   type RsvpStatus,
 } from "../../shared/gatherings";
 import {
-  REFERENCE_NEW_MOON_MS,
-  SYNODIC_MONTH_MS,
   civilDateKey,
   civilParts,
-  cycleStartMs,
   fullMoonsBetween,
   newMoonsBetween,
   seasonInstants,
   zonedTimeToUtc,
 } from "../../shared/lunar";
+import { activeClock } from "./gratitude-cycles";
 
 // ── Row shape ───────────────────────────────────────────────────────────────
 
@@ -278,14 +276,18 @@ export function expandOccurrences(row: CalendarRow, from: Date, to: Date, timeZo
     if (rec.on === "new_moon") instants = newMoonsBetween(winFrom, winTo);
     else if (rec.on === "full_moon") instants = fullMoonsBetween(winFrom, winTo);
     else {
-      // Cycle close: the settlement clock's boundaries, which are the true
-      // new moons from TRUE_CLOCK_FROM_CYCLE on and the mean ones before.
+      // Cycle close: the settlement clock's own boundaries, whichever clock
+      // the village keeps. Walked forward from the first boundary after the
+      // window opens, so the arithmetic belongs to the clock and this file
+      // holds no second copy of it.
       instants = [];
-      let k = Math.floor((winFrom.getTime() - REFERENCE_NEW_MOON_MS) / SYNODIC_MONTH_MS) - 1;
-      for (; k < 100000; k++) {
-        const s = cycleStartMs(k);
-        if (s >= winTo.getTime()) break;
-        if (s >= winFrom.getTime()) instants.push(new Date(s));
+      const clock = activeClock();
+      let at = new Date(winFrom.getTime() - 1);
+      for (let guard = 0; guard < 100000; guard++) {
+        const next = clock.nextBoundaryAfter(at);
+        if (next.getTime() >= winTo.getTime()) break;
+        instants.push(next);
+        at = next;
       }
     }
     for (const inst of instants) {

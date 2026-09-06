@@ -13,6 +13,7 @@ import {
   Network,
   ArrowRight,
   Scale,
+  ShieldCheck,
 } from "lucide-react";
 
 const PRINCIPLES = [
@@ -61,7 +62,7 @@ export default function Governance() {
             Power Belongs to the Circle, Not the Person
           </h1>
           <p className="text-white/80 text-lg max-w-3xl leading-relaxed">
-            {villageName} uses sociocracy, a consent-based governance system where every voice can influence decisions and no single person holds veto power.
+            {villageName} uses sociocracy, a consent-based governance system where every voice can influence decisions. While the systems are still finding their feet, members elect stewards who can veto a decision, and those same members can vote a steward out.
           </p>
         </div>
       </section>
@@ -189,6 +190,36 @@ export default function Governance() {
             </p>
             <p>
               If the tension still won't resolve, the relevant circle holds a mediation. No one is removed from the community without a circle consent vote. We err on the side of repair and reintegration whenever possible.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Stewards: the training wheels, and the fact that they come off.
+          The hero used to say no single person holds veto power, which stopped
+          being true the moment the engine shipped one. A member reading this
+          page has to be able to find out who can stop a decision, how long they
+          have, and what the village can do about it. */}
+      <section className="bg-white py-20">
+        <div className="container max-w-3xl mx-auto px-4">
+          <div className="flex items-center gap-3 mb-4">
+            <ShieldCheck className="w-6 h-6 text-teal-deep" />
+            <h2 className="font-display text-3xl md:text-4xl font-bold text-teal-deep">
+              Stewards, and Why They Are Temporary
+            </h2>
+          </div>
+          <div className="space-y-4 text-stone-700 leading-relaxed">
+            <p>
+              The community votes stewards in. A steward holds a veto: once a major proposal passes, a steward has three days to stop it before it takes effect. That window exists so somebody with the whole picture can catch a decision that would cause harm or break something the village depends on.
+            </p>
+            <p>
+              A veto is answerable. It is recorded with the steward's name and their stated reason, both visible to every member, so stopping a decision costs a steward something and cannot be done quietly.
+            </p>
+            <p>
+              The community checks the stewards. Members who put a steward in can vote that steward out, and the settings governing stewards are the one thing no steward may veto, so a seat can never defend itself against the village that granted it.
+            </p>
+            <p>
+              These are training wheels. Stewards exist while the systems are young and still being proven, and the village can lower or retire the role by vote once it no longer needs them.
             </p>
           </div>
         </div>

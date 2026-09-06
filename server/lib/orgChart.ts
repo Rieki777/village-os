@@ -322,17 +322,20 @@ export async function orgRoleHistory(pool: Pool, orgRoleId: string): Promise<Org
 /**
  * Has this seating run out of mandate?
  *
- * NOTHING IS REVOKED. A village misses a re-selection during a harvest or a
- * build push, and taking the keys away on a Tuesday for reasons nobody chose
- * is worse than the seat saying out loud that it is ready to be re-chosen,
- * which is the word the map now uses for it. So a lapsed holding is still a
- * holding: the person keeps acting, and the seat says out loud that it is
- * waiting to be reassigned.
+ * ON THIS PLANE, NOTHING IS REVOKED, AND THAT IS TRUE HERE BECAUSE OF WHAT
+ * THIS PLANE IS. An org-chart seat carries accountabilities and no
+ * permissions: there is nothing here to switch off, so a lapsed seating is
+ * still a seating, the person keeps acting, and the seat says out loud that it
+ * is waiting to be re-chosen. The founder's 2026-08-31 ruling that terms end
+ * when they end lands on the PERMISSION plane, where a term genuinely ends the
+ * powers (`role_holders.term_ends_at`, migration 0171, read by
+ * `roleCapabilitiesFor` and by `holdingHasLapsed` in server/lib/stewardship.ts).
+ * Do not read "nothing is revoked" as a statement about the whole product.
  *
  * Derived on every read, so a season turn writes nothing and cannot drift.
  */
 export function isLapsed(
-  a: Pick<OrgAssignment, "termEndsAt" | "seasonId" | "endedAt">,
+  a: Pick<OrgAssignment, "termEndsAt" | "seasonId" | "endedAt"> & { startedAt?: Date | null },
   role: Pick<OrgRole, "expiresEachSeason">,
   ctx: LapseContext,
 ): { lapsed: boolean; reason: "term" | "season" | null } {
@@ -345,6 +348,30 @@ export function isLapsed(
   if (ctx.cadence === "never") return { lapsed: false, reason: null };
   // A seat may opt out on its own card; null inherits the village setting.
   if (role.expiresEachSeason === false) return { lapsed: false, reason: null };
+  /*
+   * ANNUAL WAS DEAD, AND IT IS FIXED HERE RATHER THAN DELETED.
+   *
+   * `org.reassignment_cadence` offers "Once a year", with the hint "One
+   * reopening a year, whatever the seasons did", and this function had no
+   * branch for it: the value fell past every test to the final return, so a
+   * village that chose it got seats that never reopened at all, which is the
+   * opposite of what it read on the control. Deleting the choice was the other
+   * option and it is worse: a village with the value already stored would have
+   * an unparseable setting, and the founder's rule is that a village's dials
+   * are the village's.
+   *
+   * A year is measured from when the seating BEGAN, because that is the only
+   * date the row carries that means "since when". `startedAt` is optional on
+   * the input so that every existing caller compiles; a call that omits it
+   * simply cannot lapse annually, which is the fail-safe direction.
+   */
+  if (ctx.cadence === "annual") {
+    const began = a.startedAt;
+    if (began && now.getTime() - began.getTime() >= 365 * 86400000) {
+      return { lapsed: true, reason: "season" };
+    }
+    return { lapsed: false, reason: null };
+  }
   // Seated in a season that is no longer the one running.
   if (
     (ctx.cadence === "season_turn" || ctx.cadence === "pattern_change") &&

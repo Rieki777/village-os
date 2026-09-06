@@ -625,7 +625,7 @@ Three keys are claimed by more than one module, so switching one module off leav
 
 ## Capabilities
 
-A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which holds 31 keys in total. It never becomes a second permission mechanism. The order of the one gate is admin, then badge denies, then role, then badge grants, then stage: a badge deny beats role and stage, and only admin outranks it. Eleven modules add keys:
+A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which holds 32 keys in total. It never becomes a second permission mechanism. The order of the one gate is admin, then badge denies, then role, then badge grants, then stage: a badge deny beats role and stage, and only admin outranks it. Eleven modules add keys:
 
 | Module | Capabilities |
 | --- | --- |

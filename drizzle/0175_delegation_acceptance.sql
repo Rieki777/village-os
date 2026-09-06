@@ -1,0 +1,45 @@
+-- 0175: a delegation is a handshake. One nullable column.
+--
+-- WHY ACCEPTANCE EXISTS AT ALL. The delegation table shipped one-sided: a
+-- member named somebody and that member's choice started arriving in the
+-- namer's own ballot row. The reasoning behind that was written while every
+-- ballot was public, and it stopped holding the moment choices became hidden
+-- by default. Point a delegation at a steward, read her hidden choice off
+-- your own row minutes after she casts it, take the delegation back, and vote
+-- your own way with nothing left behind. The delegation was a private window
+-- into somebody else's ballot that they never agreed to open.
+--
+-- Consent closes it. A delegation with `accepted_at` NULL is an OFFER: both
+-- sides can see it, it stands until somebody ends it, and it carries no
+-- choice into any ballot. Only after the delegate accepts does the chain
+-- carry, and by accepting they know their choice is being copied.
+--
+-- NULLABLE, NEVER BACKFILLED. A delegation given before this migration was
+-- given without anybody's consent, so it stays pending until its delegate
+-- says yes. Backfilling `accepted_at` for those rows would grant on their
+-- behalf exactly the consent this column exists to ask for. Additive and
+-- expand-only in the house sense: nothing reads the column until the code
+-- that understands it ships, and while it is unread every delegation simply
+-- carries nothing, which is the fail-safe direction.
+--
+-- WHERE THE OTHER HALF LIVES. Refusal (`/decline`) and revocation by either
+-- side both stamp `revoked_at`, which 0174 already carries: declining is the
+-- delegate's revocation and needs no column of its own. One live row per
+-- member is still the primary key's job, so re-pointing a delegation at
+-- somebody new overwrites the row and lands it back at pending, because the
+-- new delegate has consented to nothing yet.
+--
+-- The decision is pinned by a test rather than by this comment alone. The
+-- case "adds the column and backfills nothing" in server/lib/delegation.test.ts
+-- reads this file, so adding an UPDATE that sets `accepted_at` here, or
+-- dropping the sentence above, turns red.
+--
+-- No CHARSET clause, following 0174 and 0089: a datetime carries no
+-- collation, and the table inherits the database's.
+
+ALTER TABLE `delegations` ADD COLUMN `accepted_at` datetime NULL;
+
+-- The read the accept and decline routes both perform: everything offered to
+-- me that is still live. Without it a delegate's inbox is a table scan, and
+-- the existing index is on the delegate alone, which cannot skip the revoked.
+CREATE INDEX `idx_delegations_delegate_live` ON `delegations` (`delegate_id`, `revoked_at`);

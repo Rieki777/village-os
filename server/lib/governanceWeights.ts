@@ -22,6 +22,14 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 import { tokenDef, memberAccount } from "./ledger";
 import { isListedForTrade } from "./exchange";
 
+/**
+ * The share arithmetic, re-exported so a server caller has ONE door to
+ * everything about weight. It is pure and lives in `shared/` because the dry
+ * run needs it and may not import this file: `shared/dryRun/` has no import
+ * path to a connection, and this module opens one on its second line.
+ */
+export { shareOfTotal, topShares } from "../../shared/governanceShare";
+
 export type WeightMode = "equal" | "token" | "custom";
 
 export interface WeightModeSnapshot {

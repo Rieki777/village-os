@@ -20,6 +20,8 @@
 
 import { GAME_CONFIG } from "./gameConfig";
 import { STAGE_UNLOCKS } from "./capabilities";
+import { TIER_FLOORS, type Criticality } from "./governanceEngine";
+import { MINT_RULE, SUBJECT_THRESHOLDS } from "./ballotSubjects";
 import { isAnchorDateAcceptable } from "./villageMoon";
 
 export type VariableType = "integer" | "decimal" | "percentage" | "boolean" | "choice" | "text";
@@ -73,6 +75,18 @@ export interface VariableDef {
   ring?: VariableRing;
   /** Apply-timing override. Absent = derived by applyTimingOf(). */
   applyTiming?: VariableApplyTiming;
+  /**
+   * HOW CRITICAL THIS DIAL IS, and therefore how much of the village has to
+   * show up and agree before it moves (the founder's ruling of 2026-09-02,
+   * Q11: nothing is un-votable, and the more critical it is the higher the
+   * bar). Absent = `routine`, which asks for nothing beyond the village's own
+   * unity and quorum, so a dial that says nothing behaves exactly as every
+   * dial behaved before this field existed.
+   *
+   * The tiers and their floors live in `shared/governanceEngine.ts`, because
+   * they are governance arithmetic and this registry is one of two readers.
+   */
+  criticality?: Criticality;
 }
 
 /**
@@ -137,9 +151,9 @@ export const VARIABLES: VariableDef[] = [
   {
     key: "ledger.admin_mint_cycle_cap",
     category: "Ledger",
-    label: "Admin mint cap per lunar cycle",
+    label: "Admin mint cap per cycle",
     description:
-      "The most any admins can mint by hand, in total, per token, per lunar cycle (S9's mint endpoint enforces it as an aggregate, not per call). COUNTED IN WHOLE TOKENS, so 100 means a hundred of the token and not a hundred of whatever the ledger stores underneath. A cap on manual issuance is what makes 'the numbers mean something' a property of the system instead of a promise from whoever holds admin. 0 disables manual minting entirely.",
+      "The most any admins can mint by hand, in total, per token, per cycle (S9's mint endpoint enforces it as an aggregate, not per call). COUNTED IN WHOLE TOKENS, so 100 means a hundred of the token and not a hundred of whatever the ledger stores underneath. A cap on manual issuance is what makes 'the numbers mean something' a property of the system instead of a promise from whoever holds admin. 0 disables manual minting entirely.",
     type: "integer",
     default: "10000",
     min: 0,
@@ -212,7 +226,7 @@ export const VARIABLES: VariableDef[] = [
     category: "The Mint",
     label: "When each Claims Week begins",
     description:
-      "Four dates a year, one per season, as MM-DD separated by commas. The default follows the solstices and equinoxes, which is the same rhythm the moon settlement already runs on. Leave it blank to keep claims open all year, which suits a village that would rather not batch.",
+      "Four dates a year, one per season, as MM-DD separated by commas. The default follows the solstices and equinoxes, which is the sun's rhythm and a different clock from the cycle the settlement keeps: a season turn and a cycle boundary fall on different days, and the window opens at midnight in the village timezone. Leave it blank to keep claims open all year, which suits a village that would rather not batch.",
     type: "text",
     default: "03-21,06-21,09-23,12-21",
   },
@@ -256,7 +270,7 @@ export const VARIABLES: VariableDef[] = [
     default: "true",
   },
   /*
-   * THERE IS NO RHYTHM DIAL, AND THAT IS THE DECISION.
+   * THE RHYTHM DIAL, AND WHY IT IS BACK.
    *
    * `gratitude.cycle_mode` used to sit here offering "lunar" or "month". It
    * was live in the admin panel and reported to every client, and one branch
@@ -265,11 +279,44 @@ export const VARIABLES: VariableDef[] = [
    * months and nothing changed anywhere.
    *
    * Rye retired it rather than wiring it, 2026-08-29: "let's just stick with
-   * lunar months all around, it's good to be on our own rhythm." The moon is
-   * the clock this platform keeps. If you are here because a lunar-only
-   * economy looked like an oversight, it is a choice, and `shared/lunar.ts`
-   * is where it lives.
+   * lunar months all around, it's good to be on our own rhythm." Migration
+   * `0108` cleared the rows.
+   *
+   * He reopened it on 2026-09-02: "Yes the cycle structure can be changed."
+   * So `cycle.mode` below is the dial, and it is a different object from the
+   * one that was retired. The old one was a value with no reader. This one is
+   * read through `shared/cycleClock.ts`, which every consumer of village time
+   * now calls, and `assertCycleSettingsRead` refuses to boot a build where a
+   * rhythm setting is shown and nothing reads it. The defect `0108` retired
+   * the old dial for cannot come back silently.
    */
+  {
+    key: "cycle.mode",
+    category: "Gratitude",
+    // Constitutional. A village's rhythm is the frame every other number sits
+    // in: budgets, caps, mint rules, seat terms, the veto window and the
+    // instant a passed proposal lands are all counted in cycles. Changing it
+    // re-times all of them at once, so it asks for the same bar as the
+    // decisions that change who decides.
+    criticality: "constitutional",
+    label: "The rhythm the village keeps time by",
+    description:
+      "Whether a cycle is a moon or a calendar month. The moon is the default and is what every village has run on: budgets refill, caps reset and the settlement lands at the new moon, so the village keeps its own rhythm instead of the one on an office wall. Calendar months suit a village whose money and reporting already run that way. The switch is a constitutional change and lands only where a cycle ends, with every finished cycle settled first, so no cycle is ever cut in half or settled against a clock it was not played on. Every cycle already closed keeps the name and the dates it closed under, whichever rhythm the village moves to.",
+    type: "choice",
+    default: "lunar",
+    choices: [
+      {
+        value: "lunar",
+        label: "The moon",
+        hint: "New moon to new moon, about 29.5 days. Boundaries come from a checked-in table of true new moons.",
+      },
+      {
+        value: "calendar",
+        label: "The calendar month",
+        hint: "First of the month to first of the month, UTC. Cycles carry ids like month-2026-09.",
+      },
+    ],
+  },
 
   // ── The org chart and its seasons ─────────────────────────────────────────
   {
@@ -423,26 +470,147 @@ export const VARIABLES: VariableDef[] = [
   {
     key: "governance.hub_url",
     category: "Governance",
-    label: "ReGen governance hub URL",
+    label: "Governance hub URL",
     description:
-      "Base URL of the ReGen hub that listens to the chain for this village. When a proposal's Hypha URL is pasted in, the platform registers the on-chain proposal id with this hub (signed with the shared governance secret) so the verified outcome can find its way home. Leave as the platform default unless you run your own hub.",
+      "Base URL of the hub that listens to the chain for this village. When a proposal's Hypha URL is pasted in, the platform registers the on-chain proposal id with this hub (signed with the shared governance secret) so the verified outcome can find its way home. Empty means this village has no hub: nothing is registered and nothing is sent anywhere. Fill it in only if you run a hub or have been given one to point at.",
     type: "text",
-    // The ReGen hub is a platform SERVICE this village talks to, and a fork
-    // points it at its own hub or leaves it, the same way it leaves the
-    // Stripe endpoint alone. The waiver rides the line itself, because the
-    // guard reads the line carrying the hit and nothing above it.
-    default: "https://regencivics.earth", // brand-ok: platform service, not a village's name
+    /*
+     * SHIPS BLANK, the way `FEEDBACK_HUB_URL` was blanked once a fork could
+     * inherit it. This repository is public and every village that forks it
+     * gets these defaults as its constitution, so a default naming one
+     * organisation's hub would quietly point every new village's governance
+     * relay at that organisation. Empty is the honest default: it means no
+     * hub, and every reader already treats empty as off.
+     */
+    default: "",
     ring: "founder",
   },
   {
     key: "governance.auto_apply_enabled",
     category: "Governance",
     label: "Apply verified proposals automatically",
+    criticality: "structural",
     description:
       "When on, a proposal verified as passed on-chain applies itself: instantly for instant dials, at the next cycle close when the set touches any cycle-timed dial (the whole set waits together; a set applies atomically or not at all). Turning this OFF is the founder's emergency brake: verified proposals hold, stewards are notified, and applying becomes a human act until it is turned back on. Founder-held on purpose.",
     type: "boolean",
     default: "true",
     ring: "founder",
+  },
+  // The steward's reach, as one list. It was two lists while the steward
+  // approved things, one for what waited and one for what carried itself.
+  // Nothing waits any more: a decision the village carried lands at its
+  // landing time whether or not anybody holds the seat, so the second list
+  // said nothing the first one did not, and it is gone.
+  // `governance.auto_apply_enabled` is untouched and still means exactly what
+  // it always meant: the mechanics brake.
+  {
+    key: "governance.steward_subjects",
+    category: "Governance",
+    label: "Which decisions a steward can stop",
+    criticality: "constitutional",
+    description:
+      "A steward can stop a decision the village has already carried, inside the window before it lands, and has to say why. This names which kinds of decision are inside that reach. Leave it as all while the village is young; name a shorter list, or none, as it learns to trust its own agreements. A village with no steward and self-executing agreements is a healthy village, not a broken one. Advisory votes are never in reach, because they change nothing. Neither is the ballot that seats or unseats a steward, so the seat can never stop its own removal.",
+    type: "text",
+    default: "all",
+  },
+  /*
+   * THE SECOND HALF OF THE REACH, AND IT IS THE ONE THAT NARROWS BY DEFAULT.
+   *
+   * Rye, 2026-09-04: "for now as the default let's have constitutional able to
+   * be vetoed but let it be a setting in admin for which of these 3 categories
+   * a steward can veto".
+   *
+   * `steward_subjects` above names WHICH KINDS of decision are in reach. This
+   * names WHICH SIZES. A veto needs both: the subject in the first list and the
+   * tier in this one, so a village can say "the seat may pause a constitutional
+   * mechanics change and nothing else" without writing two half-rules that
+   * disagree.
+   *
+   * The default is deliberately narrower than the code shipped with. Every tier
+   * was stoppable before this; now the seat reaches the changes that reshape the
+   * village and stays out of the way of the rest, which is the founder's own
+   * framing that power sits with the community and the community governs the
+   * seat.
+   */
+  {
+    key: "governance.steward_veto_tiers",
+    category: "Governance",
+    label: "Which sizes of decision a steward can stop",
+    criticality: "constitutional",
+    description:
+      "Every decision carries a size: routine, structural, or constitutional. This names the sizes a steward may stop inside the window before a decision lands, and a veto needs the decision to be in reach on both this list and the one above. The default is constitutional on its own, so the seat can pause the changes that reshape the village and leaves the smaller ones alone. Write them separated by commas, or write all. Leave it empty and no steward can stop anything, which is a healthy village and not a broken one. Changing this is priced at the top tier and no steward can stop the change, because a seat that could veto an edit to its own limits would have none.",
+    type: "text",
+    default: "constitutional",
+  },
+  /*
+   * A PAYOUT GOES THE MOMENT IT PASSES, UNLESS IT IS BIG (Rye, 2026-09-04).
+   *
+   * Asked whether token sends should take the three-day window: "No, they go
+   * the moment they pass all conditions (minimum time set by the whole system
+   * for a proposal duration) quorum and unity) And then also another settings
+   * where you can say which payouts require a 3 day delay to confirm and set it
+   * above $1000 as a default."
+   *
+   * So the small payout keeps its speed, which is what makes a quest loop feel
+   * like a quest loop, and the size of payout that would hurt to get wrong
+   * waits where somebody can catch it. Zero delays every payout, which is the
+   * fail-closed direction this codebase already uses for every cap: zero means
+   * zero and never unlimited.
+   */
+  {
+    key: "governance.payout_delay_over",
+    category: "Governance",
+    label: "Payouts above this wait three days before they are sent",
+    criticality: "structural",
+    description:
+      "A payout the village votes through is sent the moment it passes. Above this amount it waits the steward window first, so somebody can catch a send that would empty a purse or reward the wrong work. The amount is counted in whole tokens of whatever token is being sent, so a village holding several tokens with very different sizes should set this against the one it actually pays people in. Zero makes every payout wait.",
+    type: "integer",
+    default: "1000",
+  },
+  {
+    key: "governance.steward_council",
+    category: "Governance",
+    label: "A veto needs a majority of the stewards",
+    criticality: "constitutional",
+    description:
+      "Off by default, and off means any one seated steward can stop a decision on their own. Turn it on and a village with several stewards runs them as a council: stopping a decision then takes a majority of the seated seats, so one seat alone cannot hold the village up. Changing this is priced at the top tier, and no steward can stop the change, because a seat that could veto an edit to its own limits would have none.",
+    type: "boolean",
+    default: "false",
+  },
+  // The veto window. The other two settings the 2026-09-03 rulings need are
+  // `governance.steward_council` above and `governance.highest_tier` further
+  // down: three lanes wrote those two keys between them, and the duplicate
+  // definitions came out at the merge rather than shipping a registry that
+  // throws on its own duplicate check at boot.
+  {
+    key: "governance.veto_hours",
+    category: "Governance",
+    label: "How long a steward has to stop a change",
+    criticality: "constitutional",
+    description:
+      "A change to the Game that the village has passed does not take effect straight away. It is stamped with a landing instant and a steward may stop it until then, with a reason that goes on the record. This is the least notice a steward gets, counted from the moment the vote closes. 72 hours is the floor and cannot be lowered; a village may give its stewards longer. A decision that sends tokens is not held by this: a steward stops one of those by voting no while the ballot is still open.",
+    type: "integer",
+    default: "72",
+    min: 72,
+    max: 720,
+    unit: "hours",
+  },
+  // A decision that carried and then never landed. It happens: the auto-apply
+  // brake sits off for a season, a village goes quiet, a landing keeps throwing.
+  // Without a limit the row waits forever and a member reads a countdown that
+  // never reaches zero, which is the one outcome nobody can act on.
+  {
+    key: "governance.landing_expiry_cycles",
+    category: "Governance",
+    label: "Cycles a passed decision waits before it is written off",
+    criticality: "structural",
+    description:
+      "A decision the village passed is stamped with the instant it takes effect. If it is still sitting there this many cycles after that instant, it is closed and the village is told. The door back is to withdraw and rewrite it, which keeps everybody who backed it. Set it higher for a village that turns the automatic landing off for long stretches.",
+    type: "integer",
+    default: "3",
+    min: 1,
+    max: 12,
+    unit: "cycles",
   },
   {
     key: "governance.change_cooldown_days",
@@ -454,6 +622,129 @@ export const VARIABLES: VariableDef[] = [
     default: "0",
     min: 0,
     max: 365,
+    unit: "days",
+  },
+
+  // ── Governance windows, per proposal kind (19E, 19F, 20.11) ──────────────
+  //
+  // "we can also block all proposals from not happening within defined
+  // governance windows. Some can be 'always open' but some can have set
+  // windows (like the last week of every month or last 2 weeks of every
+  // season or whatever) but those two are the default choices we offer to
+  // guide." A governance month is a lunar month (19F), so "the last week of
+  // every month" is the last seven days of the ACTIVE clock's cycle.
+  //
+  // Every one of these ships ALWAYS OPEN, so a village that never touches
+  // them behaves exactly as every village behaved before windows existed.
+  // The grammar, the arithmetic and the refusals live in
+  // `server/lib/governanceWindows.ts`; `WINDOW_KINDS` there holds the same
+  // ten keys and `governanceWindows.test.ts` pins the two lists equal.
+  //
+  // The tier is structural: a window decides when the village may open a
+  // proposal at all, which is a rule about how the village decides. 20.11
+  // classes the window settings with the other dials that price proposals,
+  // so none of them may be trialled at a discount.
+  {
+    key: "governance.window_changeset",
+    category: "Governance",
+    label: "When a change to the Game Mechanics can go to the vote",
+    criticality: "structural",
+    description:
+      "always_open lets anyone take a change set to the vote on any day. last_days_of_cycle:7 opens it in the last seven days before the moon turns, so the village reads its changes together. last_days_of_season:14 opens it in the last two weeks of the season that is running. custom:1-7 names your own days of the cycle, counted from the moon. A window decides when a vote may OPEN: a vote already running is never closed by a window shutting, and a proposal coming back after a veto or an objection opens outside its window for the grace named below.",
+    type: "text",
+    default: "always_open",
+  },
+  {
+    key: "governance.window_mint_rule",
+    category: "Governance",
+    label: "When a change to what the village mints can go to the vote",
+    criticality: "structural",
+    description:
+      "The window a minting change opens in, in the same words as the change set window above. This one is separate because a village that wants its minting read together can hold minting to a window while everything else stays open. A change set carrying a minting element is held to the stricter of the two.",
+    type: "text",
+    default: "always_open",
+  },
+  {
+    key: "governance.window_governance_mode",
+    category: "Governance",
+    label: "When a change to how votes are counted can go to the vote",
+    criticality: "structural",
+    description:
+      "The window a vote-mode switch opens in, in the same words as the change set window above. A change set carrying a mode switch is held to this window as well as its own, so the biggest change in a bundle cannot ride into an open week under a small one.",
+    type: "text",
+    default: "always_open",
+  },
+  {
+    key: "governance.window_role_declare",
+    category: "Governance",
+    label: "When declaring a role can go to the vote",
+    criticality: "structural",
+    description:
+      "The window a proposal that declares a new role opens in, in the same words as the change set window above.",
+    type: "text",
+    default: "always_open",
+  },
+  {
+    key: "governance.window_role_seat",
+    category: "Governance",
+    label: "When seating a role can go to the vote",
+    criticality: "structural",
+    description:
+      "The window a proposal that asks somebody to sit in a role opens in, in the same words as the change set window above. Hold this one open while a village is young: a seat nobody can be asked to fill is a seat that stays empty until the calendar allows it.",
+    type: "text",
+    default: "always_open",
+  },
+  {
+    key: "governance.window_role_unseat",
+    category: "Governance",
+    label: "When taking a seat back can go to the vote",
+    criticality: "structural",
+    description:
+      "The window a proposal that takes a seat back opens in, in the same words as the change set window above. A village that windows this one is choosing to wait before it can remove somebody, so leave it always open unless you have a reason you can say out loud.",
+    type: "text",
+    default: "always_open",
+  },
+  {
+    key: "governance.window_power_transfer",
+    category: "Governance",
+    label: "When moving a power to a role can go to the vote",
+    criticality: "structural",
+    description:
+      "The window a proposal that moves a power from the admin panel to a role opens in, in the same words as the change set window above.",
+    type: "text",
+    default: "always_open",
+  },
+  {
+    key: "governance.window_power_grant",
+    category: "Governance",
+    label: "When granting a power can go to the vote",
+    criticality: "structural",
+    description:
+      "The window a proposal that grants a power to a role opens in, in the same words as the change set window above.",
+    type: "text",
+    default: "always_open",
+  },
+  {
+    key: "governance.window_power_return",
+    category: "Governance",
+    label: "When handing a power back can go to the vote",
+    criticality: "structural",
+    description:
+      "The window a proposal that hands a power back to the admin panel opens in, in the same words as the change set window above.",
+    type: "text",
+    default: "always_open",
+  },
+  {
+    key: "governance.window_grace_days",
+    category: "Governance",
+    label: "How long a proposal coming back may open outside its window",
+    criticality: "structural",
+    description:
+      "A resubmission after objections, a veto override and a renewal of a trial are all proposals coming back, and the village has already been asked once. Each of them may open outside its kind's window for this many days after the decision it comes back from closed. Set this to 0 and a single steward's veto becomes unanswerable until the next window opens.",
+    type: "integer",
+    default: "7",
+    min: 0,
+    max: 90,
     unit: "days",
   },
 
@@ -470,6 +761,10 @@ export const VARIABLES: VariableDef[] = [
     category: "Governance",
     label: "How voting weight is assigned",
     ring: "founder",
+    // What one vote MEANS. Changing it changes every decision the village
+    // ever makes after it, in both directions (Q8), so it carries the
+    // constitutional bar and travels only as a mode_switch item.
+    criticality: "constitutional",
     description:
       "What one member's vote weighs on an on-site ballot. Equal gives every eligible member the same single vote. Token weighs votes by each member's balance of the weight token at the moment a ballot opens. Custom weighs votes by the allocation table you keep under Voting weights, where a member with no allocation weighs zero. Whatever you choose, each ballot freezes the weights when it opens, and every allocation change is on a permanent record any member can read.",
     type: "choice",
@@ -485,6 +780,7 @@ export const VARIABLES: VariableDef[] = [
     category: "Governance",
     label: "The weight token",
     ring: "founder",
+    criticality: "constitutional",
     description:
       "Which token weighs votes when the weight mode is token. Only tokens this platform itself governs can be chosen: a token governed on Hypha is a display-only mirror here, and a ballot may never make this platform a second source of truth for it. The default is the recognition token, which nobody can buy, so weight in the default posture is earned appreciation.",
     type: "text",
@@ -494,6 +790,7 @@ export const VARIABLES: VariableDef[] = [
     key: "governance.unity_pct",
     category: "Governance",
     label: "Unity needed to pass",
+    criticality: "structural",
     description:
       "Of the votes cast for or against, the share that must be in favor for a ballot run on the village's own dials to pass. Abstentions help a ballot reach quorum and take no side here. 100 asks for consensus in effect; the Hypha surface this inherits from runs at 80.",
     type: "percentage",
@@ -506,6 +803,7 @@ export const VARIABLES: VariableDef[] = [
     key: "governance.quorum_pct",
     category: "Governance",
     label: "Quorum needed to count",
+    criticality: "structural",
     description:
       "The share of the electorate's total voting weight that must show up, counting abstentions, before a ballot's outcome counts at all. Below this the ballot closes as no quorum, whatever the votes said. Each ballot freezes this number when it opens.",
     type: "percentage",
@@ -519,7 +817,7 @@ export const VARIABLES: VariableDef[] = [
     category: "Governance",
     label: "How long a ballot stays open",
     description:
-      "Days between a ballot opening and its votes locking. Votes can be changed freely until then. After the period ends the ballot waits for a human to close it and record the outcome; nothing executes on a timer.",
+      "Days between a ballot opening and its votes locking. Votes can be changed freely until then. The clock closes the ballot when the window ends and the village's own engine reads the result, so nobody chooses the moment. A change to the Game then waits again, for the window a steward can stop it in.",
     type: "integer",
     default: "7",
     min: 1,
@@ -542,6 +840,7 @@ export const VARIABLES: VariableDef[] = [
     key: "governance.default_method",
     category: "Governance",
     label: "How village-wide ballots decide",
+    criticality: "structural",
     description:
       "The method a village-wide ballot uses when nothing more specific applies. Your own dials use the unity and quorum settings above. Majority means more than half of the votes cast carries it. Consensus means everyone who takes a side agrees. Consent means a decision passes when nobody sustains a reasoned objection. Hypha keeps the shipped loop: proposals go to your Hypha space for the binding vote.",
     type: "choice",
@@ -554,10 +853,198 @@ export const VARIABLES: VariableDef[] = [
       { value: "hypha", label: "Decide on Hypha", hint: "The shipped loop: the binding vote happens in your Hypha space." },
     ],
   },
+  // -- Governance: what each tier of change costs (Q11, 2026-09-02) ---------
+  //
+  // Every setting carries a criticality tier and the tier names the least
+  // unity and quorum a change to it may be decided on. These eight dials are
+  // where a village raises its own bars. They can only be raised: `min` on
+  // each one is the platform floor from `TIER_FLOORS`, so nothing here can
+  // walk a bar downwards, and `thresholdSettingsFrom` in
+  // `shared/ballotSubjects.ts` applies the same floor again on read so a
+  // value written by anything other than this validator cannot lower it
+  // either. One source for the number, two layers that refuse to go under it.
+  //
+  // They are constitutional themselves, because a village that can lower the
+  // bar for changing the bar has no bar.
+  {
+    key: "governance.tier_routine_quorum_pct",
+    category: "Governance",
+    label: "Routine changes: quorum floor",
+    description:
+      "The least share of the village's voting weight that must turn up before an ordinary change to the Game can be decided. Ordinary means a number the village tunes while it plays. 0 leaves it entirely to your own quorum setting above, which is the shipped posture. Raise it to ask for more attention on every change, however small.",
+    type: "percentage",
+    default: String(TIER_FLOORS.routine.quorumPct),
+    min: TIER_FLOORS.routine.quorumPct,
+    max: 100,
+    unit: "%",
+    criticality: "constitutional",
+  },
+  {
+    key: "governance.tier_routine_unity_pct",
+    category: "Governance",
+    label: "Routine changes: unity floor",
+    description:
+      "The least share of the votes cast for or against that must be in favour before an ordinary change to the Game carries. 0 leaves it entirely to your own unity setting above, which is the shipped posture.",
+    type: "percentage",
+    default: String(TIER_FLOORS.routine.unityPct),
+    min: TIER_FLOORS.routine.unityPct,
+    max: 100,
+    unit: "%",
+    criticality: "constitutional",
+  },
+  {
+    key: "governance.tier_structural_quorum_pct",
+    category: "Governance",
+    label: "Structural changes: quorum floor",
+    description:
+      "The least share of the village's voting weight that must turn up before a structural change can be decided. Structural means it changes how the village decides or who belongs to it: the unity and quorum settings themselves, how ballots decide, who may be admitted, what the village mints, and turning a part of the Game on or off. The shipped 50 is this platform's starting number and your village may raise it. It cannot go below the platform floor.",
+    type: "percentage",
+    default: String(TIER_FLOORS.structural.quorumPct),
+    min: TIER_FLOORS.structural.quorumPct,
+    max: 100,
+    unit: "%",
+    criticality: "constitutional",
+  },
+  {
+    key: "governance.tier_structural_unity_pct",
+    category: "Governance",
+    label: "Structural changes: unity floor",
+    description:
+      "The least share of the votes cast for or against that must be in favour before a structural change carries. The shipped 80 is the number this platform inherited from Hypha, and it is a starting point your village may raise. It cannot go below the platform floor.",
+    type: "percentage",
+    default: String(TIER_FLOORS.structural.unityPct),
+    min: TIER_FLOORS.structural.unityPct,
+    max: 100,
+    unit: "%",
+    criticality: "constitutional",
+  },
+  {
+    key: "governance.tier_constitutional_quorum_pct",
+    category: "Governance",
+    label: "Constitutional changes: quorum floor",
+    description:
+      "The least share of the village's voting weight that must turn up before a constitutional change can be decided. Constitutional means it changes the rules for changing the rules: how voting weight is assigned, which token carries weight, and these bars themselves. The shipped number is 97, which leaves room for 3 in 100 to be unreachable on the day. Going higher is allowed and the Game will warn you why it is risky.",
+    type: "percentage",
+    default: String(TIER_FLOORS.constitutional.quorumPct),
+    min: TIER_FLOORS.constitutional.quorumPct,
+    max: 100,
+    unit: "%",
+    criticality: "constitutional",
+  },
+  {
+    key: "governance.tier_constitutional_unity_pct",
+    category: "Governance",
+    label: "Constitutional changes: unity floor",
+    description:
+      "The least share of the votes cast for or against that must be in favour before a constitutional change carries. The shipped number is 97. Going higher is allowed and the Game will warn you why it is risky.",
+    type: "percentage",
+    default: String(TIER_FLOORS.constitutional.unityPct),
+    min: TIER_FLOORS.constitutional.unityPct,
+    max: 100,
+    unit: "%",
+    criticality: "constitutional",
+  },
+  {
+    /*
+     * THE HIGHEST TIER THIS VILLAGE HAS SET, and the bar a veto override
+     * clears (19E). The founder's words of 2026-09-03: "We can have a veto
+     * override if it goes up to the highest tier they have set as a village
+     * (this is also a setting that can change at the highest tier set)."
+     *
+     * The registry tier below is the FLOOR on what it costs to move this.
+     * The live price is the tier this setting itself names, worked out by
+     * `thresholdChangePrice` in `shared/ballotSubjects.ts`, which is the
+     * "priced at itself" half of his sentence. Without that, a village could
+     * name the routine tier here on a quiet week and hand every future veto
+     * an override that costs nothing.
+     */
+    // The literal, because the generated governance document reads this
+    // registry as source text. `HIGHEST_TIER_KEY` in `shared/ballotSubjects.ts`
+    // holds the same string and `gameVariables.test.ts` pins the pair equal.
+    key: "governance.highest_tier",
+    category: "Governance",
+    label: "The tier a veto override is passed at",
+    description:
+      "A steward can veto a change the village passed. The village can bring the same proposal back and pass it again at this tier, and then it lands whatever any steward says. This names which tier that is: the highest one your village works at. Moving this setting costs whatever the tier it currently names costs, so lowering it is as hard as the bar you are lowering.",
+    type: "choice",
+    default: "constitutional",
+    choices: [
+      { value: "routine", label: "Routine", hint: "Your own unity and quorum settings decide an override." },
+      { value: "structural", label: "Structural", hint: "An override asks the structural bar: how the village decides." },
+      { value: "constitutional", label: "Constitutional", hint: "An override asks the highest bar this platform ships." },
+    ],
+    criticality: "constitutional",
+  },
+  {
+    key: "governance.subject_mint_rule_quorum_pct",
+    category: "Governance",
+    label: "Minting rule changes: quorum floor",
+    description:
+      "The least share of the village's voting weight that must turn up before a change to what the village mints can be decided. This one sits on top of the structural tier, so raising it asks for more attention on minting alone without moving every other structural change with it. Cannot be set below the platform floor.",
+    type: "percentage",
+    default: String(SUBJECT_THRESHOLDS[MINT_RULE].minQuorumPct),
+    min: SUBJECT_THRESHOLDS[MINT_RULE].minQuorumPct,
+    max: 100,
+    unit: "%",
+    criticality: "constitutional",
+  },
+  {
+    key: "governance.subject_mint_rule_unity_pct",
+    category: "Governance",
+    label: "Minting rule changes: unity floor",
+    description:
+      "The least share of the votes cast for or against that must be in favour before a change to what the village mints carries. 0 leaves it to the structural tier and your own unity setting.",
+    type: "percentage",
+    default: String(SUBJECT_THRESHOLDS[MINT_RULE].minUnityPct),
+    min: SUBJECT_THRESHOLDS[MINT_RULE].minUnityPct,
+    max: 100,
+    unit: "%",
+    criticality: "constitutional",
+  },
+  /*
+   * ── WHOSE WEIGHT THE QUORUM COUNTS (19G, 2026-09-03) ──────────────────────
+   *
+   * The founder brought voice for other beings from the first day of a village,
+   * and 19F made quorum pure token weight. Put together with no third rule, a
+   * river holding a share of the Voice sits in every quorum denominator whether
+   * or not anybody ever speaks for it, and a handful of quiet seats puts the
+   * top tier permanently out of reach with no door.
+   *
+   * These two dials are the door, and they are arithmetic telling the truth
+   * about a bar. No threshold moves, and a village that misses quorum still
+   * misses it. Both carry the constitutional tier, because a dial that moves
+   * the denominator has the same power over an outcome as one that moves the
+   * bar, and `isMetaSetting` in shared/ballotSubjects.ts names both so neither
+   * can be tried for a moon at a lower price.
+   */
+  {
+    key: "governance.nonhuman_in_quorum",
+    category: "Governance",
+    label: "Seats speaking for other beings count toward quorum",
+    criticality: "constitutional",
+    description:
+      "Your village can seat a voice for a being that is not a person: a mountain, a river, the trees, the wolves. A member or a bot holds that seat and casts its vote. This says whether the weight on such a seat is part of the count that decides whether enough of the village turned up. Off, which is how it ships, leaves that weight out of the count on both sides of the sum, and a vote cast from the seat still counts toward agreement. On counts it like any member's, and weight that provably cannot answer drops out of the count instead.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "governance.absent_cycles",
+    category: "Governance",
+    label: "Cycles of silence before a seat leaves the count",
+    criticality: "constitutional",
+    description:
+      "When seats speaking for other beings do count toward quorum, this is how many cycles of casting nothing it takes before such a seat's weight drops out of the count. A seat nobody holds drops out straight away. The weight is always shown beside the people count, so the village can see how much of its Voice is silent. Nothing here changes a threshold: it changes what the threshold is measured against.",
+    type: "integer",
+    default: "3",
+    min: 1,
+    max: 24,
+    unit: "cycles",
+  },
   {
     key: "membership.vouch_threshold",
     category: "Governance",
     label: "Vouches to admit a member",
+    criticality: "structural",
     description:
       "How many standing members must vouch for an applicant before membership completes on its own. 0 keeps vouching off and admission stays whatever your current process is. Vouching comes from contributors and up, a member may never vouch for themself, and every vouch is on the record.",
     type: "integer",
@@ -1815,6 +2302,13 @@ export function ringOf(def: VariableDef): VariableRing {
 
 /** Keys whose mid-cycle change would corrupt a settlement basis. */
 const CYCLE_APPLY_KEYS = new Set([
+  // The rhythm itself, and it is the strictest case in this set: a mid-cycle
+  // change of clock resets every per-cycle budget and cap and can leave the
+  // running lunation with no clock able to settle it. Cycle timing is the
+  // floor here; `cycleModeSwitchProblem` in shared/cycleClock.ts is the real
+  // guard, and it refuses any landing instant that is not a boundary of the
+  // outgoing clock with every finished cycle already settled.
+  "cycle.mode",
   // The claim dials shape what a member is told they can do THIS season, so a
   // mid-season change would move the goalposts under somebody already counting.
   "economy.voice_claim_threshold",
@@ -1837,6 +2331,16 @@ export function applyTimingOf(def: VariableDef): VariableApplyTiming {
   return CYCLE_APPLY_KEYS.has(def.key) ? "cycle-close" : "instant";
 }
 
+/**
+ * How critical this dial is. Absent means routine, which is the whole reason
+ * the field is optional: 149 dials are ordinary numbers a village tunes while
+ * it plays, and marking each of them "routine" by hand would be 149 chances
+ * to mark one of them wrong.
+ */
+export function criticalityOf(def: VariableDef): Criticality {
+  return def.criticality ?? "routine";
+}
+
 /** Parse a stored string into the type the caller expects. */
 export function parseVariable(def: VariableDef, raw: string | undefined | null): number | boolean | string {
   const value = raw ?? def.default;
@@ -1854,6 +2358,28 @@ export function parseVariable(def: VariableDef, raw: string | undefined | null):
 }
 
 /**
+ * THE GRAMMAR OF A GOVERNANCE WINDOW, and the one place it is written down.
+ *
+ * `server/lib/governanceWindows.ts` parses the same four shapes into the type
+ * the arithmetic uses and re-exports this refusal, so a village can never
+ * store a shape the engine cannot read. The ordering check is here as well as
+ * the syntax, because `custom:20-5` parses cleanly and names no days at all.
+ */
+export const GOVERNANCE_WINDOW_SHAPES =
+  "always_open, last_days_of_cycle:N, last_days_of_season:N, or custom:FROM-TO counting days from the start of the cycle";
+
+export function governanceWindowSyntaxProblem(raw: string): string | null {
+  const text = String(raw ?? "").trim();
+  const bad = `A governance window is one of ${GOVERNANCE_WINDOW_SHAPES}.`;
+  if (text === "always_open") return null;
+  const last = /^last_days_of_(cycle|season):(\d{1,3})$/.exec(text);
+  if (last) return Number(last[2]) >= 1 ? null : bad;
+  const custom = /^custom:(\d{1,3})-(\d{1,3})$/.exec(text);
+  if (custom) return Number(custom[1]) >= 1 && Number(custom[2]) >= Number(custom[1]) ? null : bad;
+  return bad;
+}
+
+/**
  * Validate a proposed value. Returns an error message, or null when acceptable.
  * Runs on the server before any write, and is exported so Admin can show the
  * same message without a round trip.
@@ -1868,6 +2394,18 @@ export function validateVariable(def: VariableDef, raw: string): string | null {
   }
   if (def.type === "text") {
     if (raw.length > 255) return "Too long (255 characters maximum).";
+    /*
+     * A governance window is a grammar, and a typo in it would close a whole
+     * kind of proposal with nothing saying why. The SYNTAX is checked here so
+     * every write path gets it; the cross-key rule (a window has to be longer
+     * than `governance.vote_days`, or no vote could ever fit inside it) needs
+     * a second value and lives in `windowShapeProblem`,
+     * server/lib/governanceWindows.ts, called from `validateChangeSet`.
+     */
+    if (def.key.startsWith("governance.window_") && governanceWindowSyntaxProblem(raw)) {
+      return governanceWindowSyntaxProblem(raw);
+    }
+
     // The first moon must be a date the platform can read, or blank. A value
     // it cannot read stops the whole village counting rather than guessing an
     // anchor (server/lib/villageMoon.ts says why), so the typo is refused

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { SYNODIC_MONTH_DAYS, daysRemainingInCycle, moonPhase, moonPhaseName } from "@shared/lunar";
+import { SYNODIC_MONTH_DAYS, moonPhase, moonPhaseName } from "@shared/lunar";
 import { quarterMarks, wheelState, type Hemisphere } from "@shared/wheel";
 
 /**
@@ -12,6 +12,14 @@ import { quarterMarks, wheelState, type Hemisphere } from "@shared/wheel";
  *
  * Token-driven like the circle scenes: pick a seed in Admin → Look and the
  * clock is already in your palette.
+ *
+ * THE CYCLE COMES FROM THE SERVER, never from lunar arithmetic here. This
+ * component used to call `daysRemainingInCycle` directly, which is right for
+ * every village keeping the moon and wrong for one that voted for calendar
+ * months: the ring would have counted down to a new moon the village no
+ * longer settles on. `/api/game/cycle` answers under whichever clock the
+ * village keeps, and the copy below says which one it is reading. The moon
+ * phase stays local because the sky is the sky whatever a village decides.
  */
 const T = {
   brand: "var(--tone-brand, #157f7d)",
@@ -29,9 +37,13 @@ const pt = (angle: number, r: number) => {
 
 export default function CycleClock({ hemisphere = "north" }: { hemisphere?: Hemisphere }) {
   const [season, setSeason] = useState<string>("");
+  const [cycle, setCycle] = useState<{ daysRemaining: number; clock?: string } | null>(null);
   useEffect(() => {
     fetch("/api/season").then((r) => (r.ok ? r.json() : null))
       .then((d) => setSeason(d?.current?.name ?? "")).catch(() => {});
+    fetch("/api/game/cycle").then((r) => (r.ok ? r.json() : null))
+      .then((d) => setCycle(d ? { daysRemaining: Number(d.daysRemaining) || 0, clock: d.clock } : null))
+      .catch(() => {});
   }, []);
 
   const now = new Date();
@@ -40,12 +52,14 @@ export default function CycleClock({ hemisphere = "north" }: { hemisphere?: Hemi
   // This passed the 0..1 phase straight in, so the ring never filled past
   // 3% (round 4 measured it); the age is the phase times the month.
   const state = wheelState(now, phase * SYNODIC_MONTH_DAYS, hemisphere);
-  const daysLeft = daysRemainingInCycle(now);
+  // Null until the server answers. "Counting" says the number is on its way,
+  // which is a different sentence from a confident zero.
+  const daysLeft = cycle?.daysRemaining ?? null;
   const [tx, ty] = pt(state.yearAngle, 86);
   const lunarSweep = state.lunationFraction;
 
   return (
-    <figure className="mx-auto max-w-[260px]" aria-label={`Cycle clock: ${moonPhaseName(phase)}, ${daysLeft} days left in this cycle`}>
+    <figure className="mx-auto max-w-[260px]" aria-label={`Cycle clock: ${moonPhaseName(phase)}, ${daysLeft === null ? "counting the days left in this cycle" : `${daysLeft} days left in this cycle`}`}>
       <svg viewBox="0 0 220 220" role="img" aria-hidden="true" style={{ display: "block", width: "100%" }}>
         {/* the year ring */}
         <circle cx="110" cy="110" r="86" fill="none" stroke={T.mist} strokeWidth="10" />
@@ -80,12 +94,14 @@ export default function CycleClock({ hemisphere = "north" }: { hemisphere?: Hemi
           {moonPhaseName(phase)}
         </text>
         <text x="110" y="128" textAnchor="middle" fontSize="8" fill="var(--foreground, #1a3a39)" opacity="0.6">
-          {daysLeft} day{daysLeft === 1 ? "" : "s"} to cycle close
+          {daysLeft === null ? "Counting the days" : `${daysLeft} day${daysLeft === 1 ? "" : "s"} to cycle close`}
         </text>
       </svg>
       <figcaption className="sr-only">
-        The year as a circle with the four solar turnings, today's position, and the current lunar
-        cycle's progress. Budgets refill when the cycle turns.
+        The year as a circle with the four solar turnings, today's position, and the moon's
+        progress through its lunation. The countdown at the centre is this village's own cycle,
+        {cycle?.clock === "calendar" ? " a calendar month," : " a moon,"} and budgets refill when
+        it turns.
       </figcaption>
     </figure>
   );

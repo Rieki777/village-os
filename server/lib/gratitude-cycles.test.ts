@@ -6,6 +6,9 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  activeClock,
+  currentCycle,
+  cycleDaysRemaining,
   dueCycles,
   settleCycle,
   unreadableCycleIds,
@@ -126,5 +129,28 @@ describe("an id it cannot read", () => {
     expect(unreadableCycleIds(rows)).toEqual([]);
     expect(unreadableCycleProblem(rows)).toBeNull();
     expect(() => settleCycle(rows, "lunar-000100")).not.toThrow();
+  });
+});
+
+describe("the countdown every surface shows", () => {
+  it("counts to the open cycle's own end under the village's clock", () => {
+    const at = new Date("2026-09-03T12:00:00Z");
+    const open = currentCycle(at);
+    expect(cycleDaysRemaining(at)).toBe(
+      Math.ceil((new Date(open.endsAt).getTime() - at.getTime()) / 86_400_000),
+    );
+  });
+
+  it("defaults to the moon, because that is what a village runs until it votes", () => {
+    expect(activeClock().mode).toBe("lunar");
+    expect(currentCycle(new Date("2026-09-03T12:00:00Z")).clock).toBe("lunar");
+  });
+
+  it("says zero rather than a negative number once the cycle has ended", () => {
+    const open = currentCycle(new Date("2026-09-03T12:00:00Z"));
+    const past = new Date(new Date(open.endsAt).getTime() + 1000);
+    // Asked at an instant past this cycle's end, the OPEN cycle is a later
+    // one, so the answer is that cycle's own remainder and never below zero.
+    expect(cycleDaysRemaining(past)).toBeGreaterThanOrEqual(0);
   });
 });

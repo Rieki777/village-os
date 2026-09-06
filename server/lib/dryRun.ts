@@ -53,9 +53,8 @@
  * moons, a different argument.
  */
 import { GAME_CONFIG } from "../../shared/gameConfig";
-import { cycleBoundsByNumber, cycleBoundsFor } from "../../shared/lunar";
+import { activeClock, boundsForNumber, formatCycleId } from "./gratitude-cycles";
 import type { VillageMoon } from "../../shared/villageMoon";
-import { formatCycleId } from "./gratitude-cycles";
 import { villageMoonForCycle } from "./villageMoon";
 import { cyclePoolProblem } from "./cyclePool";
 import { faucetFor, toLedgerUnits, VILLAGE_VOICE } from "./economy";
@@ -540,12 +539,15 @@ export function dryRun(snapshot: DryRunSnapshot, options: DryRunOptions): DryRun
   // before it gets here; this is so the function is safe on its own terms.
   const asked = Math.trunc(Number(options.moons));
   const moons = Number.isFinite(asked) ? Math.max(1, Math.min(MAX_MOONS, asked)) : 1;
-  const firstCycle = cycleBoundsFor(from).cycleNumber;
+  // The village's own clock, so a projection over "moons" counts whatever a
+  // cycle is here: lunations by default, calendar months where a village voted
+  // for them.
+  const firstCycle = activeClock().cycleNumberAt(from);
 
   const turns: DryRunTurn[] = [];
   for (let i = 0; i < moons; i++) {
     const cycle = firstCycle + i;
-    const bounds = cycleBoundsByNumber(cycle);
+    const bounds = boundsForNumber(cycle);
     const inForce = rulesInForce(snapshot.rules, cycle);
     const findings: Finding[] = [
       ...promotionFindings(snapshot.rules, cycle, firstCycle),
@@ -701,7 +703,7 @@ export function dryRun(snapshot: DryRunSnapshot, options: DryRunOptions): DryRun
 
   // ── The jobs, counted and never run ──────────────────────────────────────
   const spanDays = moons > 0
-    ? (cycleBoundsByNumber(firstCycle + moons - 1).endsAt.getTime() - cycleBoundsByNumber(firstCycle).startsAt.getTime()) / DAY_MS
+    ? (boundsForNumber(firstCycle + moons - 1).endsAt.getTime() - boundsForNumber(firstCycle).startsAt.getTime()) / DAY_MS
     : 0;
   const jobs: DryRunJobLine[] = snapshot.jobs
     .map((j) => {

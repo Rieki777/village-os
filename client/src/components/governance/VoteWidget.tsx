@@ -100,7 +100,11 @@ export default function VoteWidget({
           Votes are locked. Nothing happens on a timer here: this decision is waiting for a person to close it and say
           what the village decided.
         </p>
-        {mine && <p className="mt-2 text-sm text-stone-700">Your vote stands as {mine}.</p>}
+        {mine ? (
+          <p className="mt-2 text-sm text-stone-700">Your vote stands as {mine}.</p>
+        ) : ballot.myVote ? (
+          <p className="mt-2 text-sm text-stone-700">{ballot.myVote.sentence}.</p>
+        ) : null}
       </div>
     );
   }
@@ -131,6 +135,17 @@ export default function VoteWidget({
           </span>
         )}
       </div>
+
+      {/* A VOTE SOMEBODY ELSE DECIDED, WHILE THIS ONE IS STILL RUNNING (0175).
+          The row is cast and the choice is not this member's to read yet, so
+          none of the three buttons is lit and the state is said in a sentence
+          instead. Voting here still works and takes the row back, which is the
+          right the whole feature was built around. */}
+      {ballot.myVote?.state === "cast_following" && (
+        <p className="mt-2 rounded-lg bg-stone-50 px-3 py-2 text-sm text-stone-700">
+          {ballot.myVote.sentence}. Vote below whenever you want to decide this one yourself.
+        </p>
+      )}
 
       {ballot.myWeight === 0 && (
         <p className="mt-2 rounded-lg bg-amber-light px-3 py-2 text-sm text-gold">

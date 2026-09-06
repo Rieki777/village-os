@@ -31,8 +31,6 @@ import {
   type CalendarUpsertInput,
 } from "./calendar";
 import {
-  cycleBoundsFor,
-  cycleBoundsByNumber,
   fullMoonsBetween,
   lunarYearOf,
   newMoonsBetween,
@@ -40,7 +38,7 @@ import {
   zonedTimeToUtc,
   type YearAnchor,
 } from "../../shared/lunar";
-import { formatCycleId } from "./gratitude-cycles";
+import { activeClock, boundsForNumber, formatCycleId } from "./gratitude-cycles";
 import { recognitionName } from "./economy";
 
 // ── The sky ─────────────────────────────────────────────────────────────────
@@ -217,10 +215,14 @@ export async function mirrorCalendarSources(pool: Pool, ctx: MirrorContext): Pro
       if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) continue;
       await mark(n, s, e, String(r.status));
     }
-    const current = cycleBoundsFor(now);
-    for (const n of [current.cycleNumber, current.cycleNumber + 1]) {
+    // The open cycle and the next one come from the clock the village keeps,
+    // so a village that voted for calendar months sees month marks here and
+    // its settled lunar rows above keep the dates they closed under.
+    const clock = activeClock();
+    const openNumber = clock.cycleNumberAt(now);
+    for (const n of [openNumber, openNumber + 1]) {
       if (seen.has(n)) continue;
-      const b = cycleBoundsByNumber(n);
+      const b = boundsForNumber(n);
       await mark(n, b.startsAt, b.endsAt, "open");
     }
   });

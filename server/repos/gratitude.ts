@@ -162,7 +162,7 @@ export function gratitudeCyclesRepo(pool: Pool): CyclesRepo {
   return {
     async all() {
       const [rows] = await pool.query<RowDataPacket[]>(
-        "SELECT id, cycle_number, starts_at, ends_at, status, closed_at FROM gratitude_cycles ORDER BY cycle_number",
+        "SELECT id, cycle_number, starts_at, ends_at, status, closed_at, clock FROM gratitude_cycles ORDER BY cycle_number",
       );
       return rows.map((r) => ({
         id: String(r.id),
@@ -171,14 +171,20 @@ export function gratitudeCyclesRepo(pool: Pool): CyclesRepo {
         endsAt: toIso(r.ends_at),
         status: String(r.status) as CycleRecord["status"],
         closedAt: r.closed_at ? toIso(r.closed_at) : undefined,
+        // 0169. A row written before the column existed reads as lunar,
+        // which is the only clock any village has ever run.
+        clock: String(r.clock ?? "lunar") === "calendar" ? "calendar" : "lunar",
       }));
     },
 
     async upsert(rec) {
       await pool.query(
-        "INSERT INTO gratitude_cycles (id, cycle_number, starts_at, ends_at, status, closed_at) VALUES (?,?,?,?,?,?) " +
+        "INSERT INTO gratitude_cycles (id, cycle_number, starts_at, ends_at, status, closed_at, clock) VALUES (?,?,?,?,?,?,?) " +
           "ON DUPLICATE KEY UPDATE status=VALUES(status), closed_at=VALUES(closed_at)",
-        [rec.id, rec.cycleNumber, toDb(rec.startsAt), toDb(rec.endsAt), rec.status, toDb(rec.closedAt ?? null)],
+        // `clock` is written on INSERT and deliberately NOT in the UPDATE
+        // list: a cycle records the rhythm it was PLAYED on, and a re-run of
+        // close after a village changed its rhythm must not rewrite history.
+        [rec.id, rec.cycleNumber, toDb(rec.startsAt), toDb(rec.endsAt), rec.status, toDb(rec.closedAt ?? null), rec.clock ?? "lunar"],
       );
     },
   };

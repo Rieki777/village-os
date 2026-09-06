@@ -598,6 +598,29 @@ jobs:
         # a reader that reports green either way.
         run: node scripts/generate-token-doc.test.mjs
 
+      - name: Governance doc
+        # docs/GOVERNANCE.md is GENERATED from the engine, the subject
+        # registry, the dials, the capability tables, the module definition,
+        # the clock and the route registrations. This regenerates it and fails
+        # when the committed text and the code have come apart.
+        #
+        # A RED HERE IS OFTEN CORRECT WORK LANDING. The engine is being built
+        # while that document describes it, so a lane that adds a subject type,
+        # a dial or a route SHOULD turn this red. The fix is one command, and
+        # the failure message names it.
+        #
+        # Dependency-free, no database. The deeper proof (that the numbers the
+        # document publishes are the numbers the real engine produces, against
+        # a real MySQL) is server/db/governanceDoc.test.ts, in the suite below.
+        run: node scripts/check-governance-doc.mjs
+
+      - name: Governance doc, self-test
+        # The generator's own fixture suite: the coverage refusals in both
+        # directions, the route door it must decline to classify instead of
+        # guessing, and the house writing rules over every sentence a person
+        # wrote. A reader nobody has proven can refuse is a reader that reports
+        # green either way.
+        run: node scripts/generate-governance-doc.test.mjs
       - name: Game variables doc matches the registry
         # Three documents nobody writes by hand. Each generator reads the real
         # source by transpiling and IMPORTING it, never by regex, and each

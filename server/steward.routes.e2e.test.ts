@@ -154,10 +154,18 @@ const publicPulse = async (): Promise<string[]> => {
 };
 
 /**
- * Everybody says yes, the clock runs out, and a MEMBER closes it.
+ * Everybody says yes, the clock runs out, a MEMBER closes it, AND IT LANDS.
  *
  * The closer is Rhoda throughout this file and never the founder, because a
  * chain with an admin closing the ballot is a chain with an admin in it.
+ *
+ * THE LANDING STEP IS NEW, and it is here because declaring a role changes
+ * the Game. Such a decision is stamped with a landing instant at the close
+ * rather than executed there, and a steward may stop it until that instant.
+ * Nothing in this file is about the window, so the fixture runs the clock out
+ * and calls the landing path, which is what the five-minute job does on its
+ * own in a running village. Seating and unseating carry no window at all and
+ * take effect at the close, so for those this step finds nothing due.
  */
 async function carry(ballotId: string, outcomeNote: string): Promise<Answer> {
   for (const t of [founderToken, rhodaToken, solToken, tamToken]) {
@@ -165,10 +173,22 @@ async function carry(ballotId: string, outcomeNote: string): Promise<Answer> {
     expect(r.status, JSON.stringify(r.json)).toBe(200);
   }
   await expire(ballotId);
-  return await call("POST", `/api/governance/ballots/${ballotId}/close`, {
+  const closed = await call("POST", `/api/governance/ballots/${ballotId}/close`, {
     token: rhodaToken,
     body: { outcomeNote },
   });
+  await land(ballotId);
+  return closed;
+}
+
+/** The window runs out with nobody stopping it, and the landing path runs. */
+async function land(ballotId: string): Promise<void> {
+  await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    "UPDATE ballots SET lands_at = DATE_SUB(NOW(), INTERVAL 1 HOUR), veto_closes_at = DATE_SUB(NOW(), INTERVAL 1 HOUR) " +
+      "WHERE id = ? AND lands_at IS NOT NULL",
+    [ballotId],
+  );
+  await call("POST", "/api/admin/cycles/close", { body: {} });
 }
 
 const ROLE_ID = "game-steward";

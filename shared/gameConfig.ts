@@ -242,7 +242,11 @@ export interface GameConfig {
   /** The progression ladder, in order. First stage is the default. */
   stages: GameStage[];
   gratitude: {
-    /** Base sending budget per calendar-month cycle (before stage multiplier). */
+    /** Base sending budget per cycle, before the stage multiplier. A cycle is
+     *  whatever `cycle.mode` says it is: a moon by default, a calendar month
+     *  where a village voted for one. This comment said "calendar-month" for
+     *  as long as the engine ran on lunations only, which is the same defect
+     *  in prose that migration 0108 retired a dial for. */
     monthlyBudget: number;
     /** Max sends to the same recipient per cycle. */
     maxPerRecipientPerCycle: number;
@@ -518,33 +522,24 @@ export const GAME_CONFIG: GameConfig = {
   season: {
     cadence: "solstice-equinox",
     timezone: "America/Costa_Rica",
-    seasons: [
-      {
-        id: "foundations-2026",
-        name: "Season of Foundations",
-        theme: "Building and Preparing",
-        focus: "Site planning, first structures, and growing the founding community.",
-        startsOn: "2026-06-21",
-        endsOn: "2026-09-22",
-        goals: [
-          { text: "Master plan reviewed and agreed", done: false },
-          { text: "First homes designed and costed", done: false },
-          { text: "Founding circle fully assembled", done: false },
-        ],
-      },
-      {
-        id: "rooting-2026",
-        name: "Season of Rooting",
-        theme: "Planting and Deepening",
-        focus: "First builds underway, food forests planted, and the circles finding their rhythm.",
-        startsOn: "2026-09-22",
-        endsOn: "2026-12-21",
-        goals: [
-          { text: "Ground broken on the first structures", done: false },
-          { text: "Food forest phase one planted", done: false },
-        ],
-      },
-    ],
+    /*
+     * EMPTY, AND DERIVED INSTEAD. See `defaultSeasonsFor` in
+     * `server/lib/seasonCalendar.ts`.
+     *
+     * Two hard-dated seasons used to sit here, running 2026-06-21 to
+     * 2026-12-21 in `America/Costa_Rica`. They were one village's dates and
+     * they expire, so every fork provisioned after 2026-12-21 had no current
+     * season on any date. That is not cosmetic: `org.reassignment_cadence`
+     * defaults to `season_turn`, seat lapse is computed against the current
+     * season, and a village with no current season is a village where no seat
+     * ever lapses and no term ever comes due.
+     *
+     * An empty list here means the season list is derived from the cadence and
+     * timezone below, relative to the day it is asked for, so a fresh village
+     * has a current season whatever the date. A village that writes its own
+     * list keeps it; nothing here overwrites one.
+     */
+    seasons: [],
   },
 };
 
