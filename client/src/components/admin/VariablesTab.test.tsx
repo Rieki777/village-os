@@ -143,12 +143,28 @@ describe("VariablesTab", () => {
     expect(put![1].headers.Authorization).toBe("Bearer secret");
   });
 
-  it("still carries the Integrate DAO panel that only this tab calls", async () => {
+  it("carries ONE token panel, not the two that were stacked here", async () => {
+    /*
+     * THIS TEST ASSERTED THE OPPOSITE and is rewritten rather than deleted,
+     * because the thing it was really protecting still needs protecting: this
+     * tab is the only caller of whatever token panel it renders, so a panel
+     * that quietly disappears from here disappears from the product.
+     *
+     * What changed is which panel. Rye, on the merged tree: "there looks to be
+     * 2 modules for imputing tokens and contracts." IntegrateDaoPanel took a
+     * token NAME and wrote an address into a variable with no contract read;
+     * the Bridge lists what the account actually holds and reads name, symbol
+     * and decimals off the contract before binding, which is what catches a
+     * token minted to carry your exact name. The safer one survived.
+     */
     render(<VariablesTab password="secret" />);
+    expect(await screen.findByRole("heading", { name: "Hypha Bridge" })).toBeInTheDocument();
+    // The retired panel's own two marks are gone, which is the half that would
+    // otherwise leave a dead second door on the page.
     expect(
-      await screen.findByRole("heading", { name: "Integrate DAO: find a token's contract on Base" }),
-    ).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Exact on-chain token name")).toBeInTheDocument();
+      screen.queryByRole("heading", { name: "Integrate DAO: find a token's contract on Base" }),
+    ).toBeNull();
+    expect(screen.queryByPlaceholderText("Exact on-chain token name")).toBeNull();
   });
 
   it("still says what the screen is for when the server refuses the load", async () => {

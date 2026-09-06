@@ -35,6 +35,7 @@ import {
   wasVetoed,
   landingOf,
   landingRow,
+  openPending,
   runVetoWatch,
   recordVeto,
   routeOutcome,
@@ -1195,5 +1196,50 @@ describe.skipIf(!configured)("which SIZES of decision the seat may stop", () => 
     // The one that matters most: a seat that could veto a NARROWING of its own
     // reach would be the only seat here that sets its own limits.
     expect(keyIsVetoLocked("governance.steward_veto_tiers")).toBe(true);
+  });
+});
+
+describe.skipIf(!configured)("the claim and its reader keep one clock", () => {
+  /**
+   * THE DEFECT, WHICH ONLY A UTC DATABASE COULD SEE. `openPending` stamped
+   * `claimed_at` with the DATABASE's `NOW()` while `unfinishedLandings`
+   * compared it against a UTC instant from Node, using a strict `<`. On a
+   * developer box at UTC-7 the claim sat seven hours below the bound, so the
+   * query always matched and the suite was green. On CI, which runs UTC, the
+   * claim and the read fall in the SAME SECOND, the comparison asks `x < x`,
+   * and the row that was just claimed is the one row the query cannot see.
+   *
+   * This asserts the PROPERTY rather than the environment: the two clocks
+   * agree. That is what makes it fail on any machine instead of only on the
+   * one whose offset happens to expose it.
+   */
+  it("stamps claimed_at on Node's clock, not the database's", async () => {
+    const id = `claim-clock-${++n}`;
+    const before = Date.now();
+    await openPending(pool, id);
+    const after = Date.now();
+
+    const [rows] = await pool.query<any[]>(
+      "SELECT claimed_at FROM governance_executor_pending WHERE ballot_id = ?",
+      [id],
+    );
+    const raw = rows[0]?.claimed_at;
+    const stamped = raw instanceof Date ? raw : new Date(String(raw).replace(" ", "T") + "Z");
+
+    // Two seconds of slack for the whole-second truncation and the round trip.
+    // A database on a different offset lands HOURS out, so this cannot pass by
+    // accident on a box whose clock disagrees.
+    expect(
+      Math.abs(stamped.getTime() - before),
+      `claimed_at ${stamped.toISOString()} is not on the same clock as Node (${new Date(before).toISOString()})`,
+    ).toBeLessThan(2000 + (after - before));
+  });
+
+  it("sees a row claimed in this very second, which strict less-than could not", async () => {
+    const id = `claim-same-second-${++n}`;
+    await openPending(pool, id);
+    // olderThanMs 0 makes the bound the claim instant itself. This is the exact
+    // shape CI hit: same second, and `<` answers empty.
+    expect(await unfinishedLandings(pool, 0)).toContain(id);
   });
 });

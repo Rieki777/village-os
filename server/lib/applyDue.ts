@@ -589,8 +589,15 @@ export async function openPending(pool: Pool, ballotId: string): Promise<void> {
     [ballotId],
   );
   await pool.query(
-    "INSERT INTO governance_executor_pending (ballot_id, claimed_at, attempts) VALUES (?, NOW(), ?)",
-    [ballotId, Number(prior[0]?.n ?? 0) + 1],
+    /*
+     * `sqlInstant(new Date())` AND NEVER `NOW()`. Everything else in this
+     * module stamps a UTC instant from Node; `NOW()` is the DATABASE server's
+     * local time. Mixing the two put `claimed_at` seven hours below the bound
+     * on a developer box at UTC-7, so the claim query always matched and the
+     * defect below was invisible here while failing on a UTC runner.
+     */
+    "INSERT INTO governance_executor_pending (ballot_id, claimed_at, attempts) VALUES (?, ?, ?)",
+    [ballotId, sqlInstant(new Date()), Number(prior[0]?.n ?? 0) + 1],
   );
 }
 
@@ -605,16 +612,23 @@ export async function clearPending(pool: Pool, ballotId: string, error?: string)
     return;
   }
   await pool.query(
-    "UPDATE governance_executor_pending SET cleared_at = NOW(), last_error = NULL WHERE ballot_id = ? " +
+    "UPDATE governance_executor_pending SET cleared_at = ?, last_error = NULL WHERE ballot_id = ? " +
       "AND cleared_at IS NULL ORDER BY id DESC LIMIT 1",
-    [ballotId],
+    [sqlInstant(new Date()), ballotId],
   );
 }
 
 /** Decisions that started landing and never finished. A human can act on these. */
 export async function unfinishedLandings(pool: Pool, olderThanMs = 10 * 60 * 1000): Promise<string[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT DISTINCT ballot_id FROM governance_executor_pending WHERE cleared_at IS NULL AND claimed_at < ? " +
+    /*
+     * `<=` AND NOT `<`. `claimed_at` is a TIMESTAMP, so it holds whole
+     * seconds. With `olderThanMs` at 0 the bound IS the claim instant, and a
+     * strict comparison asks `x < x` and answers empty: the row that was just
+     * claimed is the one row this query cannot see, which is the opposite of
+     * what it is for.
+     */
+    "SELECT DISTINCT ballot_id FROM governance_executor_pending WHERE cleared_at IS NULL AND claimed_at <= ? " +
       "ORDER BY ballot_id",
     [sqlInstant(new Date(Date.now() - olderThanMs))],
   );
