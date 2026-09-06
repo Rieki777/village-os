@@ -300,7 +300,16 @@ export default function VillageMap() {
         </div>
       </section>
 
-      <section className="py-6 bg-background">
+      {/* THE LENS IS ITS OWN WORLD, and `circle-lens` is what makes it one.
+          It re-declares the semantic tokens for this subtree only (see
+          index.css), so every surface inside, the search box, the chips, the
+          panel, the legend, the accordion and the sheet, arrives on the
+          living map's ground with the pairing it was written against. The
+          rest of the site is untouched.
+
+          Crossing from the land to the circles used to mean leaving the world
+          and arriving somewhere that shared only the data. */}
+      <section className="circle-lens py-6 bg-background text-foreground">
         <div className="container max-w-7xl">
           {denied && (
             <p className="text-center text-muted-foreground py-16">Sign in to see the village map.</p>

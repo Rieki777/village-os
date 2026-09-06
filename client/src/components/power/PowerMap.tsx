@@ -28,6 +28,7 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type TouchEvent as ReactTouchEvent,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -366,15 +367,83 @@ export default function PowerMap({
    * dead margin, which is where a name too long for its circle now goes.
    */
   const fittedView: CameraView = aspect < 1 ? [view[0], view[1], view[2] / aspect] : view;
+  /*
+   * ── PINCH AND PAN, ON THE STAGE THAT NEEDS IT ─────────────────────────────
+   *
+   * A phone shows fifteen circles at 18 to 30px each. Tap-to-zoom answers
+   * "step into this one"; it does not answer "let me look closer at that
+   * corner", and the compact rule means most names only appear once you are
+   * inside. So the small stage gets a real camera the reader drives.
+   *
+   * ONE FINGER IS LEFT ALONE, deliberately. The map sits in a scrolling page
+   * now, and a canvas that swallows one-finger drag is a canvas a reader
+   * cannot scroll past: they reach the map and the page stops. Two fingers
+   * pinch and pan, which is the convention every embedded map uses for
+   * exactly this reason, and `touch-action: pan-y` keeps vertical scrolling
+   * with the page.
+   *
+   * The nudge is a DELTA on top of the camera, never a replacement for it:
+   * tapping a circle still flies there, and arriving resets the nudge, so
+   * the two ways of moving cannot fight over where the view is.
+   */
+  const [nudge, setNudge] = useState({ dx: 0, dy: 0, k: 1 });
+  useEffect(() => setNudge({ dx: 0, dy: 0, k: 1 }), [focusId, shape]);
+  const gesture = useRef<{ dist: number; mx: number; my: number } | null>(null);
+  const zoomable = !!compact;
+
   // Screen pixels per world unit, at the camera's current width. Everything
   // that has to hold a fixed size on screen divides by this.
-  const pxPerWorld = box.w > 0 ? box.w / fittedView[2] : 0;
+  const navView: CameraView = zoomable
+    ? [fittedView[0] + nudge.dx, fittedView[1] + nudge.dy, fittedView[2] / nudge.k]
+    : fittedView;
+  const pxPerWorld = box.w > 0 ? box.w / navView[2] : 0;
 
   return (
     <>
       <svg
         ref={attachSvg}
-        viewBox={viewBoxFor(fittedView, aspect)}
+        viewBox={viewBoxFor(navView, aspect)}
+        style={zoomable ? { touchAction: "pan-y" } : undefined}
+        onTouchStart={
+          zoomable
+            ? (e: ReactTouchEvent) => {
+                // Two fingers only. One is the page's, so scrolling survives.
+                if (e.touches.length !== 2) { gesture.current = null; return; }
+                const [a, b] = [e.touches[0]!, e.touches[1]!];
+                gesture.current = {
+                  dist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY),
+                  mx: (a.clientX + b.clientX) / 2,
+                  my: (a.clientY + b.clientY) / 2,
+                };
+              }
+            : undefined
+        }
+        onTouchMove={
+          zoomable
+            ? (e: ReactTouchEvent) => {
+                const g = gesture.current;
+                if (!g || e.touches.length !== 2 || pxPerWorld <= 0) return;
+                e.preventDefault();
+                const [a, b] = [e.touches[0]!, e.touches[1]!];
+                const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+                const mx = (a.clientX + b.clientX) / 2;
+                const my = (a.clientY + b.clientY) / 2;
+                setNudge((n) => ({
+                  // Panning is the midpoint's travel, converted to world
+                  // units and inverted: dragging the picture right moves the
+                  // camera left.
+                  dx: n.dx - (mx - g.mx) / pxPerWorld,
+                  dy: n.dy - (my - g.my) / pxPerWorld,
+                  // Between 1x and 6x. Below 1 the reader zooms out past the
+                  // whole village into empty ground, which looks broken and
+                  // answers nothing.
+                  k: Math.min(6, Math.max(1, n.k * (g.dist > 0 ? dist / g.dist : 1))),
+                }));
+                gesture.current = { dist, mx, my };
+              }
+            : undefined
+        }
+        onTouchEnd={zoomable ? () => { gesture.current = null; } : undefined}
         className="w-full h-full"
         preserveAspectRatio="xMidYMid meet"
         role="group"
@@ -866,6 +935,21 @@ export default function PowerMap({
 
         {lenses}
       </svg>
+
+      {/* THE WAY BACK, which a camera the reader drives has to have.
+          Pinched in three levels and panned to a corner, there is no gesture
+          that means "start again"; double-tap is taken by the browser and a
+          pinch-out only walks back the way you came. It appears only once
+          the view has actually moved, so it costs nothing at rest. */}
+      {zoomable && (nudge.k !== 1 || nudge.dx !== 0 || nudge.dy !== 0) && (
+        <button
+          type="button"
+          onClick={() => setNudge({ dx: 0, dy: 0, k: 1 })}
+          className="absolute right-2 top-2 z-10 rounded-full bg-card/90 border border-border px-3 py-1.5 text-xs text-foreground shadow-sm"
+        >
+          Fit the village
+        </button>
+      )}
 
       <p className="sr-only" role="status" aria-live="polite">
         {announcement}
