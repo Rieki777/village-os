@@ -593,9 +593,18 @@ const Word = (n) => word(n).replace(/^./, (c) => c.toUpperCase());
 const code = (s) => `\`${s}\``;
 const codeList = (list, empty) => (list.length ? list.map(code).join(", ") : empty);
 
+/**
+ * A table cell. Backslash FIRST, then pipe: escaping the pipe alone turns an
+ * input of `a\|b` into `a\\|b`, which markdown reads as an escaped backslash
+ * followed by a LIVE pipe, so the cell being protected opens a new column
+ * instead. Whitespace collapses for the same reason: a row is one line.
+ */
+const cell = (s) =>
+  String(s).replace(/\s+/g, " ").replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
+
 function table(headers, rows) {
   const lines = [`| ${headers.join(" | ")} |`, `| ${headers.map(() => "---").join(" | ")} |`];
-  for (const r of rows) lines.push(`| ${r.join(" | ")} |`);
+  for (const r of rows) lines.push(`| ${r.map(cell).join(" | ")} |`);
   return lines.join("\n");
 }
 

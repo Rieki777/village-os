@@ -47,13 +47,20 @@ const check = async (name, fn) => {
 const REGISTRY = fs.readFileSync(path.join(ROOT, ...ENTRY.split("/")), "utf8");
 
 /**
+ * A key is DATA when it is spliced into a pattern, so every metacharacter is
+ * escaped and not just the dot. Escaping one class and trusting the rest is
+ * how a reader silently matches the wrong dial instead of failing loudly.
+ */
+const reEscape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
  * One field of one dial, read straight out of the source with no help from the
  * generator. Anchored on the key and bounded, so a moved field is a loud
  * failure instead of a match on the next dial's value.
  */
 function sourceField(key, field) {
   const re = new RegExp(
-    `key:\\s*"${key.replace(/\./g, "\\.")}"[\\s\\S]{0,2500}?\\n\\s*${field}:\\s*"([^"]*)"`,
+    `key:\\s*"${reEscape(key)}"[\\s\\S]{0,2500}?\\n\\s*${field}:\\s*"([^"]*)"`,
   );
   const m = re.exec(REGISTRY);
   assert.ok(m, `${ENTRY} no longer declares ${field} for the dial "${key}"; this test's anchor moved`);

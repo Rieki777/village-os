@@ -683,7 +683,14 @@ function workedDecisions(decide, facts) {
 // ── Rendering ───────────────────────────────────────────────────────────────
 
 const yes = (b) => (b ? "yes" : "no");
-const cell = (s) => String(s).replace(/\|/g, "\\|");
+/**
+ * A table cell. Backslash FIRST, then pipe: escaping the pipe alone turns an
+ * input of `a\|b` into `a\\|b`, which markdown reads as an escaped backslash
+ * followed by a LIVE pipe, so the cell being protected opens a new column
+ * instead. Whitespace collapses for the same reason: a row is one line.
+ */
+const cell = (s) =>
+  String(s).replace(/\s+/g, " ").replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
 
 function table(headers, rows) {
   const lines = [`| ${headers.join(" | ")} |`, `| ${headers.map(() => "---").join(" | ")} |`];

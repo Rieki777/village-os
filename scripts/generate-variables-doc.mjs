@@ -524,7 +524,14 @@ export async function collectFacts(root = ROOT) {
 // ── Rendering ────────────────────────────────────────────────────────────────
 
 /** A table cell: no newlines, and no pipe that would open a column. */
-const cell = (value) => String(value).replace(/\s+/g, " ").replace(/\|/g, "\\|").trim();
+/**
+ * A table cell. Backslash FIRST, then pipe: escaping the pipe alone turns an
+ * input of `a\|b` into `a\\|b`, which markdown reads as an escaped backslash
+ * followed by a LIVE pipe, so the cell being protected opens a new column
+ * instead. Whitespace collapses for the same reason: a row is one line.
+ */
+const cell = (value) =>
+  String(value).replace(/\s+/g, " ").replace(/\\/g, "\\\\").replace(/\|/g, "\\|").trim();
 
 function table(headers, rows) {
   const lines = [`| ${headers.join(" | ")} |`, `| ${headers.map(() => "---").join(" | ")} |`];
