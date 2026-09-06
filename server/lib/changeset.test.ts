@@ -29,6 +29,7 @@ import {
 } from "./changeset";
 import { dryRunProposal } from "./proposalDryRun";
 import { loadVariables, numberVar } from "./variables";
+import { VARIABLES, applyTimingOf } from "../../shared/gameVariables";
 
 const configured = testDbConfigured();
 let db: TestDb;
@@ -280,8 +281,50 @@ describe.skipIf(!configured)("the dry run writes nothing", () => {
 
 describe("the cycle-timed predicate, with no database", () => {
   it("says a set holding a cycle-timed dial waits as a whole", () => {
+    /*
+     * THIS TEST'S TITLE WAS A CLAIM IT NEVER CHECKED. Both of its assertions
+     * were `.toBe(false)`: it proved that two things which do NOT wait do not
+     * wait, and never once asked a dial that does. The positive case, which is
+     * the whole behaviour, was untested.
+     */
+    expect(changeSetWaitsForCycleClose([{ key: "gratitude.base_budget" }])).toBe(true);
     expect(changeSetWaitsForCycleClose([{ key: "governance.vote_days" }])).toBe(false);
     expect(changeSetWaitsForCycleClose([{ key: "a.key.that.does.not.exist" }])).toBe(false);
+    // A set waits if ANY element does, which is 19F's "who bundle waits".
+    expect(
+      changeSetWaitsForCycleClose([{ key: "governance.vote_days" }, { key: "gratitude.base_budget" }]),
+    ).toBe(true);
+  });
+
+  it("agrees with the REGISTRY on every dial, not on the two somebody picked", () => {
+    /*
+     * A TOTAL COMPARATOR, and it replaces a sample of two.
+     *
+     * `applyTimingOf` on the variable definition is what DECLARES that a dial
+     * moves a number the running cycle is settled against.
+     * `changeSetWaitsForCycleClose` is what the landing path ASKS. Those are
+     * two readings of one fact, and nothing forced them to agree: the sample
+     * above checked one key of the twenty-three that carry the timing, so a
+     * dial whose key shape the predicate mishandled would have waited for
+     * nobody and nothing would have failed.
+     *
+     * Enumerating from the registry means a dial added later is covered the day
+     * it is added, by whoever adds it, without anybody remembering this file.
+     */
+    const declared = VARIABLES.filter((v) => applyTimingOf(v) === "cycle-close");
+    // The control: a registry that has stopped answering must fail here rather
+    // than pass as a clean sweep over an empty list.
+    expect(declared.length, "the registry must still name cycle-close dials").toBeGreaterThan(10);
+
+    const disagree: string[] = [];
+    for (const v of VARIABLES) {
+      const registrySays = applyTimingOf(v) === "cycle-close";
+      const predicateSays = changeSetWaitsForCycleClose([{ key: v.key }]);
+      if (registrySays !== predicateSays) {
+        disagree.push(`${v.key}: registry says ${registrySays}, predicate says ${predicateSays}`);
+      }
+    }
+    expect(disagree, "the registry and the landing path must read the same dials").toEqual([]);
   });
 });
 
