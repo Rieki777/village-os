@@ -106,10 +106,48 @@ async function mintTo(userId: string, amount: number): Promise<void> {
   expect(r.status, `the mint must land: ${r.text.slice(0, 300)}`).toBe(200);
 }
 
+/**
+ * MINOR units, which is what `/api/exchange` reports and what the ledger holds.
+ * Read the door table above `scaleOfCredits` before comparing this to anything.
+ */
 async function balanceOf(token: string): Promise<number> {
   const r = await call("GET", "/api/exchange", undefined, token);
   expect(r.status).toBe(200);
   return Number(r.json?.mine?.balances?.[CREDITS] ?? 0);
+}
+
+/**
+ * THE SCALE, OFF THE REGISTRY, AND THE DOOR TABLE THAT GOES WITH IT.
+ *
+ * `0162` moved Village Credits to two decimals and this file was written when
+ * it carried none, where every door's number looked the same. They are not the
+ * same, and the difference is not uniform, so there is no single multiplier to
+ * apply down the file:
+ *
+ *   HUMAN   `POST /api/redemptions` (`toLedgerUnits` once, at the route),
+ *           `POST /api/admin/tokens/:slug/mint`, and every `amount` the
+ *           redemption queue and history report back (`fromLedgerUnits`).
+ *   MINOR   `POST /api/wallet/send`, because the client converts before it
+ *           posts and the route refuses to convert twice, and `balanceOf`
+ *           above, because `/api/exchange` reports the ledger's own number.
+ *
+ * WHAT GETTING THAT BACKWARDS COST, here, in this file. The Wednesday step
+ * asserts a send is REFUSED because the credits are held. It sent a bare 500,
+ * which reached the send route as five credits, five were affordable against
+ * the unheld remainder, the send SUCCEEDED, and the assertion passed anyway.
+ * The positive control above it had the same shape: a bare 10 moved a tenth of
+ * a credit to Ash and the control read green. So the one door the whole hold
+ * design exists to shut was reporting itself shut while standing open.
+ */
+let creditScale = 0;
+async function scaleOfCredits(): Promise<number> {
+  if (creditScale) return creditScale;
+  const r = await call("GET", "/api/admin/tokens", undefined, founderToken);
+  expect(r.status, `the registry must answer: ${r.text.slice(0, 200)}`).toBe(200);
+  const row = (r.json?.tokens ?? []).find((t: any) => t.slug === CREDITS);
+  expect(row, "credits must be registered").toBeTruthy();
+  creditScale = 10 ** Number(row.decimals ?? 0);
+  return creditScale;
 }
 
 describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
@@ -238,17 +276,18 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
        * herring of a green. So ten credits go to Ash here, through the same
        * route with the same body shape, and they arrive.
        */
+      const scale = await scaleOfCredits();
       const control = await call(
         "POST",
         "/api/wallet/send",
-        { to: ashId, tokenType: CREDITS, amount: 10, note: "the control" },
+        { to: ashId, tokenType: CREDITS, amount: 10 * scale, note: "the control" },
         wrenToken,
       );
       expect(control.status, `the send door must really be open: ${control.text.slice(0, 300)}`).toBe(200);
-      expect(await balanceOf(ashToken)).toBe(10);
+      expect(await balanceOf(ashToken)).toBe(10 * scale);
 
       const before = await balanceOf(wrenToken);
-      expect(before).toBeGreaterThanOrEqual(500);
+      expect(before).toBeGreaterThanOrEqual(500 * scale);
 
       // MONDAY. Wren asks for 500 credits to become a bicycle.
       const asked = await call(
@@ -268,7 +307,9 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
       const sent = await call(
         "POST",
         "/api/wallet/send",
-        { to: ashId, tokenType: CREDITS, amount: 500, note: "for Ash" },
+        // MINOR, and the same 500 whole credits the redemption above asked
+        // for in HUMAN. Sending less than the hold would prove nothing.
+        { to: ashId, tokenType: CREDITS, amount: 500 * scale, note: "for Ash" },
         wrenToken,
       );
       // THIS IS THE WHOLE CASE, and every assertion about the hold is placed
@@ -276,12 +317,27 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
       // red, and the red then reads as the double spend it is instead of as a
       // missing field on a response.
       expect(sent.status, `the send must be refused: ${sent.text.slice(0, 300)}`).not.toBe(200);
-      expect(String(sent.json?.error ?? sent.text)).toContain("insufficient");
+      /*
+       * THE MEMBER'S SENTENCE, NOT THE LEDGER'S, and the change is main's.
+       *
+       * This line read `toContain("insufficient")`, which is the raw ledger
+       * refusal: `insufficient credits: "mem:..." holds N and cannot
+       * overdraft`. `refusalForMember` in server/lib/ledger.ts now stands in
+       * front of that and rewrites it, deliberately, so a member is never
+       * shown an account id or the word overdraft. Asserting the raw form
+       * would go green again on the day that rewriting broke, which is the
+       * opposite of what this case wants.
+       *
+       * So both halves are asserted: the refusal is about funds, and the
+       * account id does not reach the member.
+       */
+      expect(String(sent.json?.error ?? sent.text)).toContain("not enough to send");
+      expect(String(sent.json?.error ?? sent.text)).not.toContain("mem:");
       // Ash still holds the control's ten and nothing more.
-      expect(await balanceOf(ashToken)).toBe(10);
+      expect(await balanceOf(ashToken)).toBe(10 * scale);
 
       expect(asked.json?.holds).toBe(true);
-      expect(await balanceOf(wrenToken)).toBe(before - 500);
+      expect(await balanceOf(wrenToken)).toBe(before - 500 * scale);
       const mine = await call("GET", "/api/redemptions", undefined, wrenToken);
       expect(Number(mine.json?.held?.[CREDITS] ?? 0)).toBe(500);
 
@@ -308,12 +364,14 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
       expect(done.json?.redemption?.state).toBe("confirmed");
 
       // The member's balance, read back off HTTP, and the retired figure, read
-      // back off the admin panel's own route.
-      expect(await balanceOf(wrenToken)).toBe(before - 500);
+      // back off the admin panel's own route. Both MINOR: `retiredSupply`
+      // returns the ledger's own units and `/api/admin/tokens` passes them
+      // through without converting.
+      expect(await balanceOf(wrenToken)).toBe(before - 500 * scale);
       const panel = await call("GET", "/api/admin/tokens", undefined, founderToken);
       expect(panel.status).toBe(200);
       const credits = (panel.json?.tokens ?? []).find((t: any) => t.slug === CREDITS);
-      expect(Number(credits?.retired ?? 0)).toBe(500);
+      expect(Number(credits?.retired ?? 0)).toBe(500 * scale);
 
       // And the same two numbers straight out of the database.
       const [[held]] = await testDb!.conn.query<any[]>(
@@ -324,8 +382,9 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
         "SELECT COALESCE(balance,0) AS n FROM token_balances WHERE account_id = 'sys:redeemed' AND token_type = ?",
         [CREDITS],
       );
+      // Straight out of `token_balances`, so minor with nothing in between.
       expect(Number(held.n)).toBe(0);
-      expect(Number(retired.n)).toBe(500);
+      expect(Number(retired.n)).toBe(500 * scale);
 
       // A second press destroys nothing.
       const again = await call("POST", `/api/redemptions/${id}/confirm`, { note: "again" }, founderToken);
@@ -334,7 +393,7 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
         "SELECT COALESCE(balance,0) AS n FROM token_balances WHERE account_id = 'sys:redeemed' AND token_type = ?",
         [CREDITS],
       );
-      expect(Number(still.n)).toBe(500);
+      expect(Number(still.n)).toBe(500 * scale);
     },
     420_000,
   );
@@ -368,7 +427,8 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
     const asked = await call("POST", "/api/redemptions", { token: CREDITS, amount: 40, askedFor: "a saw" }, wrenToken);
     expect(asked.status, asked.text.slice(0, 300)).toBe(201);
     const id = String(asked.json?.redemption?.id ?? "");
-    expect(await balanceOf(wrenToken)).toBe(before - 40);
+    // The ask was 40 HUMAN; the balance it moves is MINOR.
+    expect(await balanceOf(wrenToken)).toBe(before - 40 * (await scaleOfCredits()));
     const no = await call("POST", `/api/redemptions/${id}/refuse`, { note: "the village has no saw to give" }, founderToken);
     expect(no.status, no.text.slice(0, 300)).toBe(200);
     expect(no.json?.released).toBe(true);
@@ -385,7 +445,7 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
     const asked = await call("POST", "/api/redemptions", { token: CREDITS, amount: 25, askedFor: "a hat" }, wrenToken);
     expect(asked.status).toBe(201);
     const id = String(asked.json?.redemption?.id ?? "");
-    expect(await balanceOf(wrenToken)).toBe(before - 25);
+    expect(await balanceOf(wrenToken)).toBe(before - 25 * (await scaleOfCredits()));
     // Not somebody else's to withdraw.
     expect((await call("POST", `/api/redemptions/${id}/withdraw`, undefined, ashToken)).status).toBe(404);
     const back = await call("POST", `/api/redemptions/${id}/withdraw`, undefined, wrenToken);
