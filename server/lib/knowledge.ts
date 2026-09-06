@@ -301,6 +301,10 @@ export const MODULE_DOCS: Readonly<Record<string, string>> = {
   resources: "how-resources-flow.md",
   crowdpool: "crowdpool.md",
   hypha: "hypha.md",
+  // The doc has sat on the shelf since 2026-08-10 with nothing routing to it, so
+  // the assistant could not reach it and the module read as undocumented. Its
+  // own header names the registry id.
+  messaging: "messaging.md",
 };
 
 /** Deterministic and close enough for a budget. Four characters per token. */
