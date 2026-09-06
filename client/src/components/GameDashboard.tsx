@@ -139,25 +139,45 @@ export default function GameDashboard() {
         <StageAdvanced advance={advance} stages={me.stages} onClose={() => setAdvance(null)} />
       )}
 
-      {/* Next best action */}
+      {/*
+        YOUR NEXT STEP, in the sheet's gold rather than the brand's fill.
+
+        It was a solid `bg-teal-deep` panel carrying white text. That is a safe
+        pair, and on the night ground it made the one call to action on the page
+        the darkest block on it: the brand colour is guaranteed to CARRY white,
+        which means it is dark, which means a filled brand panel recedes here
+        instead of leading.
+
+        Gold on a washed gold ground reads as the earned thing it is, and the
+        arrow became a real button because the design was right about that: an
+        arrow at the end of a row is a hint, and a member who has just been told
+        what to do next should be able to press the thing that does it.
+
+        The whole card is still ONE link. A button nested inside a link is two
+        controls a keyboard has to distinguish for one action.
+      */}
       <Link
         href={me.nextAction.href}
-        className="flex items-center justify-between gap-4 bg-teal-deep text-white rounded-2xl px-6 py-5 shadow-md hover:bg-teal transition-colors"
+        className="group flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-notice/50 bg-notice/10 px-6 py-5 shadow-md transition-colors hover:bg-notice/15"
       >
-        <div className="flex items-center gap-3 min-w-0">
-          <Compass className="w-6 h-6 text-amber shrink-0" />
+        <div className="flex min-w-0 items-center gap-3">
+          <Compass className="h-6 w-6 shrink-0 text-notice" aria-hidden="true" />
           <div className="min-w-0">
-            <p className="text-xs uppercase tracking-widest text-white font-semibold">Your next step</p>
-            {/* `truncate` cut this banner's own headline: "Continue your community
-                  training" needs 294px and the box is 241px at 393px, so a member
-                  read "Continue your community tr...". At 320 barely half survived.
-                  It is the ONE call to action on the page, so ellipsising it hides
-                  the thing the banner exists to say. Two lines is cheaper than a
-                  guess. */}
-                <p className="font-display text-lg font-semibold leading-snug">{me.nextAction.label}</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-notice">Your next step</p>
+            {/* `truncate` cut this banner's own headline once: "Continue your
+                community training" needs 294px and the box is 241px at 393px,
+                so a member read "Continue your community tr...". It is the ONE
+                call to action on the page, so ellipsising it hides the thing
+                the banner exists to say. Two lines is cheaper than a guess. */}
+            <p className="font-display text-lg font-semibold leading-snug text-card-foreground">
+              {me.nextAction.label}
+            </p>
           </div>
         </div>
-        <ArrowRight className="w-5 h-5 shrink-0" />
+        <span className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg bg-notice px-4 py-2 font-medium text-background transition-transform group-hover:translate-x-0.5">
+          Take it
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
+        </span>
       </Link>
 
       {/* The stage ladder used to stand here as "Path of Growth". It moved to

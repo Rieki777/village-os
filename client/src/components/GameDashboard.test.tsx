@@ -82,16 +82,34 @@ afterEach(() => {
 });
 
 describe("GameDashboard", () => {
-  it("draws the next step, the balance and the quest chips once the read lands", async () => {
+  it("draws the next step and the quest chips once the read lands", async () => {
     answering(async () => ({ ok: true, status: 200, json: async () => payload }));
     draw();
 
     expect(await screen.findByText("Continue your community training")).toBeTruthy();
-    expect(screen.getByText("12")).toBeTruthy();
     expect(screen.getByText("Tend the orchard")).toBeTruthy();
     expect(screen.getByText("In progress")).toBeTruthy();
     expect(screen.getByText("Awaiting consent")).toBeTruthy();
     expect(screen.getByText("Completed")).toBeTruthy();
+  });
+
+  /**
+   * THE BALANCE IS NOT ON THIS CARD ANY MORE, and that is the assertion.
+   *
+   * This dashboard used to print the balance and the sending budget beside the
+   * quest chips, which made it one of SIX places on the profile talking about
+   * the same token. TheVessel owns all of it now, beside the send control.
+   *
+   * Asserting the absence rather than deleting the test: a balance quietly
+   * reappearing here is the exact regression the consolidation exists to
+   * prevent, and nothing else would catch it.
+   */
+  it("does NOT print the balance, which the vessel owns now", async () => {
+    answering(async () => ({ ok: true, status: 200, json: async () => payload }));
+    draw();
+    await screen.findByText("Continue your community training");
+    expect(screen.queryByText("12")).toBeNull();
+    expect(screen.queryByText(/left this cycle/i)).toBeNull();
   });
 
   /**
@@ -153,22 +171,29 @@ describe("GameDashboard", () => {
   });
 
   it("re-reads when a write elsewhere on the profile announces a change", async () => {
-    let balance = 12;
+    /*
+     * THE OBSERVABLE CHANGED WITH THE CARD, AND THE SUBJECT DID NOT.
+     *
+     * This proved the re-read by watching the balance move 12 -> 30. The
+     * balance moved to TheVessel, so the assertion moves to something this card
+     * still draws: the next step's own label. The defect under test is
+     * unchanged and is still the one that matters, a card that fetches once on
+     * mount and keeps painting what it read before somebody's write.
+     */
+    let label = "Continue your community training";
     answering(async () => ({
       ok: true,
       status: 200,
-      json: async () => ({ ...payload, gratitude: { ...payload.gratitude, balance } }),
+      json: async () => ({ ...payload, nextAction: { ...payload.nextAction, label } }),
     }));
     draw();
-    expect(await screen.findByText("12")).toBeTruthy();
+    expect(await screen.findByText("Continue your community training")).toBeTruthy();
 
-    balance = 30;
+    label = "Claim a quest on the land";
     announceProfileChange();
 
-    // The stale figure is gone, which is the whole defect: a card that fetches
-    // once on mount kept painting the balance from before the write.
-    expect(await screen.findByText("30")).toBeTruthy();
-    await waitFor(() => expect(screen.queryByText("12")).toBeNull());
+    expect(await screen.findByText("Claim a quest on the land")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText("Continue your community training")).toBeNull());
   });
 
   it("does not paint a Retry at a reader with no session", async () => {

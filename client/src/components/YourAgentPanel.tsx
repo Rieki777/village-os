@@ -107,6 +107,13 @@ export default function YourAgentPanel() {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [inboxUrl, setInboxUrl] = useState("");
   const [inboxSecret, setInboxSecret] = useState("");
+  /*
+   * COLLAPSED BY DEFAULT, and this is the whole reason the disclosure exists.
+   * This section renders about 1,463 pixels of a page that is otherwise a third
+   * shorter, and it is the least often needed thing on it: a member sets an
+   * agent up once and never opens it again.
+   */
+  const [open, setOpen] = useState(false);
   const [inboxBusy, setInboxBusy] = useState(false);
   const [inboxNote, setInboxNote] = useState("");
 
@@ -283,15 +290,53 @@ export default function YourAgentPanel() {
     },
   };
 
+  /*
+   * A SECRET SHOWN ONCE MUST NOT BE COLLAPSIBLE.
+   *
+   * Two values here are shown exactly once and never recoverable: the agent
+   * token (`revealed`) and the inbox signing secret (`inboxSecret`). The
+   * village does not keep either. So the disclosure is FORCED OPEN while
+   * either is on screen, and the trigger says why rather than going quietly
+   * dead. Somebody who has just minted a token and reaches for the collapse is
+   * one click from losing it forever.
+   *
+   * The body is hidden with `hidden` rather than unmounted, for the same
+   * reason: unmounting drops the state, and half-typed fields, an in-flight
+   * save and an unread secret all live in it. `hidden` keeps the component
+   * mounted, keeps its requests from re-firing, and still takes the subtree out
+   * of the accessibility tree and the tab order.
+   */
+  const holdingASecret = Boolean(revealed) || Boolean(inboxSecret);
+  const shown = open || holdingASecret;
+
   return (
     <div className="bg-card rounded-2xl shadow-lg p-6 sm:p-8">
-      <div className="flex items-center gap-2 mb-1">
-        <Bot className="w-5 h-5 text-notice" />
-        <h2 className="font-display text-xl font-bold text-card-foreground">Your agent</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 mb-1">
+          <Bot className="w-5 h-5 text-notice" />
+          <h2 className="font-display text-xl font-bold text-card-foreground">Your agent</h2>
+        </div>
+        <button
+          type="button"
+          aria-expanded={shown}
+          aria-controls="agent-body"
+          disabled={holdingASecret}
+          onClick={() => setOpen((v) => !v)}
+          className="min-h-11 shrink-0 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-60"
+        >
+          {holdingASecret ? "Copy your secret first" : shown ? "Hide" : "Set up"}
+        </button>
       </div>
       <p className="text-sm text-muted-foreground mb-5">
         Connect your own agent to this village, or run the village assistant on your own key. You hold the token; the village never writes anything until you say yes.
       </p>
+      {/* One sentence a screen reader hears when the button changes what is
+          under it. Without it the longest section on the page opens and closes
+          in silence. */}
+      <p aria-live="polite" className="sr-only">
+        {shown ? "Agent settings shown." : "Agent settings hidden."}
+      </p>
+      <div id="agent-body" hidden={!shown}>
       {error && <p role="alert" className="text-xs text-destructive mb-4">{error}</p>}
 
       <div className="space-y-5">
@@ -562,6 +607,7 @@ export default function YourAgentPanel() {
             </ul>
           )}
         </Card>
+      </div>
       </div>
     </div>
   );

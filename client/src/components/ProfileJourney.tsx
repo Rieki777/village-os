@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { TrendingUp, Heart, ScrollText, ShieldCheck, Users } from "lucide-react";
-import { authToken } from "@/lib/gameApi";
+import { authToken, useRoleWord } from "@/lib/gameApi";
 import { useTokenNameLower } from "@/hooks/useTokenNames";
 import Celebration from "@/components/natural/Celebration";
 import BreathingLoader from "@/components/natural/BreathingLoader";
@@ -125,6 +125,24 @@ function useGratitudeBloom(): { name: string; message: string } | null {
  * milestones; putting one through the other is how a first vote turns into
  * something members can rank each other by.
  */
+/**
+ * One day, one way, everywhere on this page.
+ *
+ * Three places print a date here and each had written its own
+ * `toLocaleDateString` call with the same four arguments. A fourth was about to.
+ * Returns "" for anything unparseable rather than the string "Invalid Date",
+ * which is what a bare `new Date(x).toLocaleDateString()` puts on the page.
+ */
+function dayOf(at: unknown): string {
+  const d = new Date(String(at ?? ""));
+  if (!Number.isFinite(d.getTime())) return "";
+  try {
+    return d.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+  } catch {
+    return "";
+  }
+}
+
 function FirstTimes({ firsts }: { firsts?: { vote?: string | null; objection?: string | null; seat?: string | null } | null }) {
   const rows = [
     { key: "vote", label: "The first time you voted", at: firsts?.vote },
@@ -142,7 +160,7 @@ function FirstTimes({ firsts }: { firsts?: { vote?: string | null; objection?: s
             <span>
               <span className="text-card-foreground">{r.label}</span>
               <span className="block text-xs text-muted-foreground mt-0.5">
-                {new Date(String(r.at)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                {dayOf(r.at)}
               </span>
             </span>
           </li>
@@ -160,6 +178,8 @@ const SECTIONS = [
 ] as const;
 
 export default function ProfileJourney() {
+  /* The village's own word for a position somebody holds. Default "Role". */
+  const roleWord = useRoleWord();
   const [prog, setProg] = useState<any | null>(null);
   const [flows, setFlows] = useState<any | null>(null);
   const [ledger, setLedger] = useState<any | null>(null);
@@ -262,6 +282,20 @@ export default function ProfileJourney() {
             <h2 className="text-2xl font-display font-bold text-card-foreground">Your Progression</h2>
           </div>
 
+          {(prog.roles ?? []).length > 0 && (
+            /*
+              THE ROLES A MEMBER HOLDS, NAMED WITH THE VILLAGE'S OWN WORD.
+              The chips were unlabelled: gold pills with a person icon and no
+              heading, which reads as decoration rather than as standing. The
+              design asked for a "Seats you hold" panel; a role is the position
+              and a seat is one person's turn at it, so what a member HOLDS is
+              the role. `roleWord.plural` is derived, so a village calling them
+              Hats reads "Hats you hold" with no second string to set.
+            */
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {roleWord.plural} you hold
+            </p>
+          )}
           {(prog.capabilities?.length > 0 || prog.roles?.length > 0) && (
             <div className="flex flex-wrap gap-2 mb-5">
               {/* THE ROLE'S OWN NAME, which the seed has always carried.
@@ -318,7 +352,7 @@ export default function ProfileJourney() {
                       </span>
                     )}
                     <span className="block text-xs text-muted-foreground mt-0.5">
-                      {new Date(h.at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                      {dayOf(h.at)}
                     </span>
                   </div>
                 </li>
@@ -435,6 +469,14 @@ export default function ProfileJourney() {
                     </span>
                     {e.description && (
                       <span className="block text-xs text-muted-foreground truncate">{e.description}</span>
+                    )}
+                    {/* THE DATE, WHICH HAS BEEN ON THE WIRE ALL ALONG. `at` ships
+                        on every entry and nothing rendered it, so a feed whose
+                        heading promises "newest first" gave a reader no way to
+                        tell whether the top row was this morning or last spring.
+                        Ordering is a claim; a date is the evidence for it. */}
+                    {e.at && (
+                      <span className="block text-xs text-muted-foreground">{dayOf(e.at)}</span>
                     )}
                   </div>
                   {/* MINOR UNITS. `amount` is `token_ledger.amount` verbatim,
