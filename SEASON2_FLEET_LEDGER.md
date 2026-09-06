@@ -2801,6 +2801,19 @@ it currently stands at 762 across dozens of files, and it is contended exactly l
 27d warns, and the consequence is concrete rather than theoretical: a whole ratchet that no lane
 knows to claim, because the tool everyone uses to enumerate gates reads one workflow of five.
 
+**AND THE GATE IS PATH-FILTERED, so it does not run when its own guard changes.**
+`module-intake.yml` fires on seven paths: three files in `shared/`, two in `server/lib/`,
+`scripts/enable-all-modules.mjs` and `docs/modules/**`. Neither `scripts/sql-burndown.mjs` nor
+`scripts/module-sql-pending.json` is among them. So the pull request that FIXED the burn-down guard
+did not run intake at all, while a pull request editing one module doc did, and was handed six files
+of somebody else's debt. **The gate is blind to changes to itself and fires on the population least
+likely to have caused the problem.** Both halves were measured on real runs, not reasoned about.
+
+The fix is not to widen the trigger, and the lane that owns it worked out why before doing it: adding
+the guard's own files to intake's paths makes intake run on the pull request that fixes intake, which
+then fails on the debt that pull request deliberately did not touch. **Pay the debt, then widen, and
+widen as a REPORT before a gate.** The same ordering as everything else in this section.
+
 **And the trap in it armed itself while somebody was FIXING it, which is the sharpest version of
 this shape anyone has produced.** The guard compared GRAND TOTALS while the register is PER FILE, so
 a fall in one file silently blessed growth in others. The lane fixing it waived one genuine false
