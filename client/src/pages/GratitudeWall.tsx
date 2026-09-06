@@ -45,6 +45,8 @@ import NightMotes from "@/components/profile/NightMotes";
 import VoicesHero from "@/components/gratitude/VoicesHero";
 import HeartsRow from "@/components/gratitude/HeartsRow";
 import WallEntryCard from "@/components/gratitude/WallEntryCard";
+import YourStanding from "@/components/gratitude/YourStanding";
+import MoonsPast from "@/components/gratitude/MoonsPast";
 import type { WallEntry } from "@shared/gratitudeVoices";
 
 interface SentEntry {
@@ -178,6 +180,10 @@ export default function GratitudeWall() {
           {/* The clock the economy runs on: lunation, season, the four turnings. */}
           <div className="mb-10"><CycleClock /></div>
 
+          {/* Where you stand, above the control you act with: it is about the
+              member, and breadth leads it rather than the size of the pile. */}
+          {user && <YourStanding currency={currency} />}
+
           {user ? (
             <form onSubmit={send} className="mb-10 rounded-2xl border border-border bg-card p-6 shadow-sm">
               <div className="mb-4 flex items-center justify-between">
@@ -305,6 +311,10 @@ export default function GratitudeWall() {
               ))}
             </div>
           )}
+
+          {/* The chronicle closes the page, under the wall it is the history
+              of: what people said, then what those moons settled to. */}
+          <MoonsPast currency={currency} />
         </div>
         <MoonDock />
       </div>
