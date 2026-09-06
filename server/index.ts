@@ -20717,30 +20717,8 @@ ${inner}
     res.json({ success: true, party: await partyFor(getPool(), villageId(), user.id, user.id) });
   });
 
-  /**
-   * The public wall: written appreciations only.
-   *
-   * `.slice(-60)` ran BEFORE any kind filter, so whatever the last sixty
-   * gratitude rows happened to be went out — and a HEART is a gratitude row
-   * whose message is the body of the feed post it was tapped on. In a village
-   * whose feed is members-only, that put member-only prose on an endpoint with
-   * no authentication at all, and the busier the feed the more of the wall it
-   * became.
-   *
-   * Filtering first also matches the documented `feed.hearts_on_wall` default
-   * of false: a tap is a gesture, not a message, and it was never meant to be
-   * quoted here.
-   */
-  registerGratitudeVoiceRoutes(app, { getPool });
-  app.get("/api/game/gratitude/wall", async (_req, res) => {
-    const log = await gratitudeRepo.all();
-    const wall = log
-      .filter((g) => g.kind !== "heart")
-      .slice(-60)
-      .reverse()
-      .map((g) => ({ id: g.id, from: firstName(g.fromName), to: firstName(g.toName), message: g.message, at: g.at }));
-    res.json(wall);
-  });
+  // The hero and the wall, both in server/routes/gratitudeVoices.ts.
+  registerGratitudeVoiceRoutes(app, { getPool, gratitudeLog: () => gratitudeRepo.all() });
 
   // Gratitude: my journal (received + sent, with amounts)
   app.get("/api/game/gratitude/me", async (req, res) => {

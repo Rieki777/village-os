@@ -51,6 +51,44 @@ export interface Voice {
   isExample: boolean;
 }
 
+/**
+ * WHO A LINE ON THE WALL NAMES.
+ *
+ * The wall carried `from` and `to` as bare first names, which made a hall of
+ * strangers: you could read that somebody thanked somebody and never see who.
+ * Rye's ruling (2026-09-06) is that portraits and handles may be public, so
+ * each side now carries the three facts `publicView` in server/lib/profile.ts
+ * already serves without gating: the name, the handle, and which character
+ * they front. Nothing gated by a member's privacy flags is added here, and
+ * `showHearts` keeps meaning what it meant, which is their BALANCES and not
+ * their appearance on this wall.
+ *
+ * `avatar` is null whenever the server has no portrait to point at, never a
+ * path it guesses might resolve. The page renders a medallion for a null and
+ * carries onError for a file that goes missing after the answer was sent,
+ * which is the same contract `ProfileHero` holds.
+ */
+export interface WallPerson {
+  name: string;
+  /** Without the leading @, the way `/profile/:handle` wants it. */
+  handle: string | null;
+  avatar: string | null;
+}
+
+export interface WallEntry {
+  id: string;
+  from: WallPerson;
+  to: WallPerson;
+  /**
+   * How much was given. It was not on this payload at all, so every thanks on
+   * the wall looked the same size when the economy had already decided they
+   * were not.
+   */
+  amount: number;
+  message: string;
+  at: string;
+}
+
 export interface VoicesAnswer {
   voices: Voice[];
   /**

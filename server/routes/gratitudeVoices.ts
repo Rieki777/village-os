@@ -6,18 +6,27 @@
  * export that touches Express, and the dependency slice is the complete list
  * of what this route can reach: a pool, and nothing else.
  *
- * ── WHY THIS ONE IS ALLOWED TO BE ANONYMOUS ──────────────────────────────
+ * ── THE HERO IS ANONYMOUS AND THE WALL IS NOT, AND THAT IS DELIBERATE ────
  *
- * `/api/game/gratitude/wall` is already public and returns first names, and
- * the design note in `sendGratitude`'s `resolveTyped` explains why the send
- * flow refused to build a member picker: a picker needs a directory, and
- * "nothing here can be asked for a LIST" is the property that was being
- * protected. An enriched wall carrying handles and portraits would give that
- * property away, which is why it is a later phase and behind authentication.
+ * `heroVoices` selects `message` and an opaque row id. No name, no handle, no
+ * amount, no timestamp. That is what lets the hero be the one thing a stranger
+ * meets first: unattributed sentences are not a directory of anybody, and the
+ * hero's own examples could not exist otherwise.
  *
- * This route gives nothing away. `heroVoices` selects `message` and an opaque
- * row id, so there is no name, no handle, no amount and no timestamp in the
- * answer. Sixteen unattributed sentences are not a directory of anybody.
+ * The WALL below it now carries names, handles and portraits, on Rye's ruling
+ * of 2026-09-06. The cost was stated before it was made and is recorded here
+ * because it is the kind of thing a later reader will want the reasoning for:
+ * `resolveTyped` in server/lib/gratitude.ts chose handles over a member picker
+ * precisely because a picker needs a DIRECTORY, and it ends "nothing here can
+ * be asked for a LIST". Sixty rows of handle and portrait on an unauthenticated
+ * endpoint is that list. It was raised, it was decided, and the decision is the
+ * village's to make.
+ *
+ * What the ruling does NOT reach, and what this route therefore still honours:
+ * the three fields it serves are exactly the three `publicView` serves with no
+ * privacy flag consulted (name, handle, fronted character). Nothing gated by a
+ * member's own settings is added, and `showHearts` keeps meaning their
+ * BALANCES rather than their appearance here.
  *
  * ── NO CACHING HEADER, DELIBERATELY ──────────────────────────────────────
  *
@@ -29,12 +38,21 @@
 import type { Express } from "express";
 
 import type { AppDeps } from "../lib/appDeps";
-import { heroVoices } from "../lib/gratitudeVoices";
+import { heroVoices, wallEntries, type WallLogRow } from "../lib/gratitudeVoices";
 
-type Deps = Pick<AppDeps, "getPool">;
+/**
+ * The log arrives as a FUNCTION rather than as the repo.
+ *
+ * `gratitudeRepo` is not in `AppDeps`, and widening that type to add it would
+ * hand every future route module the whole gratitude log whether or not it
+ * asked. The slice a route module declares is meant to be the complete list of
+ * what it can reach, and "one read of the log" is the honest size of what this
+ * one needs.
+ */
+type Deps = Pick<AppDeps, "getPool"> & { gratitudeLog: () => Promise<WallLogRow[]> };
 
 export function register(app: Express, deps: Deps): void {
-  const { getPool } = deps;
+  const { getPool, gratitudeLog } = deps;
 
   app.get("/api/game/gratitude/voices", async (_req, res) => {
     try {
@@ -45,5 +63,9 @@ export function register(app: Express, deps: Deps): void {
       // with an honest empty set rather than a 500 that blanks the route.
       res.json({ voices: [], realTotal: 0 });
     }
+  });
+
+  app.get("/api/game/gratitude/wall", async (_req, res) => {
+    res.json(await wallEntries(getPool(), await gratitudeLog()));
   });
 }

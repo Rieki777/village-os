@@ -44,14 +44,8 @@ import MoonDock from "@/components/profile/MoonDock";
 import NightMotes from "@/components/profile/NightMotes";
 import VoicesHero from "@/components/gratitude/VoicesHero";
 import HeartsRow from "@/components/gratitude/HeartsRow";
-
-interface WallEntry {
-  id: string;
-  from: string;
-  to: string;
-  message: string;
-  at: string;
-}
+import WallEntryCard from "@/components/gratitude/WallEntryCard";
+import type { WallEntry } from "@shared/gratitudeVoices";
 
 interface SentEntry {
   toId?: string | null;
@@ -307,14 +301,7 @@ export default function GratitudeWall() {
           ) : (
             <div className="space-y-3">
               {wall.map((w) => (
-                <div key={w.id} className="rounded-2xl border border-border bg-card px-5 py-4 shadow-sm">
-                  <p className="mb-2 leading-relaxed text-card-foreground">"{w.message}"</p>
-                  <p className="text-xs text-muted-foreground">
-                    <span className="font-semibold text-notice">{w.from}</span> to{" "}
-                    <span className="font-semibold text-notice">{w.to}</span> ·{" "}
-                    {new Date(w.at).toLocaleDateString()}
-                  </p>
-                </div>
+                <WallEntryCard key={w.id} entry={w} currency={currency} />
               ))}
             </div>
           )}
