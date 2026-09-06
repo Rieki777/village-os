@@ -946,7 +946,7 @@ const DEFAULT_INVESTOR_SUMMARY = SITE_CONTENT.investorSummary;
 // values until they change them. This is what makes a new project live-editable
 // from the browser without a code deploy. Merged over GAME_CONFIG on read.
 const DEFAULT_BRAND = {
-  project: { name: "", tagline: "", memberName: "", catalystName: "", location: "", country: "", fiatCurrency: "", siteUrl: "", eventsUrl: "", contactEmail: "", footerBlurb: "" },
+  project: { name: "", tagline: "", memberName: "", catalystName: "", roleName: "", seatName: "", location: "", country: "", fiatCurrency: "", siteUrl: "", eventsUrl: "", contactEmail: "", footerBlurb: "" },
   currency: { name: "", nameLower: "" },
   images: { hero: "", investorHero: "", residentHero: "", stewardHero: "", prosperityHero: "", masterPlanHero: "", logo: "", heartLogo: "", favicon: "" },
   // Setup Wizard progress — projects tick these off as they make the site theirs.
@@ -2673,8 +2673,8 @@ function mergedConfig() {
       name: pick(brand.project.name, p.name),
       tagline: pick(brand.project.tagline, p.tagline),
       memberName: pick(brand.project.memberName, p.memberName),
-      // A LABEL, never a role: nothing downstream gates on it.
-      catalystName: pick((brand.project as any).catalystName, p.catalystName),
+      catalystName: pick((brand.project as any).catalystName, p.catalystName), // three LABELS, gating nothing
+      roleName: pick((brand.project as any).roleName, p.roleName), seatName: pick((brand.project as any).seatName, p.seatName), // why role and seat stay two words: shared/gameConfig.ts
       location: pick(brand.project.location, p.location),
       // 0083 (P8): where the project lives and what it counts in. Display
       // only, like every overlay field; blank inherits the platform default.

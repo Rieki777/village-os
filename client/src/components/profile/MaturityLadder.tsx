@@ -86,10 +86,26 @@ function distanceToNext(next: GameStagePublic, consentedQuests: number): string 
 const times = (n: number): string => `${n} time${n === 1 ? "" : "s"}`;
 
 export default function MaturityLadder({
+  showNext = true,
   stages,
   stageIndex,
   consentedQuests,
 }: {
+  /*
+   * Whether THIS component draws the next-rung block, or somebody above it does.
+   *
+   * Defaults true, which is the whole point: eighteen tests render this
+   * component directly and assert that block's copy, and they were written
+   * before anything wanted it at the top of the page. Changing the default
+   * would have rewritten every one of them to prove a behaviour nobody
+   * changed.
+   *
+   * Profile.tsx passes false and renders `NextRung` in the hero instead, so
+   * the sentence is said ONCE per page. Saying it twice is what a component
+   * test caught the first time, and the reason is still good: a member reading
+   * the same countdown in two places assumes they are two different counts.
+   */
+  showNext?: boolean;
   stages: GameStagePublic[];
   stageIndex: number;
   consentedQuests: number;
@@ -124,6 +140,8 @@ export default function MaturityLadder({
         and a member using a screen reader got no announcement that the answer
         to "what is next" had landed.
       */}
+      {showNext ? (
+        <>
       {next && here ? (
         <div aria-live="polite" className="mt-4 rounded-xl border border-border bg-muted p-4">
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Next rung</p>
@@ -194,6 +212,8 @@ export default function MaturityLadder({
           You stand on the last rung this village has named.
         </p>
       )}
+        </>
+      ) : null}
 
       {/*
         THE LADDER ITSELF.

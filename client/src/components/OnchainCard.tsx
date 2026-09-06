@@ -137,7 +137,7 @@ export default function OnchainCard() {
           </span>
         ) : (
           <button onClick={verify} disabled={busy}
-            className="inline-flex items-center gap-1.5 text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium disabled:opacity-50">
+            className="inline-flex items-center gap-1.5 text-sm border border-notice/70 bg-teal-deep text-white rounded-lg px-4 py-2 font-medium disabled:opacity-50">
             <Link2 className="w-4 h-4" /> {busy ? "Waiting for your wallet…" : "Verify my wallet"}
           </button>
         )}
