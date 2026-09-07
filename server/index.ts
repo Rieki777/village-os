@@ -78,9 +78,16 @@ import { notifyRollRows, type RollNotice } from "./lib/ballotNotices";
 import { forgetStewardActs, holdingHasLapsed, runTermWatch, setVetoWindowCheck, stewardMailRefusal } from "./lib/stewardship";
 import { decideRoleCapabilities, stewardSeatRefusal } from "./lib/roleGrants";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
+import { register as registerContentRoutes } from "./routes/content";
+import { register as registerNotificationRoutes } from "./routes/notifications";
+import { register as registerVoiceClaimRoutes } from "./routes/voiceClaims";
+import { register as registerCharacterRoutes } from "./routes/characters";
+import { register as registerArchetypeRoutes } from "./routes/archetypes";
+import { register as registerProfileRoutes } from "./routes/profile";
+import { register as registerMeProfileRoutes } from "./routes/meProfile";
+import { register as registerMapWalkLogRoutes } from "./routes/mapWalkLog";
 import { register as registerHousingRoutes } from "./routes/housing";
 import { register as registerJourneyRoutes } from "./routes/journey";
-import { register as registerProfileRoutes } from "./routes/profile";
 import { register as registerPathLadderRoutes } from "./routes/pathLadders";
 import { register as registerPlacesRoutes } from "./routes/places";
 import { register as registerMapSceneRoutes } from "./routes/mapScene";
@@ -8017,70 +8024,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     res.send(csv);
   });
 
-  // Content: Public Read
-  // GET /api/content/:section
-  /**
-   * Public content, minus the holder names the `roles` cards still carry.
-   *
-   * This route is unauthenticated and has no module gate, and the `roles`
-   * section is the CARD-SHAPED org chart that 0049 replaced with rows. The
-   * cards kept their `holders` array and `holderNote`, so this endpoint has
-   * been answering anonymous callers with real first names, some of them
-   * qualified with "(interim)", and notes about a person's availability for as
-   * long as the section has existed.
-   * `/api/org` tiers exactly those fields behind `map.viewPeople`; this was the
-   * side door.
-   *
-   * Stripped rather than gated, because content drives real public pages. It
-   * costs nothing: no client reads `content/roles` any more (Team.tsx reads
-   * `/api/org` plus `content/team`, which is a consented bio page), and the
-   * live editing surface for holders is Admin, Org Chart. `/api/admin/content`
-   * still returns everything.
-   *
-   * Scoped to the two fields that name people. `circles.members` is a list of
-   * SEAT TITLES and stays.
-   */
-  const PERSON_FIELDS = ["holders", "holderNote"];
-
-  app.get("/api/content/:section", async (req, res) => {
-    const content = contentRepo.get();
-    const section = content[req.params.section];
-    if (section === undefined) {
-      return res.status(404).json({ error: "Section not found" });
-    }
-    if (await isAdmin(req)) return res.json(section);
-    if (Array.isArray(section)) {
-      return res.json(
-        section.map((card: any) => {
-          if (!card || typeof card !== "object" || !PERSON_FIELDS.some((f) => f in card)) return card;
-          const copy = { ...card };
-          for (const f of PERSON_FIELDS) delete copy[f];
-          return copy;
-        }),
-      );
-    }
-    res.json(section);
-  });
-
-  // Admin: Read All Content
-  app.get("/api/admin/content", async (req, res) => {
-    if (!(await isAdmin(req))) {
-      return res.status(401).json({ error: "auth_required" });
-    }
-    res.json(contentRepo.get());
-  });
-
-  // Admin: Update Content Section
-  // PUT /api/admin/content/:section   (Authorization: Bearer <admin password>)
-  app.put("/api/admin/content/:section", async (req, res) => {
-    // 0098: `story.tell`. What a village says about itself in public is the
-    // clearest case in the set of a power that belongs to the village.
-    if (!(await guardCapability(req, res, "story.tell"))) return;
-    const content = contentRepo.get();
-    content[req.params.section] = req.body;
-    await contentRepo.put(content);
-    res.json({ success: true });
-  });
+  // Content routes extracted to server/routes/content.ts
+  registerContentRoutes(app, { contentRepo, isAdmin, guardCapability });
 
   // Auth: Register
   app.post("/api/auth/register", async (req, res) => {
@@ -17819,52 +17764,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     });
   });
 
-  // â”€â”€ S16: notifications + preferences â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  app.get("/api/notifications", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required" });
-    // `?count=1` is the poll: unread count and the newest timestamp from one
-    // indexed pass, no list built. The bell asks this every twenty-five
-    // seconds while a member is on the page and only fetches the list when
-    // the timestamp moves, which is how the poll got shorter AND cheaper.
-    const seenAt = (user as any)?.prefs?.notify?.seenAt ?? null;
-    if (String(req.query.count ?? "") === "1") {
-      return res.json(await notificationPulse(getPool(), user.id, seenAt));
-    }
-    res.json(await notificationsFor(getPool(), user.id, 50, seenAt));
-  });
-
-  app.post("/api/notifications/read", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required" });
-    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : undefined;
-    const marked = await markNotificationsRead(getPool(), user.id, ids);
-    res.json({ success: true, marked });
-  });
-
-  /**
-   * SEEN, which is not read.
-   *
-   * Opening the bell quiets the badge and changes nothing else: every row
-   * keeps its own read state, so a member who glanced at the panel still
-   * knows what they have and have not dealt with. Collapsing the two is the
-   * documented antipattern (docs/NOTIFICATION_RESEARCH.md part 1 section 2),
-   * and this used to do exactly that, marking everything read on open.
-   *
-   * The cursor is ONE timestamp in the member's prefs blob. No column, no
-   * migration, and unseen is computed as a subset of unread, so something
-   * already dealt with can never come back as new.
-   */
-  app.post("/api/notifications/seen", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required" });
-    const at = new Date().toISOString();
-    await members.update(user.id, (u: any) => {
-      u.prefs = { ...(u.prefs ?? {}), notify: { ...(u.prefs?.notify ?? {}), seenAt: at } };
-    });
-    res.json({ success: true, seenAt: at });
-  });
+  // Notification routes extracted to server/routes/notifications.ts
+  registerNotificationRoutes(app, { authedUser, getPool, members });
 
   app.get("/api/profile/prefs", async (req, res) => {
     const user = await authedUser(req);
@@ -19514,37 +19415,8 @@ ${inner}
     deploymentOrigin: notifyDeps.origin, projectName: notifyDeps.projectName,
   });
 
-  /**
-   * The running map posting its own walk log.
-   *
-   * Under `/api/map`, so it inherits the module gate. Unauthenticated on
-   * purpose: a walk runs before anyone signs in, which is exactly the person
-   * whose experience this measures. Nothing here identifies anybody, the
-   * batch is capped, and a replayed post dedupes on its idempotency key.
-   */
-  app.post("/api/map/walk-log", async (req, res) => {
-    const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
-    if (!rows.length || (await overLimit(`walk-log:${clientIp(req)}`, WALK_LOG_PER_IP_HOURLY, 60 * 60 * 1000))) return res.json({ recorded: 0 });
-    const session = typeof req.body?.sessionKey === "string" ? req.body.sessionKey : "";
-    if (!session) return res.status(400).json({ error: "sessionKey required" });
-    const lang = typeof req.body?.lang === "string" ? req.body.lang : null;
-    const wrote = await recordWalkRows(
-      getPool(),
-      rows.map((r: any) => ({
-        sessionKey: session, step: r?.step, atIndex: r?.at_index ?? r?.atIndex,
-        tsSeq: r?.ts_seq ?? r?.tsSeq, lang,
-      })),
-      "live",
-    );
-    /*
-     * `recorded` is the NEW rows, which is what the word has always implied
-     * and did not mean: it used to be `affectedRows`, and MySQL counts an
-     * ON DUPLICATE KEY update as two of those, so a replayed batch reported
-     * more writes than a first send. `accepted` rides beside it for anyone
-     * who wants to know the batch arrived whole.
-     */
-    res.json({ recorded: wrote.stored, accepted: wrote.accepted });
-  });
+  // Map walk log route extracted to server/routes/mapWalkLog.ts
+  registerMapWalkLogRoutes(app, { getPool, overLimit, clientIp });
 
   /**
    * A promise made on the map: coming to a gathering, or taking a quest.
@@ -20565,156 +20437,27 @@ ${inner}
 
   registerCharacterPortraitRoutes(app, { authedUser, getPool, uploadsDir: UPLOADS_DIR });
 
-  /** The five classes, as this village names them. Public: it is the front door. */
-  app.get("/api/archetypes", async (_req, res) => {
-    res.json(await listArchetypes(getPool(), villageId()));
-  });
+  // Archetype routes extracted to server/routes/archetypes.ts
+  registerArchetypeRoutes(app, { getPool, villageId });
 
   // ── The Player Profile ────────────────────────────────────────────────────
 
-  /** Your own sheet. Everything, because it is yours. */
-  app.get("/api/me/profile", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in first" });
-    const loaded = await loadProfile(getPool(), villageId(), user.id);
-    if (!loaded) return res.status(404).json({ error: "Not found" });
-    const { startsAt } = cycleWindow();
-    res.json({
-      ...loaded.view,
-      standing: await loadStanding(getPool(), user.id),
-      gratitude: await loadGratitude(getPool(), villageId(), user.id, startsAt),
-      party: await partyFor(getPool(), villageId(), user.id, user.id),
-      allowance: await gratitudeAllowance(user),
-      voice: await claimReadiness(getPool(), user.id),
-    });
-  });
+  // Me profile routes extracted to server/routes/meProfile.ts
+  registerMeProfileRoutes(app, { authedUser, getPool, villageId, cycleWindow, partyFor, gratitudeAllowance, claimReadiness });
 
-  /**
-   * Ask to carry accrued voice to Hypha.
-   *
-   * The engine decides everything; this route only carries the answer. It
-   * returns the refusal SENTENCE rather than a code, because the sentence is
-   * the one the chip already shows and two sources for the same message drift.
-   */
-  app.post("/api/me/voice-claim", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in first" });
-    const out = await requestVoiceClaim(getPool(), user.id);
-    if (!out.ok) return res.status(out.status).json({ error: out.error });
-    void recordEvent(getPool(), {
-      kind: "audit",
-      text: `voice:claim-requested:${out.claimId}:${out.amount}`,
-      actorUserId: user.id,
-      entityType: "voice_claim",
-      entityRef: out.claimId,
-      audience: "admin",
-    });
-    res.json({ success: true, claimId: out.claimId, amount: out.amount });
-  });
+  // Voice claim routes extracted to server/routes/voiceClaims.ts
+  registerVoiceClaimRoutes(app, { authedUser, getPool, villageId, recordEvent });
 
-  /**
-   * Change your mind, and take the voice back.
-   *
-   * Scoped to the claim's OWNER, so a claim id — which is not a secret and
-   * rides in the member's own JSON — cannot be used to cancel somebody else's.
-   */
-  app.post("/api/me/voice-claim/:id/cancel", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in first" });
-    const [own] = await getPool().query<any[]>(
-      "SELECT `id` FROM `voice_claims` WHERE `id` = ? AND `village_id` = ? AND `user_id` = ? LIMIT 1",
-      [req.params.id, villageId(), user.id],
-    );
-    if (!own.length) return res.status(404).json({ error: "Not found" });
-    const out = await settleVoiceClaim(getPool(), req.params.id, "canceled", "The member withdrew it");
-    if (!out.ok) return res.status(409).json({ error: out.error });
-    res.json({ success: true, refunded: out.refunded });
-  });
-
-  /** Every claim you have made. Yours only. */
-  app.get("/api/me/voice-claims", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in first" });
-    res.json({ claims: await claimHistory(getPool(), user.id) });
-  });
-
-  /**
-   * Somebody else's sheet.
-   *
-   * The privacy filter runs in `publicView`, which builds a stranger's copy by
-   * adding what the flags permit rather than by deleting from a full one. The
-   * expensive reads are still done first and then dropped, which is a little
-   * wasteful and much harder to get wrong than deciding twice.
-   *
-   * A member reading their OWN handle gets the full sheet, because being told
-   * your own home is private by you is absurd.
-   */
-  app.get("/api/profiles/:handle", async (req, res) => {
-    const targetId = await userIdForHandle(getPool(), req.params.handle);
-    if (!targetId) return res.status(404).json({ error: "Not found" });
-    const loaded = await loadProfile(getPool(), villageId(), targetId);
-    if (!loaded) return res.status(404).json({ error: "Not found" });
-
-    const viewer = await authedUser(req);
-    const { startsAt } = cycleWindow();
-    const full = {
-      ...loaded.view,
-      standing: await loadStanding(getPool(), targetId),
-      gratitude: await loadGratitude(getPool(), villageId(), targetId, startsAt),
-    };
-    if (viewer?.id === targetId) {
-      return res.json({ ...full, party: await partyFor(getPool(), villageId(), targetId, viewer?.id ?? null) });
-    }
-    res.json({
-      ...publicView(full, loaded.privacy),
-      party: await partyFor(getPool(), villageId(), targetId, viewer?.id ?? null),
-    });
-  });
+  // Character routes extracted to server/routes/characters.ts
+  registerCharacterRoutes(app, { authedUser, getPool, villageId });
 
   /** What a class opens. A suggestion, never a restriction. */
   app.get("/api/archetypes/:key/paths", async (req, res) => {
     res.json(await openPathsFor(getPool(), villageId(), req.params.key));
   });
 
-  app.get("/api/me/characters", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in first" });
-    res.json({ party: await partyFor(getPool(), villageId(), user.id, user.id) });
-  });
-
-  /**
-   * Walk a path, or change how a character you already play looks.
-   *
-   * Multi-class is the point, so this adds rather than replaces. Validation
-   * lives in the service: presentation and tone are closed sets and the
-   * archetype is checked against this village's own rows, because all three
-   * end up in an avatar filename.
-   */
-  app.post("/api/me/characters", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in first" });
-    const outcome = await addCharacter(getPool(), villageId(), user.id, req.body ?? {});
-    if (!outcome.ok) return res.status(outcome.status).json({ error: outcome.error });
-    res.json({ success: true, character: outcome.character });
-  });
-
-  /** Which character fronts the sheet. */
-  app.post("/api/me/characters/:id/primary", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in first" });
-    const ok = await setPrimary(getPool(), villageId(), user.id, req.params.id);
-    if (!ok) return res.status(404).json({ error: "Not one of your characters" });
-    res.json({ success: true, party: await partyFor(getPool(), villageId(), user.id, user.id) });
-  });
-
-  /** Leave a path. Removing the primary hands the crown on in the same breath. */
-  app.delete("/api/me/characters/:id", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in first" });
-    const removed = await removeCharacter(getPool(), villageId(), user.id, req.params.id);
-    if (!removed) return res.status(404).json({ error: "Not one of your characters" });
-    res.json({ success: true, party: await partyFor(getPool(), villageId(), user.id, user.id) });
-  });
+  // Archetype routes extracted to server/routes/archetypes.ts
+  registerArchetypeRoutes(app, { getPool, villageId });
 
   /**
    * The public wall: written appreciations only.
