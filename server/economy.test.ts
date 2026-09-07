@@ -982,7 +982,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
       // already reported units, so the two mint paths disagreed as well.
       //
       // The scale comes OFF THE REGISTRY. This line read a bare 100, right
-      // while Voice carried three decimals and wrong the day `0162` moved it
+      // while Voice carried three decimals and wrong the day `0184` moved it
       // to two, which is the whole reason the helper above exists.
       const voice = out.minted.find((m) => m.token === VILLAGE_VOICE);
       expect(voice?.units).toBe(Math.round(0.1 * (await scaleOf(pool, VILLAGE_VOICE))));
@@ -1310,7 +1310,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
        *
        * THE WITNESS IS DERIVED, NOT TYPED. This line read `1.001`, chosen
        * because 1.001 is a whole number of THOUSANDTHS while `1.001 * 1000` is
-       * 1000.9999999999999. `0162` moved Voice to hundredths, where 1.001 is
+       * 1000.9999999999999. `0184` moved Voice to hundredths, where 1.001 is
        * not payable at all and the guard is right to refuse it, so the example
        * stopped testing the tolerance and started testing the scale. The search
        * below asks the same question of whatever scale the registry holds: the

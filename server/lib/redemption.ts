@@ -99,7 +99,7 @@ import { stringVar } from "./variables";
  * Tokens held against an open redemption. NOT a faucet, and for 0072's stated
  * reason, which transfers exactly: tokens held against an open request have to
  * have come from somebody, and a faucet here would let a redemption create the
- * tokens it redeems. Seeded by 0161.
+ * tokens it redeems. Seeded by 0183.
  */
 export const REDEMPTION_HOLD = "sys:redemption-hold";
 
@@ -108,7 +108,7 @@ export const REDEMPTION_HOLD = "sys:redemption-hold";
  * `sys:voice-decay` carries: a faucet flag here would let the account go
  * negative, and a negative balance would say the retiring account had ISSUED
  * the token. This account only ever receives. Its balance is everything this
- * village has retired to date. Seeded by 0161.
+ * village has retired to date. Seeded by 0183.
  */
 export const REDEEMED = "sys:redeemed";
 

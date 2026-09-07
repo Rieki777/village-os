@@ -1,4 +1,4 @@
--- 0168: a circle budget carries a per-cycle cap beside its per-season one.
+-- 0188: a circle budget carries a per-cycle cap beside its per-season one.
 --
 -- 0084 gave a circle one envelope and said in its own header that a budget is
 -- a declared envelope and never a balance. That is still true of this column:

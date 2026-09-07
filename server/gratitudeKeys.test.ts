@@ -52,7 +52,7 @@ import type { UsersRepo } from "./repos/users";
 const configured = testDbConfigured();
 
 /** The file under test, read off disk so the case runs what the fleet runs. */
-const MIGRATION = path.join(process.cwd(), "drizzle", "0160_one_gift_one_key.sql");
+const MIGRATION = path.join(process.cwd(), "drizzle", "0182_one_gift_one_key.sql");
 
 const AT_GUEST = async () => 1;
 
@@ -387,7 +387,7 @@ describe.skipIf(!configured)("one gift, one key", () => {
    * ── THE REPAIR, RUN RATHER THAN READ ───────────────────────────────────
    */
 
-  describe("drizzle/0160_one_gift_one_key.sql", () => {
+  describe("drizzle/0182_one_gift_one_key.sql", () => {
     /** Seeded note ids, one per case the file claims to handle. */
     const plain = "grat-1756000000000-abc123";
     const heart = "grat-1756000000001-def456";

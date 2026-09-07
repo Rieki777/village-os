@@ -33,7 +33,7 @@
  *   one. `library_items.credit_value` is an appraisal a steward typed.
  *   `library_loans.escrow_credits`, `wear_fee` and `damage_fee` are the same
  *   number a member is quoted. Those columns STAY human. The decision is
- *   deliberate and it is the reason 0162 needed no backfill on this module's
+ *   deliberate and it is the reason 0184 needed no backfill on this module's
  *   tables when library credits went to two decimals: nothing here mirrors the
  *   ledger's scale.
  *

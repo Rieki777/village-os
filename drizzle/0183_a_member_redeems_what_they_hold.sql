@@ -1,4 +1,4 @@
--- 0161: a member turns tokens into something real, and the tokens are destroyed.
+-- 0183: a member turns tokens into something real, and the tokens are destroyed.
 --
 -- THE FOUNDER'S SHAPE, in his words: "On platform all we need is a redemption
 -- process that destroys currency that is redeemed. Then the off platform
@@ -58,7 +58,7 @@
 -- numbers and leaves the third where it was.
 --
 -- `sys:redeemed` is therefore a SINK, not a faucet, exactly like `sys:voice-decay`
--- (0165). It only ever receives: its balance is positive and rising, and that
+-- (0185). It only ever receives: its balance is positive and rising, and that
 -- number is everything this village has retired. Issued supply does not fall.
 -- The admin token panel prints the two side by side.
 --

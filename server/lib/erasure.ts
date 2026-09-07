@@ -168,7 +168,7 @@ export async function anonymizeMember(
   // Intents are the same class of trace: their own words about what they
   // sought and offered, plus every matcher sentence where they were a party.
   await eraseIntentsForMember(pool, target.id);
-  // member_needs (0167) says "Only you can read this", so it goes too.
+  // member_needs (0187) says "Only you can read this", so it goes too.
   await forgetMemberNeeds(pool, target.id);
   // A vendor's record naming this member, holding a verbatim quote about
   // them. Absent from this sweep until now, so it survived a departure, and

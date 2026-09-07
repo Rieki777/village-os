@@ -197,6 +197,59 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   under-reports, so run all three scans (the directory, `git ls-tree` over every remote AND
   local ref, and every `drizzle/*.sql` on disk across the worktrees), then
   `node scripts/check-migration-numbers.mjs --next` to confirm.
+- **renumber lane (RN), 2026-09-07: TAKES 0182 to 0188.** The seven economics migrations on
+  `wt/econ` sat at or below a ceiling their base ref had already passed, so the gate refused the
+  branch. Same bodies, new numbers, relative order preserved because the runner sorts by
+  filename and `0183` creates the `redemptions` table that `0184`'s guard reads:
+  `0160`->`0182`, `0161`->`0183`, `0162`->`0184`, `0165`->`0185`, `0166`->`0186`,
+  `0167`->`0187`, `0168`->`0188`. **`0179`, `0180` and `0181` are stepped over and burned**:
+  `wt/gratitude-voices` holds the first two on origin refs. `0181` is no longer merely claimed:
+  the treasury lane merged it, so `0181_a_circle_holds_its_own_treasury.sql` is IN the base tree
+  this lane renumbers into (`wt/econ` at `ddcf54a`), which is why the wave starts at `0182`.
+- **Ceiling for the line above, measured THREE WAYS at 2026-09-07, three separate times, the
+  last of them AT THE RENAME on the rebased base.** A reading expires in minutes, so the one
+  that counts is the last: every one of 677 ref trees reached **0181**, every `drizzle/` on
+  disk across 348 worktrees reached **0181**, and `git status --untracked-files=all` in each
+  of those worktrees reached **0162**, all three excluding this lane's own tree and its own
+  refs. Nothing anywhere holds `0182` through `0188`. The untracked scan earned its place on
+  the middle reading, when it was the only channel that could see
+  `0181_a_circle_holds_its_own_treasury.sql` sitting STAGED in `ECON` while the treasury lane
+  merged it; by the last reading that file was committed and the scan fell back to **0162**.
+  A channel that reports nothing today is not a channel you can drop.
+- **`git log --all --name-only --diff-filter=A` is the WRONG ref-side scan, and here is the
+  measurement, taken twice.** It never reports a rename. On the first reading it missed `0179`
+  and `0180`, which reach the log only under their pre-renumber names
+  `0169_seven_full_sends.sql` and `0170_the_wall_speaks_first.sql`, while it did see `0181`,
+  which was added and never moved. So its answer looked right and was blind to two numbers.
+  **The second reading, after this lane pushed, is the one to remember: at `0179` and above it
+  reported `0181` and NOTHING ELSE**, missing `0179`, `0180` and all seven of `0182` to `0188`,
+  because every one of those arrived as a rename. Nine numbers invisible, one visible.
+  **`--diff-filter=AR` read on the DESTINATION path saw all ten**, agreed with the 677-ref tree
+  walk exactly, and cost a fraction of it. A renumber that reaches main through a squashed
+  merge flattens into an addition, so `A` alone looks correct on everything that has landed
+  and is blind precisely to work still in flight, which is the only case the scan exists for.
+- **Renaming these seven was VERIFIED safe, never inherited, and one of them would NOT survive
+  a replay.** `0188_a_circle_has_two_caps.sql` is a bare `ALTER TABLE ... ADD COLUMN`; MySQL
+  offers no `IF NOT EXISTS` there, and replaying its body against a migrated schema fails with
+  `ER_DUP_FIELDNAME`, measured on the local MySQL. The other six are replay-safe by
+  construction and were each exercised: `0182` is an UPDATE whose WHERE stops matching, `0183`
+  and `0185` are `INSERT IGNORE`, `0186` and `0187` are `CREATE TABLE IF NOT EXISTS`, and
+  `0184` re-reads an empty guard and assigns the same constants (0 rows changed). So the rename
+  is safe only because nothing that persists holds an old name, and that was checked rather than
+  assumed: six schemas on the local MySQL hold the old filenames in `_migrations_applied`, and
+  every one is a `village_tpl_` template or a leaked `village_test_` scratch schema.
+  `migrationsFingerprint` in `server/db/testDb.ts` hashes every migration's NAME and BYTES, so
+  the renamed set keys to a fresh template and `buildTemplate` drops before it builds. No
+  deployed schema holds any of the seven. `rc_qa_crowdpool` reaches 0240 in its own numbering
+  universe and holds none of them.
+- **Swept as a STRING and not as a filename: 92 references across 41 files, of which 14 were
+  filenames** and the rest were header lines, section markers, doc prose, test descriptions and
+  one runtime SQL string (`REFUSED by 0184`, asserted by
+  `server/tokenScale.migration.test.ts`). Eleven further mentions in three files are LEFT ALONE
+  on purpose: five in `docs/GAME_MECHANICS_AUDIT_2026-07-31.md` belong to a different numbering
+  universe that reaches 0219, and the six in this document and in
+  `docs/GOVERNANCE_EVOLUTION_PROMPT.md` are dated measurements of what a disk held on a given
+  day. Rewriting a measurement is how a record stops being one.
 - **profile-rebase integration, 2026-09-04: RENUMBERED to 0156, 0157, 0158, 0159.** The four
   entries below (path-data's 0144/0145/0146, portraits' 0147, and the 0144-to-0151 move made
   earlier the same day) are HISTORY now, not allocation. Main reached 0153 while the branch
@@ -3008,6 +3061,7 @@ Both look like intentional work and neither is.
 | 2026-09-07 | treasury lane (TR) | `wt/econ-treasury`, VERIFIED IN CI and ready to integrate | pushed | **Run `34168402017` on `1b9eb7c`: completed, SUCCESS, 50 steps, 13m08s, no failed step.** Node 22 and MySQL 8, which this machine is neither: the local `node_modules` still holds express `4.22.2` against a lockfile on `^5.2.1`, so the local greens were never CI greens and the suites say so on every run. Migration `0181` is HELD and NOT YET TAKEN: per 27b the number is assigned at LANDING from a fresh scan, and this one was measured against `origin/main` at `0178` on 2026-09-07. Whoever integrates should re-scan by REF TREE (`git for-each-ref` then `git ls-tree`), not by `--diff-filter=A`, for the reason in the claim above. |
 | 2026-09-07 | treasury lane (TR) | `server/lib/mintCap.ts` `HAND_MINT_SOURCES` and `server/mintCap.e2e.test.ts` | `wt/econ-treasury` | HELD. `circle_treasury_fund` is a FOURTH door that meets `mintCapGuard`, so it joins the hand-mint list and the e2e that asserts the list against the doors now drives four. That assertion went red on its own when the door landed, which is the tripwire its comment promised. Left off the list, `capRefusal` would have told a founder who had just funded ten circle treasuries that their own issuance came from a door no admin opened. |
 | 2026-09-07 | treasury lane (TR) | `server/index.ts` (import + two route registrations + the circle-status hook) | `wt/econ-treasury` | HELD. Additive only, and the server-index ratchet subtracts imports and register calls, so the baseline does not move. **The unrelated finding: `check-migration-numbers --since origin/main` resolves the base ref to the MERGE-BASE and not to origin/main's tip.** On this branch that is `b865a34`, whose ceiling is `0159`, so `wt/econ`'s `0165` to `0168` pass today and will be refused the moment that branch rebases onto a main that has reached `0178`. A green from this gate is a statement about the merge-base, never about main. |
+| 2026-09-07 | renumber lane (RN) | migrations `0182`-`0188` | `wt/econ-renumber` | **TAKEN, and the two rows above are left standing as the record of what they held.** The seven files the MM lane numbered `0160`-`0162` and `0165`-`0167`, plus `0168`, all sat at or below the ceiling their base ref had reached, so `check-migration-numbers` refused `wt/econ` outright. Renumbered to `0182`-`0188` with `git mv`, order preserved. `0179` and `0180` (`wt/gratitude-voices`) and `0181` (`wt/econ-treasury`) are stepped over. REBASED onto `wt/econ` at `ddcf54a`, which already carries `0181`, and the ceiling re-measured three ways AT THE RENAME on that base: 677 ref trees reached `0181`, 348 worktrees on disk reached `0181`, and the untracked scan reached `0162`, every one of them excluding this lane's own tree and refs; full method and the per-file replay findings are in section 3. **The number check is a statement about the MERGE-BASE, not about main's tip.** `resolveBase()` runs `git merge-base HEAD <ref>` and takes the newest match, so this branch's green is about `origin/main @ 773713eb`, which reached `0178`. `origin/main`'s TIP `47b4dfc` also reaches `0178` today, so the two agree for now; a branch can pass this gate and be refused the moment it takes a newer main. |
 
 
 ### 27d — Verification: CI runs the full suite, lanes run what they touched

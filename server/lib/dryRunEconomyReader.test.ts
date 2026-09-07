@@ -170,7 +170,7 @@ describe.skipIf(!configured)("the economy snapshot of a live village", () => {
 
     // The four rows the migrations seed, plus the one `ensureVoiceToken`
     // registers at boot. `0006` gives every migrated row `decimals int NOT NULL
-    // DEFAULT 0` and `0162` then raises the currency-like ones, which is
+    // DEFAULT 0` and `0184` then raises the currency-like ones, which is
     // `credits` here: recognition and the two hypha mirrors stay whole and
     // village-voice takes VOICE_DECIMALS.
     expect(Object.keys(places).sort()).toEqual(["credits", "equity", "gratitude", "village-voice", "voice"]);
@@ -251,7 +251,7 @@ describe.skipIf(!configured)("the economy snapshot of a live village", () => {
     expect(questVoice.enabled).toBe(true);
     expect(questVoice.recipient).toBe("claimant");
 
-    // 25 credits at two places is 2500 minor units, since 0162.
+    // 25 credits at two places is 2500 minor units, since 0184.
     const questCredits = ruleById(snapshot.mintRules, "rule-quest.completed-credits");
     expect(questCredits.amount).toBe(BigInt(25 * 10 ** CURRENCY_DECIMALS));
     expect(questCredits.amountRaw).toBe("25.0000");
@@ -499,7 +499,7 @@ describe.skipIf(!configured)("a rule written below its token's own resolution", 
     expect(rule.amount).toBeNull();
     expect(rule.amountRaw).toBe("");
     // The ceiling column is NOT NULL, so a from-source rule still has a cap.
-    // 5 credits at two places, since 0162.
+    // 5 credits at two places, since 0184.
     expect(rule.ceiling).toBe(BigInt(5 * 10 ** CURRENCY_DECIMALS));
     expect(rule.ceilingRaw).toBe("5.0000");
   });
@@ -598,10 +598,10 @@ describe.skipIf(!configured)("the seed fallback, and saying it is a seed", () =>
     // POINT. The list is pinned rather than counted or filtered because a
     // pinned enumeration costs exactly one red per legitimate addition, and
     // the alternative costs an addition nobody notices. It has already earned
-    // that once: `sys:voice-decay` arrived with drizzle/0165_voice_that_waned
+    // that once: `sys:voice-decay` arrived with drizzle/0185_voice_that_waned
     // from the decay lane, and this line is what said so. Twice now:
     // `sys:redemption-hold` and `sys:redeemed` arrived with
-    // drizzle/0161_a_member_redeems_what_they_hold from the redemption lane, and
+    // drizzle/0183_a_member_redeems_what_they_hold from the redemption lane, and
     // both belong in the snapshot by the rule above, because a redemption posts
     // into one of them and then the other. If you are here
     // because you added an account, add it to the list and read the sentence

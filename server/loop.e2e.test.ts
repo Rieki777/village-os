@@ -129,7 +129,7 @@ async function auditRowCount(text: string, waitMs = 10_000): Promise<number> {
 /**
  * A TOKEN'S SCALE, READ OFF THE REGISTRY THE BOOT JUST MIGRATED, NEVER TYPED.
  *
- * `0162` moved every platform credit token and Village Voice to two decimals,
+ * `0184` moved every platform credit token and Village Voice to two decimals,
  * and this file was written when credits carried none. The repair is not to
  * correct 1000 to 100000: a corrected literal is a literal that goes wrong
  * again the next time the scale is ruled on, and it has been ruled on twice in
@@ -2408,7 +2408,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
      * it back UNCONVERTED. So the fixture has to CARRY the scale: this row is
      * written straight into the column, not through the price route that
      * converts, and ten whole stay-credits is `10 * scale`. It used to be a
-     * bare 10, correct only while the token carried no decimals; after `0162`
+     * bare 10, correct only while the token carried no decimals; after `0184`
      * a bare 10 buys a tenth of a credit against a rate of 2, the guest can
      * afford no nights at all, and the failure surfaces two hundred lines
      * later as "posted 2, expected 3" with nothing pointing back here.
@@ -3511,7 +3511,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(rec.json.invariants.ok).toBe(true);
     const exitAcct = rec.json.systemAccounts.find((s: any) => s.id === "sys:exit-settlement" && s.tokenType === "library-credit");
     // MINOR. The reconciliation panel reports the ledger's own number, and
-    // `library-credit` is a platform credit token, so `0162` scaled it too.
+    // `library-credit` is a platform credit token, so `0184` scaled it too.
     expect(exitAcct?.balance).toBe(30 * (await scale("library-credit")));
 
     // A deployment can never strand itself: no exit opens on the last founder.

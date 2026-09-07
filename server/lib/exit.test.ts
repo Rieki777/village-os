@@ -62,7 +62,7 @@ const configured = testDbConfigured();
 /**
  * Registered by 0007, and PINNED to 0 in the setup below.
  *
- * It used to inherit 0 from the registry default, and `0162` ended that: credits
+ * It used to inherit 0 from the registry default, and `0184` ended that: credits
  * are currency-like and now carry two places. The pin is what keeps the three
  * tokens here at three DISTINCT scales, which is the property the last
  * assertion in the scale case depends on. Left to inherit, credits and Voice

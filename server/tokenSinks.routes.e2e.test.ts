@@ -128,7 +128,7 @@ async function balance(token: string, slug = CREDITS): Promise<number> {
 /**
  * THE SCALE, OFF THE REGISTRY, AND THE DOOR TABLE THAT GOES WITH IT.
  *
- * `0162` moved Village Credits to two decimals. This file was written when it
+ * `0184` moved Village Credits to two decimals. This file was written when it
  * carried none, where every door's number looked the same, and they are not the
  * same. There is no single multiplier: each figure has to be read against the
  * door it came through.
@@ -466,7 +466,7 @@ describe.skipIf(!DB_CONFIGURED)("the pool token has somewhere to go", () => {
      */
     expect(mine.json?.priceTokens?.[CREDITS], "a token a room is priced in ships its scale").toBeTruthy();
     // THE REGISTRY'S OWN SCALE, not a number typed here. This read `toBe(0)`,
-    // which was true of `credits` until `0162` and asserted the wrong thing
+    // which was true of `credits` until `0184` and asserted the wrong thing
     // even then: the property is that the payload ships whatever scale the
     // token really carries, so the page can divide by it.
     expect(10 ** Number(mine.json?.priceTokens?.[CREDITS]?.decimals)).toBe(S);

@@ -1,11 +1,11 @@
 /**
- * 0162 RUN, NOT REVIEWED.
+ * 0184 RUN, NOT REVIEWED.
  *
  * The file is read off disk and executed statement by statement through the
  * runner's own `splitStatements`, so what this suite exercises is the bytes
  * that will run at boot on thirteen founder instances and never a paraphrase of
- * them. `provisionTestDb` has already applied 0162 by the time a schema
- * arrives, so each case winds the registry back to a pre-0162 state first and
+ * them. `provisionTestDb` has already applied 0184 by the time a schema
+ * arrives, so each case winds the registry back to a pre-0184 state first and
  * then runs the real file forward over it.
  *
  * WHAT IT HAS TO PROVE, in the order the risk runs:
@@ -40,7 +40,7 @@ if (!configured) {
   console.warn("[tokenScale.migration] TEST_DATABASE_URL not set. This suite SKIPPED.");
 }
 
-const MIGRATION = path.join(process.cwd(), "drizzle", "0162_a_village_spends_its_credits_in_hundredths.sql");
+const MIGRATION = path.join(process.cwd(), "drizzle", "0184_a_village_spends_its_credits_in_hundredths.sql");
 
 /** The tokens this build ships, and the scale each one must end at. */
 const EXPECTED_SCALE: Record<string, number> = {
@@ -53,7 +53,7 @@ const EXPECTED_SCALE: Record<string, number> = {
   "library-credit": CURRENCY_DECIMALS,
 };
 
-describe.skipIf(!configured)("0162, the scale ruling, run against a real schema", () => {
+describe.skipIf(!configured)("0184, the scale ruling, run against a real schema", () => {
   let db: TestDb;
   let pool: mysql.Pool;
 
@@ -65,14 +65,14 @@ describe.skipIf(!configured)("0162, the scale ruling, run against a real schema"
   };
 
   /**
-   * Wind the registry back to what it was before 0162, so the file has
+   * Wind the registry back to what it was before 0184, so the file has
    * something to do. Both starting scales are represented on purpose: the
    * credit tokens start at 0 and Village Voice starts at 3, which is where they
    * actually stood, and a file that only ever raised or only ever lowered would
    * pass a test built from one of them.
    */
   const windBack = async () => {
-    await pool.query("UPDATE `tokens` SET `decimals` = 0"); // module-review-ok: fixture against the S5 scratch schema, restoring the pre-0162 registry
+    await pool.query("UPDATE `tokens` SET `decimals` = 0"); // module-review-ok: fixture against the S5 scratch schema, restoring the pre-0184 registry
     await pool.query("UPDATE `tokens` SET `decimals` = 3 WHERE `slug` = 'village-voice'"); // module-review-ok: fixture against the S5 scratch schema
     await pool.query("DELETE FROM `_token_scale_guard`"); // module-review-ok: fixture against the S5 scratch schema
   };
@@ -182,7 +182,7 @@ describe.skipIf(!configured)("0162, the scale ruling, run against a real schema"
     await expect(runMigration()).rejects.toThrow(/credits/);
     // The refusal names the token AND says what it is refusing, because the
     // boot runner reports err.message and nothing else.
-    await expect(runMigration()).rejects.toThrow(/REFUSED by 0162/);
+    await expect(runMigration()).rejects.toThrow(/REFUSED by 0184/);
     // And it REFUSED: the registry did not move.
     expect((await scales()).credits).toBe(0);
 

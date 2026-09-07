@@ -60,7 +60,7 @@ if (!configured) {
 /**
  * Credit kind, and it is NOT decimals 0 any more.
  *
- * This constant was named for a property `0162` took away: `credits` carried no
+ * This constant was named for a property `0184` took away: `credits` carried no
  * decimals when this file was written and carries two now. The name is kept,
  * because every case here is about the credit KIND and renaming forty-two
  * mentions would say nothing new, but the file no longer assumes the scale.
@@ -81,7 +81,7 @@ const FINE = "exit-split-fine";
 /** One integer, three scales. Seeded as MINOR, which is what the sweep reads. */
 const MINOR = 12_345;
 
-/** Read off the registry in `beforeAll`, because `0162` moves both of them. */
+/** Read off the registry in `beforeAll`, because `0184` moves both of them. */
 let vDec = 0;
 let wDec = 0;
 

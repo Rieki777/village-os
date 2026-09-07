@@ -393,7 +393,7 @@ check("F10 READER: the hand-written keys the old table omitted are all present",
     "voice-claim-debit:<villageId()>:<claimId>",
     "ord:<orderId>:reversal-leg1",
     "exit:<exitId>:sweep:<token>",
-    // `gratitude_received:<id>` was on this list until 0160. It was the key
+    // `gratitude_received:<id>` was on this list until 0182. It was the key
     // `server/lib/gratitude.ts` built by hand, and the allowance's refund arm
     // could never find it, so a gift made through the acknowledgement door was
     // reversible and refunded the giver nothing. That door posts under
@@ -670,8 +670,8 @@ check("READER: the vault list is DERIVED from the migrations, not kept in the ge
   // THE SECOND FORM OF THE SAME BLIND SPOT. The faucets region named four vault
   // accounts one at a time inside the generator while `drizzle/` seeded eleven,
   // so a table a reader trusts BECAUSE it is generated described four of the
-  // eleven places value can sit. `sys:voice-decay` had been missing since 0165;
-  // `sys:redemption-hold` and `sys:redeemed` arrived in 0161 and did not reach
+  // eleven places value can sit. `sys:voice-decay` had been missing since 0185;
+  // `sys:redemption-hold` and `sys:redeemed` arrived in 0183 and did not reach
   // it either. A hand-kept list inside a generator is identical on both sides of
   // the guard's comparison however incomplete it is.
   //

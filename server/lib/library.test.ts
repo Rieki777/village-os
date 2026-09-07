@@ -311,7 +311,7 @@ describe.skipIf(!configured)("the material library, in the units the ledger actu
     /*
      * THE SCALE IS SET HERE AND NO LONGER INHERITED. This block used to lean on
      * library credits happening to carry 0, which the 2026-09-04 scale ruling
-     * ended: a credit token is currency-like and `0162` gives it two places.
+     * ended: a credit token is currency-like and `0184` gives it two places.
      * Leaning on a platform default made this block silently change what it was
      * asking the day that default moved, so it now names the scale it is about.
      */
@@ -346,7 +346,7 @@ describe.skipIf(!configured)("the material library, in the units the ledger actu
 
       // THE RESCALE, done the only way it is ever safe: the registry row and
       // every holding move together, in one step, and the module's own mirror
-      // column is deliberately untouched. `0162` refuses instead of doing this,
+      // column is deliberately untouched. `0184` refuses instead of doing this,
       // because it cannot know what a fork holds; a village that DID hold rows
       // would have to move them exactly like this.
       await pool.query("UPDATE tokens SET decimals = 4 WHERE slug = ?", [LIBRARY_CREDIT]);

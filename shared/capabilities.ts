@@ -81,7 +81,7 @@ export type Capability =
   // sentence "the village's ____ look after that", and it covers a real
   // refusal rather than a button.
   | "quest.approve" // put a proposed quest on the board, with what it pays
-  // ── The redemption key (0161) ────────────────────────────────────────────
+  // ── The redemption key (0183) ────────────────────────────────────────────
   //
   // A member asks for their tokens to become something real off the platform,
   // and somebody has to say that it happened before the tokens are destroyed.

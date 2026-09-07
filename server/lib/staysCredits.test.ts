@@ -50,7 +50,7 @@ import { loadVariables, setVariable } from "./variables";
 const configured = testDbConfigured();
 /**
  * PINNED to 0 in the setup below. It used to inherit the registry default, and
- * `0162` ended that: credits are currency-like and now carry two places. This
+ * `0184` ended that: credits are currency-like and now carry two places. This
  * file is about a conversion being applied exactly once in each direction, so
  * it needs one token with no scale and one with a big one, and the pin is what
  * keeps the first of those true.

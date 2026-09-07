@@ -604,7 +604,7 @@ describe.skipIf(!configured)("carrying voice to Hypha", () => {
      *
      * This list read `[137.5, 100.1, 250.125, 199.999]`, every one a whole
      * number of THOUSANDTHS, correct while Voice carried three decimals. After
-     * `0162` it carries two, where 250.125 is not payable at all: the conversion
+     * `0184` it carries two, where 250.125 is not payable at all: the conversion
      * rounds it to 250.13 and the round trip this case exists to prove reports
      * a loss the engine did not cause. The shapes are what matter, so each is
      * derived from whatever scale the registry holds and every one is a whole

@@ -143,7 +143,7 @@ export interface EconomyProvenance {
  * freshly migrated schema so the claim is measured and not remembered.
  *
  * `decimals` was the column default of 0 for every row the migrations seed
- * (0006:32) until `0162`, which raises the currency-like ones to
+ * (0006:32) until `0184`, which raises the currency-like ones to
  * `CURRENCY_DECIMALS`. That is why `credits` carries a scale here and the two
  * hypha mirrors and recognition do not. `active` still defaults to 1 there.
  */

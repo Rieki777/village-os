@@ -53,7 +53,7 @@ let pool: mysql.Pool;
  * A token's scale, read off the registry rather than typed. The seeded
  * `quest.completed` rules pay 10 Voice and 25 Credits, both HUMAN numbers in
  * `mint_rules.amount`, and `balanceOf` answers in MINOR units. Those were the
- * same number until `0162`, which is why these assertions read as bare
+ * same number until `0184`, which is why these assertions read as bare
  * literals and why the literal is the wrong shape rather than the wrong value.
  */
 async function scaleOf(slug: string): Promise<number> {
