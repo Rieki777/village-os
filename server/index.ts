@@ -78,6 +78,7 @@ import { notifyRollRows, type RollNotice } from "./lib/ballotNotices";
 import { forgetStewardActs, holdingHasLapsed, runTermWatch, setVetoWindowCheck, stewardMailRefusal } from "./lib/stewardship";
 import { decideRoleCapabilities, stewardSeatRefusal } from "./lib/roleGrants";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
+import { register as registerContentRoutes } from "./routes/content";
 import { register as registerHousingRoutes } from "./routes/housing";
 import { register as registerJourneyRoutes } from "./routes/journey";
 import { register as registerProfileRoutes } from "./routes/profile";
@@ -8017,70 +8018,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     res.send(csv);
   });
 
-  // Content: Public Read
-  // GET /api/content/:section
-  /**
-   * Public content, minus the holder names the `roles` cards still carry.
-   *
-   * This route is unauthenticated and has no module gate, and the `roles`
-   * section is the CARD-SHAPED org chart that 0049 replaced with rows. The
-   * cards kept their `holders` array and `holderNote`, so this endpoint has
-   * been answering anonymous callers with real first names, some of them
-   * qualified with "(interim)", and notes about a person's availability for as
-   * long as the section has existed.
-   * `/api/org` tiers exactly those fields behind `map.viewPeople`; this was the
-   * side door.
-   *
-   * Stripped rather than gated, because content drives real public pages. It
-   * costs nothing: no client reads `content/roles` any more (Team.tsx reads
-   * `/api/org` plus `content/team`, which is a consented bio page), and the
-   * live editing surface for holders is Admin, Org Chart. `/api/admin/content`
-   * still returns everything.
-   *
-   * Scoped to the two fields that name people. `circles.members` is a list of
-   * SEAT TITLES and stays.
-   */
-  const PERSON_FIELDS = ["holders", "holderNote"];
-
-  app.get("/api/content/:section", async (req, res) => {
-    const content = contentRepo.get();
-    const section = content[req.params.section];
-    if (section === undefined) {
-      return res.status(404).json({ error: "Section not found" });
-    }
-    if (await isAdmin(req)) return res.json(section);
-    if (Array.isArray(section)) {
-      return res.json(
-        section.map((card: any) => {
-          if (!card || typeof card !== "object" || !PERSON_FIELDS.some((f) => f in card)) return card;
-          const copy = { ...card };
-          for (const f of PERSON_FIELDS) delete copy[f];
-          return copy;
-        }),
-      );
-    }
-    res.json(section);
-  });
-
-  // Admin: Read All Content
-  app.get("/api/admin/content", async (req, res) => {
-    if (!(await isAdmin(req))) {
-      return res.status(401).json({ error: "auth_required" });
-    }
-    res.json(contentRepo.get());
-  });
-
-  // Admin: Update Content Section
-  // PUT /api/admin/content/:section   (Authorization: Bearer <admin password>)
-  app.put("/api/admin/content/:section", async (req, res) => {
-    // 0098: `story.tell`. What a village says about itself in public is the
-    // clearest case in the set of a power that belongs to the village.
-    if (!(await guardCapability(req, res, "story.tell"))) return;
-    const content = contentRepo.get();
-    content[req.params.section] = req.body;
-    await contentRepo.put(content);
-    res.json({ success: true });
-  });
+  // Content routes extracted to server/routes/content.ts
+  registerContentRoutes(app, { contentRepo, isAdmin, guardCapability });
 
   // Auth: Register
   app.post("/api/auth/register", async (req, res) => {
