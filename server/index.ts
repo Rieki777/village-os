@@ -80,6 +80,7 @@ import { decideRoleCapabilities, stewardSeatRefusal } from "./lib/roleGrants";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
 import { register as registerContentRoutes } from "./routes/content";
 import { register as registerNotificationRoutes } from "./routes/notifications";
+import { register as registerVoiceClaimRoutes } from "./routes/voiceClaims";
 import { register as registerHousingRoutes } from "./routes/housing";
 import { register as registerJourneyRoutes } from "./routes/journey";
 import { register as registerProfileRoutes } from "./routes/profile";
@@ -20485,54 +20486,8 @@ ${inner}
     });
   });
 
-  /**
-   * Ask to carry accrued voice to Hypha.
-   *
-   * The engine decides everything; this route only carries the answer. It
-   * returns the refusal SENTENCE rather than a code, because the sentence is
-   * the one the chip already shows and two sources for the same message drift.
-   */
-  app.post("/api/me/voice-claim", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in first" });
-    const out = await requestVoiceClaim(getPool(), user.id);
-    if (!out.ok) return res.status(out.status).json({ error: out.error });
-    void recordEvent(getPool(), {
-      kind: "audit",
-      text: `voice:claim-requested:${out.claimId}:${out.amount}`,
-      actorUserId: user.id,
-      entityType: "voice_claim",
-      entityRef: out.claimId,
-      audience: "admin",
-    });
-    res.json({ success: true, claimId: out.claimId, amount: out.amount });
-  });
-
-  /**
-   * Change your mind, and take the voice back.
-   *
-   * Scoped to the claim's OWNER, so a claim id — which is not a secret and
-   * rides in the member's own JSON — cannot be used to cancel somebody else's.
-   */
-  app.post("/api/me/voice-claim/:id/cancel", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in first" });
-    const [own] = await getPool().query<any[]>(
-      "SELECT `id` FROM `voice_claims` WHERE `id` = ? AND `village_id` = ? AND `user_id` = ? LIMIT 1",
-      [req.params.id, villageId(), user.id],
-    );
-    if (!own.length) return res.status(404).json({ error: "Not found" });
-    const out = await settleVoiceClaim(getPool(), req.params.id, "canceled", "The member withdrew it");
-    if (!out.ok) return res.status(409).json({ error: out.error });
-    res.json({ success: true, refunded: out.refunded });
-  });
-
-  /** Every claim you have made. Yours only. */
-  app.get("/api/me/voice-claims", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in first" });
-    res.json({ claims: await claimHistory(getPool(), user.id) });
-  });
+  // Voice claim routes extracted to server/routes/voiceClaims.ts
+  registerVoiceClaimRoutes(app, { authedUser, getPool, villageId, recordEvent });
 
   /**
    * Somebody else's sheet.
