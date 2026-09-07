@@ -797,6 +797,24 @@ export function shareCapFor(allowanceTotal: number): number {
  * and not the 7 on the dial. Reading the dial directly would have drawn two
  * hearts a member could never fill, which is the displayed-number-versus-
  * actual-behaviour defect this codebase keeps finding.
+ *
+ * ── IT IS NOT `spreadsAcross`, AND THEY MUST NOT BE RECONCILED ───────────
+ *
+ * server/lib/dryRun.ts computes `ceil(allowance / cap)` and calls it
+ * `spreadsAcross`. The two disagree whenever the allowance does not divide
+ * evenly, and both are right, because they answer different questions:
+ *
+ *   fullSendsIn    how many FULL-STRENGTH gifts the allowance holds.
+ *                  100 across 7 is 7, each of 14, and 2 are left over.
+ *   spreadsAcross  how many PEOPLE it takes to spend the allowance to zero.
+ *                  100 across 7 is 8, because somebody has to take the last 2.
+ *
+ * The wall draws this one as hearts, because the dial is named after full
+ * sends and a heart is one of them. A future reader finding the mismatch
+ * should not make them agree; they should check that neither is wearing the
+ * other's words, which is the bug that actually shipped once: the hearts row
+ * borrowed "the fewest who can take your whole allowance" and was false in six
+ * of ten plausible dial settings.
  */
 export function fullSendsIn(allowanceTotal: number): number {
   const cap = shareCapFor(allowanceTotal);

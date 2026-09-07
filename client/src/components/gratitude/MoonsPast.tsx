@@ -112,8 +112,17 @@ export default function MoonsPast({ currency }: { currency: string }) {
                 </p>
               ) : (
                 <ul className="mt-3 space-y-1.5">
-                  {totals.map((t) => (
-                    <li key={t.name} className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                  {/*
+                    Keyed by POSITION and not by name. The settlement payload
+                    carries names only, deliberately, and `nameOf` runs them
+                    through `firstName`, so a village with two Ashes hands this
+                    list two rows keyed "Ash". React treats a duplicate key as
+                    the same element and one of the two silently vanishes, which
+                    on a settlement report is a person losing their credit.
+                    The list is sorted and static, so the index is stable.
+                  */}
+                  {totals.map((t, i) => (
+                    <li key={i} className="flex flex-wrap items-baseline gap-x-2 text-sm">
                       <span className="font-semibold text-notice">{t.name}</span>
                       <span className="text-muted-foreground">
                         {t.received} {currency.toLowerCase()}

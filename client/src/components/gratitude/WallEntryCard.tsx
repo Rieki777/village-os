@@ -38,23 +38,37 @@ function Face({ who, size = "h-8 w-8" }: { who: WallPerson; size?: string }) {
   const initial = (who.name || "?").trim().charAt(0).toUpperCase() || "?";
   return (
     <span
-      className={`${size} inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted text-xs font-semibold text-muted-foreground`}
+      className={`${size} relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted text-xs font-semibold text-muted-foreground`}
       aria-hidden="true"
     >
+      {/*
+        THE INITIAL IS ALWAYS RENDERED, AND THE PORTRAIT SITS ON TOP OF IT.
+
+        This was `{avatar ? <img/> : null}{avatar ? null : initial}`, so when a
+        portrait existed the initial was never in the tree at all, and the
+        onError below hid the img to reveal nothing: an empty circle. The
+        comment on that handler claimed the initial would show, which is the
+        second half of the defect. A guard whose fallback does not exist is not
+        a guard, and prose describing behaviour the code does not have is worse
+        than no prose.
+
+        Absolutely positioned so the two occupy the same square rather than
+        stacking, and the img paints over the letter until it cannot.
+      */}
+      <span className="absolute">{initial}</span>
       {who.avatar ? (
         <img
           src={who.avatar}
           alt=""
-          className="h-full w-full object-cover"
+          className="relative h-full w-full object-cover"
           loading="lazy"
           onError={(e) => {
             // The file went missing after the server answered. Drop the img and
-            // let the initial behind it show, rather than a broken glyph.
+            // the initial underneath it is what remains.
             e.currentTarget.style.display = "none";
           }}
         />
       ) : null}
-      {who.avatar ? null : initial}
     </span>
   );
 }

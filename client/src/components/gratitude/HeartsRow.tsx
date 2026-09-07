@@ -119,9 +119,28 @@ export default function HeartsRow({
       <div
         className="flex flex-wrap items-center gap-1.5"
         role="img"
+        /*
+         * "FULL SENDS", never "the fewest who can take your whole allowance".
+         *
+         * That second phrasing was here and it is FALSE whenever the allowance
+         * does not divide evenly by the dial, which is most settings. Run the
+         * real functions across ten plausible configurations and six of them
+         * overclaim: an allowance of 100 across 7 gives a ceiling of 14, so
+         * seven people take 98 and it needs an eighth; an allowance of 13
+         * gives a ceiling of 1, so the row draws 7 hearts while the true answer
+         * is 13 people. The stock ladder happens to be clean (105 through 525
+         * all divide by 7), which is exactly why the lie survived a reading.
+         *
+         * `fullSendsIn` counts FULL-STRENGTH gifts, which is what the dial is
+         * named after and what these hearts are. `spreadsAcross` in
+         * server/lib/dryRun.ts answers the other question, "people needed to
+         * spend it all", with a ceil, and its own note words it correctly.
+         * The two are different questions and both are true; they must not be
+         * reconciled into one number, and neither may borrow the other's words.
+         */
         aria-label={
           `${people} ${people === 1 ? "person" : "people"} thanked this cycle. ` +
-          `${fullSends} is the fewest that can take your whole allowance, at up to ${cap} each.` +
+          `You have ${fullSends} full ${fullSends === 1 ? "send" : "sends"} a cycle, at up to ${cap} each.` +
           (lap > 0 ? ` This is the ${timesAround(lap)} time round the row.` : "")
         }
       >
@@ -129,9 +148,19 @@ export default function HeartsRow({
         {Array.from({ length: fullSends - filled }, (_, i) => <Heart key={`b${i}`} cls={behindClass} />)}
       </div>
       <p className="mt-2 text-sm text-muted-foreground">
-        {lap > 0
-          ? `The ${timesAround(lap)} time round: you have thanked more than ${fullSends} people this cycle. The row fills again, and each gift gets smaller as the circle widens.`
-          : `One heart, one person. An open heart is allowance you still hold, and leaving it open at the turn of the cycle costs you nothing.`}
+        {/*
+          THE EXACTLY-N CASE IS ITS OWN SENTENCE.
+          At people === fullSends the lap has just completed: `lap` is 1 and
+          `filled` is 0, so the row is full and the second colour has not
+          started. The old copy said "you have thanked more than 7 people" to
+          somebody who had thanked exactly 7, which is simply untrue, and it
+          said it at the one moment the row looks most like an achievement.
+        */}
+        {lap > 0 && filled === 0
+          ? `A full row: ${people} ${people === 1 ? "person" : "people"} thanked this cycle. Sending to more is fine, and the row starts over.`
+          : lap > 0
+            ? `The ${timesAround(lap)} time round: more than ${fullSends} people this cycle. The row fills again, and each gift gets smaller as the circle widens.`
+            : `One heart, one person. An open heart is allowance you still hold, and leaving it open at the turn of the cycle costs you nothing.`}
       </p>
     </div>
   );

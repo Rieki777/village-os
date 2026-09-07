@@ -177,6 +177,28 @@ export default function GratitudeWall() {
         <div className="relative container mx-auto max-w-3xl px-4">
           <VoicesHero />
 
+          {/*
+            WHAT THIS PAGE IS, said once, AFTER the voices.
+
+            Restored rather than added: the page it replaced opened with this
+            sentence and its tooltip, and moving the gratitude to the top took
+            them out with the heading they were attached to. That went too far.
+            A signed-out stranger was landing on eight unattributed quotes with
+            nothing anywhere telling them what the wall is or that sending is
+            thanks and never pay. Leading with the gratitude means not opening
+            with the explanation; it does not mean deleting it.
+
+            So it sits under the voices, at body size, once. The tooltip is the
+            same one, because what it says is still the thing a newcomer most
+            needs to know about this economy.
+          */}
+          <p className="mb-10 max-w-prose text-muted-foreground">
+            Appreciation, spoken out loud. Naming what is good is how the village grows
+            more of it, and every thanks on this wall becomes{" "}
+            <InfoTip tip={`Each cycle every member receives a budget of ${currency.toLowerCase()} to send. Sending is thanks for real contributions, never pay, and the wall keeps every word.`}>{currency.toLowerCase()}</InfoTip>{" "}
+            in the hands of the member it names.
+          </p>
+
           {/* The clock the economy runs on: lunation, season, the four turnings. */}
           <div className="mb-10"><CycleClock /></div>
 

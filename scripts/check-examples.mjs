@@ -32,6 +32,15 @@ if (!url) {
 
 const c = await mysql.createConnection({ uri: url, timezone: "Z" });
 
+/**
+ * Hand-kept, and it has to be: this script talks to a database over a URL and
+ * has no build step to import `EXAMPLE_TABLES` from. So a module that starts
+ * seeding a NEW table is invisible here until somebody adds it, and the
+ * report then says "TOTAL 0 example rows" while the rows are sitting there.
+ * That is what happened when `gratitude_voices` (0170) shipped: the economic
+ * checks below were still right, because they name their own tables, but the
+ * inventory above them under-reported by sixteen.
+ */
 const CONTENT_TABLES = [
   "users", "circles", "roles", "org_roles", "org_role_assignments", "quests",
   "forum_threads", "forum_replies", "tools",
@@ -39,6 +48,10 @@ const CONTENT_TABLES = [
   "payment_products", "badges", "regen_entries", "health_snapshots", "health_events",
   "recordings", "call_syntheses", "call_tasks", "shared_items", "peer_instances",
   "token_exchange_settings", "currency_prices",
+  // The Gratitude wall's anonymous voices. Display-only by construction: it
+  // holds a message and nothing else, which is why gratitude can carry
+  // examples at all when a gratitude_log row never could.
+  "gratitude_voices",
 ];
 
 console.log("EXAMPLE ROWS PER TABLE");
