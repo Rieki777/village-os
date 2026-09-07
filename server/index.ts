@@ -81,6 +81,7 @@ import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/q
 import { register as registerContentRoutes } from "./routes/content";
 import { register as registerNotificationRoutes } from "./routes/notifications";
 import { register as registerVoiceClaimRoutes } from "./routes/voiceClaims";
+import { register as registerCharacterRoutes } from "./routes/characters";
 import { register as registerHousingRoutes } from "./routes/housing";
 import { register as registerJourneyRoutes } from "./routes/journey";
 import { register as registerProfileRoutes } from "./routes/profile";
@@ -20489,6 +20490,9 @@ ${inner}
   // Voice claim routes extracted to server/routes/voiceClaims.ts
   registerVoiceClaimRoutes(app, { authedUser, getPool, villageId, recordEvent });
 
+  // Character routes extracted to server/routes/characters.ts
+  registerCharacterRoutes(app, { authedUser, getPool, villageId });
+
   /**
    * Somebody else's sheet.
    *
@@ -20527,45 +20531,8 @@ ${inner}
     res.json(await openPathsFor(getPool(), villageId(), req.params.key));
   });
 
-  app.get("/api/me/characters", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in first" });
-    res.json({ party: await partyFor(getPool(), villageId(), user.id, user.id) });
-  });
-
-  /**
-   * Walk a path, or change how a character you already play looks.
-   *
-   * Multi-class is the point, so this adds rather than replaces. Validation
-   * lives in the service: presentation and tone are closed sets and the
-   * archetype is checked against this village's own rows, because all three
-   * end up in an avatar filename.
-   */
-  app.post("/api/me/characters", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in first" });
-    const outcome = await addCharacter(getPool(), villageId(), user.id, req.body ?? {});
-    if (!outcome.ok) return res.status(outcome.status).json({ error: outcome.error });
-    res.json({ success: true, character: outcome.character });
-  });
-
-  /** Which character fronts the sheet. */
-  app.post("/api/me/characters/:id/primary", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in first" });
-    const ok = await setPrimary(getPool(), villageId(), user.id, req.params.id);
-    if (!ok) return res.status(404).json({ error: "Not one of your characters" });
-    res.json({ success: true, party: await partyFor(getPool(), villageId(), user.id, user.id) });
-  });
-
-  /** Leave a path. Removing the primary hands the crown on in the same breath. */
-  app.delete("/api/me/characters/:id", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in first" });
-    const removed = await removeCharacter(getPool(), villageId(), user.id, req.params.id);
-    if (!removed) return res.status(404).json({ error: "Not one of your characters" });
-    res.json({ success: true, party: await partyFor(getPool(), villageId(), user.id, user.id) });
-  });
+  // Character routes extracted to server/routes/characters.ts
+  registerCharacterRoutes(app, { authedUser, getPool, villageId });
 
   /**
    * The public wall: written appreciations only.
