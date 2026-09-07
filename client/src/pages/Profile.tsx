@@ -12,6 +12,11 @@ import MaturityLadder from "@/components/profile/MaturityLadder";
 import PowersMap from "@/components/profile/PowersMap";
 import PathsPanel, { type PathTile } from "@/components/profile/PathsPanel";
 import StandingRow from "@/components/profile/StandingRow";
+import PathFacts from "@/components/profile/PathFacts";
+import QuietSection from "@/components/profile/QuietSection";
+import { SHEET_SECTIONS } from "@/components/profile/sheetSections";
+import SurfacedBanner from "@/components/profile/SurfacedBanner";
+import { useSurfaced } from "@/components/profile/useSurfaced";
 import TheVessel from "@/components/profile/TheVessel";
 import MoonDock from "@/components/profile/MoonDock";
 import NightMotes from "@/components/profile/NightMotes";
@@ -23,6 +28,7 @@ import { useTokenName } from "@/hooks/useTokenNames";
 import { usePathLadders } from "@/hooks/usePathLadders";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
+import { onProfileRefresh } from "@/lib/profileRefresh";
 
 /**
  * THE CHARACTER SHEET.
@@ -119,6 +125,17 @@ export default function Profile() {
       .catch(() => setMeFailed(true));
   };
   useEffect(reloadMe, []);
+  /*
+   * ONE READ, AND IT RE-READS FOR EVERYBODY.
+   *
+   * GameDashboard kept its own /api/game/me and its own refresh listener, so
+   * the profile fetched that payload twice on every mount, and a give updated
+   * the two cards on two different round trips. The page owns the read now and
+   * hands it down, which halves the requests AND means the vessel and the
+   * dashboard can no longer disagree about a balance for the width of one
+   * fetch.
+   */
+  useEffect(() => onProfileRefresh(reloadMe), []);
 
   useEffect(() => {
     let live = true;
@@ -141,7 +158,7 @@ export default function Profile() {
    * ladder is drawn until there is one to draw. A member who walks no path
    * makes no request at all, and claiming a path re-reads.
    */
-  const ladders = usePathLadders(user?.paths ?? []);
+  const { ladders, particulars } = usePathLadders(user?.paths ?? []);
 
   /**
    * Take a path or let one go.
@@ -221,6 +238,25 @@ export default function Profile() {
    */
   const offerKnown = config !== null;
   const offeredPaths = config?.paths ?? [];
+
+  /*
+   * WHAT IS OPEN TO THIS MEMBER, in the sheet's own declared order, which is
+   * the order the surfacing queue meets them in.
+   *
+   * A path section counts as open the moment the path is walked. The bands that
+   * are always present are not candidates at all: "newly open" has to mean
+   * something a member did not have before, and a section every member has had
+   * since their first minute has never opened for anybody.
+   */
+  const openSections = SHEET_SECTIONS.filter(
+    (sec) => sec.band === "path" && sec.path && user.paths.includes(sec.path),
+  ).map((sec) => sec.id);
+  const surfaced = useSurfaced(openSections, offerKnown);
+  const surfacedSection = SHEET_SECTIONS.find((sec) => sec.id === surfaced.sectionId);
+  const surfacedLabel = surfacedSection?.path
+    ? (offeredPaths.find((p) => p.id === surfacedSection.path)?.label ?? "")
+    : "";
+
   const pathTiles: PathTile[] = [
     ...offeredPaths.map((p) => ({
       id: p.id,
@@ -328,48 +364,42 @@ export default function Profile() {
 
             <div className="space-y-8">
               {/* WHO YOU ARE HERE. */}
-              <PathsPanel
-                tiles={pathTiles}
-                claimedIds={user.paths}
-                offerKnown={offerKnown}
-                saving={savingPath}
-                error={pathError}
-                onToggle={togglePath}
-                ladders={ladders}
-              />
+              {/*
+                THE ONE PLACE THE FIXED ORDER BENDS, and it bends by a signpost
+                rather than by moving anything.
 
-              {/* HOW FAR YOU HAVE COME. Both halves wait for their payload:
-                  `config` carries the ladder with every rule already overlaid,
-                  and `prog` carries where this member stands on it. */}
-              {config && prog ? (
-                <MaturityLadder
-                  /*
-                    THE VESSEL SAYS THE ALLOWANCE SENTENCE NOW, SO THE LADDER
-                    MUST NOT. `showNext` was added with a default of true and
-                    then never passed, which meant the whole next-rung block,
-                    the allowance-multiplier line included, printed in both
-                    places. A member reading the same sentence twice on one
-                    page assumes they are two different facts. The prop existed
-                    for exactly this and was not used, which is worse than not
-                    having added it.
-                  */
-                  showNext={false}
-                  stages={config.stages}
-                  stageIndex={prog.stageIndex}
-                  consentedQuests={prog.consentedQuests}
+                A section that has just opened is named here for a visit or two
+                and then settles. The section itself never leaves its home: this
+                points DOWN at it. Rendering the section up here instead would
+                put the same thing on the page twice and leave a member unsure
+                whether they were looking at two things or one.
+              */}
+              {surfacedSection && surfacedLabel ? (
+                <SurfacedBanner
+                  title={surfacedLabel}
+                  because={surfacedSection.quiet.replace(/, once you walk.*$/, ".")}
+                  onGo={() => {
+                    surfaced.acknowledge(surfacedSection.id);
+                    /* Every surfaceable section today is a path section, and a
+                       path's content lives in PathsPanel, so that is the anchor.
+                       Falling back to the section's own id keeps this correct
+                       for whatever surfaces next without another edit here. */
+                    (document.getElementById(`sheet-${surfacedSection.id}`) ??
+                      document.getElementById("sheet-paths"))?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
                 />
               ) : null}
 
-              {/* WHAT YOU CAN DO RIGHT NOW. */}
-              {config && prog ? (
-                <PowersMap
-                  catalogue={prog.capabilityCatalogue ?? []}
-                  stages={config.stages}
-                  stageIndex={prog.stageIndex}
-                />
-              ) : null}
+              {/*
+                ABOUT YOU IS A DAY-ONE ACT, so it reads in the day-one band.
 
-              {/* About you */}
+                It was eleven sections down, below Powers and the whole record,
+                which put one of the two things a brand-new member can actually
+                DO on arrival past everything they cannot. Writing a bio and
+                choosing a character are the acts available before anything has
+                been earned; the character picker already sits in the hero, and
+                this belongs beside it.
+              */}
               <motion.section
                 aria-labelledby="bio-h"
                 initial={{ opacity: 0, y: 20 }}
@@ -458,18 +488,15 @@ export default function Profile() {
               </motion.section>
 
               {/*
-                GRATITUDE HELD.
+                THE VESSEL SITS IN THE "NOW" BAND, and a subject stays whole.
 
-                This card was `text-white` on a `--tone-sun` gradient. That
-                token is DERIVED to carry dark ink, so the pairing measured
-                between 1.48:1 and 2.25:1, and `index.css` documents two
-                earlier shipments of the same bug. It also had no heading
-                element at all, and its 48px number had no accessible name, so
-                a screen reader read a bare integer.
-
-                Rebuilt on the semantic pair, with a real heading and a
-                labelled figure. The amber survives as the icon only, which
-                carries no information and is hidden from the reader.
+                Giving is a day-one act: a member has a sending allowance from
+                the moment they arrive, before they have walked a path or
+                claimed a quest. The gratitude LEDGER inside this panel is empty
+                for months, and the gradient would put that low, but splitting a
+                subject to satisfy an ordering is how the six sections happened
+                in the first place. A subject sits at the height of its most
+                actionable part and its history rides inside it.
               */}
               {/*
                 THE VESSEL, WHERE SIX SECTIONS USED TO BE.
@@ -487,6 +514,74 @@ export default function Profile() {
                 failed={meFailed}
                 onGiven={reloadMe}
               />
+              {/*
+                THE ANCHOR THE SURFACED BANNER POINTS AT.
+
+                A walked path's ladder renders inside PathsPanel, so this is
+                where "take a look" lands. The banner names the path and this is
+                the thing it means; a second surface for a walked path would be
+                the duplicate the whole consolidation exists to avoid.
+              */}
+              <div id="sheet-paths" className="scroll-mt-6">
+              <PathsPanel
+                tiles={pathTiles}
+                claimedIds={user.paths}
+                offerKnown={offerKnown}
+                saving={savingPath}
+                error={pathError}
+                onToggle={togglePath}
+                ladders={ladders}
+              />
+              </div>
+
+              {/* HOW FAR YOU HAVE COME. Both halves wait for their payload:
+                  `config` carries the ladder with every rule already overlaid,
+                  and `prog` carries where this member stands on it. */}
+              {config && prog ? (
+                <MaturityLadder
+                  /*
+                    THE VESSEL SAYS THE ALLOWANCE SENTENCE NOW, SO THE LADDER
+                    MUST NOT. `showNext` was added with a default of true and
+                    then never passed, which meant the whole next-rung block,
+                    the allowance-multiplier line included, printed in both
+                    places. A member reading the same sentence twice on one
+                    page assumes they are two different facts. The prop existed
+                    for exactly this and was not used, which is worse than not
+                    having added it.
+                  */
+                  showNext={false}
+                  stages={config.stages}
+                  stageIndex={prog.stageIndex}
+                  consentedQuests={prog.consentedQuests}
+                />
+              ) : null}
+
+              {/* WHAT YOU CAN DO RIGHT NOW. */}
+              {config && prog ? (
+                <PowersMap
+                  catalogue={prog.capabilityCatalogue ?? []}
+                  stages={config.stages}
+                  stageIndex={prog.stageIndex}
+                  consentedQuests={prog.consentedQuests}
+                />
+              ) : null}
+
+              {/* About you */}
+
+              {/*
+                GRATITUDE HELD.
+
+                This card was `text-white` on a `--tone-sun` gradient. That
+                token is DERIVED to carry dark ink, so the pairing measured
+                between 1.48:1 and 2.25:1, and `index.css` documents two
+                earlier shipments of the same bug. It also had no heading
+                element at all, and its 48px number had no accessible name, so
+                a screen reader read a bare integer.
+
+                Rebuilt on the semantic pair, with a real heading and a
+                labelled figure. The amber survives as the icon only, which
+                carries no information and is hidden from the reader.
+              */}
 
               {/* Contributions */}
               <motion.section
@@ -564,6 +659,67 @@ export default function Profile() {
 
               {/* Standing, gratitude and this moon, from /api/me/profile */}
               <ProfileSheet />
+
+              {/*
+                THE PATH BAND: present, and not yet yours.
+
+                Each path opens its own section, and an UNWALKED path's section
+                is quiet rather than absent. Filtering was the first idea and it
+                breaks on the case this redesign exists for: a new member has no
+                paths, so a filtered sheet shows them nothing on the page they
+                land on straight after signing up.
+
+                Marked instead, a day-one member sees the whole map, quiet, and
+                every quiet line is an argument for claiming a path. That makes
+                the day-one act obvious without a tutorial, and it finally gives
+                `user.paths` an observable consequence: claiming one visibly
+                grows your sheet.
+
+                It expands IMMEDIATELY and costs no round trip, because
+                `updateProfile` writes the new user back into AuthContext, so
+                `user.paths` has already changed by the time the await returns.
+                The quiet line vanishes on that same render.
+
+                EACH PATH APPEARS ONCE, IN ONE OF TWO STATES. Unwalked, it is
+                a single quiet line naming what walking it would open. Walked,
+                it is that path's own PARTICULARS: the investor's dated facts,
+                a member's ventures, their reservations, their seatings.
+
+                The ladder is a different thing and stays where it is, inside
+                PathsPanel up in the "now" band. A ladder says WHERE somebody
+                stands on a path; this says WHAT the path holds. Reading the
+                second off the first is what was impossible before: `laddersFor`
+                narrows every row to the dated fields a rung needs and drops
+                the venture's name, so the profile could show that a venture had
+                been opened and never which one. Both projections now come off
+                the same fetch and the same four queries.
+              */}
+              {SHEET_SECTIONS.filter(
+                (sec) => sec.band === "path" && sec.path && user.paths.includes(sec.path),
+              ).map((sec) => (
+                <PathFacts
+                  key={sec.id}
+                  pathId={sec.path ?? ""}
+                  title={offeredPaths.find((p) => p.id === sec.path)?.label ?? sec.path ?? ""}
+                  particulars={particulars}
+                />
+              ))}
+
+              {SHEET_SECTIONS.filter(
+                (sec) => sec.band === "path" && sec.path && !user.paths.includes(sec.path),
+              ).map((sec) => {
+                const label = offeredPaths.find((p) => p.id === sec.path)?.label ?? sec.path ?? "";
+                return (
+                  <QuietSection
+                    key={sec.id}
+                    title={label}
+                    quiet={sec.quiet}
+                    action={`Walk the ${label} path`}
+                    busy={savingPath === sec.path}
+                    onAction={() => sec.path && void togglePath(sec.path)}
+                  />
+                );
+              })}
 
               {/* The member's own token balances. Target of /profile#wallet from
                   the account menu, and renders nothing when the exchange module

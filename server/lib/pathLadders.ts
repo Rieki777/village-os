@@ -58,6 +58,7 @@ import {
   type LadderPathId,
   type LadderRung,
   type PathLadder,
+  type PathParticulars,
   type RungDef,
 } from "../../shared/pathLadders";
 import type { VillageMoon } from "../../shared/villageMoon";
@@ -78,7 +79,11 @@ export const NO_MOONS: MoonOf = () => null;
 // invent them to call it.
 
 export interface SeatingFacts {
+  /** org_role_assignments.id. */
+  id?: string;
   orgRoleId: string;
+  /** org_roles.name, already joined for the flags below. */
+  roleName?: string;
   holderKind: string;
   seasonId: string | null;
   termEndsAt: Date | null;
@@ -438,3 +443,126 @@ export function laddersFor(
 }
 
 export type { LadderPathId };
+
+// ── THE PARTICULARS ─────────────────────────────────────────────────────────
+
+/**
+ * The same rows the ladders are derived from, read for what they SAY.
+ *
+ * `laddersFor` narrows every row to the two or three dated fields a rung needs
+ * and drops the rest, which is right for a position and leaves the profile
+ * unable to name a single thing a member actually did. Both projections run
+ * off ONE fetch: the repos already SELECT every column and the route already
+ * runs all four queries on every profile load, so this costs no query, no
+ * round trip and no route.
+ *
+ * SEEDED EXAMPLES ARE DROPPED. A demo row is there to show a village what the
+ * surface looks like, and printing one inside a member's own list would tell
+ * them they hold something they do not. The ladder plane already refuses to
+ * let an example lift a position; this refuses to let one appear at all.
+ */
+export interface InvestorParticularRow extends InvestorFacts {
+  id: string;
+  detail: string | null;
+  documentId: string | null;
+}
+
+export interface VentureParticularRow extends VentureFacts {
+  id: string;
+  name: string;
+  summary: string | null;
+  kind: string | null;
+  link: string | null;
+}
+
+export interface ReservationParticularRow extends ReservationFacts {
+  id: string;
+  homeType: string;
+  structureKey: string | null;
+}
+
+export interface ParticularRows {
+  seatings?: readonly SeatingFacts[];
+  reservations?: readonly ReservationParticularRow[];
+  investorFacts?: readonly InvestorParticularRow[];
+  ventures?: readonly VentureParticularRow[];
+}
+
+const notExample = (r: { isExample?: boolean }): boolean => r.isExample !== true;
+
+export function particularsFor(
+  paths: readonly string[],
+  rows: ParticularRows,
+  moonOf: MoonOf,
+): PathParticulars {
+  const walks = new Set(paths.map(String));
+  const out: PathParticulars = {};
+
+  if (walks.has("investor")) {
+    out.investor = {
+      facts: (rows.investorFacts ?? []).filter(notExample).map((f) => ({
+        id: f.id,
+        fact: f.fact,
+        detail: f.detail,
+        documentId: f.documentId,
+        live: f.endedAt == null,
+        startedMoon: moonOf(f.startedAt),
+        endedMoon: moonOf(f.endedAt),
+        endedReason: f.endedReason,
+      })),
+    };
+  }
+
+  if (walks.has("prosperity-creator")) {
+    out["prosperity-creator"] = {
+      ventures: (rows.ventures ?? []).filter(notExample).map((v) => ({
+        id: v.id,
+        name: v.name,
+        summary: v.summary,
+        kind: v.kind,
+        link: v.link,
+        live: v.closedAt == null,
+        listed: v.listedAt != null,
+        openedMoon: moonOf(v.openedAt),
+        listedMoon: moonOf(v.listedAt),
+        closedMoon: moonOf(v.closedAt),
+        closedReason: v.closedReason,
+      })),
+    };
+  }
+
+  if (walks.has("resident")) {
+    out.resident = {
+      // No example filter here, and that is the table's doing:
+      // `housing_reservations` carries no is_example column, so there is
+      // nothing to exclude and a filter would only imply otherwise.
+      reservations: (rows.reservations ?? []).map((r) => ({
+        id: r.id,
+        homeType: r.homeType,
+        structureKey: r.structureKey,
+        status: r.status,
+        madeMoon: moonOf(r.createdAt),
+      })),
+    };
+  }
+
+  if (walks.has("steward")) {
+    out.steward = {
+      // A seat on an EXAMPLE role is an example too, however real the
+      // assignment row looks: the seat it names is scaffolding.
+      seats: (rows.seatings ?? [])
+        .filter((s) => notExample(s) && !s.roleIsExample)
+        .map((s) => ({
+          id: s.id ?? s.orgRoleId,
+          roleName: s.roleName ?? s.orgRoleId,
+          live: s.endedAt == null,
+          representsCircle: s.roleRepresentsCircle,
+          startedMoon: moonOf(s.startedAt),
+          endedMoon: moonOf(s.endedAt),
+          endedReason: s.endedReason,
+        })),
+    };
+  }
+
+  return out;
+}
