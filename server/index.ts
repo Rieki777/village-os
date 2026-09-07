@@ -469,7 +469,7 @@ import {
 import { ensureInstanceIdentity, instanceIdentity, PLATFORM_VERSION } from "./lib/identity";
 import { listDrafts, measureVisionMetrics, visionProgress } from "./lib/orgDrafts";
 import { DECIDES_BY, DOMAINS, HOW_CHOSEN, SHAPES } from "../shared/power";
-import { displayCurrencyProblem } from "../shared/money";
+import { noteSeen, readSeen } from "./lib/sheetSeen"; import { displayCurrencyProblem } from "../shared/money";
 import { latestRates, refreshDailyRates } from "./lib/fxRates";
 import {
   coveredSeatIds,
@@ -17869,7 +17869,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   app.get("/api/profile/prefs", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
-    res.json({ notify: resolveNotifyPrefs(user.prefs) });
+    res.json({ notify: resolveNotifyPrefs(user.prefs), sheetSeen: readSeen(user.prefs) }); // which sections this member has already met; server/lib/sheetSeen.ts
   });
 
   app.put("/api/profile/prefs", async (req, res) => {
@@ -17885,7 +17885,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       ?? (await stewardMailRefusal(getPool(), user.id, incoming));
     if (bad) return res.status(400).json({ error: bad });
     const updated = await members.update(user.id, (u: any) => {
-      u.prefs = { ...(u.prefs ?? {}), notify: { ...(u.prefs?.notify ?? {}), ...incoming } };
+      u.prefs = { ...(u.prefs ?? {}), notify: { ...(u.prefs?.notify ?? {}), ...incoming } }; if (Array.isArray(req.body?.sawSections)) u.prefs.sheetSeen = noteSeen(readSeen(u.prefs), req.body.sawSections, req.body?.acknowledged === true);
       if (wantsCurrency) {
         const code = String(req.body.displayCurrency ?? "").trim().toUpperCase();
         if (code) u.prefs.displayCurrency = code;
@@ -17895,7 +17895,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (!updated) return res.status(404).json({ error: "User not found" });
     // Echo back the VALIDATED view, so a junk write reads back as defaults.
     res.json({
-      notify: resolveNotifyPrefs(updated.prefs),
+      notify: resolveNotifyPrefs(updated.prefs), sheetSeen: readSeen(updated.prefs),
       displayCurrency: updated.prefs?.displayCurrency ?? null,
     });
   });
