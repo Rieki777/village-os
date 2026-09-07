@@ -305,6 +305,25 @@ describe.skipIf(!configured)("a circle's treasury", () => {
     expect(again[0]!.movedMinor).toBe(0);
     expect(await conservation()).toBe(0);
 
+    /*
+     * SAME DAY, DIFFERENT BALANCE: a real second sweep, and the key has to let
+     * it through. Before the amount joined the key this posted nothing and the
+     * tokens stayed in the account, which is the stranding the whole file
+     * exists to prevent arriving through the idempotency key.
+     */
+    const sameDay = await fundTreasury(pool, {
+      circleId, circleName: "Sleepy", circleStatus: "active", tokenSlug: TOKEN,
+      amountMinor: 33, actorId: null, note: "same day", idempotencyKey: key("sameday"), permit: ALLOW,
+    });
+    expect(sameDay.ok, sameDay.error).toBe(true);
+    const sameDaySweep = await sweepDormantCircle(pool, {
+      circleId, budgets: [{ id: "bud-sleepy", unit: UNIT }],
+      tokenTypeFor: (u) => (u === UNIT ? TOKEN : null), at, actorId: null,
+    });
+    expect(sameDaySweep[0]!.movedMinor, "a different balance on the same day is not a duplicate").toBe(33);
+    expect((await treasuryHoldings(pool, circleId, TOKEN)).balanceMinor).toBe(0);
+    expect(await conservation()).toBe(0);
+
     // Revived, funded again, dormant again on a later day: a real second sweep.
     const refund = await fundTreasury(pool, {
       circleId, circleName: "Sleepy", circleStatus: "active", tokenSlug: TOKEN,

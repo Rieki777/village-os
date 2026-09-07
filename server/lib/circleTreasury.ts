@@ -225,7 +225,7 @@ export type TreasuryAction = "set_mode" | "fund" | "spend" | "return";
  *
  * Null means allowed. A string is the refusal a person reads, and it comes
  * from the permission model, so a lane that later replaces
- * `mayDeclareResources` with a badge check changes one function in one route
+ * the declare gate with a badge check changes `permitFor` in one route module
  * and nothing in this file moves.
  *
  * It is REQUIRED rather than optional. An optional permit is a default of
@@ -572,14 +572,29 @@ export interface DormancySweep {
  * this file, and the amount that left is written onto the budget row so a
  * steward reviving the circle can be told what it had.
  *
- * ── THE KEY IS THE CIRCLE AND THE INSTANT, NOT A RANDOM STRING ─────────────
+ * ── THE KEY, AND THE ONE COLLISION IT CANNOT TELL FROM A RETRY ─────────────
  *
  * A circle can go dormant, be revived, be funded again and go dormant again,
  * and each of those is a real sweep of a different balance. Keying on the
  * circle alone would make the second sweep a duplicate and silently leave the
- * tokens in the account. Keying on the DAY the sweep happens keeps a retried
- * status write idempotent, which is the case that actually repeats, while
- * leaving a genuine second dormancy free to post.
+ * tokens in the account, which is the stranding this whole file exists to
+ * prevent, arriving through the idempotency key.
+ *
+ * So the key carries the circle, the token, the DAY and the AMOUNT. A retried
+ * status write repeats all four and posts once, which is the case that
+ * actually happens. A second dormancy on a later day, or on the same day with
+ * a different balance, differs and posts.
+ *
+ * WHAT IS LEFT, STATED RATHER THAN HIDDEN: a circle that goes dormant, is
+ * revived, is funded to EXACTLY the same amount and goes dormant again ON THE
+ * SAME DAY writes one row and leaves the second balance in the account. That
+ * case is indistinguishable from a retry by anything the ledger records, and
+ * it is why `dormantHoldings` exists and is reported by name: the net catches
+ * what the key cannot.
+ *
+ * Width: 24 + 40 + 1 + 31 + 1 + 10 + 1 + 20 is 128 against the 160
+ * `token_ledger.idempotency_key` holds, so the circle id is clipped at 40 the
+ * way every other composite key here clips.
  *
  * ── A ZERO BALANCE IS NOT A FAILURE AND WRITES NO ROW ──────────────────────
  *
@@ -626,7 +641,8 @@ export async function sweepDormantCircle(
           destination === "master_treasury"
             ? "Circle went dormant: treasury returned to the village"
             : "Circle went dormant: treasury retired",
-        idempotencyKey: `circle_treasury:dormant:${input.circleId.slice(0, 40)}:${tokenSlug}:${day}`,
+        idempotencyKey:
+          `circle_treasury:dormant:${input.circleId.slice(0, 40)}:${tokenSlug}:${day}:${held.balanceMinor}`,
       });
       duplicate = !!r.duplicate;
       if (!r.ok) error = r.error;
