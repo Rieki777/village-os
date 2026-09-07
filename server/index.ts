@@ -82,6 +82,7 @@ import { register as registerContentRoutes } from "./routes/content";
 import { register as registerNotificationRoutes } from "./routes/notifications";
 import { register as registerVoiceClaimRoutes } from "./routes/voiceClaims";
 import { register as registerCharacterRoutes } from "./routes/characters";
+import { register as registerArchetypeRoutes } from "./routes/archetypes";
 import { register as registerHousingRoutes } from "./routes/housing";
 import { register as registerJourneyRoutes } from "./routes/journey";
 import { register as registerProfileRoutes } from "./routes/profile";
@@ -20463,10 +20464,8 @@ ${inner}
 
   registerCharacterPortraitRoutes(app, { authedUser, getPool, uploadsDir: UPLOADS_DIR });
 
-  /** The five classes, as this village names them. Public: it is the front door. */
-  app.get("/api/archetypes", async (_req, res) => {
-    res.json(await listArchetypes(getPool(), villageId()));
-  });
+  // Archetype routes extracted to server/routes/archetypes.ts
+  registerArchetypeRoutes(app, { getPool, villageId });
 
   // ── The Player Profile ────────────────────────────────────────────────────
 
@@ -20531,8 +20530,8 @@ ${inner}
     res.json(await openPathsFor(getPool(), villageId(), req.params.key));
   });
 
-  // Character routes extracted to server/routes/characters.ts
-  registerCharacterRoutes(app, { authedUser, getPool, villageId });
+  // Archetype routes extracted to server/routes/archetypes.ts
+  registerArchetypeRoutes(app, { getPool, villageId });
 
   /**
    * The public wall: written appreciations only.
