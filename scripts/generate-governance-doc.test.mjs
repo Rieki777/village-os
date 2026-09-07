@@ -31,6 +31,9 @@
  */
 import assert from "node:assert";
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
 import {
   KNOWN_DIALS,
   LINEAGE_SOURCES,
@@ -46,7 +49,9 @@ import {
   proseCoverageProblem,
   quorumSentence,
   renderLineage,
+  SOURCES,
   schemaFacts,
+  sourceFingerprint,
   subjectCoverageProblem,
 } from "./generate-governance-doc.mjs";
 import { checkSpan } from "./check-voice.mjs";
@@ -375,9 +380,66 @@ check("the real repository generates, and generates the same bytes twice", () =>
   assert.ok(once.endsWith("\n"), "a text file ends with a newline");
 });
 
-check("it names the commit whose sources it describes", () => {
+check("it names a FINGERPRINT of the sources, not a commit", () => {
+  /*
+   * It named a commit until the stamp change. A commit id can never converge in
+   * one pass: when the generator runs, the commit that will contain its output
+   * does not exist yet, so a change-and-regenerate always wrote the previous id
+   * and the guard went red on the commit that landed the document.
+   */
   const text = generate();
-  assert.ok(/It describes the code at commit `[0-9a-f]{40}`\./.test(text), "the commit line is how a reader checks everything else");
+  assert.ok(
+    /It describes the sources at fingerprint `[0-9a-f]{16}`, which regenerating reproduces\./.test(text),
+    "the fingerprint line is how a reader checks everything else",
+  );
+  assert.ok(!/at commit `[0-9a-f]{40}`/.test(text), "the commit stamp is gone, not sitting beside it");
+});
+
+check("the fingerprint moves with CONTENT and not with commits, CRLF included", () => {
+  /*
+   * THE WHOLE POINT, asserted in a THROWAWAY repository.
+   *
+   * The first version of this test committed and then `git reset --hard`-ed the
+   * REAL repository to prove a commit does not move the fingerprint. It proved
+   * it, and destroyed every uncommitted change in the working tree doing so,
+   * including the change under test. A self-test may read this repository and
+   * must never write to it: the blast radius of `--hard` is everything anybody
+   * happens to be holding, and a shared worktree means that is not only you.
+   */
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "govdoc-fp-"));
+  try {
+    const write = (rel, body) => {
+      fs.mkdirSync(path.join(dir, path.dirname(rel)), { recursive: true });
+      fs.writeFileSync(path.join(dir, rel), body);
+    };
+    for (const rel of SOURCES) {
+      if (rel.includes(".")) write(rel, "const x = 1;\n");
+      else fs.mkdirSync(path.join(dir, rel), { recursive: true });
+    }
+
+    const first = sourceFingerprint(dir);
+    assert.match(first, /^[0-9a-f]{16}$/, "a fingerprint is a short hex digest");
+
+    // A commit changes history and no source byte. The old stamp could not have
+    // passed this, which is the entire reason for the change.
+    execFileSync("git", ["init", "-q"], { cwd: dir });
+    execFileSync("git", ["add", "-A"], { cwd: dir });
+    execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "one"], { cwd: dir });
+    assert.strictEqual(sourceFingerprint(dir), first, "committing must not move it");
+
+    // CRLF must not move it either, or the document is red on every pull
+    // request between a Windows checkout and a Linux runner, for a reason no
+    // diff would show.
+    for (const rel of SOURCES) if (rel.includes(".")) write(rel, "const x = 1;\r\n");
+    assert.strictEqual(sourceFingerprint(dir), first, "line endings are the checkout, not the code");
+
+    // And a real content change MUST move it, without which every assertion
+    // above would pass against a function that returned a constant.
+    write(SOURCES.find((s) => s.includes(".")), "const x = 2;\n");
+    assert.notStrictEqual(sourceFingerprint(dir), first, "changed code must change the fingerprint");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 check("the constitution comes before the long tables", () => {
@@ -400,7 +462,7 @@ check("the document carries a machine-readable block that parses", () => {
   assert.ok(Array.isArray(parsed.dials) && parsed.dials.length > 0);
   assert.ok(Array.isArray(parsed.routes) && parsed.routes.length > 0);
   assert.ok(Array.isArray(parsed.rulings) && parsed.rulings.length === RULINGS.length);
-  assert.ok(/^[0-9a-f]{40}$/.test(parsed.commit));
+  assert.ok(/^[0-9a-f]{16}$/.test(parsed.commit));
   for (const s of parsed.subjects) {
     for (const field of ["subjectType", "minUnityPct", "minQuorumPct", "executesAtClose"]) {
       assert.ok(field in s, `every machine-readable subject needs ${field}`);
