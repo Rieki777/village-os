@@ -152,7 +152,24 @@ export interface Ballot {
     heldNow: { roleId: string; roleName: string | null; byBallot: boolean; movedAt: string } | null;
     crossedHere: { movedAt: string } | null;
   } | null;
-  myVote: { choice: VoteChoice; reason: string | null } | null;
+  /**
+   * MY OWN ROW, AS THE SERVER LETS ME READ IT (0175).
+   *
+   * `choice` is NULL while a vote is running and the village hides choices
+   * and somebody else decided this row: a delegated vote is cast, and what it
+   * said is not the delegator's to read before everybody else reads it.
+   * `sentence` is what the page shows in that state, and it arrives with the
+   * choice at the close.
+   */
+  myVote: {
+    choice: VoteChoice | null;
+    reason: string | null;
+    choiceHidden: boolean;
+    state: "cast_by_me" | "cast_following";
+    sentence: string;
+    followedUserId: string | null;
+    followedName: string | null;
+  } | null;
   /** Null means the viewer is outside this electorate. Zero means inside it,
    *  holding no weight, which is a different and much louder fact. */
   myWeight: number | null;
@@ -229,7 +246,24 @@ export interface BallotCard {
   unity: number;
   quorum: number;
   votedCount: number;
-  myVote: { choice: VoteChoice; reason: string | null } | null;
+  /**
+   * MY OWN ROW, AS THE SERVER LETS ME READ IT (0175).
+   *
+   * `choice` is NULL while a vote is running and the village hides choices
+   * and somebody else decided this row: a delegated vote is cast, and what it
+   * said is not the delegator's to read before everybody else reads it.
+   * `sentence` is what the page shows in that state, and it arrives with the
+   * choice at the close.
+   */
+  myVote: {
+    choice: VoteChoice | null;
+    reason: string | null;
+    choiceHidden: boolean;
+    state: "cast_by_me" | "cast_following";
+    sentence: string;
+    followedUserId: string | null;
+    followedName: string | null;
+  } | null;
   myWeight: number | null;
 }
 

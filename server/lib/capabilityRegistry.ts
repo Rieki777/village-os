@@ -220,6 +220,16 @@ export const POWERS: readonly PowerEntry[] = [
     ],
   },
   {
+    capability: "steward.veto",
+    title: "The veto on a carried decision",
+    surface: "Stopping what the village carried, inside the window, and saying why",
+    routes: [
+      "/api/governance/ballots/:id/veto",
+      "/api/governance/ballots/:id/no-objection",
+      "/api/governance/vetoes/:id/redact",
+    ],
+  },
+  {
     capability: "ballot.vote",
     title: "The vote itself",
     surface: "Who is on the roll when this village holds a ballot",

@@ -31,6 +31,15 @@ it when a moon closes. It is generated from the migrations and the server
 source, and a build step fails when it and the code have come apart, so it is
 safe to trust rather than a snapshot of what was true once.
 
+## Understanding governance
+
+Read **`docs/GOVERNANCE.md`**. It says what a decision is, how a vote is
+counted, what each kind of decision asks of the village, what happens when one
+carries, and which of the founder's rulings are built today. It is generated
+from the engine and the route registrations, and a build step fails when it and
+the code have come apart, so it is safe to trust. It names what is broken as
+well as what works.
+
 ## Building or changing the platform
 
 Start with **`CLAUDE.md`** at the repository root, then

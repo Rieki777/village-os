@@ -122,6 +122,50 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} advisory votes closed.",
     celebrate: false,
   },
+  // The steward's one act. It does not celebrate: a village that carried
+  // something already had its moment, and this is the last word on it rather
+  // than a second one. There is no approval kind beside it, because nothing
+  // waits for a steward: a carried decision lands on its own, and the seat can
+  // only stop it inside the window before it does.
+  ballot_vetoed: {
+    group: "decisions",
+    blurb: "A steward stopped a decision the village carried, inside its window, and said why.",
+    many: "{n} decisions were stopped, each with a reason.",
+    celebrate: false,
+  },
+  /*
+   * THE THREE WINDOW NOTICES, and they are three types rather than one for a
+   * reason that is entirely about the mail.
+   *
+   * Every governance type resolves to the governance email preference, which
+   * defaults to DAILY. A daily digest is right for a ballot opening: its
+   * window is measured in days. It is wrong for these: the last one is sent
+   * two hours before a change the village carried takes effect, so a digest
+   * tomorrow arrives after the door it names has shut. Their own types let
+   * `emailCadenceFor` pin all three to "immediate" without making every other
+   * governance notice immediate with them.
+   *
+   * They go to the seated stewards and to nobody else, and none of them
+   * celebrates: a countdown is not a moment.
+   */
+  veto_window_opened: {
+    group: "decisions",
+    blurb: "The village carried a decision and your window to stop it is open. The page names the instant it lands.",
+    many: "{n} carried decisions are inside their window.",
+    celebrate: false,
+  },
+  veto_window_halfway: {
+    group: "decisions",
+    blurb: "Half of your window to stop a carried decision has gone. It lands at its instant unless somebody stops it.",
+    many: "{n} windows are half gone.",
+    celebrate: false,
+  },
+  veto_window_closing: {
+    group: "decisions",
+    blurb: "Two hours left to stop a carried decision. After that it lands and the door is closed.",
+    many: "{n} windows close within two hours.",
+    celebrate: false,
+  },
   ballot_expired: {
     group: "decisions",
     blurb: "A voting window ran out with nobody closing it. Closing is a human act, so the ballot waits for one.",
@@ -153,9 +197,15 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} seats came to you.",
     celebrate: false,
   },
+  season: {
+    group: "decisions",
+    blurb: "No season is running, so the calendar every term is measured against has stopped. Every mandate in the village hangs on it, the steward's seat included, so it says so until somebody starts the next one.",
+    many: "The calendar has been stopped for {n} sweeps.",
+    celebrate: false,
+  },
   term_expiring: {
     group: "decisions",
-    blurb: "The agreement to keep holding your seat is running out. Nothing was taken away; it is a moment to renew or hand it on.",
+    blurb: "The agreement to keep holding your seat is running out. On a seat that carries permissions those end with the term (0171), so it is the moment to renew or hand it on.",
     many: "{n} of your terms are running out.",
     celebrate: false,
   },

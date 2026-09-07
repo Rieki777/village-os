@@ -22,12 +22,14 @@ import fs from "node:fs";
 import path from "node:path";
 import mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { subjectRefFor } from "./subjectRefs";
 import {
   EXTERNAL_PROPOSAL_KINDS,
   landProposal,
   proposalQueue,
   proposalsInBatch,
   recentDrops,
+  reresolveSubjects,
   forgetMemberInProposals,
   proposalsAboutMember,
   unattributedSubjectCount,
@@ -217,7 +219,8 @@ describe.skipIf(!configured)("a record about more than one person", () => {
   it("resolves a reference that names a member of this village, and admits when it cannot", async () => {
     await pool.query("INSERT INTO users (id, name, email, password_hash) VALUES (?,?,?,?)", // module-review-ok: seeding the scratch schema this suite provisioned
       ["u-sub-1", "Ada", "ada@example.invalid", "x"]);
-    await land(["u-sub-1", "saberra-opaque-999"]);
+    const ref = await subjectRefFor(pool, "u-sub-1");
+    await land([ref, "saberra-opaque-999"]);
     const [rows] = await pool.query<any[]>(
       "SELECT subject_ref, member_id FROM external_proposal_subjects ORDER BY position",
     );
@@ -233,7 +236,8 @@ describe.skipIf(!configured)("a record about more than one person", () => {
       await pool.query("INSERT INTO users (id, name, email, password_hash) VALUES (?,?,?,?)", // module-review-ok: seeding the scratch schema this suite provisioned
         [id, id, `${id}@example.invalid`, "x"]);
     }
-    await land(["u-sub-1", "u-sub-2"]);
+    const refs = [await subjectRefFor(pool, "u-sub-1"), await subjectRefFor(pool, "u-sub-2")];
+    await land(refs);
     // The defect this replaces: only the first was findable.
     expect(await proposalsAboutMember(pool, "u-sub-1")).toHaveLength(1);
     expect(await proposalsAboutMember(pool, "u-sub-2")).toHaveLength(1);
@@ -244,7 +248,7 @@ describe.skipIf(!configured)("a record about more than one person", () => {
       await pool.query("INSERT INTO users (id, name, email, password_hash) VALUES (?,?,?,?)", // module-review-ok: seeding the scratch schema this suite provisioned
         [id, id, `${id}@example.invalid`, "x"]);
     }
-    await land(["u-sub-1", "u-sub-2"]);
+    await land([await subjectRefFor(pool, "u-sub-1"), await subjectRefFor(pool, "u-sub-2")]);
     const done = await forgetMemberInProposals(pool, "u-sub-1");
     expect(done).toEqual({ records: 1, quotesCleared: 1 });
     expect(await proposalsAboutMember(pool, "u-sub-1")).toHaveLength(0);
@@ -259,5 +263,39 @@ describe.skipIf(!configured)("a record about more than one person", () => {
     const out = await land(["person-a", "ada@example.org"]);
     expect(out.ok).toBe(false);
     expect(await pool.query("SELECT 1 FROM external_proposals").then(([r]: any) => r.length)).toBe(0); // module-review-ok: the suite reading back the scratch schema it provisioned
+  });
+  it("re-resolves what it now can, counts it, and never clears an attribution", async () => {
+    // The cohort Rye ruled on: rows that landed before the reference scheme
+    // existed carry a NULL that was true at the time. Filling it in is an
+    // explicit action with a number, never a silent migration.
+    await pool.query("INSERT INTO users (id, name, email, password_hash) VALUES (?,?,?,?)", // module-review-ok: seeding the scratch schema this suite provisioned
+      ["u-sub-9", "Later", "later@example.invalid", "x"]);
+    const ref = await subjectRefFor(pool, "u-sub-9");
+
+    // Land it while the row cannot be attributed, by writing the subject row
+    // the way a pre-scheme import would have: reference kept, member unknown.
+    await land(["saberra-opaque-1"]);
+    await pool.query("UPDATE external_proposal_subjects SET subject_ref = ?, member_id = NULL", [ref]); // module-review-ok: staging the pre-scheme state this action exists to repair
+    expect(await unattributedSubjectCount(pool)).toBe(1);
+
+    // The "before" number writes nothing.
+    const dry = await reresolveSubjects(pool, { apply: false });
+    expect(dry).toMatchObject({ resolvable: 1, updated: 0 });
+    expect(await unattributedSubjectCount(pool)).toBe(1);
+
+    const done = await reresolveSubjects(pool, { apply: true });
+    expect(done).toMatchObject({ resolvable: 1, updated: 1 });
+    expect(await unattributedSubjectCount(pool)).toBe(0);
+    expect(await proposalsAboutMember(pool, "u-sub-9")).toHaveLength(1);
+  });
+
+  it("leaves a reference that resolves to nobody exactly as it is", async () => {
+    // An erased member has had their reference retired, so it resolves to
+    // nobody. Re-running must not touch that row: rewriting it to NULL would
+    // say the same thing while destroying the evidence it once resolved.
+    await land(["saberra-opaque-unknown"]);
+    const before = await reresolveSubjects(pool, { apply: true });
+    expect(before).toMatchObject({ resolvable: 0, updated: 0 });
+    expect(await unattributedSubjectCount(pool)).toBe(1);
   });
 });

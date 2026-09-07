@@ -163,11 +163,18 @@ const publicPulse = async (): Promise<string[]> => {
 };
 
 /**
- * Everybody says yes, the clock runs out, and a MEMBER closes it.
+ * Everybody says yes, the clock runs out, a MEMBER closes it, AND IT LANDS.
  *
  * The closer is Wren throughout this file and never the founder, because a
  * chain with an admin closing the ballot is a chain with an admin in it. A
  * ballot closes by a human act and this is the human.
+ *
+ * THE LANDING STEP IS NEW. Giving a role a power, moving one and handing one
+ * back all change the Game, so since 2026-09-03 the close stamps a landing
+ * instant on the decision rather than writing the change there and then, and
+ * a steward may stop it until that instant. Nothing in this file is about the
+ * window, so the fixture runs the clock out and calls the landing path, which
+ * is what the five-minute job does on its own in a running village.
  */
 async function carry(ballotId: string, outcomeNote: string): Promise<Answer> {
   for (const t of [founderToken, wrenToken, idaToken, ottoToken]) {
@@ -175,10 +182,22 @@ async function carry(ballotId: string, outcomeNote: string): Promise<Answer> {
     expect(r.status, JSON.stringify(r.json)).toBe(200);
   }
   await expire(ballotId);
-  return await call("POST", `/api/governance/ballots/${ballotId}/close`, {
+  const closed = await call("POST", `/api/governance/ballots/${ballotId}/close`, {
     token: wrenToken,
     body: { outcomeNote },
   });
+  await land(ballotId);
+  return closed;
+}
+
+/** The window runs out with nobody stopping it, and the landing path runs. */
+async function land(ballotId: string): Promise<void> {
+  await pool.query( // module-review-ok: fixture SQL against the suite's own scratch schema, never a production table
+    "UPDATE ballots SET lands_at = DATE_SUB(NOW(), INTERVAL 1 HOUR), veto_closes_at = DATE_SUB(NOW(), INTERVAL 1 HOUR) " +
+      "WHERE id = ? AND lands_at IS NOT NULL",
+    [ballotId],
+  );
+  await call("POST", "/api/admin/cycles/close", { body: {} });
 }
 
 beforeAll(async () => {
@@ -572,8 +591,14 @@ describe.skipIf(!DB_CONFIGURED)("STEP ONE: the village gives a role a power, wit
     const closed = await carry(grantId, "The stewards keep the library from today.");
     expect(closed.status, JSON.stringify(closed.json)).toBe(200);
     expect(closed.json?.outcome).toBe("passed");
-    expect(closed.json?.applied).toEqual(["library.keep"]);
-    expect(closed.json?.held).toBeNull();
+    /*
+     * THE CLOSE STAMPS, AND THE LANDING WRITES. A power crossing changes the
+     * Game, so since 2026-09-03 the close reports nothing applied and says
+     * when the decision lands instead. `carry` runs that window out and calls
+     * the landing path, so every read below is a read of the landed world.
+     */
+    expect(closed.json?.applied).toEqual([]);
+    expect(String(closed.json?.held)).toContain("lands at");
 
     // THE ROLES TABLE, read raw. The village wrote a permission table.
     expect(await roleCapabilities("steward-circle")).toContain("library.keep");
@@ -635,7 +660,14 @@ describe.skipIf(!DB_CONFIGURED)("STEP TWO: the village takes the power on, still
   it("IT CARRIES, AND THE POWER CROSSES: one row, naming the ballot that moved it", async () => {
     const closed = await carry(transferId, "The village keeps its own library from today.");
     expect(closed.status, JSON.stringify(closed.json)).toBe(200);
-    expect(closed.json?.applied).toEqual(["library.keep"]);
+    /*
+     * THE CLOSE STAMPS, AND THE LANDING WRITES. A power crossing changes the
+     * Game, so since 2026-09-03 the close reports nothing applied and says
+     * when the decision lands instead. `carry` runs that window out and calls
+     * the landing path, so every read below is a read of the landed world.
+     */
+    expect(closed.json?.applied).toEqual([]);
+    expect(String(closed.json?.held)).toContain("lands at");
 
     const rows = await holdingRows();
     expect(rows).toHaveLength(1);
@@ -753,8 +785,14 @@ describe.skipIf(!DB_CONFIGURED)("STEP THREE: the village hands it back, still wi
     const closed = await carry(returnId, "The village hands the library back for now.");
     expect(closed.status, JSON.stringify(closed.json)).toBe(200);
     expect(closed.json?.outcome).toBe("passed");
-    expect(closed.json?.applied).toEqual(["library.keep"]);
-    expect(closed.json?.held).toBeNull();
+    /*
+     * THE CLOSE STAMPS, AND THE LANDING WRITES. A power crossing changes the
+     * Game, so since 2026-09-03 the close reports nothing applied and says
+     * when the decision lands instead. `carry` runs that window out and calls
+     * the landing path, so every read below is a read of the landed world.
+     */
+    expect(closed.json?.applied).toEqual([]);
+    expect(String(closed.json?.held)).toContain("lands at");
 
     // THE HOLDING IS GONE.
     expect(await holdingRows()).toEqual([]);

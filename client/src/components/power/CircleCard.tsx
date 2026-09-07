@@ -46,16 +46,35 @@ export default function CircleCard({
   const places = seats.reduce((n, s) => n + s.seats, 0);
   const open = Math.max(0, places - held);
 
-  // The domain, from the seats that carry one. Distinct, in the order the
-  // seats come in, so it reads the same on every load.
+  /*
+   * THE DOMAIN, SUMMARISED, BECAUSE THE RAW FIELD IS AN ESSAY.
+   *
+   * A circle has no domain column, so this derives one from the domains its
+   * seats carry. The first version joined them whole with a separator, and
+   * live on Amora's Community Circle that produced a SIX HUNDRED character
+   * run-on in a 320px panel: four seats, each with a paragraph, glued into
+   * one unreadable block. Correct data, useless surface.
+   *
+   * A reader is asking one question here: does this circle decide about the
+   * thing I came with. That is answered by the FIRST SENTENCE of each seat's
+   * domain, which is where these are written to say what they cover. The
+   * full text is one tap away on the seat itself, which is where somebody
+   * who needs the detail is going anyway.
+   */
   const domains = useMemo(() => {
     const out: string[] = [];
     for (const s of seats) {
-      const d = (s.domain ?? "").trim();
-      if (d && !out.includes(d)) out.push(d);
+      const raw = (s.domain ?? "").trim();
+      if (!raw) continue;
+      // First sentence, or a clean clip if the first sentence is itself long.
+      const firstStop = raw.search(/[.;]\s/);
+      let head = firstStop > 0 ? raw.slice(0, firstStop) : raw;
+      if (head.length > 88) head = `${head.slice(0, 85).trimEnd()}…`;
+      if (head && !out.some((o) => o.toLowerCase() === head.toLowerCase())) out.push(head);
     }
     return out;
   }, [seats]);
+  const DOMAIN_CAP = 4;
 
   // The double link, named. `representsCircle` marks the seat that speaks
   // for this circle where it joins the one above.
@@ -102,7 +121,18 @@ export default function CircleCard({
             <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">
               Decides on
             </dt>
-            <dd className="text-sm text-foreground">{domains.join(" · ")}</dd>
+            <dd className="text-sm text-foreground">
+              <ul className="list-disc pl-4 space-y-0.5">
+                {domains.slice(0, DOMAIN_CAP).map((d, i) => (
+                  <li key={`${d}-${i}`}>{d}</li>
+                ))}
+              </ul>
+              {domains.length > DOMAIN_CAP && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  and {domains.length - DOMAIN_CAP} more, on the seats below.
+                </p>
+              )}
+            </dd>
           </div>
         )}
         {method && (

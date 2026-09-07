@@ -119,6 +119,24 @@ const expire = async (ballotId: string) => {
   await pool.query("UPDATE ballots SET closes_at = DATE_SUB(NOW(), INTERVAL 1 HOUR) WHERE id = ?", [ballotId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
 };
 
+/**
+ * The window runs out with nobody stopping it, and the landing path runs.
+ *
+ * A power crossing changes the Game, so since 2026-09-03 the close stamps a
+ * landing instant on the decision rather than moving the power there and then,
+ * and a steward may stop it until that instant. Nothing in this file is about
+ * the window, so the fixture runs it out and calls the landing path, which is
+ * what the five-minute job does on its own in a running village.
+ */
+const land = async (ballotId: string) => {
+  await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    "UPDATE ballots SET lands_at = DATE_SUB(NOW(), INTERVAL 1 HOUR), veto_closes_at = DATE_SUB(NOW(), INTERVAL 1 HOUR) " +
+      "WHERE id = ? AND lands_at IS NOT NULL",
+    [ballotId],
+  );
+  await call("POST", "/api/admin/cycles/close", { body: {} });
+};
+
 /** The holding table exactly as it stands. The permanent row, read raw. */
 const holdingRows = async (): Promise<Array<{ capability: string; role: string; ballot: string | null; movedAt: string }>> => {
   const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
@@ -496,8 +514,10 @@ describe.skipIf(!DB_CONFIGURED)("the crossing, end to end", () => {
     });
     expect(closed.status, JSON.stringify(closed.json)).toBe(200);
     expect(closed.json?.outcome).toBe("passed");
-    expect(closed.json?.applied).toEqual(["event.manage"]);
-    expect(closed.json?.held).toBeNull();
+    // The close STAMPS and writes nothing; the landing path writes.
+    expect(closed.json?.applied).toEqual([]);
+    expect(String(closed.json?.held)).toContain("lands at");
+    await land(transferId);
 
     // THE PERMANENT ROW. Exactly one, naming the ballot that moved it.
     const rows = await holdingRows();

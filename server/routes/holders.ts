@@ -39,8 +39,9 @@
  * somebody who never signed up.
  */
 import type { Express } from "express";
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool } from "mysql2/promise";
 import type { AppDeps } from "../lib/appDeps";
+import { liveSeatings, type SeatingRow } from "../repos/seatHoldings";
 import { subjectRefsFor } from "../lib/subjectRefs";
 
 type Deps = Pick<AppDeps, "guardCapability" | "getPool">;
@@ -63,35 +64,37 @@ function iso(v: unknown): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-function kindOf(row: RowDataPacket): HolderKind {
-  if (Number(row.is_agent) === 1) return "agent";
-  return String(row.holder_kind) === "member" ? "member" : "documented";
+/**
+ * "Agent" is this document's word and not the table's, which is why the
+ * decision is made here rather than in the read: the row carries `holder_kind`
+ * and `is_agent` as two independent columns, and a seat held by software is
+ * reported as one kind because that is the distinction a reader of THIS
+ * document needs. The read stays the table's shape; the naming stays ours.
+ */
+function kindOf(row: SeatingRow): HolderKind {
+  if (row.isAgent) return "agent";
+  return row.holderKind === "member" ? "member" : "documented";
 }
 
 export async function liveHoldings(pool: Pool): Promise<SeatHolding[]> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT `org_role_id`, `user_id`, `holder_kind`, `is_agent`, `started_at`, `term_ends_at` " +
-      "FROM `org_role_assignments` " +
-      "WHERE `ended_at` IS NULL AND `is_example` = 0 " +
-      "ORDER BY `org_role_id` ASC, `started_at` ASC",
-  );
+  const rows = await liveSeatings(pool);
 
   // Members only. A documented holder has no account, so asking for a reference
   // would issue one against a null id.
   const memberIds = rows
-    .filter((r) => kindOf(r) === "member" && typeof r.user_id === "string" && r.user_id !== "")
-    .map((r) => String(r.user_id));
+    .filter((r) => kindOf(r) === "member" && r.userId !== null && r.userId !== "")
+    .map((r) => String(r.userId));
   const refs = await subjectRefsFor(pool, memberIds);
 
   return rows.map((r) => {
     const holder = kindOf(r);
-    const userId = typeof r.user_id === "string" ? r.user_id : null;
+    const userId = r.userId;
     return {
-      orgRoleId: String(r.org_role_id),
+      orgRoleId: r.orgRoleId,
       holder,
       subjectRef: holder === "member" && userId ? (refs.get(userId) ?? null) : null,
-      since: iso(r.started_at),
-      termEndsAt: iso(r.term_ends_at),
+      since: iso(r.startedAt),
+      termEndsAt: iso(r.termEndsAt),
     };
   });
 }

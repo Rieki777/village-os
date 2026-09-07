@@ -423,52 +423,48 @@ describe.skipIf(!DB_CONFIGURED)("voice is not the platform's to sell", () => {
   });
 });
 
-describe.skipIf(!DB_CONFIGURED)("a token money can buy does not weigh a vote", () => {
-  it("refuses to open any ballot once the weight token is one that is on sale", async () => {
-    // fen-credit is listed and stocked by the case above. Pointing the weight
-    // at it is a founder dial and two clicks; from that moment a card payment
-    // would be voting weight.
-    expect((await call("PUT", "/api/admin/variables/governance.weight_token", {
-      body: { value: "fen-credit" },
-    })).status).toBe(200);
-    expect((await call("PUT", "/api/admin/variables/governance.weight_mode", {
+describe.skipIf(!DB_CONFIGURED)("after the Birthing, what weighs a vote is the village's", () => {
+  /*
+   * REWRITTEN BY THE DISPATCHER LANE.
+   *
+   * Three cases used to live here, and all three began by flipping
+   * `governance.weight_mode` and `governance.weight_token` from the admin panel
+   * after the Game had started. The 2026-09-03 model closes that door: what one
+   * vote MEANS is the village's own decision from the Birthing on, and its one
+   * remaining route is a `governance_mode` ballot that lands at an instant a
+   * steward can stop it inside.
+   *
+   * The rule those cases proved (a token money can buy cannot weigh a vote) is
+   * NOT lost. It is pinned where it lives, in `server/lib/exchange.test.ts`,
+   * against `weightTokenProblem` and `weightTokenListingProblem` directly, and
+   * the change-set executor now runs the same refusal before it will switch a
+   * village into token mode (`server/lib/changeset.test.ts`). What is proved
+   * here is the door itself.
+   */
+  it("refuses the admin flip of the vote mode and names the vote instead", async () => {
+    const refused = await call("PUT", "/api/admin/variables/governance.weight_mode", {
       body: { value: "token" },
-    })).status).toBe(200);
-
-    const asked = await call("POST", "/api/governance/advisory", {
-      body: {
-        question: "Should the village plant the north field with alder this winter?",
-        detail: "Practising the question before it matters.",
-      },
     });
-    expect(asked.status, JSON.stringify(asked.json)).toBe(409);
-    expect(String(asked.json?.error)).toContain("A token money can buy is not what weighs a vote");
+    expect(refused.status, JSON.stringify(refused.json)).toBe(409);
+    expect(String(refused.json?.error)).toContain("the village's to decide");
+
+    // Refused means nothing was written. A 409 that had already flipped the
+    // mode would be the worst of both.
+    const now = await call("GET", "/api/admin/variables");
+    const mode = (now.json?.variables ?? []).find((v: any) => v.key === "governance.weight_mode");
+    expect(String(mode?.value ?? mode?.default)).not.toBe("token");
   });
 
-  it("refuses to LIST the weight token from the other side, in the same breath", async () => {
-    // The first case delisting would fix; this one is the door that would
-    // otherwise be walked through in the opposite direction.
-    expect((await call("PUT", "/api/admin/exchange/tokens/fen-credit", {
-      body: { purchasable: false, swappable: false },
-    })).status).toBe(200);
-    const relist = await call("PUT", "/api/admin/exchange/tokens/fen-credit", {
-      body: { purchasable: true },
+  it("refuses the admin weight-allocation writes too, and points at the proposal", async () => {
+    const one = await call("PUT", `/api/admin/governance/weights/${wrenId}`, {
+      body: { weight: 99, note: "Trying it from the panel." },
     });
-    expect(relist.status, JSON.stringify(relist.json)).toBe(409);
-    expect(String(relist.json?.error)).toContain("voting weight on sale");
-  });
+    expect(one.status, JSON.stringify(one.json)).toBe(409);
+    expect(String(one.json?.proposeInstead)).toBe("weight_allocation");
 
-  it("opens the same vote once the weight is somewhere money cannot reach", async () => {
-    // Gratitude: the shipped default, recognition, and never for sale.
-    expect((await call("PUT", "/api/admin/variables/governance.weight_token", {
-      body: { value: "gratitude" },
-    })).status).toBe(200);
-    const asked = await call("POST", "/api/governance/advisory", {
-      body: {
-        question: "Should the village plant the north field with alder this winter?",
-        detail: "Practising the question before it matters.",
-      },
+    const bulk = await call("POST", "/api/admin/governance/weights/bulk", {
+      body: { note: "All of us at once.", changes: [{ userId: wrenId, weight: 5 }] },
     });
-    expect(asked.status, JSON.stringify(asked.json)).toBe(200);
+    expect(bulk.status).toBe(409);
   });
 });

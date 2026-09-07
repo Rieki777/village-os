@@ -193,7 +193,7 @@ const rel = (p) => path.relative(ROOT, p).split(path.sep).join("/");
  * point: the list cannot grow by accident, only by a deliberate edit that
  * shows up in a diff next to this comment.
  */
-export const PENDING_CEILING = 25;
+export const PENDING_CEILING = 24;
 
 // ── Scope ───────────────────────────────────────────────────────────────────
 

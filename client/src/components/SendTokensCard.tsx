@@ -172,7 +172,7 @@ export default function SendTokensCard() {
           <p className="text-xs text-muted-foreground">You hold {formatTokenAmount(held, decimalsOf(tokenDecimals, form.tokenType))}.</p>
           <button
             type="submit" disabled={busy || !form.toEmail || !form.amount}
-            className="bg-teal-deep text-white text-sm font-medium rounded-lg px-4 py-2 disabled:opacity-50"
+            className="border border-notice/70 bg-teal-deep text-white text-sm font-medium rounded-lg px-4 py-2 disabled:opacity-50"
           >
             {busy ? "Sending…" : "Send"}
           </button>

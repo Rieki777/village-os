@@ -2888,6 +2888,40 @@ to main's copy and lower from there**: `--update-baseline` REFUSES, because from
 correct value is a raise. Never clear a red baseline with `--update-baseline` — the gate is red
 about committed work, not about your change.
 
+**THERE IS A SEVENTH RATCHET AND IT IS NOT IN `scripts/`, WHICH IS WHY NOBODY CLAIMS IT.**
+`scripts/module-sql-pending.json` is a per-file debt register of raw SQL call sites outside
+`server/repos`, and its own header says it "only ever shrinks". That is a ratchet by any other name,
+it currently stands at 762 across dozens of files, and it is contended exactly like the six above.
+
+**It is enforced by a gate `module-facts.mjs` cannot see.** `scripts/sql-burndown.mjs` runs from
+`scripts/validate-module.mjs`, which is invoked by `.github/workflows/module-intake.yml` and NOT by
+`ci.yml`. So the script this section tells you to trust for the gate list is blind to it, exactly as
+27d warns, and the consequence is concrete rather than theoretical: a whole ratchet that no lane
+knows to claim, because the tool everyone uses to enumerate gates reads one workflow of five.
+
+**AND THE GATE IS PATH-FILTERED, so it does not run when its own guard changes.**
+`module-intake.yml` fires on seven paths: three files in `shared/`, two in `server/lib/`,
+`scripts/enable-all-modules.mjs` and `docs/modules/**`. Neither `scripts/sql-burndown.mjs` nor
+`scripts/module-sql-pending.json` is among them. So the pull request that FIXED the burn-down guard
+did not run intake at all, while a pull request editing one module doc did, and was handed six files
+of somebody else's debt. **The gate is blind to changes to itself and fires on the population least
+likely to have caused the problem.** Both halves were measured on real runs, not reasoned about.
+
+The fix is not to widen the trigger, and the lane that owns it worked out why before doing it: adding
+the guard's own files to intake's paths makes intake run on the pull request that fixes intake, which
+then fails on the debt that pull request deliberately did not touch. **Pay the debt, then widen, and
+widen as a REPORT before a gate.** The same ordering as everything else in this section.
+
+**And the trap in it armed itself while somebody was FIXING it, which is the sharpest version of
+this shape anyone has produced.** The guard compared GRAND TOTALS while the register is PER FILE, so
+a fall in one file silently blessed growth in others. The lane fixing it waived one genuine false
+positive, which took the tree to exactly 762, equal to the register, and the old code then wrote the
+whole scan while printing "register lowered to 762". **The thing that spends the margin is not
+carelessness, it is somebody doing the right thing.** A guard whose failure mode is triggered by
+correct work will not be caught by being careful. Fixed by refusing per file BEFORE the total, and
+pinned by a test that builds the hole exactly: one file falling six to one paying for another
+growing three to four, so the total falls while a file grows.
+
 **Some of those ratchets are PER FILE, and that is the half that bites an extraction.** Moving code
 out of a file carrying a grandfathered allowance into a file that has none turns settled lines into
 new violations with nobody having written a new one. `check-tailwind-gray` took a lane red on two
@@ -2959,6 +2993,8 @@ Both look like intentional work and neither is.
 | 2026-09-04 | governance (`b7f9ef`) | migration `0144`, `drizzle/0144_the_landing_loop_names_its_own_rows.sql` | `wt/governance-build` | HELD — confirmed mine after the profile lane moved off it |
 | 2026-09-04 | profile lane | migration `0151` | (relayed) | HELD — landed as `3c739ce` |
 | 2026-09-04 | governance (`b7f9ef`) | migration `0144` | `wt/governance-build` | **RELEASED, and the claim above is superseded.** Main now reaches `0159`, so `0144` is a GAP and unlandable by anybody: the gate refuses a migration added since the base ref that is numbered below what that ref reached. Renumbering the file is safe here ONLY because it has never run outside a throwaway test schema. Number to be taken at landing, per the count-not-band rule, never reserved now. |
+| 2026-09-04 | governance (`b7f9ef`) | **NINE migration numbers, count not band** | `wt/governance-build` | CLAIMED AS A COUNT. Nine files on that branch sit at or below main’s ceiling and must renumber before the branch can land: `0132`-`0139` and `0144`. Measured against `origin/main` at ceiling `0159`. The renumber is safe ONLY because none of the nine has ever run outside a scratch schema dropped per run; the same operation on a shipped file would replay it. Numbers taken at landing from a fresh two-way scan, not reserved here. |
+| 2026-09-05 | governance (`b7f9ef`) | **NINE numbers TAKEN: `0169`-`0177`** | `wt/gov-veto-window` | RESOLVED, and the row above it is left standing as the record. Ceiling measured TWO WAYS on 2026-09-05 because neither scan sees what the other sees: every remote ref reached `0164`, and unpushed files on sibling worktrees reached `0168`, which no git command can see. So `0132`-`0139` and `0144` became `0169`-`0177`, order preserved, because the runner sorts by filename and `0173` creates the tables `0177` re-keys. Pushed, so a scan of remote refs now sees them. **Note what the row above got wrong: it measured the ceiling at `0159` from main alone.** The real ceiling was nine higher, held on refs and on disk. A claim measured one way is a claim measured wrong. |
 | 2026-09-04 | paths lane | migrations `0144`, `0145`, `0146` | (landed) | RELEASED — renumbered to `0156`+ BEFORE landing, which is the correct order and why nothing had to be grandfathered |
 | 2026-09-04 | two sessions | migration `0156` | (landed) | **COLLIDED AND SHIPPED.** Both files ran on production eleven minutes apart, so neither can be renumbered: the applied ledger keys on FILENAME, and renaming makes the file new to every instance that already ran it. Grandfathered with evidence in `b5ed26f`. The list of grandfathered numbers does not grow. |
 | 2026-09-04 | governance (`b7f9ef`) | `docs/GOVERNANCE.md` and `scripts/generate-governance-doc.mjs` | `wt/gb-docs` | HELD — ruling top-up in flight |
@@ -3024,6 +3060,21 @@ Written by the Admin lane after landing PR #165, having run 26 of the 35 and bel
 thorough.
 
 - Lanes run **only their touched suites plus the guards**.
+- **NAME THE SUITES A CHANGE CROSSES, NOT THE FILES IT EDITS.** This is the rule that makes the
+  line above safe, and it has now bitten two lanes independently in two days. A migration unioning
+  a token slug across eleven tables that do not share a collation took out EVERY database-backed
+  suite; the lane first reported that only CI could see it, and that was wrong, because a collation
+  suite in this repository provisions its own schema and reproduces it exactly on this machine.
+  Nobody had run it, because it was in no lane's touched-file set. The same shape put a governance
+  guard red across two pushes: the file it failed on was in nobody's set either. A touched-file set
+  is a statement about what you EDITED; the suites worth running are the ones your change can be
+  OBSERVED BY, which for a migration is every suite that provisions a schema and for a shared type
+  is every consumer of it. Ask what a change crosses before you ask what it touches.
+  **And the practical form, because inferring them is exactly what failed twice: a lane BRIEF names
+  the crossed suites, rather than trusting the lane to work them out.** A lane knows the files it is
+  about to edit and cannot know what else in the repository observes them; whoever writes the brief
+  has the whole map in front of them and can. A brief that says "run your own tests" and nothing
+  more is asking a lane for a judgement it does not have the information to make.
 - The merge agent runs the touched suites and the guards, pushes, and **READS THE RUN**.
 - **At most one full local suite per LANDING**, never per merge step.
 - The one deliberate exception is a **pair-merge scratch**, because two branches merged together

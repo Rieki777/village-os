@@ -23,8 +23,8 @@ import {
 import { useEffect, useState } from "react";
 import CircleScene from "@/components/CircleScene";
 import CirclesMiniMap, { type MiniCircle, type MiniSeat } from "@/components/CirclesMiniMap";
+import { cssColourForCircle } from "@shared/circleView";
 import InfoTip from "@/components/InfoTip";
-import { swatchFor } from "@/lib/swatch";
 import { gameFetch } from "@/lib/gameApi";
 import { PeopleLockNote, type PeopleTier } from "@/components/PeopleLock";
 
@@ -56,9 +56,27 @@ function CircleCard({ circle, expanded, onToggle, index }: {
   index: number;
 }) {
   const Icon = ICONS[circle.icon ?? ""] ?? CircleDot;
-  // The icon swatch and the focus-area pills below are both drawn on this
-  // colour, so the ink travels with it rather than being assumed to be white.
-  const swatch = swatchFor(circle.color);
+  /*
+   * THE CARD WEARS THE SAME COLOUR THE MAP DRAWS.
+   *
+   * These cards resolved colour through the brand tone layer, which is
+   * NEUTRAL GREY on a deployment that has not chosen a seed (index.css says
+   * so on purpose: an untouched fork renders nobody's brand). So the map was
+   * eleven hues and this page was half grey, and the two surfaces disagreed
+   * about what colour a circle is while agreeing about everything else.
+   *
+   * `cssColourForCircle` is the map's resolver, so a circle is one colour
+   * everywhere: here, on the canvas, in the mini render and in the accordion
+   * key. A categorical palette is not a brand, which is why it does not
+   * belong in the tone layer.
+   *
+   * THE INK IS ALWAYS DARK, and that is measured rather than assumed. All
+   * eleven hues are mid-tones: against the near-black foreground the worst
+   * is rose at 5.05:1 and the best is teal at 10.13:1, so every one clears
+   * AA. Against WHITE every one of them fails, the worst at 1.77:1, which is
+   * why `swatchFor`'s white-ink pairings cannot be reused here.
+   */
+  const hue = cssColourForCircle({ id: circle.id, color: circle.color ?? null });
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -77,8 +95,11 @@ function CircleCard({ circle, expanded, onToggle, index }: {
         <div className="p-6">
         <div className="flex items-start justify-between">
           <div className="flex items-start gap-4 flex-1">
-            <div className={`w-12 h-12 ${swatch.bg} rounded-lg flex items-center justify-center flex-shrink-0 mt-1`}>
-              <Icon className={`w-6 h-6 ${swatch.ink}`} />
+            <div
+              className="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 mt-1"
+              style={{ background: hue }}
+            >
+              <Icon className="w-6 h-6 text-foreground" />
             </div>
             <div>
               <h3 className="font-display text-xl font-bold text-foreground">
@@ -129,7 +150,7 @@ function CircleCard({ circle, expanded, onToggle, index }: {
                   <h4 className="font-semibold text-foreground mb-3">Key Focus Areas</h4>
                   <div className="flex flex-wrap gap-2">
                     {circle.focus.filter(Boolean).map((area) => (
-                      <span key={area} className={`px-3 py-1 rounded-full text-xs font-medium ${swatch.bg} ${swatch.ink} shadow-sm`}>
+                      <span key={area} className="px-3 py-1 rounded-full text-xs font-medium text-foreground shadow-sm" style={{ background: hue }}>
                         {area}
                       </span>
                     ))}

@@ -50,7 +50,25 @@ const DIST = path.resolve(process.cwd(), "dist/index.js");
  * clear of every other declared window and of the 32768+ ephemeral range.
  * `scripts/check-e2e-ports.mjs` is what proves that, not this comment.
  */
-const PORT = 30802 + (process.pid % 400);
+/*
+ * MOVED BELOW THE 6000 CONVENTION, BECAUSE THE BAND ABOVE IT IS FULL.
+ *
+ * This suite and main's stewardSeat suite both held 30802, the usual sibling
+ * collision: a free window is only free at the instant you check it, and a lane
+ * cannot see a lane. Mine moves because main's is published.
+ *
+ * There was nowhere above 6000 to move to. Walking the guard upward from 27602,
+ * every 200-wide slot to 32701 is taken, and 32702 would reach past 32768 into
+ * the range Linux hands out as ephemeral, which the guard refuses for a real
+ * reason: a bound port there can lose the bind to an ordinary outbound
+ * connection on CI.
+ *
+ * The 6000 floor is a CONVENTION and not a rule. The guard enforces only the
+ * ephemeral ceiling, so 1024 to 5999 is entirely unused and this takes the top
+ * of it. Anybody adding the next suite should know the band above 6000 is
+ * exhausted and this is where the room is.
+ */
+const PORT = 5600 + (process.pid % 200);
 const BASE = `http://localhost:${PORT}`;
 const ADMIN = "needstombstone-admin";
 const PASSWORD = "NeedsTombstone123!";

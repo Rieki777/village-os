@@ -34,7 +34,13 @@ const CLOSED_WORD: Record<string, string> = {
 
 export default function DecisionCard({ ballot }: { ballot: BallotCardData }) {
   const open = ballot.status === "open";
-  const mine = ballot.myVote ? MINE[ballot.myVote.choice] : null;
+  // A DELEGATED ROW ON A LIVE VOTE HAS NO CHOICE TO SHOW (0175). It was cast,
+  // and what it said belongs to the member who decided it until the vote
+  // closes. So the card says it was cast and leaves the badge alone, rather
+  // than reading a missing choice as "waiting on you", which would be the one
+  // wrong sentence: this member has already answered.
+  const cast = !!ballot.myVote;
+  const mine = ballot.myVote?.choice ? MINE[ballot.myVote.choice] : null;
   const MineIcon = mine?.icon;
   const inRoll = ballot.myWeight !== null;
   const expired = open && Date.parse(ballot.closesAt) <= Date.now();
@@ -106,6 +112,11 @@ export default function DecisionCard({ ballot }: { ballot: BallotCardData }) {
               <MineIcon className="w-4 h-4" aria-hidden="true" />
               {mine.label}
             </span>
+          ) : cast ? (
+            <span className="inline-flex items-center gap-1.5 text-sm font-medium text-stone-600">
+              <CircleMinus className="w-4 h-4" aria-hidden="true" />
+              {ballot.myVote?.sentence ?? "Cast"}
+            </span>
           ) : open && inRoll && !expired ? (
             <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-teal-deep">
               Waiting on you
@@ -117,7 +128,7 @@ export default function DecisionCard({ ballot }: { ballot: BallotCardData }) {
           href={`/decisions/${ballot.id}`}
           className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-sm font-semibold text-teal-deep hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
         >
-          {open && inRoll && !mine && !expired ? "Vote on this" : "Open it"}
+          {open && inRoll && !cast && !expired ? "Vote on this" : "Open it"}
           <ArrowRight className="w-4 h-4" aria-hidden="true" />
         </Link>
       </div>

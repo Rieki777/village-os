@@ -97,7 +97,23 @@ export type Capability =
   // default describes. So "steward" comes to mean whatever this village has
   // decided it means, and there is no vacancy to detect, only a key nobody was
   // given.
-  | "redemption.confirm"; // agree that a member was paid, and destroy their tokens
+  | "redemption.confirm" // agree that a member was paid, and destroy their tokens
+  /*
+   * The steward's veto, and the reason it has to carry.
+   *
+   * A separate key from `proposal.decide` on purpose, because they are two
+   * different acts on the same ballot and a village should be able to split
+   * them. `proposal.decide` CLOSES a vote: it reads the tally and writes down
+   * what the village decided, which is a facilitation job. This one stops a
+   * decision the village already carried, inside the window before it lands.
+   * A facilitator who can also veto is one person holding both ends of the
+   * decision.
+   *
+   * NOTHING APPROVES ANY MORE. A passed decision lands on its own, whether or
+   * not anybody holds this seat. The key opens one door: stopping a landing
+   * inside its window, in the open, with a name and a reason on it.
+   */
+  | "steward.veto"; // stop a carried decision inside its window, and say why
 
 /**
  * The canonical list, as a VALUE: badge validation and unlock diffs iterate
@@ -137,6 +153,7 @@ export const ALL_CAPABILITIES: Capability[] = [
   "dial.set",
   "quest.approve",
   "redemption.confirm",
+  "steward.veto",
 ];
 
 /**
@@ -190,6 +207,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "dial.set": "Turn the village's own dials",
   "quest.approve": "Put a proposed quest on the board and set what it pays",
   "redemption.confirm": "Confirm that a member was paid, and destroy the tokens they redeemed",
+  "steward.veto": "Stop a carried decision inside its window, and say why",
 };
 
 /**
@@ -362,6 +380,21 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   "org.seat": true,
   "org.seatAgent": true,
   "dial.set": true,
+  /*
+   * The steward's seat is the one power the founder designed to CHANGE HANDS,
+   * so it would be strange for the map to refuse to move it. He ruled that
+   * giving the power up is reversible and that the village fills the seat
+   * again by voting somebody into it, which is exactly this key crossing to a
+   * role the village declared.
+   *
+   * `true` HERE MEANS MORE THAN IT MEANS ANYWHERE ELSE IN THIS MAP. For every
+   * other key it removes an admin's short-circuit and leaves the break-glass
+   * door. For this one the admin roles routes refuse the key outright, in
+   * both directions, admin path included: a village seats and unseats its
+   * steward through the `role_seat` and `role_unseat` ballots and through
+   * nothing else. See `stewardSeatRefusal` in server/lib/roleGrants.ts.
+   */
+  "steward.veto": true,
   "event.manage": true,
   "exchange.manage": true,
   "forum.moderate": true,
@@ -535,6 +568,33 @@ export const DENIABLE: Record<Capability, boolean> = {
    * without suspending a named person. Villages set their own dials (R56).
    */
   "mechanics.propose": false,
+  /*
+   * The steward's veto. NOT a voice, and it is here for two reasons, of which
+   * the first is about WHICH WAY A PAUSE FAILS.
+   *
+   * THE DIRECTION INVERTED ON 2026-09-03 (19C), and the comment this replaced
+   * had not noticed. Under the approval model this key was `steward.approve`
+   * and pausing it was safe: a paused approval meant a proposal waited, and a
+   * proposal that waits changes nothing. Under the veto model nothing waits.
+   * A PAUSED VETO MEANS THE CHANGE LANDS. Suspending this key for 72 hours is
+   * not a pause on the seat, it is the passage of every Game change the seat
+   * was seated to look at, and the record shows no seat moving while it
+   * happens. There is no fail-safe direction left to argue from, so the deny
+   * is refused outright.
+   *
+   * The second reason is the roles plane. A warning badge is written by an
+   * admin, and this key is the one power an admin route may not touch in
+   * either direction: a village seats and unseats its steward through the
+   * `role_seat` and `role_unseat` ballots (`stewardSeatRefusal` in
+   * server/lib/roleGrants.ts). Leaving it deniable would put the removal
+   * those ballots own back inside the badge panel, which is the same door
+   * under a different name.
+   *
+   * `capabilityDecision` reads `isDeniable` before it reads the role, so this
+   * `false` is what stops a badge deny outranking a seated steward's role
+   * grant, and `badgeProblem` refuses to store such a badge at all.
+   */
+  "steward.veto": false,
 
   // ── TRUE: EXPRESSION. Speaking, but not deciding ────────────────────────
   //

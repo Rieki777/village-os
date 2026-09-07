@@ -15,6 +15,8 @@
  * dimensions. It fails if the geometry regresses, and it says which of the
  * three parts moved: the scale, the crop, or the floor.
  */
+import fs from "fs";
+import path from "path";
 import { describe, expect, it } from "vitest";
 import { layoutNestedMap, wrapLabel, type NestedInput } from "@shared/mapLayout";
 import { viewFor, viewBoxFor, type CameraView } from "./camera";
@@ -148,6 +150,119 @@ describe("the label floor, at the sizes a reader actually gets", () => {
     const wrapped = { lines: ["Land"], fontSize: 12, lineHeight: 14 };
     expect(fitLabelToScreen(wrapped, 100, 0).fontSize).toBe(12);
     expect(fitLabelToScreen(wrapped, 100, 0).outside).toBe(false);
+  });
+});
+
+/**
+ * THE WIRING, WHICH IS WHERE THIS ACTUALLY BROKE.
+ *
+ * Every assertion above passed while the floor did nothing in production.
+ * `fitLabelToScreen` was correct; the component never handed it a real
+ * `pxPerWorld`, because the SVG's ref was an inline arrow. React treats a
+ * ref callback with a new identity as a different ref, so on every render it
+ * detached the old one and attached the new one, the element state thrashed,
+ * the ResizeObserver was rebuilt each time, and `box` stayed {0,0}.
+ *
+ * Measured live at build b865a34: pxPerWorld 0, every label at its raw
+ * wrapLabel size, the "forming" caption at its 9-unit fallback. A pure
+ * function with a green suite, doing nothing.
+ *
+ * There is no jsdom in this repo, so this is a source check. It guards the
+ * two properties the live defect turned on.
+ */
+describe("the component actually feeds the floor a measurement", () => {
+  const src = fs.readFileSync(path.resolve(__dirname, "PowerMap.tsx"), "utf8");
+
+  it("finds the file and its ref (the positive control)", () => {
+    expect(src).toContain("useMeasuredBox");
+    expect(src).toMatch(/ref=\{/);
+  });
+
+  it("attaches the SVG through a STABLE ref, never an inline arrow", () => {
+    // `ref={(el) => {...}}` is the defect. A named useCallback is the fix.
+    expect(src, "the svg ref is not an inline arrow").not.toMatch(/ref=\{\s*\(el\)\s*=>/);
+    expect(src).toMatch(/const\s+attachSvg\s*=\s*useCallback\(/);
+    expect(src).toMatch(/ref=\{attachSvg\}/);
+  });
+
+  it("keeps values that CHANGE out of framer's style prop", () => {
+    /*
+     * The second live defect, and the one that survived the first fix.
+     *
+     * framer-motion owns the `style` object on a motion component and does
+     * not reliably re-apply a static value that changes between renders. The
+     * first render happens before the ResizeObserver measures, so pxPerWorld
+     * is 0 and the label takes its raw size; the second render computes the
+     * right one and framer keeps the first.
+     *
+     * It was named by two numbers from ONE object disagreeing on one
+     * element: the tspan `dy` (a plain attribute React owns) updated to the
+     * fitted 23 while `font-size` stayed at the unfitted 12. The "forming"
+     * caption, a plain <text>, was correct the whole time.
+     *
+     * Same trap on the circle: `fillOpacity` changes on hover, so through
+     * `style` the hover lift would have been dead on arrival.
+     */
+    expect(src, "the label's size is an attribute").toMatch(/fontSize=\{label\.fontSize\}/);
+    expect(src, "the circle's fill is an attribute").toMatch(/fill=\{tone\}/);
+    expect(src, "the circle's fill opacity is an attribute").toMatch(/fillOpacity=\{isFocus/);
+
+    /*
+     * And no MOTION element carries a style at all on this canvas.
+     *
+     * The rule is about framer specifically. A plain <text> or <circle> is
+     * React's, and React re-applies a changed style every render, so
+     * `style={{ fontSize: captionSize(...) }}` on the forming caption is
+     * correct and was working live while the motion label beside it was not.
+     *
+     * So scope the check to motion tags, by walking each one's opening tag
+     * with brace depth rather than by regex, which cannot see where a tag
+     * ends and reported the plain elements as violations.
+     */
+    const motionTags: string[] = [];
+    for (let i = src.indexOf("<motion."); i !== -1; i = src.indexOf("<motion.", i + 1)) {
+      let depth = 0;
+      for (let j = i; j < src.length; j++) {
+        const ch = src[j];
+        if (ch === "{") depth++;
+        else if (ch === "}") depth--;
+        else if (ch === ">" && depth === 0) {
+          motionTags.push(src.slice(i, j + 1));
+          break;
+        }
+      }
+    }
+    expect(motionTags.length, "there are motion elements to check").toBeGreaterThan(0);
+    for (const tag of motionTags) {
+      const name = tag.slice(0, tag.indexOf("\n")).trim();
+      expect(tag.includes("style={{"), `${name} carries no style object`).toBe(false);
+    }
+  });
+
+  it("positions each label line ONCE, not once per coordinate system", () => {
+    /*
+     * The floating names, finally explained.
+     *
+     * The <text> is moved to pos.x by framer's `animate={{x, y}}`, which is a
+     * transform. A tspan's `x` is ABSOLUTE inside that already-moved frame,
+     * so `x={pos.x}` on the tspan put every label at 2 x pos.x.
+     *
+     * Measured live at 9b41ae0: all 15 labels displaced, each by exactly its
+     * own `pos.x * scale`, with the tspan's x attribute equal to the
+     * transform's translateX to the decimal. This is why "Health & Healing
+     * Council" and "Development Circle" floated to the right of the ring in
+     * the first screenshot anybody took of this surface, which the plan for
+     * this work misread as "names too long for their circles".
+     */
+    expect(src, "tspans sit at the text's own origin").toMatch(/<tspan[^>]*\sx=\{0\}/);
+    expect(src, "no tspan re-applies the circle's absolute x").not.toMatch(/<tspan[^>]*\sx=\{pos\.x\}/);
+  });
+
+  it("refuses a zero measurement instead of dividing by it", () => {
+    // Two PowerMaps mount on this page and CSS hides one. The hidden one
+    // measures 0x0; taking that as the box zeroes pxPerWorld and hands every
+    // label back unchanged, which is the bug wearing a different hat.
+    expect(src).toMatch(/if\s*\(next\.w\s*<=\s*0\s*\|\|\s*next\.h\s*<=\s*0\)\s*return;/);
   });
 });
 

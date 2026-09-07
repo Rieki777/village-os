@@ -243,7 +243,24 @@ export function refusalLines(result, baselineFile = "scripts/module-sql-pending.
         `This ratchet only turns down. Move the new ones into server/repos.`,
     );
   }
+  // A fall is good news, and the advice for recording it is only correct when
+  // nothing else in the same run went UP. `--update-baseline` records the whole
+  // tree, so naming it here while something is growing points the reader at a
+  // command that will refuse; and `result.total` is the MEASURED total, which in
+  // that state is ABOVE the ceiling, so following the sentence literally would
+  // RAISE the number this file's own header forbids raising. Both were true of
+  // this repository on 2026-09-05.
+  const blockedByGrowth = result.grown.length + result.unexpected.length;
   for (const s of result.stale) {
+    if (blockedByGrowth) {
+      lines.push(
+        `${s.file} is registered at ${s.listed} and now carries ${s.found}, which is a real fall and cannot ` +
+          `be recorded yet: ${blockedByGrowth} file(s) in this same run are above their recorded number, and ` +
+          `\`--update-baseline\` writes the WHOLE tree, so recording this fall now would record their ` +
+          `growth too. Clear the growth above first, then the fall writes down on its own.`,
+      );
+      continue;
+    }
     lines.push(
       s.found === 0
         ? `${s.file} is in the burn-down register at ${s.listed} and is now CLEAN. Good news, and it needs the ` +
@@ -368,6 +385,43 @@ export function main(argv) {
     // eighty entries as the only way to create the file. Every run after it
     // may only lower the number.
     const seeding = !fs.existsSync(baselinePath);
+
+    // THE TOTAL CHECK BELOW IS NOT ENOUGH, AND THIS BLOCK IS WHY.
+    //
+    // The register is PER FILE. The guard under it compares two grand totals.
+    // So a large fall in one file pays for growth in several others, the write
+    // records the worse state, and the line it prints says "lowered".
+    //
+    // Measured on 2026-09-05 on this repository, register at 762:
+    // server/index.ts had fallen 14 while six other files had grown 15, leaving
+    // the measured total exactly ONE above the recorded one. That single call
+    // site was all that stood between the register and a permanent, silent
+    // blessing of all six growths, and the way it would have been spent is
+    // somebody doing the right thing and extracting one more query.
+    //
+    // `auditBaseline` has computed `grown` and `unexpected` the whole time and
+    // was never consulted here: the reporting path knew and the writing path
+    // did not ask. A ratchet whose report is per file and whose enforcement is
+    // aggregate makes exactly the promise it does not keep.
+    if (!seeding) {
+      const audit = auditBaseline(counts, old, null);
+      const rising = [
+        ...audit.grown.map((g) => `${g.file}: ${g.found}, register allows ${g.allowed}`),
+        ...audit.unexpected.map((u) => `${u.file}: ${u.found}, not in the register at all`),
+      ];
+      if (rising.length) {
+        console.error(
+          `::error::refusing to write the raw-SQL burn-down register: ${rising.length} file(s) are above ` +
+            `their recorded number, so writing now would record them as allowed. The register is per file ` +
+            `and only ever falls per file; a fall elsewhere does not buy this.\n    ` +
+            rising.join("\n    ") +
+            `\n\n  Move those queries into a repo under server/repos, or if a hit is a genuine ` +
+            `false positive put \`module-review-ok: <reason>\` ON THE LINE ITSELF. Then run this again.`,
+        );
+        return 1;
+      }
+    }
+
     if (!seeding && total > oldTotal) {
       console.error(
         `::error::refusing to raise the raw-SQL burn-down total: ${total} is above the recorded ${oldTotal}. ` +

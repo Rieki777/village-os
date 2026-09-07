@@ -21,12 +21,14 @@
  * (which takes a `pad` for the outer ring).
  */
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type TouchEvent as ReactTouchEvent,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -74,12 +76,27 @@ function useMeasuredBox(el: SVGSVGElement | null): { w: number; h: number } {
       // Round before comparing: a fractional resize that changes nothing
       // visible would otherwise re-render on every scroll on some browsers.
       const next = { w: Math.round(r.width), h: Math.round(r.height) };
+      // A HIDDEN instance measures ZERO, and zero is not a measurement.
+      //
+      // This page mounts TWO PowerMaps, one for the standing panel and one
+      // for the phone, and CSS hides whichever does not apply. The hidden
+      // one reports 0x0, and taking that as the box would divide the label
+      // floor by zero and hand every label back unchanged, which is exactly
+      // the bug this hook exists to prevent. Keep the last real size.
+      if (next.w <= 0 || next.h <= 0) return;
       setBox((prev) => (prev.w === next.w && prev.h === next.h ? prev : next));
     };
     read();
+    // The first paint can land before layout has given this subtree a size,
+    // so read again on the next frame. The observer covers every later
+    // change; this covers the one before it starts.
+    const raf = typeof requestAnimationFrame === "function" ? requestAnimationFrame(read) : null;
     const ro = new ResizeObserver(read);
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      if (raf !== null) cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
   }, [el]);
   return box;
 }
@@ -118,6 +135,7 @@ export default function PowerMap({
   lenses,
   svgRef,
   maxDepth,
+  compact,
 }: {
   data: PowerData;
   layout: NestedLayout;
@@ -145,6 +163,21 @@ export default function PowerMap({
    * above, and the breadcrumb is the way down.
    */
   maxDepth?: number;
+  /*
+   * COMPACT: a stage too small to carry every name at a legible size.
+   *
+   * The screen floor makes each label readable on its own. On a 358px phone
+   * stage with fifteen sibling circles that is not enough: measured live at
+   * 1d0d869, the names cleared 12.5px and then collided into an unreadable
+   * pile, because legible and legible-together are different problems.
+   *
+   * So a compact stage draws a name only where it FITS INSIDE its circle. A
+   * name that would have to be promoted above the disc is dropped instead:
+   * the circle is still tappable, tapping it makes it the focus and gives it
+   * room, and the accordion underneath carries every name in full. Fewer
+   * words, all of them readable, beats fifteen words in a heap.
+   */
+  compact?: boolean;
 }) {
   const byId = useMemo(() => new Map(data.circles.map((c) => [c.id, c])), [data.circles]);
   const posById = useMemo(() => new Map(layout.circles.map((p) => [p.id, p])), [layout]);
@@ -160,8 +193,28 @@ export default function PowerMap({
   const target: CameraTarget = useMemo(() => {
     const pos = focusId ? posById.get(focusId) : null;
     if (focusId && pos) return { id: focusId, cx: pos.x, cy: pos.y, r: pos.r };
-    return { id: null, cx: layout.village.x, cy: layout.village.y, r: layout.village.r };
-  }, [focusId, posById, layout]);
+    /*
+     * THE VILLAGE VIEW HAS TO CLEAR THE SEASON RING, WHICH DRAWS OUTSIDE IT.
+     *
+     * `viewFor` frames `2r + FOCUS_MARGIN`, which is 12 world units of
+     * clearance on each side. `SeasonRing` draws its dashed ring at r + 14
+     * and rides its LABEL on an arc at r + 20, so at the village level the
+     * season words along the top were being shaved by the frame. Measured
+     * live at 1280x800: the ring clipped by 2 units, the label arc by 8.
+     *
+     * It is only the village that needs this: the season ring draws once,
+     * around the whole village, and a focused circle has nothing outside it.
+     * So the allowance goes here instead of into FOCUS_MARGIN, which every
+     * other focus would then pay for as a smaller picture.
+     */
+    const seasonPad = data.season.current || data.season.nextRollAt ? 34 : 0;
+    return {
+      id: null,
+      cx: layout.village.x,
+      cy: layout.village.y,
+      r: layout.village.r + seasonPad,
+    };
+  }, [focusId, posById, layout, data.season]);
 
   const reduced =
     typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -263,7 +316,33 @@ export default function PowerMap({
 
   // The CONTAINER's aspect, measured, not the layout's (which is 1 by
   // construction). See useMeasuredBox above for what this was costing.
+  /*
+   * A STABLE REF CALLBACK, WHICH IS THE WHOLE DIFFERENCE.
+   *
+   * This was an inline arrow. React treats a ref callback with a new
+   * identity as a different ref, so on EVERY render it detached the old one
+   * (calling it with null) and attached the new one. The element state
+   * thrashed null/element every render, the effect below tore its
+   * ResizeObserver down and rebuilt it each time, and the measurement never
+   * settled: `box` stayed {0,0} in production.
+   *
+   * Measured live on 2026-09-05 at build b865a34: `pxPerWorld` was 0, so
+   * `fitLabelToScreen` returned every label unchanged and the "forming"
+   * caption sat at its 9-world-unit fallback. The label floor was shipped
+   * and doing nothing, on desktop and on mobile alike.
+   *
+   * `useCallback` keyed on the one prop it closes over gives React the same
+   * function every render, so the ref attaches once.
+   */
   const [svgEl, setSvgEl] = useState<SVGSVGElement | null>(null);
+  const attachSvg = useCallback(
+    (el: SVGSVGElement | null) => {
+      setSvgEl(el);
+      // `svgRef` is the caller's handle (export, print). Keep feeding it.
+      if (svgRef) (svgRef as { current: SVGSVGElement | null }).current = el;
+    },
+    [svgRef],
+  );
   /* HOVER, SO A READER CAN SURVEY WITHOUT NAVIGATING.
      Reading the shape of the village meant stepping into every circle and
      back out again, which loses your place each time. Pointer only: a touch
@@ -288,19 +367,83 @@ export default function PowerMap({
    * dead margin, which is where a name too long for its circle now goes.
    */
   const fittedView: CameraView = aspect < 1 ? [view[0], view[1], view[2] / aspect] : view;
+  /*
+   * ── PINCH AND PAN, ON THE STAGE THAT NEEDS IT ─────────────────────────────
+   *
+   * A phone shows fifteen circles at 18 to 30px each. Tap-to-zoom answers
+   * "step into this one"; it does not answer "let me look closer at that
+   * corner", and the compact rule means most names only appear once you are
+   * inside. So the small stage gets a real camera the reader drives.
+   *
+   * ONE FINGER IS LEFT ALONE, deliberately. The map sits in a scrolling page
+   * now, and a canvas that swallows one-finger drag is a canvas a reader
+   * cannot scroll past: they reach the map and the page stops. Two fingers
+   * pinch and pan, which is the convention every embedded map uses for
+   * exactly this reason, and `touch-action: pan-y` keeps vertical scrolling
+   * with the page.
+   *
+   * The nudge is a DELTA on top of the camera, never a replacement for it:
+   * tapping a circle still flies there, and arriving resets the nudge, so
+   * the two ways of moving cannot fight over where the view is.
+   */
+  const [nudge, setNudge] = useState({ dx: 0, dy: 0, k: 1 });
+  useEffect(() => setNudge({ dx: 0, dy: 0, k: 1 }), [focusId, shape]);
+  const gesture = useRef<{ dist: number; mx: number; my: number } | null>(null);
+  const zoomable = !!compact;
+
   // Screen pixels per world unit, at the camera's current width. Everything
   // that has to hold a fixed size on screen divides by this.
-  const pxPerWorld = box.w > 0 ? box.w / fittedView[2] : 0;
+  const navView: CameraView = zoomable
+    ? [fittedView[0] + nudge.dx, fittedView[1] + nudge.dy, fittedView[2] / nudge.k]
+    : fittedView;
+  const pxPerWorld = box.w > 0 ? box.w / navView[2] : 0;
 
   return (
     <>
       <svg
-        ref={(el) => {
-          setSvgEl(el);
-          // `svgRef` is the caller's handle (export, print). Keep feeding it.
-          if (svgRef) (svgRef as { current: SVGSVGElement | null }).current = el;
-        }}
-        viewBox={viewBoxFor(fittedView, aspect)}
+        ref={attachSvg}
+        viewBox={viewBoxFor(navView, aspect)}
+        style={zoomable ? { touchAction: "pan-y" } : undefined}
+        onTouchStart={
+          zoomable
+            ? (e: ReactTouchEvent) => {
+                // Two fingers only. One is the page's, so scrolling survives.
+                if (e.touches.length !== 2) { gesture.current = null; return; }
+                const [a, b] = [e.touches[0]!, e.touches[1]!];
+                gesture.current = {
+                  dist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY),
+                  mx: (a.clientX + b.clientX) / 2,
+                  my: (a.clientY + b.clientY) / 2,
+                };
+              }
+            : undefined
+        }
+        onTouchMove={
+          zoomable
+            ? (e: ReactTouchEvent) => {
+                const g = gesture.current;
+                if (!g || e.touches.length !== 2 || pxPerWorld <= 0) return;
+                e.preventDefault();
+                const [a, b] = [e.touches[0]!, e.touches[1]!];
+                const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+                const mx = (a.clientX + b.clientX) / 2;
+                const my = (a.clientY + b.clientY) / 2;
+                setNudge((n) => ({
+                  // Panning is the midpoint's travel, converted to world
+                  // units and inverted: dragging the picture right moves the
+                  // camera left.
+                  dx: n.dx - (mx - g.mx) / pxPerWorld,
+                  dy: n.dy - (my - g.my) / pxPerWorld,
+                  // Between 1x and 6x. Below 1 the reader zooms out past the
+                  // whole village into empty ground, which looks broken and
+                  // answers nothing.
+                  k: Math.min(6, Math.max(1, n.k * (g.dist > 0 ? dist / g.dist : 1))),
+                }));
+                gesture.current = { dist, mx, my };
+              }
+            : undefined
+        }
+        onTouchEnd={zoomable ? () => { gesture.current = null; } : undefined}
         className="w-full h-full"
         preserveAspectRatio="xMidYMid meet"
         role="group"
@@ -308,6 +451,31 @@ export default function PowerMap({
         data-power-map
         data-shape={shape}
         onClick={() => onFocus(parentOf(focusId))}
+        /*
+         * ESCAPE, WHICH THE LABELS HAVE BEEN PROMISING ALL ALONG.
+         *
+         * Every focused circle carries the aria-label "You are inside it;
+         * press Enter or Escape to go out one level", and spec 11 lists Esc
+         * among the keyboard paths. Enter was wired and Escape never was, so
+         * the one instruction a screen-reader user is given for leaving a
+         * circle did nothing. Verified live at build b9806ea: Enter cleared
+         * the focus, Escape left it exactly where it was.
+         *
+         * It sits on the SVG rather than on each node so it works from a
+         * seat as well as from a circle: key events bubble, and "go out one
+         * level" is the same act wherever focus happens to be.
+         *
+         * A selected seat closes FIRST. Escape means "back out of the thing
+         * I am in", and when a seat card is open that thing is the card, not
+         * the circle behind it.
+         */
+        onKeyDown={(e: ReactKeyboardEvent) => {
+          if (e.key !== "Escape") return;
+          e.preventDefault();
+          e.stopPropagation();
+          if (selected) onSelect(null);
+          else onFocus(parentOf(focusId));
+        }}
       >
         <defs>
           <RelationArrowDef />
@@ -336,7 +504,7 @@ export default function PowerMap({
           </>
         )}
 
-        <SeasonRing cx={layout.village.x} cy={layout.village.y} r={layout.village.r} season={data.season} />
+        <SeasonRing cx={layout.village.x} cy={layout.village.y} r={layout.village.r} season={data.season} pxPerWorld={pxPerWorld} />
 
         {/* Pyramid connectors: child to parent, before the discs. */}
         {shape === "pyramid" &&
@@ -394,7 +562,33 @@ export default function PowerMap({
                 animate={{ cx: pos.x, cy: pos.y, r: pos.r }}
                 initial={false}
                 transition={morph}
-                style={{ fill: tone, fillOpacity: isFocus ? 0.16 : hovered ? 0.2 : 0.1 }}
+                /* ATTRIBUTES, NOT STYLE, FOR THE SAME REASON AS THE LABEL.
+                   framer owns `style` on a motion component and does not
+                   reliably re-apply a static value that CHANGES between
+                   renders. `fillOpacity` changes on hover and on focus, so
+                   through `style` the hover lift would have been dead on
+                   arrival: the handler fires, React re-renders, framer keeps
+                   the first paint. `stroke` and the two below were already
+                   attributes, which is why they were going to work and this
+                   one was not. */
+                fill={tone}
+                /*
+                 * THESE HUES WERE DRAWN FOR A DARK GROUND.
+                 *
+                 * They are the living map artifact's `CIRCLE_COL`, and the
+                 * artifact paints them on #131a11 where a tenth of a hue
+                 * still reads. This page is light, and at 0.1 a mid-tone on
+                 * white is within a few percent of white: measured on the
+                 * live phone at b711620 the ring was seventeen near-identical
+                 * pale discs, which is the same "one grey" the palette work
+                 * was supposed to end.
+                 *
+                 * A third of the hue reads as a tint on white and still sits
+                 * far behind the near-black label on top of it, so nothing
+                 * about legibility moves. The mini render on /circles is on
+                 * the dark ground and keeps its own lower value.
+                 */
+                fillOpacity={isFocus ? 0.42 : hovered ? 0.46 : 0.32}
                 stroke={tone}
                 strokeOpacity={isFocus ? 0.9 : hovered ? 0.85 : 0.45}
                 strokeWidth={isFocus ? 3 : hovered ? 3 : 2}
@@ -443,38 +637,78 @@ export default function PowerMap({
                 pointerEvents="none"
               />
 
-              {(showLabel(pos.id) || hovered) && (
+              {/* On a compact stage a promoted label is dropped rather
+                  than piled on its neighbours. See `compact` above. */}
+              {(showLabel(pos.id) || hovered) && !(compact && fit.outside && !isFocus) && (
                 <motion.text
                   animate={{ x: pos.x, y: labelTop }}
                   initial={false}
                   transition={morph}
                   textAnchor="middle"
                   className="fill-foreground font-semibold pointer-events-none"
-                  style={{
-                    fontSize: label.fontSize,
-                    // A label pushed outside its circle crosses whatever is
-                    // behind it, so it carries the page's own ground as a
-                    // halo. `paint-order` puts that stroke UNDER the glyphs;
-                    // without it the stroke is drawn over them and the text
-                    // thins out to nothing at small sizes.
-                    ...(fit.outside
-                      ? {
-                          paintOrder: "stroke" as const,
-                          stroke: "var(--background)",
-                          strokeWidth: 3.5,
-                          strokeLinejoin: "round" as const,
-                        }
-                      : null),
-                  }}
+                  /*
+                   * fontSize IS AN ATTRIBUTE HERE, NOT A STYLE, AND THAT IS
+                   * THE WHOLE FIX.
+                   *
+                   * framer-motion owns the `style` object on a motion
+                   * component. A static style value that CHANGES between
+                   * renders is not reliably re-applied: the first render
+                   * happens before the ResizeObserver has measured, so
+                   * pxPerWorld is 0, the label takes its raw wrapLabel size,
+                   * and framer wrote that. The second render computed the
+                   * correct size and framer kept the first one.
+                   *
+                   * Measured live at build f045f3c: the tspan `dy` (a plain
+                   * SVG attribute React owns) updated to the fitted 23 while
+                   * `font-size` stayed at the unfitted 12, on the same
+                   * element, in the same render. Two numbers from one object,
+                   * disagreeing, which is what named the cause. The "forming"
+                   * caption below is a plain <text> and was correct all along.
+                   *
+                   * `fontSize` as a presentation attribute goes through React,
+                   * not framer, so it tracks every render.
+                   */
+                  fontSize={label.fontSize}
+                  {...(fit.outside
+                    ? {
+                        // A label pushed outside its circle crosses whatever
+                        // is behind it, so it carries the page's own ground
+                        // as a halo. `paint-order` puts that stroke UNDER the
+                        // glyphs; without it the stroke draws over them and
+                        // the text thins to nothing at small sizes.
+                        //
+                        // Attributes, not style: `fit.outside` changes as the
+                        // camera moves, and framer would keep whichever value
+                        // the first render happened to produce, exactly as it
+                        // did with fontSize above.
+                        paintOrder: "stroke" as const,
+                        stroke: "var(--background)",
+                        strokeWidth: 3.5,
+                        strokeLinejoin: "round" as const,
+                      }
+                    : {})}
                 >
+                  {/* x=0, NOT pos.x, AND THAT IS A BUG FIX.
+                      The <text> is already moved to pos.x by framer's
+                      `animate={{x, y}}`, which is a transform. A tspan's `x`
+                      is ABSOLUTE inside that already-moved frame, so setting
+                      it to pos.x again put every label at 2 x pos.x.
+                      Measured live at 9b41ae0: all 15 labels displaced, each
+                      by exactly its own `pos.x * scale`, and the tspan's x
+                      attribute equalled the transform's translateX to the
+                      decimal. This is why "Health & Healing Council" and
+                      "Development Circle" floated unanchored to the right of
+                      the ring in the very first screenshot of this surface.
+                      Zero re-centres each line on the text's own origin,
+                      which textAnchor="middle" then centres on the circle. */}
                   {label.lines.map((ln, i) => (
-                    <tspan key={ln + i} x={pos.x} dy={i === 0 ? 0 : label.lineHeight}>
+                    <tspan key={ln + i} x={0} dy={i === 0 ? 0 : label.lineHeight}>
                       {ln}
                     </tspan>
                   ))}
                 </motion.text>
               )}
-              {forming && showLabel(pos.id) && (
+              {forming && showLabel(pos.id) && !(compact && fit.outside && !isFocus) && (
                 <text
                   x={pos.x}
                   y={labelTop + (label.lines.length - (hasChildren ? 0 : 1)) * label.lineHeight + (hasChildren ? 14 : 16)}
@@ -701,6 +935,21 @@ export default function PowerMap({
 
         {lenses}
       </svg>
+
+      {/* THE WAY BACK, which a camera the reader drives has to have.
+          Pinched in three levels and panned to a corner, there is no gesture
+          that means "start again"; double-tap is taken by the browser and a
+          pinch-out only walks back the way you came. It appears only once
+          the view has actually moved, so it costs nothing at rest. */}
+      {zoomable && (nudge.k !== 1 || nudge.dx !== 0 || nudge.dy !== 0) && (
+        <button
+          type="button"
+          onClick={() => setNudge({ dx: 0, dy: 0, k: 1 })}
+          className="absolute right-2 top-2 z-10 rounded-full bg-card/90 border border-border px-3 py-1.5 text-xs text-foreground shadow-sm"
+        >
+          Fit the village
+        </button>
+      )}
 
       <p className="sr-only" role="status" aria-live="polite">
         {announcement}

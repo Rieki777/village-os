@@ -12,10 +12,12 @@ import SendTokensCard from "@/components/SendTokensCard";
 import MaturityLadder from "@/components/profile/MaturityLadder";
 import PowersMap from "@/components/profile/PowersMap";
 import PathsPanel, { type PathTile } from "@/components/profile/PathsPanel";
+import StandingRow from "@/components/profile/StandingRow";
+import TheVessel from "@/components/profile/TheVessel";
 import MoonDock from "@/components/profile/MoonDock";
 import NightMotes from "@/components/profile/NightMotes";
 import { useAuth } from "@/contexts/AuthContext";
-import { gameFetch, useGameConfig, type ProgressionCapability } from "@/lib/gameApi";
+import { fetchGameMe, gameFetch, useGameConfig, type GameMe, type ProgressionCapability } from "@/lib/gameApi";
 import { motion, AnimatePresence } from "framer-motion";
 import { Heart, Edit2, LogOut, ArrowRight, CheckCircle2 } from "lucide-react";
 import { useTokenName } from "@/hooks/useTokenNames";
@@ -88,6 +90,36 @@ export default function Profile() {
     consentedQuests: number;
     capabilityCatalogue: ProgressionCapability[];
   } | null>(null);
+  /*
+   * ONE READ OF /api/game/me, AND IT IS WHAT MAKES THE BALANCE CORRECT.
+   *
+   * `user.recognitionBalance` is the cached MINOR-UNIT column and this page
+   * printed it raw at 5xl, so a token with two decimals read a hundred times
+   * too large. This payload carries the balance AND its scale together, which
+   * is the only pair that can be formatted honestly, and it also carries the
+   * budget the vessel needs and the stage the multiplier sentence needs.
+   * Read once here and passed down rather than fetched per card.
+   */
+  const [me, setMe] = useState<GameMe | null>(null);
+  const [meFailed, setMeFailed] = useState(false);
+  /*
+   * A FAILED RE-READ NEVER ERASES WHAT IS ALREADY IN HAND.
+   *
+   * `fetchGameMe` answers null for a non-ok response WITHOUT throwing, so a 500
+   * arrived down the SUCCESS path and ran setMe(null). After a give that really
+   * happened, that unmounted the vessel, the balance and the "Sent."
+   * confirmation together, leaving a member one plausible retry away from
+   * sending twice. `if (d)` is the whole fix, and it protects the standing row
+   * as well, which a guard inside the vessel could never have reached.
+   */
+  const reloadMe = () => {
+    fetchGameMe()
+      .then((d) => {
+        if (d) { setMe(d); setMeFailed(false); } else setMeFailed(true);
+      })
+      .catch(() => setMeFailed(true));
+  };
+  useEffect(reloadMe, []);
 
   useEffect(() => {
     let live = true;
@@ -243,7 +275,38 @@ export default function Profile() {
             */}
             <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0 flex-1">
-                <ProfileHero name={user.name} handle={user.handle} />
+                {/* The ladder position comes from HERE and not from a second
+                    fetch inside the hero: `prog.stageIndex` is /api/game/me and
+                    `config.stages` is /api/game/config, both already read above.
+                    Two reads of one fact disagree for one render every time a
+                    rung turns. Null while either is loading, and the arc draws
+                    nothing rather than drawing zero. */}
+                <ProfileHero
+                  name={user.name}
+                  handle={user.handle}
+                  stageIndex={prog?.stageIndex ?? null}
+                  stageCount={config?.stages?.length ?? null}
+                />
+                {/*
+                  WHERE YOU STAND, under the identity and above everything else.
+
+                  `held` is the balance AND its scale, from /api/game/me, which
+                  is the only pair that can be formatted honestly. It is null
+                  while that read is in flight, and the figure is simply absent
+                  until it lands rather than flashing a wrong number.
+
+                  Powers open is counted from the catalogue's held flags, which
+                  is the same set PowersMap draws from, so the figure and the
+                  section below it can never disagree.
+                */}
+                <StandingRow
+                  standing={{
+                    held: me ? { units: Number(me.gratitude.balance ?? 0), decimals: Number(me.gratitude.decimals ?? 0) } : null,
+                    powersOpen: prog ? prog.capabilityCatalogue.filter((c) => c.held).length : null,
+                    pathsWalked: user.paths.length,
+                    questsDone: prog?.consentedQuests ?? null,
+                  }}
+                />
               </div>
               <motion.button
                 whileHover={{ scale: 1.05 }}
@@ -281,6 +344,17 @@ export default function Profile() {
                   and `prog` carries where this member stands on it. */}
               {config && prog ? (
                 <MaturityLadder
+                  /*
+                    THE VESSEL SAYS THE ALLOWANCE SENTENCE NOW, SO THE LADDER
+                    MUST NOT. `showNext` was added with a default of true and
+                    then never passed, which meant the whole next-rung block,
+                    the allowance-multiplier line included, printed in both
+                    places. A member reading the same sentence twice on one
+                    page assumes they are two different facts. The prop existed
+                    for exactly this and was not used, which is worse than not
+                    having added it.
+                  */
+                  showNext={false}
                   stages={config.stages}
                   stageIndex={prog.stageIndex}
                   consentedQuests={prog.consentedQuests}
@@ -404,29 +478,22 @@ export default function Profile() {
                 labelled figure. The amber survives as the icon only, which
                 carries no information and is hidden from the reader.
               */}
-              <motion.section
-                aria-labelledby="gratitude-h"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8"
-              >
-                <div className="flex items-center gap-2">
-                  <Heart className="h-6 w-6 shrink-0 text-amber" aria-hidden="true" />
-                  <h2
-                    id="gratitude-h"
-                    className="font-display text-2xl font-bold text-card-foreground"
-                  >
-                    {tokenName} held
-                  </h2>
-                </div>
-                <p className="mt-4 font-display text-5xl font-bold text-foreground">
-                  <span className="sr-only">{tokenName} held: </span>
-                  {user.recognitionBalance}
-                </p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Total earned across all contributions. Yours to keep, never spent.
-                </p>
-              </motion.section>
+              {/*
+                THE VESSEL, WHERE SIX SECTIONS USED TO BE.
+
+                This span was the raw-balance card: a MINOR-unit column printed
+                at 5xl with no scale, which is a hundred times too large for any
+                token with two decimals. It is gone rather than patched, because
+                the same number was also on ProfileSheet and in the dashboard
+                card, and patching one of three is how a defect survives.
+              */}
+              <TheVessel
+                gratitude={me?.gratitude ?? null}
+                here={me?.stage ?? null}
+                next={me && me.stages ? (me.stages[me.stageIndex + 1] ?? null) : null}
+                failed={meFailed}
+                onGiven={reloadMe}
+              />
 
               {/* Contributions */}
               <motion.section

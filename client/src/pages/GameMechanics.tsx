@@ -145,7 +145,7 @@ interface ProposalChange {
 }
 
 /** Every value `mechanics_proposals.status` can hold (0089 widened the enum to
- *  ten and this list carried eight; see STATUS_COPY). */
+ *  ten and this list carried eight, and 0172 added an eleventh; see STATUS_COPY). */
 type ProposalStatus =
   | "draft"
   | "open"
@@ -155,7 +155,7 @@ type ProposalStatus =
   | "passed_claimed"
   | "passed_verified"
   | "passed_onsite"
-  | "failed"
+  | "failed" | "vetoed"
   | "applied";
 
 /** How the last ballot on a proposal ended (`ballots.status`). */
@@ -206,12 +206,12 @@ export const STATUS_COPY: Record<ProposalStatus, { label: string; cls: string }>
   // same brake and the same cycle timing as the on-site sibling below, and
   // the chip asserted the happy branch of both.
   passed_verified: { label: "verified on-chain", cls: "bg-violet-50 text-violet-700" },
-  // No ", applying" on this one. Whether it IS applying depends on
-  // `governance.auto_apply_enabled` and on whether the set touches a
-  // cycle-timed dial, so the chip states the fact that never varies and
-  // WaitingNote below says which of the two is holding it.
+  // No ", applying" on this one. Whether it IS applying depends on the landing
+  // instant, the brake and the cycle timing, so the chip states the fact that
+  // never varies and WaitingNote below says which of the three is holding it.
   passed_onsite: { label: "carried at the village vote", cls: "bg-violet-50 text-violet-700" },
   failed: { label: "did not pass", cls: "bg-stone-100 text-stone-500" },
+  vetoed: { label: "stopped by a steward, back with the proposer", cls: "bg-amber-50 text-amber-700" }, // 0172
   applied: { label: "applied", cls: "bg-teal-deep/10 text-teal-deep" },
 };
 

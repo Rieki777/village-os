@@ -446,23 +446,37 @@ describe.skipIf(!DB_CONFIGURED)("the village votes on what it mints", () => {
     expect(closed.status, JSON.stringify(closed.json)).toBe(200);
     expect(closed.json?.outcome).toBe("passed");
 
+    /*
+     * REWRITTEN BY THE DISPATCHER LANE, because the rule it pinned is now wrong.
+     *
+     * It used to assert that a carried minting ballot queues the rule AT THE
+     * CLOSE. The 2026-09-03 ruling gives every Game change a landing instant and
+     * a window a steward can stop it inside, and a minting rule is a Game
+     * change. So the close stamps the instant and writes nothing, and the
+     * landing path writes the pending row when the instant comes.
+     *
+     * What has NOT changed, and is still asserted below, is the deferral this
+     * case exists for: the LIVE number never moves, and the new one lands on a
+     * moon rather than today.
+     */
+    const stamped = await ruleRow(seatGratitude);
+    expect(String(stamped.amount), "the live amount must not move").toBe(liveAmountBefore);
+    expect(stamped.pending_amount, "nothing is queued at the close any more").toBeNull();
+    expect(closed.json?.applied, "a queued rule is not an applied dial").toEqual([]);
+    expect(String(closed.json?.held)).toContain("lands at");
+
+    // The window runs out. Nobody stopped it, so the next pass of the landing
+    // path applies it. The human cycle close is one of that path's two callers.
+    await pool.query("UPDATE ballots SET lands_at = DATE_SUB(NOW(), INTERVAL 1 HOUR), veto_closes_at = DATE_SUB(NOW(), INTERVAL 1 HOUR) WHERE id = ?", [ballotId]); // module-review-ok: fixture SQL against the suite's own scratch schema
+    const landed = await call("POST", "/api/admin/cycles/close", { body: {} });
+    expect(landed.status, JSON.stringify(landed.json)).toBe(200);
+    expect(landed.json?.governanceLanding?.ran, "the landing path has to say whether it ran").toBe(true);
+
     const after = await ruleRow(seatGratitude);
-    // THE DEFERRAL HOLDS. The live number is what it was, so nothing already
-    // owed for the cycle the village is in moved under anybody.
-    expect(String(after.amount), "the live amount must not move").toBe(liveAmountBefore);
-    // And the decision landed where a decision lands.
+    expect(String(after.amount), "the live amount still must not move").toBe(liveAmountBefore);
     expect(Number(after.pending_amount)).toBe(35);
     expect(Number(after.pending_from_cycle)).toBeGreaterThan(0);
     expect(String(after.pending_by)).toBeTruthy();
-
-    /*
-     * WHAT THE CARD SAYS. `applied` renders as "<key> now holds the value the
-     * village voted for", which would be false about a queued rule, so a mint
-     * reports through `held` instead: "Nothing has moved yet: ... The change is
-     * recorded and waiting."
-     */
-    expect(closed.json?.applied, "a queued rule is not an applied dial").toEqual([]);
-    expect(String(closed.json?.held)).toContain("what the village mints changes at cycle");
 
     // The amendment ledger carries it, sourced to governance and pointing at
     // the ballot, so the record survives the browser session that closed it.
