@@ -287,7 +287,36 @@ describe("usePathLadders", () => {
     });
     const { result } = renderHook(() => usePathLadders(["steward"]));
     await waitFor(() => expect(asked).toBe(1));
-    expect(result.current).toBeNull();
+    expect(result.current.ladders).toBeNull();
+    expect(result.current.particulars).toBeNull();
+  });
+
+  /*
+   * The two halves of the payload are checked SEPARATELY. An older server, or
+   * one mid-deploy, answers with ladders and no `paths` key, and the ladders
+   * must still draw: pinning the whole response on the newer half would blank
+   * a steward's ladder for the length of a rollout.
+   */
+  it("keeps the ladders when the particulars half is missing or malformed", async () => {
+    withTokenStore();
+    vi.stubGlobal("fetch", async () => ({
+      ok: true,
+      json: async () => ({ ladders: [{ pathId: "steward", rungs: [] }] }),
+    } as unknown as Response));
+    const { result } = renderHook(() => usePathLadders(["steward"]));
+    await waitFor(() => expect(result.current.ladders).toHaveLength(1));
+    expect(result.current.particulars).toBeNull();
+  });
+
+  it("refuses an array as the particulars, which JSON columns happily hold", async () => {
+    withTokenStore();
+    vi.stubGlobal("fetch", async () => ({
+      ok: true,
+      json: async () => ({ ladders: [], paths: ["investor"] }),
+    } as unknown as Response));
+    const { result } = renderHook(() => usePathLadders(["steward"]));
+    await waitFor(() => expect(result.current.ladders).toEqual([]));
+    expect(result.current.particulars).toBeNull();
   });
 
   /* The route refuses a stranger, so the call has to carry the token. */

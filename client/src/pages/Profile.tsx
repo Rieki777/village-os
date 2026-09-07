@@ -12,6 +12,7 @@ import MaturityLadder from "@/components/profile/MaturityLadder";
 import PowersMap from "@/components/profile/PowersMap";
 import PathsPanel, { type PathTile } from "@/components/profile/PathsPanel";
 import StandingRow from "@/components/profile/StandingRow";
+import PathFacts from "@/components/profile/PathFacts";
 import QuietSection from "@/components/profile/QuietSection";
 import { SHEET_SECTIONS } from "@/components/profile/sheetSections";
 import SurfacedBanner from "@/components/profile/SurfacedBanner";
@@ -157,7 +158,7 @@ export default function Profile() {
    * ladder is drawn until there is one to draw. A member who walks no path
    * makes no request at all, and claiming a path re-reads.
    */
-  const ladders = usePathLadders(user?.paths ?? []);
+  const { ladders, particulars } = usePathLadders(user?.paths ?? []);
 
   /**
    * Take a path or let one go.
@@ -679,21 +680,31 @@ export default function Profile() {
                 `user.paths` has already changed by the time the await returns.
                 The quiet line vanishes on that same render.
 
-                ONLY THE UNWALKED APPEAR HERE, and that is not a shortcut. A
-                walked path's ladder already renders inside PathsPanel, up in
-                the "now" band, reading that path's own facts. Drawing a second
-                surface for it here would be the six-gratitude-sections mistake
-                in a new place. A member who walks all four sees this band
-                disappear, which is the correct thing for it to do: there is
-                nothing left unopened to point at.
+                EACH PATH APPEARS ONCE, IN ONE OF TWO STATES. Unwalked, it is
+                a single quiet line naming what walking it would open. Walked,
+                it is that path's own PARTICULARS: the investor's dated facts,
+                a member's ventures, their reservations, their seatings.
 
-                What does NOT exist yet is a section per path for that path's
-                own FACTS beyond the ladder rungs: the investor's dated facts,
-                a member's ventures, their reservations, their seatings. All
-                four have tables (0156, 0157, the housing index, org seatings)
-                and none reaches the profile client. That is one small server
-                change per path and it is the next thing here, not this one.
+                The ladder is a different thing and stays where it is, inside
+                PathsPanel up in the "now" band. A ladder says WHERE somebody
+                stands on a path; this says WHAT the path holds. Reading the
+                second off the first is what was impossible before: `laddersFor`
+                narrows every row to the dated fields a rung needs and drops
+                the venture's name, so the profile could show that a venture had
+                been opened and never which one. Both projections now come off
+                the same fetch and the same four queries.
               */}
+              {SHEET_SECTIONS.filter(
+                (sec) => sec.band === "path" && sec.path && user.paths.includes(sec.path),
+              ).map((sec) => (
+                <PathFacts
+                  key={sec.id}
+                  pathId={sec.path ?? ""}
+                  title={offeredPaths.find((p) => p.id === sec.path)?.label ?? sec.path ?? ""}
+                  particulars={particulars}
+                />
+              ))}
+
               {SHEET_SECTIONS.filter(
                 (sec) => sec.band === "path" && sec.path && !user.paths.includes(sec.path),
               ).map((sec) => {
