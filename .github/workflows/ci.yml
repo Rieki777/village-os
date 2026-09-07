@@ -72,7 +72,7 @@ jobs:
     env:
       TEST_DATABASE_URL: mysql://root:ci-test@127.0.0.1:3306/mysql
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # The two migration guards below both ask "what did the PREVIOUS
           # release have?", and answer it from git. The default here is
@@ -86,10 +86,10 @@ jobs:
           # that is red for a reason nobody can fix gets deleted.
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         # version comes from package.json "packageManager" — one source of truth
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
