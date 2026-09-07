@@ -4,6 +4,16 @@ This is a white-label village-coordination platform. One codebase runs every ins
 village gets its own database, domain and environment. `README.md` routes by why you are here;
 `docs/ARCHITECTURE.md` is the system map.
 
+## Canonical contributor guide
+
+The unified contributor system for all three Rieki777 repositories lives in
+[`Bioregional-Infinite-Game`](https://github.com/Rieki777/Bioregional-Infinite-Game). It covers
+the shared flow for human and AI contributors: Git trailers for AI attribution, the Hypha
+governance proposal draft that fires after a PR merges, and the OSS adoption strategy. This file
+is the repo-specific overlay: it carries the gates, invariants, and conventions that are unique
+to village-os. Read the canonical guide first when the question is about the contributor system
+itself; read this file when the question is about this codebase.
+
 Read this file before you open a pull request. The contribution model here is unusual on purpose,
 and the parts that surprise people are in the first section.
 
