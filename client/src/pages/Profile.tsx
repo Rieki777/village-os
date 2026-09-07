@@ -14,6 +14,8 @@ import PathsPanel, { type PathTile } from "@/components/profile/PathsPanel";
 import StandingRow from "@/components/profile/StandingRow";
 import QuietSection from "@/components/profile/QuietSection";
 import { SHEET_SECTIONS } from "@/components/profile/sheetSections";
+import SurfacedBanner from "@/components/profile/SurfacedBanner";
+import { useSurfaced } from "@/components/profile/useSurfaced";
 import TheVessel from "@/components/profile/TheVessel";
 import MoonDock from "@/components/profile/MoonDock";
 import NightMotes from "@/components/profile/NightMotes";
@@ -235,6 +237,25 @@ export default function Profile() {
    */
   const offerKnown = config !== null;
   const offeredPaths = config?.paths ?? [];
+
+  /*
+   * WHAT IS OPEN TO THIS MEMBER, in the sheet's own declared order, which is
+   * the order the surfacing queue meets them in.
+   *
+   * A path section counts as open the moment the path is walked. The bands that
+   * are always present are not candidates at all: "newly open" has to mean
+   * something a member did not have before, and a section every member has had
+   * since their first minute has never opened for anybody.
+   */
+  const openSections = SHEET_SECTIONS.filter(
+    (sec) => sec.band === "path" && sec.path && user.paths.includes(sec.path),
+  ).map((sec) => sec.id);
+  const surfaced = useSurfaced(openSections, offerKnown);
+  const surfacedSection = SHEET_SECTIONS.find((sec) => sec.id === surfaced.sectionId);
+  const surfacedLabel = surfacedSection?.path
+    ? (offeredPaths.find((p) => p.id === surfacedSection.path)?.label ?? "")
+    : "";
+
   const pathTiles: PathTile[] = [
     ...offeredPaths.map((p) => ({
       id: p.id,
@@ -342,6 +363,32 @@ export default function Profile() {
 
             <div className="space-y-8">
               {/* WHO YOU ARE HERE. */}
+              {/*
+                THE ONE PLACE THE FIXED ORDER BENDS, and it bends by a signpost
+                rather than by moving anything.
+
+                A section that has just opened is named here for a visit or two
+                and then settles. The section itself never leaves its home: this
+                points DOWN at it. Rendering the section up here instead would
+                put the same thing on the page twice and leave a member unsure
+                whether they were looking at two things or one.
+              */}
+              {surfacedSection && surfacedLabel ? (
+                <SurfacedBanner
+                  title={surfacedLabel}
+                  because={surfacedSection.quiet.replace(/, once you walk.*$/, ".")}
+                  onGo={() => {
+                    surfaced.acknowledge(surfacedSection.id);
+                    /* Every surfaceable section today is a path section, and a
+                       path's content lives in PathsPanel, so that is the anchor.
+                       Falling back to the section's own id keeps this correct
+                       for whatever surfaces next without another edit here. */
+                    (document.getElementById(`sheet-${surfacedSection.id}`) ??
+                      document.getElementById("sheet-paths"))?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                />
+              ) : null}
+
               {/*
                 ABOUT YOU IS A DAY-ONE ACT, so it reads in the day-one band.
 
@@ -466,6 +513,15 @@ export default function Profile() {
                 failed={meFailed}
                 onGiven={reloadMe}
               />
+              {/*
+                THE ANCHOR THE SURFACED BANNER POINTS AT.
+
+                A walked path's ladder renders inside PathsPanel, so this is
+                where "take a look" lands. The banner names the path and this is
+                the thing it means; a second surface for a walked path would be
+                the duplicate the whole consolidation exists to avoid.
+              */}
+              <div id="sheet-paths" className="scroll-mt-6">
               <PathsPanel
                 tiles={pathTiles}
                 claimedIds={user.paths}
@@ -475,6 +531,7 @@ export default function Profile() {
                 onToggle={togglePath}
                 ladders={ladders}
               />
+              </div>
 
               {/* HOW FAR YOU HAVE COME. Both halves wait for their payload:
                   `config` carries the ladder with every rule already overlaid,
