@@ -254,7 +254,7 @@ const ctx = {
 describe("the four questions", () => {
   it("answers in the brief's shape: alone, with approval, the pots, the sources", () => {
     const budgets: CircleBudgetRow[] = [
-      { id: "b1", circleId: "kitchen", seasonId: null, amountMinor: 120000, cycleAmountMinor: null, unit: "CHF", note: null, isExample: false },
+      { id: "b1", circleId: "kitchen", seasonId: null, amountMinor: 120000, cycleAmountMinor: null, mode: "cap", pending: null, dormant: null, unit: "CHF", note: null, isExample: false },
     ];
     const sources: FundingSourceRow[] = [
       { id: "s1", name: "Stays", kind: "stays", sharePct: 40, amountMinorPerYear: null, unit: null, note: null, sortOrder: 1, isExample: false },

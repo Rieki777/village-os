@@ -32,6 +32,7 @@ import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { burnFor, type CircleEnvelope, type SeasonSpan } from "../lib/circleBurn";
 import { burnSentence, type BurnWords, type CircleBurnReading } from "../../shared/circleBurn";
+import { CIRCLE_STATUSES, type CircleStatus } from "../../shared/draftKinds";
 import { amountWords, listBudgets } from "../lib/resources";
 import { tokenDef } from "../lib/ledger";
 import { clockModeNow } from "../lib/circleBonusGate";
@@ -78,6 +79,11 @@ export function register(app: Express, deps: Deps): void {
       seasonCapMinor: b.amountMinor,
       cycleCapMinor: b.cycleAmountMinor,
       seasonId: b.seasonId,
+      // 0181: which model, and the change queued against it. `burnFor` decides
+      // which one is RUNNING at the instant asked for; this only carries both.
+      mode: b.mode,
+      pending: b.pending,
+      dormant: b.dormant,
     }));
 
     const season = seasonState();
@@ -103,6 +109,16 @@ export function register(app: Express, deps: Deps): void {
     const clockMode = clockModeNow();
 
     const words = burnWords(circlesRepo);
+    /*
+     * A CIRCLE'S STATUS IS READ FROM THE REPO AND NEVER DEFAULTED (0181).
+     *
+     * A circle this route cannot find is reported `dormant` and not `active`.
+     * The reading uses the status to decide whether a treasury balance is a
+     * live one, and the conservative direction for an unknown circle is the
+     * one that says "held, not spendable", because the opposite invites a
+     * spend against a circle nobody could name.
+     */
+    const circleStatusFor = circleStatusReader(circlesRepo);
     const targets = only ? [only] : distinct(envelopes.map((e) => e.circleId));
 
     const readings: Array<CircleBurnReading & { sentence: string }> = [];
@@ -117,6 +133,7 @@ export function register(app: Express, deps: Deps): void {
           seasons,
           timeZone,
           tokenTypeFor,
+          circleStatusFor,
         },
       );
       readings.push({ ...reading, sentence: burnSentence(reading, words) });
@@ -133,10 +150,21 @@ export function register(app: Express, deps: Deps): void {
  * whose movements live in `fiat_charges`, so it returns null and the reading
  * reports `unmeasurable` instead of a zero nobody measured.
  */
-function tokenTypeFor(unit: string): string | null {
+export function tokenTypeFor(unit: string): string | null {
   const m = TOKEN_UNIT.exec(String(unit ?? ""));
   if (!m) return null;
   return tokenDef(m[1]) ? m[1] : null;
+}
+
+/** A circle's lifecycle, off the repo, with an unknown circle reading dormant. */
+function circleStatusReader(circlesRepo: { all(): unknown[] }): (id: string) => CircleStatus {
+  const circles = circlesRepo.all() as Array<{ id?: string; status?: string }>;
+  return (id: string) => {
+    const found = circles.find((c) => c?.id === id);
+    return CIRCLE_STATUSES.includes(found?.status as CircleStatus)
+      ? (found!.status as CircleStatus)
+      : "dormant";
+  };
 }
 
 function burnWords(circlesRepo: { all(): unknown[] }): BurnWords {

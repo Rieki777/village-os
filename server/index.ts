@@ -61,6 +61,8 @@ import { register as registerHoldersRoutes } from "./routes/holders";
 import { register as registerErasureQueueRoutes } from "./routes/erasureQueue";
 import { register as registerCircleBurnRoutes } from "./routes/circleBurn";
 import { register as registerCircleBonusGateRoutes } from "./routes/circleBonusGate";
+import { register as registerCircleTreasuryRoutes } from "./routes/circleTreasury";
+import { budgetTreasuries, onCircleStatusChange, treasuryFacts, type TreasuryAction, type TreasuryPermit } from "./lib/circleTreasury";
 import { register as registerGovernanceWeightRoutes } from "./routes/governanceWeights";
 import { register as registerGovernanceWizardRoutes } from "./routes/governanceWizard";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
@@ -10334,9 +10336,49 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       if (clash) return res.status(409).json({ error: `Alias "${alias}" already resolves to another circle` });
     }
     if (merged.parentCircleId === merged.id) return res.status(400).json({ error: "A circle cannot parent itself" });
+    const wasStatus = String((all[idx] as any).status ?? "active");
     all[idx] = { ...merged, aliases };
     await circlesRepo.replaceAll(all);
-    res.json(all[idx]);
+
+    /*
+     * 0181: GOING DORMANT EMPTIES THE CIRCLE'S TREASURY. RYE RULED IT.
+     *
+     * "If a circle goes dormant the treasury is destroyed or sent back to a
+     * master treasury (if there is one). To be reissued if that circle comes
+     * alive again."
+     *
+     * THE SWEEP RUNS AFTER `replaceAll`, DELIBERATELY. The status change is
+     * what makes the sweep lawful, so the row has to be committed first: a
+     * sweep that ran before it and then hit a failed write would have moved a
+     * live circle's money. This way the worst case is a dormant circle that
+     * still holds tokens, which `GET /api/resources/treasuries` reports by
+     * name and which any steward can clear with the return route.
+     *
+     * TURNING A CIRCLE BACK ON TELLS THE STEWARD WHAT IT HELD AND WHAT
+     * REISSUING COSTS, because reissuing is a new mint and a new mint meets the
+     * village's issuance cap. A steward who found that out by being refused
+     * would have learned it in the worst place.
+     */
+    const nowStatus = String(all[idx].status ?? "active");
+    let treasuryNote: string | null = null;
+    let swept: unknown[] | undefined;
+    if (wasStatus !== "dormant" && nowStatus === "dormant") {
+      const forCircle = (await listBudgets(getPool())).filter((b) => b.circleId === all[idx].id);
+      swept = await sweepDormantCircle(getPool(), {
+        circleId: String(all[idx].id),
+        budgets: forCircle.map((b) => ({ id: b.id, unit: b.unit })),
+        tokenTypeFor: treasuryTokenFor,
+        actorId: adminActor(req)?.id ?? null,
+      });
+    } else if (wasStatus === "dormant" && nowStatus !== "dormant") {
+      const forCircle = (await listBudgets(getPool())).filter((b) => b.circleId === all[idx].id);
+      const record = forCircle.find((b) => b.dormant);
+      const slug = record ? treasuryTokenFor(record.unit) : null;
+      if (record?.dormant && slug) {
+        treasuryNote = revivalNote(record.dormant, slug, String(all[idx].name ?? all[idx].id));
+      }
+    }
+    res.json({ ...all[idx], ...(swept ? { treasurySwept: swept } : {}), ...(treasuryNote ? { treasuryNote } : {}) });
   });
 
   app.delete("/api/admin/circles/:id", async (req, res) => {
@@ -15614,6 +15656,45 @@ Send an empty drafts array when you are still listening. A role payload is {name
     res.json({ success: true });
   });
 
+  /*
+   * 0181: THE TREASURY LANE'S PERMISSION SEAM, FILLED IN FROM HERE.
+   *
+   * `server/routes/circleTreasury.ts` and `server/lib/circleTreasury.ts`
+   * decide nothing about who may fund, spend, return or reschedule a circle's
+   * money. They call this. It answers null when the actor may act and the
+   * sentence they should read when they may not.
+   *
+   * TODAY it is the declare gate the budget writes above already use, which
+   * means admin, `org.declare`, or the circle's own speaking seat, with the
+   * break-glass hatch carried through. That is deliberately the SAME right
+   * that already sets a circle's caps: setting a cap and minting a treasury
+   * are the same decision about the same circle's money, so shipping them
+   * under different rights would be inventing a permission model in a lane
+   * that was told not to.
+   *
+   * WHEN THE BADGE AND THE CIRCLE-SCOPED ROLE ARE RULED ON, this closure is
+   * the whole change: swap `mayDeclareResources` for the badge check, branch
+   * on `action` if the ruling distinguishes funding from spending, and neither
+   * the library nor the routes move. `action` is already in the signature for
+   * exactly that reason, unused here on purpose.
+   */
+  async function treasuryPermitFor(req: express.Request): Promise<TreasuryPermit> {
+    const { declareCtx } = await resourcesViewerFor(req);
+    const { ctx: actCtx } = await resourcesDeclareAct(req, declareCtx);
+    return (_action: TreasuryAction, circleId: string): string | null => {
+      if (mayDeclareResources(circleId, actCtx)) return null;
+      return "Moving a circle's money takes admin, org.declare, or this circle's speaking seat";
+    };
+  }
+
+  registerCircleTreasuryRoutes(app, {
+    getPool,
+    authedUser,
+    circlesRepo,
+    seasonState,
+    permitFor: treasuryPermitFor,
+  });
+
   app.use("/api/health", requireModule("health"));
   app.use("/api/admin/health", requireModule("health"));
 
@@ -17248,9 +17329,60 @@ Send an empty drafts array when you are still listening. A role payload is {name
      * silently is the change of meaning `spendSinkFor` refuses in writing.
      */
     const retired = await retiredSupply(getPool());
+    /*
+     * AND TREASURY-HELD SITS BESIDE BOTH, NETTED INTO NEITHER (0181).
+     *
+     * A third fact about the same tokens: issued, still in existence, not yet
+     * spent, and COMMITTED TO A CIRCLE. Cap mode issues nothing and only
+     * permits; treasury mode mints up front, and Rye's design intent is that a
+     * circle underspends and saves, so these balances persist across seasons
+     * and accumulate. Without this figure a founder reading issuance alone
+     * overstates what is loose in the village by exactly this much, which is
+     * the same shape as the stay-credit outstanding number that went one term
+     * short.
+     *
+     * SUMMED OFF `token_balances`, never off funded minus spent. The
+     * subtraction would be a second counter over rows the cache already
+     * answers for, and this repository has paid for one of those this week.
+     *
+     * The STATE is what stops a zero lying. `module_off` is an absence,
+     * `none_on_treasury` is a measured zero because every circle chose a cap,
+     * and `all_empty` is a measured zero with treasuries that have never been
+     * funded. `held` wins over all three whenever tokens are actually there,
+     * including while the module is off, because the tokens are real either
+     * way.
+     */
+    const budgets = await listBudgets(getPool());
+    const readAt = new Date();
+    const onTreasury = budgets.filter((b) => modeAt(b.mode, b.pending, readAt) === "treasury");
+    const heldByToken = await treasuryHeldByToken(getPool());
+    const resourcesOn = effectiveLifecycle("resources") !== "off";
     res.json({
-      tokens: allTokens().map((t) => ({ ...t, issuedBy: byToken[t.slug] ?? {}, retired: retired[t.slug] ?? 0 })),
+      tokens: allTokens().map((t) => {
+        const held = heldByToken[t.slug] ?? { heldMinor: 0, accounts: 0 };
+        const onTreasuryHere = onTreasury.filter((b) => b.unit === `token:${t.slug}`).length;
+        const state = treasuryTotalState(resourcesOn, held.accounts, onTreasuryHere);
+        return {
+          ...t,
+          issuedBy: byToken[t.slug] ?? {},
+          retired: retired[t.slug] ?? 0,
+          treasuryHeld: {
+            state,
+            heldMinor: state === "module_off" ? null : held.heldMinor,
+            accountsHolding: held.accounts,
+            budgetsOnTreasury: onTreasuryHere,
+          },
+        };
+      }),
       mintCapPerCycle: numberVar("ledger.admin_mint_cycle_cap"),
+      /*
+       * THE ONE NUMBER RYE ASKED FOR, across every token this village holds.
+       * Per-token detail is on each row above; this is the village's total,
+       * and it is deliberately a sum of MINOR units per token rather than one
+       * scalar, because adding two tokens with different scales together would
+       * be an invented figure.
+       */
+      treasuryHeldByToken: heldByToken,
     });
   });
 

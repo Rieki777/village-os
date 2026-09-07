@@ -57,6 +57,10 @@ import {
 import type { VillageMoon } from "../../shared/villageMoon";
 import { issuanceRefusal, readGameStart } from "./gameStart";
 import { cycleIdFor, parseCycleId } from "./gratitude-cycles";
+// The import runs both ways, the same shape `./exit` above already has: both
+// modules only reach each other from inside functions, so nothing is read at
+// module-init time and the cycle resolves.
+import { applyPendingModes } from "./circleTreasury";
 import { openExitFor } from "./exit";
 import { moonOneCycle, villageMoonFor } from "./villageMoon";
 import { numberVar, stringVar } from "./variables";
@@ -2806,6 +2810,22 @@ export async function runSettlement(pool: Pool, at: Date = new Date()): Promise<
   // pay the old rate and then apply the new one a moon late, which is the
   // deferral working backwards.
   await applyPendingRules(pool, at);
+
+  /*
+   * AND THE SAME FOR A CIRCLE'S BUDGET MODE (0181).
+   *
+   * A queued mode change lands on a SEASON boundary by default while this
+   * runs on a CYCLE, so most settlements promote nothing and the one after a
+   * season turns promotes whatever was waiting. That is correct: the sweep
+   * compares stored instants and does not care how often it is asked.
+   *
+   * IT IS A TIDY-UP AND NOT THE RULE. `modeAt` in shared/circleTreasury.ts
+   * decides which model a circle is running from the row itself, so a village
+   * whose scheduler is off still reads correctly. Making the promotion the
+   * rule would mean a missed settlement left every circle running last
+   * season's model with nothing anywhere saying so.
+   */
+  await applyPendingModes(pool, at);
 
   /*
    * WANING GOES HERE, AHEAD OF THE RULES READ, AND THE POSITION IS THE POINT.

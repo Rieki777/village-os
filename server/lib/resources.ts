@@ -17,6 +17,7 @@
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { formatMoney } from "../../shared/money";
+import { BUDGET_MODES, isBudgetMode, type BudgetMode, type PendingModeChange } from "../../shared/circleTreasury";
 import { moduleActivity } from "./modules";
 
 // ── Vocabulary ──────────────────────────────────────────────────────────────
@@ -144,6 +145,32 @@ export interface CircleBudgetRow {
    * closed.
    */
   cycleAmountMinor: number | null;
+  /**
+   * WHICH MODEL THIS CIRCLE RUNS ON (0181), and it is per circle by ruling.
+   *
+   * `cap` is every row that existed before 0181 and is the column's default:
+   * the two caps above bound a right to ISSUE and nothing is held. `treasury`
+   * means real tokens in `sys:circle:<circleId>`, which persist across a
+   * period and are read from the ledger, never from this table.
+   */
+  mode: BudgetMode;
+  /**
+   * A queued change to that model, or null.
+   *
+   * It has NOT happened. `modeAt` in shared/circleTreasury.ts decides which
+   * model is running at an instant; this is the schedule, not the state.
+   */
+  pending: PendingModeChange | null;
+  /**
+   * WHAT THIS TREASURY HELD WHEN ITS CIRCLE WENT DORMANT, and where it went.
+   *
+   * Null means the circle has never gone dormant under this budget. That is
+   * the distinction Rye's ruling forces: a circle that never had a treasury, a
+   * circle whose treasury was swept when it went dormant, and a circle awake
+   * with a treasury of zero all read zero, and all three mean something
+   * different. This column is what tells the middle one apart.
+   */
+  dormant: { heldMinor: number; at: string; destination: string } | null;
   unit: string;
   note: string | null;
   isExample: boolean;
@@ -256,6 +283,19 @@ export function budgetProblem(body: any, tokenExists: (slug: string) => boolean)
       return "cycleAmountMinor must be a whole number of minor units, zero or above";
     }
   }
+  /*
+   * A MODE IS OPTIONAL AND, WHEN GIVEN, IT IS ONE OF TWO WORDS (0181).
+   *
+   * It only reaches the INSERT. `upsertBudget`'s UPDATE never names `mode`, so
+   * a mode sent with an edit is ignored on purpose: switching models is a
+   * scheduled act at a period boundary and not a side effect of changing an
+   * amount. Both caps above stay required by the table and stop being read the
+   * moment a row runs on a treasury, because a treasury has a balance and no
+   * ceiling.
+   */
+  if (body.mode !== undefined && body.mode !== null && !isBudgetMode(body.mode)) {
+    return `mode must be ${BUDGET_MODES.join(" or ")}`;
+  }
   return null;
 }
 
@@ -301,7 +341,9 @@ export async function listSources(pool: Pool): Promise<FundingSourceRow[]> {
 
 export async function listBudgets(pool: Pool): Promise<CircleBudgetRow[]> {
   const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: the declaration tables' one enumerable home (the structureRead pattern); no cache sits above these three tables
-    "SELECT id, circle_id, season_id, amount_minor, cycle_amount_minor, unit, note, is_example FROM circle_budgets ORDER BY circle_id, season_id",
+    "SELECT id, circle_id, season_id, amount_minor, cycle_amount_minor, mode, pending_mode, " +
+      "pending_from, pending_by, pending_at, dormant_held_minor, dormant_at, dormant_to, " +
+      "unit, note, is_example FROM circle_budgets ORDER BY circle_id, season_id",
   );
   return (rows as any[]).map((r) => ({
     id: String(r.id),
@@ -312,6 +354,32 @@ export async function listBudgets(pool: Pool): Promise<CircleBudgetRow[]> {
     cycleAmountMinor: r.cycle_amount_minor === null || r.cycle_amount_minor === undefined
       ? null
       : Number(r.cycle_amount_minor),
+    /*
+     * ANYTHING THIS COLUMN DOES NOT RECOGNISE READS AS `cap`, which is the
+     * conservative direction: a cap holds no tokens, so a misread cannot
+     * invent a balance. The reverse default would show every circle an empty
+     * treasury, which reads as a circle that has spent everything.
+     */
+    mode: isBudgetMode(r.mode) ? r.mode : "cap",
+    // `pending_from` alone says whether a change is queued, the same way
+    // `pending_from_cycle` does on mint_rules. Half a pending row is no row.
+    pending: isBudgetMode(r.pending_mode) && r.pending_from
+      ? {
+          mode: r.pending_mode as BudgetMode,
+          from: new Date(r.pending_from).toISOString(),
+          by: r.pending_by ?? null,
+          at: r.pending_at ? new Date(r.pending_at).toISOString() : null,
+        }
+      : null,
+    // `dormant_at` alone says a sweep happened. A held figure of 0 with a date
+    // is a real answer: the circle went dormant holding nothing.
+    dormant: r.dormant_at
+      ? {
+          heldMinor: Number(r.dormant_held_minor ?? 0),
+          at: new Date(r.dormant_at).toISOString(),
+          destination: String(r.dormant_to ?? ""),
+        }
+      : null,
     unit: String(r.unit),
     note: r.note ?? null,
     isExample: Number(r.is_example ?? 0) === 1,
@@ -719,6 +787,18 @@ export async function upsertBudget(pool: Pool, body: any, actorId: string | null
       ? null
       : Number(body.cycleAmountMinor);
   const note = body.note ? String(body.note).slice(0, 500) : null;
+  /*
+   * THE MODE IS SETTABLE AT CREATION AND NEVER ON AN EDIT (0181).
+   *
+   * A budget being written for the first time has no period to finish, so a
+   * village saying "this circle runs on a treasury" is a starting condition
+   * and not a switch. Once the row exists, Rye's ruling binds: a change to the
+   * model waits for the period boundary, and it goes through `queueModeChange`
+   * in server/lib/circleTreasury.ts. So the UPDATE below deliberately does not
+   * name `mode`, which means editing an amount cannot flip the model even if
+   * a caller sends one, and a queued change survives an amount edit.
+   */
+  const mode: BudgetMode = isBudgetMode(body.mode) ? body.mode : "cap";
   const [updated]: any = await pool.query( // module-review-ok: the declaration tables' one enumerable home (the structureRead pattern); no cache sits above these three tables
     "UPDATE circle_budgets SET amount_minor = ?, cycle_amount_minor = ?, note = ? WHERE circle_id = ? AND unit = ? AND ((season_id IS NULL AND ? IS NULL) OR season_id = ?)",
     [amount, cycleAmount, note, circleId, unit, seasonId, seasonId],
@@ -727,8 +807,8 @@ export async function upsertBudget(pool: Pool, body: any, actorId: string | null
   if (!updated.affectedRows) {
     id = id || newId("budget");
     await pool.query( // module-review-ok: the declaration tables' one enumerable home (the structureRead pattern); no cache sits above these three tables
-      "INSERT INTO circle_budgets (id, circle_id, season_id, amount_minor, cycle_amount_minor, unit, note) VALUES (?,?,?,?,?,?,?)",
-      [id, circleId, seasonId, amount, cycleAmount, unit, note],
+      "INSERT INTO circle_budgets (id, circle_id, season_id, amount_minor, cycle_amount_minor, mode, unit, note) VALUES (?,?,?,?,?,?,?,?)",
+      [id, circleId, seasonId, amount, cycleAmount, mode, unit, note],
     );
   } else if (!id) {
     const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: the declaration tables' one enumerable home (the structureRead pattern); no cache sits above these three tables
