@@ -3007,6 +3007,23 @@ checked it.
 1. **Refetch, then rebase on `origin/main`.** The local tree runs behind origin far more often than
    it feels, and every line number and every "not implemented" claim taken from a stale checkout is
    suspect. `git fetch origin`, rebase, then re-verify the claims your work rests on.
+1a. **FETCH BEFORE YOU MEASURE, not only before you rebase, and this is the one that keeps costing.**
+   Measuring is a separate act from rebasing and happens far more often: reading a function to answer
+   a question, checking whether a column exists, telling another lane what the code does. A stale
+   tree does not refuse those. It answers them, correctly, about a world that has moved.
+
+   **The dangerous form is a CROSS-LANE CORRECTION**, because it arrives carrying authority. Two
+   lanes traded three corrections on the circle franchise in one exchange. One read a seat COUNT as
+   a table of holders. The other read a real function on a real tree that was 38 commits behind, and
+   sent a confident correction to a lane standing on the tree after the change: no lapse filter, no
+   term column, so expiry must be built. All true of their checkout, all false of main, and the
+   receiving lane would have removed a working mechanism on the strength of it.
+
+   **Both lanes already had this hazard written down and both walked into it anyway**, which is the
+   part worth keeping: the note is not what prevents it. `git fetch origin` immediately before the
+   read is. A claim about the codebase is a measurement, and a measurement carries the timestamp of
+   the tree it was taken on whether or not anybody says so.
+
 2. **Assert the ANCESTRY of every commit your work depends on** before naming a head for a pair
    merge: `git merge-base --is-ancestor <sha> HEAD` per dependency, and say which ones you checked.
    Being level with your own remote is a different question, and a branch that merged main days ago
