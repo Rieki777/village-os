@@ -315,6 +315,7 @@ import { loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle }
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
 import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requestVoiceClaim, settleVoiceClaim } from "./lib/voiceClaim";
 import { defaultSeasonsFor, seasonRunningProblem, suggestNextSeasonDates } from "./lib/seasonCalendar";
+import { completionsFor, completionsForMany, trainingIsComplete } from "./lib/trainingRecord";
 import { respondToTerminalError, installCrashHandlers, installShutdownHandlers, reachedSomebody, reportError, reportErrorWithin, wireErrorReporting } from "./lib/errors";
 import {
   STAY_CREDIT,
@@ -3769,12 +3770,6 @@ function hasMembership(user: any): boolean {
 }
 
 
-function trainingComplete(user: any): boolean {
-  const mods: any[] = trainingRepo.all();
-  if (!mods.length) return false;
-  const done: string[] = user.journeys?.training ?? [];
-  return mods.every((m) => done.includes(m.id));
-}
 
 /**
  * Compute the highest stage the player has earned, per gameConfig rules.
@@ -3783,7 +3778,11 @@ function trainingComplete(user: any): boolean {
  * list, which fetches them grouped in one query — pay nothing extra.
  * Single-member callers use stageOf(), which fetches the count and delegates.
  */
-function computeStage(user: any, consentedQuests: number): string {
+/** Server-recorded completions against the live catalogue. See lib/trainingRecord.ts. */
+const trainingDoneHere = (done: readonly string[]): boolean =>
+  trainingIsComplete(trainingRepo.all().map((m: any) => String(m.id)), done);
+
+function computeStage(user: any, consentedQuests: number, trainingDone: readonly string[]): string {
   let earned = GAME_CONFIG.stages[0].id;
   const grantedIdx = user.stageGranted ? stageIndex(user.stageGranted) : -1;
   for (const stage of GAME_CONFIG.stages) {
@@ -3792,7 +3791,7 @@ function computeStage(user: any, consentedQuests: number): string {
     switch (stage.rule.type) {
       case "default": ok = true; break;
       case "account": ok = true; break; // having a user record implies an account
-      case "training-complete": ok = trainingComplete(user); break;
+      case "training-complete": ok = trainingDoneHere(trainingDone); break;
       case "membership": ok = hasMembership(user); break;
       // The threshold reads the registry (progression.quests_for.<stage>,
       // default = the config min), so climbing speed is village-tunable.
@@ -3807,7 +3806,7 @@ function computeStage(user: any, consentedQuests: number): string {
 
 /** The one-member form: fetch the consented count, then compute. */
 async function stageOf(user: any): Promise<string> {
-  return computeStage(user, await claimsRepo.consentedCount(user.id));
+  return computeStage(user, await claimsRepo.consentedCount(user.id), await completionsFor(getPool(), user.id));
 }
 
 /**
@@ -4548,10 +4547,11 @@ async function runRetentionSweep(): Promise<string> {
 
 async function nextActionFor(user: any): Promise<{ id: string; label: string; href: string }> {
   const claims = await claimsRepo.forUser(user.id);
+  const trained = await completionsFor(getPool(), user.id);
   const budget = await gratitudeBudget(user);
   for (const rule of GAME_CONFIG.nextActions) {
     switch (rule.when) {
-      case "no-training": if (!trainingComplete(user)) return rule; break;
+      case "no-training": if (!trainingDoneHere(trained)) return rule; break;
       case "no-membership": if (!hasMembership(user)) return rule; break;
       case "no-quest-claimed": if (claims.length === 0) return rule; break;
       case "quest-in-progress": if (claims.some((c) => c.status === "claimed" || c.status === "submitted")) return rule; break;
@@ -9170,6 +9170,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
   async function eligibleSenderIds(): Promise<Set<string>> {
     const all = await members.all();
     const consented = await claimsRepo.consentedCounts();
+    // ONE query for the whole roll. A per-member read inside the loop would be
+    // the N+1 the consented counts above already go out of their way to avoid.
+    const trained = await completionsForMany(getPool(), (all as any[]).map((u) => String(u.id)));
     const memberIdx = stageIndex("member");
     const eligible = new Set<string>();
     for (const u of all as any[]) {
@@ -9177,7 +9180,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       // this test and enter the one set every breadth metric trusts.
       if (u.isExample) continue;
       const count = consented.get(u.id) ?? 0;
-      if (count >= 1 || stageIndex(computeStage(u, count)) >= memberIdx) eligible.add(u.id);
+      const done = trained.get(String(u.id)) ?? [];
+      if (count >= 1 || stageIndex(computeStage(u, count, done)) >= memberIdx) eligible.add(u.id);
     }
     return eligible;
   }
@@ -19036,7 +19040,7 @@ ${inner}
   // sit: Express matches in registration order, so where a register() is
   // CALLED is part of the behaviour and not a detail. Said once for all of
   // them, because three verbatim copies of it were three things to keep true.
-  registerTrainingRoutes(app, { isAdmin, trainingRepo });
+  registerTrainingRoutes(app, { isAdmin, trainingRepo, authedUser, getPool, members });
 
   // â”€â”€ FAQs (NEW-1) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -20271,19 +20275,6 @@ ${inner}
     res.json(consented);
   });
 
-  // Journey / training progress sync (server-side game state)
-  app.post("/api/game/journey/sync", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required" });
-    const { journeyId, steps } = req.body ?? {};
-    if (!journeyId || !Array.isArray(steps)) return res.status(400).json({ error: "Missing journeyId or steps" });
-    const updated = await members.update(user.id, (u: any) => {
-      if (!u.journeys) u.journeys = {};
-      u.journeys[journeyId] = steps.map(String);
-    });
-    if (!updated) return res.status(404).json({ error: "User not found" });
-    res.json({ success: true, journeys: updated.journeys });
-  });
 
   // My game state
   app.get("/api/game/me", async (req, res) => {
@@ -20298,7 +20289,8 @@ ${inner}
     // Seeker" from an id. Calling the two halves directly costs the SAME
     // single query stageOf was already paying.
     const consentedQuests = await claimsRepo.consentedCount(user.id);
-    const stageId = computeStage(user, consentedQuests);
+    const trained = await completionsFor(getPool(), user.id);
+    const stageId = computeStage(user, consentedQuests, trained);
     const claims = await claimsRepo.forUser(user.id);
     const ctx = await capabilityCtx(user);
     // What each consented quest actually paid. `amount` is what the witness
@@ -20340,7 +20332,7 @@ ${inner}
       ),
       journeys: user.journeys ?? {},
       membership: hasMembership(user),
-      trainingComplete: trainingComplete(user),
+      trainingComplete: trainingDoneHere(trained),
       // The third rule type as a number, beside the two booleans that were
       // already here. With the ladder now carrying its rules, these three
       // fields are everything a reader needs to evaluate any rung except
@@ -21212,7 +21204,7 @@ ${inner}
     // Same substitution as /api/game/me, same single query: the count the
     // ladder measures is kept instead of collapsed into a stage id.
     const consentedQuests = await claimsRepo.consentedCount(user.id);
-    const stageId = computeStage(user, consentedQuests);
+    const stageId = computeStage(user, consentedQuests, await completionsFor(getPool(), user.id));
     const ctx = await capabilityCtx(user);
     res.json({
       stage: servedStage(stageId),
@@ -26756,6 +26748,7 @@ ${inner}
       consentedCounts: () => claimsRepo.consentedCounts(),
       isExampleUser,
       computeStage,
+      trainingCompletions: (ids: readonly string[]) => completionsForMany(getPool(), ids),
       seasonsCompleted: () => {
         const st = seasonState();
         return st.seasons.filter((x: any) => x.endsOn && x.endsOn <= st.today).length;
@@ -27363,6 +27356,7 @@ ${inner}
   registerPulseRoutes(app, { getPool });
   registerPlayersRoutes(app, {
     isAdmin, members, claimsRepo, computeStage, hasMembership, stageOf, recordStageEvent,
+    trainingCompletions: (ids: readonly string[]) => completionsForMany(getPool(), ids),
   });
 
   // S18: "delete" a member = anonymize them. Value rows persist (the ledger

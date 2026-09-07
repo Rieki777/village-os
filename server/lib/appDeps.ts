@@ -227,7 +227,16 @@ export interface AppDeps {
   // module importing each other. Passing keeps the arrow pointing one way.
 
   /** The stage a member has actually reached, given their consented quests. */
-  computeStage(user: MemberRecord, consentedQuests: number): string;
+  /**
+   * PURE and synchronous, so a caller that already holds its values pays
+   * nothing. `trainingDone` is the SERVER's record of completed modules and
+   * never a field the member can write; batch it with `trainingCompletions`
+   * rather than reading per member inside a loop.
+   */
+  computeStage(user: MemberRecord, consentedQuests: number, trainingDone: readonly string[]): string;
+
+  /** Completed training modules for many members, in one query. */
+  trainingCompletions(userIds: readonly string[]): Promise<Map<string, string[]>>;
 
   /** `computeStage` with the quest count looked up for you. One read. */
   stageOf(user: MemberRecord): Promise<string>;

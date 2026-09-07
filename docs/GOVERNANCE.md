@@ -2667,7 +2667,7 @@ The tables and columns the rules above rest on. The generator checks every one a
 | `delegations.accepted_at` | a delegation carries a choice only once the delegate accepts it |
 | `role_holder_terms` | a term survives an unrelated appointment |
 
-Checked against the 134 migration files in `drizzle/`.
+Checked against the 135 migration files in `drizzle/`.
 
 ## What this file is made from
 
