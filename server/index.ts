@@ -85,6 +85,7 @@ import { register as registerCharacterRoutes } from "./routes/characters";
 import { register as registerArchetypeRoutes } from "./routes/archetypes";
 import { register as registerProfileRoutes } from "./routes/profile";
 import { register as registerMeProfileRoutes } from "./routes/meProfile";
+import { register as registerMapWalkLogRoutes } from "./routes/mapWalkLog";
 import { register as registerHousingRoutes } from "./routes/housing";
 import { register as registerJourneyRoutes } from "./routes/journey";
 import { register as registerPathLadderRoutes } from "./routes/pathLadders";
@@ -19414,37 +19415,8 @@ ${inner}
     deploymentOrigin: notifyDeps.origin, projectName: notifyDeps.projectName,
   });
 
-  /**
-   * The running map posting its own walk log.
-   *
-   * Under `/api/map`, so it inherits the module gate. Unauthenticated on
-   * purpose: a walk runs before anyone signs in, which is exactly the person
-   * whose experience this measures. Nothing here identifies anybody, the
-   * batch is capped, and a replayed post dedupes on its idempotency key.
-   */
-  app.post("/api/map/walk-log", async (req, res) => {
-    const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
-    if (!rows.length || (await overLimit(`walk-log:${clientIp(req)}`, WALK_LOG_PER_IP_HOURLY, 60 * 60 * 1000))) return res.json({ recorded: 0 });
-    const session = typeof req.body?.sessionKey === "string" ? req.body.sessionKey : "";
-    if (!session) return res.status(400).json({ error: "sessionKey required" });
-    const lang = typeof req.body?.lang === "string" ? req.body.lang : null;
-    const wrote = await recordWalkRows(
-      getPool(),
-      rows.map((r: any) => ({
-        sessionKey: session, step: r?.step, atIndex: r?.at_index ?? r?.atIndex,
-        tsSeq: r?.ts_seq ?? r?.tsSeq, lang,
-      })),
-      "live",
-    );
-    /*
-     * `recorded` is the NEW rows, which is what the word has always implied
-     * and did not mean: it used to be `affectedRows`, and MySQL counts an
-     * ON DUPLICATE KEY update as two of those, so a replayed batch reported
-     * more writes than a first send. `accepted` rides beside it for anyone
-     * who wants to know the batch arrived whole.
-     */
-    res.json({ recorded: wrote.stored, accepted: wrote.accepted });
-  });
+  // Map walk log route extracted to server/routes/mapWalkLog.ts
+  registerMapWalkLogRoutes(app, { getPool, overLimit, clientIp });
 
   /**
    * A promise made on the map: coming to a gathering, or taking a quest.
