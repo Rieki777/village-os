@@ -79,16 +79,6 @@ export default function GratitudeWall() {
   const [sending, setSending] = useState(false);
   const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const load = () => {
-    fetch("/api/game/gratitude/wall")
-      .then((r) => (r.ok ? r.json() : []))
-      .then((d) => setWall(Array.isArray(d) ? d : []))
-      .catch(() => { /* silent */ });
-    fetchGameMe().then(setMe);
-  };
-
-  useEffect(load, []);
-
   /* The one thing on this form the village decides. See the textarea below. */
   const [requireMessage, setRequireMessage] = useState<boolean | null>(null);
   useEffect(() => {
@@ -114,16 +104,24 @@ export default function GratitudeWall() {
    * reach it. Counted client-side against the budget's own `cycleId`, which is
    * the same string the server spends against, so the row cannot drift into a
    * different lunation than the meter beside it.
+   *
+   * ── IT IS A FUNCTION, AND THAT IS THE BUG FIX ────────────────────────────
+   *
+   * This lived in a `useEffect` keyed on `[user, budget.cycleId]`, and a send
+   * does not change either of those: the member is the same member and the
+   * lunation is the same lunation. So the effect never re-ran, and the hearts
+   * row sat at its old count until a full page reload. Found by sending on a
+   * phone and watching the row stay on "0 people thanked this cycle" after the
+   * send had visibly succeeded, on the one surface whose whole job is to show
+   * what you have sent. A count that does not answer to the action it counts
+   * is the displayed-number-versus-actual-behaviour defect again.
    */
-  useEffect(() => {
-    if (!user) return;
-    const cycleId = me?.gratitude.budget?.cycleId;
-    if (!cycleId) return;
-    let alive = true;
+  const loadPeopleThanked = (cycleId: string | undefined) => {
+    if (!user || !cycleId) return;
     gameFetch("/api/game/gratitude/me")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (!alive || !d || !Array.isArray(d.sent)) return;
+        if (!d || !Array.isArray(d.sent)) return;
         const ids = new Set(
           (d.sent as SentEntry[])
             .filter((s) => s.cycleId === cycleId && s.toId)
@@ -131,9 +129,24 @@ export default function GratitudeWall() {
         );
         setPeopleThanked(ids.size);
       })
-      .catch(() => { /* the row stays away rather than guessing */ });
-    return () => { alive = false; };
-  }, [user, me?.gratitude.budget?.cycleId]);
+      .catch(() => { /* the row stays as it was rather than guessing */ });
+  };
+
+  const load = () => {
+    fetch("/api/game/gratitude/wall")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => setWall(Array.isArray(d) ? d : []))
+      .catch(() => { /* silent */ });
+    // The count is re-read from whatever budget comes BACK, not from the
+    // `me` in scope when this was called, so a send that moves the cycle
+    // boundary still counts against the right lunation.
+    fetchGameMe().then((fresh) => {
+      setMe(fresh);
+      loadPeopleThanked(fresh?.gratitude.budget?.cycleId);
+    });
+  };
+
+  useEffect(load, []);
 
   const send = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -208,7 +221,15 @@ export default function GratitudeWall() {
 
           {user ? (
             <form onSubmit={send} className="mb-10 rounded-2xl border border-border bg-card p-6 shadow-sm">
-              <div className="mb-4 flex items-center justify-between">
+              {/*
+                `flex-wrap` and a gap, because at 390px these two run into each
+                other. `justify-between` pushes them to the edges only while
+                there is slack; with a heading and "95 / 105 left this cycle" on
+                one line there is none, and the phone rendered
+                "Send gratitude95 / 105 left this cycle" with no space at all.
+                Wrapping drops the budget to its own line where it does not fit.
+              */}
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                 <h2 className="font-display text-xl font-bold text-card-foreground">Send {currency.toLowerCase()}</h2>
                 {budget && budget.total > 0 ? (
                   <span className="text-sm text-muted-foreground">
@@ -243,7 +264,7 @@ export default function GratitudeWall() {
                   onChange={(e) => setForm({ ...form, to: e.target.value })}
                   aria-label="Who you are thanking, by handle"
                   placeholder="Their @handle"
-                  className="rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:ring-2 focus:ring-ring"
+                  className="min-h-11 rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:ring-2 focus:ring-ring"
                 />
                 <input
                   type="number"
@@ -254,7 +275,7 @@ export default function GratitudeWall() {
                   aria-label={`Amount of ${currency.toLowerCase()} to send`}
                   value={form.amount}
                   onChange={(e) => setForm({ ...form, amount: parseInt(e.target.value) || 1 })}
-                  className="rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:ring-2 focus:ring-ring"
+                  className="min-h-11 rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
               {/*

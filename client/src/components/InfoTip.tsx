@@ -126,7 +126,14 @@ export default function InfoTip({ tip, children, label, className = "" }: InfoTi
         }}
         className={
           bare
-            ? "inline-flex items-center justify-center align-middle w-4 h-4 ml-1 rounded-full border border-current/40 text-[10px] leading-none opacity-70 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep/60 cursor-help select-none"
+            // `before:-inset-1.5` grows the TOUCH TARGET and nothing else.
+            // Measured on a real 390px phone: this control is 16 by 16 CSS
+            // pixels, and WCAG 2.5.8 asks 24 by 24 at AA, so a thumb was being
+            // asked to hit two thirds of the minimum. The circle is 16px by
+            // design and is in twenty-six files, so growing the VISUAL would
+            // reflow every one of them; an invisible inset pseudo-element
+            // takes the hit area to 28 by 28 and moves no layout anywhere.
+            ? "relative inline-flex items-center justify-center align-middle w-4 h-4 ml-1 rounded-full border border-current/40 text-[10px] leading-none opacity-70 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep/60 cursor-help select-none before:absolute before:-inset-1.5 before:content-['']"
             : "underline decoration-dotted decoration-1 underline-offset-4 cursor-help rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep/60"
         }
       >

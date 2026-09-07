@@ -73,15 +73,40 @@ function Face({ who, size = "h-8 w-8" }: { who: WallPerson; size?: string }) {
   );
 }
 
-function Named({ who }: { who: WallPerson }) {
+/**
+ * THE FACE AND THE NAME ARE ONE TARGET.
+ *
+ * They were two elements with the link on the name alone, which measured
+ * 74 by 16 CSS pixels on a real 390px phone. WCAG 2.5.8 asks 24 by 24 at AA
+ * and 2.5.5 asks 44 by 44 at AAA, so a 16px-tall link fails the lower bar
+ * outright, and it is the primary way a member reaches somebody's profile
+ * from this wall.
+ *
+ * Wrapping both in one anchor is the fix and it is also the better
+ * interaction: on a phone the portrait is the thing a thumb goes for, and it
+ * was inert. `min-h-11` is the 44px this codebase already uses for its own
+ * touch targets, and the negative inset keeps the row's visual rhythm
+ * unchanged while the hit area grows past the text.
+ */
+function Person({ who }: { who: WallPerson }) {
   const label = who.name || "A member";
-  if (!who.handle) return <span className="font-semibold text-notice">{label}</span>;
+  const body = (
+    <>
+      <Face who={who} />
+      <span className="font-semibold text-notice">{label}</span>
+    </>
+  );
+  // No handle means a deleted account: the tombstone keeps the recorded name
+  // and there is nowhere to go, so it is deliberately not a link.
+  if (!who.handle) {
+    return <span className="inline-flex min-h-11 items-center gap-2">{body}</span>;
+  }
   return (
     <Link
       href={`/profile/${who.handle}`}
-      className="font-semibold text-notice underline-offset-2 hover:underline"
+      className="-mx-1 inline-flex min-h-11 items-center gap-2 rounded-lg px-1 underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]"
     >
-      {label}
+      {body}
     </Link>
   );
 }
@@ -91,11 +116,9 @@ export default function WallEntryCard({ entry, currency }: { entry: WallEntry; c
     <article className="rounded-2xl border border-border bg-card px-5 py-4 shadow-sm">
       <p className="mb-3 leading-relaxed text-card-foreground">"{entry.message}"</p>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-        <Face who={entry.from} />
-        <Named who={entry.from} />
+        <Person who={entry.from} />
         <span>thanked</span>
-        <Face who={entry.to} />
-        <Named who={entry.to} />
+        <Person who={entry.to} />
         {entry.amount > 0 && (
           <span className="text-notice">
             {/* Named for the reader, so the figure is never a bare integer. */}
