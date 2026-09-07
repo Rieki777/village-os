@@ -34,7 +34,7 @@ import { burnFor, type CircleEnvelope, type SeasonSpan } from "../lib/circleBurn
 import { burnSentence, type BurnWords, type CircleBurnReading } from "../../shared/circleBurn";
 import { amountWords, listBudgets } from "../lib/resources";
 import { tokenDef } from "../lib/ledger";
-import { stringVar } from "../lib/variables";
+import { clockModeNow } from "../lib/circleBonusGate";
 
 const TOKEN_UNIT = /^token:([a-z0-9][a-z0-9-]{0,30})$/;
 
@@ -89,8 +89,18 @@ export function register(app: Express, deps: Deps): void {
      * variable while the server starts reads the platform default, because
      * the stores have not loaded yet. A village that keeps calendar months
      * would then be metered against lunations it does not use.
+     *
+     * IT IS READ THROUGH `clockModeNow` BECAUSE THE KEY DOES NOT EXIST YET.
+     * `shared/cycleClock.ts` names `cycle.mode` in `CYCLE_SETTING_READERS` as
+     * the key the rhythm dial publishes, and `shared/gameVariables.ts` does
+     * not declare it on this tree. `variable()` throws on a key it does not
+     * know, on purpose, so `stringVar("cycle.mode")` here threw `Unknown game
+     * variable: cycle.mode` on every request, before this handler read
+     * anything. `client/src/components/power/ResourcesPanel.tsx` fetches this
+     * route on mount, so the member-facing panel got nothing at all.
+     * `server/routes/circleBurn.test.ts` is the control that keeps it fixed.
      */
-    const clockMode = stringVar("cycle.mode");
+    const clockMode = clockModeNow();
 
     const words = burnWords(circlesRepo);
     const targets = only ? [only] : distinct(envelopes.map((e) => e.circleId));
