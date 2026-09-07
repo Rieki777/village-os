@@ -1154,7 +1154,7 @@
       "`voices` is how the wall gets something true to open with anyway. A voice has",
       "no sender, no recipient and no amount, so it is not a send: it never reaches",
       "the ledger and conservation holds trivially. The table it seeds into",
-      "(gratitude_voices, migration 0170) has nowhere to record who gave what to",
+      "(gratitude_voices, migration 0180) has nowhere to record who gave what to",
       "whom. That absence is the safety property, and it is deliberate.",
       "",
       "WHAT THESE SIXTEEN ARE FOR, which is more than filling a blank page. A founder",

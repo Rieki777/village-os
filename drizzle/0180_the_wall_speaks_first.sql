@@ -1,4 +1,4 @@
--- 0170: anonymous voices for the top of the Gratitude wall.
+-- 0180: anonymous voices for the top of the Gratitude wall.
 --
 -- WHY THIS IS NOT gratitude_log, WHICH IS THE WHOLE DESIGN
 --

@@ -82,7 +82,7 @@ export const EXAMPLE_TABLES: Record<string, string[]> = {
   // row and never will: a gratitude row posts to the ledger at creation, so
   // seeding one would mint real recognition or break conservation.
   //
-  // `gratitude_voices` is where the module's examples actually live (0170).
+  // `gratitude_voices` is where the module's examples actually live (0180).
   // A voice carries no sender, no recipient and no amount, so it is not a
   // send, reaches no ledger, and can be seeded freely. Listing it here is what
   // makes gratitude a normal module at last: the banner appears while the

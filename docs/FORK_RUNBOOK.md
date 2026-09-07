@@ -135,7 +135,7 @@ above the size of a gathering, not to the size of one person's usage.
   item": its sixteen `voices` are the HERO of the wall, so they retire when
   the village has `HERO_SLOTS` written acknowledgments of its own and not on
   the first one, which would take a new village from sixteen voices to one.
-  They seed into `gratitude_voices` (0170) and never into `gratitude_log`,
+  They seed into `gratitude_voices` (0180) and never into `gratitude_log`,
   because a gratitude row posts to the ledger at creation.
 - `tokens` table rows (a fresh village seeds gratitude/equity/voice/credits,
   and stay-credit, library-credit and village-voice arrive at first boot) - a

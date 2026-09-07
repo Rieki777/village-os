@@ -1,4 +1,4 @@
--- 0169: the per-recipient ceiling becomes a COUNT, and the count is seven.
+-- 0179: the per-recipient ceiling becomes a COUNT, and the count is seven.
 --
 -- WHAT THE CODE DID IN THE SAME CHANGE
 --
@@ -43,10 +43,19 @@
 --
 -- WHAT WAS MEASURED BEFORE WRITING THIS FILE
 --
--- The number: 0168 was the highest claimed across all 628 local and remote
--- refs at the moment this file was created, so this is 0169. The ledger's own
--- rule is that such a reading expires in minutes, and it was taken immediately
--- before the file was written.
+-- The number, and it was WRONG ONCE, which is the useful part of this note.
+-- 0168 was the highest claimed across all 628 refs when this file was created,
+-- so it was written as 0169. By the time the branch was ready to push, other
+-- lanes had landed 0169 through 0178 and BOTH 0169 and 0170 were taken
+-- (`a_cycle_records_its_clock` and `a_refusal_carries_a_reason`). The ledger
+-- says a reading expires in minutes and it is not exaggerating: this one was
+-- correct when taken and stale by the same afternoon.
+--
+-- Re-measured against every ref immediately before the rename, this is 0179
+-- and its sibling is 0180. Renaming was safe here only because these had run
+-- nowhere but throwaway scratch schemas: `_migrations_applied` keys on
+-- FILENAME, so renumbering a file that has run on a real instance replays it.
+-- Check that before ever doing this again.
 --
 -- The row: game_variables holds DELTAS ONLY, so a row exists for this key only
 -- where a founder moved it off 25. The UPDATE below therefore does nothing at

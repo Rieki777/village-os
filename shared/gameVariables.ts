@@ -191,10 +191,10 @@ export const VARIABLES: VariableDef[] = [
   // at 500: doubling the base budget cannot silently double how much of one
   // person's standing may come from one relationship.
   //
-  // That share is itself retired now, by 0160, and `gratitude.full_sends_per_cycle`
+  // That share is itself retired now, by 0179, and `gratitude.full_sends_per_cycle`
   // holds the same ceiling in the unit a founder actually reasons in. A share of
   // 1/N and a count of N are the same constraint written two ways, which is why
-  // 0160 TRANSLATES a village's setting instead of dropping it the way 0110 had
+  // 0179 TRANSLATES a village's setting instead of dropping it the way 0110 had
   // to: 25% becomes 4, and nothing a village voted for is lost. The comment on
   // `shareCapFor` made the point before the dial caught up with it, that a cap of
   // 1/N is the sentence "at least N people" written as one number.

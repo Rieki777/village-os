@@ -37,7 +37,7 @@ const c = await mysql.createConnection({ uri: url, timezone: "Z" });
  * has no build step to import `EXAMPLE_TABLES` from. So a module that starts
  * seeding a NEW table is invisible here until somebody adds it, and the
  * report then says "TOTAL 0 example rows" while the rows are sitting there.
- * That is what happened when `gratitude_voices` (0170) shipped: the economic
+ * That is what happened when `gratitude_voices` (0180) shipped: the economic
  * checks below were still right, because they name their own tables, but the
  * inventory above them under-reported by sixteen.
  */
