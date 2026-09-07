@@ -60,6 +60,7 @@ import { register as registerReviewRoutes } from "./routes/review";
 import { register as registerHoldersRoutes } from "./routes/holders";
 import { register as registerErasureQueueRoutes } from "./routes/erasureQueue";
 import { register as registerCircleBurnRoutes } from "./routes/circleBurn";
+import { register as registerCircleBonusGateRoutes } from "./routes/circleBonusGate";
 import { register as registerGovernanceWeightRoutes } from "./routes/governanceWeights";
 import { register as registerGovernanceWizardRoutes } from "./routes/governanceWizard";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
@@ -15201,6 +15202,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   app.use("/api/resources", requireModule("resources"));
   app.use("/api/admin/resources", requireModule("resources"));
   registerCircleBurnRoutes(app, { getPool, authedUser, circlesRepo, seasonState });
+  registerCircleBonusGateRoutes(app, { getPool, authedUser, circlesRepo, seasonState });
 
   /** The resources module's config, defaults filled. */
   function resourcesConfig(): { requestCategory: string; measuredVisibleTo: string; labels: Record<string, string> } {

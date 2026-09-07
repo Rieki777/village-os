@@ -52,6 +52,9 @@ import {
   type VoteComponent,
 } from "../../shared/circleBonusGate";
 import type { CircleBurnReading } from "../../shared/circleBurn";
+import { clockFor, type ClockMode } from "../../shared/cycleClock";
+import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
+import { stringVar } from "./variables";
 
 /** What a completion ballot is filed under. One subject type, one spelling. */
 export const COMPLETION_SUBJECT = "circle_completion";
@@ -219,4 +222,29 @@ export async function bonusGateFor(q: GateQuery, deps: GateDeps): Promise<BonusG
     vote,
     burn,
   });
+}
+
+// ── The clock dial, read safely on a tree where it has not landed ───────────
+
+/**
+ * THE VILLAGE'S CLOCK MODE, READ AFTER THE STORES INITIALISE, AND SAFE WHEN
+ * THE DIAL DOES NOT EXIST YET.
+ *
+ * `cycle.mode` is named in `CYCLE_SETTING_READERS` (shared/cycleClock.ts) as
+ * the key the rhythm dial publishes, and `shared/gameVariables.ts` does NOT
+ * publish it on this tree. `variable()` throws on a key it does not know, on
+ * purpose, so that a typo cannot read as a zero. Calling it for a key another
+ * lane still owns turns a read into a 500.
+ *
+ * Measured on this tree, live: `server/routes/circleBurn.ts` calls
+ * `stringVar("cycle.mode")` inside its handler, so `GET /api/resources/burn`
+ * throws `Unknown game variable: cycle.mode` before it reads anything, and
+ * `client/src/components/power/ResourcesPanel.tsx` fetches that route.
+ *
+ * So the key is read only when the registry publishes it, and otherwise the
+ * clock's own default answers. The day the dial lands, this starts returning
+ * the village's answer with no edit here.
+ */
+export function clockModeNow(): ClockMode | string {
+  return VARIABLES_BY_KEY["cycle.mode"] ? stringVar("cycle.mode") : clockFor(null).mode;
 }
