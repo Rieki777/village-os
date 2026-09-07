@@ -98,6 +98,10 @@ export function useSurfaced(openNow: readonly string[], ready: boolean): Surface
     if (!candidate || counted.current) return;
     counted.current = true;
     void gameFetch("/api/profile/prefs", {
+      // save-ok: nothing on this page tells the member a sighting was
+      // recorded, so there is no claim here that could be false. The count is
+      // re-read from the server on the next mount, and a lost write shows the
+      // section once more, which is the harmless direction to be wrong in.
       method: "PUT",
       body: JSON.stringify({ sawSections: [candidate] }),
     }).catch(() => {
@@ -111,6 +115,10 @@ export function useSurfaced(openNow: readonly string[], ready: boolean): Surface
     acknowledge: (sectionId: string) => {
       setSettledLocally((s) => (s[sectionId] ? s : { ...s, [sectionId]: true }));
       void gameFetch("/api/profile/prefs", {
+        // save-ok: `settledLocally` above is what this hook renders from, so
+        // the section stops surfacing on this device whatever the server
+        // says. This write is the copy that outlives the session, and a lost
+        // one costs at most one more sighting on another device.
         method: "PUT",
         body: JSON.stringify({ sawSections: [sectionId], acknowledged: true }),
       }).catch(() => {

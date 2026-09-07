@@ -561,6 +561,7 @@ export default function Profile() {
                   catalogue={prog.capabilityCatalogue ?? []}
                   stages={config.stages}
                   stageIndex={prog.stageIndex}
+                  consentedQuests={prog.consentedQuests}
                 />
               ) : null}
 
