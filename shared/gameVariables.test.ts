@@ -530,6 +530,9 @@ describe("what this wave added to the registry, counted", () => {
       if (d.type === "choice" || d.type === "boolean") expect(d.choices ?? d.type).toBeTruthy();
       else expect(d.unit, `${d.key} unit`).toBeTruthy();
     }
+  });
+});
+
 /**
  * THE OVERRIDE TIER AS A SETTING (19E). The village names the tier a veto
  * override is passed at, and the setting is votable, which is what the
