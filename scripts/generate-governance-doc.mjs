@@ -61,7 +61,7 @@
  *   node scripts/generate-governance-doc.mjs            write docs/GOVERNANCE.md
  *   node scripts/generate-governance-doc.mjs --stdout   print it, write nothing
  */
-import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
@@ -1216,60 +1216,97 @@ export function routeFacts(root = ROOT) {
 }
 
 /**
- * THE COMMIT THESE SOURCES WERE LAST CHANGED IN.
+ * A FINGERPRINT OF THE SOURCES, WHICH IS WHAT THIS DOCUMENT ACTUALLY DESCRIBES.
  *
- * The document names the commit it describes, which section 0 of the brief
- * asks of anything generated here. It cannot be `HEAD`: HEAD moves the moment
- * the document is committed, and the guard's byte comparison would go red on
- * the commit that landed it. So it is the last commit that touched any file in
- * SOURCES, which is stable for as long as the sources are, and moves only when
- * the facts move.
+ * ── WHY NOT A COMMIT ID, WHICH IS WHAT THIS WAS ────────────────────────────
  *
- * ONE CONSEQUENCE, SAID HERE SO NOBODY HAS TO WORK IT OUT FROM A RED GATE. A
- * commit that changes a source AND regenerates this document in the same
- * commit writes the PREVIOUS commit's id, because the new one did not exist
- * when the generator ran. Regenerating once more after that commit lands fixes
- * it, and the guard's own failure message says so. Regenerating AFTER a merge,
- * which is what the merge agent does, converges in one pass.
+ * The document named the last commit that touched any file in SOURCES. That
+ * can never converge in one pass, and the reason is structural rather than a
+ * bug: at the moment the generator runs, the commit that will CONTAIN its
+ * output does not exist. So a change-and-regenerate always wrote the previous
+ * id, and the guard went red on the commit that landed the document.
  *
- * It fails loud when git cannot answer. A checkout with no history cannot tell
- * this document what it is describing, and a document that guessed would be
- * making up the one fact a reader uses to check everything else.
+ * It cost four follow-up merges in one session, and the squashes were the worst
+ * of them: a squash IS a new commit touching sources, so main went red the
+ * instant a source change landed and no branch could have fixed it, because the
+ * squash commit did not exist until the merge happened. A red main teaches
+ * people to stop reading red, which costs far more than the tax itself.
+ *
+ * A CONTENT FINGERPRINT converges on the first pass, because it depends on
+ * bytes rather than on a commit nobody has made yet. It is also the truer
+ * statement: "this document describes THIS state of the code" is what a reader
+ * wants, where a commit id only approximates it. Regenerating checks it, which
+ * is what the guard already does.
+ *
+ * ── CARRIAGE RETURNS COME OFF FIRST, AND THIS IS NOT OPTIONAL ──────────────
+ *
+ * The sources are ordinary text files, so a Windows checkout with autocrlf
+ * hands back CRLF while CI reads LF. A raw byte hash would differ between the
+ * machine that wrote the document and the machine that checks it, and the guard
+ * would be red on every pull request for a reason no diff would show.
+ * `check-brand-refs.mjs` learned this the same way and its header says so.
+ * Normalising is what makes this a fact about the CODE and not the checkout.
+ *
+ * It fails loud when a source cannot be read, for the reason the commit version
+ * did: a document that guessed this would be inventing the one fact a reader
+ * uses to check everything else.
  */
-const commitCache = new Map();
+/** A separator no source contains, so two files cannot blur into one. */
+const NUL = "\u0000";
+/** The first line of an error, for a message a person can act on. */
+const firstLine = (err) => String(err?.message ?? err).split("\n")[0];
 
-export function sourceCommit(root = ROOT) {
+export function sourceFingerprint(root = ROOT) {
+  const hash = createHash("sha256");
   /*
-   * ONE GIT CALL PER PROCESS, PER ROOT.
-   *
-   * The self-test renders the document half a dozen times, and on Windows a
-   * repeated `spawnSync` of the same executable inside one process
-   * intermittently comes back `UNKNOWN` with nothing wrong: the generator ran
-   * green for a dozen renders and then failed on the seventh in the same
-   * second. The commit cannot change while this process runs, so caching it
-   * removes the flake and the repeated cost together.
+   * A SOURCE CAN BE A DIRECTORY, which the git version handled for free.
+   * ROUTE_DIR and MIGRATION_DIR are both in SOURCES, so a fingerprint that only
+   * read files refuses on the first run. Every file in a listed directory
+   * counts, so adding a migration moves it exactly as editing one does.
    */
-  if (commitCache.has(root)) return commitCache.get(root);
-  let out;
-  try {
-    out = execFileSync("git", ["log", "-1", "--format=%H", "--", ...SOURCES], {
-      cwd: root,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-  } catch (err) {
-    fail(
-      "git could not say which commit last changed the sources " +
-        `(${String(err?.message ?? err).split("\n")[0]}). This document names the commit it describes, ` +
-        "and a checkout with no history cannot answer that.",
-    );
+  const filesUnder = (rel) => {
+    const abs = path.join(root, rel);
+    let stat;
+    try {
+      stat = fs.statSync(abs);
+    } catch (err) {
+      fail(
+        `this document is made from ${rel} and it could not be read (${firstLine(err)}). ` +
+          "The fingerprint names the state of the sources, and one taken over files it could " +
+          "not open would be a guess.",
+      );
+    }
+    if (!stat.isDirectory()) return [rel];
+    return fs
+      .readdirSync(abs)
+      .filter((n) => /[.](ts|tsx|mjs|sql)$/.test(n))
+      .map((n) => `${rel}/${n}`);
+  };
+
+  // Sorted, so a lane reordering SOURCES does not move the fingerprint.
+  for (const rel of [...SOURCES].sort().flatMap(filesUnder).sort()) {
+    let body;
+    try {
+      body = fs.readFileSync(path.join(root, rel), "utf8");
+    } catch (err) {
+      fail(`this document is made from ${rel} and it could not be read (${firstLine(err)}).`);
+    }
+    // The path goes in as well as the body, so moving content between two
+    // sources changes the answer.
+    hash.update(rel);
+    hash.update(NUL);
+    // CRLF off first. See the header.
+    hash.update(body.split("\r\n").join("\n"));
+    hash.update(NUL);
   }
-  const sha = String(out).trim();
-  if (!/^[0-9a-f]{40}$/.test(sha)) {
-    fail(`git answered "${sha.slice(0, 60)}" for the last commit touching the sources, which is not a commit id`);
-  }
-  commitCache.set(root, sha);
-  return sha;
+  /*
+   * NO CACHE. The commit version cached because repeatedly spawning git in one
+   * process intermittently came back UNKNOWN on Windows with nothing wrong.
+   * Reading files has neither that flake nor that cost, and a cached
+   * fingerprint would answer stale after a write, which is the staleness this
+   * whole change exists to remove.
+   */
+  return hash.digest("hex").slice(0, 16);
 }
 
 // ── The prose. Written by a person, kept here so the file stays generated ───
@@ -2634,7 +2671,7 @@ export function collectFacts(root = ROOT) {
   const kinds = kindFacts(root);
   const schema = schemaFacts(root);
   const quorumFormula = quorumFormulaFacts(root);
-  const commit = sourceCommit(root);
+  const commit = sourceFingerprint(root);
 
   const byKey = Object.fromEntries(dialFacts.governance.map((d) => [d.key, d]));
   const need = (key) => {
@@ -2805,7 +2842,7 @@ export function render(f) {
   p();
   say("generated");
   p();
-  p(`It describes the code at commit \`${f.commit}\`.`);
+  p(`It describes the sources at fingerprint \`${f.commit}\`, which regenerating reproduces.`);
   p();
   say("editing");
   p();
@@ -3620,7 +3657,7 @@ export function renderLineage(f) {
       "document, from the same words, so the shelf and the document cannot come apart. Editing it by hand does not hold.",
   );
   p();
-  p(`It describes the code at commit \`${f.commit}\`.`);
+  p(`It describes the sources at fingerprint \`${f.commit}\`, which regenerating reproduces.`);
   p();
   lineage(p, say, sayUnder);
   p("## What the rules themselves say");
