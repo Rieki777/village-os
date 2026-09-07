@@ -32,12 +32,12 @@ import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { burnFor, type CircleEnvelope, type SeasonSpan } from "../lib/circleBurn";
 import { burnSentence, type BurnWords, type CircleBurnReading } from "../../shared/circleBurn";
-import { CIRCLE_STATUSES, type CircleStatus } from "../../shared/draftKinds";
+// `treasuryTokenFor` is the ONE definition of "which token is this unit", in
+// the library, because three routes and the circle-status hook all need it.
+import { circleStatusReader, treasuryTokenFor as tokenTypeFor } from "../lib/circleTreasury";
 import { amountWords, listBudgets } from "../lib/resources";
 import { tokenDef } from "../lib/ledger";
 import { clockModeNow } from "../lib/circleBonusGate";
-
-const TOKEN_UNIT = /^token:([a-z0-9][a-z0-9-]{0,30})$/;
 
 type Deps = Pick<AppDeps, "getPool" | "authedUser"> & {
   /** The village's circles, for names. Read, never written here. */
@@ -141,30 +141,6 @@ export function register(app: Express, deps: Deps): void {
 
     res.json({ at: at.toISOString(), clock: clockMode, timeZone, plus, readings });
   });
-}
-
-/**
- * Which ledger token an envelope's unit is denominated in.
- *
- * `token:<slug>` is a token this ledger holds. An ISO 4217 code is a currency
- * whose movements live in `fiat_charges`, so it returns null and the reading
- * reports `unmeasurable` instead of a zero nobody measured.
- */
-export function tokenTypeFor(unit: string): string | null {
-  const m = TOKEN_UNIT.exec(String(unit ?? ""));
-  if (!m) return null;
-  return tokenDef(m[1]) ? m[1] : null;
-}
-
-/** A circle's lifecycle, off the repo, with an unknown circle reading dormant. */
-function circleStatusReader(circlesRepo: { all(): unknown[] }): (id: string) => CircleStatus {
-  const circles = circlesRepo.all() as Array<{ id?: string; status?: string }>;
-  return (id: string) => {
-    const found = circles.find((c) => c?.id === id);
-    return CIRCLE_STATUSES.includes(found?.status as CircleStatus)
-      ? (found!.status as CircleStatus)
-      : "dormant";
-  };
 }
 
 function burnWords(circlesRepo: { all(): unknown[] }): BurnWords {

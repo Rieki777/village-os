@@ -6,24 +6,29 @@
  *   POST   /api/admin/resources/budgets/:id/fund     mint into the treasury
  *   POST   /api/admin/resources/budgets/:id/spend    pay somebody from it
  *   POST   /api/admin/resources/budgets/:id/return   hand it back to the village
+ *   GET    /api/admin/resources/treasuries           what each budget holds
  *   GET    /api/resources/treasuries                 what every circle holds
  *
- * All six mount behind `requireModule("resources")`, which server/index.ts
+ * All seven mount behind `requireModule("resources")`, which server/index.ts
  * installs on both prefixes before this module's `register()` is called. The
  * module ships OFF and while it is off every one of these is a 404.
  *
  * ── THIS FILE DECIDES NOTHING ABOUT WHO ────────────────────────────────────
  *
  * A village-wide treasury badge and a circle-scoped treasury role are held
- * pending a ruling and belong to another lane. So permission arrives as a
- * function, `deps.permitFor(req)`, which answers a `TreasuryPermit`:
+ * pending a ruling and belong to another lane. So permission arrives as two
+ * injected pieces that `permitFor` below composes into a `TreasuryPermit`:
  *
  *     (action: TreasuryAction, circleId: string) => Promise<string | null> | string | null
  *
- * Null means allowed; a string is the refusal a person reads. server/index.ts
- * builds it today from `mayDeclareResources`, which is the same gate the
- * budget writes beside it already use. When the badge lands, that one closure
- * changes and nothing in `server/lib/circleTreasury.ts` or in this file moves.
+ * Null means allowed; a string is the refusal a person reads. It is built
+ * today from the declare gate the budget writes beside it already use, which
+ * means admin, `org.declare`, or the circle's own speaking seat, with the
+ * break-glass hatch carried through. Setting a circle's caps and minting its
+ * treasury are the same decision about the same circle's money, so shipping
+ * them under different rights would be inventing a permission model in a lane
+ * that was told not to. When the badge lands, `permitFor` is the whole change
+ * and nothing in `server/lib/circleTreasury.ts` moves.
  *
  * ── SIGNED IN ONLY, AND THE READ IS TIGHTER THAN THE DECLARATION ───────────
  *
@@ -43,6 +48,7 @@
 import type { Express, Request } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import {
+  budgetTreasuries,
   circleFundingClause,
   circleFundingSince,
   dormantHoldings,
@@ -53,10 +59,14 @@ import {
   returnTreasury,
   spendTreasury,
   treasuryHoldings,
+  circleStatusReader,
   treasuryStandings,
+  treasuryTokenFor,
   villageTreasuryTotal,
+  type TreasuryAction,
   type TreasuryPermit,
 } from "../lib/circleTreasury";
+import type { DeclareContext } from "../lib/orgChart";
 import { cycleWindowAt, seasonWindowAt, type SeasonSpan } from "../lib/circleBurn";
 import {
   modeAt,
@@ -66,13 +76,12 @@ import {
   treasuryTotalSentence,
   type BudgetMode,
 } from "../../shared/circleTreasury";
-import { CIRCLE_STATUSES, type CircleStatus } from "../../shared/draftKinds";
+import type { CircleStatus } from "../../shared/draftKinds";
 import { amountWords, listBudgets, type CircleBudgetRow } from "../lib/resources";
 import { fromLedgerUnits, toLedgerUnits } from "../lib/economy";
 import { tokenDef } from "../lib/ledger";
 import { mintCycleStart } from "../lib/mintCap";
-import { stringVar } from "../lib/variables";
-import { tokenTypeFor } from "./circleBurn";
+import { clockModeNow } from "../lib/circleBonusGate";
 
 type Deps = Pick<AppDeps, "getPool" | "authedUser"> & {
   /** The village's circles, for names and status. Read, never written here. */
@@ -80,29 +89,46 @@ type Deps = Pick<AppDeps, "getPool" | "authedUser"> & {
   /** The dated season calendar and the zone it turns in. */
   seasonState(): { seasons?: unknown[]; timezone?: string };
   /**
-   * THE PERMISSION SEAM. See the header: this module never decides who.
-   * server/index.ts supplies it, because that is where the capability gate,
-   * the break-glass hatch and the declare context live.
+   * THE PERMISSION SEAM, IN TWO PARTS, AND NEITHER OF THEM IS A RULE.
+   *
+   * `declareCtxFor` hands over the declare context for a WRITE, which is the
+   * closure `server/index.ts` already builds for every resources write, break
+   * glass and all. `mayDeclare` is the gate itself, straight out of
+   * server/lib/orgChart.ts.
+   *
+   * This module composes them into a `TreasuryPermit` and calls it. It decides
+   * nothing: when the treasury badge and the circle-scoped role are ruled on,
+   * `permitFrom` below is the whole change, and neither
+   * `server/lib/circleTreasury.ts` nor any handler here moves.
    */
-  permitFor(req: Request): Promise<TreasuryPermit>;
+  declareCtxFor(req: Request): Promise<DeclareContext>;
+  mayDeclare(target: string, ctx: DeclareContext): boolean;
 };
 
 export function register(app: Express, deps: Deps): void {
   const { getPool, authedUser, circlesRepo, seasonState } = deps;
+
+  /**
+   * The permit for one request. `action` is unused today ON PURPOSE: setting a
+   * circle's caps and minting its treasury are the same decision about the
+   * same circle's money, so both ship under the right that already sets a cap.
+   * A ruling that separates funding from spending branches HERE.
+   */
+  const permitFor = async (req: Request): Promise<TreasuryPermit> => {
+    const ctx = await deps.declareCtxFor(req);
+    return (_action: TreasuryAction, circleId: string): string | null =>
+      deps.mayDeclare(circleId, ctx)
+        ? null
+        : "Moving a circle's money takes admin, org.declare, or this circle's speaking seat";
+  };
 
   const circleName = (id: string): string => {
     const circles = circlesRepo.all() as Array<{ id?: string; name?: string }>;
     return String(circles.find((c) => c?.id === id)?.name ?? id);
   };
 
-  /** A circle's lifecycle. An unknown circle reads dormant, never active. */
-  const statusOf = (id: string): CircleStatus => {
-    const circles = circlesRepo.all() as Array<{ id?: string; status?: string }>;
-    const found = circles.find((c) => c?.id === id);
-    return CIRCLE_STATUSES.includes(found?.status as CircleStatus)
-      ? (found!.status as CircleStatus)
-      : "dormant";
-  };
+  /** A circle's lifecycle. One definition, in the library, for three routes. */
+  const statusOf = (id: string): CircleStatus => circleStatusReader(circlesRepo)(id);
 
   /** The budget row this request names, or null. Read fresh every time. */
   const budgetById = async (id: string): Promise<CircleBudgetRow | null> => {
@@ -115,7 +141,7 @@ export function register(app: Express, deps: Deps): void {
    * not one this ledger holds. A treasury in EUR has nothing to mint.
    */
   const tokenForBudget = (b: CircleBudgetRow): { slug: string } | { error: string } => {
-    const slug = tokenTypeFor(b.unit);
+    const slug = treasuryTokenFor(b.unit);
     if (!slug) {
       return {
         error:
@@ -132,7 +158,19 @@ export function register(app: Express, deps: Deps): void {
     const seasons = (Array.isArray(season.seasons) ? season.seasons : []) as SeasonSpan[];
     const timeZone = String(season.timezone || "UTC");
     return {
-      cycle: cycleWindowAt(at, stringVar("cycle.mode")),
+      /*
+       * `clockModeNow` AND NOT `stringVar("cycle.mode")`.
+       *
+       * `cycle.mode` is named in CYCLE_SETTING_READERS as the key the rhythm
+       * dial publishes, and `shared/gameVariables.ts` does not declare it on
+       * this tree. `variable()` throws on a key it does not know, so the bare
+       * read turned every request into an unhandled rejection that never
+       * answered. The burn route shipped with exactly that defect and a
+       * sibling lane closed it; this route was written from the same shape and
+       * inherited it. Found here by an end-to-end drive, which is the only
+       * thing that had ever called this handler.
+       */
+      cycle: cycleWindowAt(at, clockModeNow()),
       season: seasonWindowAt(at, seasons, timeZone),
     };
   };
@@ -145,7 +183,7 @@ export function register(app: Express, deps: Deps): void {
     const budget = await budgetById(String(req.params.id));
     if (!budget) return res.status(404).json({ error: "No such budget" });
 
-    const permit = await deps.permitFor(req);
+    const permit = await permitFor(req);
     const refused = await permit("set_mode", budget.circleId);
     if (refused) return res.status(401).json({ error: "auth_required", message: refused });
 
@@ -182,7 +220,7 @@ export function register(app: Express, deps: Deps): void {
     if (!user) return res.status(401).json({ error: "auth_required" });
     const budget = await budgetById(String(req.params.id));
     if (!budget) return res.status(404).json({ error: "No such budget" });
-    const permit = await deps.permitFor(req);
+    const permit = await permitFor(req);
     const refused = await permit("set_mode", budget.circleId);
     if (refused) return res.status(401).json({ error: "auth_required", message: refused });
     const cleared = await cancelModeChange(getPool(), budget.id);
@@ -218,7 +256,7 @@ export function register(app: Express, deps: Deps): void {
       return res.status(400).json({ error: "A reason is required. Minting into a treasury has to explain itself" });
     }
 
-    const permit = await deps.permitFor(req);
+    const permit = await permitFor(req);
     const result = await fundTreasury(getPool(), {
       circleId: budget.circleId,
       circleName: circleName(budget.circleId),
@@ -289,7 +327,7 @@ export function register(app: Express, deps: Deps): void {
       return res.status(400).json({ error: "amountMinor is a positive whole number of minor units" });
     }
 
-    const permit = await deps.permitFor(req);
+    const permit = await permitFor(req);
     const result = await spendTreasury(getPool(), {
       circleId: budget.circleId,
       circleStatus: statusOf(budget.circleId),
@@ -342,7 +380,7 @@ export function register(app: Express, deps: Deps): void {
       });
     }
 
-    const permit = await deps.permitFor(req);
+    const permit = await permitFor(req);
     const result = await returnTreasury(getPool(), {
       circleId: budget.circleId,
       tokenSlug: token.slug,
@@ -370,6 +408,22 @@ export function register(app: Express, deps: Deps): void {
     });
   });
 
+  /**
+   * WHAT EACH BUDGET'S TREASURY HOLDS, FOR THE PANEL THAT DECLARES IT.
+   *
+   * The admin desk is where a steward funds and spends, so it needs the
+   * balance beside the row. It is its own route rather than a field bolted
+   * onto `GET /api/admin/resources`, because the balance belongs to this
+   * domain and the declaration payload belongs to the resources module: one
+   * owner per surface is what stops a lane widening somebody else's response.
+   */
+  app.get("/api/admin/resources/treasuries", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    const budgets = await listBudgets(getPool());
+    res.json({ treasuries: await budgetTreasuries(getPool(), budgets) });
+  });
+
   // ── What every circle holds, dormant ones named ───────────────────────────
 
   app.get("/api/resources/treasuries", async (req, res) => {
@@ -387,7 +441,7 @@ export function register(app: Express, deps: Deps): void {
       unit: b.unit,
       mode: modeAt(b.mode, b.pending, at),
     }));
-    const standings = await treasuryStandings(getPool(), running, tokenTypeFor, statusOf);
+    const standings = await treasuryStandings(getPool(), running, treasuryTokenFor, statusOf);
     const dormant = dormantHoldings(standings);
 
     /*
@@ -407,7 +461,7 @@ export function register(app: Express, deps: Deps): void {
         moduleOn: true,
         slug,
         budgetsOnTreasury: running.filter(
-          (b) => b.mode === "treasury" && tokenTypeFor(b.unit) === slug,
+          (b) => b.mode === "treasury" && treasuryTokenFor(b.unit) === slug,
         ).length,
       });
       totals[slug] = {
@@ -469,3 +523,19 @@ function movementKey(kind: string, budgetId: string, req: Request): string {
 
 /** Exported so a caller converting a human amount uses the ledger's own scale. */
 export { toLedgerUnits };
+
+/**
+ * THE TWO PLACES THE MONOLITH REACHES THIS DOMAIN, RE-EXPORTED HERE ON PURPOSE.
+ *
+ * `server/index.ts` needs exactly two things from the treasury: what happens to
+ * a circle's money when its status changes, and the third supply figure the
+ * admin token panel prints beside issued and retired. Both are implemented in
+ * `server/lib/circleTreasury.ts`, which is where their reasoning lives.
+ *
+ * They come out through this file because this file IS the domain's entry
+ * point: the monolith already imports `register` from here, and one import
+ * line for one domain is the shape `docs/ARCHITECTURE.md` asks for. It also
+ * keeps the monolith's dependency on this domain to a single named surface, so
+ * a reader of `server/index.ts` has one file to open rather than two.
+ */
+export { onCircleStatusChange, treasuryFacts } from "../lib/circleTreasury";

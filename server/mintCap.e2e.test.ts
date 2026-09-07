@@ -516,7 +516,12 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
     expect(approved.status, `approve: ${approved.text.slice(0, 300)}`).toBe(200);
     await setVar("ledger.admin_mint_cosign_over", "0");
 
-    // Door 4 (0181): a circle treasury funded from the same faucet.
+    // Door 4 (0181): a circle treasury funded from the same faucet. Resources
+    // hard-depends on `map` (`requires` in shared/modules.ts), and a missing
+    // dependency answers 409 on the lifecycle write, so the map goes on first.
+    expect((await call("PUT", "/api/admin/modules/map/lifecycle", {
+      lifecycle: "public",
+    }, founderToken)).status).toBe(200);
     expect((await call("PUT", "/api/admin/modules/resources/lifecycle", {
       lifecycle: "public",
     }, founderToken)).status).toBe(200);

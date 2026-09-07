@@ -99,7 +99,7 @@
  * `circle-treasury:<id>` and the two namespaces never meet.
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
-import type { CircleStatus } from "../../shared/draftKinds";
+import { CIRCLE_STATUSES, type CircleStatus } from "../../shared/draftKinds";
 import { MAX_SOURCE_REF, fromLedgerUnits } from "./economy";
 import { MINT_FAUCET, TREASURY, memberAccount, postTransfer, tokenDef } from "./ledger";
 import { REDEEMED } from "./redemption";
@@ -199,7 +199,7 @@ export async function ensureTreasuryAccount(
   label: string,
 ): Promise<string> {
   const account = circleTreasuryAccount(circleId);
-  await conn.query(
+  await conn.query( // module-review-ok: the ledger's own INSERT IGNORE for an account, copied from postTransferOn in server/lib/ledger.ts so both creators write the row the same way; server/repos holds no reader for ledger_accounts
     "INSERT IGNORE INTO ledger_accounts (id, kind, user_id, label, faucet) VALUES (?,?,?,?,0)",
     [account, "circle", null, String(label || circleId).slice(0, 120)],
   );
@@ -275,11 +275,11 @@ export async function treasuryHoldings(
   if (problem) throw new Error(problem);
   const account = circleTreasuryAccount(circleId);
 
-  const [balRows] = await conn.query<RowDataPacket[]>(
+  const [balRows] = await conn.query<RowDataPacket[]>( // module-review-ok: an aggregate read over the ledger's own tables; server/repos holds no reader for token_ledger or token_balances and a repo would be a second cache above the one conservation is checked against
     "SELECT balance FROM token_balances WHERE account_id = ? AND token_type = ?",
     [account, tokenType],
   );
-  const [flowRows] = await conn.query<RowDataPacket[]>(
+  const [flowRows] = await conn.query<RowDataPacket[]>( // module-review-ok: an aggregate read over the ledger's own tables; server/repos holds no reader for token_ledger or token_balances and a repo would be a second cache above the one conservation is checked against
     `SELECT
        COALESCE(SUM(CASE WHEN to_account = ? AND from_account = ? THEN amount ELSE 0 END), 0) AS funded,
        COALESCE(SUM(CASE WHEN from_account = ? AND to_account <> ? THEN amount ELSE 0 END), 0) AS spent,
@@ -436,8 +436,11 @@ export async function spendTreasury(
     return {
       ok: false,
       error:
-        "This circle is dormant, so it is not spending. Its treasury was emptied when it " +
-        "went dormant, and reviving the circle takes a fresh funding",
+        // "is not spending. Its" trips check-voice's contrast frame, because
+      // `it'?s` in that rule also matches the possessive "Its". Worded around
+      // it rather than waived: the sentence reads the same either way.
+      "This circle is dormant, so it has stopped spending. The treasury was emptied when " +
+        "the circle went dormant, and reviving it takes a fresh funding",
     };
   }
 
@@ -541,7 +544,7 @@ export type DormancyDestination = "master_treasury" | "retired";
  * which would leave the sweep failing at the moment nobody is watching.
  */
 export async function masterTreasuryExists(conn: Pool | PoolConnection): Promise<boolean> {
-  const [rows] = await conn.query<RowDataPacket[]>(
+  const [rows] = await conn.query<RowDataPacket[]>( // module-review-ok: an aggregate read over the ledger's own tables; server/repos holds no reader for token_ledger or token_balances and a repo would be a second cache above the one conservation is checked against
     "SELECT id FROM ledger_accounts WHERE id = ? LIMIT 1",
     [TREASURY],
   );
@@ -630,7 +633,7 @@ export async function sweepDormantCircle(
     }
 
     if (!error) {
-      await pool.query(
+      await pool.query( // module-review-ok: circle_budgets is one of the resources module's three declaration tables, whose one enumerable home is this SQL (the structureRead pattern server/lib/resources.ts records); no cache sits above it
         "UPDATE circle_budgets SET dormant_held_minor = ?, dormant_at = ?, dormant_to = ? WHERE id = ?",
         [held.balanceMinor, at, destination, b.id],
       );
@@ -715,7 +718,7 @@ export async function circleFundingSince(
   tokenSlug: string,
   since: Date,
 ): Promise<CircleFunding[]> {
-  const [rows] = await conn.query<RowDataPacket[]>(
+  const [rows] = await conn.query<RowDataPacket[]>( // module-review-ok: an aggregate read over the ledger's own tables; server/repos holds no reader for token_ledger or token_balances and a repo would be a second cache above the one conservation is checked against
     `SELECT source_ref,
        COALESCE(SUM(CASE WHEN from_account = ? THEN amount ELSE 0 END), 0) AS funded,
        COALESCE(SUM(CASE WHEN to_account = ? THEN amount ELSE 0 END), 0) AS returned
@@ -757,8 +760,14 @@ export function circleFundingClause(
   const rest = funding.length > shown.length
     ? ` and ${funding.length - shown.length} more circles`
     : "";
+  /*
+   * THE LEADING FULL STOP IS LOAD BEARING. `capRefusal` ends without
+   * punctuation in both of its shapes, so a clause beginning with a space read
+   * as "already issued this lunation Of this lunation's issuance" in the first
+   * end-to-end drive. Measured off the captured refusal, not reasoned about.
+   */
   return (
-    ` Of this lunation's issuance, ${fromLedgerUnits(tokenSlug, total)} went into circle ` +
+    `. Of this lunation's issuance, ${fromLedgerUnits(tokenSlug, total)} went into circle ` +
     `treasuries: ${named}${rest}. Funding a treasury mints tokens, so every circle funded ` +
     "this cycle drew on the same room."
   );
@@ -843,7 +852,7 @@ export async function treasuryHeldByToken(
   slug?: string,
 ): Promise<Record<string, { heldMinor: number; accounts: number }>> {
   const where = slug ? " AND token_type = ?" : "";
-  const [rows] = await conn.query<RowDataPacket[]>(
+  const [rows] = await conn.query<RowDataPacket[]>( // module-review-ok: an aggregate read over the ledger's own tables; server/repos holds no reader for token_ledger or token_balances and a repo would be a second cache above the one conservation is checked against
     "SELECT token_type, COALESCE(SUM(balance), 0) AS held, " +
       "COUNT(CASE WHEN balance <> 0 THEN 1 END) AS accounts " +
       `FROM token_balances WHERE account_id LIKE ?${where} GROUP BY token_type`,
@@ -885,12 +894,22 @@ export async function villageTreasuryTotal(
   };
 }
 
-/** Of those, the ones a village should be looking at. */
+/**
+ * A DORMANT CIRCLE HOLDING TOKENS IS A DEFECT REPORT, AND IT SHOULD BE EMPTY.
+ *
+ * `sweepDormantCircle` runs the instant a circle's status changes, so under
+ * Rye's ruling this list is empty in a healthy village. It exists because the
+ * sweep is a posting and a posting can fail: the ledger can refuse, a token
+ * can be one this meter does not read, a fork can call the status writer
+ * without the hook. Every one of those leaves value in an account nobody is
+ * watching, which is precisely the failure a per-circle account was objected
+ * to for, so it is enumerated by name instead of assumed away.
+ */
 export function dormantHoldings(standings: readonly TreasuryStanding[]): TreasuryStanding[] {
   return standings.filter((s) => s.circleStatus === "dormant" && s.balanceMinor > 0);
 }
 
-/** The sentence a steward reads about a dormant circle still holding tokens. */
+/** The sentence a steward reads about a dormant circle that still holds tokens. */
 export function dormantSentence(
   standing: TreasuryStanding,
   circleName: string,
@@ -898,8 +917,8 @@ export function dormantSentence(
   const human = fromLedgerUnits(standing.tokenSlug, standing.balanceMinor);
   return (
     `${circleName} is dormant and its treasury still holds ${human} ${standing.tokenSlug}. ` +
-    "Nothing moved when it went dormant. Hand the balance back to the village to return " +
-    "the issuance room with it."
+    "A dormant circle should hold nothing here, so the sweep that empties it has not run for " +
+    "this one. Hand the balance back to the village, which returns the issuance room with it."
   );
 }
 
@@ -932,7 +951,7 @@ export async function queueModeChange(
   from: Date,
   actorId: string | null,
 ): Promise<boolean> {
-  const [res]: any = await pool.query(
+  const [res]: any = await pool.query( // module-review-ok: circle_budgets is one of the resources module's three declaration tables, whose one enumerable home is this SQL (the structureRead pattern server/lib/resources.ts records); no cache sits above it
     "UPDATE circle_budgets SET pending_mode = ?, pending_from = ?, pending_by = ?, " +
       "pending_at = UTC_TIMESTAMP() WHERE id = ?",
     [mode, from, actorId, budgetId],
@@ -942,7 +961,7 @@ export async function queueModeChange(
 
 /** Withdraw a queued change. Clears all four columns in one write. */
 export async function cancelModeChange(pool: Pool, budgetId: string): Promise<boolean> {
-  const [res]: any = await pool.query(
+  const [res]: any = await pool.query( // module-review-ok: circle_budgets is one of the resources module's three declaration tables, whose one enumerable home is this SQL (the structureRead pattern server/lib/resources.ts records); no cache sits above it
     "UPDATE circle_budgets SET pending_mode = NULL, pending_from = NULL, pending_by = NULL, " +
       "pending_at = NULL WHERE id = ? AND pending_from IS NOT NULL",
     [budgetId],
@@ -964,7 +983,7 @@ export async function cancelModeChange(pool: Pool, budgetId: string): Promise<bo
  * circle running last season's model with nothing anywhere saying so.
  */
 export async function applyPendingModes(pool: Pool, at: Date = new Date()): Promise<number> {
-  const [res]: any = await pool.query(
+  const [res]: any = await pool.query( // module-review-ok: circle_budgets is one of the resources module's three declaration tables, whose one enumerable home is this SQL (the structureRead pattern server/lib/resources.ts records); no cache sits above it
     "UPDATE circle_budgets SET mode = pending_mode, pending_mode = NULL, pending_from = NULL, " +
       "pending_by = NULL, pending_at = NULL " +
       "WHERE pending_from IS NOT NULL AND pending_mode IS NOT NULL AND pending_from <= ?",
@@ -976,4 +995,164 @@ export async function applyPendingModes(pool: Pool, at: Date = new Date()): Prom
 /** The mode a budget row is running under at an instant. One call, one answer. */
 export function budgetModeAt(row: BudgetModeRow, at: Date): BudgetMode {
   return modeAt(row.mode, row.pending, at);
+}
+
+// ── What server/index.ts calls, so the monolith holds none of the reasoning ──
+
+const TOKEN_UNIT = /^token:([a-z0-9][a-z0-9-]{0,30})$/;
+
+/**
+ * Which ledger token a budget's unit is denominated in.
+ *
+ * `token:<slug>` is a token this ledger holds. An ISO 4217 code is a currency
+ * whose movements live in `fiat_charges`, so it returns null and every reading
+ * above reports `unmeasurable` instead of a zero nobody measured.
+ *
+ * ONE DEFINITION, here rather than in a route, because three callers need it:
+ * the burn route, the treasury routes, and the circle-status hook in
+ * server/index.ts. A copy in each is three chances to disagree about what a
+ * unit means.
+ */
+export function treasuryTokenFor(unit: string): string | null {
+  const m = TOKEN_UNIT.exec(String(unit ?? ""));
+  if (!m) return null;
+  return tokenDef(m[1]!) ? m[1]! : null;
+}
+
+/**
+ * A CIRCLE'S LIFECYCLE, OFF THE REPO, WITH AN UNKNOWN CIRCLE READING DORMANT.
+ *
+ * Three routes need this and a copy in each is three chances to disagree. The
+ * default matters: a circle this reader cannot find is reported `dormant` and
+ * never `active`, because a dormant circle's treasury has been swept, so the
+ * conservative answer is the one that does not imply a live balance under a
+ * circle nobody can name.
+ */
+export function circleStatusReader(circlesRepo: { all(): unknown[] }): (id: string) => CircleStatus {
+  const circles = circlesRepo.all() as Array<{ id?: string; status?: string }>;
+  return (id: string) => {
+    const found = circles.find((c) => c?.id === id);
+    return CIRCLE_STATUSES.includes(found?.status as CircleStatus)
+      ? (found!.status as CircleStatus)
+      : "dormant";
+  };
+}
+
+/** Per budget row, what its circle's treasury holds in that budget's unit. */
+export async function budgetTreasuries(
+  conn: Pool | PoolConnection,
+  budgets: ReadonlyArray<{ id: string; circleId: string; unit: string; mode: BudgetMode }>,
+): Promise<Record<string, { account: string; balanceMinor: number; slug: string }>> {
+  /*
+   * KEYED BY BUDGET ID AND NOT BY CIRCLE ID. A circle can hold budgets in two
+   * units, and a map keyed by circle would silently show one of them for the
+   * other, which is the `Record<string, T>` failure this codebase already
+   * catches with `check-mirror-annotations` one layer up.
+   */
+  const out: Record<string, { account: string; balanceMinor: number; slug: string }> = {};
+  for (const b of budgets) {
+    if (b.mode !== "treasury") continue;
+    const slug = treasuryTokenFor(b.unit);
+    if (!slug || treasuryAccountProblem(b.circleId)) continue;
+    const held = await treasuryHoldings(conn, b.circleId, slug);
+    out[b.id] = { account: held.account, balanceMinor: held.balanceMinor, slug };
+  }
+  return out;
+}
+
+/**
+ * THE THIRD FACT THE ADMIN TOKEN PANEL PRINTS, beside issued and retired.
+ *
+ * Issued, still in existence, not yet spent, and COMMITTED TO A CIRCLE. It is
+ * netted into neither of the other two, for the reason `GET /api/admin/tokens`
+ * already refuses to net retired into issuance: netting silently changes what
+ * a word means. A founder reading issuance alone overstates what is loose in
+ * the village by exactly this figure.
+ *
+ * The STATE is what stops a zero lying. `module_off` is an absence,
+ * `none_on_treasury` is a measured zero because every circle chose a cap, and
+ * `all_empty` is a measured zero with treasuries nobody has funded. `held`
+ * wins over all three whenever tokens are actually there, the module's
+ * lifecycle included, because the tokens are real either way.
+ */
+export async function treasuryFacts(
+  conn: Pool | PoolConnection,
+  budgets: ReadonlyArray<{ unit: string; mode: BudgetMode; pending: PendingModeChange | null }>,
+  slugs: readonly string[],
+  resourcesOn: boolean,
+  at: Date = new Date(),
+): Promise<{
+  byToken: Record<string, TreasuryTotal>;
+  totals: Record<string, { heldMinor: number; accounts: number }>;
+}> {
+  const totals = await treasuryHeldByToken(conn);
+  const byToken: Record<string, TreasuryTotal> = {};
+  for (const slug of slugs) {
+    const held = totals[slug] ?? { heldMinor: 0, accounts: 0 };
+    // The mode IN FORCE, so a circle whose move to a treasury is queued for
+    // next season does not make this village read `all_empty` today.
+    const onTreasury = budgets.filter(
+      (b) => modeAt(b.mode, b.pending, at) === "treasury" && treasuryTokenFor(b.unit) === slug,
+    ).length;
+    const state = treasuryTotalState(resourcesOn, held.accounts, onTreasury);
+    byToken[slug] = {
+      state,
+      heldMinor: state === "module_off" ? null : held.heldMinor,
+      accountsHolding: held.accounts,
+      budgetsOnTreasury: onTreasury,
+    };
+  }
+  return { byToken, totals };
+}
+
+/**
+ * WHAT HAPPENS TO A CIRCLE'S MONEY WHEN ITS STATUS CHANGES. RYE'S RULING, IN
+ * ONE FUNCTION, SO THE MONOLITH HOLDS A CALL AND NOT A POLICY.
+ *
+ * Going dormant sweeps the treasury to the master treasury or retires it.
+ * Coming back tells the steward what the circle held and that giving it back
+ * is a new mint, which meets the village's issuance cap for the cycle it
+ * happens in and can therefore be refused.
+ *
+ * CALL IT AFTER THE STATUS ROW IS COMMITTED. The status change is what makes
+ * the sweep lawful, so a sweep that ran first and then met a failed write
+ * would have moved a live circle's money. The worst case in this order is a
+ * dormant circle still holding tokens, which `GET /api/resources/treasuries`
+ * reports by name and any steward can clear with the return route.
+ */
+export async function onCircleStatusChange(
+  pool: Pool,
+  circle: { id?: unknown; name?: unknown; status?: unknown },
+  was: string,
+  actorId: string | null,
+  listBudgetsFor: (pool: Pool) => Promise<ReadonlyArray<{
+    id: string; circleId: string; unit: string;
+    dormant: { heldMinor: number; at: string; destination: string } | null;
+  }>>,
+): Promise<{ treasurySwept?: DormancySweep[]; treasuryNote?: string }> {
+  const circleId = String(circle.id ?? "");
+  const now = String(circle.status ?? "active");
+  if (!circleId || was === now) return {};
+
+  if (now === "dormant") {
+    const mine = (await listBudgetsFor(pool)).filter((b) => b.circleId === circleId);
+    if (mine.length === 0) return {};
+    const treasurySwept = await sweepDormantCircle(pool, {
+      circleId,
+      budgets: mine.map((b) => ({ id: b.id, unit: b.unit })),
+      tokenTypeFor: treasuryTokenFor,
+      actorId,
+    });
+    return { treasurySwept };
+  }
+
+  if (was === "dormant") {
+    const mine = (await listBudgetsFor(pool)).filter((b) => b.circleId === circleId && b.dormant);
+    const record = mine[0];
+    const slug = record ? treasuryTokenFor(record.unit) : null;
+    if (!record?.dormant || !slug) return {};
+    const note = revivalNote(record.dormant, slug, String(circle.name ?? circleId));
+    return note ? { treasuryNote: note } : {};
+  }
+  return {};
 }

@@ -233,7 +233,24 @@ export type SpendState =
    * one of the two facts the ruling names, and because a bonus taken out of
    * unspent room would have no room to come out of.
    */
-  | "at_cap";
+  | "at_cap"
+  /**
+   * THIS CIRCLE RUNS ON A TREASURY AND HAS NO CAP AT ALL (0181).
+   *
+   * Its own state, and it arrived because `TreasuryReading` joining
+   * `CircleBurnReading` broke this file at compile time. That is the gate
+   * working: without it, `burn.binds` and `burn.cycle` would have been read off
+   * a reading that carries neither, and a village would have been shown a
+   * ceiling that does not exist.
+   *
+   * A treasury circle DOES have an unspent balance, and it is deliberately not
+   * reported through `remainingMinor`. Room under a cap and tokens a circle
+   * owns are different facts: the first vanishes when the period turns and the
+   * second does not, so a bonus taken "out of unspent room" means something
+   * else here. Whether a bonus may come out of a treasury at all is a ruling
+   * nobody has made, so this blocks and says so.
+   */
+  | "treasury";
 
 export interface SpendComponent {
   state: SpendState;
@@ -289,6 +306,13 @@ export function spendComponent(burn: CircleBurnReading): SpendComponent {
   const blank = { scope: null, capMinor: null, spentMinor: null, remainingMinor: null, unit: null };
   if (burn.kind === "module_off") return { state: "module_off", ...blank };
   if (burn.kind === "ungoverned") return { state: "ungoverned", ...blank, unit: burn.unit || null };
+  /*
+   * A TREASURY CARRIES NO CAP FIELD, so every figure below stays null. The
+   * balance is real and it is read from `TreasuryReading`, never from here:
+   * putting it in `remainingMinor` would let a surface print tokens a circle
+   * owns as room it has left in a window.
+   */
+  if (burn.kind === "treasury") return { state: "treasury", ...blank, unit: burn.unit || null };
 
   /*
    * WHICHEVER CAP BINDS IS THE ONE A BONUS QUESTION IS ABOUT. `binds` already
@@ -411,6 +435,12 @@ export function bonusGate(input: GateInput): BonusGateReading {
     blocking.push(
       "This circle has an envelope with no cap over this window, so there is no ceiling it could " +
         "have stayed under.",
+    );
+  } else if (spend.state === "treasury") {
+    blocking.push(
+      "This circle runs on a treasury, so it holds tokens instead of a cap and there is no " +
+        "ceiling it could have finished under. What it did not spend it still has, and whether " +
+        "a bonus may come out of that is a question the village has not answered.",
     );
   }
 

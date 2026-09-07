@@ -286,7 +286,8 @@ export function budgetProblem(body: any, tokenExists: (slug: string) => boolean)
   /*
    * A MODE IS OPTIONAL AND, WHEN GIVEN, IT IS ONE OF TWO WORDS (0181).
    *
-   * It only reaches the INSERT. `upsertBudget`'s UPDATE never names `mode`, so
+   * It only reaches the INSERT, and `upsertBudget` never names `mode` on its
+   * UPDATE, so
    * a mode sent with an edit is ignored on purpose: switching models is a
    * scheduled act at a period boundary and not a side effect of changing an
    * amount. Both caps above stay required by the table and stop being read the
@@ -794,8 +795,8 @@ export async function upsertBudget(pool: Pool, body: any, actorId: string | null
    * village saying "this circle runs on a treasury" is a starting condition
    * and not a switch. Once the row exists, Rye's ruling binds: a change to the
    * model waits for the period boundary, and it goes through `queueModeChange`
-   * in server/lib/circleTreasury.ts. So the UPDATE below deliberately does not
-   * name `mode`, which means editing an amount cannot flip the model even if
+   * in server/lib/circleTreasury.ts. So the statement below deliberately leaves
+   * `mode` out, which means editing an amount cannot flip the model even if
    * a caller sends one, and a queued change survives an amount edit.
    */
   const mode: BudgetMode = isBudgetMode(body.mode) ? body.mode : "cap";
