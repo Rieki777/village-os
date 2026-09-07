@@ -11,6 +11,7 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  isTreasury,
   bindingCap,
   burnSentence,
   isUngoverned,
@@ -19,6 +20,7 @@ import {
   type CapReading,
   type CircleBurnReading,
   type MeteredReading,
+  type TreasuryReading,
   type UngovernedReading,
   type WindowRef,
 } from "./circleBurn";
@@ -277,6 +279,18 @@ describe("four facts, four sentences, and no two the same", () => {
           return "ungoverned";
         case "metered":
           return r.cycle.state;
+        /*
+         * THE GATE FIRED HERE, AND THIS CASE IS WHAT IT COST (0181).
+         *
+         * Adding `TreasuryReading` to the union failed `tsc` on the line below
+         * with "Type 'TreasuryReading' is not assignable to type 'never'",
+         * BEFORE this case existed. That is the whole point of the exhaustive
+         * switch: a new model of circle money cannot reach a surface through
+         * the branch written for a cap, so nothing can render a persisting
+         * balance as a percentage of a resetting ceiling.
+         */
+        case "treasury":
+          return r.circleStatus;
         default: {
           const impossible: never = r;
           return impossible;
@@ -285,6 +299,124 @@ describe("four facts, four sentences, and no two the same", () => {
     };
     expect(branch(ungoverned)).toBe("ungoverned");
     expect(branch(unspent)).toBe("unspent");
+  });
+
+  it("keeps a treasury apart BY TYPE, so no cap field is reachable on it", () => {
+    const treasury: TreasuryReading = {
+      kind: "treasury",
+      circleId: "kitchen",
+      unit: "token:credits",
+      takenAt: new Date(START).toISOString(),
+      askMinor: 0,
+      account: "sys:circle:kitchen",
+      balanceMinor: 4_000,
+      fundedMinor: 5_000,
+      spentMinor: 1_000,
+      returnedMinor: 0,
+      fits: true,
+      circleStatus: "active",
+      pending: null,
+      sweptOnDormancy: null,
+      period: SEASON,
+    };
+    const noCaps = (r: TreasuryReading): number | null => {
+      // @ts-expect-error a treasury has no cycle cap: it holds tokens
+      void r.cycle;
+      // @ts-expect-error and no season cap either
+      void r.season;
+      // @ts-expect-error and there is no share of a ceiling to take
+      void r.askShare;
+      return r.balanceMinor;
+    };
+    expect(noCaps(treasury)).toBe(4_000);
+    expect(isTreasury(treasury)).toBe(true);
+    expect(isTreasury(unspent)).toBe(false);
+    expect(isUngoverned(treasury)).toBe(false);
+  });
+
+  it("says a treasury persists and never prints it as a share of a cap", () => {
+    const held: TreasuryReading = {
+      kind: "treasury",
+      circleId: "kitchen",
+      unit: "token:credits",
+      takenAt: new Date(START).toISOString(),
+      askMinor: 0,
+      account: "sys:circle:kitchen",
+      balanceMinor: 4_000,
+      fundedMinor: 5_000,
+      spentMinor: 1_000,
+      returnedMinor: 0,
+      fits: true,
+      circleStatus: "active",
+      pending: null,
+      sweptOnDormancy: null,
+      period: SEASON,
+    };
+    const s = burnSentence(held, WORDS);
+    expect(s).toContain("carries over");
+    expect(s).not.toContain("%");
+    expect(s).not.toContain("room");
+    expect(s).not.toContain("cap");
+
+    /*
+     * THREE ZEROS, THREE SENTENCES. Rye ruled that a dormant circle's treasury
+     * goes to the master treasury or is destroyed, so a balance of zero can
+     * mean never funded, swept on dormancy, or spent. A surface printing one
+     * sentence over all three would be the conflation this module exists to
+     * prevent, one level down from the union itself.
+     */
+    const neverFunded = burnSentence(
+      { ...held, balanceMinor: 0, fundedMinor: 0, spentMinor: 0 },
+      WORDS,
+    );
+    const sweptAway = burnSentence(
+      {
+        ...held,
+        balanceMinor: 0,
+        spentMinor: 0,
+        circleStatus: "dormant",
+        sweptOnDormancy: { heldMinor: 5_000, at: "2026-09-01T00:00:00.000Z", destination: "master_treasury" },
+      },
+      WORDS,
+    );
+    const allSpent = burnSentence(
+      { ...held, balanceMinor: 0, spentMinor: 5_000 },
+      WORDS,
+    );
+    expect(new Set([neverFunded, sweptAway, allSpent]).size).toBe(3);
+
+    expect(neverFunded).toContain("nothing has been minted into it yet");
+    expect(neverFunded).toContain("never a spent one");
+
+    expect(sweptAway).toContain("its treasury was swept");
+    expect(sweptAway).toContain("returned to the village treasury");
+    // The consequence with teeth: reviving costs a mint against the cap.
+    expect(sweptAway).toContain("meets this village's issuance cap");
+
+    expect(allSpent).toContain("spent its whole treasury");
+    expect(allSpent).toContain("never an empty one");
+
+    // Destroyed says destroyed, and it is a different sentence again.
+    const destroyed = burnSentence(
+      {
+        ...held,
+        balanceMinor: 0,
+        spentMinor: 0,
+        circleStatus: "dormant",
+        sweptOnDormancy: { heldMinor: 5_000, at: "2026-09-01T00:00:00.000Z", destination: "retired" },
+      },
+      WORDS,
+    );
+    expect(destroyed).toContain("no longer exist");
+    expect(destroyed).not.toBe(sweptAway);
+
+    // A unit this meter cannot read says so instead of reporting zero.
+    const unknown = burnSentence(
+      { ...held, balanceMinor: null, fundedMinor: null, spentMinor: null, returnedMinor: null, fits: null },
+      WORDS,
+    );
+    expect(unknown).toContain("Treat the balance as unknown");
+    expect(unknown).not.toContain("0");
   });
 
   it("keeps the ungoverned case apart BY TYPE, so a caller cannot render it as an absence", () => {

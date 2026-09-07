@@ -475,15 +475,20 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
   }, 60_000);
 
   /**
-   * THE THREE DOORS THAT DO MEET THE GUARD WRITE ONLY HAND SOURCES.
+   * THE FOUR DOORS THAT DO MEET THE GUARD WRITE ONLY HAND SOURCES.
    *
    * `HAND_MINT_SOURCES` is what the refusal subtracts before it tells a
    * founder how much of the lunation came from somewhere other than an
    * admin's hand. Hardcoded, so it is asserted against the doors themselves:
-   * a fourth guarded door with a new source would otherwise be reported to a
+   * a guarded door with a new source would otherwise be reported to a
    * founder as somebody else's issuance, quietly and wrongly.
+   *
+   * DOOR 4 IS 0181's CIRCLE TREASURY FUNDING and it is here because this
+   * assertion went red when it landed, which is the tripwire working. Minting
+   * a circle its treasury is a steward deciding to issue, so it belongs beside
+   * the hand-mint instead of beside the stays doors nobody clicks.
    */
-  it("holds the hand-mint source list against the three doors that meet the guard", async () => {
+  it("holds the hand-mint source list against the four doors that meet the guard", async () => {
     await setVar("ledger.admin_mint_cycle_cap", "100000");
     const slug = "cap-probe";
     expect((await call("POST", "/api/admin/tokens", {
@@ -511,12 +516,33 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
     expect(approved.status, `approve: ${approved.text.slice(0, 300)}`).toBe(200);
     await setVar("ledger.admin_mint_cosign_over", "0");
 
+    // Door 4 (0181): a circle treasury funded from the same faucet. Resources
+    // hard-depends on `map` (`requires` in shared/modules.ts), and a missing
+    // dependency answers 409 on the lifecycle write, so the map goes on first.
+    expect((await call("PUT", "/api/admin/modules/map/lifecycle", {
+      lifecycle: "public",
+    }, founderToken)).status).toBe(200);
+    expect((await call("PUT", "/api/admin/modules/resources/lifecycle", {
+      lifecycle: "public",
+    }, founderToken)).status).toBe(200);
+    const circle = await call("POST", "/api/admin/circles", { name: "Cap Probe Circle" }, founderToken);
+    expect(circle.status, `circle: ${circle.text.slice(0, 300)}`).toBe(200);
+    const circleId = String(circle.json?.id ?? "");
+    const budget = await call("POST", "/api/admin/resources/budgets", {
+      circleId, unit: `token:${slug}`, amountMinor: 100, mode: "treasury",
+    }, founderToken);
+    expect(budget.status, `budget: ${budget.text.slice(0, 300)}`).toBe(200);
+    const funded = await call("POST", `/api/admin/resources/budgets/${budget.json.id}/fund`, {
+      amountMinor: 7, note: "door 4", requestId: "mintcap-door-4",
+    }, founderToken);
+    expect(funded.status, `fund: ${funded.text.slice(0, 300)}`).toBe(200);
+
     const [rows] = await testDb!.conn.query<any[]>(
       "SELECT DISTINCT source FROM token_ledger WHERE from_account = 'sys:mint' AND token_type = ?",
       [slug],
     );
     const written = rows.map((r: any) => String(r.source)).sort();
-    expect(written, "three guarded doors, and only the sources the refusal knows about").toEqual(
+    expect(written, "four guarded doors, and only the sources the refusal knows about").toEqual(
       [...HAND_MINT_SOURCES].sort(),
     );
   }, 180_000);
@@ -622,10 +648,13 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
     // It names a door the founder did not open. The doors are read back off
     // the ledger rather than typed here, so this cannot pass by agreeing with
     // a list the test wrote.
+    // The exclusion is HAND_MINT_SOURCES itself and no longer a copy of it.
+    // Typed out, this list went stale the day a fourth guarded door landed,
+    // and a stale exclusion here reports a guarded door as an unguarded one.
     const [others] = await testDb!.conn.query<any[]>(
       "SELECT DISTINCT source FROM token_ledger WHERE from_account = 'sys:mint' AND token_type = ? " +
-        "AND source NOT IN ('admin_mint', 'exchange_stock')",
-      [CREDIT],
+        `AND source NOT IN (${HAND_MINT_SOURCES.map(() => "?").join(",")})`,
+      [CREDIT, ...HAND_MINT_SOURCES],
     );
     expect(others.length, "the fixture must have issued through a door no admin opened").toBeGreaterThan(0);
     expect(others.some((r: any) => sentence.includes(String(r.source))), sentence).toBe(true);

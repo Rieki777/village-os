@@ -57,6 +57,9 @@
  * writes nothing anywhere.
  */
 
+import type { CircleStatus } from "./draftKinds";
+import { MODE_WORD, type PendingModeChange } from "./circleTreasury";
+
 // ── The windows a cap is taken over ─────────────────────────────────────────
 
 export type CapScope = "cycle" | "season";
@@ -167,11 +170,123 @@ export interface MeteredReading {
   fits: boolean;
 }
 
-export type CircleBurnReading = ModuleOffReading | UngovernedReading | MeteredReading;
+/**
+ * WHAT A CIRCLE RUNNING ON A TREASURY HAS, AND WHY IT IS NOT A CAP READING.
+ *
+ * A cap has ROOM THAT RESETS. A treasury has a BALANCE THAT PERSISTS. Every
+ * field on `CapReading` is an answer about a window that turns: `remainingMinor`
+ * is what is left before the window ends, `askShare` is a fraction of a
+ * ceiling, `exhaustsAt` is when this window's room runs out. None of those
+ * sentences is true of tokens a circle owns. Printing a treasury as a
+ * percentage of a cap would state a ceiling that does not exist and imply a
+ * reset that never happens, which is the whole difference between the two
+ * models Rye asked for.
+ *
+ * So a treasury gets its OWN member of the union, and the union is narrowed by
+ * an exhaustive switch (see `burnSentence`). A surface holding a
+ * `CircleBurnReading` cannot reach `reading.cycle.askShare` without proving
+ * first that it is looking at a metered reading, and a fourth member added
+ * later fails to compile in the same place. That is the gate.
+ *
+ * ── A DORMANT CIRCLE HOLDS NOTHING, AND THREE ZEROS MEAN THREE THINGS ──────
+ *
+ * Rye ruled the dormancy case: "If a circle goes dormant the treasury is
+ * destroyed or sent back to a master treasury (if there is one). To be
+ * reissued if that circle comes alive again." So going dormant EMPTIES the
+ * account, which is what stops a circle treasury becoming the stranded pile
+ * `sys:event-escrow` is.
+ *
+ * That makes a balance of zero ambiguous in three ways, and a surface printing
+ * a bare zero would conflate them:
+ *
+ *   NEVER FUNDED. No tokens have ever been minted into this treasury. An empty
+ *     account, and never a spent one.
+ *   SWEPT ON DORMANCY. The circle had a treasury and it was taken back when the
+ *     circle stopped. Reviving the circle means a NEW MINT, which meets the
+ *     village's issuance cap, so it can be refused this cycle.
+ *   SPENT. The circle was awake, had a treasury, and used all of it.
+ *
+ * `sweptOnDormancy` is what tells the middle one from the other two, and
+ * `fundedMinor` tells the first from the third. Each gets its own sentence.
+ */
+export interface TreasuryReading {
+  kind: "treasury";
+  circleId: string;
+  unit: string;
+  /** The instant this answers for. Not the instant it was computed. */
+  takenAt: string;
+  /** The ask being tested, in the unit's minor units. 0 asks where we stand. */
+  askMinor: number;
+  /** The ledger account holding it. Named so an auditor can go and look. */
+  account: string;
+  /**
+   * Tokens the circle holds RIGHT NOW, minor units.
+   *
+   * Null when this unit is one the ledger does not hold, which is the same
+   * `unmeasurable` fact `CapReading` carries and for the same reason: an
+   * envelope denominated in a currency keeps its movements in `fiat_charges`,
+   * and reporting zero would be a claim nobody measured.
+   */
+  balanceMinor: number | null;
+  /** Everything ever minted into this treasury, minor. Null when unmeasurable. */
+  fundedMinor: number | null;
+  /** Everything ever spent out of it, minor. Null when unmeasurable. */
+  spentMinor: number | null;
+  /** Everything handed back to the faucet, minor. Null when unmeasurable. */
+  returnedMinor: number | null;
+  /**
+   * `balance >= ask`. Null when the balance is unknown, and null is never
+   * false: a treasury this meter cannot read has not refused anything.
+   */
+  fits: boolean | null;
+  /** The circle's own lifecycle. A dormant circle has already been swept. */
+  circleStatus: CircleStatus;
+  /**
+   * WHAT THE TREASURY HELD WHEN THE CIRCLE WENT DORMANT, and where it went.
+   *
+   * Null when the circle has never gone dormant. This is the fact that keeps a
+   * swept zero apart from a never-funded zero and from a spent one. See the
+   * header.
+   */
+  sweptOnDormancy: { heldMinor: number; at: string; destination: string } | null;
+  /** A queued mode change that has not landed, or null. */
+  pending: PendingModeChange | null;
+  /**
+   * The period this reading falls in, for a surface that wants to say WHEN.
+   *
+   * IT IS NOT A WINDOW THE BALANCE RESETS ON, and it must never be rendered as
+   * one. It is here so a card can print "this season" beside a balance that
+   * will outlive it.
+   */
+  period: WindowRef | null;
+}
+
+export type CircleBurnReading =
+  | ModuleOffReading
+  | UngovernedReading
+  | MeteredReading
+  | TreasuryReading;
 
 /** True for the one reading that means the spend is uncapped, not empty. */
 export function isUngoverned(r: CircleBurnReading): r is UngovernedReading {
   return r.kind === "ungoverned";
+}
+
+/** True for the one reading that means the circle owns what it is spending. */
+export function isTreasury(r: CircleBurnReading): r is TreasuryReading {
+  return r.kind === "treasury";
+}
+
+/**
+ * THE COMPILE-TIME GATE, AND IT IS A FUNCTION AND NOT A COMMENT.
+ *
+ * Every exhaustive branch on `CircleBurnReading` ends here. A new member of
+ * the union arrives as `never` failing to accept it, at the exact place that
+ * would otherwise have rendered it through somebody else's branch. `treasury`
+ * was added this way: before its case existed, this call did not compile.
+ */
+export function assertNoOtherReading(r: never): never {
+  throw new Error(`unhandled circle burn reading: ${JSON.stringify(r)}`);
 }
 
 // ── The rate ────────────────────────────────────────────────────────────────
@@ -346,20 +461,120 @@ const SCOPE_WORD: Readonly<Record<CapScope, string>> = {
  * and tested apart.
  */
 export function burnSentence(reading: CircleBurnReading, words: BurnWords): string {
-  if (reading.kind === "module_off") {
+  switch (reading.kind) {
+    case "module_off":
+      return (
+        "This village is not keeping circle budgets. Nothing here says what a circle may " +
+        "issue, so an ask is measured against nothing."
+      );
+    case "ungoverned":
+      return (
+        `No envelope has been set for ${words.circleName(reading.circleId)}, so this ask is ` +
+        "ungoverned. Nothing caps what this circle may issue, and a zero here would say the " +
+        "opposite of what is true. Set a budget before reading a burn rate."
+      );
+    case "treasury":
+      return treasurySentence(reading, words);
+    case "metered":
+      return meteredSentence(reading, words);
+    default:
+      /*
+       * THE GATE. A fifth member of the union arrives here as a type error,
+       * at the one place that would otherwise have rendered it through a
+       * branch written for something else. `treasury` was added by watching
+       * this line refuse to compile.
+       */
+      return assertNoOtherReading(reading);
+  }
+}
+
+/**
+ * A TREASURY'S SENTENCE, AND EVERY WORD OF IT AVOIDS THE CAP VOCABULARY.
+ *
+ * No percentage, no room, no reset, no "until the window turns". A circle
+ * holding tokens is told what it holds and what it has spent, and that is a
+ * different fact from a cap's remaining room. A steward who reads "62% used"
+ * about a treasury has been told a ceiling exists.
+ *
+ * The four states written apart, for the same reason the cap sentences are:
+ * unmeasurable, dormant, funded, and never funded are four facts about a
+ * village and one sentence covering them is how five member-facing pages in
+ * this repository came to conflate an empty state with a real zero.
+ */
+function treasurySentence(reading: TreasuryReading, words: BurnWords): string {
+  const name = words.circleName(reading.circleId);
+  const queued = reading.pending
+    ? ` A move to a ${MODE_WORD[reading.pending.mode]} is queued for ${shortInstant(reading.pending.from)}.`
+    : "";
+
+  if (reading.balanceMinor === null) {
     return (
-      "This village is not keeping circle budgets. Nothing here says what a circle may " +
-      "issue, so an ask is measured against nothing."
+      `${name} runs on a treasury denominated in ${reading.unit}, and this meter reads the ` +
+      `token ledger, so what it holds is not counted here. Treat the balance as unknown.${queued}`
     );
   }
-  if (reading.kind === "ungoverned") {
+
+  const held = words.amount(reading.balanceMinor, reading.unit);
+
+  /*
+   * THREE ZEROS, THREE SENTENCES, AND THE ORDER MATTERS.
+   *
+   * A swept treasury is checked FIRST, because it is the only one of the three
+   * that carries a consequence a steward has to act on: reviving the circle is
+   * a new mint against the village's issuance cap. Checking "never funded"
+   * first would swallow it, since a swept treasury has a balance of zero and
+   * may well have been funded in a season nobody is looking at.
+   */
+  if (reading.sweptOnDormancy) {
+    const swept = reading.sweptOnDormancy;
+    const took = swept.destination === "retired"
+      ? "retired, so those tokens no longer exist"
+      : "returned to the village treasury";
+    const amount = swept.heldMinor > 0
+      ? `${words.amount(swept.heldMinor, reading.unit)} was ${took}`
+      : "it held nothing at the time";
     return (
-      `No envelope has been set for ${words.circleName(reading.circleId)}, so this ask is ` +
-      "ungoverned. Nothing caps what this circle may issue, and a zero here would say the " +
-      "opposite of what is true. Set a budget before reading a burn rate."
+      `${name} went dormant on ${shortInstant(swept.at)} and its treasury was swept: ${amount}. ` +
+      "Giving it a treasury again is a new mint, so it meets this village's issuance cap for " +
+      `the cycle it happens in.${queued}`
     );
   }
-  return meteredSentence(reading, words);
+
+  if (reading.circleStatus === "dormant") {
+    return (
+      `${name} is dormant. A dormant circle holds no treasury here, and this one shows ` +
+      `${held}. If that figure is above zero, the sweep has not run for it and a steward ` +
+      `should hand the balance back.${queued}`
+    );
+  }
+
+  if ((reading.fundedMinor ?? 0) === 0) {
+    return (
+      `${name} runs on a treasury and nothing has been minted into it yet. This is an empty ` +
+      "account and never a spent one, and no cap applies to what it does with what it " +
+      `holds.${queued}`
+    );
+  }
+
+  if ((reading.balanceMinor ?? 0) === 0) {
+    return (
+      `${name} has spent its whole treasury of ` +
+      `${words.amount(reading.fundedMinor ?? 0, reading.unit)}. This is a spent treasury and ` +
+      `never an empty one: the circle had it and used it.${queued}`
+    );
+  }
+
+  const funded = words.amount(reading.fundedMinor ?? 0, reading.unit);
+  const spent = words.amount(reading.spentMinor ?? 0, reading.unit);
+  const ask = reading.askMinor > 0
+    ? reading.fits === false
+      ? ` This ask does not fit: the treasury holds ${held}.`
+      : ` This ask fits, and would leave ${words.amount((reading.balanceMinor ?? 0) - reading.askMinor, reading.unit)}.`
+    : "";
+  return (
+    `${name} holds ${held} of the ${funded} minted into its treasury, having spent ${spent}. ` +
+    `A treasury carries over, so this balance stands when the period turns.${ask}${queued}`
+  );
 }
 
 function meteredSentence(reading: MeteredReading, words: BurnWords): string {

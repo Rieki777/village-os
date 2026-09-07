@@ -60,6 +60,7 @@ import {
   type GateWords,
 } from "../../shared/circleBonusGate";
 import { burnFor, type CircleEnvelope, type SeasonSpan } from "../lib/circleBurn";
+import { circleStatusReader } from "../lib/circleTreasury";
 import { amountWords, listBudgets } from "../lib/resources";
 import { tokenDef } from "../lib/ledger";
 
@@ -136,6 +137,12 @@ export function register(app: Express, deps: Deps): void {
       seasonCapMinor: b.amountMinor,
       cycleCapMinor: b.cycleAmountMinor,
       seasonId: b.seasonId,
+      // 0181: which model the circle runs on, the change queued against it,
+      // and what it held when it last went dormant. `burnFor` decides which
+      // model is RUNNING at the instant asked for; this only carries them.
+      mode: b.mode,
+      pending: b.pending,
+      dormant: b.dormant,
     }));
 
     const season = seasonState();
@@ -157,7 +164,13 @@ export function register(app: Express, deps: Deps): void {
         burnFor: (id, instant) =>
           burnFor(
             { circleId: id, at: instant },
-            { conn: pool, moduleOn: true, envelopes, clockMode, seasons, timeZone, tokenTypeFor },
+            {
+              conn: pool, moduleOn: true, envelopes, clockMode, seasons, timeZone, tokenTypeFor,
+              // A circle this route cannot name reads dormant and never active:
+              // a dormant circle's treasury has been swept, so the conservative
+              // answer is the one that does not imply a live balance.
+              circleStatusFor: circleStatusReader(circlesRepo),
+            },
           ),
         electorate,
       },

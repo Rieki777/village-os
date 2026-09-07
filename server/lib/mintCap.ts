@@ -70,19 +70,31 @@ export const MINT_CAP_KEY = "ledger.admin_mint_cycle_cap";
  * The `token_ledger.source` values the three doors that MEET the guard write.
  *
  * `exchange_stock` is treasury stocking, `admin_mint` is both the hand-mint
- * and its co-signed approval. Everything else out of this faucet is a door
+ * and its co-signed approval, and `circle_treasury_fund` (0181) is a steward
+ * minting a circle its treasury. Everything else out of this faucet is a door
  * that issues without passing the guard: the Stripe stay-purchase settle, the
  * member-triggered quest work-exchange release, the three stays routes, and
  * any `mint_rules` rule on stay-credit, because `faucetFor("stay-credit")`
  * returns this faucet.
  *
  * HARDCODED AND TESTED, not derived: there is no registry of door sources to
- * derive it from. `server/lib/mintCap.test.ts` drives the three guarded doors
- * and asserts the rows they wrote carry exactly these two values, so a fourth
- * guarded door with a new source goes red instead of quietly being reported
- * to a founder as somebody else's issuance.
+ * derive it from. `server/mintCap.e2e.test.ts` drives every guarded door and
+ * asserts the rows they wrote carry exactly these values, so a further guarded
+ * door with a new source goes red instead of quietly being reported to a
+ * founder as somebody else's issuance.
+ *
+ * `circle_treasury_fund` WAS ADDED BY WATCHING THAT TEST GO RED, which is the
+ * tripwire doing its job. It belongs on this list because funding a circle
+ * treasury is a steward deciding to issue, the same act the other three are.
+ * Left off, `capRefusal` would have told a founder who had just funded ten
+ * circles that their own issuance "was issued by circle_treasury_fund, which
+ * no admin minted by hand", which is the opposite of true.
  */
-export const HAND_MINT_SOURCES: readonly string[] = ["admin_mint", "exchange_stock"];
+export const HAND_MINT_SOURCES: readonly string[] = [
+  "admin_mint",
+  "exchange_stock",
+  "circle_treasury_fund",
+];
 
 /** What one token issued and took back in one cycle. All figures MINOR. */
 export interface CycleIssuance {

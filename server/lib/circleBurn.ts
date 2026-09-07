@@ -70,8 +70,12 @@ import {
   type CapReading,
   type CircleBurnReading,
   type MeteredReading,
+  type TreasuryReading,
   type WindowRef,
 } from "../../shared/circleBurn";
+import { modeAt, type BudgetMode, type PendingModeChange } from "../../shared/circleTreasury";
+import type { CircleStatus } from "../../shared/draftKinds";
+import { treasuryAccountProblem, treasuryHoldings } from "./circleTreasury";
 
 // ── The attribution key ─────────────────────────────────────────────────────
 
@@ -270,6 +274,25 @@ export interface CircleEnvelope {
   cycleCapMinor: number | null;
   /** The season this row is tied to, or null for a standing envelope. */
   seasonId: string | null;
+  /**
+   * WHICH MODEL THIS CIRCLE RUNS ON (0181). Every row before 0181 is `cap`.
+   *
+   * The two caps above are read only under `cap`. Under `treasury` they are
+   * not consulted at all, because a treasury has a balance and no ceiling, and
+   * a reading that mixed them would report a persisting balance as a fraction
+   * of a resetting cap.
+   */
+  mode: BudgetMode;
+  /** A queued change to that model, or null. It has not happened yet. */
+  pending: PendingModeChange | null;
+  /**
+   * What this treasury held when its circle last went dormant, or null.
+   *
+   * Rye ruled that a dormant circle's treasury goes to the master treasury or
+   * is destroyed, so a dormant circle holds nothing and its balance of zero
+   * needs this to be told apart from a treasury nobody ever funded.
+   */
+  dormant: { heldMinor: number; at: string; destination: string } | null;
 }
 
 export interface BurnQuery {
@@ -318,6 +341,16 @@ export interface BurnDeps {
   timeZone: string;
   /** Which ledger token an envelope's unit is denominated in. */
   tokenTypeFor: (unit: string) => string | null;
+  /**
+   * A circle's lifecycle, read by the caller from the circles repo.
+   *
+   * `dormant` is reachable today (`circles.status`) and a dormant circle keeps
+   * every token in its treasury, so the reading has to be able to say so. It
+   * is REQUIRED rather than defaulted: a default of `active` would render a
+   * dormant circle's held balance as a live one, which is the empty-state
+   * confusion this module was written to avoid, one level up.
+   */
+  circleStatusFor: (circleId: string) => CircleStatus;
 }
 
 /**
@@ -356,16 +389,35 @@ export async function burnFor(q: BurnQuery, deps: BurnDeps): Promise<CircleBurnR
   const takenAt = q.at.toISOString();
   if (!deps.moduleOn) return { kind: "module_off" };
 
-  const forCircle = deps.envelopes.filter((e) => e.circleId === q.circleId);
-  const envelope = q.unit ? forCircle.find((e) => e.unit === q.unit) : forCircle[0];
+  const ask = Math.max(0, Math.trunc(Number(q.plus ?? 0) || 0));
+  const cycleWindow = cycleWindowAt(q.at, deps.clockMode);
+  const seasonWindow = seasonWindowAt(q.at, deps.seasons, deps.timeZone);
+
+  const envelope = envelopeAt(deps.envelopes, q.circleId, q.unit, seasonWindow);
   if (!envelope) {
     return { kind: "ungoverned", circleId: q.circleId, unit: q.unit ?? "", takenAt };
   }
 
   const tokenType = deps.tokenTypeFor(envelope.unit);
-  const ask = Math.max(0, Math.trunc(Number(q.plus ?? 0) || 0));
-  const cycleWindow = cycleWindowAt(q.at, deps.clockMode);
-  const seasonWindow = seasonWindowAt(q.at, deps.seasons, deps.timeZone);
+
+  /*
+   * THE MODE IN FORCE AT `at`, WHICH IS NOT THE MODE IN THE COLUMN.
+   *
+   * A queued change that has not reached its boundary changes nothing here,
+   * which is the whole of Rye's deferral ruling expressed as one call. A
+   * ballot card asking about an instant NEXT season therefore reads the model
+   * the circle will be on then, and a member reading today reads the one it is
+   * on now, from the same row.
+   */
+  if (modeAt(envelope.mode, envelope.pending, q.at) === "treasury") {
+    return treasuryReadingFor(deps.conn, envelope, {
+      circleStatus: deps.circleStatusFor(envelope.circleId),
+      tokenType,
+      takenAt,
+      ask,
+      period: seasonWindow ?? cycleWindow,
+    });
+  }
 
   const cycle = await readOne(
     deps.conn, "cycle", envelope.circleId, tokenType, cycleWindow, envelope.cycleCapMinor, q.at, ask,
@@ -389,6 +441,111 @@ export async function burnFor(q: BurnQuery, deps: BurnDeps): Promise<CircleBurnR
     fits,
   };
   return reading;
+}
+
+/**
+ * WHICH ENVELOPE GOVERNS THIS CIRCLE AT THIS INSTANT, AND WHY IT IS NOT
+ * SIMPLY THE FIRST ROW.
+ *
+ * `circle_budgets.season_id` names the season a row belongs to, and NULL means
+ * a standing envelope that applies whatever season it is. Taking `forCircle[0]`
+ * ignored that column completely, so a circle whose only budget was written for
+ * the summer season kept being metered against the summer cap all through the
+ * autumn. The row is not for this period, and reporting a cap from a period
+ * that has ended is worse than reporting none: it answers "does this fit" with
+ * a number nobody voted for.
+ *
+ * The precedence is the season's own row first, then a standing row, then
+ * NOTHING. That last step is the point Rye asked for out loud: a circle with no
+ * budget for a new period reads as UNGOVERNED, which is its own member of the
+ * union and its own sentence, and never as a zero. A zero would say "this
+ * circle may issue nothing", and the truth is the opposite, that nothing caps
+ * what it may issue.
+ *
+ * A village with no dated season at all has no season window, so only standing
+ * rows apply, which is the same rule with the first step empty.
+ */
+export function envelopeAt(
+  envelopes: readonly CircleEnvelope[],
+  circleId: string,
+  unit: string | undefined,
+  seasonWindow: WindowRef | null,
+): CircleEnvelope | null {
+  const forCircle = envelopes.filter(
+    (e) => e.circleId === circleId && (unit === undefined || e.unit === unit),
+  );
+  if (forCircle.length === 0) return null;
+  const dated = seasonWindow
+    ? forCircle.find((e) => e.seasonId !== null && e.seasonId === seasonWindow.id)
+    : undefined;
+  return dated ?? forCircle.find((e) => e.seasonId === null) ?? null;
+}
+
+/**
+ * A TREASURY'S READING, AND NOT ONE FIELD OF IT IS A CAP.
+ *
+ * No `remainingMinor`, no `askShare`, no `exhaustsAt`. What this answers is
+ * what the circle HOLDS, what was put there, and what has gone out, all read
+ * from the ledger at the instant it is asked for, the same way the cap reading
+ * derives everything and stores nothing.
+ *
+ * `fits` is a comparison against the balance and not against a ceiling. A
+ * treasury with 400 in it can afford an ask of 400 and cannot afford 401, and
+ * neither of those sentences involves a window.
+ */
+async function treasuryReadingFor(
+  conn: Pool | PoolConnection,
+  envelope: CircleEnvelope,
+  ctx: {
+    circleStatus: CircleStatus;
+    tokenType: string | null;
+    takenAt: string;
+    ask: number;
+    period: WindowRef | null;
+  },
+): Promise<TreasuryReading> {
+  const base = {
+    kind: "treasury" as const,
+    circleId: envelope.circleId,
+    unit: envelope.unit,
+    takenAt: ctx.takenAt,
+    askMinor: ctx.ask,
+    circleStatus: ctx.circleStatus,
+    pending: envelope.pending,
+    // The record of the last dormancy sweep, carried straight through. It is
+    // what keeps a swept zero apart from a never-funded one and a spent one.
+    sweptOnDormancy: envelope.dormant,
+    period: ctx.period,
+  };
+
+  /*
+   * A UNIT THIS METER DOES NOT READ IS NOT A ZERO BALANCE. An envelope
+   * denominated in a currency keeps its movements in `fiat_charges`, and a
+   * treasury reported as holding nothing would be a claim about money nobody
+   * here counted. Same decision as `unmeasurable` on the cap side.
+   */
+  if (ctx.tokenType === null || treasuryAccountProblem(envelope.circleId)) {
+    return {
+      ...base,
+      account: "",
+      balanceMinor: null,
+      fundedMinor: null,
+      spentMinor: null,
+      returnedMinor: null,
+      fits: null,
+    };
+  }
+
+  const held = await treasuryHoldings(conn, envelope.circleId, ctx.tokenType);
+  return {
+    ...base,
+    account: held.account,
+    balanceMinor: held.balanceMinor,
+    fundedMinor: held.fundedMinor,
+    spentMinor: held.spentMinor,
+    returnedMinor: held.returnedMinor,
+    fits: held.balanceMinor >= ctx.ask,
+  };
 }
 
 async function readOne(

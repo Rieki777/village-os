@@ -258,6 +258,9 @@ describe.skipIf(!configured)("what a circle has spent", () => {
       seasonCapMinor: 1000,
       cycleCapMinor: 400,
       seasonId: null,
+      mode: "cap",
+      pending: null,
+      dormant: null,
     };
 
     const deps = (over: Partial<BurnDeps> = {}): BurnDeps => ({
@@ -268,6 +271,7 @@ describe.skipIf(!configured)("what a circle has spent", () => {
       seasons: SEASONS,
       timeZone: TZ,
       tokenTypeFor: (u: string) => (u === UNIT ? TOKEN : null),
+      circleStatusFor: () => "active",
       ...over,
     });
 

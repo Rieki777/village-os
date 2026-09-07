@@ -49,6 +49,15 @@ interface Budget {
   amountMinor: number;
   /** The CYCLE cap (0168). Null means the village set none. */
   cycleAmountMinor: number | null;
+  /**
+   * WHICH MODEL THIS CIRCLE RUNS ON (0181). A cap permits and holds nothing; a
+   * treasury is real tokens the circle owns and keeps across a period.
+   */
+  mode: "cap" | "treasury";
+  /** A change to that model, queued for a period boundary. It has not happened. */
+  pending: { mode: "cap" | "treasury"; from: string; by: string | null; at: string | null } | null;
+  /** What the treasury held when the circle last went dormant, or null. */
+  dormant: { heldMinor: number; at: string; destination: string } | null;
   unit: string;
   note: string | null;
 }
@@ -102,7 +111,10 @@ const EMPTY_RULE = {
 };
 
 const EMPTY_SOURCE = { name: "", kind: "donations", sharePct: "", amountPerYear: "", unit: "", note: "" };
-const EMPTY_BUDGET = { circleId: "", seasonId: "", amount: "", cycleAmount: "", unit: "", note: "" };
+const EMPTY_BUDGET = { circleId: "", seasonId: "", amount: "", cycleAmount: "", unit: "", note: "", mode: "cap" };
+
+/** One row's treasury inputs. Kept per budget so two rows cannot share a draft. */
+const EMPTY_MOVE = { amount: "", toUserId: "", note: "" };
 
 export default function ResourcesAdminPanel({ password }: { password: string }) {
   const auth = { Authorization: `Bearer ${password}` };
@@ -115,6 +127,15 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [source, setSource] = useState({ ...EMPTY_SOURCE });
   const [budget, setBudget] = useState({ ...EMPTY_BUDGET });
+  const [move, setMove] = useState<Record<string, typeof EMPTY_MOVE>>({});
+  /**
+   * What each treasury holds, keyed by BUDGET id.
+   *
+   * Its own fetch, because the balance belongs to the treasury domain and the
+   * declaration payload belongs to the resources module. One owner per
+   * surface is what stops a lane widening somebody else's response.
+   */
+  const [treasuries, setTreasuries] = useState<Record<string, { account: string; balanceMinor: number; slug: string }>>({});
   const [labelDraft, setLabelDraft] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
@@ -130,6 +151,12 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
     const d = (await res.json()) as AdminPayload;
     setModuleOff(false);
     setData(d);
+    // A treasury balance is a separate read and a FAILED one leaves the map
+    // empty rather than showing a zero: an empty state and a real zero are
+    // different facts, and the row prints "not read" for the first.
+    const held = await fetch("/api/admin/resources/treasuries", { headers: auth });
+    setTreasuries(held.ok ? ((await held.json())?.treasuries ?? {}) : {});
+
     setLabelDraft(d.config.labels ?? {});
     setRule((r) => ({ ...r, unit: r.unit || d.defaultUnit, scopeId: r.scopeId || (d.circles[0]?.id ?? "") }));
     setSource((s) => ({ ...s, unit: s.unit || d.defaultUnit }));
@@ -209,11 +236,90 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
         : toMinor(budget.cycleAmount, budget.unit.trim()),
       unit: budget.unit.trim(),
       note: budget.note.trim() || undefined,
+      // A mode is a STARTING CONDITION and only reaches the INSERT. Changing
+      // the model of a budget that already exists waits for a period boundary
+      // and goes through the schedule control below.
+      mode: budget.mode,
     });
     if (ok) {
       setBudget({ ...EMPTY_BUDGET, unit: data?.defaultUnit ?? "", circleId: data?.circles?.[0]?.id ?? "" });
       setNote("The budget is written.");
     }
+  };
+
+  /** The draft for one budget row's treasury moves. */
+  const draft = (id: string) => move[id] ?? EMPTY_MOVE;
+  const setDraft = (id: string, patch: Partial<typeof EMPTY_MOVE>) =>
+    setMove((m) => ({ ...m, [id]: { ...(m[id] ?? EMPTY_MOVE), ...patch } }));
+
+  /**
+   * SCHEDULE A MODE CHANGE. It lands at the period boundary and never now, so
+   * the button says what will happen and the answer says when.
+   */
+  const scheduleMode = async (b: Budget) => {
+    const asked = (b.pending?.mode ?? b.mode) === "treasury" ? "cap" : "treasury";
+    const res = await fetch(`/api/admin/resources/budgets/${b.id}/mode`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...auth },
+      body: JSON.stringify({ mode: asked }),
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      setProblem(String(json?.error ?? json?.message ?? "That did not go through"));
+      return;
+    }
+    setNote(String(json?.message ?? "The change is queued."));
+    await load();
+  };
+
+  /** MINT INTO A TREASURY. This is issuance and the village's cap binds it. */
+  const fundTreasury = async (b: Budget) => {
+    const d = draft(b.id);
+    const ok = await act(`/api/admin/resources/budgets/${b.id}/fund`, "POST", {
+      amountMinor: toMinor(d.amount, b.unit),
+      note: d.note.trim() || "Funding the circle's treasury",
+      requestId: `${b.id}:${d.amount}:${d.note.trim()}`,
+    });
+    if (ok) {
+      setDraft(b.id, { amount: "" });
+      setNote("The treasury is funded. Those tokens are minted, so they spent the village's issuance room for this cycle.");
+    }
+  };
+
+  /** PAY SOMEBODY FROM A TREASURY. This moves tokens that already exist. */
+  const spendTreasury = async (b: Budget) => {
+    const d = draft(b.id);
+    const ok = await act(`/api/admin/resources/budgets/${b.id}/spend`, "POST", {
+      toUserId: d.toUserId.trim(),
+      amountMinor: toMinor(d.amount, b.unit),
+      note: d.note.trim() || "Paid from the circle's treasury",
+      requestId: `${b.id}:${d.toUserId.trim()}:${d.amount}`,
+    });
+    if (ok) {
+      setDraft(b.id, { amount: "", toUserId: "" });
+      setNote("Paid. A treasury spend moves tokens the circle already holds, so the village's issuance cap did not move.");
+    }
+  };
+
+  /** HAND A TREASURY BACK. The issuance room comes back with the tokens. */
+  const returnTreasury = async (b: Budget) => {
+    const d = draft(b.id);
+    const res = await fetch(`/api/admin/resources/budgets/${b.id}/return`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...auth },
+      body: JSON.stringify({
+        amountMinor: d.amount.trim() ? toMinor(d.amount, b.unit) : undefined,
+        note: d.note.trim() || "Handed back to the village",
+      }),
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      setProblem(String(json?.error ?? "That did not go through"));
+      return;
+    }
+    setDraft(b.id, { amount: "" });
+    setNote(String(json?.message ?? "Handed back."));
+    await load();
   };
 
   const saveLabels = async () => {
@@ -460,17 +566,92 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
         {data.budgets.length > 0 && (
           <div className="space-y-1.5">
             {data.budgets.map((b) => (
-              <div key={b.id} className="flex items-center justify-between gap-2 text-sm bg-muted/40 rounded-lg px-3 py-2">
-                <span className="text-foreground/90">
-                  <span className="font-semibold">{circleName(b.circleId)}</span> may issue up to {money(b.amountMinor, b.unit)}
-                  {b.seasonId ? ` in season ${b.seasonId}` : " a season"}
-                  {b.cycleAmountMinor === null
-                    ? ", with no cap on any one cycle"
-                    : `, and up to ${money(b.cycleAmountMinor, b.unit)} in any one cycle`}
-                </span>
-                <button type="button" className="text-xs text-red-600 font-medium shrink-0" onClick={() => act(`/api/admin/resources/budgets/${b.id}`, "DELETE")}>
-                  Remove
-                </button>
+              <div key={b.id} className="space-y-2 text-sm bg-muted/40 rounded-lg px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-foreground/90">
+                    {b.mode === "treasury" ? (
+                      <>
+                        <span className="font-semibold">{circleName(b.circleId)}</span> holds a treasury of{" "}
+                        {treasuries[b.id] ? money(treasuries[b.id]!.balanceMinor, b.unit) : "an amount this page could not read"}.
+                        It keeps whatever it does not spend.
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-semibold">{circleName(b.circleId)}</span> may issue up to {money(b.amountMinor, b.unit)}
+                        {b.seasonId ? ` in season ${b.seasonId}` : " a season"}
+                        {b.cycleAmountMinor === null
+                          ? ", with no cap on any one cycle"
+                          : `, and up to ${money(b.cycleAmountMinor, b.unit)} in any one cycle`}
+                      </>
+                    )}
+                  </span>
+                  <button type="button" className="text-xs text-red-600 font-medium shrink-0" onClick={() => act(`/api/admin/resources/budgets/${b.id}`, "DELETE")}>
+                    Remove
+                  </button>
+                </div>
+
+                {b.dormant && (
+                  <p className="text-xs text-muted-foreground">
+                    This circle went dormant on {b.dormant.at.slice(0, 10)} and its treasury of{" "}
+                    {money(b.dormant.heldMinor, b.unit)} was{" "}
+                    {b.dormant.destination === "retired" ? "retired, so those tokens are gone" : "returned to the village treasury"}.
+                    Giving it a treasury again is a new mint, so it meets the village's issuance cap for the cycle it happens in.
+                  </p>
+                )}
+
+                {b.pending ? (
+                  <p className="text-xs text-muted-foreground">
+                    Queued: this circle moves to a {b.pending.mode === "treasury" ? "treasury" : "spending cap"} on{" "}
+                    {b.pending.from.slice(0, 10)}. It finishes this period on the model it started with.{" "}
+                    <button type="button" className="underline font-medium" onClick={() => act(`/api/admin/resources/budgets/${b.id}/mode`, "DELETE")}>
+                      Withdraw that
+                    </button>
+                  </p>
+                ) : (
+                  <button type="button" className="text-xs underline font-medium text-foreground/80" onClick={() => scheduleMode(b)}>
+                    {b.mode === "treasury" ? "Move to a spending cap next period" : "Move to a treasury next period"}
+                  </button>
+                )}
+
+                {b.mode === "treasury" && (
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    <input
+                      className={input}
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder={`Amount in ${b.unit}`}
+                      value={draft(b.id).amount}
+                      onChange={(e) => setDraft(b.id, { amount: e.target.value })}
+                    />
+                    <input
+                      className={input}
+                      placeholder="Member id, to pay somebody"
+                      value={draft(b.id).toUserId}
+                      onChange={(e) => setDraft(b.id, { toUserId: e.target.value })}
+                    />
+                    <input
+                      className={input}
+                      placeholder="Why"
+                      value={draft(b.id).note}
+                      onChange={(e) => setDraft(b.id, { note: e.target.value })}
+                    />
+                    <button type="button" className={button} disabled={!draft(b.id).amount} onClick={() => fundTreasury(b)}>
+                      Mint into it
+                    </button>
+                    <button
+                      type="button"
+                      className={button}
+                      disabled={!draft(b.id).amount || !draft(b.id).toUserId.trim()}
+                      onClick={() => spendTreasury(b)}
+                    >
+                      Pay from it
+                    </button>
+                    <button type="button" className={button} onClick={() => returnTreasury(b)}>
+                      Hand it back
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -500,7 +681,19 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
             Unit
             <input className={input} value={budget.unit} onChange={(e) => setBudget({ ...budget, unit: e.target.value })} />
           </label>
+          <label className={label}>
+            How this circle runs
+            <select className={input} value={budget.mode} onChange={(e) => setBudget({ ...budget, mode: e.target.value })}>
+              <option value="cap">A spending cap: it may issue up to the amounts above and holds nothing</option>
+              <option value="treasury">A treasury: mint it tokens up front and it keeps what it does not spend</option>
+            </select>
+          </label>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Choose per circle. Some circles can run on a cap while others hold a treasury, in the same season. Changing
+          the model of a budget that already exists waits for the next period, so a circle finishes its season on the
+          model it started with.
+        </p>
         <button type="button" className={button} disabled={!budget.circleId || !budget.amount} onClick={saveBudget}>
           Declare the budget
         </button>
