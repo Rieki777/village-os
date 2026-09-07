@@ -278,7 +278,8 @@ export async function measureVisionMetrics(
     allMembers(): Promise<any[]>;
     consentedCounts(): Promise<Map<string, number>>;
     isExampleUser(u: any): boolean;
-    computeStage(u: any, consented: number): string;
+    computeStage(u: any, consented: number, trainingDone: readonly string[]): string;
+    trainingCompletions(userIds: readonly string[]): Promise<Map<string, string[]>>;
     seasonsCompleted(): number;
   },
 ): Promise<Map<string, number>> {
@@ -309,13 +310,17 @@ export async function measureVisionMetrics(
   if (asked.some((m) => m.startsWith("members_at_stage:"))) {
     const [allMembers, consented] = await Promise.all([deps.allMembers(), deps.consentedCounts()]);
     const real = allMembers.filter((u) => !deps.isExampleUser(u));
+    // One query for the roll, beside the grouped count above it. The stage
+    // ladder now reads the server's training record rather than a member field.
+    const trained = await deps.trainingCompletions(real.map((u: any) => String(u.id)));
     for (const m of asked) {
       if (!m.startsWith("members_at_stage:")) continue;
       const floor = stageIndex(m.slice("members_at_stage:".length));
       if (floor < 0) continue;
       measured.set(
         m,
-        real.filter((u) => stageIndex(deps.computeStage(u, Number(consented.get(u.id) ?? 0))) >= floor).length,
+        real.filter((u) => stageIndex(deps.computeStage(u, Number(consented.get(u.id) ?? 0), trained.get(String(u.id)) ?? [])) >= floor)
+          .length,
       );
     }
   }
