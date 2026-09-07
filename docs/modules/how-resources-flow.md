@@ -54,3 +54,27 @@ The three vocabularies ship with platform wording and ids that never change. `co
 ## Examples
 
 Standing examples ride the `is_example` machinery: four rules, two sources and one budget, pointing at the map's and progression's example structure, retired by the village's first real declaration through the admin surface. The admin tab's empty state names the three rows that make the map speak first.
+
+## Whether a circle's period can be judged: `GET /api/resources/completion`
+
+A founder ruling: a circle earns a bonus when it finished under its cap AND the village voted that its work was completed. The first half is the burn reading above. This route is the second half and the join, and it pays nothing: it is a GET, it moves no value, opens no ballot and writes no row.
+
+It reports three components and never merges them into a score. A composite would invite the optimisation it exists to avoid, and it would also destroy the information, since a circle that delivered a great deal cheaply and one that delivered little expensively can land on the same number.
+
+- **Commitment.** What the circle recorded it was taking on, and whether that was written down before the period ended or afterwards.
+- **Vote.** What the village answered, off the frozen ballot. Never asked, running, withdrawn, quorum missed, said no and said yes are six states and never fewer. Quorum missed is never rendered as a refusal, because silence is not a refusal.
+- **Spend.** Where the issuance landed against the cap that binds, taken straight from the burn reading.
+
+The one aggregate is `blocking`, a list of reasons a bonus cannot be considered yet. It can only ever say no, so an empty list is the absence of an objection and never an authorisation. There is no eligibility flag and no amount anywhere in the payload, and a test asserts that over the serialised reading.
+
+### Two gaps this route names instead of hiding
+
+**Nothing records what a circle took on.** Measured across every table of a migrated schema, `circle_budgets` is the only one carrying both a circle and a period, and it holds an amount, a unit and a note. A note is a label on an envelope. So `commitmentFor` is an injected dependency wired to a reader that finds none, the payload carries `noCommitmentStore` saying so in words, and the reading refuses instead of guessing. A completion vote with no written commitment asks the village to agree with a memory.
+
+That gap also explains the key. `ballots.subject_ref` is varchar(64) and a circle id plus a season id is 129 characters, so a ballot cannot name both. The ballot's subject is the commitment RECORD, whose id fits, the way a mechanics ballot names a proposal. A village with nothing written down has nothing for the ballot to point at, so the two gaps are one gap.
+
+**Who votes has not been decided.** `drizzle/0095_governance_prune.sql` removed `ballots.circle_id` because a circle has no roll to build an electorate from: circles are pointed at by permission groups and by org seats, and neither is a list of who votes. So the electorate is a query parameter, the route serves `village` and refuses `circle` with that reason, and `ruling` rides every answer saying the choice is open. A circle voting yes on its own completion to release its own bonus has the shape of a circle voting itself a bigger budget.
+
+### What the reading cannot see
+
+`blindSpot` rides every response and is not conditional. A circle whose work is care, mediation or hosting can leave almost nothing in any of the three components and still have carried the village through the season. A thin record is not evidence of a thin season, and whoever votes has to weigh what they saw.
