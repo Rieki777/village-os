@@ -48,7 +48,8 @@ import {
   WIRED_BUT_HELD_BACK,
   type PowerHolder,
 } from "./lib/capabilityRegistry";
-import { allVariables, boolVar, numberVar, rawValue, setVariable, stringVar } from "./lib/variables";
+import { allVariables, boolVar, loadVariables, numberVar, rawValue, setVariable, stringVar } from "./lib/variables";
+import { greetArrival } from "./lib/arrival";
 import { adminGateWasConsulted, markAdminGate } from "./lib/adminGate";
 import { type FaqPathway, register as registerFaqRoutes } from "./routes/faqs";
 import { register as registerGratitudeVoiceRoutes } from "./routes/gratitudeVoices";
@@ -316,7 +317,7 @@ import { loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle }
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
 import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requestVoiceClaim, settleVoiceClaim } from "./lib/voiceClaim";
 import { defaultSeasonsFor, seasonRunningProblem, suggestNextSeasonDates } from "./lib/seasonCalendar";
-import { completionsFor, completionsForMany, trainingIsComplete } from "./lib/trainingRecord";
+import { completionsFor, completionsForMany, gatingModuleIds, trainingIsComplete } from "./lib/trainingRecord";
 import { respondToTerminalError, installCrashHandlers, installShutdownHandlers, reachedSomebody, reportError, reportErrorWithin, wireErrorReporting } from "./lib/errors";
 import {
   STAY_CREDIT,
@@ -733,7 +734,6 @@ import { applyPending, connect as dbConnect } from "./db/migrate";
 import { startMaintenanceServer } from "./db/maintenanceMode";
 import { alignTableCollations } from "./db/collation";
 import { dbCollection, dbDocument } from "./repos/store-db";
-import { loadVariables } from "./lib/variables";
 import {
   activeClock,
   assertCycleSettingsRead,
@@ -1073,6 +1073,7 @@ function defaultTrainingModules() {
       `The foundation of how we talk to each other at ${village}. Learn the four components of NVC and why they matter.`,
     type: "Video",
     url: "",
+    mandatory: true,
     order: 1,
   },
   {
@@ -1082,6 +1083,7 @@ function defaultTrainingModules() {
       "Games and practices for deeper, more honest connection with the people around you.",
     type: "Practice",
     url: "",
+    mandatory: true,
     order: 2,
   },
   {
@@ -1091,6 +1093,7 @@ function defaultTrainingModules() {
       `How ${village} makes decisions together: the difference between consensus and consent, and why it matters.`,
     type: "Article",
     url: "",
+    mandatory: true,
     order: 3,
   },
   {
@@ -1100,6 +1103,7 @@ function defaultTrainingModules() {
       "How to hold and participate in a circle meeting. The roles, the rhythms, and the practices.",
     type: "Workshop",
     url: "",
+    mandatory: true,
     order: 4,
   },
   ];
@@ -1228,6 +1232,7 @@ const trainingRepo = dbCollection(getPool(), {
     { js: "description", db: "description" },
     { js: "type", db: "type" },
     { js: "url", db: "url" },
+    { js: "mandatory", db: "mandatory", kind: "bool" }, // 0179, see gatingModuleIds
     { js: "order", db: "sort_order", kind: "int" },
   ],
 });
@@ -3781,7 +3786,7 @@ function hasMembership(user: any): boolean {
  */
 /** Server-recorded completions against the live catalogue. See lib/trainingRecord.ts. */
 const trainingDoneHere = (done: readonly string[]): boolean =>
-  trainingIsComplete(trainingRepo.all().map((m: any) => String(m.id)), done);
+  trainingIsComplete(gatingModuleIds(trainingRepo.all()), done);
 
 function computeStage(user: any, consentedQuests: number, trainingDone: readonly string[]): string {
   let earned = GAME_CONFIG.stages[0].id;
@@ -8121,6 +8126,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     };
     await members.add(user);
     await addActivity("join", `${firstName(name)} stepped into the village as a Guest`, { actorUserId: userId, entityType: "user", entityRef: userId });
+    await greetArrival({ id: userId, name, handle: user.handle }, { greeterRoleId: stringVar("arrival.greeter_role"), seats: await loadRoleHolders(), everyone: await members.all(), notify });
     const token = encodeToken(AUTH_TOKEN_SECRET, userId, email);
     res.json({ success: true, token, user: publicUser(user) });
   });

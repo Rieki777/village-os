@@ -111,6 +111,15 @@ export const VOICE_WEIGHTING_CHOICES = [
 export const VARIABLES: VariableDef[] = [
   // ── Gratitude: the in-site recognition economy ────────────────────────────
   {
+    key: "arrival.greeter_role",
+    category: "Membership",
+    label: "The seat that greets a new arrival",
+    description:
+      "The role whose holders are told the moment somebody joins. Greeting belongs to a seat, so the village re-seats it each season and the message follows with nobody editing a setting. Leave it empty and the founders hear it, which is also what happens when the seat is named and nobody is sitting in it: a village that has not built its org chart yet, and one whose greeter stepped down last week, both still find out that a person arrived. Paste the role id from the org chart.",
+    type: "text",
+    default: "",
+  },
+  {
     key: "gratitude.base_budget",
     category: "Gratitude",
     label: "Base sending allowance per cycle",

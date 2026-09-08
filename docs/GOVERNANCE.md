@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `0f64cf85dd6eac4f`, which regenerating reproduces.
+It describes the sources at fingerprint `2dad9f8a2b4bf309`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -1031,7 +1031,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "0f64cf85dd6eac4f",
+  "commit": "2dad9f8a2b4bf309",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -2667,7 +2667,7 @@ The tables and columns the rules above rest on. The generator checks every one a
 | `delegations.accepted_at` | a delegation carries a choice only once the delegate accepts it |
 | `role_holder_terms` | a term survives an unrelated appointment |
 
-Checked against the 137 migration files in `drizzle/`.
+Checked against the 138 migration files in `drizzle/`.
 
 ## What this file is made from
 

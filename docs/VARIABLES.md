@@ -22,24 +22,25 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 145 open and 33 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 146 open and 33 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 155 of them as soon as it is saved, and 23 of them at the next cycle close.
+Each dial also says WHEN a change lands. 156 of them as soon as it is saved, and 23 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-178 dials in 29 categories. 104 carry a minimum and a maximum. By type: 82 integer, 13 decimal, 10 percentage, 21 boolean, 22 choice, 30 text.
+179 dials in 30 categories. 104 carry a minimum and a maximum. By type: 82 integer, 13 decimal, 10 percentage, 21 boolean, 22 choice, 31 text.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
+| Membership | 1 | 1 | 0 |
 | Gratitude | 9 | 9 | 0 |
 | Ledger | 2 | 2 | 0 |
 | The Mint | 4 | 3 | 1 |
@@ -76,6 +77,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 
 | Dial | Key | Category | Type | Default | Who may change it |
 | --- | --- | --- | --- | --- | --- |
+| The seat that greets a new arrival | `arrival.greeter_role` | Membership | text | blank | the whole village |
 | Base sending allowance per cycle | `gratitude.base_budget` | Gratitude | integer | `105` | the whole village |
 | Value pool distributed at each cycle close | `gratitude.pool_per_cycle` | Gratitude | integer | `1000` | the whole village |
 | Which token the pool pays | `gratitude.pool_token` | Gratitude | text | `credits` | the whole village |
@@ -254,6 +256,24 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Match score floor | `introductions.match_floor` | Introductions | integer | `3` | the whole village |
 | Days an introduction stays open | `introductions.opportunity_days` | Introductions | integer | `10` | the whole village |
 | Keep match reasoning for | `introductions.retention_days` | Introductions | integer | `90` | the whole village |
+
+## Membership
+
+1 dial. 1 for the whole village.
+
+### The seat that greets a new arrival
+
+The role whose holders are told the moment somebody joins. Greeting belongs to a seat, so the village re-seats it each season and the message follows with nobody editing a setting. Leave it empty and the founders hear it, which is also what happens when the seat is named and nobody is sitting in it: a village that has not built its org chart yet, and one whose greeter stepped down last week, both still find out that a person arrived. Paste the role id from the org chart.
+
+| Fact | Value |
+| --- | --- |
+| Key | `arrival.greeter_role` |
+| Type | text, free text |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Gratitude
 

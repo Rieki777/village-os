@@ -21,6 +21,13 @@ interface TrainingModule {
   type: string;
   url: string;
   order: number;
+  /**
+   * Whether finishing this one is required to climb (migration 0179). Optional
+   * modules are offered and gate nothing. Absent on a server older than 0179,
+   * where every module was required, so `!== false` is the reading that keeps
+   * an old server honest.
+   */
+  mandatory?: boolean;
 }
 
 const TYPE_META: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string }> = {
@@ -31,29 +38,35 @@ const TYPE_META: Record<string, { icon: React.ComponentType<{ className?: string
   "Live Session": { icon: Radio, color: "bg-gold/20 text-gold" },
 };
 
-const STORAGE_KEY = "amora-training-completed";
-
-function loadCompleted(): string[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveCompleted(ids: string[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
-  } catch {
-    // ignore
-  }
-}
+/*
+ * ── THE RECORD LIVES ON THE SERVER, AND USED NOT TO ─────────────────────────
+ *
+ * This page kept completions in `localStorage` under "amora-training-completed"
+ * and mirrored them to `POST /api/game/journey/sync`. Both halves were wrong,
+ * and together they made a whole rung of the ladder unreachable:
+ *
+ *   The ladder's Participant rung has the rule `training-complete`, which the
+ *   server answers from `training_completions`. Nothing this page did ever
+ *   wrote that table, so no member using the app could ever cross it.
+ *
+ *   The sync route it did call REFUSES the "training" journey BY NAME now,
+ *   because that route stored whatever list it was handed and a member could
+ *   promote their own rung by posting one. The refusal was caught and dropped,
+ *   so the page had been failing silently since that door closed.
+ *
+ *   And a cleared browser erased somebody's training record entirely.
+ *
+ * So the server is the source now: `GET /api/game/training/completed` on load,
+ * and one POST or DELETE per module. No localStorage at all, deliberately. A
+ * mirror would only reintroduce the question of which copy is true.
+ */
 
 export default function Training() {
   const [modules, setModules] = useState<TrainingModule[]>([]);
-  const [completed, setCompleted] = useState<string[]>([]);
+  const [completed, setCompleted] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [said, setSaid] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -64,32 +77,69 @@ export default function Training() {
     } catch {
       setModules([]);
     }
+    // The member's own record, from the server that decides the rung. Null
+    // stays null on a failure, so an unreadable record never renders as an
+    // empty one: "we could not ask" and "you have finished nothing" are
+    // different sentences and only one of them is a reason to start.
+    try {
+      const res = await gameFetch("/api/game/training/completed");
+      const data = res.ok ? await res.json() : null;
+      if (Array.isArray(data?.completed)) setCompleted(data.completed.map(String));
+    } catch {
+      /* leaves null */
+    }
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    setCompleted(loadCompleted());
-    load();
+    void load();
   }, [load]);
 
-  const toggle = (id: string) => {
-    const next = completed.includes(id)
-      ? completed.filter((x) => x !== id)
-      : [...completed, id];
-    setCompleted(next);
-    saveCompleted(next);
-    // Mirror to the player's server-side game state (drives Path of Growth stage)
-    gameFetch("/api/game/journey/sync", {
-      // save-ok: local-first. `saveCompleted` above is what this page renders
-      // from, and the sync only mirrors it into the Path of Growth stage.
-      method: "POST",
-      body: JSON.stringify({ journeyId: "training", steps: next }),
-    }).catch(() => { /* offline-tolerant; localStorage remains source for UI */ });
+  /*
+   * A DECLARATION, AND ITS WITHDRAWAL, both answered by the server.
+   *
+   * The Response is read rather than dropped: this control claims a change
+   * landed, so it has to know that it did. On a refusal the tick goes back
+   * where it was and the page says so, because a checkbox that reverts in
+   * silence is how somebody comes to believe they finished a module they did
+   * not.
+   */
+  const toggle = async (id: string) => {
+    if (completed === null || busy) return;
+    const had = completed.includes(id);
+    setBusy(id);
+    setSaid("");
+    try {
+      const res = await gameFetch(`/api/game/training/${encodeURIComponent(id)}/complete`, {
+        method: had ? "DELETE" : "POST",
+      });
+      if (!res.ok) {
+        setSaid("That did not save. Try again in a moment.");
+        return;
+      }
+      const data = await res.json();
+      // The server's own list, never the one this page guessed at.
+      if (Array.isArray(data?.completed)) setCompleted(data.completed.map(String));
+      setSaid(had ? "Taken off your record." : "Added to your record.");
+    } catch {
+      setSaid("That did not save. Try again in a moment.");
+    } finally {
+      setBusy(null);
+    }
   };
 
+  const held = completed ?? [];
   const total = modules.length;
-  const done = modules.filter((m) => completed.includes(m.id)).length;
+  const done = modules.filter((m) => held.includes(m.id)).length;
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  /*
+   * The rung turns on the MANDATORY modules only, so the page counts them
+   * separately from the total above. Both figures are shown, because "3 of 5
+   * modules" and "the 2 that open the next rung" are different questions and a
+   * single percentage answers neither of them.
+   */
+  const required = modules.filter((m) => m.mandatory !== false);
+  const requiredDone = required.filter((m) => held.includes(m.id)).length;
 
   return (
     <Layout>
@@ -133,6 +183,30 @@ export default function Training() {
                 style={{ width: `${pct}%` }}
               />
             </div>
+            {/* What the bar above does NOT answer. A percentage over every
+                module says nothing about the rung, because only the required
+                ones open it, and a member deserves to know which count they
+                are being measured on. */}
+            {required.length > 0 ? (
+              <p className="mt-3 text-sm text-stone-600">
+                {requiredDone === required.length ? (
+                  <>You have finished every required module.</>
+                ) : (
+                  <>
+                    <span className="font-semibold text-teal-deep">
+                      {requiredDone} of {required.length}
+                    </span>{" "}
+                    required modules done. Finishing them all opens the next rung.
+                  </>
+                )}
+              </p>
+            ) : null}
+            {/* Mounted on every render, empty until there is something to say:
+                a region inserted with its text already in it announces
+                nothing. */}
+            <p aria-live="polite" className={said ? "mt-2 text-sm text-stone-600" : "sr-only"}>
+              {said}
+            </p>
           </div>
 
           {/* Modules */}
@@ -148,7 +222,7 @@ export default function Training() {
               {modules.map((m) => {
                 const meta = TYPE_META[m.type] ?? TYPE_META.Article;
                 const Icon = meta.icon;
-                const isDone = completed.includes(m.id);
+                const isDone = held.includes(m.id);
                 return (
                   <div
                     key={m.id}
@@ -165,9 +239,20 @@ export default function Training() {
                           <h3 className={`font-display text-lg font-semibold ${isDone ? "text-stone-500" : "text-teal-deep"}`}>
                             {m.title}
                           </h3>
-                          <span className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${meta.color}`}>
-                            {m.type}
-                          </span>
+                          <div className="shrink-0 flex items-center gap-1.5">
+                            {m.mandatory === false ? (
+                              <span className="inline-flex items-center rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-500">
+                                Optional
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center rounded-full bg-amber/20 px-2 py-0.5 text-xs font-medium text-amber-700">
+                                Required
+                              </span>
+                            )}
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${meta.color}`}>
+                              {m.type}
+                            </span>
+                          </div>
                         </div>
                         <p className={`text-sm leading-relaxed mb-4 ${isDone ? "text-stone-400" : "text-stone-600"}`}>
                           {m.description}
@@ -185,9 +270,16 @@ export default function Training() {
                           ) : (
                             <span className="text-sm text-stone-400 italic">Link coming soon</span>
                           )}
+                          {/* Disabled until the member's record has arrived, so
+                              nobody can toggle against a list nobody has read,
+                              and while a write is in flight so a double press
+                              cannot post and delete the same module. */}
                           <button
-                            onClick={() => toggle(m.id)}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                            type="button"
+                            onClick={() => void toggle(m.id)}
+                            disabled={completed === null || busy !== null}
+                            aria-busy={busy === m.id}
+                            className={`inline-flex min-h-11 items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-60 ${
                               isDone
                                 ? "bg-teal-deep/10 text-teal-deep hover:bg-teal-deep/15"
                                 : "bg-stone-100 text-stone-600 hover:bg-stone-200"
@@ -195,11 +287,11 @@ export default function Training() {
                           >
                             {isDone ? (
                               <>
-                                <CheckCircle2 className="w-4 h-4" /> Completed
+                                <CheckCircle2 className="w-4 h-4" /> I have done this
                               </>
                             ) : (
                               <>
-                                <Circle className="w-4 h-4" /> Mark Complete
+                                <Circle className="w-4 h-4" /> Mark as done
                               </>
                             )}
                           </button>
