@@ -154,6 +154,72 @@ describe.skipIf(!configured)("the hero blends real voices over examples", () => 
     }));
   };
 
+  /**
+   * A VILLAGE THAT ALREADY EXISTS, which is the shape that shipped broken.
+   *
+   * Every other case in this file starts from a virgin schema, and so did both
+   * manual checks before release. A virgin schema has no `example_state` row
+   * for gratitude, `isSeeded` is false, and the voices seed. On Amora they did
+   * not: the module has been stamped seeded since the examples engine shipped,
+   * because it was stamped deliberately back when it created no rows, and
+   * `seedExamples` opens with `if (isSeeded(id)) return 0`. The live wall
+   * opened on an empty hero.
+   *
+   * So this case seeds the OLD SHAPE first: the stamp with no rows behind it,
+   * exactly as a village upgrading into 0180 carries it. Migration 0189 clears
+   * that stamp where the module was never retired, and this asserts the voices
+   * arrive afterwards.
+   */
+  it("reaches a village that was stamped seeded before the voices existed", async () => {
+    await pool.query("DELETE FROM `gratitude_voices`");
+    await pool.query(
+      "INSERT INTO `example_state` (`module_id`, `seeded_at`) VALUES ('gratitude', ?) " +
+        "ON DUPLICATE KEY UPDATE `seeded_at` = VALUES(`seeded_at`), `retired_at` = NULL",
+      [new Date()], // module-review-ok: fixture SQL against the S5 scratch schema this suite provisions and drops, never a production table
+    );
+    await loadExampleState(pool);
+
+    // The old shape reproduces the defect: stamped, so the seeder declines.
+    expect(await seedExamples(pool, "gratitude", loadExampleSeed(SEEDS_DIR))).toBe(0);
+    expect((await heroVoices(pool)).voices).toHaveLength(0);
+
+    // 0189, as the runner applies it.
+    await pool.query(
+      "UPDATE `example_state` SET `seeded_at` = NULL WHERE `module_id` = 'gratitude' AND `retired_at` IS NULL",
+    ); // module-review-ok: fixture SQL against the S5 scratch schema this suite provisions and drops, never a production table
+    await loadExampleState(pool);
+
+    expect(await seedExamples(pool, "gratitude", loadExampleSeed(SEEDS_DIR))).toBeGreaterThan(0);
+    const { voices } = await heroVoices(pool);
+    expect(voices).toHaveLength(HERO_SLOTS);
+    expect(voices.every((v) => v.isExample)).toBe(true);
+  });
+
+  /**
+   * The tombstone still wins. A village that RETIRED its gratitude examples has
+   * spoken for itself, and 0189 must not talk over it: the migration clears the
+   * stamp only where `retired_at IS NULL`, and `isRetired` refuses regardless.
+   */
+  it("does not resurrect examples in a village that retired them", async () => {
+    await pool.query("DELETE FROM `gratitude_voices`");
+    await pool.query(
+      "INSERT INTO `example_state` (`module_id`, `seeded_at`, `retired_at`, `retired_reason`) " +
+        "VALUES ('gratitude', ?, ?, 'first_real_item') " +
+        "ON DUPLICATE KEY UPDATE `seeded_at` = VALUES(`seeded_at`), `retired_at` = VALUES(`retired_at`)",
+      [new Date(), new Date()], // module-review-ok: fixture SQL against the S5 scratch schema this suite provisions and drops, never a production table
+    );
+    await loadExampleState(pool);
+
+    // 0189's own WHERE clause leaves this row alone.
+    await pool.query(
+      "UPDATE `example_state` SET `seeded_at` = NULL WHERE `module_id` = 'gratitude' AND `retired_at` IS NULL",
+    ); // module-review-ok: fixture SQL against the S5 scratch schema this suite provisions and drops, never a production table
+    await loadExampleState(pool);
+
+    expect(await seedExamples(pool, "gratitude", loadExampleSeed(SEEDS_DIR))).toBe(0);
+    expect((await heroVoices(pool)).voices.filter((v) => v.isExample)).toHaveLength(0);
+  });
+
   it("seeds the voices a gratitude row never could", async () => {
     const [[row]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema this suite provisions and drops, never a production table
       "SELECT COUNT(*) n FROM `gratitude_voices` WHERE `is_example` = 1",

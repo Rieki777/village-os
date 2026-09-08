@@ -1,0 +1,55 @@
+-- 0189: let the Gratitude voices seed on a village that already exists.
+--
+-- THE DEFECT, FOUND ON PRODUCTION MINUTES AFTER SHIPPING
+--
+-- 0180 gave the gratitude module its first example rows, sixteen anonymous
+-- voices for the top of the wall. On a fresh database they seed and the hero
+-- opens with them. On Amora they did not seed at all, and the live wall showed
+-- an empty hero: `/api/game/gratitude/voices` answered zero, and
+-- `/api/examples` did not list gratitude among the modules showing examples.
+--
+-- The reason is a stamp that predates the voices. `seedExamples` opens with
+--
+--     if (isSeeded(moduleId) && !opts.force) return 0;
+--
+-- and gratitude has been stamped seeded on every existing village since the
+-- examples engine shipped. It was stamped deliberately, and the comment in
+-- server/lib/examples.ts said exactly why: gratitude and profiles "are stamped
+-- seeded so the attempt is not repeated every boot, but they deliberately
+-- create no rows". That was correct when the module had nothing to seed. It
+-- became a lock on the door the moment it did.
+--
+-- WHY NO TEST CAUGHT IT
+--
+-- Every schema this was proven against was VIRGIN: the suite provisions a
+-- scratch schema per run, and both manual checks used a database created
+-- minutes earlier. A virgin schema has no `example_state` row for gratitude,
+-- so `isSeeded` is false and the seed runs. The bug lives exactly and only in
+-- the gap between a fresh checkout and a village with history, which is the
+-- one shape none of it exercised. `server/gratitudeVoices.test.ts` now seeds
+-- the OLD stamp first and asserts the voices arrive anyway.
+--
+-- WHAT THIS CLEARS, AND WHAT IT REFUSES TO
+--
+-- Only the `seeded_at` stamp, and only where `retired_at IS NULL`. Retirement
+-- is the one-way tombstone in the contract: a village that has spoken for
+-- itself is never talked over again, and a village that has already retired
+-- its gratitude examples must not have them return. That row is left exactly
+-- as it stands.
+--
+-- Clearing the stamp does NOT force a seed. It returns the module to the
+-- question it should have been asked, and `seedExamplesAtBoot` still runs
+-- `hasRealContent` afterwards: a village that has written its own
+-- appreciations is marked decided-without-seeding on the next boot and gets
+-- nothing. The only villages that gain voices are the ones whose wall is
+-- genuinely empty, which is who the voices were written for.
+--
+-- EXPAND, NEVER CONTRACT. One UPDATE of one nullable column on one row. No
+-- column is dropped, no type narrows, no key is added. The previous release
+-- reads `example_state` the same way and simply seeds nothing, because its own
+-- code has no voices to seed.
+
+UPDATE `example_state`
+SET `seeded_at` = NULL
+WHERE `module_id` = 'gratitude'
+  AND `retired_at` IS NULL;
