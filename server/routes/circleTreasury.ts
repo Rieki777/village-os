@@ -6,10 +6,19 @@
  *   POST   /api/admin/resources/budgets/:id/fund     mint into the treasury
  *   POST   /api/admin/resources/budgets/:id/spend    pay somebody from it
  *   POST   /api/admin/resources/budgets/:id/return   hand it back to the village
+ *   GET    /api/admin/resources/budgets/:id/bonus    what a cap circle is owed
+ *   POST   /api/admin/resources/budgets/:id/bonus    pay it
  *   GET    /api/admin/resources/treasuries           what each budget holds
  *   GET    /api/resources/treasuries                 what every circle holds
  *
- * All seven mount behind `requireModule("resources")`, which server/index.ts
+ * THE TWO BONUS DOORS ARE HERE AND NOT IN A MODULE OF THEIR OWN, and the
+ * reason is measured rather than aesthetic: the `server/index.ts` ratchet had
+ * ZERO slack when they landed (27893 of 27893 lines), so a new route module
+ * could not be registered from that file at all. They also belong here on
+ * their own merits, because paying a bonus mints into `sys:circle:<id>`, which
+ * is the account every other door in this file moves.
+ *
+ * All nine mount behind `requireModule("resources")`, which server/index.ts
  * installs on both prefixes before this module's `register()` is called. The
  * module ships OFF and while it is off every one of these is a 404.
  *
@@ -81,7 +90,14 @@ import { amountWords, listBudgets, type CircleBudgetRow } from "../lib/resources
 import { fromLedgerUnits, toLedgerUnits } from "../lib/economy";
 import { tokenDef } from "../lib/ledger";
 import { mintCycleStart } from "../lib/mintCap";
-import { clockModeNow } from "../lib/circleBonusGate";
+import { bonusGateFor, clockModeNow } from "../lib/circleBonusGate";
+import { payCircleBonus, vetoVerdictFor } from "../lib/circleBonus";
+import { bonusFor, bonusSentence, type BonusWords } from "../../shared/circleBonus";
+import { burnFor, type CircleEnvelope } from "../lib/circleBurn";
+import { NO_COMMITMENT_STORE, noCommitmentOnRecord } from "./circleBonusGate";
+import { BLIND_SPOT } from "../../shared/circleBonusGate";
+import { numberVar } from "../lib/variables";
+import { BONUS_PCT_KEY } from "../../shared/circleBonus";
 
 type Deps = Pick<AppDeps, "getPool" | "authedUser"> & {
   /** The village's circles, for names and status. Read, never written here. */
@@ -408,6 +424,185 @@ export function register(app: Express, deps: Deps): void {
     });
   });
 
+  // The bonus for room a capped circle did not use
+
+  /**
+   * WHAT A CIRCLE IS OWED, AND EVERY REASON IT MIGHT BE OWED NOTHING.
+   *
+   * A read. It moves nothing, opens no ballot and writes no row, so a steward
+   * can see the figure before anybody decides to pay it. Everything it reports
+   * comes from `bonusFor` in shared/circleBonus.ts, which asks the completion
+   * gate, the veto and the one difference between the two budget modes.
+   */
+  const bonusStanding = async (req: Request, budget: CircleBudgetRow, at: Date) => {
+    const pool = getPool();
+    const budgets = await listBudgets(pool);
+    const envelopes: CircleEnvelope[] = budgets.map((b) => ({
+      circleId: b.circleId,
+      unit: b.unit,
+      seasonCapMinor: b.amountMinor,
+      cycleCapMinor: b.cycleAmountMinor,
+      seasonId: b.seasonId,
+      mode: b.mode,
+      pending: b.pending,
+      dormant: b.dormant,
+    }));
+    const season = seasonState();
+    const seasons = (Array.isArray(season.seasons) ? season.seasons : []) as SeasonSpan[];
+    const timeZone = String(season.timezone || "UTC");
+    const clockMode = clockModeNow();
+
+    const periodId = String(req.query.periodId ?? req.body?.periodId ?? "").trim();
+    if (!periodId) return { error: "periodId names the period this answers about" };
+
+    const gate = await bonusGateFor(
+      { circleId: budget.circleId, periodId, at },
+      {
+        conn: pool,
+        /*
+         * THE SAME STUB THE COMPLETION ROUTE USES, IMPORTED AND NEVER COPIED.
+         * No table in this schema records what a circle took on, so every
+         * reading refuses by name until one exists. A second stub here would
+         * be a second place to change on the day a store lands, which is the
+         * shape that leaves one twin unfixed.
+         */
+        commitmentFor: noCommitmentOnRecord,
+        burnFor: (id, instant) =>
+          burnFor(
+            { circleId: id, at: instant },
+            {
+              conn: pool, moduleOn: true, envelopes, clockMode, seasons, timeZone,
+              tokenTypeFor: treasuryTokenFor,
+              circleStatusFor: statusOf,
+            },
+          ),
+        electorate: "village",
+      },
+    );
+
+    /*
+     * THE VETO, READ BESIDE THE GATE BECAUSE THE GATE DOES NOT CARRY IT.
+     * `VoteComponent` has no member for a veto and `voteStateOf` builds its
+     * state from `ballots.status`, which a veto never changes. See the header
+     * of server/lib/circleBonus.ts.
+     */
+    const veto = await vetoVerdictFor(pool, gate.vote.ballotId);
+    const mode = modeAt(budget.mode, budget.pending, at);
+    const outcome = bonusFor({ gate, mode, pct: numberVar(BONUS_PCT_KEY), veto });
+    return { gate, outcome, veto, mode, periodId };
+  };
+
+  /** How a bonus sentence names a circle and spells an amount. */
+  const bonusWords = (): BonusWords => ({
+    circleName,
+    amount: (minor: number, unit: string) =>
+      amountWords(minor, unit, (slug: string) => {
+        const d = tokenDef(slug);
+        return d ? { name: d.name, decimals: d.decimals } : undefined;
+      }),
+  });
+
+  app.get("/api/admin/resources/budgets/:id/bonus", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    const budget = await budgetById(String(req.params.id));
+    if (!budget) return res.status(404).json({ error: "No such budget" });
+
+    const at = parseInstant(req.query.at);
+    if (!at) return res.status(400).json({ error: "at must be an ISO instant" });
+
+    const standing = await bonusStanding(req, budget, at);
+    if ("error" in standing) return res.status(400).json({ error: standing.error });
+    res.json({
+      ...standing,
+      sentence: bonusSentence(standing.outcome, bonusWords(), budget.circleId),
+      /*
+       * BOTH RIDE EVERY RESPONSE AND NEITHER IS CONDITIONAL, the same rule the
+       * completion route keeps. The blind spot is what this reading cannot see
+       * about a circle whose work is care; the other is what this build cannot
+       * see about any circle at all.
+       */
+      blindSpot: BLIND_SPOT,
+      noCommitmentStore: NO_COMMITMENT_STORE,
+    });
+  });
+
+  /**
+   * PAY IT. ISSUANCE, SO THE VILLAGE-WIDE CAP BINDS.
+   *
+   * The amount is `bonusFor`'s and the verdict is the village's. This handler
+   * decides neither: it refuses whenever the outcome is anything other than
+   * `payable`, and hands the award straight to `payCircleBonus`.
+   */
+  app.post("/api/admin/resources/budgets/:id/bonus", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    const budget = await budgetById(String(req.params.id));
+    if (!budget) return res.status(404).json({ error: "No such budget" });
+
+    const at = parseInstant(req.body?.at);
+    if (!at) return res.status(400).json({ error: "at must be an ISO instant" });
+
+    const token = tokenForBudget(budget);
+    if ("error" in token) return res.status(400).json({ error: token.error });
+
+    const standing = await bonusStanding(req, budget, at);
+    if ("error" in standing) return res.status(400).json({ error: standing.error });
+
+    const words = bonusWords();
+    if (standing.outcome.kind !== "payable") {
+      return res.status(409).json({
+        error: bonusSentence(standing.outcome, words, budget.circleId),
+        outcome: standing.outcome,
+        gate: standing.gate,
+        noCommitmentStore: NO_COMMITMENT_STORE,
+      });
+    }
+
+    const recordId = standing.gate.commitment.recordId;
+    if (!recordId) {
+      /*
+       * UNREACHABLE THROUGH `bonusFor`, WHICH BLOCKS ON A MISSING COMMITMENT,
+       * and kept because the idempotency key is built from this id. A payment
+       * whose key came from a fallback would pay twice on a retry, so the
+       * refusal is here instead of a default.
+       */
+      return res.status(409).json({ error: NO_COMMITMENT_STORE });
+    }
+
+    const permit = await permitFor(req);
+    const result = await payCircleBonus(getPool(), {
+      circleId: budget.circleId,
+      circleName: circleName(budget.circleId),
+      circleStatus: statusOf(budget.circleId),
+      tokenSlug: token.slug,
+      award: standing.outcome.award,
+      recordId,
+      actorId: user.id ?? null,
+      note: String(req.body?.note ?? "").trim() || "bonus for room this circle did not use",
+      permit,
+    });
+
+    if (!result.ok) {
+      const error = String(result.error ?? "");
+      if (error.includes("mint cap")) {
+        const funding = await circleFundingSince(getPool(), token.slug, mintCycleStart());
+        return res.status(409).json({ error: error + circleFundingClause(funding, token.slug, circleName) });
+      }
+      return res.status(error.includes("dormant") ? 409 : 400).json({ error });
+    }
+
+    const held = await treasuryHoldings(getPool(), budget.circleId, token.slug);
+    res.json({
+      success: true,
+      duplicate: !!result.duplicate,
+      award: standing.outcome.award,
+      sentence: bonusSentence(standing.outcome, words, budget.circleId),
+      balanceMinor: held.balanceMinor,
+      balance: fromLedgerUnits(token.slug, held.balanceMinor),
+    });
+  });
+
   /**
    * WHAT EACH BUDGET'S TREASURY HOLDS, FOR THE PANEL THAT DECLARES IT.
    *
@@ -513,6 +708,19 @@ export function register(app: Express, deps: Deps): void {
  * key built from the clock protects nothing beyond this process, and saying so
  * here is better than a route that looks idempotent and is not.
  */
+/**
+ * An ISO instant, or now when none was asked for, or null when it is junk.
+ *
+ * THE INSTANT IS A PARAMETER AND THE DEFAULT IS ONLY A DEFAULT, the same rule
+ * the burn and completion routes keep. A bonus is about a period that has
+ * ENDED, so the instant a caller wants is almost never now.
+ */
+function parseInstant(raw: unknown): Date | null {
+  if (raw === undefined || raw === null || String(raw) === "") return new Date();
+  const d = new Date(String(raw));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function movementKey(kind: string, budgetId: string, req: Request): string {
   const asked = String((req.body as any)?.requestId ?? "").trim();
   const tail = asked

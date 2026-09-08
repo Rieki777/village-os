@@ -626,7 +626,16 @@ export default function JourneyToLaunch() {
   }, []);
   useEffect(() => { if (isAdmin) load(); }, [isAdmin, load]);
 
-  const confirm = (id: string, done: boolean) => {
+  /**
+   * The three answers this page can give about one checklist row.
+   *
+   * `true` and `false` are the manual confirmation and its retraction, which
+   * this button has always sent. `"declined"` is the third, and only a row the
+   * registry marks `declinable` accepts one: the server refuses it by name on
+   * any other, so a founder cannot decline their way past the shared-password
+   * exit from here or from anywhere else.
+   */
+  const confirm = (id: string, done: boolean | "declined") => {
     setBusy(id);
     fetch("/api/admin/launch/confirm", {
       method: "POST", headers: headers(), body: JSON.stringify({ id, done }),
@@ -833,6 +842,7 @@ export default function JourneyToLaunch() {
                             <p className={`text-xs mt-1.5 ${i.state === "ok" ? "text-emerald-700" : "text-stone-600"}`}>
                               {i.detail}
                               {i.confirmedAt && ` · ${new Date(i.confirmedAt).toLocaleDateString()}`}
+                              {i.declinedAt && ` · ${new Date(i.declinedAt).toLocaleDateString()}`}
                             </p>
                             <div className="flex items-center gap-3 mt-2">
                               {i.fixAt.startsWith("http") ? (
@@ -857,6 +867,32 @@ export default function JourneyToLaunch() {
                                   }`}
                                 >
                                   {i.state === "ok" ? "Un-confirm" : "Mark done"}
+                                </button>
+                              )}
+                              {/*
+                                * THE SECOND ANSWER, AND IT IS THE WHOLE POINT
+                                * OF A DECLINABLE ROW.
+                                *
+                                * The founder is asked once for the village's
+                                * issuance cap and may say no. Without a door
+                                * for that answer, "you may decline" is a
+                                * sentence with no mechanism behind it and the
+                                * row is a step somebody skipped. The link
+                                * beside this button is where the cap is set;
+                                * this is where naming none is recorded, with
+                                * a name and an instant on it.
+                                */}
+                              {i.declinable && (
+                                <button
+                                  onClick={() => confirm(i.id, i.declinedBy ? false : "declined")}
+                                  disabled={busy === i.id}
+                                  className={`text-xs font-medium rounded-lg px-2.5 py-1 border ${
+                                    i.declinedBy
+                                      ? "text-stone-500 border-stone-200 hover:bg-stone-50"
+                                      : "text-white bg-teal-deep border-teal-deep"
+                                  }`}
+                                >
+                                  {i.declinedBy ? "Undo" : "Decline"}
                                 </button>
                               )}
                             </div>

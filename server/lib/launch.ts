@@ -28,6 +28,14 @@ import {
   LAUNCH_REQUIREMENTS,
   type LaunchRequirement,
 } from "../../shared/launchRequirements";
+import {
+  ISSUANCE_CAP_KEY,
+  ISSUANCE_CAP_REQUIREMENT,
+  issuanceCapDecision,
+  issuanceCapDetail,
+  type IssuanceCapDecision,
+} from "../../shared/issuanceCap";
+import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
 
 export type CheckState = "ok" | "missing" | "partial";
 
@@ -50,6 +58,16 @@ export interface LaunchItemStatus extends LaunchRequirement {
   /** For manual items: who confirmed, when. */
   confirmedBy?: string;
   confirmedAt?: string;
+  /**
+   * For a DECLINABLE item: whether the founder answered by declining.
+   *
+   * ITS OWN FIELD AND NEVER A READING OF `state`. A declined item and a done
+   * item both read `ok`, because both are answers, and a surface that could
+   * only see `ok` would print "done" over a founder who deliberately said no.
+   * Absent means nobody declined, which is not the same as declining.
+   */
+  declinedBy?: string;
+  declinedAt?: string;
 }
 
 export interface LaunchStatus {
@@ -71,20 +89,48 @@ export interface LaunchStatus {
 
 interface LaunchState {
   manualConfirms: Record<string, { by: string; at: string }>;
+  /**
+   * WHO DECLINED WHAT, AND WHEN. The record that makes a decision a decision.
+   *
+   * A SEPARATE MAP FROM `manualConfirms` on purpose, and the reason is the one
+   * this whole item exists for. "I did the thing" and "I was asked and I chose
+   * not to" are two different answers, and putting them in one map keyed by
+   * requirement id would make them one answer with a different label. Reading
+   * the two maps is how a later surface tells a founder which they gave.
+   */
+  declines: Record<string, { by: string; at: string }>;
   launchedAt: string | null;
   launchedBy: string | null;
   launchedByBallotId?: string | null;
 }
 
-const EMPTY: LaunchState = { manualConfirms: {}, launchedAt: null, launchedBy: null, launchedByBallotId: null };
+const EMPTY: LaunchState = {
+  manualConfirms: {},
+  declines: {},
+  launchedAt: null,
+  launchedBy: null,
+  launchedByBallotId: null,
+};
 
 async function readState(pool: Pool): Promise<LaunchState> {
   const [[row]] = await pool.query<any[]>(
     "SELECT value FROM app_config WHERE config_key = 'launch-state'",
   );
-  if (!row) return { ...EMPTY, manualConfirms: {} };
+  if (!row) return { ...EMPTY, manualConfirms: {}, declines: {} };
   const doc = typeof row.value === "string" ? JSON.parse(row.value) : row.value;
-  return { ...EMPTY, ...doc, manualConfirms: doc?.manualConfirms ?? {} };
+  /*
+   * BOTH MAPS DEFAULTED SEPARATELY, because every launch-state document
+   * written before this field existed carries no `declines` key at all, and a
+   * spread of `undefined` over the empty object would leave the field
+   * undefined instead of empty. Same defence `manualConfirms` already has, for
+   * the same reason: an older document is the normal case, never the edge.
+   */
+  return {
+    ...EMPTY,
+    ...doc,
+    manualConfirms: doc?.manualConfirms ?? {},
+    declines: doc?.declines ?? {},
+  };
 }
 
 async function writeState(pool: Pool, state: LaunchState): Promise<void> {
@@ -125,6 +171,37 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
     if (req.appliesWhenModule) {
       const gatingModules = Array.isArray(req.appliesWhenModule) ? req.appliesWhenModule : [req.appliesWhenModule];
       if (gatingModules.every((m) => deps.moduleLifecycle(m) === "off")) continue;
+    }
+
+    /*
+     * A REQUIREMENT THE FOUNDER DECIDES, ANSWERED FROM TWO FACTS THIS FILE
+     * ALREADY HAS A POOL FOR.
+     *
+     * It is resolved HERE and not through `deps.checks` deliberately. Every
+     * other live check closes over a boot-loaded cache in server/index.ts, and
+     * that file's ratchet had ZERO slack when this landed (27893 of 27893
+     * lines), so a check wired from there could not be added at all. This one
+     * needs no cache: it reads one override row and one field of the document
+     * this file already owns, which is the same shape the `manual:` branch
+     * below has had since S62.
+     */
+    if (req.checkKey.startsWith("decide:")) {
+      const declined = state.declines[req.id];
+      const decision = await decisionFor(pool, req.checkKey.slice("decide:".length), declined ?? null);
+      const read = decision
+        ? issuanceCapDetail(decision)
+        : {
+            state: "missing" as const,
+            detail: `No decision resolver for "${req.checkKey}". This is a platform bug, report it`,
+          };
+      items.push({
+        ...req,
+        state: read.state,
+        detail: read.detail,
+        declinedBy: declined?.by,
+        declinedAt: declined?.at,
+      });
+      continue;
     }
 
     if (req.checkKey.startsWith("manual:")) {
@@ -168,23 +245,133 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
   };
 }
 
-/** Confirm (or retract) a manual requirement, attributed. */
+/**
+ * Confirm, DECLINE, or retract a requirement, attributed.
+ *
+ * THREE ANSWERS THROUGH ONE DOOR, AND IT IS THE SAME DOOR ON PURPOSE.
+ *
+ * `done` widened from `boolean` to `unknown` so a founder can decline without
+ * a second route. `server/index.ts` forwards `req.body?.done` straight in, and
+ * its ratchet had zero slack when this landed, so a second route could not be
+ * registered from that file at all. The three values are spelled here:
+ *
+ *   anything but the two below   the item is done, and it must be `manual:`
+ *   "declined"                   the founder answered by declining, and the
+ *                                requirement must carry `declinable`
+ *   false                        retract whichever answer stands
+ *
+ * BACKWARDS COMPATIBLE BY CONSTRUCTION. `done` absent still means done, which
+ * is what the client has always sent, and `false` still retracts.
+ *
+ * A DECLINE ON A ROW THAT IS NOT DECLINABLE IS REFUSED BY NAME. Declining is a
+ * power the REGISTRY hands out one row at a time; without that check a village
+ * could decline its way past the shared-password exit and reach
+ * `readyToLaunch` with the platform's oldest debt untouched.
+ */
 export async function confirmManual(
   pool: Pool,
   reqId: string,
   by: string,
-  done: boolean,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+  done: unknown,
+): Promise<{ ok: true; answer: "done" | "declined" | "retracted" } | { ok: false; error: string }> {
   const req = LAUNCH_REQUIREMENTS.find((r) => r.id === reqId);
   if (!req) return { ok: false, error: `unknown requirement "${reqId}"` };
+
+  const state = await readState(pool);
+
+  if (done === false) {
+    delete state.manualConfirms[reqId];
+    delete state.declines[reqId];
+    await writeState(pool, state);
+    return { ok: true, answer: "retracted" };
+  }
+
+  if (done === "declined") {
+    if (!req.declinable) {
+      return {
+        ok: false,
+        error: `"${req.title}" has to be done, so declining it is not one of the answers`,
+      };
+    }
+    /*
+     * A DECLINE CLEARS ANY MANUAL CONFIRMATION ON THE SAME ROW, so the two
+     * maps can never both hold the same id. Two answers to one question is a
+     * state nobody would know how to render, and the last answer is the one
+     * the founder meant.
+     */
+    delete state.manualConfirms[reqId];
+    state.declines[reqId] = { by, at: new Date().toISOString() };
+    await writeState(pool, state);
+    return { ok: true, answer: "declined" };
+  }
+
   if (!req.checkKey.startsWith("manual:")) {
     return { ok: false, error: `"${req.title}" is checked live by the server, so it cannot be hand-confirmed` };
   }
-  const state = await readState(pool);
-  if (done) state.manualConfirms[reqId] = { by, at: new Date().toISOString() };
-  else delete state.manualConfirms[reqId];
+  delete state.declines[reqId];
+  state.manualConfirms[reqId] = { by, at: new Date().toISOString() };
   await writeState(pool, state);
-  return { ok: true };
+  return { ok: true, answer: "done" };
+}
+
+// The decisions a founder makes on the journey
+
+/**
+ * The raw override a village holds for one dial, or null when it holds none.
+ *
+ * READ FRESH FROM THE TABLE and never from the variables cache in
+ * server/lib/variables.ts, for two reasons. The cache does not export the
+ * override map, so an absent row and a row equal to the default give the same
+ * answer through `rawValue`, and those two are exactly what this question has
+ * to tell apart. And a launch check is asked a handful of times a day by one
+ * admin, so a round trip costs nothing worth saving.
+ */
+async function overrideFor(pool: Pool, key: string): Promise<string | null> {
+  const [rows] = await pool.query<any[]>(
+    "SELECT value FROM game_variables WHERE config_key = ?",
+    [key],
+  );
+  const row = rows[0];
+  return row ? String(row.value) : null;
+}
+
+/**
+ * WHAT THIS VILLAGE DECIDED ABOUT ITS ISSUANCE CAP.
+ *
+ * Exported because three surfaces want it and none of them wants the whole
+ * checklist: the admin token panel, the mint refusal, and any later reader
+ * asking whether a village chose its own ceiling. `launchStatus` is not the
+ * door for it, for the reason `launchedAtOf` gives one screen up: that
+ * function runs every wired check, and this answer must not depend on whether
+ * an email provider is reachable.
+ */
+export async function issuanceCapDecisionFor(pool: Pool): Promise<IssuanceCapDecision> {
+  const state = await readState(pool);
+  return issuanceCapDecision({
+    declined: state.declines[ISSUANCE_CAP_REQUIREMENT] ?? null,
+    overrideValue: await overrideFor(pool, ISSUANCE_CAP_KEY),
+    platformDefault: VARIABLES_BY_KEY[ISSUANCE_CAP_KEY]?.default ?? "0",
+  });
+}
+
+/**
+ * One decision, by the name its `decide:` check key carries.
+ *
+ * Null for a key nothing resolves, which surfaces on the page as a platform
+ * bug in the same words an unwired check does. A checklist that silently
+ * dropped a row would read as shorter than the truth.
+ */
+async function decisionFor(
+  pool: Pool,
+  name: string,
+  declined: { by: string; at: string } | null,
+): Promise<IssuanceCapDecision | null> {
+  if (name !== ISSUANCE_CAP_REQUIREMENT) return null;
+  return issuanceCapDecision({
+    declined,
+    overrideValue: await overrideFor(pool, ISSUANCE_CAP_KEY),
+    platformDefault: VARIABLES_BY_KEY[ISSUANCE_CAP_KEY]?.default ?? "0",
+  });
 }
 
 /**
