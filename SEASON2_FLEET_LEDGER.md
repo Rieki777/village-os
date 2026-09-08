@@ -265,7 +265,7 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
 - **So the drill that matters is RUN THE SET, TWICE, and the second run is the smaller half.**
   A first run proves the wave applies in its new order. Here it was the first run that
   failed, on a file this lane did not write and did not renumber.
-- **Swept as a STRING and not as a filename: 93 references across 42 files, of which 14 were
+- **Swept as a STRING and not as a filename: 96 lines across 42 files, of which 14 were
   filenames** and the rest were header lines, section markers, doc prose, test descriptions and
   one runtime SQL string (`REFUSED by 0184`, asserted by
   `server/tokenScale.migration.test.ts`). Eleven further mentions in three files are LEFT ALONE
