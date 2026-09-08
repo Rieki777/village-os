@@ -280,6 +280,37 @@ describe.skipIf(!DB_CONFIGURED)("a village runs caps and treasuries side by side
     expect(workshop.cycle.capMinor).toBe(40_000);
     expect(workshop.season.capMinor).toBe(100_000);
     expect(workshop.balanceMinor).toBeUndefined();
+
+    /*
+     * THE SEASON CAP IS MEASURED, AND THIS IS THE ASSERTION THAT PROVES IT.
+     *
+     * The line above passes whether or not this village has a season, because
+     * a cap with no window still reports its number now. That is right for a
+     * reader and useless as a control, so the window is asserted separately:
+     * a fresh village HAS a season, so the season meter has something to sum
+     * over and the state is a real one rather than `no_window`.
+     *
+     * What this guards is a defect that reached every fresh village. The
+     * platform's default season document is an EMPTY LIST, meaning "derive
+     * these from the cadence", and `normalizeSeasonConfig` matched the empty
+     * array as a written answer and returned it, so the derived calendar was
+     * unreachable for any village that had not hand-written its own seasons.
+     * No current season on any date, and `defaultSeasonsFor` called from one
+     * place nothing could reach. Season caps read `no_window` was the small
+     * half; seat terms come due at the season turn, so nothing lapsed either.
+     */
+    expect(workshop.season.window, "a fresh village has a derived season").not.toBeNull();
+    expect(workshop.season.state).not.toBe("no_window");
+    expect(workshop.season.spentMinor).toBe(0);
+  }, 60_000);
+
+  it("a fresh village has a current season, derived and not written", async () => {
+    const season = await call("GET", "/api/season", undefined, founderToken);
+    expect(season.status).toBe(200);
+    // Nobody wrote this list. It comes from the cadence and the timezone,
+    // relative to today, which is why it is current whatever today is.
+    expect(season.json?.current, JSON.stringify(season.json).slice(0, 300)).toBeTruthy();
+    expect(String(season.json?.current?.id ?? "")).toBeTruthy();
   }, 60_000);
 
   // ── 2. Funding passes the issuance guard, and conservation holds ──────────

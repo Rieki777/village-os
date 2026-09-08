@@ -3580,7 +3580,7 @@ function daysBetween(fromISO: string, toISO: string): number {
  *  season object, so existing data/season.json keeps working after deploy. */
 function normalizeSeasonConfig(raw: any): { seasons: any[]; cadence: string; timezone: string } {
   const def = GAME_CONFIG.season;
-  if (raw && Array.isArray(raw.seasons)) {
+  if (raw && Array.isArray(raw.seasons) && raw.seasons.length > 0) {
     return {
       seasons: raw.seasons.map((s: any, i: number) => ({
         id: s.id || `season-${i + 1}`,
@@ -3616,14 +3616,14 @@ function normalizeSeasonConfig(raw: any): { seasons: any[]; cadence: string; tim
       timezone: def.timezone,
     };
   }
-  // A village that has written nothing gets a list DERIVED from its cadence
-  // and timezone, relative to today. The platform used to seed two hard-dated
-  // seasons that both ended 2026-12-21, so every fork provisioned after that
-  // date had no current season on any date and no seat term could come due.
+  // Written nothing, OR WRITTEN AN EMPTY LIST, gets a list DERIVED from the
+  // cadence and timezone. The default document IS the empty list and `get()`
+  // returns it when no row exists, so the length test above is what makes this
+  // branch reachable: without it no fresh village had a season on any date.
   return {
-    seasons: (def.seasons.length ? def.seasons : defaultSeasonsFor(def.cadence, def.timezone)) as any[],
-    cadence: def.cadence,
-    timezone: def.timezone,
+    seasons: (def.seasons.length ? def.seasons : defaultSeasonsFor(raw?.cadence ?? def.cadence, raw?.timezone ?? def.timezone)) as any[],
+    cadence: raw?.cadence ?? def.cadence,
+    timezone: raw?.timezone ?? def.timezone,
   };
 }
 
