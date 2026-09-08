@@ -13,7 +13,7 @@
  */
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
-import { completionsFor, recordCompletion, serverOwnedJourneyRefusal } from "../lib/trainingRecord";
+import { completionsFor, recordCompletion, serverOwnedJourneyRefusal, withdrawCompletion } from "../lib/trainingRecord";
 
 type Deps = Pick<AppDeps, "isAdmin" | "trainingRepo" | "authedUser" | "getPool" | "members">;
 
@@ -50,6 +50,28 @@ export function register(app: Express, deps: Deps): void {
       return res.status(404).json({ error: `No training module with id "${moduleId}".` });
     }
     await recordCompletion(getPool(), user.id, moduleId);
+    res.json({ completed: await completionsFor(getPool(), user.id) });
+  });
+
+  /**
+   * WITHDRAW ONE, and only your own.
+   *
+   * A completion is self-declared, so it has to be retractable: a row of
+   * checkboxes where a misclick is permanent is a trap rather than a record.
+   * Scoped to `authedUser(req).id` inside the statement, so there is no id in
+   * the request that could reach somebody else's row.
+   *
+   * Answers the same shape as the POST, so a client renders one thing from
+   * either call and never has to guess what it now holds.
+   */
+  app.delete("/api/game/training/:moduleId/complete", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    const moduleId = String(req.params.moduleId ?? "");
+    if (!trainingRepo.all().some((m: any) => String(m.id) === moduleId)) {
+      return res.status(404).json({ error: `No training module with id "${moduleId}".` });
+    }
+    await withdrawCompletion(getPool(), user.id, moduleId);
     res.json({ completed: await completionsFor(getPool(), user.id) });
   });
 
@@ -98,7 +120,7 @@ export function register(app: Express, deps: Deps): void {
     if (!(await isAdmin(req))) {
       return res.status(401).json({ error: "auth_required" });
     }
-    const { title, description, type, url, order } = req.body ?? {};
+    const { title, description, type, url, order, mandatory } = req.body ?? {};
     if (!title || !type) return res.status(400).json({ error: "Missing title or type" });
     const mods: any[] = trainingRepo.all();
     const entry = {
@@ -107,6 +129,15 @@ export function register(app: Express, deps: Deps): void {
       description: description ?? "",
       type,
       url: url ?? "",
+      /*
+       * STATED, NEVER LEFT TO THE COLUMN DEFAULT. `training_modules` is a
+       * dbCollection, so `replaceAll` names every column in the spec and an
+       * absent key is written rather than skipped: `kind: "bool"` writes 0,
+       * which would have made every module an admin created OPTIONAL while
+       * migration 0179's DEFAULT 1 sat there looking like it applied. Required
+       * unless the caller says otherwise, which is what the default means.
+       */
+      mandatory: mandatory === undefined ? true : !!mandatory,
       order: typeof order === "number" ? order : mods.length + 1,
     };
     mods.push(entry);
@@ -121,10 +152,14 @@ export function register(app: Express, deps: Deps): void {
     const mods: any[] = trainingRepo.all();
     const idx = mods.findIndex((m) => m.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Not found" });
+    // `mandatory` is editable: whether a module gates the climb is exactly the
+    // kind of decision a village makes about its own training, and it is the
+    // one lever that turns the Participant rung on and off.
     const allowed = ["title", "description", "type", "url", "order"];
     for (const key of allowed) {
       if (req.body[key] !== undefined) mods[idx][key] = req.body[key];
     }
+    if (req.body.mandatory !== undefined) mods[idx].mandatory = !!req.body.mandatory;
     await trainingRepo.replaceAll(mods);
     res.json(mods[idx]);
   });
