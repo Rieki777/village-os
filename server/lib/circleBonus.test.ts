@@ -570,6 +570,52 @@ describe.skipIf(!configured)("the rollover, and the bonus that follows from it",
     expect((await treasuryHoldings(pool, "denied", TOKEN)).rows).toBe(before.rows);
   }, 60_000);
 
+  it("refuses a record id too wide for the key, because a lost row is a payment that never happened", async () => {
+    /*
+     * `token_ledger.idempotency_key` is varchar(191) and MariaDB here runs
+     * STRICT_TRANS_TABLES, so an over-width key is a LOST ROW instead of a
+     * truncated one. `completionRefProblem` already refuses one before a
+     * completion ballot opens; this door asks the same reader rather than
+     * inventing a second width.
+     */
+    const outcome = await standing("capside", "cap", record({ circleId: "capside" }));
+    if (outcome.kind !== "payable") throw new Error("expected payable");
+    const r = await payCircleBonus(pool, {
+      circleId: "capside", circleName: "Cap Side", circleStatus: "active", tokenSlug: TOKEN,
+      award: outcome.award, recordId: "r".repeat(200), actorId: null, note: "too wide", permit: ALLOW,
+    });
+    expect(r.ok).toBe(false);
+    expect(String(r.error)).toContain("subject_ref");
+  }, 60_000);
+
+  it("refuses an award measured in one unit and paid in another", async () => {
+    const outcome = await standing("capside", "cap", record({ circleId: "capside" }));
+    if (outcome.kind !== "payable") throw new Error("expected payable");
+    const r = await payCircleBonus(pool, {
+      circleId: "capside", circleName: "Cap Side", circleStatus: "active", tokenSlug: TOKEN,
+      award: { ...outcome.award, unit: "EUR" }, recordId: "rec-wrong-unit",
+      actorId: null, note: "mismatch", permit: ALLOW,
+    });
+    expect(r.ok).toBe(false);
+    expect(String(r.error)).toContain("two different units");
+  }, 60_000);
+
+  it("CLAMPS the share at 100, because a hand-written dial row reaches no validator", async () => {
+    /*
+     * `validateVariable` bounds this dial at 100 on every path an admin or a
+     * passed proposal can reach, and a hand-written `game_variables` row
+     * reaches none of them. A share above 100 would pay a circle MORE than it
+     * held back, which is a cap turned inside out.
+     */
+    const outcome = await standing("capside", "cap", record({ circleId: "capside" }), 400);
+    expect(outcome.kind).toBe("payable");
+    if (outcome.kind !== "payable") return;
+    expect(outcome.award.pct).toBe(100);
+    expect(outcome.award.amountMinor, "never more than the room that was held back").toBe(
+      outcome.award.unmintedMinor,
+    );
+  }, 60_000);
+
   it("refuses to pay a DORMANT circle, so nothing lands in a swept account", async () => {
     const outcome = await standing("capside", "cap", record({ circleId: "capside" }));
     if (outcome.kind !== "payable") throw new Error("expected payable");

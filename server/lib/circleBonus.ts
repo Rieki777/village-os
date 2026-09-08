@@ -68,9 +68,11 @@ import {
   circleTreasuryAccount,
   ensureTreasuryAccount,
   treasuryAccountProblem,
+  treasuryTokenFor,
   type TreasuryMoveResult,
   type TreasuryPermit,
 } from "./circleTreasury";
+import { completionRefProblem } from "./circleBonusGate";
 import type { CircleStatus } from "../../shared/draftKinds";
 import type { BonusAward, VetoVerdict } from "../../shared/circleBonus";
 
@@ -154,10 +156,11 @@ export interface PayBonusInput {
 /**
  * PAY IT. THE VERDICT IS SOMEBODY ELSE'S AND THE AMOUNT IS `bonusFor`'S.
  *
- * This function refuses on four things and computes none of them: a circle id
+ * This function refuses on six things and computes none of them: a circle id
  * too wide for the account column, a permission the seam denies, a dormant
- * circle, and an amount at or below zero. Everything else is the ledger's own
- * arithmetic and the cap's own guard.
+ * circle, an amount at or below zero, a record id too wide for the key, and an
+ * award measured in a different unit from the token being posted. Everything
+ * else is the ledger's own arithmetic and the cap's own guard.
  *
  * A DORMANT CIRCLE IS REFUSED for the mechanical reason `fundTreasury`
  * records: going dormant EMPTIES the account, so a payment landing afterwards
@@ -185,6 +188,34 @@ export async function payCircleBonus(pool: Pool, input: PayBonusInput): Promise<
 
   const units = Math.trunc(Number(input.award.amountMinor) || 0);
   if (units <= 0) return { ok: false, error: "A bonus is a positive number of minor units" };
+
+  /*
+   * THE KEY HAS TO FIT, AND A KEY THAT DOES NOT IS A PAYMENT THAT SILENTLY
+   * NEVER HAPPENED.
+   *
+   * `completionRefProblem` already refuses a record id too wide for
+   * `ballots.subject_ref`, so anything that reached a completion VOTE has
+   * passed it. This function is exported and a caller can reach it without
+   * one, and MariaDB here runs STRICT_TRANS_TABLES, so an over-width
+   * `idempotency_key` is a LOST ROW instead of a truncated one. The same
+   * reader is asked again rather than a second width being invented here.
+   */
+  const refProblem = completionRefProblem(input.recordId);
+  if (refProblem) return { ok: false, error: refProblem };
+
+  /*
+   * AND THE AWARD HAS TO BE ABOUT THE TOKEN BEING POSTED. The key names the
+   * award's unit and the posting names the caller's slug, so a mismatch would
+   * key one token's payment under another token's name and let both be paid.
+   */
+  if (treasuryTokenFor(input.award.unit) !== input.tokenSlug) {
+    return {
+      ok: false,
+      error:
+        `This bonus was measured in ${input.award.unit} and is being paid in ` +
+        `${input.tokenSlug}, which are two different units`,
+    };
+  }
 
   await ensureTreasuryAccount(pool, input.circleId, input.circleName);
 

@@ -259,13 +259,22 @@ export function bonusFor(input: BonusInput): BonusOutcome {
    * over. Rounding up pays MORE than the published share, and issuing above a
    * stated rate is the one direction that must never happen. It also makes
    * "too small to pay" a counted fact instead of a unit quietly invented.
+   *
+   * AND THE SHARE IS CLAMPED TO 100, WHICH THE REGISTRY CANNOT GUARANTEE.
+   * `validateVariable` bounds this dial at 100 on every path an admin or a
+   * passed proposal can reach, and a hand-written `game_variables` row reaches
+   * none of them. `server/lib/variables.ts` records that a hand-written row is
+   * the only way past the write guard, and `decayVoice` fails closed against
+   * exactly the same hole. A share above 100 would pay a circle more than it
+   * held back, which is a cap turned inside out.
    */
-  const amountMinor = Math.floor((unmintedMinor * pct) / 100);
+  const share = Math.min(100, pct);
+  const amountMinor = Math.floor((unmintedMinor * share) / 100);
   if (amountMinor <= 0) {
     return {
       kind: "too_small",
       reason:
-        `A share of ${pct}% of what this circle held back floors to nothing at this token's ` +
+        `A share of ${share}% of what this circle held back floors to nothing at this token's ` +
         "precision, so there is no posting to make. The room was held back and the share of " +
         "it is smaller than the smallest unit this token has.",
       unmintedMinor,
@@ -282,7 +291,7 @@ export function bonusFor(input: BonusInput): BonusOutcome {
       capMinor: spend.capMinor,
       spentMinor: spend.spentMinor,
       unmintedMinor,
-      pct,
+      pct: share,
       amountMinor,
     },
   };
