@@ -209,7 +209,21 @@ export default function PowersMap({
   // badgeCapabilities -> stage` lets a deny outrank standing. Those rows say
   // "Closed" on a walked rung, which is the true thing, and claims no
   // mechanism this payload cannot see.
-  const rungs = showClosed ? climb : climb.filter((r) => r.state !== "ahead");
+  /*
+   * HIDING "WHAT IS CLOSED" HIDES CLOSED POWERS, and it used to hide RUNGS
+   * AHEAD instead, which is a different set. The gate is `admin -> badgeDenies
+   * -> role -> badgeCapabilities -> stage`, so a badge or a role can open a
+   * power whose rung sits above where a member stands: filtering by rung threw
+   * those away while the sentence underneath still counted them, so the button
+   * hid powers the member had actually earned and announced a number it was
+   * not showing.
+   *
+   * Filtered by `held`, the two agree by construction. A rung with nothing held
+   * on it drops out, which is what makes the short view short.
+   */
+  const rungs = showClosed
+    ? climb
+    : climb.map((r) => ({ ...r, powers: r.powers.filter((p) => p.held) })).filter((r) => r.powers.length > 0);
   const appointedShown = showClosed ? appointed : appointed.filter((c) => c.held);
 
   return (
@@ -228,9 +242,13 @@ export default function PowersMap({
             {climbCount} open by climbing, {appointed.length} by appointment.
           </p>
         </div>
+        {/* No `aria-pressed`. This button's NAME changes to describe what the
+            next press does, and a toggle that does that must not also carry a
+            pressed state: "Hide what is closed, pressed" announced that hiding
+            was on at the exact moment everything was shown. One or the other,
+            never both. */}
         <button
           type="button"
-          aria-pressed={showClosed}
           onClick={() => setShowClosed((v) => !v)}
           className="min-h-11 shrink-0 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
         >
