@@ -115,9 +115,9 @@ export const VARIABLES: VariableDef[] = [
     category: "Gratitude",
     label: "Base sending allowance per cycle",
     description:
-      "THE allowance behind every way of giving in this village: written acknowledgments on the Gratitude page, and taps of appreciation on the feed. A member's own figure is this number times their stage multiplier under Progression, so the stock ladder runs from 100 a cycle at Guest to 500 at Sage. Set it to 0 and nobody gives anything at any stage. Raise it and every stage rises with it, and so does the amount any one person may receive, because that ceiling is a share of this. Unused allowance does not roll over. Giving mints fresh Gratitude for the person being thanked and takes nothing from the giver's own balance, so this allowance is what bounds it. Works with: 'Share of an allowance any one person can receive', 'Gratitude each heart sends', 'Hearts one member can tap for another per cycle', and 'Sending-budget multiplier' under Progression.",
+      "THE allowance behind every way of giving in this village: written acknowledgments on the Gratitude page, and taps of appreciation on the feed. A member's own figure is this number times their stage multiplier under Progression, so the stock ladder runs from 105 a cycle at Guest to 525 at Sage. Set it to 0 and nobody gives anything at any stage. Raise it and every stage rises with it, and so does the amount any one person may receive, because that ceiling is this figure divided by 'Full sends per cycle'. The default is 105 because it divides evenly by the default of 7 full sends, which is what makes a full send a whole 15 Gratitude at Guest and 75 at Sage. A figure that does not divide evenly still works: the ceiling rounds down and the remainder is given as a smaller gift. Unused allowance does not roll over. Giving mints fresh Gratitude for the person being thanked and takes nothing from the giver's own balance, so this allowance is what bounds it. Works with: 'Full sends per cycle', 'Gratitude each heart sends', 'Hearts one member can tap for another per cycle', and 'Sending-budget multiplier' under Progression.",
     type: "integer",
-    default: "100",
+    default: "105",
     min: 0,
     max: 100000,
     unit: "Gratitude",
@@ -186,10 +186,18 @@ export const VARIABLES: VariableDef[] = [
   // ladder could hand one person 500 Gratitude in a single send and break no
   // rule. Gratitude is `governance.weight_token` by default, so that was a
   // limit on how much voice one member can concentrate in another, and it did
-  // not exist. `gratitude.max_share_per_recipient` replaces both caps with a
+  // not exist. `gratitude.max_share_per_recipient` replaced both caps with a
   // share of the giver's own allowance, which means the same thing at 100 and
   // at 500: doubling the base budget cannot silently double how much of one
   // person's standing may come from one relationship.
+  //
+  // That share is itself retired now, by 0179, and `gratitude.full_sends_per_cycle`
+  // holds the same ceiling in the unit a founder actually reasons in. A share of
+  // 1/N and a count of N are the same constraint written two ways, which is why
+  // 0179 TRANSLATES a village's setting instead of dropping it the way 0110 had
+  // to: 25% becomes 4, and nothing a village voted for is lost. The comment on
+  // `shareCapFor` made the point before the dial caught up with it, that a cap of
+  // 1/N is the sentence "at least N people" written as one number.
   //
   // The retired keys are dropped from the registry by 0110. An override row
   // for a key the registry no longer holds is never read (`variable()` throws
@@ -245,20 +253,20 @@ export const VARIABLES: VariableDef[] = [
     default: "",
   },
   {
-    key: "gratitude.max_share_per_recipient",
+    key: "gratitude.full_sends_per_cycle",
     category: "Gratitude",
-    label: "Share of an allowance any one person can receive",
+    label: "Full sends per cycle",
     description:
-      "The most of a giver's cycle allowance that any one other member can receive. At the default of 25 a member can give any one person a quarter of what they have, across as many sends as they like, so it takes at least four people to spend an allowance. Set it to 100 and one person can receive somebody's whole allowance. Set it to 1 and it takes a hundred people to spend one. It counts written acknowledgments and feed hearts TOGETHER, so neither channel can carry what the other refuses. The figure it is a share of is the base sending allowance times the giver's stage multiplier, so at the stock ladder 25 means 25 Gratitude to one person at Guest and 125 at Sage. The ceiling never falls below 1 Gratitude, so a small allowance and a small share cannot combine into a village where nobody can give anything at all. This is also the dial that bounds concentrated VOICE while Gratitude is the weight token under Governance: it decides how much of one member's standing may come from a single relationship. Works with: 'Base sending allowance per cycle', 'Gratitude each heart sends', 'Hearts one member can tap for another per cycle', and 'Sending-budget multiplier' under Progression.",
-    type: "percentage",
-    default: "25",
+      "How many people it takes to give a whole allowance away, and so how many full-strength gifts a member has each cycle. At the default of 7 the most any one person can receive is a seventh of the giver's allowance, across as many sends as they like, so thanking seven people spends everything. Set it to 1 and one person can receive somebody's whole allowance. Set it to 100 and it takes a hundred people to spend one. Sending to more people than this is allowed and always was: the ceiling bounds the AMOUNT one person may receive and never the number of sends, so a wider circle simply means smaller gifts. It counts written acknowledgments and feed hearts TOGETHER, so neither channel can carry what the other refuses. The ceiling is the base sending allowance times the giver's stage multiplier, divided by this number, so at the stock ladder 7 means 15 Gratitude to one person at Guest and 75 at Sage. It never falls below 1 Gratitude, so a small allowance and a large count cannot combine into a village where nobody can give anything at all. This is also the dial that bounds concentrated VOICE while Gratitude is the weight token under Governance: it decides how much of one member's standing may come from a single relationship. Works with: 'Base sending allowance per cycle', 'Gratitude each heart sends', 'Hearts one member can tap for another per cycle', and 'Sending-budget multiplier' under Progression.",
+    type: "integer",
+    default: "7",
     min: 1,
-    max: 100,
+    max: 1000,
     // Short on purpose. Game Mechanics renders a value as `${raw} ${unit}` in
-    // a chip, and three of those sit on one line ("25 % of the allowance",
-    // "village-tuned · default 25 % of the allowance", and a staged arrow), so
-    // a longer unit wraps the row. The full sentence is in the description.
-    unit: "% of the allowance",
+    // a chip, and three of those sit on one line ("7 full sends", "village-tuned
+    // · default 7 full sends", and a staged arrow), so a longer unit wraps the
+    // row. The full sentence is in the description.
+    unit: "full sends",
   },
   {
     key: "gratitude.require_message",
@@ -2317,10 +2325,10 @@ const CYCLE_APPLY_KEYS = new Set([
   "gratitude.base_budget",
   "gratitude.pool_per_cycle",
   "gratitude.pool_token",
-  // The share is measured against an allowance a member is already spending
-  // against, so moving it mid-cycle would move a ceiling under somebody who
-  // has already given up to the old one.
-  "gratitude.max_share_per_recipient",
+  // The count decides a ceiling measured against an allowance a member is
+  // already spending against, so moving it mid-cycle would move that ceiling
+  // under somebody who has already given up to the old one.
+  "gratitude.full_sends_per_cycle",
   "feed.heart_amount",
   "feed.max_hearts_per_recipient_per_cycle",
   "ledger.admin_mint_cycle_cap",

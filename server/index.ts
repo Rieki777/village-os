@@ -51,6 +51,7 @@ import {
 import { allVariables, boolVar, numberVar, rawValue, setVariable, stringVar } from "./lib/variables";
 import { adminGateWasConsulted, markAdminGate } from "./lib/adminGate";
 import { type FaqPathway, register as registerFaqRoutes } from "./routes/faqs";
+import { register as registerGratitudeVoiceRoutes } from "./routes/gratitudeVoices";
 import { register as registerLandRoutes } from "./routes/land";
 import { register as registerMilestonesRoutes } from "./routes/milestones";
 import { register as registerTrainingRoutes } from "./routes/training";
@@ -20392,7 +20393,7 @@ ${inner}
    * `/api/game/gratitude/send` is the acknowledgement flow and this is the
    * Hearts economy, and both now read `gratitude.base_budget` times the
    * giver's stage multiplier for the allowance and
-   * `gratitude.max_share_per_recipient` for how much of it one person may
+   * `gratitude.full_sends_per_cycle` for how much of it one person may
    * receive. They always summed their spending out of the same table; what
    * they disagreed about was the total, so the flat 30 here quietly won for
    * anyone who came through this door. The two doors differ now only in what
@@ -20716,29 +20717,8 @@ ${inner}
     res.json({ success: true, party: await partyFor(getPool(), villageId(), user.id, user.id) });
   });
 
-  /**
-   * The public wall: written appreciations only.
-   *
-   * `.slice(-60)` ran BEFORE any kind filter, so whatever the last sixty
-   * gratitude rows happened to be went out — and a HEART is a gratitude row
-   * whose message is the body of the feed post it was tapped on. In a village
-   * whose feed is members-only, that put member-only prose on an endpoint with
-   * no authentication at all, and the busier the feed the more of the wall it
-   * became.
-   *
-   * Filtering first also matches the documented `feed.hearts_on_wall` default
-   * of false: a tap is a gesture, not a message, and it was never meant to be
-   * quoted here.
-   */
-  app.get("/api/game/gratitude/wall", async (_req, res) => {
-    const log = await gratitudeRepo.all();
-    const wall = log
-      .filter((g) => g.kind !== "heart")
-      .slice(-60)
-      .reverse()
-      .map((g) => ({ id: g.id, from: firstName(g.fromName), to: firstName(g.toName), message: g.message, at: g.at }));
-    res.json(wall);
-  });
+  // The hero and the wall, both in server/routes/gratitudeVoices.ts.
+  registerGratitudeVoiceRoutes(app, { getPool, gratitudeLog: () => gratitudeRepo.all() });
 
   // Gratitude: my journal (received + sent, with amounts)
   app.get("/api/game/gratitude/me", async (req, res) => {
@@ -26319,11 +26299,11 @@ ${inner}
     res.json({
       gratitude: {
         baseBudget: numberVar("gratitude.base_budget"),
-        // A SHARE of the sender's own allowance, so the client cannot render
-        // it as an amount without knowing whose allowance it is a share of.
-        // `/api/game/me` carries that member's budget; this route is
-        // anonymous and describes the rule, never one person's ceiling.
-        maxSharePerRecipient: numberVar("gratitude.max_share_per_recipient"),
+        // How many full-strength gifts an allowance holds. Anonymous, so it
+        // describes the RULE and never one person's ceiling; `/api/game/me`
+        // carries that member's own cap. Replaced `maxSharePerRecipient` when
+        // the dial became a count: see `shareCapFor` in server/lib/economy.ts.
+        fullSendsPerCycle: numberVar("gratitude.full_sends_per_cycle"),
         requireMessage: boolVar("gratitude.require_message"),
         // The ReGen pool model: the community can always see how big the pool
         // is and what it pays — but a member's SHARE is unknowable before

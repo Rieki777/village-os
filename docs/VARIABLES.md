@@ -36,7 +36,7 @@ Each dial also says WHEN a change lands. 155 of them as soon as it is saved, and
 
 ## At a glance
 
-178 dials in 29 categories. 104 carry a minimum and a maximum. By type: 81 integer, 13 decimal, 11 percentage, 21 boolean, 22 choice, 30 text.
+178 dials in 29 categories. 104 carry a minimum and a maximum. By type: 82 integer, 13 decimal, 10 percentage, 21 boolean, 22 choice, 30 text.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -76,10 +76,10 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 
 | Dial | Key | Category | Type | Default | Who may change it |
 | --- | --- | --- | --- | --- | --- |
-| Base sending allowance per cycle | `gratitude.base_budget` | Gratitude | integer | `100` | the whole village |
+| Base sending allowance per cycle | `gratitude.base_budget` | Gratitude | integer | `105` | the whole village |
 | Value pool distributed at each cycle close | `gratitude.pool_per_cycle` | Gratitude | integer | `1000` | the whole village |
 | Which token the pool pays | `gratitude.pool_token` | Gratitude | text | `credits` | the whole village |
-| Share of an allowance any one person can receive | `gratitude.max_share_per_recipient` | Gratitude | percentage | `25` | the whole village |
+| Full sends per cycle | `gratitude.full_sends_per_cycle` | Gratitude | integer | `7` | the whole village |
 | Require a message with every acknowledgment | `gratitude.require_message` | Gratitude | boolean | `true` | the whole village |
 | The rhythm the village keeps time by | `cycle.mode` | Gratitude | choice | `lunar` | the whole village |
 | Gratitude each heart sends | `feed.heart_amount` | Gratitude | integer | `1` | the whole village |
@@ -261,13 +261,13 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 
 ### Base sending allowance per cycle
 
-THE allowance behind every way of giving in this village: written acknowledgments on the Gratitude page, and taps of appreciation on the feed. A member's own figure is this number times their stage multiplier under Progression, so the stock ladder runs from 100 a cycle at Guest to 500 at Sage. Set it to 0 and nobody gives anything at any stage. Raise it and every stage rises with it, and so does the amount any one person may receive, because that ceiling is a share of this. Unused allowance does not roll over. Giving mints fresh Gratitude for the person being thanked and takes nothing from the giver's own balance, so this allowance is what bounds it. Works with: 'Share of an allowance any one person can receive', 'Gratitude each heart sends', 'Hearts one member can tap for another per cycle', and 'Sending-budget multiplier' under Progression.
+THE allowance behind every way of giving in this village: written acknowledgments on the Gratitude page, and taps of appreciation on the feed. A member's own figure is this number times their stage multiplier under Progression, so the stock ladder runs from 105 a cycle at Guest to 525 at Sage. Set it to 0 and nobody gives anything at any stage. Raise it and every stage rises with it, and so does the amount any one person may receive, because that ceiling is this figure divided by 'Full sends per cycle'. The default is 105 because it divides evenly by the default of 7 full sends, which is what makes a full send a whole 15 Gratitude at Guest and 75 at Sage. A figure that does not divide evenly still works: the ceiling rounds down and the remainder is given as a smaller gift. Unused allowance does not roll over. Giving mints fresh Gratitude for the person being thanked and takes nothing from the giver's own balance, so this allowance is what bounds it. Works with: 'Full sends per cycle', 'Gratitude each heart sends', 'Hearts one member can tap for another per cycle', and 'Sending-budget multiplier' under Progression.
 
 | Fact | Value |
 | --- | --- |
 | Key | `gratitude.base_budget` |
 | Type | integer, a whole number |
-| Default | `100` |
+| Default | `105` |
 | Range | 0 to 100000 |
 | Counted in | Gratitude |
 | Who may change it | the whole village |
@@ -303,17 +303,17 @@ The token the cycle pool pays out, for example your village's credits. The list 
 | A change takes effect | at the next cycle close |
 | What it costs to change | a routine vote |
 
-### Share of an allowance any one person can receive
+### Full sends per cycle
 
-The most of a giver's cycle allowance that any one other member can receive. At the default of 25 a member can give any one person a quarter of what they have, across as many sends as they like, so it takes at least four people to spend an allowance. Set it to 100 and one person can receive somebody's whole allowance. Set it to 1 and it takes a hundred people to spend one. It counts written acknowledgments and feed hearts TOGETHER, so neither channel can carry what the other refuses. The figure it is a share of is the base sending allowance times the giver's stage multiplier, so at the stock ladder 25 means 25 Gratitude to one person at Guest and 125 at Sage. The ceiling never falls below 1 Gratitude, so a small allowance and a small share cannot combine into a village where nobody can give anything at all. This is also the dial that bounds concentrated VOICE while Gratitude is the weight token under Governance: it decides how much of one member's standing may come from a single relationship. Works with: 'Base sending allowance per cycle', 'Gratitude each heart sends', 'Hearts one member can tap for another per cycle', and 'Sending-budget multiplier' under Progression.
+How many people it takes to give a whole allowance away, and so how many full-strength gifts a member has each cycle. At the default of 7 the most any one person can receive is a seventh of the giver's allowance, across as many sends as they like, so thanking seven people spends everything. Set it to 1 and one person can receive somebody's whole allowance. Set it to 100 and it takes a hundred people to spend one. Sending to more people than this is allowed and always was: the ceiling bounds the AMOUNT one person may receive and never the number of sends, so a wider circle simply means smaller gifts. It counts written acknowledgments and feed hearts TOGETHER, so neither channel can carry what the other refuses. The ceiling is the base sending allowance times the giver's stage multiplier, divided by this number, so at the stock ladder 7 means 15 Gratitude to one person at Guest and 75 at Sage. It never falls below 1 Gratitude, so a small allowance and a large count cannot combine into a village where nobody can give anything at all. This is also the dial that bounds concentrated VOICE while Gratitude is the weight token under Governance: it decides how much of one member's standing may come from a single relationship. Works with: 'Base sending allowance per cycle', 'Gratitude each heart sends', 'Hearts one member can tap for another per cycle', and 'Sending-budget multiplier' under Progression.
 
 | Fact | Value |
 | --- | --- |
-| Key | `gratitude.max_share_per_recipient` |
-| Type | percentage, a percentage |
-| Default | `25` |
-| Range | 1 to 100 |
-| Counted in | % of the allowance |
+| Key | `gratitude.full_sends_per_cycle` |
+| Type | integer, a whole number |
+| Default | `7` |
+| Range | 1 to 1000 |
+| Counted in | full sends |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
 | What it costs to change | a routine vote |

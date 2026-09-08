@@ -139,7 +139,7 @@ Recognition sends, lunar cycles, and the value pool distributed at each close.
 | Requires | nothing |
 | Recommends | nothing |
 | Capabilities it adds | none |
-| Variable keys it owns | `gratitude.base_budget`, `gratitude.require_message`, `gratitude.max_share_per_recipient`, `gratitude.pool_per_cycle`, `gratitude.pool_token` |
+| Variable keys it owns | `gratitude.base_budget`, `gratitude.require_message`, `gratitude.full_sends_per_cycle`, `gratitude.pool_per_cycle`, `gratitude.pool_token` |
 | API prefixes | `/api/game/gratitude`, `/api/game/cycle`, `/api/admin/cycles` |
 | Contract doc | [gratitude.md](modules/gratitude.md) |
 
@@ -697,7 +697,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
       "variableKeys": [
         "gratitude.base_budget",
         "gratitude.require_message",
-        "gratitude.max_share_per_recipient",
+        "gratitude.full_sends_per_cycle",
         "gratitude.pool_per_cycle",
         "gratitude.pool_token"
       ],

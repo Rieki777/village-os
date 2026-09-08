@@ -30,6 +30,8 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { parseRewardRange } from "../../shared/questRewards";
+import { HERO_SLOTS } from "../../shared/gratitudeVoices";
+import { realVoiceCount } from "./gratitudeVoices";
 import { stringVar } from "./variables";
 import { loadTokenRegistry } from "./ledger";
 import { badgeProblem } from "./badges";
@@ -75,7 +77,18 @@ export const EXAMPLE_TABLES: Record<string, string[]> = {
   automation: ["call_tasks", "call_syntheses", "transcripts", "recordings"],
   network: ["peer_shared_cache", "peer_instances", "shared_items"],
   exchange: ["currency_prices", "token_exchange_settings", "tokens"],
-  gratitude: ["gratitude_log"],
+  // `gratitude_log` is listed so `ownRealContent` can see a village's own
+  // sends and decline to layer examples over them. It never HOLDS an example
+  // row and never will: a gratitude row posts to the ledger at creation, so
+  // seeding one would mint real recognition or break conservation.
+  //
+  // `gratitude_voices` is where the module's examples actually live (0180).
+  // A voice carries no sender, no recipient and no amount, so it is not a
+  // send, reaches no ledger, and can be seeded freely. Listing it here is what
+  // makes gratitude a normal module at last: the banner appears while the
+  // voices stand, "Clear examples" removes them, and the first real send
+  // retires them through the trigger that has been firing all along.
+  gratitude: ["gratitude_voices", "gratitude_log"],
   profiles: [],
 };
 
@@ -849,9 +862,33 @@ export async function seedExamples(
       }
       break;
 
-    // gratitude and profiles seed nothing, on purpose. A gratitude row posts to
-    // the ledger at creation, so an example send would either mint real
-    // recognition or break conservation; a profile belongs to its owner.
+    /*
+     * Gratitude seeds VOICES and never entries.
+     *
+     * `block.entries` stays empty forever and the seed file says so at length:
+     * a gratitude row posts to the ledger at creation, so an example send would
+     * either mint real recognition or break conservation. Nothing below reads
+     * that key, and it is left in the seed as the place that refusal is
+     * recorded rather than deleted and forgotten.
+     *
+     * A voice is the part that was always safe. No sender, no recipient, no
+     * amount, so no ledger row and nothing for a settlement to count.
+     */
+    case "gratitude":
+      for (const [i, v] of (block.voices ?? []).entries()) {
+        n += await ins(p, "gratitude_voices", {
+          id: v.id,
+          message: v.message,
+          // The set is composed, not chronological: the order they are read in
+          // is a choice about which kind of care a founder meets first, so it
+          // is carried explicitly and never left to insert order.
+          sort_order: i,
+          is_example: 1,
+        });
+      }
+      break;
+
+    // profiles seeds nothing, on purpose: a profile belongs to its owner.
     default:
       break;
   }
@@ -1199,10 +1236,55 @@ export async function retireExamplesWithPair(
   return { removed, retired };
 }
 
+/**
+ * Modules that retire on a threshold of their own instead of on the FIRST real
+ * item, and the one module that needs it.
+ *
+ * Rule 3 of the contract is "the first real item retires the module", and for
+ * eleven of the twelve modules that is exactly right: one real quest, one real
+ * library item, and the founder has spoken for themselves in that surface.
+ *
+ * The Gratitude wall is the exception, and the shape of the surface is why.
+ * Its examples are not a list a founder replaces one row at a time, they are
+ * the HERO: a composed set of voices that opens the page. Retiring all of them
+ * on the first real send would take a village from sixteen voices to exactly
+ * one, on the day the thing starts working, and the page would get visibly
+ * worse at the moment it first succeeded. That is a cliff, and the honest
+ * shape is a crossfade: real voices take the hero's slots as they arrive,
+ * labelled examples hold whatever is left, and the last example leaves when
+ * the village can fill the hero on its own.
+ *
+ * It stays one-way and it stays permanent. This moves WHEN the tombstone is
+ * stamped and changes nothing about what stamping means, so a village that has
+ * spoken for itself is still never talked over again.
+ *
+ * A predicate that throws is treated as "not yet" rather than as "retire":
+ * failing closed here leaves labelled examples standing for one more send,
+ * while failing open would delete a village's hero on a transient error.
+ */
+const RETIRE_WHEN: Record<string, (p: Pool) => Promise<boolean>> = {
+  gratitude: async (p) => (await realVoiceCount(p)) >= HERO_SLOTS,
+};
+
+
 export function onRealItemPublished(p: Pool, moduleId: string, byUserId: string | null = null): void {
   for (const id of retiresWith(moduleId)) {
     if (isRetired(id) || !isSeeded(id)) continue;
-    void retireExamples(p, id, "first_real_item", byUserId);
+    const when = RETIRE_WHEN[id];
+    if (!when) {
+      void retireExamples(p, id, "first_real_item", byUserId);
+      continue;
+    }
+    void (async () => {
+      let ready = false;
+      try {
+        ready = await when(p);
+      } catch {
+        // Not yet. See the block above for why this direction is the safe one.
+        return;
+      }
+      if (ready) await retireExamples(p, id, "first_real_item", byUserId);
+    })();
   }
 }
 

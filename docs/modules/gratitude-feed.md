@@ -101,7 +101,7 @@ id varchar(64) PK, threadId varchar(64), replyId varchar(64) NULL, reporterId va
 1. Auth → user; load thread (kind post/event, not hidden); reject self-heart (mirrors "Gratitude flows to others").
 2. Idempotency pre-check: existing gratitude_log row (fromId=user, contextRef=threadId, kind='heart') → 200 {hearted:true} no-op (unique key is the enforcement, this is the fast path).
 3. amount = var('feed.heart_amount'). Budget check via existing gratitudeBudget(user): total ≤ 0 → 403 progression message (visitor multiplier 0 naturally gates visitors out — hearts become a progression incentive); amount > remaining → 400. **Hearts and wall sends draw one budget, so total giving per cycle stays bounded — no inflation, no cap bypass.**
-4. Per-recipient heart cap: count(kind='heart', fromId=user, toId=author, cycleId=current) ≥ var('feed.max_hearts_per_recipient_per_cycle') → 409. Then the per-recipient share (R73): sum(amount, fromId=user, toId=author, cycleId=current) over ALL kinds, plus amount, above var('gratitude.max_share_per_recipient') percent of the sender's own allowance → 409. One count cap and one share, one budget, both enforced in gratitude_log. The share is deliberately kind-blind, which is what stops either channel laundering the other.
+4. Per-recipient heart cap: count(kind='heart', fromId=user, toId=author, cycleId=current) ≥ var('feed.max_hearts_per_recipient_per_cycle') → 409. Then the per-recipient ceiling (R73): sum(amount, fromId=user, toId=author, cycleId=current) over ALL kinds, plus amount, above the sender's own allowance divided by var('gratitude.full_sends_per_cycle') → 409. One count cap and one ceiling, one budget, both enforced in gratitude_log. The ceiling is deliberately kind-blind, which is what stops either channel laundering the other.
 5. Write gratitude_log entry {kind:'heart', contextType:'post', contextRef:threadId, message: derived snippet `for your post: "…first 80 chars…"`, cycleId} — the post itself is the context, satisfying the spirit of require_message without a modal.
 6. creditTokens(ledger, {userId: author, amount, source:'gratitude_received', sourceRef: entry.id, idempotencyKey:`gratitude_received:${entry.id}`}) — identical source/key scheme as the wall send; recipient's recognitionBalance set to the RECOMPUTED balance (never +=).
 7. Same transaction (post-cutover): forum_threads.heartCount recomputed from gratitude_log count.
@@ -118,7 +118,7 @@ id varchar(64) PK, threadId varchar(64), replyId varchar(64) NULL, reporterId va
 ## Game variables
 
 - feed.heart_amount: 1 (1–100, unit: Gratitude) — how much a heart click sends from the sender's cycle budget; the giver never types a number
-- feed.max_hearts_per_recipient_per_cycle: 3 (1–100) — heart-channel cap per recipient, counting TAPS; how much Gratitude reaches one person is bounded by gratitude.max_share_per_recipient, which counts hearts and wall acknowledgments together
+- feed.max_hearts_per_recipient_per_cycle: 3 (1–100) — heart-channel cap per recipient, counting TAPS; how much Gratitude reaches one person is bounded by gratitude.full_sends_per_cycle, which counts hearts and wall acknowledgments together
 - feed.max_posts_per_day: 5 (1–50) — per-member micropost rate limit
 - feed.max_post_length: 500 (100–5000, unit: characters) — micropost body ceiling
 - feed.report_hide_threshold: 3 (1–20) — distinct soft reports before a post auto-hides pending admin review

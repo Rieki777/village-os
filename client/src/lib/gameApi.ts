@@ -460,7 +460,19 @@ export interface GameMe {
   stageIndex: number;
   stages: GameStagePublic[];
   /** `balance` is MINOR units, `decimals` is its scale. See client/src/lib/tokenAmount.ts. */
-  gratitude: { balance: number; decimals?: number; budget: { total: number; spent: number; remaining: number; cycleId: string } };
+  /**
+   * `budget` mirrors `GratitudeBudget` in server/lib/gratitude.ts. `cap` is the
+   * most any one person may receive and `fullSends` is how many gifts of that
+   * size the allowance holds, which is what the wall draws as hearts. Both are
+   * SERVER-DERIVED from the same two functions that refuse a send, so nothing
+   * on the client recomputes either one: a ceiling worked out twice is how the
+   * caps R73 replaced drifted apart.
+   */
+  gratitude: {
+    balance: number;
+    decimals?: number;
+    budget: { total: number; spent: number; remaining: number; cycleId: string; cap: number; fullSends: number };
+  };
   quests: QuestClaim[];
   journeys: Record<string, string[]>;
   membership: boolean;

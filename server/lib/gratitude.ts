@@ -16,7 +16,7 @@ import { parseCycleId } from "./gratitude-cycles";
 import { isExampleUser } from "./examples";
 import { issuanceRefusal } from "./gameStart";
 import { memberAccount, postTransferOn, RECOGNITION_FAUCET } from "./ledger";
-import { allowanceFor, writeGratitudeRow, shareCapFor, recognitionName, type Allowance } from "./economy";
+import { allowanceFor, writeGratitudeRow, shareCapFor, fullSendsIn, recognitionName, type Allowance } from "./economy";
 import { userIdForHandle } from "./profile";
 import type { GratitudeLogRepo, GratitudeEntry } from "../repos/gratitude";
 import type { UsersRepo } from "../repos/users";
@@ -41,6 +41,20 @@ export interface GratitudeBudget {
   spent: number;
   remaining: number;
   cycleId: string;
+  /**
+   * The most any ONE person may receive from this member this cycle, and how
+   * many gifts of that size the allowance holds. The wall draws the second as
+   * hearts, one heart per person.
+   *
+   * Carried on the budget rather than fetched from the rules route, because
+   * both are functions of THIS member's allowance and the rules route is
+   * anonymous. A client that had to combine an anonymous percentage with its
+   * own total would be a second place the ceiling gets computed, and two
+   * places is how the caps R73 replaced drifted apart. The server divides
+   * once and says the answer.
+   */
+  cap: number;
+  fullSends: number;
 }
 
 /**
@@ -52,7 +66,17 @@ export interface GratitudeBudget {
  * computes nothing.
  */
 export function asBudget(a: Allowance): GratitudeBudget {
-  return { total: a.total, spent: a.spent, remaining: a.remaining, cycleId: a.cycleKey };
+  return {
+    total: a.total,
+    spent: a.spent,
+    remaining: a.remaining,
+    cycleId: a.cycleKey,
+    // The same two functions the engine refuses sends with, so the hearts a
+    // member counts on the wall and the ceiling that stops them are one
+    // computation and cannot disagree.
+    cap: shareCapFor(a.total),
+    fullSends: fullSendsIn(a.total),
+  };
 }
 
 /**
@@ -300,7 +324,7 @@ export async function sendGratitude(deps: GratitudeDeps, input: SendInput): Prom
           status: 409,
           error:
             `${cap} is the most you can give one person this cycle, and you have given them ${alreadyGiven}. ` +
-            `That leaves ${left} for them (gratitude.max_share_per_recipient)`,
+            `That leaves ${left} for them (gratitude.full_sends_per_cycle)`,
         };
       }
 

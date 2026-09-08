@@ -721,7 +721,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
   it("exposes the rules publicly, and Admin edits a variable with validation", async () => {
     const rules = await api("GET", "/api/game/rules");
     expect(rules.status).toBe(200);
-    expect(rules.json.gratitude.baseBudget).toBe(100);
+    expect(rules.json.gratitude.baseBudget).toBe(105);
     // The rhythm is no longer a field here. It was a dial nothing honoured, so
     // the client is told the budget and the caps and nothing about a choice
     // the engine cannot make. server/lunarRhythm.test.ts holds that shut.
@@ -919,14 +919,15 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
 
     // And the thing the old cap could not do. The doer is at a stock stage on
     // an allowance of `gratitude.base_budget` times their multiplier, and the
-    // share is 25% of it, so a single send of the whole allowance to one peer
-    // is refused by the share and the refusal names the dial.
+    // ceiling is a seventh of it, so a single send of the whole allowance to
+    // one peer is refused by the ceiling and the refusal names the dial.
     const rules = await api("GET", "/api/game/rules");
     const me = await api("GET", "/api/game/me", undefined, doerToken);
     const total = me.json.gratitude.budget.total;
     expect(total).toBeGreaterThan(0);
-    expect(rules.json.gratitude.maxSharePerRecipient).toBe(25);
-    const cap = Math.max(1, Math.floor((total * 25) / 100));
+    const fullSends = rules.json.gratitude.fullSendsPerCycle;
+    expect(fullSends).toBe(7);
+    const cap = Math.max(1, Math.floor(total / fullSends));
     const hogging = await api(
       "POST",
       "/api/game/gratitude/send",
@@ -934,7 +935,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       doerToken,
     );
     expect(hogging.status).toBe(409);
-    expect(String(hogging.json.error)).toContain("gratitude.max_share_per_recipient");
+    expect(String(hogging.json.error)).toContain("gratitude.full_sends_per_cycle");
 
     const noMessage = await api(
       "POST",
