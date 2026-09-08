@@ -22,26 +22,26 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 165 open and 35 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 166 open and 35 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 175 of them as soon as it is saved, and 25 of them at the next cycle close.
+Each dial also says WHEN a change lands. 175 of them as soon as it is saved, and 26 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-200 dials in 31 categories. 117 carry a minimum and a maximum. By type: 87 integer, 14 decimal, 17 percentage, 23 boolean, 28 choice, 31 text.
+201 dials in 31 categories. 118 carry a minimum and a maximum. By type: 87 integer, 14 decimal, 18 percentage, 23 boolean, 28 choice, 31 text.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
 | Gratitude | 9 | 9 | 0 |
-| Ledger | 7 | 5 | 2 |
+| Ledger | 8 | 6 | 2 |
 | The Mint | 6 | 5 | 1 |
 | Progression | 28 | 28 | 0 |
 | Quests | 5 | 5 | 0 |
@@ -89,6 +89,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Recognition for an accepted Work With Us proposal | `gratitude.proposal_accept_award` | Gratitude | integer | `100` | the whole village |
 | Issuance cap per lunar cycle | `ledger.admin_mint_cycle_cap` | Ledger | integer | `10000` | the whole village |
 | Second steward needed above | `ledger.admin_mint_cosign_over` | Ledger | integer | `100` | the whole village |
+| Bonus for a circle that finished under its cap | `resources.circle_cap_bonus_pct` | Ledger | percentage | `10` | the whole village |
 | Who confirms a redemption | `redemption.confirmed_by` | Ledger | choice | `steward` | the whole village |
 | Hold the tokens while a redemption is open | `redemption.holds_on_propose` | Ledger | boolean | `true` | the founder or an admin |
 | Which tokens may be redeemed | `redemption.tokens` | Ledger | text | blank | the founder or an admin |
@@ -422,7 +423,7 @@ How much recognition is minted for a member whose Work With Us proposal is accep
 
 ## Ledger
 
-7 dials. 5 for the whole village, 2 for the founder or an admin.
+8 dials. 6 for the whole village, 2 for the founder or an admin.
 
 ### Issuance cap per lunar cycle
 
@@ -452,6 +453,21 @@ A hand-mint larger than this waits for a SECOND steward to agree before any toke
 | Counted in | tokens |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Bonus for a circle that finished under its cap
+
+The share of a circle's UNMINTED capacity that comes back to the circle as a bonus, once the village has voted that the circle completed its work. It applies only to circles running on a spending cap, because a cap's unused room disappears when the period turns and there is nothing to reward in a treasury, which the circle simply keeps. COUNTED AS A PERCENTAGE of what the circle did not issue, so 10 against 1000 of unused room pays 100. A bonus is newly minted, so it meets this village's issuance cap for the cycle it is paid in and can be refused there. 0 means no bonus is ever paid, and the completion vote still stands on its own as the village's answer about the work.
+
+| Fact | Value |
+| --- | --- |
+| Key | `resources.circle_cap_bonus_pct` |
+| Type | percentage, a percentage |
+| Default | `10` |
+| Range | 0 to 100 |
+| Counted in | % |
+| Who may change it | the whole village |
+| A change takes effect | at the next cycle close |
 | What it costs to change | a routine vote |
 
 ### Who confirms a redemption
