@@ -119,7 +119,7 @@ async function balanceOf(token: string): Promise<number> {
 /**
  * THE SCALE, OFF THE REGISTRY, AND THE DOOR TABLE THAT GOES WITH IT.
  *
- * `0162` moved Village Credits to two decimals and this file was written when
+ * `0184` moved Village Credits to two decimals and this file was written when
  * it carried none, where every door's number looked the same. They are not the
  * same, and the difference is not uniform, so there is no single multiplier to
  * apply down the file:

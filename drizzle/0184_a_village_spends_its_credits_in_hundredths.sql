@@ -1,4 +1,4 @@
--- 0162: two decimals on what a village spends, and Voice comes down to two.
+-- 0184: two decimals on what a village spends, and Voice comes down to two.
 --
 -- Rye ruled the scale on 2026-09-04: two decimals on currency-like tokens,
 -- whole numbers for everything else, and Village Voice at two rather than the
@@ -100,7 +100,7 @@
 -- reports the new scale correctly the moment it reads the row.
 
 CREATE TABLE IF NOT EXISTS `_token_scale_guard` (
-  -- The refusal sentence, which is also the key. A row here means 0162 refused.
+  -- The refusal sentence, which is also the key. A row here means 0184 refused.
   `refusal` varchar(190) NOT NULL,
   `noticed_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`refusal`)
@@ -116,7 +116,7 @@ SELECT `offending`.`refusal`
 FROM (
   SELECT DISTINCT
     CONCAT(
-      'REFUSED by 0162: the token "', `t`.`slug`, '" already holds stored amounts, so changing its ',
+      'REFUSED by 0184: the token "', `t`.`slug`, '" already holds stored amounts, so changing its ',
       'decimals would rescale every one of them. Move the rows first.'
     ) AS `refusal`
   FROM `tokens` `t`

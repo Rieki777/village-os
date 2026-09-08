@@ -432,7 +432,7 @@ export async function sendGratitude(deps: GratitudeDeps, input: SendInput): Prom
          * of how much it gave was short by every reversed acknowledgement too.
          *
          * Rows written under the old spelling are repaired by
-         * drizzle/0160_one_gift_one_key.sql, which rewrites the key and moves
+         * drizzle/0182_one_gift_one_key.sql, which rewrites the key and moves
          * no value.
          */
         idempotencyKey: keys.gratitudeGiven(villageId(), noteId),

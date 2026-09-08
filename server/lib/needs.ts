@@ -1,7 +1,7 @@
 /**
  * The needs scope: what this village says it is for, and what meets it.
  *
- * Reads and writes `village_needs` and `need_links` (0166). The taxonomy it
+ * Reads and writes `village_needs` and `need_links` (0186). The taxonomy it
  * validates against is shared/needs.ts, which is platform copy.
  *
  * WHAT THIS FILE DELIBERATELY DOES NOT DO, and it is the load-bearing half.
@@ -612,7 +612,7 @@ export async function coverageReport(pool: Pool): Promise<{
 export { CUSTOM_NEED_PREFIX };
 
 /* -------------------------------------------------------------------------- *
- * The member's own card: `member_needs` (0167). Lane N4.
+ * The member's own card: `member_needs` (0187). Lane N4.
  *
  * WHAT THE VILLAGE MAY READ FROM THIS TABLE, and it is the whole design: a
  * COUNT, and only above a floor. There is no function below that returns
@@ -690,14 +690,14 @@ export function defaultBreadthPct(): number {
 /**
  * What a member's own row may be seen by. ONE VALUE THIS RELEASE.
  *
- * The column is `enum('private')` in 0167 for the reasons its header gives.
+ * The column is `enum('private')` in 0187 for the reasons its header gives.
  * This array is what the route validates against, so the refusal is a sentence
  * and never a MySQL error, and the two can never disagree about the list.
  */
 export const MEMBER_NEED_VISIBILITIES = ["private"] as const;
 export type MemberNeedVisibility = (typeof MEMBER_NEED_VISIBILITIES)[number];
 
-/** The widths 0167 declares. Clipped HERE, before the insert, never by MySQL. */
+/** The widths 0187 declares. Clipped HERE, before the insert, never by MySQL. */
 export const MEMBER_NEED_FEELING_MAX = 64;
 export const MEMBER_NEED_NOTE_MAX = 500;
 

@@ -194,7 +194,7 @@ describe.skipIf(!configured)("stay credits across a decimals flip", () => {
    * The scale is SET here and no longer inherited. This half used to be called
    * "at today's scale" and leaned on stay credits happening to carry 0, which
    * the 2026-09-04 scale ruling ended: a credit token is currency-like and
-   * `0162` gives it two places. Leaning on a platform default made this half
+   * `0184` gives it two places. Leaning on a platform default made this half
    * silently change what it was asking the day that default moved, so it now
    * names the scale it is about.
    */

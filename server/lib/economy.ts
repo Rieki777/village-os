@@ -123,7 +123,7 @@ export const VOICE_MINT = "sys:voice-mint";
 /** Not a faucet: voice held against an open claim came from a member. */
 export const VOICE_BRIDGE = "sys:voice-bridge";
 /**
- * Where Voice goes when it wanes. Seeded by 0165, and NOT a faucet.
+ * Where Voice goes when it wanes. Seeded by 0185, and NOT a faucet.
  *
  * A faucet's negative balance IS that token's issued supply, so a faucet flag
  * here would let this account go negative, and a negative balance here would

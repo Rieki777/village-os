@@ -47,7 +47,7 @@ interface Budget {
   seasonId: string | null;
   /** The SEASON cap. */
   amountMinor: number;
-  /** The CYCLE cap (0168). Null means the village set none. */
+  /** The CYCLE cap (0188). Null means the village set none. */
   cycleAmountMinor: number | null;
   /**
    * WHICH MODEL THIS CIRCLE RUNS ON (0181). A cap permits and holds nothing; a
