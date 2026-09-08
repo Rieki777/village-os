@@ -405,6 +405,49 @@ describe.skipIf(!configured)("the veto inside and outside the window", () => {
     expect(row?.vetoedAt).not.toBeNull();
   });
 
+  it("SWITCHES THE OUTCOME TO FAILED, so a stopped decision never reads as passed", async () => {
+    /*
+     * Rye's ruling, 2026-09-08: "all vetoed proposals need to clearly show that
+     * they didn't pass and failed".
+     *
+     * The ballot below genuinely carried, which is why this case reads the
+     * status BEFORE the veto as well. A test that only checked the after would
+     * pass against a ballot that had never passed in the first place.
+     *
+     * What this guards is not cosmetic. `voteStateOf` in the circle bonus gate
+     * maps `passed` to a yes and everything else to a no, so while this write
+     * left the status alone a vetoed completion vote came back as a YES with
+     * nothing listed as blocking it, and the gate would have paid a bonus for
+     * work a steward had just stopped.
+     */
+    await seatSteward("u-steward");
+    const b = await carriedAndStamped();
+    expect(b.status, "the vote carried, so there is something to switch").toBe("passed");
+    const noteWhenItCarried = b.outcomeNote;
+
+    const out = await recordVeto({ pool }, { ballotId: b.id, stewardId: "u-steward", reason: "The water budget is not answered." });
+    expect(out.ok).toBe(true);
+
+    const after = await reload(b.id);
+    expect(after?.status, "a stopped decision did not pass").toBe("failed");
+
+    // The veto stays legible as a veto and is never flattened into an ordinary
+    // no: these three are how every reader finds a stopped decision, and the
+    // status change is in addition to them.
+    const row = await landingRow(pool, b.id);
+    expect(row?.landingStatus).toBe("vetoed");
+    expect(row?.vetoedBy).toBe("u-steward");
+    expect(row?.vetoReason).toContain("water budget");
+
+    // The note from the close is NOT overwritten. The reason it was stopped
+    // lives in `veto_reason`, so replacing the outcome note would erase one
+    // record to duplicate another. Compared against what it actually held
+    // rather than a phrase, because the close writes this note and the veto is
+    // a later, separate act.
+    expect(after?.outcomeNote).toBe(noteWhenItCarried);
+    expect(after?.outcomeNote ?? "").not.toContain("water budget");
+  });
+
   it("refuses a veto with no reason", async () => {
     const b = await carriedAndStamped();
     const out = await recordVeto({ pool }, { ballotId: b.id, stewardId: "u-steward", reason: "   " });

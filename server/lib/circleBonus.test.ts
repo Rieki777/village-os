@@ -184,6 +184,14 @@ async function veto(ballotId: string): Promise<void> {
   await pool.query("UPDATE ballots SET vetoed_at = UTC_TIMESTAMP() WHERE id = ?", [ballotId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
 }
 
+/** Put a ballot's steward window in the future or the past. The clock, not a flag. */
+async function stewardWindow(ballotId: string, when: "open" | "closed"): Promise<void> {
+  const sql = when === "open"
+    ? "UPDATE ballots SET veto_closes_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL 2 DAY) WHERE id = ?"
+    : "UPDATE ballots SET veto_closes_at = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 HOUR) WHERE id = ?";
+  await pool.query(sql, [ballotId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+}
+
 /** The whole standing for one circle: the gate, the veto, the mode, the amount. */
 async function standing(
   circleId: string,
@@ -627,4 +635,46 @@ describe.skipIf(!configured)("the rollover, and the bonus that follows from it",
     expect(r.error).toContain("dormant");
     expect(r.error, "and it says what paying it would cost").toContain("issuance cap");
   }, 60_000);
+
+  describe.skipIf(!configured)("the steward window, before anybody has stopped anything", () => {
+    /*
+     * Rye's ruling, 2026-09-08: a decision should never pass until the veto
+     * window expires or every steward who can stop it has said yes.
+     *
+     * These two cases are the same ballot at two instants, with no veto on either
+     * of them, and that is the point. The row is identical apart from the clock,
+     * so a reader that answered from `vetoed_at` alone gave the same answer to
+     * both and paid the bonus inside the days a steward was promised.
+     */
+    it("answers window_open while the window has time left, with no veto anywhere", async () => {
+      const rec = `rec-window-open-${Date.now()}`;
+      const id = await completionBallot(`bal-window-open-${Date.now()}`, rec, "passed");
+      await stewardWindow(id, "open");
+      expect(await vetoVerdictFor(pool, id)).toBe("window_open");
+    });
+
+    it("answers none once the window has run out, which is the only no-veto that pays", async () => {
+      const rec = `rec-window-shut-${Date.now()}`;
+      const id = await completionBallot(`bal-window-shut-${Date.now()}`, rec, "passed");
+      await stewardWindow(id, "closed");
+      expect(await vetoVerdictFor(pool, id)).toBe("none");
+    });
+
+    it("still answers vetoed inside an open window, because a cast veto outranks the wait", async () => {
+      const rec = `rec-window-veto-${Date.now()}`;
+      const id = await completionBallot(`bal-window-veto-${Date.now()}`, rec, "passed");
+      await stewardWindow(id, "open");
+      await veto(id);
+      expect(await vetoVerdictFor(pool, id)).toBe("vetoed");
+    });
+
+    it("answers none when there is no window at all, which is an answer and not a gap", async () => {
+      // A decision that landed at its close never had a stoppable moment, so
+      // there is nothing to wait for. Treating a null window as "still open"
+      // would freeze every such bonus forever.
+      const rec = `rec-window-none-${Date.now()}`;
+      const id = await completionBallot(`bal-window-none-${Date.now()}`, rec, "passed");
+      expect(await vetoVerdictFor(pool, id)).toBe("none");
+    });
+  });
 });

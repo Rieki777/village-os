@@ -205,6 +205,32 @@ describe("the verdict this file does not make", () => {
     const out = bonusFor({ gate: gate(), mode: "cap", pct: 10, veto: "unknown" });
     expect(out.kind).toBe("veto_unknown");
   });
+
+  it("REFUSES WHILE THE WINDOW IS STILL OPEN, because no veto yet is not no veto", () => {
+    /*
+     * Rye's ruling, 2026-09-08: a decision should never pass until the veto
+     * window expires or every steward who can stop it has said yes.
+     *
+     * The dangerous reading is the one this replaces. A ballot that carried and
+     * has not been vetoed looks identical, at this instant, to one whose window
+     * ran out with nobody objecting. Paying on the first spends the money in
+     * exactly the days a steward was promised to stop it in.
+     */
+    const out = bonusFor({ gate: gate(), mode: "cap", pct: 10, veto: "window_open" });
+    expect(out.kind).toBe("veto_window_open");
+    if (out.kind !== "veto_window_open") return;
+    expect(out.reason).toContain("has not run out yet");
+  });
+
+  it("keeps the four verdicts APART, so a wait is never read as a refusal or a go", () => {
+    // The defect this guards is one sentence serving two facts. A member told
+    // "nothing is paid" wants to know whether to wait three days or to give up.
+    const kinds = (["none", "vetoed", "unknown", "window_open"] as const).map(
+      (v) => bonusFor({ gate: gate(), mode: "cap", pct: 10, veto: v }).kind,
+    );
+    expect(new Set(kinds).size, `four verdicts gave ${JSON.stringify(kinds)}`).toBe(4);
+    expect(kinds[0]).not.toBe("veto_window_open");
+  });
 });
 
 describe("the dial", () => {

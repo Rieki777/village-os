@@ -121,17 +121,42 @@ export function bonusIdempotencyKey(recordId: string, unit: string): string {
  * payment. A veto this function could not read is not a veto it has shown to
  * be absent.
  */
-export async function vetoVerdictFor(pool: Pool, ballotId: string | null): Promise<VetoVerdict> {
+export async function vetoVerdictFor(
+  pool: Pool,
+  ballotId: string | null,
+  now: Date = new Date(),
+): Promise<VetoVerdict> {
   if (!ballotId) return "none";
   try {
     const acts = await vetoesFor(pool, ballotId);
     if (acts.some((a) => a.act === "veto")) return "vetoed";
     const [rows] = await pool.query<any[]>( // module-review-ok: one column of the ballots row, read beside the gate because `BallotRow` in server/lib/ballots.ts does not carry `vetoed_at`; adding a reader to server/repos would be a second home for a ballot
-      "SELECT vetoed_at FROM ballots WHERE id = ?",
+      "SELECT vetoed_at, veto_closes_at FROM ballots WHERE id = ?",
       [ballotId],
     );
     if (rows.length === 0) return "unknown";
-    return rows[0]?.vetoed_at ? "vetoed" : "none";
+    if (rows[0]?.vetoed_at) return "vetoed";
+    /*
+     * NO VETO YET IS NOT NO VETO. Rye's ruling, 2026-09-08: a decision should
+     * never pass until the veto window expires or every steward who can stop it
+     * has said yes.
+     *
+     * `veto_closes_at` is computed from the ballot's FROZEN `closes_at`
+     * (drizzle/0172), so this is the promise a steward was actually made and
+     * not a window whoever pressed close chose the length of. While it is in
+     * the future the absence of a veto says only that nobody has cast one, and
+     * paying on that spends money a steward still has the right to stop.
+     *
+     * A row with no `veto_closes_at` has no window to wait for, which is a real
+     * answer and not a missing one: an advisory vote or a decision that landed
+     * at its close never had a stoppable moment.
+     */
+    const closesAt = rows[0]?.veto_closes_at;
+    if (closesAt) {
+      const at = closesAt instanceof Date ? closesAt : new Date(String(closesAt));
+      if (!Number.isNaN(at.getTime()) && at.getTime() > now.getTime()) return "window_open";
+    }
+    return "none";
   } catch {
     return "unknown";
   }

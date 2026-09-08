@@ -40,19 +40,29 @@
  * sets the whole thing aside INCLUDING the completion finding. So a veto is
  * not a second condition beside the vote: it removes the answer the vote gave.
  *
- * THE GATE DOES NOT EXPOSE ONE. `VoteComponent` in shared/circleBonusGate.ts
- * carries `state`, and `voteStateOf` in server/lib/circleBonusGate.ts builds
- * it from `ballots.status` alone, which stays `passed` through a veto. The
- * veto lives one column over, on `ballots.vetoed_at` (drizzle/0172) and in
- * `ballot_vetoes` (read by `vetoesFor` in server/lib/stewardship.ts), and
- * nothing carries it into the reading.
+ * THE GATE STILL DOES NOT EXPOSE ONE, though less badly than it did.
+ * `VoteComponent` carries `state`, and `voteStateOf` builds it from
+ * `ballots.status`. That column used to stay `passed` through a veto, so a
+ * vetoed decision reached this file as a yes; `recordVeto` now writes
+ * `status = 'failed'` (Rye's ruling, 2026-09-08: a vetoed proposal has to show
+ * that it did not pass), so the flattest version of that hole is shut. The
+ * veto itself still lives one column over, on `ballots.vetoed_at`
+ * (drizzle/0172) and in `ballot_vetoes` (read by `vetoesFor`), and the gate
+ * still cannot tell a steward's stop from an ordinary no.
  *
- * So the verdict arrives here as a REQUIRED parameter with three members, and
- * `unknown` REFUSES rather than defaulting to "no veto". A caller that cannot
- * answer it has not proved a veto is absent, and paying on an unproved absence
- * is how a set-aside decision gets paid anyway. The day the gate grows a
- * `vetoed` vote state, this parameter is filled from the reading and no
- * arithmetic here moves.
+ * So the verdict arrives here as a REQUIRED parameter with FOUR members, and
+ * two of them refuse. `unknown` REFUSES rather than defaulting to "no veto": a
+ * caller that cannot answer has not proved a veto is absent, and paying on an
+ * unproved absence is how a set-aside decision gets paid anyway.
+ *
+ * `window_open` is the fourth, and it is the same mistake caught one step
+ * earlier. Rye's ruling continues: a decision "should never pass until the veto
+ * window expires or the stewards with veto ability have all voted yes." An
+ * absent veto DURING the window is not an absent veto, it is a veto nobody has
+ * had the chance to cast, and paying a bonus on it spends the money a steward
+ * was promised three days to stop. So the two are separate members: `none`
+ * means the window closed and nobody stopped it, which is the only shape of
+ * "no veto" that may pay.
  */
 
 import { boundaryEffect, type BudgetMode } from "./circleTreasury";
@@ -75,7 +85,7 @@ export const BONUS_PCT_KEY = "resources.circle_cap_bonus_pct";
  * header: it says the reader could not answer, which is a different fact from
  * answering that no veto stands.
  */
-export type VetoVerdict = "none" | "vetoed" | "unknown";
+export type VetoVerdict = "none" | "vetoed" | "unknown" | "window_open";
 
 /** Everything a payer needs about an amount it may pay. */
 export interface BonusAward {
@@ -109,6 +119,8 @@ export type BonusOutcome =
   | { kind: "vetoed"; reason: string }
   /** Whether a veto stands could not be read, so nothing is paid. */
   | { kind: "veto_unknown"; reason: string }
+  /** The window a steward may stop this in has not run out yet. */
+  | { kind: "veto_window_open"; reason: string }
   /** The gate's own refusals, verbatim and in its own order. */
   | { kind: "blocked"; reasons: string[] }
   /** The village set the share to zero, so no bonus is ever paid here. */
@@ -178,6 +190,14 @@ export function bonusFor(input: BonusInput): BonusOutcome {
         "A steward vetoed the decision that this circle completed its work. The veto sets the " +
         "whole thing aside, the completion finding included, so there is no answer for a bonus " +
         "to stand on.",
+    };
+  }
+  if (veto === "window_open") {
+    return {
+      kind: "veto_window_open",
+      reason:
+        "The window a steward can stop this decision in has not run out yet. No veto stands right " +
+        "now, and that is not the same as none coming, so the bonus waits for the window to close.",
     };
   }
   if (veto === "unknown") {
@@ -316,6 +336,7 @@ export function bonusSentence(outcome: BonusOutcome, words: BonusWords, circleId
     case "carries_over":
     case "vetoed":
     case "veto_unknown":
+    case "veto_window_open":
     case "switched_off":
     case "no_room":
       return `${name}: ${outcome.reason}`;

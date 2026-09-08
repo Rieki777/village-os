@@ -449,8 +449,35 @@ export async function recordVeto(
     };
   }
 
+  /*
+   * A VETOED BALLOT READS AS FAILED, BECAUSE IT DID NOT PASS.
+   *
+   * Rye's ruling, 2026-09-08: "all vetoed proposals need to clearly show that
+   * they didn't pass and failed", so the state switches from passed to failed.
+   *
+   * This was the twin of the write in `routeOutcome` below, which has always
+   * set `status = 'failed'` for the steward who votes no while the ballot is
+   * open. The two paths stop the same decision for the same reason at two
+   * different moments, and only one of them said so in the column every payload
+   * and tally reads. What that cost is measurable: `voteStateOf` maps `passed`
+   * to `said_yes` and everything else to `said_no`, so a vetoed completion
+   * ballot came back to the circle bonus gate as a YES with an empty list of
+   * things blocking it. A steward stopped the decision and the gate could not
+   * see it.
+   *
+   * `outcome_note` is deliberately left alone, which is the one place these two
+   * paths still differ and should. There, the ballot never carried and the note
+   * IS the outcome. Here it carried and was then stopped, so overwriting the
+   * note would erase why the village said yes to make room for a sentence
+   * already stored in `veto_reason` beside it.
+   *
+   * Nothing keyed on a vetoed row's status: every reader finds them by
+   * `vetoed_at IS NOT NULL` or `landing_status = 'vetoed'`, and every landing
+   * predicate already required `vetoed_at IS NULL`, so this tightens a door
+   * that was shut and changes what a reader is TOLD.
+   */
   const [res] = await deps.pool.query<any>(
-    "UPDATE ballots SET vetoed_at = ?, vetoed_by = ?, veto_reason = ?, landing_status = 'vetoed' " +
+    "UPDATE ballots SET status = 'failed', vetoed_at = ?, vetoed_by = ?, veto_reason = ?, landing_status = 'vetoed' " +
       "WHERE id = ? AND vetoed_at IS NULL AND landing_status = 'pending'",
     [sqlInstant(at), input.stewardId, reason, b.id],
   );
