@@ -639,8 +639,18 @@ export async function sweepDormantCircle(
         sourceRef: treasuryRef(input.circleId),
         description:
           destination === "master_treasury"
-            ? "Circle went dormant: treasury returned to the village"
-            : "Circle went dormant: treasury retired",
+            /*
+              * NOT "TREASURY", BECAUSE THIS SWEEP IS NOT TOLD THE MODE.
+              *
+              * It takes `{ id, unit }` and runs on any circle with a balance,
+              * which is right: a circle on a spending cap holds no treasury
+              * and can still hold a bonus, and that money has to go somewhere
+              * when the circle goes quiet. Calling it a treasury wrote a
+              * permanent ledger line describing something the circle never
+              * had. What is true of both is what it HELD.
+              */
+            ? "Circle went dormant: what it held returned to the village"
+            : "Circle went dormant: what it held was retired",
         idempotencyKey:
           `circle_treasury:dormant:${input.circleId.slice(0, 40)}:${tokenSlug}:${day}:${held.balanceMinor}`,
       });
@@ -696,7 +706,7 @@ export function revivalNote(
     : `${circleName} held nothing when it went dormant on ${record.at.slice(0, 10)}. `;
   return (
     had +
-    "Giving it a treasury again is a new mint, so it meets this village's issuance cap for " +
+    "Funding it again is a new mint, so it meets this village's issuance cap for " +
     "the cycle it happens in. A cycle whose room is already spent cannot fund it until the " +
     "next one."
   );

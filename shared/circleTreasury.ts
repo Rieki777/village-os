@@ -263,8 +263,15 @@ export function treasuryTotalSentence(
       );
     case "held":
       return (
+        /*
+          * "ACCOUNTS", NOT "TREASURIES". `accountsHolding` counts ledger
+          * accounts with a balance, and a circle on a spending cap holds one
+          * of those the moment it is paid a bonus. So this state is reachable
+          * with `budgetsOnTreasury: 0`, and it then named a treasury nothing
+          * in the village was running. The figure was always right.
+          */
         `${amount(total.heldMinor ?? 0)} sits unspent across ${total.accountsHolding} circle ` +
-        "treasuries. It was issued, it still exists, and it is committed to a circle, so a " +
+        "accounts. It was issued, it still exists, and it is committed to a circle, so a " +
         "figure for what this village has issued overstates what is loose in it by this much."
       );
     default:

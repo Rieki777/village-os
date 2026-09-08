@@ -595,7 +595,7 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
                     This circle went dormant on {b.dormant.at.slice(0, 10)} and its treasury of{" "}
                     {money(b.dormant.heldMinor, b.unit)} was{" "}
                     {b.dormant.destination === "retired" ? "retired, so those tokens are gone" : "returned to the village treasury"}.
-                    Giving it a treasury again is a new mint, so it meets the village's issuance cap for the cycle it happens in.
+                    Funding it again is a new mint, so it meets the village's issuance cap for the cycle it happens in.
                   </p>
                 )}
 
