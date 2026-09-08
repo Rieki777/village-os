@@ -106,9 +106,26 @@ export default function VoicesHero() {
             >
               {v.message}
             </blockquote>
+            {/*
+              THE MARK IS PART OF THE DESIGN, not an apology for the line.
+
+              It was bare uppercase text sitting under the words, which read as
+              a disclaimer somebody had been made to add. Rye asked for a
+              beautiful tag, and the honest reason to want one is that this
+              label is going to sit under the first writing a founder ever
+              reads in their village: it should look like it belongs there.
+
+              So it is a chip, on the same earned gold every notice on this
+              surface uses, with a hairline edge and a whisper of a fill. The
+              contract is unchanged and the row still carries its own label;
+              only the craft moved.
+            */}
             {v.isExample && (
-              <figcaption className="mt-2 text-[10px] uppercase tracking-[0.13em] text-notice">
-                Example
+              <figcaption className="mt-3">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-notice/40 bg-notice/10 px-2.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-notice">
+                  <span aria-hidden="true" className="inline-block h-1 w-1 rounded-full bg-notice" />
+                  Example
+                </span>
               </figcaption>
             )}
           </motion.figure>
