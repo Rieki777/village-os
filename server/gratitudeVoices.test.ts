@@ -76,7 +76,7 @@ describe.skipIf(!configured)("the hero blends real voices over examples", () => 
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema this suite provisions and drops, never a production table
   }, 240_000);
 
   afterAll(async () => {
@@ -97,15 +97,15 @@ describe.skipIf(!configured)("the hero blends real voices over examples", () => 
    * catching one. It now asserts the examples are THERE before it retires them.
    */
   beforeEach(async () => {
-    await pool.query("DELETE FROM `gratitude_voices`");
-    await pool.query("DELETE FROM `gratitude_log`");
-    await pool.query("DELETE FROM `example_state` WHERE `module_id` = 'gratitude'");
+    await pool.query("DELETE FROM `gratitude_voices`"); // module-review-ok: fixture SQL against the S5 scratch schema this suite provisions and drops, never a production table
+    await pool.query("DELETE FROM `gratitude_log`"); // module-review-ok: fixture SQL against the S5 scratch schema this suite provisions and drops, never a production table
+    await pool.query("DELETE FROM `example_state` WHERE `module_id` = 'gratitude'"); // module-review-ok: fixture SQL against the S5 scratch schema this suite provisions and drops, never a production table
     await loadExampleState(pool);
     await seedExamples(pool, "gratitude", loadExampleSeed(SEEDS_DIR));
   });
 
   const say = (id: string, message: string, kind = "gratitude") =>
-    pool.query(
+    pool.query( // module-review-ok: fixture SQL against the S5 scratch schema this suite provisions and drops, never a production table
       "INSERT INTO `gratitude_log` (`id`, `village_id`, `kind`, `from_id`, `to_id`, `amount`, `message`, `cycle_id`) " +
         "VALUES (?, 'v', ?, 'a', 'b', 1, ?, 'lunar-000900')",
       [id, kind, message],
@@ -120,24 +120,24 @@ describe.skipIf(!configured)("the hero blends real voices over examples", () => 
   const ash = "u-ash-wall";
   beforeAll(async () => {
     const member = async (id: string, name: string, handle: string) => {
-      await pool.query(
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema this suite provisions and drops, never a production table
         "INSERT IGNORE INTO `users` (`id`,`name`,`email`,`handle`,`password_hash`) VALUES (?,?,?,?,'x')",
         [id, name, `${handle}@village.test`, handle],
       );
     };
     await member(wren, "Wren", "wren-t");
     await member(ash, "Ash", "ash-t");
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema this suite provisions and drops, never a production table
       "INSERT IGNORE INTO `player_characters` (`id`,`village_id`,`user_id`,`archetype_key`,`presentation`,`tone`) " +
         "VALUES ('pc-wren-t','v',?,'building','m','deep')",
       [wren],
     );
-    await pool.query("UPDATE `users` SET `primary_character_id` = 'pc-wren-t' WHERE `id` = ?", [wren]);
+    await pool.query("UPDATE `users` SET `primary_character_id` = 'pc-wren-t' WHERE `id` = ?", [wren]); // module-review-ok: fixture SQL against the S5 scratch schema this suite provisions and drops, never a production table
   }, 60_000);
 
   /** The log in the shape `wallEntries` takes, ordered the way the repo orders it. */
   const logRows = async (): Promise<WallLogRow[]> => {
-    const [rows] = await pool.query<any[]>(
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema this suite provisions and drops, never a production table
       "SELECT `id`, `kind`, `from_id`, `from_name`, `to_id`, `to_name`, `amount`, `message`, `at` " +
         "FROM `gratitude_log` ORDER BY `at`, `id`",
     );
@@ -155,13 +155,13 @@ describe.skipIf(!configured)("the hero blends real voices over examples", () => 
   };
 
   it("seeds the voices a gratitude row never could", async () => {
-    const [[row]] = await pool.query<any[]>(
+    const [[row]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema this suite provisions and drops, never a production table
       "SELECT COUNT(*) n FROM `gratitude_voices` WHERE `is_example` = 1",
     );
     expect(Number(row.n)).toBeGreaterThanOrEqual(HERO_SLOTS);
     // The invariant the whole design exists to protect: seeding the hero puts
     // nothing in the ledger's table.
-    const [[log]] = await pool.query<any[]>("SELECT COUNT(*) n FROM `gratitude_log`");
+    const [[log]] = await pool.query<any[]>("SELECT COUNT(*) n FROM `gratitude_log`"); // module-review-ok: fixture SQL against the S5 scratch schema this suite provisions and drops, never a production table
     expect(Number(log.n)).toBe(0);
   });
 
@@ -224,7 +224,7 @@ describe.skipIf(!configured)("the hero blends real voices over examples", () => 
   });
 
   it("carries the amount, which the payload never used to", async () => {
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema this suite provisions and drops, never a production table
       "INSERT INTO `gratitude_log` (`id`,`village_id`,`kind`,`from_id`,`to_id`,`amount`,`message`,`cycle_id`) " +
         "VALUES ('w-amt','v','gratitude',?,?,15,'You drove the long way to fetch me.','lunar-000900')",
       [wren, ash],
@@ -234,7 +234,7 @@ describe.skipIf(!configured)("the hero blends real voices over examples", () => 
   });
 
   it("names both sides with the handle and the fronted portrait", async () => {
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema this suite provisions and drops, never a production table
       "INSERT INTO `gratitude_log` (`id`,`village_id`,`kind`,`from_id`,`to_id`,`amount`,`message`,`cycle_id`) " +
         "VALUES ('w-named','v','gratitude',?,?,3,'You waited with me.','lunar-000900')",
       [wren, ash],
@@ -249,7 +249,7 @@ describe.skipIf(!configured)("the hero blends real voices over examples", () => 
   });
 
   it("keeps the recorded name and no handle for an account that is gone", async () => {
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema this suite provisions and drops, never a production table
       "INSERT INTO `gratitude_log` (`id`,`village_id`,`kind`,`from_id`,`from_name`,`to_id`,`to_name`,`amount`,`message`,`cycle_id`) " +
         "VALUES ('w-gone','v','gratitude','user-deleted','Rowan','" + ash + "','Ash',2,'You showed me the ford.','lunar-000900')",
     );
