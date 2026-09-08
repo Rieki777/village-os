@@ -322,6 +322,49 @@ describe.skipIf(!DB_CONFIGURED)("a village runs caps and treasuries side by side
     expect(String(r.json?.error)).toContain("spending cap");
   }, 30_000);
 
+  /**
+   * THE BONUS DOOR, DRIVEN, BECAUSE A HANDLER NOBODY CALLS IS A HANDLER NOBODY
+   * HAS RUN.
+   *
+   * This file's own header records what that costs: the burn route shipped
+   * calling `stringVar("cycle.mode")` for a key the registry does not publish,
+   * so every request threw before it read anything, and only an end-to-end
+   * drive found it. The bonus reading is built from the same pieces, so it is
+   * driven the same way.
+   *
+   * IT ANSWERS A REFUSAL, AND THE REFUSAL IS THE POINT. No table in this schema
+   * records what a circle took on for a period, so the completion gate has
+   * nothing for a vote to be about and the bonus refuses by name. A 200 with
+   * that refusal is the honest answer; a 500 would be the defect.
+   */
+  it("answers the BONUS reading over HTTP, and refuses because nothing records the commitment", async () => {
+    const r = await call(
+      "GET",
+      `/api/admin/resources/budgets/${workshopBudget}/bonus?periodId=rooting`,
+      undefined,
+      founderToken,
+    );
+    expect(r.status, `bonus: ${r.text.slice(0, 400)}`).toBe(200);
+    expect(r.json?.outcome?.kind, JSON.stringify(r.json?.outcome)).toBe("blocked");
+    expect(String(r.json?.outcome?.reasons?.[0])).toContain("Nothing records");
+    expect(String(r.json?.noCommitmentStore)).toContain("nowhere to write down");
+    expect(String(r.json?.blindSpot)).toContain("care");
+    // The mode in force rides the answer, because it decides the question.
+    expect(r.json?.mode).toBe("cap");
+  }, 30_000);
+
+  it("refuses to PAY a bonus for the same reason, and moves nothing", async () => {
+    const r = await call("POST", `/api/admin/resources/budgets/${workshopBudget}/bonus`, {
+      periodId: "rooting", note: "should not land",
+    }, founderToken);
+    expect(r.status, `pay: ${r.text.slice(0, 400)}`).toBe(409);
+    expect(String(r.json?.error)).toContain("standing before a bonus");
+    const [[row]] = await testDb!.conn.query<any[]>(
+      "SELECT COUNT(*) AS n FROM token_ledger WHERE source = 'circle_cap_bonus'",
+    );
+    expect(Number(row?.n ?? 0), "no bonus has ever been posted here").toBe(0);
+  }, 30_000);
+
   // ── 3. Spending is not issuance ───────────────────────────────────────────
 
   it("SPENDS FROM A TREASURY without moving the village's issuance counter", async () => {
