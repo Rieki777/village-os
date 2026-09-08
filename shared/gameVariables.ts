@@ -173,6 +173,61 @@ export const VARIABLES: VariableDef[] = [
     max: 10000000,
     unit: "tokens",
   },
+  {
+    /*
+     * THE UNSPENT-CAP BONUS, AND IT BELONGS TO THE CAP MODE ALONE.
+     *
+     * Rye, ruling on what a circle gets for finishing under its envelope:
+     * "if that was the intention then we can just use the other route where
+     * the circle mints below the capacity they're meant to then N% of what
+     * they didn't mint can still come to them as a bonus". This is N.
+     *
+     * It is here and not in `circle_budgets` because it is a rule of the game
+     * and not a property of one circle: every circle in a village is answered
+     * by the same number, the way every hand-mint meets the same cap two dials
+     * above. A per-circle share would let a village pay one circle more for
+     * the same restraint, which is a negotiation and not a rule.
+     *
+     * WHY THE DEFAULT IS 10 AND NOT 0, AND NOT 100.
+     *
+     * 0 would ship the mechanism switched off, and a village that holds the
+     * completion vote would then be told its circle earned a bonus of nothing.
+     * The vote is the gate: no bonus is ever paid without the village
+     * answering that the work was completed, so a non-zero default issues
+     * nothing on its own and cannot surprise anybody.
+     *
+     * 100 would hand back the whole cap, which turns a cap into a treasury and
+     * erases the one difference the two modes exist to express. Every value in
+     * between shares one property that 10 sits comfortably inside: returning
+     * unspent room is worth an order of magnitude less than spending it on the
+     * work, so a circle that needs the money still spends it. A circle that
+     * leaves 1000 unminted receives 100, which is felt on a real budget and
+     * never competes with doing the work.
+     *
+     * A BONUS MINTS, so it leaves `sys:mint` and meets the village-wide
+     * issuance cap in the cycle it is paid, exactly as a treasury funding
+     * does. This dial cannot buy room that cap does not have.
+     */
+    key: "resources.circle_cap_bonus_pct",
+    category: "Ledger",
+    label: "Bonus for a circle that finished under its cap",
+    description:
+      "The share of a circle's UNMINTED capacity that comes back to the circle as a bonus, once the village has voted that the circle completed its work. It applies only to circles running on a spending cap, because a cap's unused room disappears when the period turns and there is nothing to reward in a treasury, which the circle simply keeps. COUNTED AS A PERCENTAGE of what the circle did not issue, so 10 against 1000 of unused room pays 100. A bonus is newly minted, so it meets this village's issuance cap for the cycle it is paid in and can be refused there. 0 means no bonus is ever paid, and the completion vote still stands on its own as the village's answer about the work.",
+    type: "percentage",
+    default: "10",
+    min: 0,
+    max: 100,
+    unit: "%",
+    /*
+     * CYCLE-CLOSE, because the share is a promise a circle spent a whole
+     * period against. Moving it mid-period would change what restraint was
+     * worth after the restraint had already been shown, which is the same
+     * reason `gratitude.max_share_per_recipient` is in that set. Declared on
+     * the def rather than added to CYCLE_APPLY_KEYS, so this lane touches no
+     * line another lane is holding.
+     */
+    applyTiming: "cycle-close",
+  },
   // ── Redemption: turning tokens into something real ───────────────────────
   //
   // A member asks for their tokens to become cash, a service, a share, a

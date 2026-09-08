@@ -301,3 +301,77 @@ export function modeChangeSentence(
     `${MODE_WORD[asked]} ${when}, on ${schedule.from.slice(0, 10)}.`
   );
 }
+
+// ── THE ONE DIFFERENCE, NAMED ONCE ──────────────────────────────────────────
+
+/**
+ * WHAT A PERIOD BOUNDARY DOES TO WHAT A CIRCLE HAS.
+ *
+ * Rye settled this while answering a question about it, and the answer is the
+ * whole reason two modes exist:
+ *
+ *   "A treasury can also roll over to the next cycle to continue to be used
+ *   (what sets it apart from the other option of just having a cap you can
+ *   issue to). So, Actually thinking this out further with you and it doesn't
+ *   make sense to send it back... If they're choosing the treasury route where
+ *   they issue up front then those stay issued and can roll over to the next
+ *   cycle."
+ *
+ * SO THERE IS NO DE-ISSUING AT A PERIOD BOUNDARY. A treasury that a circle did
+ * not spend stays issued, stays in `sys:circle:<id>`, and is still there when
+ * the season turns. The village's issued total does not fall, because nothing
+ * moved. Dormancy is the OTHER event and it does de-issue, which is Rye's
+ * earlier ruling and `sweepDormantCircle` in server/lib/circleTreasury.ts.
+ *
+ * ── WHY THIS IS A MAP AND NOT TWO PIECES OF ARITHMETIC ─────────────────────
+ *
+ * The difference already existed in the code before this constant did, and it
+ * existed as an absence in two places: `readCap` in shared/circleBurn.ts sums
+ * over a window, and `treasuryHoldings` in server/lib/circleTreasury.ts sums
+ * over the whole life of the account. Two functions, one idea, and nothing
+ * anywhere saying they are the same idea pointing in opposite directions.
+ *
+ * That is enough while both mechanisms are only READ. It stopped being enough
+ * the moment a bonus had to be paid to one mode and refused to the other,
+ * because "which mode gets the bonus" is not a third fact: it is this one.
+ * Room that evaporates is worth compensating and a balance that persists is
+ * not, so `shared/circleBonus.ts` asks THIS function and never asks the mode.
+ * A third mode added later answers one question here instead of being pattern
+ * matched in every consumer.
+ */
+export type PeriodBoundaryEffect =
+  /** Unspent room evaporates and the window starts full. The cap model. */
+  | "resets"
+  /** Unspent value stays issued and stays held. The treasury model. */
+  | "carries";
+
+/** The one difference between the two models, as data. */
+export const PERIOD_BOUNDARY: Readonly<Record<BudgetMode, PeriodBoundaryEffect>> = {
+  cap: "resets",
+  treasury: "carries",
+};
+
+/** What the boundary does to this mode. One call, one answer, one home. */
+export function boundaryEffect(mode: BudgetMode): PeriodBoundaryEffect {
+  return PERIOD_BOUNDARY[mode];
+}
+
+/**
+ * The sentence a member reads about what the turn of a period will do.
+ *
+ * Written apart for each effect, because "your room comes back" and "you keep
+ * what you have" are opposite incentives and one sentence covering both would
+ * be the empty-state conflation this module was built to avoid, one layer up.
+ */
+export function boundarySentence(mode: BudgetMode): string {
+  if (boundaryEffect(mode) === "carries") {
+    return (
+      "A treasury carries over. What this circle does not spend, it still holds when the " +
+      "period turns, so nothing is de-issued at a boundary and saving is worth something."
+    );
+  }
+  return (
+    "A spending cap resets. Room this circle does not use is gone when the period turns, so " +
+    "the village pays a share of it back as a bonus when the work was voted complete."
+  );
+}

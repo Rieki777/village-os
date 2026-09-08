@@ -75,7 +75,7 @@ const TOKEN_UNIT = /^token:([a-z0-9][a-z0-9-]{0,30})$/;
  * later lane replaces one line and every refusal in the reading starts
  * answering differently.
  */
-async function noCommitmentOnRecord(): Promise<CommitmentRecord | null> {
+export async function noCommitmentOnRecord(): Promise<CommitmentRecord | null> {
   return null;
 }
 

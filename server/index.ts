@@ -12839,10 +12839,10 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const actor = (await authedUser(req))?.id ?? adminActor(req)?.id ?? null;
     if (!actor) return res.status(401).json({ error: "auth_required", message: "Confirming a launch step needs a named admin" });
-    const r = await confirmManual(getPool(), String(req.body?.id ?? ""), actor, req.body?.done !== false);
+    const r = await confirmManual(getPool(), String(req.body?.id ?? ""), actor, req.body?.done);
     if (!r.ok) return res.status(400).json({ error: r.error });
     void recordEvent(getPool(), {
-      kind: "audit", text: `launch:confirm:${req.body?.id}:${req.body?.done !== false ? "done" : "retracted"}`,
+      kind: "audit", text: `launch:confirm:${req.body?.id}:${r.answer}`,
       actorUserId: actor, entityType: "launch", entityRef: String(req.body?.id ?? ""), audience: "admin",
     });
     const fresh = await launchStatus(getPool(), launchDeps);
