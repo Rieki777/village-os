@@ -83,6 +83,20 @@ describe("the lifecycles", () => {
 describe("the import guard", () => {
   /** Every file in this directory. Pinned, so a new one cannot go unchecked. */
   const EXPECTED_FILES = [
+    // THREE ADDED BY THE ECONOMICS SIDE, which added them to a guarded
+    // directory and did not register them here. The guard then refused every
+    // one, by name, until somebody said what each was allowed to reach. That is
+    // the point of pinning the directory rather than scanning it: a file nobody
+    // declared does not get a default, it gets a red.
+    //
+    // Not a merge artifact, though it surfaced during one and was first written
+    // up here as one. `origin/main` carries eight files and this list of eight,
+    // and it is green; all three names below exist only on the economics
+    // branch. The merge changed nothing about this test and the branch was red
+    // on it beforehand.
+    "economicsAssumptions.ts",
+    "economicsModel.test.ts",
+    "economicsModel.ts",
     "governanceModel.test.ts",
     "governanceModel.ts",
     "rng.test.ts",
@@ -101,6 +115,35 @@ describe("the import guard", () => {
   const ALLOWED: Record<string, string[]> = {
     "governanceModel.ts": ["shared/ballotSubjects", "shared/governanceEngine"],
     "types.test.ts": ["shared/ballotSubjects"],
+    /*
+     * THE MODEL MAY NAME THE REGISTRY. THE CONTRACT MAY NOT, and the line
+     * between them is the reason this allowlist is keyed by file at all.
+     *
+     * `governanceModel.ts` above may call the governance engine because
+     * modelling governance means modelling what the engine does. These two are
+     * the same allowance for economics: the thing being modelled is dialled, so
+     * a model that cannot read the dials is modelling a different village.
+     *
+     * `economicsModel.ts` reads VARIABLES_BY_KEY and `parseVariable` to
+     * reproduce the server's own precedence, which is narrower than "read the
+     * config" and is the part worth protecting. The DEFINITION decides whether
+     * a key exists; the snapshot supplies only the village's overrides. That
+     * order is `variable()`'s, and it is why the model cannot take the whole
+     * registry through the snapshot instead: a snapshot carrying every
+     * definition is a second copy of the registry, and a second copy drifts.
+     * `economicsModel.test.ts` names it for the matching reason, so a default
+     * that moves fails here rather than leaving a preview quietly answering
+     * about a world that no longer exists.
+     *
+     * The contract still travels, and that is asserted rather than promised:
+     * EXACT below pins `types.ts`, `rng.ts` and `simulate.ts` to nothing
+     * outside this directory but the clock, and none of the three names the
+     * model, so nothing here reaches the registry by import. What consumes the
+     * model is `server/lib/dryRunEconomyReader.ts`, which is the server reading
+     * shared code and not shared code reaching into the server.
+     */
+    "economicsModel.ts": ["shared/gameVariables"],
+    "economicsModel.test.ts": ["shared/gameVariables"],
   };
 
   /** The complete import list of the three files the economics session ships. */

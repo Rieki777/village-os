@@ -126,12 +126,27 @@ describe("the burn rate", () => {
 // ── The states, each one its own fact ───────────────────────────────────────
 
 describe("a cap's five states", () => {
-  it("reports no_window without inventing a zero", () => {
+  it("reports no_window without inventing a zero, and still says what the cap was", () => {
     const c = readCap({ scope: "season", window: null, capMinor: 400_000, spentMinor: 0, atMs: START, askMinor: 0 });
     expect(c.state).toBe("no_window");
-    expect(c.capMinor).toBeNull();
+    /*
+     * THE SAME STANDARD `unmeasurable` IS HELD TO BELOW: the ceiling is real
+     * and the rest is unknown, so neither is faked. This case used to expect a
+     * null cap, which made the file argue both sides. What that cost is a
+     * village whose admin sets a season cap before declaring any seasons: the
+     * number is stored, nothing measures it, and every reading reported that
+     * there was no season cap at all.
+     *
+     * The state is what carries the warning, and it still does. Nothing treats
+     * this as a bound, because every consumer that picks the binding cap gates
+     * on a window as well.
+     */
+    expect(c.capMinor).toBe(400_000);
+    // The invented zero the title is about. There is no window to sum over.
+    expect(c.spentMinor).toBeNull();
     expect(c.remainingMinor).toBeNull();
     expect(c.askFits).toBeNull();
+    expect(c.window).toBeNull();
   });
 
   it("reports no_cap when the village set none, and constrains nothing", () => {

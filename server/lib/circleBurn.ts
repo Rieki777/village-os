@@ -564,8 +564,15 @@ async function readOne(
    * query that returns zero rows would be indistinguishable from one.
    */
   if (!window || capMinor === null) {
+    /*
+     * THE CAP TRAVELS EVEN WITH NO WINDOW TO MEASURE IT OVER. This line used
+     * to read `window ? capMinor : null`, which threw the number away in the
+     * one case where somebody most needs to be told about it: a season cap set
+     * on a village that has declared no seasons. `readCap` decides what a
+     * missing window means; the job here is not to hide the input from it.
+     */
     return readCap({
-      scope, window: window ?? null, capMinor: window ? capMinor : null,
+      scope, window: window ?? null, capMinor,
       spentMinor: 0, atMs: at.getTime(), askMinor: ask,
     });
   }

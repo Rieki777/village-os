@@ -115,12 +115,35 @@ async function open(recordId: string, heads = 1, quorumPct = 50) {
   return res.ballot;
 }
 
+/** Push a ballot's closes_at into the past: the clock, not a status change. */
+async function expire(ballotId: string) {
+  await pool.query("UPDATE ballots SET closes_at = DATE_SUB(NOW(), INTERVAL 1 HOUR) WHERE id = ?", [ballotId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+}
+
+/*
+ * A COMPLETION VOTE CLOSES ON THE CLOCK, and this helper used to ask to close
+ * early instead.
+ *
+ * `closerMayCloseEarly` is still a real door, so the old fixture looked
+ * harmless; what it could not do is PASS. `closeBallot` refuses a passing
+ * outcome before the window ends whatever the closer is allowed, because
+ * `lands_at` derives from the frozen `closes_at` and an early pass would hand
+ * the steward's veto window to whoever pressed the button. Three of the tests
+ * below need a pass, so they were asking for exactly the thing the engine
+ * exists to refuse.
+ *
+ * Expiring first is not a workaround for that refusal, it is the production
+ * path written down: the settlement job closes ballots when their windows end.
+ * A fixture that closed early would prove the seam reads an outcome nobody in
+ * a real village can produce, which is the more expensive kind of green.
+ */
 async function close(ballotId: string, note: string) {
+  await expire(ballotId);
   const res = await closeBallot(pool, {
     ballotId,
     closedBy: "steward-1",
     outcomeNote: note,
-    closerMayCloseEarly: true,
+    closerMayCloseEarly: false,
   });
   if (!res.ok) throw new Error(res.error);
   return res;

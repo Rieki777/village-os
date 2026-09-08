@@ -323,8 +323,31 @@ export interface RateInput {
 export function readCap(input: RateInput): CapReading {
   const { scope, window, capMinor, spentMinor, atMs, askMinor } = input;
 
+  /*
+   * A CAP WITH NO WINDOW STILL REPORTS ITS NUMBER.
+   *
+   * `no_window` used to blank the cap along with everything else, and that put
+   * a village one step from the worst kind of budget: an admin sets a season
+   * cap of 100,000, the village has declared no seasons, and every reading
+   * comes back saying there is no season cap at all. The number was saved. It
+   * bound nothing, and nothing said so.
+   *
+   * So the state stays honest and the cap comes with it. `no_window` still
+   * means nothing is measuring this, and every consumer that decides which cap
+   * BINDS already gates on `window !== null`, so carrying the number changes no
+   * enforcement: it changes only whether a surface can say "you set this and
+   * this village has no seasons to measure it over."
+   *
+   * The spend side stays null on purpose. There is no window to sum over, and
+   * a zero here would read as "nothing spent" about a period that does not
+   * exist, which is the same lie in the other direction.
+   */
   if (!window) {
-    return blankCap(scope, "no_window");
+    return {
+      ...blankCap(scope, "no_window"),
+      capMinor:
+        capMinor === null || capMinor === undefined ? null : Math.max(0, Math.trunc(capMinor)),
+    };
   }
   if (capMinor === null || capMinor === undefined) {
     return { ...blankCap(scope, "no_cap"), window };

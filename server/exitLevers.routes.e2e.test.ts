@@ -368,7 +368,38 @@ describe.skipIf(!DB_CONFIGURED)("what the variables route refuses about a depart
       [proposalId],
     );
 
+    /*
+     * THE DOOR THIS CASE KNOCKS ON IS SHUT IN A STARTED VILLAGE, and shutting
+     * it was right. `POST /apply` now answers 409 once the Game has begun,
+     * because an admin applying a carried change by hand is an apply inside
+     * the window a steward was promised, from the one plane the veto does not
+     * reach. After the Birthing the landing path owns it.
+     *
+     * So the fixture puts the village where this route is the way a change
+     * lands: before its Birthing, when the admin plane is how a village is
+     * built. The harness provisions an ordinary mid-life village by default
+     * and the other cases in this file want that, so the row is cleared for
+     * this one apply and put back straight after.
+     *
+     * WHAT THIS NARROWS, said plainly rather than left for a reader to notice.
+     * The guard lives inside `setVariable`, so every door reaches it, and this
+     * case now proves the pre-Birthing door only. The started-village door is
+     * the landing path, and this file does not exercise it: that needs a real
+     * ballot, a close, and a landing tick, which is `mintVote.routes.e2e`'s
+     * fixture and not this one. The property is not weaker; the coverage of
+     * the second door is a gap and belongs to whoever writes that case.
+     */
+    const gameStart = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT value FROM app_config WHERE config_key = 'game-start'",
+    );
+    const startRow = (gameStart[0] as any[])[0];
+    await pool.query("DELETE FROM app_config WHERE config_key = 'game-start'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     const applied = await call("POST", `/api/admin/mechanics/proposals/${proposalId}/apply`, {});
+    if (startRow) {
+      await pool.query("INSERT INTO app_config (config_key, value) VALUES ('game-start', ?)", [ // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        typeof startRow.value === "string" ? startRow.value : JSON.stringify(startRow.value),
+      ]);
+    }
     // RECORDED, never asserted here. The case below reads these two.
     bundleApply = applied;
     siblingAfterBundle = await storedValue("exit.keep_pct.voice");
@@ -389,36 +420,6 @@ describe.skipIf(!DB_CONFIGURED)("what the variables route refuses about a depart
     // Back to the shipped answers for the rest of the file. A no-op when the
     // element never landed, which is why it belongs here and not below.
     expect((await setDial("exit.keep_pct.voice", "0")).status).toBe(200);
-  });
-
-  it("SUPERSEDED-BY-ALL-OR-NOTHING: on this branch the bundle applies element by element", () => {
-    /*
-     * DELETE THIS CASE WHOLE WHEN THIS BRANCH MEETS THE GOVERNANCE BRANCH.
-     * Grep for SUPERSEDED-BY-ALL-OR-NOTHING.
-     *
-     * It asserts THIS branch's behaviour and nothing more: `applyMechanicsProposal`
-     * walks the change set and writes each element as it goes, so a bundle
-     * carrying one coherent and one refused element answers 207 with the
-     * coherent one stored. Rye ruled that a bundle applies ALL OR NOTHING, and
-     * the governance branch implements that ruling by validating every element
-     * before any irreversible write, which makes the same bundle a 409 with
-     * nothing stored. The ruling supersedes what is written here, so whoever
-     * lands that merge deletes this case rather than reconciling it.
-     *
-     * Nothing in the case above depends on either answer, so deleting this one
-     * costs no coverage of the security property.
-     */
-    expect(bundleApply, "the case above must run first: it makes the proposal this reads").toBeTruthy();
-    expect(bundleApply?.status, `apply: ${JSON.stringify(bundleApply?.json)}`).toBe(207);
-    expect(bundleApply?.json?.applied).toEqual(["exit.keep_pct.voice"]);
-    expect(bundleApply?.json?.failed).toEqual([
-      {
-        key: "exit.keep_pct.recognition",
-        problem:
-          "Recognition is a record of what happened, not a holding. It stays on the village's books either way, so a share of it is not a thing a leaver can keep. Leave this share at zero.",
-      },
-    ]);
-    expect(siblingAfterBundle).toBe("10");
   });
 
   it("a dial outside the Exit category is untouched by any of this", async () => {

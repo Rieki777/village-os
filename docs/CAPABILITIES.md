@@ -1,6 +1,6 @@
 # Capabilities
 
-Every capability key the platform knows about, what each one lets a member do, and the order the one gate resolves them in. 32 keys, 7 steps.
+Every capability key the platform knows about, what each one lets a member do, and the order the one gate resolves them in. 33 keys, 7 steps.
 
 There is ONE capability gate, `capabilityDecision()` in `shared/capabilities.ts`, and every permission answer in the product comes through it. The order it resolves in IS the policy: it decides whether a warning badge's deny survives an appointment, and whether an administrator still outranks a village on a power that village has taken over.
 
@@ -85,7 +85,7 @@ These rows are not a description of the order. They are answers: the generator c
 
 ## Every capability key
 
-32 keys. `ALL_CAPABILITIES` is a flat list, so they are grouped here by the prefix each key carries in its own name, in the order the list gives them: `quest`, `forum`, `proposal`, `map`, `feed`, `stay`, `exchange`, `health`, `message`, `mechanics`, `event`, `org`, `ballot`, `member`, `intake`, `library`, `story`, `dial`, `steward`.
+33 keys. `ALL_CAPABILITIES` is a flat list, so they are grouped here by the prefix each key carries in its own name, in the order the list gives them: `quest`, `forum`, `proposal`, `map`, `feed`, `stay`, `exchange`, `health`, `message`, `mechanics`, `event`, `org`, `ballot`, `member`, `intake`, `library`, `story`, `dial`, `redemption`, `steward`.
 
 Three columns need a word before the tables:
 
@@ -214,6 +214,12 @@ Three columns need a word before the tables:
 | --- | --- | --- | --- | --- | --- |
 | `dial.set` | Turn the village's own dials | yes | yes | no rung | no module |
 
+### `redemption`
+
+| Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- |
+| `redemption.confirm` | Confirm that a member was paid, and destroy the tokens they redeemed | yes | yes | no rung | no module |
+
 ### `steward`
 
 | Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
@@ -222,13 +228,13 @@ Three columns need a word before the tables:
 
 ## The voices
 
-4 of the 32 keys may never be taken away by a warning badge: `mechanics.propose`, `ballot.vote`, `member.vouch` and `steward.veto`. Each is a member's own say in a decision the village makes. The gate ignores a deny naming one of them, the badge validator refuses to save one, and a migration cleared the ones already stored. Three locks on the same door, because a hand-written UPDATE is invisible to code review by definition and a stored row outlives the admin who wrote it.
+4 of the 33 keys may never be taken away by a warning badge: `mechanics.propose`, `ballot.vote`, `member.vouch` and `steward.veto`. Each is a member's own say in a decision the village makes. The gate ignores a deny naming one of them, the badge validator refuses to save one, and a migration cleared the ones already stored. Three locks on the same door, because a hand-written UPDATE is invisible to code review by definition and a stored row outlives the admin who wrote it.
 
 The rule underneath: waning is not removal. A rule under which unused voice decays over time is legitimate. An act by which one party strips another's earned voice is not, at any tier, held by anybody.
 
 ## The keys a village can take off the admin panel
 
-18 of the 32 keys are marked transferable: `quest.consent`, `forum.moderate`, `proposal.decide`, `map.publish`, `map.curatePhotos`, `feed.announce`, `exchange.manage`, `health.record`, `event.manage`, `org.declare`, `org.seat`, `org.seatAgent`, `intake.moderate`, `library.keep`, `story.tell`, `dial.set`, `quest.approve` and `steward.veto`.
+19 of the 33 keys are marked transferable: `quest.consent`, `forum.moderate`, `proposal.decide`, `map.publish`, `map.curatePhotos`, `feed.announce`, `exchange.manage`, `health.record`, `event.manage`, `org.declare`, `org.seat`, `org.seatAgent`, `intake.moderate`, `library.keep`, `story.tell`, `dial.set`, `quest.approve`, `redemption.confirm` and `steward.veto`.
 
 A key is only marked transferable once every route that REFUSES on it asks the gate in a shape that can carry the break-glass and write the public record. A ceiling an operator cannot climb over is not a ceiling, it is an outage. The keys left out are of two kinds: personal acts, where there is nobody for the key to move to, and keys nothing refuses on yet, where a promise that an admin must reach past the village in the open would have nothing under it.
 
@@ -250,7 +256,7 @@ A module's `capabilities` array in `shared/modules.ts` is what that module ADDS 
 | Village Calendar | `events` | `event.rsvp`, `event.manage` |
 | Governance | `governance` | `ballot.vote`, `member.vouch` |
 
-12 keys are declared by no module: `map.edit`, `map.publish`, `mechanics.propose`, `org.declare`, `org.seat`, `org.seatAgent`, `intake.moderate`, `library.keep`, `story.tell`, `dial.set`, `quest.approve` and `steward.veto`. That is a fact about the registry and never a sign the key is dead. A key reaches the gate from any route that asks for it, and the admin surfaces the handover keys cover sit outside every module.
+13 keys are declared by no module: `map.edit`, `map.publish`, `mechanics.propose`, `org.declare`, `org.seat`, `org.seatAgent`, `intake.moderate`, `library.keep`, `story.tell`, `dial.set`, `quest.approve`, `redemption.confirm` and `steward.veto`. That is a fact about the registry and never a sign the key is dead. A key reaches the gate from any route that asks for it, and the admin surfaces the handover keys cover sit outside every module.
 
 ## Machine-readable
 
@@ -259,12 +265,12 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
 ```json
 {
   "counts": {
-    "keys": 32,
+    "keys": 33,
     "steps": 7,
     "voices": 4,
-    "villageHoldable": 18,
+    "villageHoldable": 19,
     "climbable": 13,
-    "undeclared": 12
+    "undeclared": 13
   },
   "resolutionOrder": [
     {
@@ -637,6 +643,15 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
     {
       "key": "quest.approve",
       "label": "Put a proposed quest on the board and set what it pays",
+      "deniable": true,
+      "transferable": true,
+      "stageUnlock": null,
+      "stageRung": null,
+      "modules": []
+    },
+    {
+      "key": "redemption.confirm",
+      "label": "Confirm that a member was paid, and destroy the tokens they redeemed",
       "deniable": true,
       "transferable": true,
       "stageUnlock": null,
