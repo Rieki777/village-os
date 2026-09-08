@@ -242,7 +242,30 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   the renamed set keys to a fresh template and `buildTemplate` drops before it builds. No
   deployed schema holds any of the seven. `rc_qa_crowdpool` reaches 0240 in its own numbering
   universe and holds none of them.
-- **Swept as a STRING and not as a filename: 92 references across 41 files, of which 14 were
+- **A RENUMBER CAN INVERT A COLUMN DEPENDENCY, AND NO GATE SEES IT. This one bricked boot
+  and `check-migration-numbers` stayed green.** `0181_a_circle_holds_its_own_treasury.sql`
+  adds its columns `AFTER cycle_amount_minor`, and that column arrives in the file this lane
+  moved from `0168` to `0188`. At `0168` it sorted BEFORE `0181` and the column was there. At
+  `0188` it sorts after, so `0181` named a column that did not exist yet and failed with
+  `Unknown column 'cycle_amount_minor' in 'circle_budgets'` on statement one. On this
+  platform that is thirteen villages that cannot start, and the only thing that caught it was
+  APPLYING the set to a scratch schema. Every static gate passed: the number check reads
+  names, the compat check reads the new files against the previous release, and neither
+  knows that moving a file past another file reorders their statements.
+- **The fix, and why nothing else was available.** Numbers only go forward and `0181` was
+  already in the base, so nothing this lane owned could sort below it: the ordering
+  requirement and the numbering rule cannot both be met by renumbering. The `AFTER` clause is
+  the only movable part, so `0181` now says `AFTER amount_minor`. **That is equivalent and it
+  was measured, not argued**: `AFTER` decides ordinal position and nothing else, `0188` adds
+  `cycle_amount_minor` `AFTER amount_minor` as well, and both trees were applied to a scratch
+  schema and `circle_budgets` read back column by column. All 18 columns identical, in the
+  same order, before and after. Editing `0181` is allowed because no release holds it:
+  `check-migration-compat` counts it among the files NEW since the previous release, and the
+  only schemas on this machine carrying it are five `village_tpl_` templates.
+- **So the drill that matters is RUN THE SET, TWICE, and the second run is the smaller half.**
+  A first run proves the wave applies in its new order. Here it was the first run that
+  failed, on a file this lane did not write and did not renumber.
+- **Swept as a STRING and not as a filename: 93 references across 42 files, of which 14 were
   filenames** and the rest were header lines, section markers, doc prose, test descriptions and
   one runtime SQL string (`REFUSED by 0184`, asserted by
   `server/tokenScale.migration.test.ts`). Eleven further mentions in three files are LEFT ALONE
@@ -3061,7 +3084,7 @@ Both look like intentional work and neither is.
 | 2026-09-07 | treasury lane (TR) | `wt/econ-treasury`, VERIFIED IN CI and ready to integrate | pushed | **Run `34168402017` on `1b9eb7c`: completed, SUCCESS, 50 steps, 13m08s, no failed step.** Node 22 and MySQL 8, which this machine is neither: the local `node_modules` still holds express `4.22.2` against a lockfile on `^5.2.1`, so the local greens were never CI greens and the suites say so on every run. Migration `0181` is HELD and NOT YET TAKEN: per 27b the number is assigned at LANDING from a fresh scan, and this one was measured against `origin/main` at `0178` on 2026-09-07. Whoever integrates should re-scan by REF TREE (`git for-each-ref` then `git ls-tree`), not by `--diff-filter=A`, for the reason in the claim above. |
 | 2026-09-07 | treasury lane (TR) | `server/lib/mintCap.ts` `HAND_MINT_SOURCES` and `server/mintCap.e2e.test.ts` | `wt/econ-treasury` | HELD. `circle_treasury_fund` is a FOURTH door that meets `mintCapGuard`, so it joins the hand-mint list and the e2e that asserts the list against the doors now drives four. That assertion went red on its own when the door landed, which is the tripwire its comment promised. Left off the list, `capRefusal` would have told a founder who had just funded ten circle treasuries that their own issuance came from a door no admin opened. |
 | 2026-09-07 | treasury lane (TR) | `server/index.ts` (import + two route registrations + the circle-status hook) | `wt/econ-treasury` | HELD. Additive only, and the server-index ratchet subtracts imports and register calls, so the baseline does not move. **The unrelated finding: `check-migration-numbers --since origin/main` resolves the base ref to the MERGE-BASE and not to origin/main's tip.** On this branch that is `b865a34`, whose ceiling is `0159`, so `wt/econ`'s `0165` to `0168` pass today and will be refused the moment that branch rebases onto a main that has reached `0178`. A green from this gate is a statement about the merge-base, never about main. |
-| 2026-09-07 | renumber lane (RN) | migrations `0182`-`0188` | `wt/econ-renumber` | **TAKEN, and the two rows above are left standing as the record of what they held.** The seven files the MM lane numbered `0160`-`0162` and `0165`-`0167`, plus `0168`, all sat at or below the ceiling their base ref had reached, so `check-migration-numbers` refused `wt/econ` outright. Renumbered to `0182`-`0188` with `git mv`, order preserved. `0179` and `0180` (`wt/gratitude-voices`) and `0181` (`wt/econ-treasury`) are stepped over. REBASED onto `wt/econ` at `ddcf54a`, which already carries `0181`, and the ceiling re-measured three ways AT THE RENAME on that base: 677 ref trees reached `0181`, 348 worktrees on disk reached `0181`, and the untracked scan reached `0162`, every one of them excluding this lane's own tree and refs; full method and the per-file replay findings are in section 3. **The number check is a statement about the MERGE-BASE, not about main's tip.** `resolveBase()` runs `git merge-base HEAD <ref>` and takes the newest match, so this branch's green is about `origin/main @ 773713eb`, which reached `0178`. `origin/main`'s TIP `47b4dfc` also reaches `0178` today, so the two agree for now; a branch can pass this gate and be refused the moment it takes a newer main. |
+| 2026-09-07 | renumber lane (RN) | migrations `0182`-`0188` | `wt/econ-renumber` | **TAKEN, and the two rows above are left standing as the record of what they held.** The seven files the MM lane numbered `0160`-`0162` and `0165`-`0167`, plus `0168`, all sat at or below the ceiling their base ref had reached, so `check-migration-numbers` refused `wt/econ` outright. Renumbered to `0182`-`0188` with `git mv`, order preserved. `0179` and `0180` (`wt/gratitude-voices`) and `0181` (`wt/econ-treasury`) are stepped over. REBASED onto `wt/econ` at `ddcf54a`, which already carries `0181`, and the ceiling re-measured three ways AT THE RENAME on that base: 677 ref trees reached `0181`, 348 worktrees on disk reached `0181`, and the untracked scan reached `0162`, every one of them excluding this lane's own tree and refs; full method and the per-file replay findings are in section 3. **The renumber INVERTED A COLUMN DEPENDENCY and bricked boot, and no static gate saw it:** `0181` adds columns `AFTER cycle_amount_minor`, which arrives in the file that moved from `0168` to `0188` and therefore now sorts after it, so `0181` failed with `Unknown column 'cycle_amount_minor'` on statement one. Only APPLYING the set caught it. `0181` now says `AFTER amount_minor`, which is equivalent and was measured: both trees applied to a scratch schema give `circle_budgets` the same 18 columns in the same order. **The number check is a statement about the MERGE-BASE, not about main's tip.** `resolveBase()` runs `git merge-base HEAD <ref>` and takes the newest match, so this branch's green is about `origin/main @ 773713eb`, which reached `0178`. `origin/main`'s TIP `47b4dfc` also reaches `0178` today, so the two agree for now; a branch can pass this gate and be refused the moment it takes a newer main. |
 
 
 ### 27d — Verification: CI runs the full suite, lanes run what they touched
