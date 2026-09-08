@@ -2760,9 +2760,24 @@ AND as untracked files on sibling worktrees, which no git command reaches at all
 are NOT enough. Run both of these, every time:
 
 ```
-git log --all --name-only --diff-filter=A --format="" -- 'drizzle/*.sql' | grep -oE '[0-9]{4}' | sort -n | tail
+git log --all --name-status --diff-filter=AR --format="" -- 'drizzle/*.sql' | grep -oE 'drizzle/[0-9]{4}' | grep -oE '[0-9]{4}' | sort -n | tail
 ls /c/Users/taren/Desktop/Amora/*/drizzle/*.sql | grep -oE '[0-9]{4}_' | sort -n | tail
 ```
+
+**`--diff-filter=AR`, AND NOT `A`. THIS ENTRY SHIPPED WRONG AND A LANE CAUGHT IT.** A renumber is a
+RENAME, git detects renames and marks them `R`, and `--diff-filter=A` excludes them. So the scan this
+section told every lane to trust was blind to exactly the files most likely to collide, because a
+file that has been renumbered once is a file somebody already had to move out of somebody else's way.
+
+Measured on this repository the day it was corrected: the `A`-only form sees `0178` and **misses
+`0179` and `0180`**, both of which arrived by rename and both of which are live. It reported a
+ceiling of `0181` while two numbers below it were invisible, which is the worst shape an undercount
+can take: the answer looked right.
+
+The condition is worth knowing, because it explains why this survived so long. **A rename that
+reaches main through a SQUASH looks like an addition**, since the squash flattens the history, so
+every renumber that has already landed shows up fine. A rename sitting on a BRANCH stays a rename.
+The blindness is therefore precisely for in-flight work, which is the only case the scan exists for.
 
 Run them SEPARATELY: the first walks every ref and takes close to two minutes, and chaining them
 behind it inside one two-minute timeout is how you get a confident empty answer from the second.
