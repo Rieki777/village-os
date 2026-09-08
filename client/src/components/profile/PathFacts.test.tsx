@@ -49,6 +49,26 @@ describe("PathFacts", () => {
     expect(container.firstChild).toBeNull();
   });
 
+  it("says so when the read failed, instead of leaving the space it promised empty", () => {
+    // Claiming a path replaces its quiet line with this section on the same
+    // render. Drawing nothing on a refusal left somebody who had just acted
+    // looking at the gap where the thing they claimed used to be, forever.
+    render(
+      <PathFacts pathId="prosperity-creator" title="Prosperity Creator" particulars={null} unavailable />,
+    );
+    expect(screen.getByText("Prosperity Creator")).toBeTruthy();
+    expect(screen.getByText(/did not load just now/)).toBeTruthy();
+  });
+
+  it("still draws nothing while the read is merely in flight", () => {
+    // "Not back yet" and "came back unusable" have to look different, because
+    // only one of them ever ends.
+    const { container } = render(
+      <PathFacts pathId="prosperity-creator" title="Prosperity Creator" particulars={null} />,
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
   it("draws nothing for a path whose key the server did not send", () => {
     // Absent means this member does not walk it, so there is nothing to say.
     // An empty section here would offer somebody a surface they never claimed.
@@ -195,14 +215,27 @@ describe("PathFacts", () => {
         particulars={{
           resident: {
             reservations: [
-              { id: "r1", homeType: "casita", structureKey: "casita-3", status: "confirmed", madeMoon: MOON },
+              {
+                id: "r1",
+                homeType: "tiny-home",
+                structureKey: "casita-3",
+                status: "new",
+                standing: "You have asked for this",
+                madeMoon: MOON,
+              },
             ],
           },
         }}
       />,
     );
-    expect(screen.getByText("casita")).toBeTruthy();
-    expect(screen.getByText("confirmed")).toBeTruthy();
+    // The stored slug is humanized, and the founders' pipeline word never
+    // appears: a member reads their own situation, not the admin's queue.
+    expect(screen.getByText("Tiny home")).toBeTruthy();
+    expect(screen.getByText("You have asked for this")).toBeTruthy();
+    expect(screen.queryByText("new")).toBeNull();
+    expect(screen.queryByText("tiny-home")).toBeNull();
+    // And a request nobody has answered is not dated as though it were held.
+    expect(screen.queryByText(/Reserved/)).toBeNull();
     // The type has no field for any of it, and this is the render-side half of
     // the server test that holds the same line.
     expect(container.textContent).not.toContain("@");

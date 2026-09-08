@@ -158,7 +158,7 @@ export default function Profile() {
    * ladder is drawn until there is one to draw. A member who walks no path
    * makes no request at all, and claiming a path re-reads.
    */
-  const { ladders, particulars } = usePathLadders(user?.paths ?? []);
+  const { ladders, particulars, failed: laddersFailed } = usePathLadders(user?.paths ?? []);
 
   /**
    * Take a path or let one go.
@@ -206,6 +206,40 @@ export default function Profile() {
     }
   };
 
+  /*
+   * ── THIS BLOCK SITS ABOVE THE EARLY RETURNS, AND HAS TO ────────────────
+   *
+   * `useSurfaced` is a hook, and the two guards below this point return before
+   * the rest of the component runs. Called after them, it runs on some renders
+   * and not others, and React counts hooks per render: the count changed and
+   * the page threw "Rendered more hooks than during the previous render".
+   *
+   * It was invisible in testing for a reason worth recording. This route is
+   * lazy, so on a normal load the chunk usually arrives AFTER AuthContext has
+   * flipped `loading` to false, and the first render already runs the hook.
+   * The deterministic break is SIGN OUT: `user` goes null, the second guard
+   * returns, the hook count drops, and the profile throws on the way out. No
+   * QA pass that never signs out can see it.
+   *
+   * Nothing here may read `user` without a guard of its own, because at this
+   * point in the render `user` is still allowed to be null.
+   */
+  const offerKnown = config !== null;
+  /*
+   * WHAT IS OPEN TO THIS MEMBER, in the sheet's own declared order, which is
+   * the order the surfacing queue meets them in.
+   *
+   * A path section counts as open the moment the path is walked. The bands that
+   * are always present are not candidates at all: "newly open" has to mean
+   * something a member did not have before, and a section every member has had
+   * since their first minute has never opened for anybody.
+   */
+  const walkedPaths = user?.paths ?? [];
+  const openSections = SHEET_SECTIONS.filter(
+    (sec) => sec.band === "path" && sec.path && walkedPaths.includes(sec.path),
+  ).map((sec) => sec.id);
+  const surfaced = useSurfaced(openSections, offerKnown);
+
   if (loading) {
     return (
       <Layout>
@@ -236,22 +270,8 @@ export default function Profile() {
    * id you already hold stays claimable however the offer moves, so a member
    * can always see a retired path and let it go.
    */
-  const offerKnown = config !== null;
   const offeredPaths = config?.paths ?? [];
 
-  /*
-   * WHAT IS OPEN TO THIS MEMBER, in the sheet's own declared order, which is
-   * the order the surfacing queue meets them in.
-   *
-   * A path section counts as open the moment the path is walked. The bands that
-   * are always present are not candidates at all: "newly open" has to mean
-   * something a member did not have before, and a section every member has had
-   * since their first minute has never opened for anybody.
-   */
-  const openSections = SHEET_SECTIONS.filter(
-    (sec) => sec.band === "path" && sec.path && user.paths.includes(sec.path),
-  ).map((sec) => sec.id);
-  const surfaced = useSurfaced(openSections, offerKnown);
   const surfacedSection = SHEET_SECTIONS.find((sec) => sec.id === surfaced.sectionId);
   const surfacedLabel = surfacedSection?.path
     ? (offeredPaths.find((p) => p.id === surfacedSection.path)?.label ?? "")
@@ -359,7 +379,11 @@ export default function Profile() {
                 Untouched: the banner, its label, its href and its wrapping all
                 stay exactly as they were. */}
             <div className="mb-8">
-              <GameDashboard />
+              {/* The page's own /api/game/me read, handed down. Rendered bare,
+                  GameDashboard fetches the same thing again, so one failure had
+                  two different remedies on one screen and the member met
+                  whichever retry they scrolled to first. */}
+              <GameDashboard me={me} meFailed={meFailed} />
             </div>
 
             <div className="space-y-8">
@@ -374,6 +398,19 @@ export default function Profile() {
                 put the same thing on the page twice and leave a member unsure
                 whether they were looking at two things or one.
               */}
+              {/*
+                THE ANNOUNCEMENT, in a region that is always mounted.
+
+                The banner below is inserted complete, text and all, so a live
+                region ON it announces nothing: assistive technology watches an
+                existing region for a CHANGE, and a node that arrives already
+                carrying its message is not a change. This paragraph is here on
+                every render and empty until there is something to say.
+              */}
+              <p aria-live="polite" className="sr-only">
+                {surfacedSection && surfacedLabel ? `${surfacedLabel} is newly open to you.` : ""}
+              </p>
+
               {surfacedSection && surfacedLabel ? (
                 <SurfacedBanner
                   title={surfacedLabel}
@@ -702,6 +739,7 @@ export default function Profile() {
                   pathId={sec.path ?? ""}
                   title={offeredPaths.find((p) => p.id === sec.path)?.label ?? sec.path ?? ""}
                   particulars={particulars}
+                  unavailable={laddersFailed}
                 />
               ))}
 
