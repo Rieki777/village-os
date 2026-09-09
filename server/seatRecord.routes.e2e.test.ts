@@ -263,6 +263,45 @@ describe.skipIf(!DB_CONFIGURED)("the term a seating never carried", () => {
     expect(holder?.termEndsAt, "the holder carries their own term").toBeTruthy();
   });
 
+  it("carries the FOUR sentences a seat owes a reader, all the way to the wire", async () => {
+    /*
+     * Rye's ask for this map: a member should arrive and know what roles do
+     * what. A seat answers with four fields, and TWO of them have been
+     * silently dropped by this projection at different times: `domain` was
+     * read every request and never sent, and `whyItMatters` was taken off
+     * this wire on the grounds that nothing rendered it.
+     *
+     * Both times the column held the words, the query returned them, and one
+     * object literal deleted them on the way out. No test failed, because
+     * every test asked about seats and holders rather than about SENTENCES.
+     *
+     * The card-side reader is held by seatExplains.test.tsx. This is the
+     * other half: the words actually leave the server.
+     */
+    const SEAT = "record-explains";
+    expect((await call("POST", "/api/admin/org/roles", {
+      body: {
+        id: SEAT,
+        name: "Spring warden",
+        aim: "Keep the spring drinkable through the dry season.",
+        domain: "The spring, its pipe and the tank above the kitchen",
+        accountabilities: ["Testing the water monthly", "Calling a repair before a failure"],
+        whyItMatters: "A village that loses its water loses a season.",
+        seats: 1,
+      },
+    })).status).toBe(200);
+
+    const map = await call("GET", "/api/map", { token: memberToken });
+    expect(map.status, JSON.stringify(map.json)).toBe(200);
+    const seat = (map.json?.roles ?? []).find((r: any) => r.id === SEAT);
+    expect(seat, "the seat is on the map").toBeTruthy();
+    // Named one at a time, so a failure says WHICH sentence went missing.
+    expect(seat.description, "aim").toContain("drinkable");
+    expect(seat.domain, "domain").toContain("tank above the kitchen");
+    expect(seat.accountabilities, "accountabilities").toHaveLength(2);
+    expect(seat.whyItMatters, "whyItMatters").toContain("loses a season");
+  });
+
   it("FEATURE 2, the seat's own lapse: the term branch reaches the map, and the seat stops reading as filled", async () => {
     /*
      * REWRITTEN TO THE 2026-09-02 RULE, and the rewrite is a SPLIT rather than

@@ -52,6 +52,15 @@ export interface PowerSeat {
   domain?: string | null;
   /** What this seat is answerable for. */
   accountabilities?: string[];
+  /**
+   * Why the village bothers having this seat at all.
+   *
+   * The one field of the four that answers "should I care about this",
+   * rather than "what does it do". All 25 of Amora's seats carry one, and it
+   * spent a release off the `/api/map` wire because nothing read it, which is
+   * how a written answer becomes an unwritten one.
+   */
+  whyItMatters?: string | null;
   circleId: string | null;
   seats: number;
   holderCount: number;

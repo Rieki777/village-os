@@ -23,6 +23,44 @@ const headers = (): Record<string, string> => {
 };
 
 /**
+ * WHAT THIS SEAT HAS NOT SAID YET, SAID OUT LOUD.
+ *
+ * Amora has all four sentences on all 25 of its seats. Every FORK of this
+ * platform starts with none of them, and a card that renders only the fields
+ * that exist shows a name, a count, and white space. Blank reads as broken,
+ * so a founder looking at their own new village cannot tell the difference
+ * between "the map is not working" and "we have not written this down".
+ *
+ * `/api/public/org.json` already solved the same problem the same way: it
+ * carries an `omits` array that states in plain words what the document
+ * deliberately does not contain, so a reader is never left inferring.
+ *
+ * Two rules keep this from becoming a nag. It says NOTHING when the seat is
+ * fully written, which is the case on any village that has done the work.
+ * And it names what is missing rather than repeating one apology per field,
+ * so a seat with three of four gets a short line and not three of them.
+ */
+export function unwrittenLine(seat: {
+  description?: string | null;
+  domain?: string | null;
+  accountabilities?: string[];
+  whyItMatters?: string | null;
+}): string | null {
+  const missing: string[] = [];
+  if (!String(seat.description ?? "").trim()) missing.push("what it works toward");
+  if (!String(seat.domain ?? "").trim()) missing.push("what it decides on");
+  if (!(seat.accountabilities ?? []).length) missing.push("what it answers for");
+  if (!String(seat.whyItMatters ?? "").trim()) missing.push("why it matters");
+  if (!missing.length) return null;
+  if (missing.length === 4) return "Nobody has written down what this seat is for yet.";
+  const list =
+    missing.length === 1
+      ? missing[0]
+      : `${missing.slice(0, -1).join(", ")} and ${missing[missing.length - 1]}`;
+  return `Still to be written down: ${list}.`;
+}
+
+/**
  * WHAT A TERM'S DATE SAYS ONCE IT HAS PASSED.
  *
  * Two words used to live here and on the holder chip further down: one that
@@ -129,6 +167,7 @@ export default function HolderCard({
   };
 
   const term = termWords(seat.termEnds);
+  const unwritten = unwrittenLine(seat);
 
   return (
     <div data-power-card>
@@ -147,7 +186,7 @@ export default function HolderCard({
           the half that tells you whether to bring it your question. */}
       {seat.description && <p className="text-sm text-muted-foreground mb-3">{seat.description}</p>}
 
-      {(seat.domain || (seat.accountabilities?.length ?? 0) > 0) && (
+      {(seat.domain || (seat.accountabilities?.length ?? 0) > 0 || seat.whyItMatters) && (
         <dl className="mb-3 space-y-2">
           {seat.domain && (
             <div>
@@ -167,8 +206,24 @@ export default function HolderCard({
               </dd>
             </div>
           )}
+          {/* WHY THE VILLAGE BOTHERS. Aim, domain and accountabilities all
+              answer what a seat DOES. This is the one that answers whether a
+              reader should care, and it is the sentence a new member needs
+              most: every one of Amora's 25 seats carries one, written by the
+              people who hold them. It sits last because it is the reason,
+              and a reason reads better after the thing it is a reason for. */}
+          {seat.whyItMatters && (
+            <div>
+              <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">Why it matters</dt>
+              <dd className="text-sm text-foreground">{seat.whyItMatters}</dd>
+            </div>
+          )}
         </dl>
       )}
+
+      {/* Silent on a village that has written its seats down; see
+          `unwrittenLine` for why blank space is the worse answer. */}
+      {unwritten && <p className="text-xs text-muted-foreground mb-3">{unwritten}</p>}
 
       <div className="text-xs text-muted-foreground space-y-1 mb-3">
         <p>

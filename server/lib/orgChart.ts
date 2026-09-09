@@ -769,19 +769,32 @@ export async function createOrgRole(pool: Pool, body: any): Promise<string> {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "")
       .slice(0, 64) || `seat-${Date.now().toString(36)}`;
+  // The four every seat gets whether or not the caller sent them, so a bare
+  // `{name}` still produces a usable row.
+  const cols = ["id", "name", "circle_id", "aim", "domain", "accountabilities", "seats", "sort_order"];
+  const vals: unknown[] = [
+    id,
+    String(body?.name ?? "New seat"),
+    body?.circleId || null,
+    body?.aim ?? null,
+    body?.domain ?? null,
+    JSON.stringify(Array.isArray(body?.accountabilities) ? body.accountabilities : []),
+    Math.max(1, Number(body?.seats ?? 1)),
+    Number(body?.order ?? 0),
+  ];
+  // Then ANYTHING ELSE `updateOrgRole` would have taken. A field this route
+  // accepts and drops is worse than one it refuses, because the caller is
+  // told it worked.
+  for (const js of Object.keys(WRITABLE)) {
+    const w = writableColumn(js, body);
+    if (!w || cols.includes(w.col)) continue;
+    cols.push(w.col);
+    vals.push(w.value);
+  }
   await pool.query(
-    `INSERT INTO org_roles (id, name, circle_id, aim, domain, accountabilities, seats, sort_order)
-     VALUES (?,?,?,?,?,?,?,?)`,
-    [
-      id,
-      String(body?.name ?? "New seat"),
-      body?.circleId || null,
-      body?.aim ?? null,
-      body?.domain ?? null,
-      JSON.stringify(Array.isArray(body?.accountabilities) ? body.accountabilities : []),
-      Math.max(1, Number(body?.seats ?? 1)),
-      Number(body?.order ?? 0),
-    ],
+    `INSERT INTO org_roles (${cols.map((c) => `\`${c}\``).join(", ")})
+     VALUES (${cols.map(() => "?").join(",")})`,
+    vals,
   );
   return id;
 }
@@ -811,17 +824,39 @@ export function statusOverrideProblem(v: unknown): string | null {
   return `A declared state must be one of: ${DECLARABLE_STATES.join(", ")}`;
 }
 
+/**
+ * ONE COERCION FOR BOTH DOORS.
+ *
+ * It used to live inside `updateOrgRole` alone, and `createOrgRole` wrote a
+ * hand-listed EIGHT columns of the twenty-three this map accepts. So a
+ * founder who posted a whole seat in one call, aim and domain and why it
+ * matters together, got a seat with the first two and silently lost the
+ * third: no error, no 400, a 200 and a seat missing the sentence that says
+ * why anyone should care about it.
+ *
+ * Caught by driving `POST /api/admin/org/roles` with all four sentences and
+ * reading `/api/map` back, which is the only way to see it: the column
+ * exists, the update path writes it, and nothing anywhere says the create
+ * path does not.
+ */
+function writableColumn(js: string, body: any): { col: string; value: unknown } | null {
+  const col = WRITABLE[js];
+  if (!col || body[js] === undefined) return null;
+  if (js === "seats") return { col, value: Math.max(1, Number(body[js] ?? 1)) };
+  if (js === "order") return { col, value: Number(body[js] ?? 0) };
+  if (js === "active" || js === "recruiting" || js === "representsCircle") return { col, value: body[js] ? 1 : 0 };
+  if (js === "expiresEachSeason") return { col, value: body[js] === null ? null : body[js] ? 1 : 0 };
+  return { col, value: body[js] === "" ? null : body[js] };
+}
+
 export async function updateOrgRole(pool: Pool, id: string, body: any): Promise<boolean> {
   const sets: string[] = [];
   const args: any[] = [];
-  for (const [js, col] of Object.entries(WRITABLE)) {
-    if (body[js] === undefined) continue;
-    sets.push(`\`${col}\` = ?`);
-    if (js === "seats") args.push(Math.max(1, Number(body[js] ?? 1)));
-    else if (js === "order") args.push(Number(body[js] ?? 0));
-    else if (js === "active" || js === "recruiting" || js === "representsCircle") args.push(body[js] ? 1 : 0);
-    else if (js === "expiresEachSeason") args.push(body[js] === null ? null : body[js] ? 1 : 0);
-    else args.push(body[js] === "" ? null : body[js]);
+  for (const js of Object.keys(WRITABLE)) {
+    const w = writableColumn(js, body);
+    if (!w) continue;
+    sets.push(`\`${w.col}\` = ?`);
+    args.push(w.value);
   }
   if (body.accountabilities !== undefined) {
     sets.push("`accountabilities` = ?");
