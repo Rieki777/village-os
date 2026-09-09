@@ -17921,7 +17921,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   // because it answers only to the account behind the token, and derived from
   // live rows on every read so a rung falls with nothing written anywhere.
   registerPathLadderRoutes(app, { authedUser, getPool, lapseContext });
-  registerVouchRoutes(app, { authedUser, getPool, members, guardCapability });
+  registerVouchRoutes(app, { authedUser, getPool, members, guardCapability, stageOf, recordStageEvent });
 
   // Journey to Launch: the founding team's own tracker, read and written
   // through the admin gate. Registered at exactly the point it used to sit.

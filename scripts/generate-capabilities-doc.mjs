@@ -408,6 +408,18 @@ const STEP_MEANINGS = {
       "The member holds a role whose `capabilities` list carries this key. A treasurer is a treasurer however many " +
       "quests they have done, which is why this path exists beside the ladder.",
   },
+  "carried by a greater key": {
+    beats:
+      "A key the member already holds that CARRIES this one. It sits directly under the role step and above badges, " +
+      "so it beats the ladder and it loses to a deny on a deniable key.",
+    detail:
+      "One key can make another absurd to refuse. A steward holding `member.superVouch` can admit a member outright, " +
+      "so declining them the smaller act of adding a single vouch would be nonsense, and Rye ruled that stewards may " +
+      "always vouch so a village always has a path to its next member. The alternative was to seat `member.vouch` on " +
+      "the steward circle, and that is a trap: seating into a role carrying that key is refused, so the circle would " +
+      "have become permanently unseatable. Carrying does not chain, so a key carries what it names and never what " +
+      "those carry in turn.",
+  },
   badge: {
     beats: "A badge the member earned or was granted. It beats the ladder, and it loses to a role and to a deny.",
     detail:
