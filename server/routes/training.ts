@@ -134,7 +134,7 @@ export function register(app: Express, deps: Deps): void {
        * dbCollection, so `replaceAll` names every column in the spec and an
        * absent key is written rather than skipped: `kind: "bool"` writes 0,
        * which would have made every module an admin created OPTIONAL while
-       * migration 0179's DEFAULT 1 sat there looking like it applied. Required
+       * migration 0191's DEFAULT 1 sat there looking like it applied. Required
        * unless the caller says otherwise, which is what the default means.
        */
       mandatory: mandatory === undefined ? true : !!mandatory,

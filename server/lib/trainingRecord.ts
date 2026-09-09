@@ -142,7 +142,7 @@ export function serverOwnedJourneyRefusal(journeyId: unknown): { error: string; 
  *
  * ── WHY EVERY EXISTING MODULE COUNTS AS MANDATORY ───────────────────────────
  *
- * `mandatory !== false`, rather than `=== true`. Migration 0179 defaults the
+ * `mandatory !== false`, rather than `=== true`. Migration 0191 defaults the
  * column to 1, so every row that already exists on all thirteen instances is
  * mandatory, which is exactly what the old rule meant when it required all of
  * them. Nobody's rung moves when this lands. Reading it the other way round

@@ -22,8 +22,8 @@ interface TrainingModule {
   url: string;
   order: number;
   /**
-   * Whether finishing this one is required to climb (migration 0179). Optional
-   * modules are offered and gate nothing. Absent on a server older than 0179,
+   * Whether finishing this one is required to climb (migration 0191). Optional
+   * modules are offered and gate nothing. Absent on a server older than 0191,
    * where every module was required, so `!== false` is the reading that keeps
    * an old server honest.
    */

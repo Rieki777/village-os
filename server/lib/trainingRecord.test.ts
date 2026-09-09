@@ -152,7 +152,7 @@ describe.skipIf(!configured)("the record the server keeps", () => {
 
 describe("gatingModuleIds", () => {
   it("counts a module with no flag as required, so nobody's rung moves on the deploy", () => {
-    // Migration 0179 defaults the column to 1, so every row that already exists
+    // Migration 0191 defaults the column to 1, so every row that already exists
     // is mandatory. Reading it as `=== true` would demote every member of every
     // village on the release that shipped the column.
     expect(gatingModuleIds([{ id: "a" }, { id: "b" }])).toEqual(["a", "b"]);

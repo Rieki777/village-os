@@ -248,7 +248,7 @@ export const NOT_YET_WIRED: Readonly<Record<string, string>> = {
    * EMPTY, and `member.vouch` is why it is worth a comment rather than a
    * deletion. It sat here from round 5 saying the membrane's vouching step had
    * not been built, which was true for as long as it was true. The step exists
-   * now (`server/routes/vouches.ts`, migration 0190), so the entry became a
+   * now (`server/routes/vouches.ts`, migration 0192), so the entry became a
    * sentence that read as current and was not, which is the failure this whole
    * registry exists to prevent one level up.
    *
