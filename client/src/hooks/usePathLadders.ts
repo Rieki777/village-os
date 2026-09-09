@@ -38,22 +38,38 @@ import type { PathLadder, PathParticulars } from "@shared/pathLadders";
 export interface PathLadderData {
   ladders: PathLadder[] | null;
   particulars: PathParticulars | null;
+  /**
+   * True once the read has come back unusable.
+   *
+   * Null alone cannot carry this. A member who has just claimed a path has
+   * their quiet line replaced by their new section, and that section draws
+   * nothing while `particulars` is null: identical to a failed read, so a
+   * refusal left the sheet permanently blank exactly where something had just
+   * been promised. "Still asking" and "we asked and could not" have to look
+   * different, because only one of them ever ends.
+   */
+  failed: boolean;
 }
 
 export function usePathLadders(paths: readonly string[]): PathLadderData {
-  const [data, setData] = useState<PathLadderData>({ ladders: null, particulars: null });
+  const [data, setData] = useState<PathLadderData>({ ladders: null, particulars: null, failed: false });
   const key = paths.join(",");
 
   useEffect(() => {
     if (key === "") return;
     let live = true;
+    setData((d) => (d.failed ? { ...d, failed: false } : d));
     gameFetch("/api/paths/ladders")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         // Only an array counts. A refusal, a proxy's HTML error page or a body
         // shaped like something else leaves the state null, which draws
         // nothing, instead of half a ladder assembled out of undefined.
-        if (!live || !Array.isArray(d?.ladders)) return;
+        if (!live) return;
+        if (!Array.isArray(d?.ladders)) {
+          setData({ ladders: null, particulars: null, failed: true });
+          return;
+        }
         // `paths` is checked on its own: an older server that serves ladders
         // and no particulars leaves that half null and draws nothing, which is
         // the same unknown-draws-nothing contract one field further in.
@@ -61,9 +77,12 @@ export function usePathLadders(paths: readonly string[]): PathLadderData {
         setData({
           ladders: d.ladders as PathLadder[],
           particulars: p && typeof p === "object" && !Array.isArray(p) ? (p as PathParticulars) : null,
+          failed: false,
         });
       })
-      .catch(() => {});
+      .catch(() => {
+        if (live) setData({ ladders: null, particulars: null, failed: true });
+      });
     return () => {
       live = false;
     };

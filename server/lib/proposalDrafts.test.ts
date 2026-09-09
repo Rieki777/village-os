@@ -318,13 +318,22 @@ describe("the badge-grant refusal and the deny map agree in the direction that i
     expect(voicesTheRunwayAllows).toEqual(["mechanics.propose"]);
   });
 
-  it("and the set really is the vote, the vouch and the seat", () => {
+  it("and the set really is the vote, the vouch, the override and the seat", () => {
     // Named outright, so renaming a key cannot make the agreement above hold
     // over a set nobody intended. `steward.veto` joined the two electorate
     // keys when the seat became a veto: a badge names people, and this seat
     // is seated and unseated by the village at a ballot of its own.
+    //
+    // `member.superVouch` joined them on 2026-09-08, when the membrane was
+    // built. It admits somebody outright, bypassing the vouch bar the village
+    // set for itself, so everything true of `member.vouch` here is more true
+    // of it. It is deliberately its OWN key rather than riding on
+    // `steward.veto`: that seat moves between roles by ballot, so a shared key
+    // would mean a village voting "the Elders hold the veto" had also voted
+    // "the Elders may admit members outright" without being asked.
     expect([...(TYPE_CAPABILITY_REFUSALS.badge_grant?.keys ?? [])].sort()).toEqual([
       "ballot.vote",
+      "member.superVouch",
       "member.vouch",
       "steward.veto",
     ]);

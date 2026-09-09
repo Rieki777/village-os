@@ -275,7 +275,21 @@ export default function Register() {
                 way they always have. On a village with no Google credentials
                 this renders nothing.
               */}
-              <GoogleSignInButton label="Continue with Google" next="/profile" />
+              {/*
+                THE SAME FIRST RUN AS THE FORM ABOVE IT.
+
+                This sent Google sign-ups straight to /profile while the email
+                form sent everybody to the character select, so two people who
+                joined the same day had had materially different first runs and
+                every surface downstream that assumed a character was chosen
+                was wrong for one of them.
+
+                It lands everybody on the same page because somebody on the
+                REGISTER page is registering. A returning member who uses this
+                door instead of Login sees their own party once, which costs
+                them a click and tells them nothing untrue.
+              */}
+              <GoogleSignInButton label="Continue with Google" next="/profile/characters?first=1" />
             </form>
 
             <div className="mt-8 text-center">

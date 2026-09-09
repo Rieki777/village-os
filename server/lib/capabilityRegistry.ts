@@ -244,10 +244,17 @@ export const POWERS: readonly PowerEntry[] = [
  * exactly one of the two lists.
  */
 export const NOT_YET_WIRED: Readonly<Record<string, string>> = {
-  "member.vouch":
-    "Declared in the round 5 capability set and gated by nothing: grep finds the key in " +
-    "shared/capabilities.ts and in no route, helper or query in server/**. The membrane's " +
-    "vouching step has not been built, so there is no power here to hand anybody yet.",
+  /*
+   * EMPTY, and `member.vouch` is why it is worth a comment rather than a
+   * deletion. It sat here from round 5 saying the membrane's vouching step had
+   * not been built, which was true for as long as it was true. The step exists
+   * now (`server/routes/vouches.ts`, migration 0192), so the entry became a
+   * sentence that read as current and was not, which is the failure this whole
+   * registry exists to prevent one level up.
+   *
+   * Anything added here is a promise that the key gates nothing, and it has to
+   * be deleted by whoever makes it gate something.
+   */
 };
 
 /**

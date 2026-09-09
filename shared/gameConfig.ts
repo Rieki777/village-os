@@ -81,6 +81,17 @@ export type StageRule =
   | { type: "training-complete" }             // finished all training modules
   | { type: "membership" }                    // signed the membership covenant
   | { type: "quests"; min: number }           // N consented quest completions
+  /*
+   * THE VILLAGE HAS PAID THEM. Rye's ruling, 2026-09-08: contribution types
+   * stand on the same footing, so time, money, skills, knowledge and resources
+   * are one thing. A member paid for work and an investor who bought a stake
+   * have both contributed, and both reach this rung.
+   *
+   * EVER paid, never currently holding: spending what you earned does not undo
+   * having earned it. Recognition never counts, because it is minted whenever
+   * anybody thanks anybody, and this rung opens `member.vouch`.
+   */
+  | { type: "tokens" }
   | { type: "granted" };                      // manually granted by the team
 
 export interface GameStage {
@@ -495,7 +506,7 @@ export const GAME_CONFIG: GameConfig = {
     { id: "immersant", name: "Immersant", description: "Spent immersive time with the community.", rule: { type: "granted" }, gratitudeMultiplier: 1 },
     { id: "participant", name: "Participant", description: "Completed community training.", rule: { type: "training-complete" }, gratitudeMultiplier: 1 },
     { id: "member", name: "Member", description: "Signed the Love Letter and joined the community.", rule: { type: "membership" }, gratitudeMultiplier: 2 },
-    { id: "contributor", name: "Contributor", description: "Completed a first quest for the village.", rule: { type: "quests", min: 1 }, gratitudeMultiplier: 2 },
+    { id: "contributor", name: "Contributor", description: "The village has paid you for what you brought it.", rule: { type: "tokens" }, gratitudeMultiplier: 2 },
     { id: "quest-seeker", name: "Quest Seeker", description: "Contributing steadily through quests.", rule: { type: "quests", min: 3 }, gratitudeMultiplier: 2 },
     { id: "initiate", name: "Initiate", description: "Walking the Co-Creator Right of Passage.", rule: { type: "granted" }, gratitudeMultiplier: 2 },
     { id: "co-creator", name: "Co-Creator", description: "Consented by the Co-Creators circle.", rule: { type: "granted" }, gratitudeMultiplier: 3 },

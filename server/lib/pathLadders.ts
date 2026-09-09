@@ -490,6 +490,32 @@ export interface ParticularRows {
 
 const notExample = (r: { isExample?: boolean }): boolean => r.isExample !== true;
 
+/**
+ * A reservation's status, in the words the member would use for it.
+ *
+ * The stored values are the founders' pipeline and belong on the admin screen:
+ * "new" and "contacted" describe what the VILLAGE has done about a request,
+ * and on somebody's own profile "new" reads as a label on the person. This
+ * says what is true from their side.
+ *
+ * Switched over `RESERVATION_STATUSES` so a fifth status is a compile error
+ * here rather than a raw pipeline word appearing on a member's profile. An
+ * unknown value still prints itself, which is ugly and true.
+ */
+const RESERVATION_STANDING: Record<(typeof RESERVATION_STATUSES)[number], string> = {
+  new: "You have asked for this",
+  contacted: "The village has been in touch",
+  reserved: "Held for you",
+  withdrawn: "Withdrawn",
+};
+
+function reservationStanding(status: string): string {
+  // Keyed by the union above, so a fifth status fails the build here. The
+  // fallback is for a row already in the database carrying a value the build
+  // does not know: it prints itself, which is ugly and true, and never blank.
+  return isReservationStatus(status) ? RESERVATION_STANDING[status] : status;
+}
+
 export function particularsFor(
   paths: readonly string[],
   rows: ParticularRows,
@@ -541,6 +567,7 @@ export function particularsFor(
         homeType: r.homeType,
         structureKey: r.structureKey,
         status: r.status,
+        standing: reservationStanding(r.status),
         madeMoon: moonOf(r.createdAt),
       })),
     };

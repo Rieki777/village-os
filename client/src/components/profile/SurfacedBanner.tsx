@@ -29,10 +29,20 @@ export default function SurfacedBanner({
     <motion.aside
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
-      /* `role="status"` and not an alert: this is worth hearing on arrival and
-         is never urgent, and an alert interrupts whatever a screen reader is
-         part-way through saying. */
-      role="status"
+      /*
+       * NO `role="status"` HERE, and that is the fix rather than the omission.
+       *
+       * A live region has to be IN THE DOCUMENT BEFORE its text arrives, or
+       * nothing is announced: assistive technology watches an existing region
+       * for changes, and a region that appears already carrying its message is
+       * a new node, not a change. This whole element is inserted with its own
+       * text, so the role announced nothing to anybody.
+       *
+       * The announcement lives in Profile.tsx instead, in a region that is
+       * mounted for the life of the page. This is the twin of a bug already
+       * fixed in TheVessel, and it was left standing here because a fix in one
+       * place is not a fix to the class.
+       */
       className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-2xl border border-notice/60 bg-notice/10 px-5 py-4"
     >
       <Sparkles className="h-5 w-5 shrink-0 text-notice" aria-hidden="true" />

@@ -17,6 +17,7 @@ import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import {
   completionsFor,
   completionsForMany,
+  gatingModuleIds,
   recordCompletion,
   serverOwnedJourneyRefusal,
   trainingIsComplete,
@@ -148,3 +149,29 @@ describe.skipIf(!configured)("the record the server keeps", () => {
     expect(trainingIsComplete(publiclyKnownIds, await completionsFor(pool, "u-attacker"))).toBe(true);
   });
 });
+
+describe("gatingModuleIds", () => {
+  it("counts a module with no flag as required, so nobody's rung moves on the deploy", () => {
+    // Migration 0191 defaults the column to 1, so every row that already exists
+    // is mandatory. Reading it as `=== true` would demote every member of every
+    // village on the release that shipped the column.
+    expect(gatingModuleIds([{ id: "a" }, { id: "b" }])).toEqual(["a", "b"]);
+  });
+
+  it("drops the ones a village marked optional", () => {
+    expect(gatingModuleIds([{ id: "a", mandatory: true }, { id: "b", mandatory: false }])).toEqual(["a"]);
+  });
+
+  it("answers empty when everything is optional, which trainingIsComplete refuses", () => {
+    // "This village gates nothing" is a decision somebody makes in Admin, never
+    // one a deploy makes by promoting every member at once.
+    const ids = gatingModuleIds([{ id: "a", mandatory: false }]);
+    expect(ids).toEqual([]);
+    expect(trainingIsComplete(ids, ["a"])).toBe(false);
+  });
+
+  it("lets a member cross once the required ones are done, optional ones untouched", () => {
+    const mods = [{ id: "a" }, { id: "b", mandatory: false }];
+    expect(trainingIsComplete(gatingModuleIds(mods), ["a"])).toBe(true);
+  });
+})

@@ -2028,6 +2028,8 @@ interface TrainingModule {
   type: string;
   url: string;
   order: number;
+  /** 0191. Required modules gate the Participant rung; optional ones do not. */
+  mandatory?: boolean;
 }
 
 const TRAINING_TYPES = ["Video", "Article", "Practice", "Workshop", "Live Session"];
@@ -2059,7 +2061,7 @@ function TrainingModulesTab({ password }: { password: string }) {
 
   const startNew = () => {
     setEditingId("new");
-    setDraft({ title: "", description: "", type: "Video", url: "", order: mods.length + 1 });
+    setDraft({ title: "", description: "", type: "Video", url: "", mandatory: true, order: mods.length + 1 });
   };
 
   const cancelEdit = () => { setEditingId(null); setDraft({}); };
@@ -2160,6 +2162,22 @@ function TrainingModulesTab({ password }: { password: string }) {
             onChange={(e) => setDraft({ ...draft, order: parseInt(e.target.value) || 0 })}
             className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep/40"
           />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-500 block mb-1">Required to climb</label>
+          {/* The one lever that turns the Participant rung on and off. A member
+              states for themselves what they have finished; the REQUIRED ones
+              are what moves them onto the next rung. Absent reads as required,
+              which is what every module shipped before 0191 is. */}
+          <label className="flex min-h-11 items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={draft.mandatory !== false}
+              onChange={(e) => setDraft({ ...draft, mandatory: e.target.checked })}
+              className="h-4 w-4 rounded border-gray-300"
+            />
+            Finishing this one is required
+          </label>
         </div>
       </div>
       <div className="flex gap-2">

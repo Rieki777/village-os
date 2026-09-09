@@ -22,28 +22,29 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 145 open and 33 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 146 open and 33 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 155 of them as soon as it is saved, and 23 of them at the next cycle close.
+Each dial also says WHEN a change lands. 156 of them as soon as it is saved, and 23 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-178 dials in 29 categories. 104 carry a minimum and a maximum. By type: 82 integer, 13 decimal, 10 percentage, 21 boolean, 22 choice, 30 text.
+179 dials in 30 categories. 104 carry a minimum and a maximum. By type: 82 integer, 13 decimal, 10 percentage, 21 boolean, 22 choice, 31 text.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
+| Membership | 2 | 2 | 0 |
 | Gratitude | 9 | 9 | 0 |
 | Ledger | 2 | 2 | 0 |
 | The Mint | 4 | 3 | 1 |
-| Progression | 28 | 28 | 0 |
+| Progression | 27 | 27 | 0 |
 | Quests | 5 | 5 | 0 |
 | Governance | 43 | 39 | 4 |
 | Tokens | 4 | 1 | 3 |
@@ -76,6 +77,8 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 
 | Dial | Key | Category | Type | Default | Who may change it |
 | --- | --- | --- | --- | --- | --- |
+| Vouches that admit a member | `membership.vouches_required` | Membership | integer | `3` | the whole village |
+| The seat that greets a new arrival | `arrival.greeter_role` | Membership | text | blank | the whole village |
 | Base sending allowance per cycle | `gratitude.base_budget` | Gratitude | integer | `105` | the whole village |
 | Value pool distributed at each cycle close | `gratitude.pool_per_cycle` | Gratitude | integer | `1000` | the whole village |
 | Which token the pool pays | `gratitude.pool_token` | Gratitude | text | `credits` | the whole village |
@@ -104,7 +107,6 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Sending-budget multiplier: Role Holder | `progression.multiplier.role-holder` | Progression | decimal | `3` | the whole village |
 | Sending-budget multiplier: Guide | `progression.multiplier.guide` | Progression | decimal | `4` | the whole village |
 | Sending-budget multiplier: Sage | `progression.multiplier.sage` | Progression | decimal | `5` | the whole village |
-| Consented quests to reach Contributor | `progression.quests_for.contributor` | Progression | integer | `1` | the whole village |
 | Consented quests to reach Quest Seeker | `progression.quests_for.quest-seeker` | Progression | integer | `3` | the whole village |
 | Stage that unlocks: forum.post | `progression.unlock.forum.post` | Progression | choice | `member` | the whole village |
 | Stage that unlocks: proposal.open | `progression.unlock.proposal.open` | Progression | choice | `co-creator` | the whole village |
@@ -254,6 +256,38 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Match score floor | `introductions.match_floor` | Introductions | integer | `3` | the whole village |
 | Days an introduction stays open | `introductions.opportunity_days` | Introductions | integer | `10` | the whole village |
 | Keep match reasoning for | `introductions.retention_days` | Introductions | integer | `90` | the whole village |
+
+## Membership
+
+2 dials. 2 for the whole village.
+
+### Vouches that admit a member
+
+How many people have to say they know somebody before that person becomes a member. Three by default, and the number is tied to how a village starts: a village launches when a founder brings two more and all three carry the launch, which leaves exactly the three vouchers the fourth member needs. The person who invited them counts as the first. A vouch cannot be taken back, so this bar is only ever crossed forwards. Lower it and the membrane is thinner; raise it and a young village may not be able to admit anybody at all, which is what the steward override exists for.
+
+| Fact | Value |
+| --- | --- |
+| Key | `membership.vouches_required` |
+| Type | integer, a whole number |
+| Default | `3` |
+| Range | 1 to 20 |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### The seat that greets a new arrival
+
+The role whose holders are told the moment somebody joins. Greeting belongs to a seat, so the village re-seats it each season and the message follows with nobody editing a setting. Leave it empty and the founders hear it, which is also what happens when the seat is named and nobody is sitting in it: a village that has not built its org chart yet, and one whose greeter stepped down last week, both still find out that a person arrived. Paste the role id from the org chart.
+
+| Fact | Value |
+| --- | --- |
+| Key | `arrival.greeter_role` |
+| Type | text, free text |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Gratitude
 
@@ -494,7 +528,7 @@ The DHO slug that voice claims are raised into, from app.hypha.earth. Until this
 
 ## Progression
 
-28 dials. 28 for the whole village.
+27 dials. 27 for the whole village.
 
 ### How often every seat reopens
 
@@ -695,21 +729,6 @@ Multiplies the base Gratitude sending allowance for members at the Sage stage, s
 | Counted in | x base budget |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
-| What it costs to change | a routine vote |
-
-### Consented quests to reach Contributor
-
-How many consented quests advance a member to the Contributor stage. Raising it never demotes anyone retroactively on its own: stages are recomputed from live counts.
-
-| Fact | Value |
-| --- | --- |
-| Key | `progression.quests_for.contributor` |
-| Type | integer, a whole number |
-| Default | `1` |
-| Range | 1 to 1000 |
-| Counted in | consented quests |
-| Who may change it | the whole village |
-| A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
 ### Consented quests to reach Quest Seeker

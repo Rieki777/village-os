@@ -3,7 +3,14 @@
     "id": "founders-circle",
     "name": "Founders Circle",
     "description": "Holds the founding vision and final say while the village grows into governing itself. Can open and decide proposals, consent to quests, moderate the forum, and declare how the village and its circles hold power.",
-    "capabilities": ["proposal.open", "proposal.decide", "quest.consent", "forum.moderate", "forum.post", "org.declare"],
+    "capabilities": [
+      "proposal.open",
+      "proposal.decide",
+      "quest.consent",
+      "forum.moderate",
+      "forum.post",
+      "org.declare"
+    ],
     "minStage": null,
     "order": 1
   },
@@ -11,7 +18,14 @@
     "id": "steward-circle",
     "name": "Steward Circle",
     "description": "Village Stewards coordinating the land and the work. Can consent to quests, post announcements to the whole village, log the land's own measurements, and put gatherings on the calendar.",
-    "capabilities": ["quest.consent", "forum.post", "feed.announce", "health.record", "event.manage"],
+    "capabilities": [
+      "quest.consent",
+      "forum.post",
+      "feed.announce",
+      "health.record",
+      "event.manage",
+      "member.superVouch"
+    ],
     "minStage": "member",
     "order": 2
   },
@@ -19,7 +33,11 @@
     "id": "treasury",
     "name": "Treasury",
     "description": "Keeps the money legible: tracks budgets and allocations, lists tokens and posts their prices, and carries the cycle report to Hypha where the equity and voice tokens are governed.",
-    "capabilities": ["proposal.open", "forum.post", "exchange.manage"],
+    "capabilities": [
+      "proposal.open",
+      "forum.post",
+      "exchange.manage"
+    ],
     "minStage": "member",
     "order": 3
   },
@@ -27,7 +45,9 @@
     "id": "practitioners",
     "name": "Trained Practitioners",
     "description": "Members trained for work that needs it (machinery, earthworks, medicine). Some quests require this role.",
-    "capabilities": ["forum.post"],
+    "capabilities": [
+      "forum.post"
+    ],
     "minStage": "participant",
     "order": 4
   }

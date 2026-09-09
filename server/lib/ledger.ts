@@ -1101,3 +1101,103 @@ export async function checkLedgerInvariants(pool: Pool): Promise<InvariantReport
 
   return { ok: problems.length === 0, problems, uncredited };
 }
+
+/**
+ * HAS THE VILLAGE EVER PAID THIS MEMBER? The Contributor rung's whole question.
+ *
+ * Rye's ruling, 2026-09-08: contribution types stand on the same footing. Time,
+ * money, skills, knowledge and resources are one thing, so a member who has been
+ * paid for work and an investor who bought in have both contributed and both
+ * reach Contributor. "If they hold those tokens then that means they
+ * contributed and they're at that tier."
+ *
+ * ── EVER PAID, NEVER CURRENTLY HOLDS ────────────────────────────────────────
+ *
+ * Spending what you earned does not undo having earned it, and Rye said so
+ * outright. Reading a BALANCE would demote somebody the moment they spent their
+ * credits, and since Contributor is what opens `member.vouch`, it would strip
+ * the power to speak for a new member from somebody who had already spoken. The
+ * ledger keeps every leg, so this asks the history and not the total.
+ *
+ * ── FROM THE VILLAGE, NOT FROM A NEIGHBOUR ──────────────────────────────────
+ *
+ * Only `credit` tokens are transferable between members, and both of Rye's
+ * examples are the village paying somebody: rewarding work, and selling a stake.
+ * Neither is a peer handing over a coin.
+ *
+ * That distinction is load-bearing rather than tidy. Counting peer transfers
+ * would let one member buy in, send a single credit to each of two friends, and
+ * manufacture three Contributors who can then vouch somebody through the
+ * membrane. The bar is meant to be three people the village has actually paid.
+ *
+ * The test is the FROM side rather than a list of sources, so a source added
+ * next year is classified correctly without anybody remembering this function.
+ * A member account is `mem:<id>`; everything else is the village.
+ *
+ * ── AND NOT RECOGNITION, WHICH THE CALLER DECIDES ───────────────────────────
+ *
+ * The caller passes the slugs that count, because which tokens a village pays
+ * in is the village's own structure. What must never be in that list is a
+ * recognition token: recognition is minted whenever anybody thanks anybody, so
+ * counting it would mean one thank-you handed a stranger the power to vouch a
+ * member in. That is the membrane, opened by a tap.
+ */
+export async function hasBeenPaidByVillage(
+  pool: Pool,
+  userId: string,
+  tokenSlugs: readonly string[],
+): Promise<boolean> {
+  if (tokenSlugs.length === 0) return false;
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT 1 FROM token_ledger WHERE to_account = ? AND amount > 0 " +
+      `AND token_type IN (${tokenSlugs.map(() => "?").join(",")}) ` +
+      "AND from_account NOT LIKE 'mem:%' LIMIT 1",
+    [memberAccount(userId), ...tokenSlugs],
+  );
+  return rows.length > 0;
+}
+
+/**
+ * The slugs that count toward the Contributor rung: everything this village
+ * issues except recognition.
+ *
+ * Derived from the registry rather than configured, so a village that mints a
+ * new credit token gets it counted with no dial to remember. Recognition is
+ * excluded here, once, so no caller can forget to.
+ */
+export function contributionTokens(): string[] {
+  return Array.from(registry.values())
+    .filter((t) => t.kind !== "recognition")
+    .map((t) => t.slug);
+}
+
+/**
+ * The same question for a whole roll, in one query.
+ *
+ * The breadth metric walks every member and asks each one's stage. A per-member
+ * read inside that loop is the N+1 the consented counts and the training
+ * completions both already go out of their way to avoid, so this exists before
+ * anybody is tempted to add a third.
+ *
+ * An empty list of ids answers without asking, because `IN ()` is a syntax
+ * error rather than an empty result.
+ */
+export async function paidByVillageMany(
+  pool: Pool,
+  userIds: readonly string[],
+  tokenSlugs: readonly string[],
+): Promise<Set<string>> {
+  const paid = new Set<string>();
+  if (userIds.length === 0 || tokenSlugs.length === 0) return paid;
+  const accounts = userIds.map((id) => memberAccount(id));
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT DISTINCT to_account FROM token_ledger " +
+      `WHERE to_account IN (${accounts.map(() => "?").join(",")}) AND amount > 0 ` +
+      `AND token_type IN (${tokenSlugs.map(() => "?").join(",")}) ` +
+      "AND from_account NOT LIKE 'mem:%'",
+    [...accounts, ...tokenSlugs],
+  );
+  // Back from `mem:<id>` to the id the caller asked about.
+  for (const r of rows) paid.add(String(r.to_account).replace(/^mem:/, ""));
+  return paid;
+}

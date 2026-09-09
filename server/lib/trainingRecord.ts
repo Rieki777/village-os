@@ -130,3 +130,87 @@ export function serverOwnedJourneyRefusal(journeyId: unknown): { error: string; 
     code: "training_is_server_owned",
   };
 }
+
+/**
+ * THE MODULE IDS THAT ACTUALLY GATE THE CLIMB.
+ *
+ * Only MANDATORY modules do (Rye's ruling, 2026-09-08). A village offers
+ * training it wants everybody to have and training it merely recommends, and
+ * the ladder should only ever turn on the first kind. A member states for
+ * themselves what they have finished, the optional ones show on their profile,
+ * and the mandatory ones are what moves them onto the next rung.
+ *
+ * ── WHY EVERY EXISTING MODULE COUNTS AS MANDATORY ───────────────────────────
+ *
+ * `mandatory !== false`, rather than `=== true`. Migration 0191 defaults the
+ * column to 1, so every row that already exists on all thirteen instances is
+ * mandatory, which is exactly what the old rule meant when it required all of
+ * them. Nobody's rung moves when this lands. Reading it the other way round
+ * would demote every member of every village on the deploy that shipped it,
+ * because a row written before the column existed would read as optional.
+ *
+ * ── THE WRITE PATH HAS ITS OWN TRAP ─────────────────────────────────────────
+ *
+ * `training_modules` is a dbCollection, and a dbCollection INSERT names every
+ * column in its spec, so the migration's DEFAULT never reaches a row written
+ * afterwards: `kind: "bool"` writes 0 for an absent key, which makes the module
+ * OPTIONAL rather than violating the NOT NULL. The default protects the rows
+ * that already exist and cannot protect a new one, so the seed and the admin
+ * panel both set this field on purpose.
+ *
+ * ── AND WHY A VILLAGE WITH NO MANDATORY MODULES STILL ANSWERS FALSE ─────────
+ *
+ * This returns an empty list there, and `trainingIsComplete` refuses an empty
+ * list on purpose. "This village gates nothing" is a decision somebody should
+ * make deliberately in Admin, not one a deploy makes for them by promoting
+ * every member at once the moment the last module is marked optional.
+ */
+export function gatingModuleIds(modules: readonly { id?: unknown; mandatory?: unknown }[]): string[] {
+  return modules.filter((m) => m.mandatory !== false).map((m) => String(m.id));
+}
+
+/**
+ * Withdraw a member's own statement that they finished a module.
+ *
+ * ── WHY THIS EXISTS AT ALL, GIVEN COMPLETION IS DATED AND IDEMPOTENT ────────
+ *
+ * A completion here is SELF-DECLARED (Rye, 2026-09-08): nobody verifies it, the
+ * member states it and it shows on their profile. A statement a person cannot
+ * take back is not a record, it is a trap, and the surface that writes it is a
+ * row of checkboxes where a misclick costs nothing to make and everything to
+ * undo. Verified credentials would be a different argument; this is not one.
+ *
+ * It is deliberately NOT an admin power. A member may only ever withdraw their
+ * own, because the whole value of a self-declaration is that it belongs to the
+ * person who made it.
+ *
+ * THE RUNG MAY FALL, and that is correct rather than a side effect to guard
+ * against. `trainingDoneHere` is computed at read time from live rows, so
+ * withdrawing the last mandatory module lowers the answer with nothing written
+ * anywhere and nothing to forget, which is the same property every other
+ * position on this ladder has.
+ */
+export async function withdrawCompletion(pool: Pool, userId: string, moduleId: string): Promise<void> {
+  await pool.query( // module-review-ok: one table, one row, no cache above it
+    "DELETE FROM training_completions WHERE user_id = ? AND module_id = ?",
+    [userId, moduleId],
+  );
+}
+
+/**
+ * How far along a member is on the training that actually gates the climb.
+ *
+ * `trainingComplete` is a boolean, and a boolean is the wrong shape for a rung
+ * a member is working toward: the quest rungs say "1 of 3 consented quests" and
+ * this one could only say "not yet". Both numbers count MANDATORY modules only,
+ * for the same reason the gate does, so the figure a member reads is the figure
+ * the rung is judged on and never a second opinion about it.
+ */
+export function trainingProgress(
+  modules: readonly { id?: unknown; mandatory?: unknown }[],
+  completed: readonly string[],
+): { done: number; required: number } {
+  const gating = gatingModuleIds(modules);
+  const held = new Set(completed);
+  return { done: gating.filter((id) => held.has(id)).length, required: gating.length };
+}
