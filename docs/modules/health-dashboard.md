@@ -1,5 +1,7 @@
 # Module design: Village Health Dashboard
 
+<!-- describes: shared/healthMetrics.ts server/lib/events.ts server/lib/health.ts shared/gameConfig.ts -->
+
 Provenance: platform
 
 > Produced by the 13-agent design workflow, 2026-07-26, from the 2020 village-demo deck (slides + speaker notes),

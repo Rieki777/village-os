@@ -1,5 +1,7 @@
 # The Natural Interface Kit
 
+<!-- describes: client/src/components/natural/moments.ts client/src/lib/celebrated.ts server/lib/notify.ts client/src/index.css client/src/lib/haptics.ts client/src/lib/sound.ts client/src/components/natural/useReducedMotion.ts scripts/check-image-budget.mjs -->
+
 The design foundation the rest of the product draws from. It lives in
 `client/src/components/natural/`, plus two utilities in `client/src/lib/`.
 

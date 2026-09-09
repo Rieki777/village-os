@@ -1,5 +1,7 @@
 # Module design: Village Map — interactive sociocratic map + coordination concierge
 
+<!-- describes: server/seeds/circles-seed.json scripts/import-map-scene.ts shared/mapScene.ts server/lib/mapScene.ts drizzle/0063_map_scene_publish.sql drizzle/0069_characters.sql server/lib/orgChart.ts server/repos/quests.ts shared/power.ts shared/mapLayout.ts shared/money.ts drizzle/0093_place_photos.sql server/lib/placePhotos.ts -->
+
 Provenance: platform
 
 > Produced by the 13-agent design workflow, 2026-07-26, from the 2020 village-demo deck (slides + speaker notes),

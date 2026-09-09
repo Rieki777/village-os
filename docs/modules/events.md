@@ -1,5 +1,7 @@
 # Module: Events (0059) — the village calendar
 
+<!-- describes: server/lib/gatherings.ts shared/gatherings.ts server/lib/events.ts server/lib/calendarCommunity.ts client/src/components/calendar/print.css server/lib/calendarBrief.ts -->
+
 Provenance: platform
 
 **Gatherings with a time, a place, a capacity and an RSVP. Other surfaces read

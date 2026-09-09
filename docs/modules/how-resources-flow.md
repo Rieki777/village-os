@@ -1,5 +1,7 @@
 # Module contract: How Resources Flow
 
+<!-- describes: server/lib/resources.ts shared/capitals.ts -->
+
 Provenance: platform
 
 > As-built, written with the code it describes (round 4, lane L3, migration 0084).

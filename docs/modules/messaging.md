@@ -1,5 +1,7 @@
 # Module design: messaging
 
+<!-- describes: server/lib/messaging.ts drizzle/0066_messaging.sql client/src/lib/messaging.ts -->
+
 Provenance: platform
 
 > Built 2026-08-10 as a platform primitive, deliberately ahead of the module that first wanted it.

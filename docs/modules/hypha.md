@@ -1,5 +1,7 @@
 # Module design: hypha
 
+<!-- describes: shared/hypha.ts server/lib/hypha-bridge.ts server/lib/base-reads.ts server/lib/governanceWeights.ts server/lib/hypha/listener.ts server/lib/hypha/selfHostedListener.ts server/lib/hypha/discovery.ts server/lib/hypha/outcomes.ts server/lib/ballots.ts server/lib/hypha/switchover.ts shared/modulePool.ts drizzle/0101_module_usage.sql server/lib/moduleUsage.ts shared/moduleProvenance.ts drizzle/0096_hypha_module.sql drizzle/0097_hypha_outcomes.sql server/lib/modules.ts server/lib/secrets.ts -->
+
 Provenance: platform
 
 **The Hypha Bridge reads a village's DAO from Base and shows it here: the token contracts the

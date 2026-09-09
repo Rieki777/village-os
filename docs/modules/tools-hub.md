@@ -1,5 +1,7 @@
 # Module design: tools-hub
 
+<!-- describes: shared/modules.ts shared/toolsVisibility.ts -->
+
 Provenance: platform
 
 > Produced by the 13-agent design workflow, 2026-07-26, from the 2020 village-demo deck (slides + speaker notes),

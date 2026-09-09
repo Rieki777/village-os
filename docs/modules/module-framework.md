@@ -1,5 +1,7 @@
 # Module design: module-framework
 
+<!-- describes: shared/modules.ts server/lib/modules.ts shared/hypha.ts -->
+
 Provenance: platform
 
 > **Corrections, 2026-08-14.** This file is a DESIGN document from before the build, and three things
