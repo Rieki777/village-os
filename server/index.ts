@@ -104,7 +104,7 @@ import {
 import { buildThemeCss, sanitizeFontName } from "./lib/themeCss";
 import { applyTimingOf, ringOf, VARIABLES_BY_KEY } from "../shared/gameVariables";
 import { CONSTITUTION } from "../shared/constitution";
-import { circleViews, cycleFromParenting } from "../shared/circleView";
+import { circleViews, parentCycleRefusal } from "../shared/circleView";
 import { DEFAULT_MAP_SKIN, sanitiseMapSkin } from "../shared/mapSkin";
 import {
   DEFAULT_MAP_VOCABULARY,
@@ -1281,6 +1281,13 @@ const rolesRepo = dbCollection<RoleDef>(getPool(), {
     // so an omitted flag comes back as DEFAULT 0 and retirement can never find
     // them again.
     { js: "isExample", db: "is_example", kind: "bool" },
+    // The twin of the `circles.created_at` bug, one table over. That one was
+    // found, fixed and commented, and this one sat here through the whole
+    // round: every admin ROLE edit was resetting EVERY role's birth date to
+    // the moment of that edit. A comment naming a trap does not find the next
+    // instance of it, so `check-repo-payloads.mjs` now reports any column the
+    // schema has and a spec omits, and that rule is what found this line.
+    { js: "createdAt", db: "created_at", kind: "time", defaultNow: true },
   ],
 });
 const roleHoldersRepo = dbCollection<RoleHolderRow>(getPool(), {
@@ -1421,6 +1428,19 @@ const circlesRepo = dbCollection(getPool(), {
     { js: "decidesBy", db: "decides_by" },
     { js: "decidesByGloss", db: "decides_by_gloss" },
     { js: "decidesByDomains", db: "decides_by_domains", kind: "json" },
+    /*
+     * 0060, and the THIRD column to need this note, which is the tell that a
+     * missing one is the default outcome rather than an oversight.
+     *
+     * Where this circle lives on the land, read by
+     * `GET /api/admin/map/structures` (server/routes/mapScene.ts). Left out
+     * of this spec it was reset to NULL for EVERY circle, village-wide, by
+     * one steward renaming one circle. Nothing writes it yet, which is why
+     * this was quiet rather than harmless: the org editor is about to be the
+     * thing that sets it, and the wipe would have arrived looking like a drag
+     * that did not save.
+     */
+    { js: "homeStructureKey", db: "home_structure_key" },
     /*
      * `replaceAll` is DELETE-all plus a re-INSERT of exactly the columns in
      * this spec, so a column left out is not preserved: it is re-defaulted.
@@ -10327,20 +10347,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       if (clash) return res.status(409).json({ error: `Alias "${alias}" already resolves to another circle` });
     }
     // Self-parent was the only check here, so two circles could each hold the
-    // other and the map drew nothing (shared/circleView.ts). The refusal names
-    // the loop, because a founder with fourteen circles needs to know WHICH.
-    const loop = cycleFromParenting(all as Array<{ id: string; parentCircleId?: string | null }>, merged.id, merged.parentCircleId);
-    if (loop) {
-      const nameOf = (cid: string) => String(all.find((c: any) => c.id === cid)?.name ?? cid);
-      return res.status(400).json({
-        error: "circle_parent_cycle",
-        message:
-          loop.length === 1
-            ? "A circle cannot be inside itself."
-            : `That would put ${nameOf(loop[0])} inside ${loop.slice(1).map(nameOf).join(", which is inside ")}, which is already inside ${nameOf(loop[0])}.`,
-        circles: loop,
-      });
-    }
+    // other and the map then drew nothing at all (shared/circleView.ts).
+    const cycle = parentCycleRefusal(all as any[], merged.id, merged.parentCircleId);
+    if (cycle) return res.status(400).json(cycle);
     all[idx] = { ...merged, aliases };
     await circlesRepo.replaceAll(all);
     res.json(all[idx]);

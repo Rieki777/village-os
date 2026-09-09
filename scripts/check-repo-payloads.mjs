@@ -48,7 +48,7 @@
  * here is reading `toDb` from memory rather than from the file.
  *
  * ── WHAT THIS CHECKS, AND WHY THERE IS NO WAIVER LIST ────────────────────
- * Two rules, both static. No database, no build, no new dependency.
+ * Three rules, all static. No database, no build, no new dependency.
  *
  *   1. DRIFT. Every `db` column a spec names must exist in that spec's table,
  *      as the migrations in `drizzle/` leave it. A spec naming a column the
@@ -61,6 +61,17 @@
  *      is not rescued by `bool` or `defaultNow`. Naming the key and handing it
  *      a literal `null` or `undefined` fails for the same reason and is
  *      reported the same way.
+ *
+ *   3. OMISSION, the mirror of rule 1 and the quiet one. Every column the
+ *      TABLE has must be in the spec, because `replaceAll` re-INSERTs exactly
+ *      the spec'd columns and a column left out is RE-DEFAULTED on every row.
+ *      One steward editing one row resets that column for the whole village.
+ *      A column MySQL maintains (`ON UPDATE CURRENT_TIMESTAMP`) is exempt and
+ *      must NOT be spec'd, which is the only carve-out and is a property of
+ *      the schema rather than a waiver anyone types. The rule found
+ *      `roles.created_at` the day it was written, sitting one table away from
+ *      the `circles.created_at` fix that had already shipped with a comment
+ *      warning about exactly this.
  *
  * `check-admin-reach.mjs` carries an allowlist because "this route deliberately
  * has no door" is a real design decision somebody can defend. THERE IS NO
@@ -238,7 +249,7 @@ function readSchema() {
           if (NON_COLUMN.test(item)) continue;
           const m = /^`([A-Za-z0-9_]+)`\s+(.*)$/s.exec(item);
           if (!m) { unread.push(`${file}: ${create[1]}: unparsed item ${JSON.stringify(item.slice(0, 60))}`); continue; }
-          cols.set(m[1], { notNull: /\bNOT\s+NULL\b/i.test(m[2]), hasDefault: /\bDEFAULT\b/i.test(m[2]), source: file });
+          cols.set(m[1], { notNull: /\bNOT\s+NULL\b/i.test(m[2]), hasDefault: /\bDEFAULT\b/i.test(m[2]), dbManaged: /\bON\s+UPDATE\s+CURRENT_TIMESTAMP\b/i.test(m[2]), source: file });
         }
         if (cols.size === 0) { unread.push(`${file}: CREATE TABLE ${create[1]} yielded no columns`); continue; }
         // `IF NOT EXISTS` means a re-declaration is a no-op against a live
@@ -254,12 +265,12 @@ function readSchema() {
         for (const clause of splitTopLevel(alter[2])) {
           let m;
           if ((m = /^ADD\s+(?:COLUMN\s+)?`([A-Za-z0-9_]+)`\s+(.*)$/is.exec(clause))) {
-            cols.set(m[1], { notNull: /\bNOT\s+NULL\b/i.test(m[2]), hasDefault: /\bDEFAULT\b/i.test(m[2]), source: file });
+            cols.set(m[1], { notNull: /\bNOT\s+NULL\b/i.test(m[2]), hasDefault: /\bDEFAULT\b/i.test(m[2]), dbManaged: /\bON\s+UPDATE\s+CURRENT_TIMESTAMP\b/i.test(m[2]), source: file });
           } else if ((m = /^MODIFY\s+(?:COLUMN\s+)?`([A-Za-z0-9_]+)`\s+(.*)$/is.exec(clause))) {
-            cols.set(m[1], { notNull: /\bNOT\s+NULL\b/i.test(m[2]), hasDefault: /\bDEFAULT\b/i.test(m[2]), source: file });
+            cols.set(m[1], { notNull: /\bNOT\s+NULL\b/i.test(m[2]), hasDefault: /\bDEFAULT\b/i.test(m[2]), dbManaged: /\bON\s+UPDATE\s+CURRENT_TIMESTAMP\b/i.test(m[2]), source: file });
           } else if ((m = /^CHANGE\s+(?:COLUMN\s+)?`([A-Za-z0-9_]+)`\s+`([A-Za-z0-9_]+)`\s+(.*)$/is.exec(clause))) {
             cols.delete(m[1]);
-            cols.set(m[2], { notNull: /\bNOT\s+NULL\b/i.test(m[3]), hasDefault: /\bDEFAULT\b/i.test(m[3]), source: file });
+            cols.set(m[2], { notNull: /\bNOT\s+NULL\b/i.test(m[3]), hasDefault: /\bDEFAULT\b/i.test(m[3]), dbManaged: /\bON\s+UPDATE\s+CURRENT_TIMESTAMP\b/i.test(m[3]), source: file });
           } else if ((m = /^DROP\s+(?:COLUMN\s+)?`([A-Za-z0-9_]+)`\s*$/i.exec(clause))) {
             cols.delete(m[1]);
           } else if (!/^(ADD|DROP|ALTER|RENAME|CONVERT|ENGINE|DEFAULT|CHARACTER|COLLATE)\b/i.test(clause)) {
@@ -551,6 +562,44 @@ for (const spec of code.repos.values()) {
   }
 }
 
+/*
+ * RULE 3, THE MIRROR OF RULE 1: a column the TABLE has and the SPEC omits.
+ *
+ * Rule 1 catches a spec naming a column that is not there, which breaks the
+ * boot read loudly. This is the same drift pointing the other way and it is
+ * the quiet one: `replaceAll` is DELETE-all plus a re-INSERT of exactly the
+ * spec'd columns, so a column left OUT is not left alone. It is re-defaulted,
+ * on every row in the table, from one steward editing one row.
+ *
+ * Three columns have been found this way and each one had to be found by a
+ * person reading the file:
+ *
+ *   circles.created_at         every admin circle edit reset EVERY circle's
+ *                              birth date to the moment of that edit
+ *   circles.home_structure_key the address plane's column (0060), wiped
+ *                              village-wide by any admin circle edit
+ *   roles.created_at           the same as the first, one table over, and it
+ *                              survived the round that fixed the first
+ *
+ * The `circles.created_at` fix carried a comment naming the trap, and the
+ * comment did not find its twin. A rule does.
+ *
+ * THE ONE EXEMPTION, and it is principled rather than a waiver list: a column
+ * declared `ON UPDATE CURRENT_TIMESTAMP` is maintained by MySQL. A spec must
+ * NOT name it, because naming it would hand the database a value on every
+ * write and take the maintenance away. `tools.updated_at` is the live case.
+ */
+const omitted = [];
+for (const spec of code.repos.values()) {
+  const cols = schema.tables.get(spec.table);
+  if (!cols) continue;
+  const specd = new Set(spec.columns.map((c) => c.db));
+  for (const [name, col] of cols) {
+    if (specd.has(name) || col.dbManaged) continue;
+    omitted.push({ repo: spec.name, where: spec.where, table: spec.table, column: name, col });
+  }
+}
+
 /** The columns an insert MUST name, per repo, with the reason it must. */
 const required = new Map();
 for (const spec of code.repos.values()) {
@@ -614,8 +663,9 @@ if (process.argv.includes("--json")) {
     unread: schema.unread,
     drift,
     missing: missing.map((m) => ({ repo: m.repo, where: m.where, table: m.table, column: m.db, field: m.js, how: m.how })),
+    omitted: omitted.map((o) => ({ repo: o.repo, where: o.where, table: o.table, column: o.column, notNull: o.col.notNull, source: o.col.source })),
   }, null, 2));
-  process.exit(drift.length + missing.length > 0 ? 1 : 0);
+  process.exit(drift.length + missing.length + omitted.length > 0 ? 1 : 0);
 }
 
 // Provenance first, on every run including the green one, because a gate that
@@ -684,6 +734,22 @@ if (missing.length > 0) {
   console.error("  server/index.ts so the INSERT stops naming it and the DEFAULT can apply.");
 }
 
-if (drift.length + missing.length > 0) process.exit(1);
+if (omitted.length > 0) {
+  console.error("");
+  const tables = new Set(omitted.map((o) => o.table)).size;
+  console.error(`::error::${omitted.length} column(s) across ${tables} table(s) exist in the schema and are missing from their dbCollection spec. replaceAll is DELETE-all plus a re-INSERT of exactly the spec'd columns, so each of these is RE-DEFAULTED on every row in its table whenever anything writes that collection.`);
+  for (const o of omitted) {
+    const shape = `${o.col.notNull ? "NOT NULL" : "NULL"}${o.col.hasDefault ? " with a DEFAULT" : ""}`;
+    console.error(`  ${o.where}  ${o.repo}: \`${o.table}\`.\`${o.column}\` (${shape}, ${o.col.source}) is not in the spec`);
+  }
+  console.error("");
+  console.error("  Add the column to the spec in server/index.ts so its value survives the round");
+  console.error("  trip. A NOT NULL timestamp wants `kind: \"time\", defaultNow: true`, which carries");
+  console.error("  an existing value through and stamps now only for a row that genuinely has none.");
+  console.error("  A column MySQL maintains itself (ON UPDATE CURRENT_TIMESTAMP) is exempt and is");
+  console.error("  never reported here.");
+}
 
-console.log(`  every payload names every column its table requires, and every spec'd column exists`);
+if (drift.length + missing.length + omitted.length > 0) process.exit(1);
+
+console.log(`  every payload names every column its table requires, every spec'd column exists, and no column is left out of its spec to be re-defaulted`);

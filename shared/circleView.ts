@@ -303,6 +303,31 @@ export function cycleFromParenting(
 }
 
 /**
+ * The whole refusal body for a parenting move, or null when the move is fine.
+ *
+ * Lives here rather than in the route so the SENTENCE is testable without
+ * booting a server, and so the org editor can say the same words before the
+ * drag lands as the server says when it refuses.
+ */
+export function parentCycleRefusal(
+  circles: Array<CircleLink & { name?: string }>,
+  childId: string,
+  parentId: string | null | undefined,
+): { error: string; message: string; circles: string[] } | null {
+  const loop = cycleFromParenting(circles, childId, parentId);
+  if (!loop) return null;
+  const nameOf = (id: string) => String(circles.find((c) => c.id === id)?.name ?? id);
+  return {
+    error: "circle_parent_cycle",
+    message:
+      loop.length === 1
+        ? "A circle cannot be inside itself."
+        : `That would put ${nameOf(loop[0])} inside ${loop.slice(1).map(nameOf).join(", which is inside ")}, which is already inside ${nameOf(loop[0])}.`,
+    circles: loop,
+  };
+}
+
+/**
  * Every circle whose parent link sits on a loop, for a batch write nobody
  * can check row by row: an import, a seed, a whole-tree draft. A caller
  * either refuses the batch or nulls these parents, and both are honest.

@@ -12,7 +12,7 @@
  * still route through here at all.
  */
 import { describe, expect, it } from "vitest";
-import { circleView, circleViews, toneForCircle, ancestorIds, cycleFromParenting, circlesOnCycles, CIRCLE_TONES, CIRCLE_TONE_HEX } from "./circleView";
+import { circleView, circleViews, toneForCircle, ancestorIds, cycleFromParenting, parentCycleRefusal, circlesOnCycles, CIRCLE_TONES, CIRCLE_TONE_HEX } from "./circleView";
 
 /** A row shaped like `circlesRepo.all()` returns one. */
 const row = (over: Record<string, unknown> = {}) => ({
@@ -215,6 +215,32 @@ describe("circle containment", () => {
     expect(cycleFromParenting(all, "web", null)).toBeNull();
     // Neither can naming a parent that is not there.
     expect(cycleFromParenting(all, "web", "ghost")).toBeNull();
+  });
+
+  it("refuses in the words a founder can act on, naming both circles", () => {
+    // "invalid parent" tells somebody with fourteen circles nothing. The
+    // route hands this body straight back, so the sentence is testable
+    // without booting a server and the editor can say it before the drop.
+    const all = [
+      { id: "finance", name: "Finance & Business Circle" },
+      { id: "business", name: "Business & Finance Council", parentCircleId: "finance" },
+    ];
+    const r = parentCycleRefusal(all, "finance", "business")!;
+    expect(r.error).toBe("circle_parent_cycle");
+    expect(r.message).toBe(
+      "That would put Finance & Business Circle inside Business & Finance Council, which is already inside Finance & Business Circle.",
+    );
+    expect(r.circles).toEqual(["finance", "business"]);
+  });
+
+  it("says the plain thing for a circle put inside itself", () => {
+    const r = parentCycleRefusal([{ id: "a", name: "Land Circle" }], "a", "a")!;
+    expect(r.message).toBe("A circle cannot be inside itself.");
+  });
+
+  it("returns null for a move that is allowed, so the route writes", () => {
+    const all = [{ id: "gcc", name: "General" }, { id: "dev", name: "Dev" }];
+    expect(parentCycleRefusal(all, "dev", "gcc")).toBeNull();
   });
 
   it("finds every circle sitting on a loop in a batch, and only those", () => {
