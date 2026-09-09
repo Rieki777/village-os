@@ -156,6 +156,20 @@ export interface GameConfig {
      */
     roleName: string;
     seatName: string;
+    /**
+     * WHAT THIS VILLAGE CALLS THE THING A MEMBER SIGNS (Rye, 2026-09-08).
+     *
+     * The platform's word is "membership commitment". Amora's is "Love
+     * Letter", and that word was baked into platform code and into admin
+     * help text a different village would read, which is a white-label
+     * defect rather than a naming preference.
+     *
+     * A LABEL AND NOTHING ELSE, the same standing as roleName and seatName.
+     * The form type id `membership-508` is FROZEN and is not this: it is
+     * stored on every existing submission row, so renaming it orphans data.
+     * This renames what a member READS, never what the record says.
+     */
+    commitmentName: string;
     location: string;
     /** ISO 3166 alpha-2 country the project lives in (0083, P8). Blank means
      *  unsaid, and money display falls back to the universal CHF default. */
@@ -323,6 +337,10 @@ export const GAME_CONFIG: GameConfig = {
     // plural from one heuristic, so a village types the word once.
     roleName: "Role",
     seatName: "Seat",
+    // The platform's own word for the thing a member signs, belonging to no
+    // village, so it is NEUTRAL to scripts/check-identity-keys.mjs rather
+    // than pending. Amora says "Love Letter" and sets that in Admin.
+    commitmentName: "membership commitment",
     // Empty on purpose: there is no neutral location. A village sets its own
     // in Admin, Make This Yours. Graduated out of the identity guard's pending
     // list on 2026-09-03, AFTER confirming the live village stores its own

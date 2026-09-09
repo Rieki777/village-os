@@ -103,6 +103,7 @@ export const IDENTITY_KEYS = [
   "project.tagline",
   "project.memberName",
   "project.catalystName",
+  "project.commitmentName",
   "project.location",
   "project.country",
   "project.fiatCurrency",
@@ -146,6 +147,10 @@ export const NEUTRAL = {
   // and names no village, the same standing as "Village member" above. A
   // village that says founder or steward puts that in its own record.
   "project.catalystName": ["Catalyst"],
+  // The platform's word for the thing a member signs. Names no village, the
+  // same standing as "Village member" and "Catalyst" above. Amora says "Love
+  // Letter" and holds that in its own brand record rather than here.
+  "project.commitmentName": ["membership commitment"],
   "project.adminPath": ["/admin"],
   // Retired from KNOWN_PENDING on 2026-08-31, in the order the list was built
   // for: the founder entered Amora's own tagline in the live Admin FIRST, so
@@ -336,6 +341,25 @@ export function emptiedNeutralDefaults(values) {
 }
 
 /**
+ * A NEUTRAL entry naming a key this guard never walks.
+ *
+ * THIS RULE EXISTS BECAUSE THE OMISSION HAPPENED. Adding
+ * `project.commitmentName` to GAME_CONFIG on 2026-09-09 took six edits, and
+ * the sixth is IDENTITY_KEYS. With five of the six done the guard reported
+ * the same green, "29 checked", while the new key held a village's own word
+ * and nothing looked at it. The NEUTRAL entry beside it read as protection
+ * and was inert.
+ *
+ * IDENTITY_KEYS is deliberately a fixed list rather than a derived one, for
+ * the reason stated where it is declared: a derived list shrinks silently
+ * when somebody renames a key. That decision is right and this is its cost,
+ * so the cost is checked rather than remembered.
+ */
+export function neutralKeysNotChecked() {
+  return Object.keys(NEUTRAL).filter((k) => !IDENTITY_KEYS.includes(k));
+}
+
+/**
  * The five rules, over an already-parsed config. Pure, so the test can drive
  * it with values that do not exist on disk.
  */
@@ -392,6 +416,9 @@ function main(argv) {
   }
   for (const key of result.unexpected) {
     problems.push(`${key} holds a value that is neither empty nor an approved platform-neutral one. Platform defaults belong to no village: every fork inherits this file, so a value here becomes thirteen villages' default. Put it in the deployment's own record through Admin, then clear it here. If it genuinely is a neutral platform default, add it to NEUTRAL with the reason.`);
+  }
+  for (const key of neutralKeysNotChecked()) {
+    problems.push(`${key} has a NEUTRAL entry and is not in IDENTITY_KEYS, so this guard never looks at it and the entry protects nothing. Add it to IDENTITY_KEYS, or delete the NEUTRAL entry if the key is gone.`);
   }
   for (const key of result.stale) {
     problems.push(`${key} is listed as known-pending and is now clean. Good news, and it needs the bookkeeping: delete its entry from KNOWN_PENDING and lower PENDING_CEILING to ${KNOWN_PENDING.length - 1}. A pending entry left behind is a standing permission for that key to be repopulated without anybody noticing.`);

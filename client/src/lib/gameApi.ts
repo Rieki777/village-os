@@ -68,6 +68,9 @@ export interface PublicGameConfig {
     catalystName?: string;
     roleName?: string;
     seatName?: string;
+    /** What this village calls the thing a member signs. Absent on a server
+     *  too old to serve it, so every reader needs a fallback. */
+    commitmentName?: string;
     location: string;
     adminPath: string;
     /** Blank = the village has no outside site; render no link. */

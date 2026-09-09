@@ -265,6 +265,12 @@ function configSource({ project = {}, dropFavicon = false } = {}) {
     // NEUTRAL value and a clean fixture carries it. A test that wants this key
     // to violate passes its own string.
     catalystName: "Catalyst",
+    // Added 2026-09-09 with the key itself, same standing as catalystName
+    // above: "membership commitment" is the platform's own word for the
+    // thing a member signs and belongs to no village, so it is NEUTRAL and
+    // a clean fixture carries it. A test that wants this key to violate
+    // passes its own string.
+    commitmentName: "membership commitment",
     // Was "Somewhere the founder has not moved yet". project.location graduated
     // on 2026-09-03 and its platform default is EMPTY, because there is no
     // neutral location, so a clean fixture is empty here for the same reason
