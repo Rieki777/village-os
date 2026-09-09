@@ -278,6 +278,21 @@ export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
      * months later, for no visible reason. Coupled fails safe. Uncoupled fails
      * silent.
      *
+     * ONLY ONE OF THE TWO CONSUMERS IS VILLAGE-TUNABLE, and the asymmetry is
+     * worth knowing before you read the coupling as tighter than it is.
+     * `membership.vouches_required` is an ordinary variable: it is in no
+     * module's variableKeys, so a founder always sees it in Admin, and
+     * server/routes/vouches.ts reads the village's stored value through
+     * numberVar. This field supplies its DEFAULT and nothing more. A village
+     * that wants a thicker membrane raises the dial and never touches this.
+     *
+     * This field itself is a hardcoded platform constant. `thresholdSettingsFrom`
+     * raises unity and quorum from village settings and never reads
+     * minElectorate, so no village can change how many founders it takes to
+     * launch. That may well be right, since launch happens once, and it is an
+     * open question with the founder rather than an oversight to fix in
+     * passing.
+     *
      * Until this comment existed the coupling was asserted in prose in three
      * files and enforced in none. It is now enforced in one and stated here,
      * at the home the other two read.
