@@ -46,7 +46,6 @@
  * the other, and no surface should let a member read one number as the other.
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
-import { cycleBoundsFor } from "../../shared/lunar";
 import {
   mintRuleValueNumber,
   mintRuleValueProblem,
@@ -55,7 +54,7 @@ import {
 } from "../../shared/mintRuleKeys";
 import type { VillageMoon } from "../../shared/villageMoon";
 import { issuanceRefusal } from "./gameStart";
-import { cycleIdFor, parseCycleId } from "./gratitude-cycles";
+import { currentCycle, currentCycleNumber, cycleIdFor, parseCycleId } from "./gratitude-cycles";
 import { moonOneCycle, villageMoonFor } from "./villageMoon";
 import { numberVar } from "./variables";
 import {
@@ -283,8 +282,8 @@ export function cycleKeyFor(at: Date = new Date()): string {
 }
 
 export function cycleWindow(at: Date = new Date()): { startsAt: Date; endsAt: Date; key: string } {
-  const b = cycleBoundsFor(at);
-  return { startsAt: b.startsAt, endsAt: b.endsAt, key: cycleIdFor(at) };
+  const c = currentCycle(at);
+  return { startsAt: new Date(c.startsAt), endsAt: new Date(c.endsAt), key: c.id };
 }
 
 // ── The epoch ───────────────────────────────────────────────────────────────
@@ -448,7 +447,7 @@ function rowToRule(r: RowDataPacket): MintRule {
  * N+1 and the closing cycle settles under the rules it ran under.
  */
 export async function rulesFor(pool: Pool, trigger: string, atCycle?: number): Promise<MintRule[]> {
-  const cycle = atCycle ?? cycleBoundsFor(new Date()).cycleNumber;
+  const cycle = atCycle ?? currentCycleNumber(new Date());
   const [rows] = await pool.query<RowDataPacket[]>(
     "SELECT * FROM `mint_rules` WHERE `village_id` = ? AND `trigger` = ? AND `enabled` = 1 " +
       "AND `effective_from_cycle` <= ?",
@@ -747,14 +746,27 @@ export interface GiveInput {
 /**
  * The most one member may put on ONE other member this cycle (R73).
  *
- * A share of the giver's own allowance, so it means the same thing at 100 and
- * at 500 and a village that doubles `gratitude.base_budget` does not silently
- * double how much of one person's standing can come from one relationship. A
- * cap of 1/N is the sentence "at least N people" written as one number.
+ * A fraction of the giver's own allowance, so it means the same thing at 105
+ * and at 525 and a village that doubles `gratitude.base_budget` does not
+ * silently double how much of one person's standing can come from one
+ * relationship.
  *
- * The floor of 1 is a bound, never a guess: 1% of an allowance of 50 rounds to
- * zero, and a zero here would refuse every send in the village while both
- * dials still read as sane numbers. It is stated on the dial itself.
+ * THE DIAL IS THE COUNT NOW, and this comment used to argue for it before the
+ * registry caught up: "a cap of 1/N is the sentence 'at least N people' written
+ * as one number." It was carrying a percentage and dividing it back out, which
+ * is the same arithmetic with a worse unit on the founder's screen. 25% and
+ * "4 people" are the same rule, and only one of them is a sentence anybody
+ * says out loud. `gratitude.full_sends_per_cycle` is N directly, so the
+ * division happens once, here, and the hearts a member sees on the wall are
+ * this same N rather than a second figure that could drift from it.
+ *
+ * Sending to MORE than N people stays allowed, because this bounds the amount
+ * one person may receive and never the number of sends. Past N the allowance
+ * is simply spread thinner, which is the honest shape of a wider circle.
+ *
+ * The floor of 1 is a bound, never a guess: an allowance of 5 across 7 sends
+ * rounds to zero, and a zero here would refuse every send in the village while
+ * both dials still read as sane numbers. It is stated on the dial itself.
  *
  * LIVES HERE, not in `server/lib/gratitude.ts`, as of the concurrency fix
  * below: this file is the guarded engine both gratitude doors write through
@@ -765,8 +777,52 @@ export interface GiveInput {
  */
 export function shareCapFor(allowanceTotal: number): number {
   if (allowanceTotal <= 0) return 0;
-  const share = numberVar("gratitude.max_share_per_recipient");
-  return Math.max(1, Math.floor((allowanceTotal * share) / 100));
+  // Guarded rather than trusted: the dial's own min is 1, and a village that
+  // reaches the column some other way must not divide by zero and hand every
+  // member an Infinity ceiling, which reads as "no limit" and is the one
+  // failure this function exists to prevent.
+  const fullSends = Math.max(1, Math.floor(numberVar("gratitude.full_sends_per_cycle")));
+  return Math.max(1, Math.floor(allowanceTotal / fullSends));
+}
+
+/**
+ * How many full-strength gifts this allowance holds, which is what the wall
+ * draws as hearts.
+ *
+ * Derived from the cap rather than read off the dial, and that is the whole
+ * point. `shareCapFor` floors, so an allowance of 100 across 7 sends gives a
+ * ceiling of 14 and SEVEN of those is 98: the dial says 7 and the allowance
+ * genuinely holds 7. But an allowance of 5 across 7 sends floors the ceiling
+ * to the bound of 1, and five 1s is all there is, so the honest answer is 5
+ * and not the 7 on the dial. Reading the dial directly would have drawn two
+ * hearts a member could never fill, which is the displayed-number-versus-
+ * actual-behaviour defect this codebase keeps finding.
+ *
+ * ── IT IS NOT `spreadsAcross`, AND THEY MUST NOT BE RECONCILED ───────────
+ *
+ * server/lib/dryRun.ts computes `ceil(allowance / cap)` and calls it
+ * `spreadsAcross`. The two disagree whenever the allowance does not divide
+ * evenly, and both are right, because they answer different questions:
+ *
+ *   fullSendsIn    how many FULL-STRENGTH gifts the allowance holds.
+ *                  100 across 7 is 7, each of 14, and 2 are left over.
+ *   spreadsAcross  how many PEOPLE it takes to spend the allowance to zero.
+ *                  100 across 7 is 8, because somebody has to take the last 2.
+ *
+ * The wall draws this one as hearts, because the dial is named after full
+ * sends and a heart is one of them. A future reader finding the mismatch
+ * should not make them agree; they should check that neither is wearing the
+ * other's words, which is the bug that actually shipped once: the hearts row
+ * borrowed "the fewest who can take your whole allowance" and was false in six
+ * of ten plausible dial settings.
+ */
+export function fullSendsIn(allowanceTotal: number): number {
+  const cap = shareCapFor(allowanceTotal);
+  if (cap <= 0) return 0;
+  return Math.min(
+    Math.max(1, Math.floor(numberVar("gratitude.full_sends_per_cycle"))),
+    Math.floor(allowanceTotal / cap),
+  );
 }
 
 /**
@@ -985,7 +1041,7 @@ async function writeGratitudeRowOnce(
      * land, and one member firing 40 gives against a 100 allowance spends
      * exactly 100.
      */
-    await conn.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
+    await conn.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"); // module-review-ok: a session isolation setting, not a table read. It has no rows and no repo it could live in, and it must run on THIS connection immediately before this transaction opens.
     await conn.beginTransaction();
 
     // The lock. Everything after this reads a world nobody else can move.
@@ -1557,7 +1613,7 @@ export async function runSettlement(pool: Pool, at: Date = new Date()): Promise<
   // deferral working backwards.
   await applyPendingRules(pool, at);
 
-  const rules = await rulesFor(pool, "role.cycle", cycleBoundsFor(at).cycleNumber);
+  const rules = await rulesFor(pool, "role.cycle", currentCycleNumber(at));
   if (!rules.length) return out;
 
   // Asked ONCE, before the seat loop, and not once per seat: an unpayable rule
@@ -1818,6 +1874,17 @@ export async function queueRuleChange(
   ruleId: string,
   change: { amount?: number | null; ceiling?: number; enabled?: boolean },
   actorUserId: string,
+  /**
+   * The cycle the caller PROMISED the village, when it has one.
+   *
+   * Governance stamps a landing instant on a carried decision and shows it to
+   * the village days before it lands. Working the cycle out here from
+   * `new Date()` at the moment of apply made the rule land a whole lunation
+   * after the date on the page whenever the two instants sat either side of a
+   * new moon. So the caller that made the promise passes it in, and the
+   * fallback stays exactly what it was for every caller with nothing to promise.
+   */
+  intendedFromCycle?: number,
 ): Promise<{ ok: true; fromCycle: number } | { ok: false; error: string }> {
   const [rows] = await pool.query<RowDataPacket[]>(
     "SELECT * FROM `mint_rules` WHERE `id` = ? AND `village_id` = ?",
@@ -1886,7 +1953,7 @@ export async function queueRuleChange(
     }
   }
 
-  const fromCycle = cycleBoundsFor(new Date()).cycleNumber + 1;
+  const fromCycle = Number.isFinite(intendedFromCycle) ? Number(intendedFromCycle) : currentCycleNumber(new Date()) + 1;
   await pool.query(
     "UPDATE `mint_rules` SET `pending_amount` = ?, `pending_ceiling` = ?, `pending_enabled` = ?, " +
       "`pending_from_cycle` = ?, `pending_by` = ?, `pending_at` = CURRENT_TIMESTAMP " +
@@ -1966,6 +2033,8 @@ export async function applyMintRuleChanges(
   pool: Pool,
   changes: Array<{ key: string; from: string; to: string }>,
   actorUserId: string,
+  /** The cycle the decision promised, passed through to `queueRuleChange`. */
+  intendedFromCycle?: number,
 ): Promise<MintRuleQueueResult> {
   const queued: MintRuleQueueResult["queued"] = [];
   const failed: MintRuleQueueResult["failed"] = [];
@@ -2011,7 +2080,7 @@ export async function applyMintRuleChanges(
       for (const f of fields) failed.push({ key: f.key, problem: refused });
       continue;
     }
-    const out = await queueRuleChange(pool, ruleId, change, actorUserId);
+    const out = await queueRuleChange(pool, ruleId, change, actorUserId, intendedFromCycle);
     if (!out.ok) {
       for (const f of fields) failed.push({ key: f.key, problem: out.error });
       continue;
@@ -2032,7 +2101,7 @@ export async function applyMintRuleChanges(
  * and a stale pending copy of it.
  */
 export async function applyPendingRules(pool: Pool, at: Date = new Date()): Promise<number> {
-  const cycle = cycleBoundsFor(at).cycleNumber;
+  const cycle = currentCycleNumber(at);
   const [res]: any = await pool.query(
     "UPDATE `mint_rules` SET " +
       "`amount` = `pending_amount`, `ceiling` = `pending_ceiling`, `enabled` = `pending_enabled`, " +

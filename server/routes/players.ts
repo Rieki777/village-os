@@ -36,13 +36,14 @@ type Deps = Pick<
   | "members"
   | "claimsRepo"
   | "computeStage"
+  | "trainingCompletions"
   | "hasMembership"
   | "stageOf"
   | "recordStageEvent"
 >;
 
 export function register(app: Express, deps: Deps): void {
-  const { isAdmin, members, claimsRepo, computeStage, hasMembership, stageOf, recordStageEvent } = deps;
+  const { isAdmin, members, claimsRepo, computeStage, trainingCompletions, hasMembership, stageOf, recordStageEvent } = deps;
 
   // Players admin: list + stage grants
   app.get("/api/admin/players", async (req, res) => {
@@ -59,6 +60,8 @@ export function register(app: Express, deps: Deps): void {
     const allMembers = sortMembersByName((await members.all()).filter((u: any) => !u.isExample));
     // One grouped COUNT for the whole roster, not one query per member.
     const consented = await claimsRepo.consentedCounts();
+    // Same reason as the line above: one query for the whole roster.
+    const trained = await trainingCompletions(allMembers.map((u: any) => String(u.id)));
     res.json(
       allMembers.map((u: any) => ({
         id: u.id,
@@ -70,7 +73,7 @@ export function register(app: Express, deps: Deps): void {
         joinedAt: u.joinedAt,
         balance: u.recognitionBalance ?? 0,
         stageGranted: u.stageGranted ?? null,
-        stageComputed: computeStage(u, consented.get(u.id) ?? 0),
+        stageComputed: computeStage(u, consented.get(u.id) ?? 0, trained.get(String(u.id)) ?? []),
         membership: hasMembership(u),
       }))
     );

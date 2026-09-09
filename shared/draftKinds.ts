@@ -178,4 +178,6 @@ export const CAPABILITY_CONSEQUENCE: Record<Capability, string> = {
   "story.tell": "say what this village is, in public, in its own words",
   "dial.set": "turn the village's own dials, within the ring the village governs",
   "quest.approve": "put a proposed quest on the board, and set what finishing it pays",
+  "steward.veto":
+    "stop a decision the village has already carried, inside the window before it lands, and say why",
 };

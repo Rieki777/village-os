@@ -140,6 +140,24 @@ function dayMonth(t: number): { day: number; month: string; year: number } {
  * Returns an empty string for an instant this cannot read, so a label degrades
  * to the part it does know rather than printing "Invalid Date" at a member.
  */
+/**
+ * How long this member has been here, in moons, as a sentence.
+ *
+ * ONE PRODUCER, because there were two and they had the same bug. Both
+ * `ProfileHero` and `PublicProfile` special-cased zero ("New on the land") and
+ * neither special-cased one, so a member in their first moon read
+ * "1 moons on the land" on two different pages. Two copies of one sentence is
+ * two places for the next edit to miss.
+ *
+ * Zero is not "0 moons": somebody who arrived this moon has not completed one,
+ * and naming the count there is worse than naming the state.
+ */
+export function moonsOnLandPhrase(moons: number | null | undefined): string {
+  if (moons == null || !Number.isFinite(moons) || moons < 0) return "";
+  if (moons === 0) return "New on the land";
+  return `${moons} ${moons === 1 ? "moon" : "moons"} on the land`;
+}
+
 export function formatMoonWindow(startsAt: Date | string, endsAt: Date | string): string {
   const a = new Date(startsAt).getTime();
   const b = new Date(endsAt).getTime();

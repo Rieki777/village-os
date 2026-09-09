@@ -18,6 +18,7 @@ import { useRoute } from "wouter";
 import { authToken } from "@/lib/gameApi";
 import { useTokenName } from "@/hooks/useTokenNames";
 import { formatTokenAmount } from "@/lib/tokenAmount";
+import { moonsOnLandPhrase } from "@shared/villageMoon";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -151,9 +152,7 @@ export default function PublicProfile() {
             <h1 className="text-3xl font-semibold text-teal-deep">{sheet.name}</h1>
             {sheet.title ? <p className="mt-1 text-sage">{sheet.title}</p> : null}
             <p className="mt-2 text-sm text-gray-700">
-              {sheet.moonsOnTheLand === 0
-                ? "New on the land"
-                : `${sheet.moonsOnTheLand} moons on the land`}
+              {moonsOnLandPhrase(sheet.moonsOnTheLand)}
             </p>
             {sheet.homeStructureKey ? (
               <p className="mt-1 text-sm text-gray-700">Hearths at {sheet.homeStructureKey}</p>

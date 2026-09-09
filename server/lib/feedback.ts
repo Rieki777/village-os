@@ -22,6 +22,31 @@
 import { createHash, randomUUID } from "crypto";
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { guardedFetchJson } from "./toolcheck";
+import { boolVar } from "./variables";
+
+/**
+ * Where this village's feedback relay sends, if anywhere.
+ *
+ * Empty means nowhere. See the relay job for why the platform's own hub is no
+ * longer a default: the setting that turns the relay on ships ON, so a
+ * hardcoded destination made every fork post its members' words to one
+ * specific organisation without ever choosing to.
+ */
+export function feedbackHubUrl(): string {
+  return String(process.env.FEEDBACK_HUB_URL ?? "").trim();
+}
+
+/**
+ * Whether feedback submitted right now would actually leave this village.
+ *
+ * Two things have to be true: the village left the dial on, and somebody told
+ * this deployment where the hub is. Every sentence the product says about
+ * sharing reads this, so the form, the receipt and the admin list can never
+ * promise a journey that has no destination.
+ */
+export function feedbackIsShared(): boolean {
+  return boolVar("platform.feedback_relay") && feedbackHubUrl().length > 0;
+}
 
 export interface FeedbackInput {
   kind: "bug" | "idea";

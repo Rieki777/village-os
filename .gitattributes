@@ -14,6 +14,11 @@ docs/prototypes/grounds-v0.html -text
 # still reads as content rather than as a whole-file difference.
 docs/TOKENS.md -text
 
+# docs/GOVERNANCE.md is GENERATED (scripts/generate-governance-doc.mjs) and
+# guarded the same way its sibling above is, so it needs the same byte pinning
+# for the same reason.
+docs/GOVERNANCE.md -text
+
 # docs/VARIABLES.md, docs/MODULES.md and docs/CAPABILITIES.md are GENERATED
 # (scripts/generate-*-doc.mjs) and each has a CI guard that regenerates and
 # compares. Same reason as docs/TOKENS.md above: `core.autocrlf` is true on the

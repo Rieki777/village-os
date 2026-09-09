@@ -11,6 +11,7 @@
 import { useEffect, useState } from "react";
 import { authToken } from "@/lib/gameApi";
 import { ExternalLink, Link2, ShieldCheck } from "lucide-react";
+import { useModules } from "@/modules/ModuleProvider";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -58,6 +59,8 @@ function VillageFigure({ label, figure }: { label: string; figure: any }) {
 }
 
 export default function OnchainCard() {
+  const { modules, loaded } = useModules();
+  const hyphaOn = modules.some((m) => m.id === "hypha");
   const [data, setData] = useState<any>(null);
   const [village, setVillage] = useState<any>(null);
   const [busy, setBusy] = useState(false);
@@ -74,6 +77,21 @@ export default function OnchainCard() {
      * section below simply does not appear, exactly the way a blank DHO address
      * hides every Hypha link.
      */
+    /*
+     * DO NOT ASK FOR A MODULE THAT IS OFF.
+     *
+     * `/api/hypha` is mounted behind `requireModule` (shared/modules.ts), so on
+     * any village without the hypha module it answers 404. This card already
+     * handled that correctly by rendering nothing, so nothing was BROKEN: it
+     * just meant every member of every such village loaded their profile and
+     * put a red 404 in the console, on the page most likely to be somebody's
+     * first look at the product.
+     *
+     * The manifest already says which modules are on, and it is already loaded
+     * for the nav. Asking it first turns a guaranteed failed request into no
+     * request.
+     */
+    if (loaded && !hyphaOn) return;
     fetch("/api/hypha", { headers: headers() })
       .then((r) => (r.ok ? r.json() : null))
       .then(setVillage)
@@ -137,7 +155,7 @@ export default function OnchainCard() {
           </span>
         ) : (
           <button onClick={verify} disabled={busy}
-            className="inline-flex items-center gap-1.5 text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium disabled:opacity-50">
+            className="inline-flex items-center gap-1.5 text-sm border border-notice/70 bg-teal-deep text-white rounded-lg px-4 py-2 font-medium disabled:opacity-50">
             <Link2 className="w-4 h-4" /> {busy ? "Waiting for your wallet…" : "Verify my wallet"}
           </button>
         )}

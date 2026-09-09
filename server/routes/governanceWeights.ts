@@ -37,6 +37,7 @@ import type { AppDeps } from "../lib/appDeps";
 import { sortMembersByName } from "../../shared/memberOrder";
 import { EXAMPLE_REFUSAL_BODY, isExampleUser } from "../lib/examples";
 import { allWeights, setWeight, weightChangeProblem, weightHistory } from "../lib/governanceWeights";
+import { readGameStart } from "../lib/gameStart";
 
 type Deps = Pick<
   AppDeps,
@@ -52,6 +53,24 @@ type Deps = Pick<
 
 export function register(app: Express, deps: Deps): void {
   const { isAdmin, authedUser, adminActor, getPool, members, firstName, notify, weightModeNow } = deps;
+
+  /**
+   * AFTER THE BIRTHING, EVERY MEMBER'S WEIGHT IS THE VILLAGE'S TO SET.
+   *
+   * Dispatcher lane. These two routes rewrite what every future vote weighs, on
+   * `isAdmin` alone, from the one plane a steward's veto does not reach. While
+   * the Game has not started that is how a village is built and it stays. Once
+   * it has started, an allocation is a `weight_allocation` element in a proposal
+   * like any other change, and this door answers with the door.
+   */
+  async function weightWritesAreTheVillages(res: any): Promise<boolean> {
+    if (!(await readGameStart(getPool())).started) return false;
+    res.status(409).json({
+      error: "The village started its Game, so what a member's vote weighs is the village's to decide. Raise it as a proposal.",
+      proposeInstead: "weight_allocation",
+    });
+    return true;
+  }
 
   /**
    * The member-visible weight record: how weight is assigned right now, the
@@ -184,6 +203,7 @@ export function register(app: Express, deps: Deps): void {
 
   app.put("/api/admin/governance/weights/:userId", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
+    if (await weightWritesAreTheVillages(res)) return;
     const problem = weightChangeProblem({ weight: req.body?.weight, note: req.body?.note });
     if (problem) return res.status(400).json({ error: problem });
     const target = await members.byId(req.params.userId);
@@ -203,6 +223,7 @@ export function register(app: Express, deps: Deps): void {
   /** Bulk allocation: one note explains the whole pass, one row per member. */
   app.post("/api/admin/governance/weights/bulk", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
+    if (await weightWritesAreTheVillages(res)) return;
     const changes = Array.isArray(req.body?.changes) ? req.body.changes : [];
     const note = String(req.body?.note ?? "");
     if (changes.length === 0) return res.status(400).json({ error: "Nothing to change" });

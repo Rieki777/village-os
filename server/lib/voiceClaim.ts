@@ -18,6 +18,8 @@
  */
 import type { Pool, RowDataPacket, ResultSetHeader } from "mysql2/promise";
 import { numberVar, stringVar } from "./variables";
+import { zonedTimeToUtc } from "../../shared/lunar";
+import { villageTimezone } from "./villageReaders";
 import { memberAccount, postTransfer } from "./ledger";
 import {
   canSettleClaim,
@@ -76,8 +78,22 @@ export const BRIDGE_DISPATCH_BUILT = false;
  * always open, which is a real answer for a village that would sooner not
  * batch. When it is shut the caller is told the NEXT opening, because "claims
  * are closed" with no date is a dead end.
+ *
+ * THIS WINDOW IS SOLAR, AND IT IS NOT THE CYCLE CLOCK. The dates are MM-DD
+ * marks on the sun's year, the settlement runs on cycles, and a season is a
+ * third object again. The registry copy used to say the default "is the same
+ * rhythm the moon settlement already runs on", which was untrue and is now
+ * corrected. Q5 asks for one clock, and the honest half of that answer that
+ * this file can give is the DAY: the window opens at midnight where the
+ * village lives rather than at midnight UTC, and its length is counted in
+ * whole days of that same zone, so a village six hours behind UTC no longer
+ * finds its Claims Week opening the evening before and closing the evening
+ * before it should.
  */
-export function claimsWindow(at: Date = new Date()): { open: boolean; nextOpens: Date | null } {
+export function claimsWindow(
+  at: Date = new Date(),
+  timeZone: string = villageTimezone(),
+): { open: boolean; nextOpens: Date | null } {
   const raw = String(stringVar("economy.claims_week_starts") ?? "").trim();
   if (!raw) return { open: true, nextOpens: null };
   const days = Math.max(1, numberVar("economy.claims_week_days"));
@@ -105,9 +121,11 @@ export function claimsWindow(at: Date = new Date()): { open: boolean; nextOpens:
       const m = Number(match[1]);
       const d = Number(match[2]);
       if (m < 1 || m > 12 || d < 1 || d > 31) continue;
-      const at2 = new Date(Date.UTC(year, m - 1, d));
-      if (at2.getUTCMonth() !== m - 1 || at2.getUTCDate() !== d) continue;
-      starts.push(at2);
+      const probe = new Date(Date.UTC(year, m - 1, d));
+      if (probe.getUTCMonth() !== m - 1 || probe.getUTCDate() !== d) continue;
+      // Midnight in the village's own zone, which is when a day starts for
+      // the people the window is for.
+      starts.push(zonedTimeToUtc(year, m, d, 0, 0, timeZone));
     }
   }
   // Dates were configured and NONE of them parsed. Falling through to "open all

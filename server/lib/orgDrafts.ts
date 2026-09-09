@@ -36,6 +36,7 @@
  * is lossy, and an archive may not be.
  */
 import type { Pool, PoolConnection } from "mysql2/promise";
+import { draftStatus, withdrawDraftRow } from "../repos/orgDrafts";
 import { stageIndex } from "../../shared/gameConfig";
 import { listOrgAssignments, listOrgRoles, peopleOnly, seatState, type LapseContext, type OrgAssignment } from "./orgChart";
 
@@ -277,7 +278,8 @@ export async function measureVisionMetrics(
     allMembers(): Promise<any[]>;
     consentedCounts(): Promise<Map<string, number>>;
     isExampleUser(u: any): boolean;
-    computeStage(u: any, consented: number): string;
+    computeStage(u: any, consented: number, trainingDone: readonly string[]): string;
+    trainingCompletions(userIds: readonly string[]): Promise<Map<string, string[]>>;
     seasonsCompleted(): number;
   },
 ): Promise<Map<string, number>> {
@@ -308,13 +310,17 @@ export async function measureVisionMetrics(
   if (asked.some((m) => m.startsWith("members_at_stage:"))) {
     const [allMembers, consented] = await Promise.all([deps.allMembers(), deps.consentedCounts()]);
     const real = allMembers.filter((u) => !deps.isExampleUser(u));
+    // One query for the roll, beside the grouped count above it. The stage
+    // ladder now reads the server's training record rather than a member field.
+    const trained = await deps.trainingCompletions(real.map((u: any) => String(u.id)));
     for (const m of asked) {
       if (!m.startsWith("members_at_stage:")) continue;
       const floor = stageIndex(m.slice("members_at_stage:".length));
       if (floor < 0) continue;
       measured.set(
         m,
-        real.filter((u) => stageIndex(deps.computeStage(u, Number(consented.get(u.id) ?? 0))) >= floor).length,
+        real.filter((u) => stageIndex(deps.computeStage(u, Number(consented.get(u.id) ?? 0), trained.get(String(u.id)) ?? [])) >= floor)
+          .length,
       );
     }
   }
@@ -827,14 +833,10 @@ export async function withdrawDraft(
   pool: Pool,
   draftId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const [r] = await pool.query<any>(
-    "UPDATE org_drafts SET status = 'withdrawn' WHERE id = ? AND status = 'open'",
-    [draftId],
-  );
-  if (r?.affectedRows) return { ok: true };
+  if (await withdrawDraftRow(pool, draftId)) return { ok: true };
   // Say which of the two reasons it was, because "that did not work" on a
   // draft a steward is trying to unjam is the least useful sentence available.
-  const [[d]] = await pool.query<any[]>("SELECT status FROM org_drafts WHERE id = ?", [draftId]);
-  if (!d) return { ok: false, error: "No such draft" };
-  return { ok: false, error: `This draft is ${d.status}, and only an open draft can be withdrawn` };
+  const status = await draftStatus(pool, draftId);
+  if (status === null) return { ok: false, error: "No such draft" };
+  return { ok: false, error: `This draft is ${status}, and only an open draft can be withdrawn` };
 }

@@ -200,10 +200,11 @@ describe("the allowance a member actually has", () => {
   it("gives a row per stage, with the share cap and how far it spreads", () => {
     const r = dryRun(snapshot(), { moons: 1, from: FROM });
     const guest = r.allowances.find((a) => a.stageId === "guest")!;
-    // Platform defaults: base 100, Guest multiplier 1, share 25%.
-    expect(guest.allowance).toBe(100);
-    expect(guest.shareCap).toBe(25);
-    expect(guest.spreadsAcross).toBe(4);
+    // Platform defaults: base 105, Guest multiplier 1, 7 full sends. 105
+    // divides by 7 exactly, which is why the default is 105 and not 100.
+    expect(guest.allowance).toBe(105);
+    expect(guest.shareCap).toBe(15);
+    expect(guest.spreadsAcross).toBe(7);
     expect(guest.heartsSendable).toBe(true);
   });
 
@@ -307,19 +308,19 @@ const NO_DB = { query: async () => [[], []] } as any;
 const setDial = (key: string, value: string) => setVariable(NO_DB, key, value);
 
 describe("dials that each read as a sane number and disagree with each other", () => {
-  it("says when the share dial rounds below one Gratitude and the floor takes over", async () => {
+  it("says when the full sends dial rounds below one Gratitude and the floor takes over", async () => {
     await setDial("gratitude.base_budget", "3");
-    await setDial("gratitude.max_share_per_recipient", "10");
+    await setDial("gratitude.full_sends_per_cycle", "10");
     try {
       const r = dryRun(snapshot(), { moons: 1, from: FROM });
       const guest = r.allowances.find((a) => a.stageId === "guest")!;
-      // 10% of 3 is 0, and shareCapFor floors at 1.
+      // 3 split 10 ways is 0, and shareCapFor floors at 1.
       expect(guest.allowance).toBe(3);
       expect(guest.shareCap).toBe(1);
-      expect(guest.note).toMatch(/share dial is doing nothing here/i);
+      expect(guest.note).toMatch(/full sends dial is doing nothing here/i);
     } finally {
-      await setDial("gratitude.base_budget", "100");
-      await setDial("gratitude.max_share_per_recipient", "25");
+      await setDial("gratitude.base_budget", "105");
+      await setDial("gratitude.full_sends_per_cycle", "7");
     }
   });
 
@@ -329,12 +330,12 @@ describe("dials that each read as a sane number and disagree with each other", (
     try {
       const r = dryRun(snapshot(), { moons: 1, from: FROM });
       const guest = r.allowances.find((a) => a.stageId === "guest")!;
-      // 25% of 8 is 2, and a heart is 5.
-      expect(guest.shareCap).toBe(2);
+      // 8 split 7 ways is 1, and a heart is 5.
+      expect(guest.shareCap).toBe(1);
       expect(guest.heartsSendable).toBe(false);
       expect(guest.note).toMatch(/every tap on the feed would be refused/i);
     } finally {
-      await setDial("gratitude.base_budget", "100");
+      await setDial("gratitude.base_budget", "105");
       await setDial("feed.heart_amount", "1");
     }
   });
@@ -345,11 +346,11 @@ describe("dials that each read as a sane number and disagree with each other", (
     try {
       const r = dryRun(snapshot(), { moons: 1, from: FROM });
       const guest = r.allowances.find((a) => a.stageId === "guest")!;
-      // Allowance 100, share 25, so 25 to one person: five hearts of 5, and
-      // the feed dial claims twenty.
-      expect(guest.shareCap).toBe(25);
-      expect(guest.note).toMatch(/5 hearts to one person, and the feed dial says 20/i);
-      expect(guest.note).toMatch(/the share is the one they meet/i);
+      // Allowance 105 across 7 full sends, so 15 to one person: three hearts
+      // of 5, and the feed dial claims twenty.
+      expect(guest.shareCap).toBe(15);
+      expect(guest.note).toMatch(/3 hearts to one person, and the feed dial says 20/i);
+      expect(guest.note).toMatch(/the ceiling is the one they meet/i);
     } finally {
       await setDial("feed.heart_amount", "1");
       await setDial("feed.max_hearts_per_recipient_per_cycle", "3");

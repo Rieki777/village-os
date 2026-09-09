@@ -893,6 +893,13 @@ export const SUBJECT_NOUN: Record<string, string> = {
   role_declare: "A new role",
   role_seat: "Who sits in a role",
   role_unseat: "A seat handed back",
+  /*
+   * The vote mode became something the village decides on 2026-09-02 (Q8),
+   * with its own subject type so it can carry the constitutional bar. The
+   * noun is what is being decided, which is how every vote after it will be
+   * counted, and not the name of the setting that stores it.
+   */
+  governance_mode: "How votes are counted",
 };
 
 export const subjectNoun = (subjectType: string): string => SUBJECT_NOUN[subjectType] ?? "Decision";

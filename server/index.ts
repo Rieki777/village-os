@@ -14,7 +14,11 @@ import multer from "multer";
 import bcrypt from "bcrypt";
 import { claimPaths, GAME_CONFIG, getStage, stageIndex } from "../shared/gameConfig";
 import { recognitionNameCheck } from "../shared/launchRequirements";
-import { civilParts, moonPhase, moonPhaseName, daysRemainingInCycle } from "../shared/lunar";
+// `daysRemainingInCycle` is gone with the clock seam: every consumer reads
+// the active clock now, and it had no caller left here. `sceneStopsFor` and
+// `cleanCrewName` go with main's dead-import pass for the same reason,
+// measured on the MERGED tree rather than on either side's base.
+import { civilParts, moonPhase, moonPhaseName } from "../shared/lunar";
 import { crewsRepo as crewsRepoFactory } from "./lib/crews";
 // Restored on merge: the dead-import lane measured these unused against ITS
 // base, and main began using them before it landed. The compiler is the only
@@ -47,6 +51,7 @@ import {
 import { allVariables, boolVar, numberVar, rawValue, setVariable, stringVar } from "./lib/variables";
 import { adminGateWasConsulted, markAdminGate } from "./lib/adminGate";
 import { type FaqPathway, register as registerFaqRoutes } from "./routes/faqs";
+import { register as registerGratitudeVoiceRoutes } from "./routes/gratitudeVoices";
 import { register as registerLandRoutes } from "./routes/land";
 import { register as registerMilestonesRoutes } from "./routes/milestones";
 import { register as registerTrainingRoutes } from "./routes/training";
@@ -61,6 +66,18 @@ import { register as registerHoldersRoutes } from "./routes/holders";
 import { register as registerErasureQueueRoutes } from "./routes/erasureQueue";
 import { register as registerGovernanceWeightRoutes } from "./routes/governanceWeights";
 import { register as registerGovernanceWizardRoutes } from "./routes/governanceWizard";
+import { register as registerDelegationRoutes } from "./routes/delegation";
+import { register as registerGovernanceVetoRoutes } from "./routes/governanceVetoes";
+import { register as registerGovernanceLandingRoutes } from "./routes/governanceLanding";
+// The dispatcher lane: the landing path, the change-set executor and the roll notice.
+import { applyDueGovernance, autoSettleExpired, digestComposerFor, itemKindsOf, markNotApplicable, overrideDials, routeOutcome, runVetoWatch, vetoWindowOn, type CloseRouting, type LandingDeps, type SubjectCloser } from "./lib/applyDue";
+import { register as registerGovernanceModeRoutes } from "./routes/governanceMode";
+import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
+import { applyChangeSet, applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
+import { landingRow } from "./lib/applyDue";
+import { notifyRollRows, type RollNotice } from "./lib/ballotNotices";
+import { forgetStewardActs, holdingHasLapsed, runTermWatch, setVetoWindowCheck, stewardMailRefusal } from "./lib/stewardship";
+import { decideRoleCapabilities, stewardSeatRefusal } from "./lib/roleGrants";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
 import { register as registerHousingRoutes } from "./routes/housing";
 import { register as registerJourneyRoutes } from "./routes/journey";
@@ -74,6 +91,7 @@ import { register as registerStaysRoutes } from "./routes/stays";
 import { register as registerSitePullRoutes } from "./routes/sitePull";
 import { register as registerBrandPreviewRoutes } from "./routes/brandPreview";
 import { register as registerBrandUploadRoutes } from "./routes/brandUploads";
+import { register as registerFeedbackRoutes } from "./routes/feedback";
 import { register as registerCharacterPortraitRoutes } from "./routes/characterPortraits";
 import { resolveGoogleConfig } from "./lib/oauthGoogle";
 import {
@@ -197,7 +215,7 @@ import {
   currentMintRuleValue,
   mintRuleLabel,
   rowToProposal,
-  validateChangeSet,
+  priceChangeSet, validateChangeSet, asChangeItem,
   type MintRuleValues,
 } from "./lib/mechanics";
 import { buildMechanicsHandoff } from "./lib/hypha-bridge";
@@ -221,12 +239,13 @@ import {
   objectionsFor,
   openBallot,
   openBallotFor,
+  ownVoteView,
   rowToBallot,
   ruleObjection,
+  setSubjectCloserCheck,
   standingObjectionCount,
   talliesFor,
   voteCount,
-  voteOf,
   votesFor,
   withdrawBallot,
   type BallotRow,
@@ -247,14 +266,20 @@ import {
   type BallotOutcome,
 } from "../shared/governanceEngine";
 import {
+  delegatedRowsCountOn,
   dialsForSubject,
   methodForSubject,
+  thresholdSettingsFrom,
   rollProblem,
   thresholdsForSubject,
   LAUNCH_SUBJECT_REF,
   MINT_RULE,
+  GOVERNANCE_MODE,
   VILLAGE_LAUNCH,
 } from "../shared/ballotSubjects";
+import { timingOf } from "../shared/governanceKinds";
+/** The two dials a started Game answers for itself, through a governance_mode ballot. */
+const WEIGHT_KEYS_AFTER_START = new Set(["governance.weight_mode", "governance.weight_token"]);
 import { isMintRuleKey, parseMintRuleKey } from "../shared/mintRuleKeys";
 import { describeRange, parseRewardRange } from "../shared/questRewards";
 import {
@@ -290,7 +315,9 @@ import { addCharacter, avatarFor, listArchetypes, openPathsFor, partyFor, remove
 import { loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
 import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requestVoiceClaim, settleVoiceClaim } from "./lib/voiceClaim";
-import { installCrashHandlers, installShutdownHandlers, reachedSomebody, reportError, reportErrorWithin, wireErrorReporting } from "./lib/errors";
+import { defaultSeasonsFor, seasonRunningProblem, suggestNextSeasonDates } from "./lib/seasonCalendar";
+import { completionsFor, completionsForMany, trainingIsComplete } from "./lib/trainingRecord";
+import { respondToTerminalError, installCrashHandlers, installShutdownHandlers, reachedSomebody, reportError, reportErrorWithin, wireErrorReporting } from "./lib/errors";
 import {
   STAY_CREDIT,
   ensureStayToken,
@@ -443,7 +470,7 @@ import {
 import { ensureInstanceIdentity, instanceIdentity, PLATFORM_VERSION } from "./lib/identity";
 import { listDrafts, measureVisionMetrics, visionProgress } from "./lib/orgDrafts";
 import { DECIDES_BY, DOMAINS, HOW_CHOSEN, SHAPES } from "../shared/power";
-import { displayCurrencyProblem } from "../shared/money";
+import { noteSeen, readSeen } from "./lib/sheetSeen"; import { displayCurrencyProblem } from "../shared/money";
 import { latestRates, refreshDailyRates } from "./lib/fxRates";
 import {
   coveredSeatIds,
@@ -466,7 +493,7 @@ import {
   signingKey,
   signingKeyAtRest,
 } from "./lib/villageExport";
-import { feedbackStatusNotice, recordFeedback, relayFeedback } from "./lib/feedback";
+import { feedbackHubUrl, feedbackIsShared, feedbackStatusNotice, recordFeedback, relayFeedback } from "./lib/feedback";
 import { submissionStatusNotice } from "./lib/submissionNotices";
 import { addPeer, discoverPeer, peerSharedItems, SHARED_ITEM_TYPES, syncPeers } from "./lib/network";
 import {
@@ -708,6 +735,10 @@ import { alignTableCollations } from "./db/collation";
 import { dbCollection, dbDocument } from "./repos/store-db";
 import { loadVariables } from "./lib/variables";
 import {
+  activeClock,
+  assertCycleSettingsRead,
+  boundsForNumber,
+  cycleDaysRemaining,
   cycleIdFor,
   currentCycle,
   dueCycles,
@@ -946,7 +977,7 @@ const DEFAULT_INVESTOR_SUMMARY = SITE_CONTENT.investorSummary;
 // values until they change them. This is what makes a new project live-editable
 // from the browser without a code deploy. Merged over GAME_CONFIG on read.
 const DEFAULT_BRAND = {
-  project: { name: "", tagline: "", memberName: "", catalystName: "", location: "", country: "", fiatCurrency: "", siteUrl: "", eventsUrl: "", contactEmail: "", footerBlurb: "" },
+  project: { name: "", tagline: "", memberName: "", catalystName: "", roleName: "", seatName: "", location: "", country: "", fiatCurrency: "", siteUrl: "", eventsUrl: "", contactEmail: "", footerBlurb: "" },
   currency: { name: "", nameLower: "" },
   images: { hero: "", investorHero: "", residentHero: "", stewardHero: "", prosperityHero: "", masterPlanHero: "", logo: "", heartLogo: "", favicon: "" },
   // Setup Wizard progress — projects tick these off as they make the site theirs.
@@ -1261,6 +1292,12 @@ const roleHoldersRepo = dbCollection<RoleHolderRow>(getPool(), {
     { js: "userId", db: "user_id" },
     { js: "grantedBy", db: "granted_by" },
     { js: "grantedAt", db: "granted_at", kind: "time" },
+    // 0171. SPEC'D SO replaceAll CANNOT ERASE A TERM: that writer names every
+    // spec'd column and only those, so a term left out here would return as
+    // NULL on the next whole-table write and every mandate would silently
+    // become permanent. The isExample line two specs up records the same trap.
+    { js: "termEndsAt", db: "term_ends_at", kind: "time" },
+    { js: "seasonId", db: "season_id" },
   ],
 });
 // Each document carries its REAL default; absent rows read as the default and
@@ -2673,8 +2710,8 @@ function mergedConfig() {
       name: pick(brand.project.name, p.name),
       tagline: pick(brand.project.tagline, p.tagline),
       memberName: pick(brand.project.memberName, p.memberName),
-      // A LABEL, never a role: nothing downstream gates on it.
-      catalystName: pick((brand.project as any).catalystName, p.catalystName),
+      catalystName: pick((brand.project as any).catalystName, p.catalystName), // three LABELS, gating nothing
+      roleName: pick((brand.project as any).roleName, p.roleName), seatName: pick((brand.project as any).seatName, p.seatName), // why role and seat stay two words: shared/gameConfig.ts
       location: pick(brand.project.location, p.location),
       // 0083 (P8): where the project lives and what it counts in. Display
       // only, like every overlay field; blank inherits the platform default.
@@ -2795,7 +2832,7 @@ type RoleDef = {
   minStage?: string | null;
   order?: number;
 };
-type RoleHolderRow = { id: string; roleId: string; userId: string; grantedBy?: string; grantedAt: string };
+type RoleHolderRow = { id: string; roleId: string; userId: string; grantedBy?: string; grantedAt: string; termEndsAt?: string | null; seasonId?: string | null };
 
 function loadRoles(): RoleDef[] {
   return rolesRepo.all();
@@ -2836,9 +2873,20 @@ function roleIdsFor(userId: string): string[] {
 /** The member's roles as the payloads serve them: see `namedRoles`. */
 const rolesFor = (userId: string) => namedRoles(roleIdsFor(userId), loadRoles());
 
-/** Every capability the member's roles grant, deduplicated. */
+/**
+ * Every capability the member's UNLAPSED roles grant, deduplicated.
+ *
+ * A holding whose `term_ends_at` has passed grants nothing (0171). The founder
+ * ruled it: "If they're not voted back in then they expire when they expire!"
+ * A term used to be a note beside a power that kept working, which is a status
+ * saying one thing while the power says another. `roleIdsFor` still reports
+ * the seat: who holds what is a different question from what they may do.
+ */
 function roleCapabilitiesFor(userId: string): string[] {
-  const held = new Set(roleIdsFor(userId));
+  const now = new Date();
+  const held = new Set(
+    loadRoleHolders().filter((r) => r.userId === userId && !holdingHasLapsed(r, now)).map((r) => r.roleId),
+  );
   const caps = new Set<string>();
   for (const role of loadRoles()) {
     if (!held.has(role.id)) continue;
@@ -2902,43 +2950,15 @@ async function recordStageEvent(user: any, from: string, to: string, reason: str
 // The module-lifecycle filter over it, the capability catalogue and the
 // served ladder all live in server/lib/progressionPayload.ts, imported above.
 
-/**
- * The amendment ledger's ONE writer. Every mechanics change — admin edit,
- * routed legacy field, platform migration, and (next phase) a passed Hypha
- * proposal — lands here or it did not happen. No-ops (value unchanged) write
- * nothing. Never throws into the caller: like recordEvent, the ledger is a
- * trace of a change that already happened.
- */
-async function recordMechanicsChange(
+/** The amendment ledger's one writer, now in server/lib/changeset.ts. */
+const recordMechanicsChange = (
   key: string,
-  result: { value?: string; previous?: string },
+  result: { value?: string; previous?: string | null },
   actorUserId: string | null,
   source: "admin" | "governance" | "platform",
   proposalRef?: string | null,
   note?: string | null,
-): Promise<void> {
-  if (result.value === result.previous) return;
-  try {
-    const def = VARIABLES_BY_KEY[key];
-    await getPool().query(
-      "INSERT INTO mechanics_changes (id, config_key, old_value, new_value, actor_user_id, source, proposal_ref, note) VALUES (?,?,?,?,?,?,?,?)",
-      [
-        `mech-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        key,
-        // NULL means "the platform default at the time" — the row records
-        // the village's act, not a snapshot of the platform's defaults.
-        result.previous === def?.default ? null : result.previous ?? null,
-        result.value === def?.default ? null : result.value ?? null,
-        actorUserId,
-        source,
-        proposalRef ?? null,
-        note ?? null,
-      ],
-    );
-  } catch (e) {
-    console.error(`[mechanics] amendment ledger write failed for ${key} (change stands)`, e);
-  }
-}
+): Promise<void> => recordMechanicsChangeRow(getPool(), key, result, actorUserId, source, proposalRef, note);
 
 /**
  * The village's stage-unlock table, resolved from the variables registry
@@ -3589,7 +3609,15 @@ function normalizeSeasonConfig(raw: any): { seasons: any[]; cadence: string; tim
       timezone: def.timezone,
     };
   }
-  return { seasons: def.seasons as any[], cadence: def.cadence, timezone: def.timezone };
+  // A village that has written nothing gets a list DERIVED from its cadence
+  // and timezone, relative to today. The platform used to seed two hard-dated
+  // seasons that both ended 2026-12-21, so every fork provisioned after that
+  // date had no current season on any date and no seat term could come due.
+  return {
+    seasons: (def.seasons.length ? def.seasons : defaultSeasonsFor(def.cadence, def.timezone)) as any[],
+    cadence: def.cadence,
+    timezone: def.timezone,
+  };
 }
 
 function getSeasonConfig() {
@@ -3641,35 +3669,8 @@ function seasonState() {
     today,
   };
 }
+setSeasonWindowReader(() => { const s = seasonState(); return { currentId: s.current?.id ?? null, endsAt: seasonEndInstant(s.current?.endsOn, s.timezone), configuredCount: s.seasons.length }; }); // windows lane (19E): the season-shaped window reads the village's own list through here
 
-/** Suggests the next season's dates from the project's cadence, so admins get a
- *  sensible draft instead of a blank form. */
-function suggestNextSeasonDates(cadence: string, lastEndsOn: string): { startsOn: string; endsOn: string } {
-  const start = /^\d{4}-\d{2}-\d{2}$/.test(lastEndsOn) ? lastEndsOn : new Date().toISOString().slice(0, 10);
-  const d = new Date(`${start}T00:00:00Z`);
-  const end = new Date(d);
-  if (cadence === "lunar") {
-    end.setUTCDate(end.getUTCDate() + 30); // ~one synodic month
-  } else if (cadence === "solstice-equinox") {
-    // Next canonical turn after `start`. Ignore marks within ~6 weeks: a season
-    // starting the day before an equinox should run to the NEXT one, not produce
-    // a one-day season.
-    const marks = [[2, 20], [5, 21], [8, 22], [11, 21]] as const; // 0-indexed months
-    const y = d.getUTCFullYear();
-    const floor = d.getTime() + 45 * 86400000;
-    const candidates = [
-      ...marks.map(([m, day]) => Date.UTC(y, m, day)),
-      ...marks.map(([m, day]) => Date.UTC(y + 1, m, day)),
-    ].filter((t) => t > floor).sort((a, b) => a - b);
-    if (candidates.length) {
-      return { startsOn: start, endsOn: new Date(candidates[0]).toISOString().slice(0, 10) };
-    }
-    end.setUTCMonth(end.getUTCMonth() + 3); // shouldn't happen; stay sane anyway
-  } else {
-    end.setUTCMonth(end.getUTCMonth() + 3); // quarterly / custom default
-  }
-  return { startsOn: start, endsOn: end.toISOString().slice(0, 10) };
-}
 
 // Safe user shape for API responses: strips the password hash and fills every
 // field the client reads, so a fresh or legacy account never returns undefined
@@ -3770,12 +3771,6 @@ function hasMembership(user: any): boolean {
 }
 
 
-function trainingComplete(user: any): boolean {
-  const mods: any[] = trainingRepo.all();
-  if (!mods.length) return false;
-  const done: string[] = user.journeys?.training ?? [];
-  return mods.every((m) => done.includes(m.id));
-}
 
 /**
  * Compute the highest stage the player has earned, per gameConfig rules.
@@ -3784,7 +3779,11 @@ function trainingComplete(user: any): boolean {
  * list, which fetches them grouped in one query — pay nothing extra.
  * Single-member callers use stageOf(), which fetches the count and delegates.
  */
-function computeStage(user: any, consentedQuests: number): string {
+/** Server-recorded completions against the live catalogue. See lib/trainingRecord.ts. */
+const trainingDoneHere = (done: readonly string[]): boolean =>
+  trainingIsComplete(trainingRepo.all().map((m: any) => String(m.id)), done);
+
+function computeStage(user: any, consentedQuests: number, trainingDone: readonly string[]): string {
   let earned = GAME_CONFIG.stages[0].id;
   const grantedIdx = user.stageGranted ? stageIndex(user.stageGranted) : -1;
   for (const stage of GAME_CONFIG.stages) {
@@ -3793,7 +3792,7 @@ function computeStage(user: any, consentedQuests: number): string {
     switch (stage.rule.type) {
       case "default": ok = true; break;
       case "account": ok = true; break; // having a user record implies an account
-      case "training-complete": ok = trainingComplete(user); break;
+      case "training-complete": ok = trainingDoneHere(trainingDone); break;
       case "membership": ok = hasMembership(user); break;
       // The threshold reads the registry (progression.quests_for.<stage>,
       // default = the config min), so climbing speed is village-tunable.
@@ -3808,7 +3807,7 @@ function computeStage(user: any, consentedQuests: number): string {
 
 /** The one-member form: fetch the consented count, then compute. */
 async function stageOf(user: any): Promise<string> {
-  return computeStage(user, await claimsRepo.consentedCount(user.id));
+  return computeStage(user, await claimsRepo.consentedCount(user.id), await completionsFor(getPool(), user.id));
 }
 
 /**
@@ -3906,30 +3905,6 @@ function deploymentOrigin(): string {
  */
 const googleSignInAvailability = () =>
   resolveGoogleConfig(process.env, String(process.env.FRONTEND_URL ?? ""));
-
-/**
- * Where this village's feedback relay sends, if anywhere.
- *
- * Empty means nowhere. See the relay job for why the platform's own hub is no
- * longer a default: the setting that turns the relay on ships ON, so a
- * hardcoded destination made every fork post its members' words to one
- * specific organisation without ever choosing to.
- */
-function feedbackHubUrl(): string {
-  return String(process.env.FEEDBACK_HUB_URL ?? "").trim();
-}
-
-/**
- * Whether feedback submitted right now would actually leave this village.
- *
- * Two things have to be true: the village left the dial on, and somebody told
- * this deployment where the hub is. Every sentence the product says about
- * sharing reads this, so the form, the receipt and the admin list can never
- * promise a journey that has no destination.
- */
-function feedbackIsShared(): boolean {
-  return boolVar("platform.feedback_relay") && feedbackHubUrl().length > 0;
-}
 
 /**
  * S16: the notification spine's dependencies. The spine never imports the
@@ -4573,10 +4548,11 @@ async function runRetentionSweep(): Promise<string> {
 
 async function nextActionFor(user: any): Promise<{ id: string; label: string; href: string }> {
   const claims = await claimsRepo.forUser(user.id);
+  const trained = await completionsFor(getPool(), user.id);
   const budget = await gratitudeBudget(user);
   for (const rule of GAME_CONFIG.nextActions) {
     switch (rule.when) {
-      case "no-training": if (!trainingComplete(user)) return rule; break;
+      case "no-training": if (!trainingDoneHere(trained)) return rule; break;
       case "no-membership": if (!hasMembership(user)) return rule; break;
       case "no-quest-claimed": if (claims.length === 0) return rule; break;
       case "quest-in-progress": if (claims.some((c) => c.status === "claimed" || c.status === "submitted")) return rule; break;
@@ -5192,6 +5168,10 @@ async function startServer() {
    */
   assertVoiceSecret();
 
+  // The rhythm setting reaches the engine. AFTER `initStores` for the same
+  // reason: a guard that reads a platform default cannot fail.
+  assertCycleSettingsRead();
+
   /*
    * 0093: the photographs the uploads route must refuse.
    *
@@ -5497,45 +5477,45 @@ async function startServer() {
   });
 
   /**
-   * Terms: tell the HOLDER, once, and never again.
+   * Terms: tell the HOLDER once, and make an empty seat loud where a carried
+   * decision is actually waiting on it.
    *
-   * The admin panel already lists overdue mandates, so this exists for the
-   * person actually holding the seat, who is the one who can say whether they
-   * want to keep it. Nothing here revokes anything, and the copy has to carry
-   * that or the notification reads as a dismissal.
+   * The body is `runTermWatch` in server/lib/stewardship.ts, which sweeps both
+   * planes: org-chart seatings, which carry no permissions and revoke nothing,
+   * and permission holdings, where a term genuinely ends the powers (0171).
+   * One notification per row per event, through stable dedupe keys, because a
+   * mandate nobody has acted on is a governance problem a weekly ping does not
+   * solve. Member holders only; a documented holder is a name on a card.
    *
-   * ONE notification per assignment per event, deliberately. `dedupe_key` is
-   * globally unique, so a key with a week bucket in it would re-fire forever,
-   * and a mandate nobody has acted on is a governance problem that a weekly
-   * ping does not solve; it just teaches people to ignore notifications. Two
-   * events are worth telling apart, so two keys: the warning and the fact.
-   *
-   * Member holders only. A documented holder is a name written on a card with
-   * no account behind it, and the admin panel is where those get seen.
+   * AGENTS ARE EXCLUDED, inherited (0142). An agent is a documented holder, so
+   * the `holderKind !== "member"` filter inside `runTermWatch` already drops
+   * it, and that is the behaviour to keep: a term end is a date the village
+   * agreed to revisit an arrangement with a person, and an agent's seating has
+   * nobody to have that conversation with. server/lib/calendarProviders.ts
+   * filters its twin for the same reason.
    */
   registerJob("term-watch", 24 * 60 * 60 * 1000, async () => {
-    const rows = await expiringSeatings(getPool(), lapseContext(), 14);
-    let told = 0;
-    for (const a of rows) {
-      // Agents excluded, inherited (0142): there is nobody to ask whether they
-      // want to carry on. server/lib/calendarProviders.ts filters its twin.
-      if (a.holderKind !== "member" || !a.userId) continue;
-      const ended = !!a.lapsed;
-      const r = await notify({
-        userId: a.userId,
-        type: "term_expiring",
-        title: ended
-          ? `Your term on ${a.roleName} has ended`
-          : `Your term on ${a.roleName} ends in ${a.daysLeft} day(s)`,
-        body: ended
-          ? "You are still holding the seat and nothing has been taken away. What has run out is the agreement to keep holding it unasked, so it is a good moment to say whether you want to carry on."
-          : "Nothing happens automatically when it does. This is the nudge to say whether you want to carry on.",
-        link: "/roles",
-        dedupeKey: `${ended ? "term-ended" : "term-soon"}:${a.id}`,
-      });
-      if (r.fresh) told += 1;
-    }
-    if (told > 0) console.log(`[org] ${told} holder(s) told their term is ending or has ended`);
+    const r = await runTermWatch({
+      pool: getPool(),
+      notify,
+      notifyAdmins,
+      seatings: await expiringSeatings(getPool(), lapseContext(), 14),
+      season: seasonState(),
+    });
+    if (r.holdersTold > 0) console.log(`[org] ${r.holdersTold} holder(s) told their term is ending or has ended`);
+    // LOUD, both halves. Nothing queues for a steward any more, so what is
+    // loud is the CALENDAR: a seat whose term expires each season cannot come
+    // due while no season runs, and the seat is the one backstop on a veto.
+    // The first line says what the stopped calendar costs, the second names
+    // which way it stopped: never configured, all ended, or a gap between two.
+    if (!r.seasonRunning) console.log(`[governance] ${r.lapsed} term(s) already lapsed, and ${r.seasonSentence}`);
+    const ss = seasonState();
+    const gap = seasonRunningProblem({
+      currentId: ss.current?.id ?? null,
+      configuredCount: ss.seasons.length,
+      allEnded: !!ss.needsNextSeason && ss.seasons.length > 0,
+    });
+    if (gap) console.warn(`[org] ${gap}`);
   });
 
   /**
@@ -5631,6 +5611,22 @@ async function startServer() {
       // mean the next tick picks up exactly where this one stopped.
       console.error("[economy] settlement failed:", err);
     }
+  });
+
+  // GOVERNANCE LANDS ON ITS OWN CLOCK, outside the settlement job on purpose:
+  // landing has no economic precondition, so it inherits no economyReady early
+  // return. A young village that switched its seeded mint rules off would
+  // otherwise land nothing, forever, and be told nothing.
+  registerJob("governance-landing", 5 * 60 * 1000, async () => {
+    const settled = await autoSettleExpired(landingDeps(), closeBallot);
+    const landed = await applyDueGovernance(landingDeps());
+    return `${settled.closed} closed, ${landed.ran ? `${landed.due} due, ${landed.landed} landed` : landed.why}`;
+  });
+
+  // Halfway through a veto window, and two hours out. All three moments dedupe.
+  registerJob("veto-watch", 30 * 60 * 1000, async () => {
+    const r = await runVetoWatch(landingDeps());
+    return `${r.open} window(s) open, ${r.halfway} halfway, ${r.twoHours} closing`;
   });
 
   registerJob("network-sync", 6 * 60 * 60 * 1000, async () => {
@@ -9175,6 +9171,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
   async function eligibleSenderIds(): Promise<Set<string>> {
     const all = await members.all();
     const consented = await claimsRepo.consentedCounts();
+    // ONE query for the whole roll. A per-member read inside the loop would be
+    // the N+1 the consented counts above already go out of their way to avoid.
+    const trained = await completionsForMany(getPool(), (all as any[]).map((u) => String(u.id)));
     const memberIdx = stageIndex("member");
     const eligible = new Set<string>();
     for (const u of all as any[]) {
@@ -9182,7 +9181,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       // this test and enter the one set every breadth metric trusts.
       if (u.isExample) continue;
       const count = consented.get(u.id) ?? 0;
-      if (count >= 1 || stageIndex(computeStage(u, count)) >= memberIdx) eligible.add(u.id);
+      const done = trained.get(String(u.id)) ?? [];
+      if (count >= 1 || stageIndex(computeStage(u, count, done)) >= memberIdx) eligible.add(u.id);
     }
     return eligible;
   }
@@ -10409,49 +10409,19 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     if ((all[idx] as any).isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
 
     const requested = Array.isArray(req.body?.capabilities) ? req.body.capabilities.map(String) : [];
-    const unknown = requested.filter((c: string) => !ALL_CAPABILITIES.includes(c as Capability));
-    if (unknown.length) {
-      return res.status(400).json({ error: `Not capabilities this platform knows about: ${unknown.join(", ")}` });
-    }
-    /*
-     * WHAT COUNTS AS AN ESCALATION HERE, and the version of this that was
-     * wrong for one test run.
-     *
-     * The draft path compares a NEW role against every existing one, because
-     * a new role introducing a power nothing else has is a governance change
-     * wearing a job title. This route edits an EXISTING role, so the baseline
-     * has to include what that role already carries. Without it, every
-     * capability the role uniquely held came back as an escalation, and
-     * "silence is refusal" then stripped the lot: a founder adding one power
-     * to the Steward Circle would have silently taken away its announcements,
-     * its measurements and its calendar. The refusal rule is right and the
-     * baseline was wrong.
-     */
-    const elsewhere = new Set<string>(((all[idx] as any).capabilities ?? []) as string[]);
-    for (const r of all) {
-      if ((r as any).id === req.params.id) continue;
-      for (const c of ((r as any).capabilities ?? []) as string[]) elsewhere.add(c);
-    }
-    const escalations = computeEscalations(requested, Array.from(elsewhere));
-    const granted = applyEscalationChoices(requested, escalations, {
-      grantedEscalations: Array.isArray(req.body?.grantedEscalations)
-        ? req.body.grantedEscalations.map(String)
-        : [],
+    // THE STEWARD'S SEAT IS THE VILLAGE'S. The one capability no admin route
+    // may add or take away, in either direction; see server/lib/roleGrants.ts.
+    const locked = stewardSeatRefusal(all[idx] as any, requested);
+    if (locked) return res.status(locked.status).json(locked.body);
+    const decision = decideRoleCapabilities({
+      role: all[idx] as any,
+      everyRole: all as any,
+      requested,
+      grantedEscalations: req.body?.grantedEscalations,
+      answered: req.body?.grantedEscalations !== undefined,
     });
-    const refused = escalations.filter((e) => !granted.includes(e.capability));
-    if (refused.length > 0 && req.body?.grantedEscalations === undefined) {
-      // First call with no answer at all: say what is being asked for, in
-      // sentences, and change nothing. The same warn-and-proceed shape the
-      // badge kind change uses, for the same reason: what may never happen is
-      // the change landing silently.
-      return res.status(409).json({
-        error:
-          `This would be the first role in the village to carry ${refused.length === 1 ? "a power" : "powers"} nothing else grants. ` +
-          `Tick the ones you mean and send them back.`,
-        escalations: escalations.map((e) => ({ capability: e.capability, consequence: e.consequence })),
-        requiresConfirmation: true,
-      });
-    }
+    if (decision.refusal) return res.status(decision.refusal.status).json(decision.refusal.body);
+    const { granted, refused } = decision;
 
     const before = ((all[idx] as any).capabilities ?? []) as string[];
     all[idx] = { ...all[idx], capabilities: granted } as any;
@@ -10477,7 +10447,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
         { actorUserId: actor, entityType: "role", entityRef: req.params.id },
       );
     }
-    res.json({ success: true, role: all[idx], added, removed, refused: refused.map((e) => e.capability) });
+    res.json({ success: true, role: all[idx], added, removed, refused });
   });
 
   /** Raise your hand on a vacant seat → the EXISTING submissions inbox. */
@@ -13499,129 +13469,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
   });
 
   // ── S66: feedback — the local queue is the feature, the relay is a copy ──
-
-  /**
-   * What the submission form needs to disclose, honestly, before anyone types.
-   *
-   * Two things decide it: the dial the village set, and whether this
-   * deployment was told where the hub is. The hub is no longer defaulted to
-   * anybody's address, so a deployment with the dial ON and `FEEDBACK_HUB_URL`
-   * unset shares nothing. Reporting the dial on its own would promise a person
-   * their words are travelling somewhere while they stay home.
-   */
-  app.get("/api/feedback/config", async (_req, res) => {
-    res.json({
-      relayOn: feedbackIsShared(),
-      villageName: mergedConfig().project.name,
-    });
-  });
-
-  app.post("/api/feedback", async (req, res) => {
-    // Same anti-abuse posture as every public form: honeypot + IP limit.
-    if (typeof req.body?.hp === "string" && req.body.hp.length > 0) return res.json({ success: true });
-    if (await overLimit(`feedback:${clientIp(req)}`, 5, 60 * 60 * 1000)) {
-      return res.status(429).json({ error: "That's a lot of feedback for one hour. Thank you, and give it a rest" });
-    }
-    const kind = req.body?.kind === "bug" ? "bug" : req.body?.kind === "idea" ? "idea" : null;
-    const title = String(req.body?.title ?? "").trim();
-    const detail = String(req.body?.detail ?? "").trim();
-    if (!kind || title.length < 4 || detail.length < 10) {
-      return res.status(400).json({ error: "Say what kind it is, a short title, and enough detail to act on" });
-    }
-    const user = await authedUser(req);
-    // The disclosure the form showed IS the consent, so it is recorded with
-    // the item rather than re-derived from the setting at relay time.
-    const mayRelay = feedbackIsShared();
-    const r = await recordFeedback(getPool(), {
-      kind, title, detail,
-      pageUrl: typeof req.body?.pageUrl === "string" ? req.body.pageUrl : null,
-      submittedBy: user?.id ?? null,
-    }, mayRelay);
-    void recordEvent(getPool(), {
-      kind: "audit", text: `feedback:${kind}:${title.slice(0, 60)}`,
-      actorUserId: user?.id ?? null, entityType: "feedback", entityRef: r.id, audience: "admin",
-    });
-    res.json({
-      success: true,
-      id: r.id,
-      shared: feedbackIsShared(),
-    });
-  });
-
-  app.get("/api/admin/feedback", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const [rows] = await getPool().query<any[]>(
-      "SELECT f.*, u.name AS submitter_name FROM feedback_items f LEFT JOIN users u ON u.id = f.submitted_by " +
-        "ORDER BY f.created_at DESC LIMIT 300",
-    );
-    /*
-     * Three facts, because two of them can disagree and an admin who cannot
-     * see the disagreement cannot fix it. `relayOn` is whether anything is
-     * actually leaving. `relayDialOn` is what the village set. `hubConfigured`
-     * is whether the server was told where to send. A dial reading ON beside a
-     * queue that is going nowhere needs a screen that says which half is
-     * missing.
-     */
-    res.json({
-      items: rows,
-      relayOn: feedbackIsShared(),
-      relayDialOn: boolVar("platform.feedback_relay"),
-      hubConfigured: feedbackHubUrl().length > 0,
-    });
-  });
-
-  app.put("/api/admin/feedback/:id", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const status = String(req.body?.status ?? "");
-    if (!["new", "seen", "planned", "done", "declined"].includes(status)) {
-      return res.status(400).json({ error: "unknown status" });
-    }
-    /*
-     * SWEEP (the incomplete loop). Triage moved and the member who reported
-     * the problem was never told, so the honest answer to "did anyone see
-     * this?" was "open the admin panel and find out", which is exactly the
-     * door they do not have.
-     *
-     * Read first, for three reasons: to know WHO to write to, to know
-     * whether the status actually moved, and because MySQL counts CHANGED
-     * rows, so re-selecting the status an item already held reported zero
-     * affected rows and answered 404 for an item that plainly exists.
-     */
-    const [[before]] = await getPool().query<any[]>(
-      "SELECT id, kind, title, status, submitted_by FROM feedback_items WHERE id = ? LIMIT 1",
-      [req.params.id],
-    );
-    if (!before) return res.status(404).json({ error: "no such item" });
-    if (String(before.status) === status) return res.json({ success: true, notified: false });
-    await getPool().query("UPDATE feedback_items SET status = ? WHERE id = ?", [status, req.params.id]);
-
-    /*
-     * The public form takes feedback from strangers too, and `submitted_by`
-     * is null for those. There is no address on the row and no account to
-     * put a notification in, so an anonymous report stays anonymous.
-     *
-     * The key is (item, status): one word per item per landing place, so a
-     * founder who sets "planned" twice, or walks an item back and forward
-     * again, rings once. It says the member's OWN title back to them,
-     * because a village clearing a backlog produces a run of these and
-     * "your report" alone would not tell them which.
-     */
-    const notice = feedbackStatusNotice(status, String(before.kind ?? "bug"));
-    let notified = false;
-    if (before.submitted_by && notice) {
-      const title = String(before.title ?? "").slice(0, 120);
-      await notify({
-        userId: String(before.submitted_by),
-        type: "feedback",
-        title: `${notice.headline}: ${title}`,
-        body: notice.line,
-        link: "/profile",
-        dedupeKey: `feedback:${String(before.id)}:${status}`,
-      });
-      notified = true;
-    }
-    res.json({ success: true, notified });
-  });
+  registerFeedbackRoutes(app, { isAdmin, authedUser, getPool, notify, overLimit, clientIp, projectName: notifyDeps.projectName });
 
   /**
    * S70: Maia's organizing counsel. Two shelves, one priority rule: the
@@ -14543,9 +14391,11 @@ Send an empty drafts array when you are still listening. A role payload is {name
       "",
       "## What this vote asks",
       "",
-      `Everyone on the roll votes, and everyone who takes a side agrees: ${dials.quorumPct}% participation and ${dials.unityPct}% agreement. ${electorate.length} people hold a voice today, and this vote is frozen to those ${electorate.length}.`,
+      `Everyone on the roll votes yes: ${dials.quorumPct}% participation and ${dials.unityPct}% agreement. ${electorate.length} people hold a voice today, and this vote is frozen to those ${electorate.length}.`,
       "",
-      "An abstention counts toward participation and takes no side on the agreement.",
+      // The one subject where an abstention is not an answer. The reason is
+      // on the village_launch entry in shared/ballotSubjects.ts.
+      "An abstention is not a yes here, and neither is a vote nobody cast. If somebody takes no side, this vote closes short of participation and the village can ask again.",
       "",
       // How weight was assigned when this froze, in the document itself. The
       // roll and the dials are already frozen here; the rule that turned
@@ -18020,7 +17870,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   app.get("/api/profile/prefs", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
-    res.json({ notify: resolveNotifyPrefs(user.prefs) });
+    res.json({ notify: resolveNotifyPrefs(user.prefs), sheetSeen: readSeen(user.prefs) }); // which sections this member has already met; server/lib/sheetSeen.ts
   });
 
   app.put("/api/profile/prefs", async (req, res) => {
@@ -18031,12 +17881,12 @@ Send an empty drafts array when you are still listening. A role payload is {name
     // the project default. Validated before anything is written, so junk
     // never lands in prefs and the picker cannot store a sentence.
     const wantsCurrency = req.body?.displayCurrency !== undefined;
-    if (wantsCurrency) {
-      const bad = displayCurrencyProblem(req.body.displayCurrency);
-      if (bad) return res.status(400).json({ error: bad });
-    }
+    // STEWARD-VETO LANE: mail cannot go quiet on a seat that can stop a carried decision.
+    const bad = (wantsCurrency ? displayCurrencyProblem(req.body.displayCurrency) : null)
+      ?? (await stewardMailRefusal(getPool(), user.id, incoming));
+    if (bad) return res.status(400).json({ error: bad });
     const updated = await members.update(user.id, (u: any) => {
-      u.prefs = { ...(u.prefs ?? {}), notify: { ...(u.prefs?.notify ?? {}), ...incoming } };
+      u.prefs = { ...(u.prefs ?? {}), notify: { ...(u.prefs?.notify ?? {}), ...incoming } }; if (Array.isArray(req.body?.sawSections)) u.prefs.sheetSeen = noteSeen(readSeen(u.prefs), req.body.sawSections, req.body?.acknowledged === true);
       if (wantsCurrency) {
         const code = String(req.body.displayCurrency ?? "").trim().toUpperCase();
         if (code) u.prefs.displayCurrency = code;
@@ -18046,7 +17896,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (!updated) return res.status(404).json({ error: "User not found" });
     // Echo back the VALIDATED view, so a junk write reads back as defaults.
     res.json({
-      notify: resolveNotifyPrefs(updated.prefs),
+      notify: resolveNotifyPrefs(updated.prefs), sheetSeen: readSeen(updated.prefs),
       displayCurrency: updated.prefs?.displayCurrency ?? null,
     });
   });
@@ -19191,7 +19041,7 @@ ${inner}
   // sit: Express matches in registration order, so where a register() is
   // CALLED is part of the behaviour and not a detail. Said once for all of
   // them, because three verbatim copies of it were three things to keep true.
-  registerTrainingRoutes(app, { isAdmin, trainingRepo });
+  registerTrainingRoutes(app, { isAdmin, trainingRepo, authedUser, getPool, members });
 
   // â”€â”€ FAQs (NEW-1) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -20426,19 +20276,6 @@ ${inner}
     res.json(consented);
   });
 
-  // Journey / training progress sync (server-side game state)
-  app.post("/api/game/journey/sync", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required" });
-    const { journeyId, steps } = req.body ?? {};
-    if (!journeyId || !Array.isArray(steps)) return res.status(400).json({ error: "Missing journeyId or steps" });
-    const updated = await members.update(user.id, (u: any) => {
-      if (!u.journeys) u.journeys = {};
-      u.journeys[journeyId] = steps.map(String);
-    });
-    if (!updated) return res.status(404).json({ error: "User not found" });
-    res.json({ success: true, journeys: updated.journeys });
-  });
 
   // My game state
   app.get("/api/game/me", async (req, res) => {
@@ -20453,7 +20290,8 @@ ${inner}
     // Seeker" from an id. Calling the two halves directly costs the SAME
     // single query stageOf was already paying.
     const consentedQuests = await claimsRepo.consentedCount(user.id);
-    const stageId = computeStage(user, consentedQuests);
+    const trained = await completionsFor(getPool(), user.id);
+    const stageId = computeStage(user, consentedQuests, trained);
     const claims = await claimsRepo.forUser(user.id);
     const ctx = await capabilityCtx(user);
     // What each consented quest actually paid. `amount` is what the witness
@@ -20495,7 +20333,7 @@ ${inner}
       ),
       journeys: user.journeys ?? {},
       membership: hasMembership(user),
-      trainingComplete: trainingComplete(user),
+      trainingComplete: trainingDoneHere(trained),
       // The third rule type as a number, beside the two booleans that were
       // already here. With the ladder now carrying its rules, these three
       // fields are everything a reader needs to evaluate any rung except
@@ -20512,7 +20350,7 @@ ${inner}
       capabilities: heldCapabilities(ctx),
       cycle: {
         ...currentCycle(),
-        daysRemaining: daysRemainingInCycle(new Date()),
+        daysRemaining: cycleDaysRemaining(),
         moonPhaseName: moonPhaseName(moonPhase(new Date())),
       },
     });
@@ -20555,7 +20393,7 @@ ${inner}
    * `/api/game/gratitude/send` is the acknowledgement flow and this is the
    * Hearts economy, and both now read `gratitude.base_budget` times the
    * giver's stage multiplier for the allowance and
-   * `gratitude.max_share_per_recipient` for how much of it one person may
+   * `gratitude.full_sends_per_cycle` for how much of it one person may
    * receive. They always summed their spending out of the same table; what
    * they disagreed about was the total, so the flat 30 here quietly won for
    * anyone who came through this door. The two doors differ now only in what
@@ -20879,29 +20717,8 @@ ${inner}
     res.json({ success: true, party: await partyFor(getPool(), villageId(), user.id, user.id) });
   });
 
-  /**
-   * The public wall: written appreciations only.
-   *
-   * `.slice(-60)` ran BEFORE any kind filter, so whatever the last sixty
-   * gratitude rows happened to be went out — and a HEART is a gratitude row
-   * whose message is the body of the feed post it was tapped on. In a village
-   * whose feed is members-only, that put member-only prose on an endpoint with
-   * no authentication at all, and the busier the feed the more of the wall it
-   * became.
-   *
-   * Filtering first also matches the documented `feed.hearts_on_wall` default
-   * of false: a tap is a gesture, not a message, and it was never meant to be
-   * quoted here.
-   */
-  app.get("/api/game/gratitude/wall", async (_req, res) => {
-    const log = await gratitudeRepo.all();
-    const wall = log
-      .filter((g) => g.kind !== "heart")
-      .slice(-60)
-      .reverse()
-      .map((g) => ({ id: g.id, from: firstName(g.fromName), to: firstName(g.toName), message: g.message, at: g.at }));
-    res.json(wall);
-  });
+  // The hero and the wall, both in server/routes/gratitudeVoices.ts.
+  registerGratitudeVoiceRoutes(app, { getPool, gratitudeLog: () => gratitudeRepo.all() });
 
   // Gratitude: my journal (received + sent, with amounts)
   app.get("/api/game/gratitude/me", async (req, res) => {
@@ -20922,9 +20739,12 @@ ${inner}
     const now = new Date();
     const cycle = currentCycle(now);
     const user = await authedUser(req);
+    // Days remaining come from THIS cycle's own end, so a village keeping
+    // calendar months is told when its month ends and not when the moon turns.
+    // The moon phase is the sky and is true whatever clock the village keeps.
     res.json({
       ...cycle,
-      daysRemaining: daysRemainingInCycle(now),
+      daysRemaining: cycleDaysRemaining(now),
       moonPhase: moonPhase(now),
       moonPhaseName: moonPhaseName(moonPhase(now)),
       budget: user ? await gratitudeBudget(user) : null,
@@ -21291,39 +21111,25 @@ ${inner}
         console.error("[badges] post-close evaluation failed (cycle stays closed)", e);
       }
     }
-    // GOVERNANCE APPLIES AT THE BOUNDARY (bridge phase). Verified proposals
-    // whose change-set touches any cycle-timed dial held for this moment: the
-    // closing cycle settled under the OLD rules just now, and the next one
-    // opens under the new — never a basis change mid-flight. Only when a
-    // cycle actually closed (a boundary actually crossed), only while the
-    // founder's auto-apply brake is off. Failures never unclose a cycle.
-    let governanceApplied = 0;
-    if (closed.length > 0 && boolVar("governance.auto_apply_enabled")) {
-      try {
-        const [pending] = await getPool().query<any[]>(
-          // passed_onsite is the on-site sibling of passed_verified (GOV_DESIGN
-          // 2.6): a ballot-passed set holding a cycle-timed dial waits for this
-          // same boundary. Ordered by when each pass was recorded; on-site
-          // passes carry no verified_at, so they sort with their close order.
-          "SELECT * FROM mechanics_proposals WHERE status IN ('passed_verified','passed_onsite') ORDER BY verified_at, id",
-        );
-        for (const row of pending) {
-          const p = rowToProposal(row as any);
-          const result = await applyMechanicsProposal(p, adminActor(req)?.id ?? null);
-          if (result.applied.length > 0) governanceApplied += 1;
-          if (result.failed.length > 0) {
-            await notifyAdmins(
-              "governance",
-              `A verified proposal could not fully apply at cycle close: ${p.title} (${result.failed.length} change(s) refused)`,
-              `gmp:${p.id}:apply-failed`,
-            );
-          }
-        }
-      } catch (e) {
-        console.error("[governance] cycle-close apply failed (cycle stays closed)", e);
-      }
-    }
-    res.json({ closed: closed.length, cycles: closed, poolCredited: totalCredited, governanceApplied });
+    /*
+     * GOVERNANCE LANDS THROUGH ONE ROUTINE, AND THIS IS ONE OF ITS TWO CALLERS.
+     *
+     * The block that used to sit here selected every passed proposal with no
+     * landing predicate and no veto join and applied whatever it found, beside
+     * an `applyDueGovernance` that had its own idea of what was due. Two
+     * routines that both decide that question disagree eventually, and the
+     * disagreement here is a change landing inside a steward's window. So the
+     * block is gone and the cycle close asks the one routine.
+     *
+     * The report says whether it RAN and how much was DUE, separately, because
+     * "nothing to apply" and "could not tell" look identical from a count.
+     */
+    const landing = await applyDueGovernance(landingDeps());
+    res.json({
+      closed: closed.length, cycles: closed, poolCredited: totalCredited,
+      governanceApplied: landing.ran ? landing.landed : 0,
+      governanceLanding: landing,
+    });
   });
 
   /**
@@ -21378,7 +21184,7 @@ ${inner}
     // Same substitution as /api/game/me, same single query: the count the
     // ladder measures is kept instead of collapsed into a stage id.
     const consentedQuests = await claimsRepo.consentedCount(user.id);
-    const stageId = computeStage(user, consentedQuests);
+    const stageId = computeStage(user, consentedQuests, await completionsFor(getPool(), user.id));
     const ctx = await capabilityCtx(user);
     res.json({
       stage: servedStage(stageId),
@@ -21884,6 +21690,12 @@ ${inner}
     }
     const raw = req.body?.value;
     if (raw === undefined || raw === null) return res.status(400).json({ error: "A value is required" });
+    // After the Birthing, what a vote MEANS is the village's, and the one door
+    // to it is a governance_mode ballot. This route is how a village is set up,
+    // not how it is governed (dispatcher lane).
+    if (WEIGHT_KEYS_AFTER_START.has(req.params.key) && (await readGameStart(getPool())).started) {
+      return res.status(409).json({ error: "The village started its Game, so how a vote is weighed is the village's to decide. Raise it as a proposal." });
+    }
     /*
      * A KNOB THAT CANNOT ACT MUST NOT ACCEPT A VALUE.
      *
@@ -22354,9 +22166,11 @@ ${inner}
     if (problems.length) return res.status(400).json({ error: "The change-set has problems", problems });
     const id = `gmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const status = standing.qualified ? "open" : "draft";
+    // The proposer's timing (0172), frozen onto the ballot at open. Absent
+    // means next_moon, the founder's default.
     await getPool().query(
-      "INSERT INTO mechanics_proposals (id, title, rationale, change_set, proposer_user_id, status) VALUES (?,?,?,?,?,?)",
-      [id, title, rationale, JSON.stringify(normalized), user.id, status],
+      "INSERT INTO mechanics_proposals (id, title, rationale, change_set, proposer_user_id, status, timing, supersedes_proposal_id) VALUES (?,?,?,?,?,?,?,?)",
+      [id, title, rationale, JSON.stringify(normalized), user.id, status, timingOf(req.body?.timing), String(req.body?.supersedesProposalId ?? "").trim().slice(0, 64) || null],
     );
     if (status === "open") {
       await addActivity("governance", `${firstName(user.name)} proposed a change to the game's rules: ${title}`, {
@@ -22568,116 +22382,55 @@ ${inner}
   });
 
   /**
-   * The apply step — ADMIN this phase, the verified Alchemy webhook next.
-   * Revalidates every change against the CURRENT registry (the registry may
-   * have evolved since the vote: a key can be gone, demoted from the open
-   * ring, or the value now out of bounds), then writes through the one
-   * variable path so bounds, the delta-only store and the amendment ledger
-   * all hold. Every applied key gets a governance-sourced ledger row carrying
-   * the proposal marker + Hypha reference.
+   * THE ONE APPLY, now in `server/lib/changeset.ts`.
+   *
+   * The body moved out for two reasons. It grew a second phase (validate every
+   * element before writing any of them), and it grew executors for four more
+   * kinds of change, and neither belongs in the file the ratchet exists to
+   * shrink. What stays here is the wiring: the pool, the amendment ledger
+   * writer, the caches this process holds above the database, and the two
+   * notices a proposer reads.
+   *
+   * THE BEHAVIOUR THAT CHANGED, and it is the one the audit asked for: an
+   * element this build cannot type now THROWS before the first write instead of
+   * being skipped while the proposal is stamped applied. The admin route below
+   * turns the throw into a 409 naming the element; nothing answers 207.
    */
-  /**
-   * THE ONE APPLY. Three callers — the admin's Verify & apply, the hub's
-   * verified callback, and the cycle close (for sets holding cycle-timed
-   * dials) — all land here, so what "applying a proposal" means can never
-   * fork. Revalidates every change against the CURRENT registry (a key can
-   * be gone, demoted from the open ring, or out of bounds since the vote),
-   * writes through setVariable so bounds and the delta store hold, and
-   * stamps governance-sourced amendment-ledger rows with the proposal
-   * reference. Idempotent: an already-applied proposal returns cleanly.
-   */
+  const changesetDeps = (): ChangesetDeps => ({
+    pool: getPool(),
+    recordMechanicsChange: (key, r, actor, source, ref, note) =>
+      recordMechanicsChange(key, r as any, actor, source as any, ref, note),
+    reloadCaches: async () => {
+      await Promise.all([rolesRepo.load(), roleHoldersRepo.load(), loadModuleSettings(getPool()), loadVariables(getPool())]);
+    },
+    sharedPasswordPosture: () => false,
+  });
+
   async function applyMechanicsProposal(
     p: { id: string; title: string; changeSet: any[]; proposerUserId: string; hyphaRef: string | null; status: string; ballotId?: string | null },
     actor: string | null,
-  ): Promise<{ ok: boolean; applied: string[]; queued: string[]; landsAtCycle: number | null; failed: Array<{ key: string; problem: string }> }> {
-    if (p.status === "applied") return { ok: true, applied: [], queued: [], landsAtCycle: null, failed: [] };
-    // An on-site pass carries its ballot the same way a Hypha pass carries
-    // its chain reference: every amendment row points at its vote.
-    const proposalRef = `gm:${p.id}${p.hyphaRef ? ` ${p.hyphaRef}` : ""}${p.ballotId ? ` bal:${p.ballotId}` : ""}`.slice(0, 255);
-    const applied: string[] = [];
-    const queued: string[] = [];
-    let landsAtCycle: number | null = null;
-    const failed: Array<{ key: string; problem: string }> = [];
-    for (const c of p.changeSet) {
-      // A minting rule is not a dial and has no registry entry. It is applied
-      // below, in one call per rule, for the reason written on
-      // `applyMintRuleChanges`.
-      if (isMintRuleKey(c.key)) continue;
-      const def = VARIABLES_BY_KEY[c.key];
-      if (!def) { failed.push({ key: c.key, problem: "This dial no longer exists in the registry" }); continue; }
-      if (ringOf(def) !== "open") { failed.push({ key: c.key, problem: "This dial is no longer community-governable" }); continue; }
-      const r = await setVariable(getPool(), c.key, c.to);
-      if (!r.ok) { failed.push({ key: c.key, problem: r.error ?? "refused" }); continue; }
-      await recordMechanicsChange(
-        c.key, r, actor, "governance", proposalRef,
-        // The vote was on target values; if the baseline drifted since, the
-        // ledger says so rather than hiding it.
-        c.from !== r.previous ? `Baseline moved between proposal (${c.from}) and apply (${r.previous})` : null,
-      );
-      applied.push(c.key);
-    }
-
-    /*
-     * THE MINTING RULES (R81, R84), AND WHY THEY ARE COUNTED SEPARATELY.
-     *
-     * A dial that applies HOLDS its new value from that moment. A minting rule
-     * does not: it is queued into its own pending columns and the next
-     * settlement promotes it, which is the deferral 0075 exists for. So a mint
-     * change goes into `queued` and never into `applied`, because the decision
-     * page renders every applied key as "<key> now holds the value the village
-     * voted for" and that sentence would be false about the one table that
-     * decides what members are paid. `landsAtCycle` carries the moon it lands
-     * on, so the sentence a member reads is the one the row actually promises.
-     */
-    const mintSet = p.changeSet.filter((c: any) => isMintRuleKey(c.key));
-    if (mintSet.length > 0) {
-      const out = await applyMintRuleChanges(getPool(), mintSet, actor ?? "governance");
-      failed.push(...out.failed);
-      for (const q of out.queued) {
-        queued.push(q.key);
-        landsAtCycle = q.fromCycle;
-        await recordMechanicsChange(
-          q.key,
-          { value: q.to, previous: q.from },
-          actor,
-          "governance",
-          proposalRef,
-          `Carried by the village and queued on the rule. It takes effect at cycle ${q.fromCycle}.`,
-        );
-      }
-    }
-
-    if (applied.length > 0 || queued.length > 0) {
-      await getPool().query("UPDATE mechanics_proposals SET status = 'applied' WHERE id = ?", [p.id]);
-      await addActivity("governance", `The village's rules changed by passed proposal: ${p.title}`, {
-        actorUserId: actor, entityType: "mechanics_proposal", entityRef: p.id,
-      });
-      await notify({
-        userId: p.proposerUserId,
-        type: "governance",
-        title: queued.length > 0 && applied.length === 0
-          ? `Your proposal carried and is queued for the next moon: ${p.title}`
-          : `Your proposal was applied: ${p.title}`,
-        body: failed.length
-          ? `${applied.length + queued.length} change(s) went through; ${failed.length} could not (see the ledger).`
-          : queued.length > 0
+  ): Promise<ApplySetResult> {
+    return applyChangeSetForProposal(changesetDeps(), p, actor, {
+      onApplied: async (proposal, result) => {
+        await addActivity("governance", `The village's rules changed by passed proposal: ${proposal.title}`, {
+          actorUserId: actor, entityType: "mechanics_proposal", entityRef: proposal.id,
+        });
+        await notify({
+          userId: proposal.proposerUserId,
+          type: "governance",
+          title: result.queued.length > 0 && result.applied.length === 0
+            ? `Your proposal carried and is queued for the next moon: ${proposal.title}`
+            : `Your proposal was applied: ${proposal.title}`,
+          body: result.queued.length > 0
             ? "What the village mints changes at the next moon. Nothing is paid at a new rate inside the cycle it is already in."
             : null,
-        link: proposalLink(p.id),
-        actorUserId: actor,
-        dedupeKey: `gmp:${p.id}:applied`,
-      });
-    }
-    return { ok: failed.length === 0, applied, queued, landsAtCycle, failed };
-  }
-
-  /** A set holding ANY cycle-timed dial applies as a whole at cycle close —
-   *  atomicity beats promptness (the sticky-split lesson, generalized). */
-  const changeSetWaitsForCycleClose = (changeSet: any[]): boolean =>
-    changeSet.some((c) => {
-      const def = VARIABLES_BY_KEY[c.key];
-      return def ? applyTimingOf(def) === "cycle-close" : false;
+          link: proposalLink(proposal.id),
+          actorUserId: actor,
+          dedupeKey: `gmp:${proposal.id}:applied`,
+        });
+      },
     });
+  }
 
   app.post("/api/admin/mechanics/proposals/:id/apply", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
@@ -22689,13 +22442,38 @@ ${inner}
     if (p.status !== "to_hypha" && p.status !== "passed_claimed" && p.status !== "passed_verified" && p.status !== "passed_onsite") {
       return res.status(409).json({ error: `A ${p.status.replace(/_/g, " ")} proposal cannot be applied` });
     }
+    /*
+     * ONCE THE GAME HAS STARTED, THIS IS THE VILLAGE'S DECISION AND NOT AN
+     * ADMIN'S. An admin applying a passed proposal by hand is an apply INSIDE
+     * the window a steward was promised, from the one plane the veto does not
+     * reach. Before the Birthing the admin plane is how a village is built and
+     * this route is how a change lands; after it, the landing path owns it.
+     */
+    if ((await readGameStart(getPool())).started) {
+      return res.status(409).json({
+        error: "The village started its Game, so a carried change lands on its own instant and a steward can stop it until then. This door is closed.",
+        landsAt: (await landingRow(getPool(), String(p.ballotId ?? "")))?.landsAt?.toISOString() ?? null,
+      });
+    }
     const actor = (await authedUser(req))?.id ?? adminActor(req)?.id ?? null;
-    const result = await applyMechanicsProposal(p, actor);
+    let result: ApplySetResult;
+    try {
+      result = await applyMechanicsProposal(p, actor);
+    } catch (e) {
+      // 409 and never 207. A partly applied decision is a state the village
+      // cannot read, so an element this build cannot carry out stops the whole
+      // set before its first write and the answer names the element.
+      if (e instanceof UntypedElementError) {
+        return res.status(409).json({ error: e.message, element: { index: e.index, kind: e.kind } });
+      }
+      throw e;
+    }
+    if (result.refusal) {
+      return res.status(409).json({ error: result.refusal.sentence, element: { index: result.refusal.index, kind: result.refusal.itemKind } });
+    }
     if (result.failed.length > 0) {
-      return res.status(result.applied.length ? 207 : 409).json({
-        error: result.applied.length
-          ? "Applied partially. Some changes no longer fit the current registry"
-          : "Nothing could be applied. The registry has moved since the vote",
+      return res.status(409).json({
+        error: "Nothing could be applied. The registry has moved since the vote",
         applied: result.applied, failed: result.failed,
       });
     }
@@ -22866,21 +22644,26 @@ ${inner}
     });
     const fresh = await proposalById(getPool(), p.id);
     if (!fresh) return res.json({ received: true, status: "passed_verified" });
-    if (!boolVar("governance.auto_apply_enabled")) {
-      await notifyAdmins(
-        "governance",
-        `Verified on-chain but auto-apply is off. Apply by hand: ${p.title}`,
-        `gmp:${p.id}:frozen`,
-      );
-      return res.json({ received: true, status: "passed_verified", held: "auto-apply is off" });
-    }
-    if (changeSetWaitsForCycleClose(fresh.changeSet)) {
-      await notify({
-        userId: p.proposerUserId, type: "governance",
-        title: `Verified. Your proposal applies at the next cycle close: ${p.title}`,
-        link: proposalLink(p.id), dedupeKey: `gmp:${p.id}:verified-waiting`,
+    /*
+     * THE INBOUND HUB IS RESTRICTED TO THE DIAL NAMESPACE, and stays there
+     * until a hub session proves the crossing end to end. A change arriving
+     * from somebody else's product may move a number this village governs; it
+     * may not seat anybody, move weight, switch the vote mode or turn a part of
+     * the Game on. The refusal names the namespace rather than failing quietly.
+     */
+    const outside = fresh.changeSet.filter((c: any) => {
+      const k = asChangeItem(c).kind;
+      return k !== "dial" && k !== "mint_rule";
+    });
+    if (outside.length > 0) {
+      return res.status(409).json({
+        received: true,
+        discarded: `an outcome from the hub may carry dial and minting changes only, and this one carries a ${asChangeItem(outside[0]).kind} change`,
       });
-      return res.json({ received: true, status: "passed_verified", held: "applies at next cycle close" });
+    }
+    if (!boolVar("governance.auto_apply_enabled")) {
+      await notifyAdmins("governance", `Verified on-chain but applying is off: ${p.title}`, `gmp:${p.id}:frozen`);
+      return res.json({ received: true, status: "passed_verified", held: "applying is switched off" });
     }
     const result = await applyMechanicsProposal(fresh, null);
     return res.json({ received: true, status: result.ok ? "applied" : "passed_verified", applied: result.applied, failed: result.failed });
@@ -23022,126 +22805,81 @@ ${inner}
    * carries whoever just acted, because telling somebody what they themselves
    * just did is the fastest way to teach them to ignore the bell.
    */
-  async function notifyRoll(
-    b: { id: string },
-    input: { type: string; title: string; body?: string | null; keySuffix: string; except?: Array<string | null | undefined>; roll?: string[] },
-  ): Promise<number> {
-    let rung = 0;
-    try {
-      const roll = input.roll ?? (await electorateOf(getPool(), b.id));
-      const skip = new Set((input.except ?? []).filter((x): x is string => !!x));
-      for (const userId of roll) {
-        if (skip.has(userId)) continue;
-        await notify({
-          userId,
-          type: input.type,
-          title: input.title,
-          body: input.body ?? null,
-          link: ballotLink(b),
-          dedupeKey: `bal:${b.id}:${input.keySuffix}:u${userId}`,
-        });
-        rung += 1;
-      }
-    } catch (e) {
-      // A trace that failed never fails the deed it is a trace OF, and this
-      // one is called without an await from two request handlers, so a throw
-      // here would be an unhandled rejection rather than a 500.
-      console.error(`[governance] telling the roll about ballot ${b.id} failed (the ballot stands)`, e);
-    }
-    return rung;
-  }
+  /** Telling the roll, now in server/lib/ballotNotices.ts. */
+  const notifyRoll = (b: { id: string }, input: RollNotice): Promise<number> =>
+    notifyRollRows({ pool: getPool(), notify, link: ballotLink }, b, input);
 
   /**
    * What a close DOES, per subject type, and the ONE place that question is
-   * answered.
+   * answered. A subject type that is NOT a key here conducts a real decision
+   * and executes nothing, which lets a village hold an advisory vote on the
+   * real engine. Absence is the fail-safe direction, so a subject type added by
+   * a later lane cannot execute something by accident.
    *
-   * This was a single `if (b.subjectType === "mechanics")` inside the close
-   * route, which is fine while there is one subject and wrong the moment
-   * there are two: the same fact (does closing this change anything?) is
-   * needed by the ballot payloads as well, and a second copy of it in
-   * serveBallot would have been a second opinion about whether a member's
-   * vote binds. Two copies of one rule disagree eventually, and here the
-   * disagreement lands on somebody who thinks they decided something.
+   * SETTLE, THEN EXECUTE, split by the 2026-09-03 ruling. `settle` records the
+   * outcome on the subject and runs for every outcome; `execute` is the
+   * world-changing part and runs only when a passed decision is actually DUE.
+   * Between them sits `routeOutcome` in server/lib/applyDue.ts, which stamps
+   * the landing instant, asks whether a seated steward voted no, and calls
+   * `execute` now or leaves it to the five-minute job. `onWithdraw` puts the
+   * subject back, so the withdraw route stops carrying a second routing table.
    *
-   * A subject type that is NOT a key here conducts a real decision and
-   * executes nothing. That is the property that lets a village hold an
-   * advisory vote on the real engine, with the real frozen roll and the real
-   * weights, and read the real answer without the answer doing anything.
-   * Absence is also the fail-safe direction, so a subject type added by a
-   * later lane cannot execute something by accident.
+   * Seven of these were written as one function whose passed branch IS the
+   * execute half, and `twoPhase` is the honest split of them: settling one of
+   * those subjects on a pass does nothing to the world, because a power
+   * crossing or a seating has no status of its own to park. Splitting each body
+   * by hand would say the same thing in seven copies.
    */
-  interface CloseRouting {
-    /** Variable keys the close actually changed. */
-    applied: string[];
-    /** Why nothing was applied, in the member's words, or null. */
-    held: string | null;
-    /** Told about this outcome already, so the roll's line skips them. */
-    proposerTold: string | null;
-  }
+  const twoPhase = (
+    fn: (b: BallotRow, outcome: BallotOutcome, outcomeNote: string, actorId: string) => Promise<CloseRouting>,
+  ): SubjectCloser => ({
+    settle: async (b, outcome, outcomeNote, actorId) =>
+      outcome === "passed" ? { applied: [], held: null, proposerTold: null } : fn(b, outcome, outcomeNote, actorId),
+    execute: (b, actorId) => fn(b, "passed", b.outcomeNote ?? "", actorId),
+  });
 
-  const SUBJECT_CLOSERS: Record<
-    string,
-    (b: BallotRow, outcome: BallotOutcome, outcomeNote: string, actorId: string) => Promise<CloseRouting>
-  > = {
+  const SUBJECT_CLOSERS: Record<string, SubjectCloser> = {
     /*
      * Mechanics (GOV_DESIGN 2.6). Every step is a guarded update or an
      * idempotent apply, so a crash partway heals on the admin apply path
      * instead of corrupting.
      */
-    mechanics: async (b, outcome, outcomeNote, actorId) => {
-      const out: CloseRouting = { applied: [], held: null, proposerTold: null };
-      const p = await proposalById(getPool(), b.subjectRef);
-      if (!p || p.status !== "onsite_vote") return out;
-
-      if (outcome === "passed") {
+    mechanics: {
+      onWithdraw: async (b) => {
         await getPool().query(
-          "UPDATE mechanics_proposals SET status = 'passed_onsite' WHERE id = ? AND status = 'onsite_vote'",
-          [p.id],
+          "UPDATE mechanics_proposals SET status = 'open' WHERE id = ? AND status = 'onsite_vote'",
+          [b.subjectRef],
         );
-        const fresh = await proposalById(getPool(), p.id);
+      },
+      /*
+       * A CARRIED CHANGE SET NO LONGER APPLIES AT CLOSE. It is parked at
+       * `passed_onsite` with its landing instant stamped beside it, and
+       * `applyDueGovernance` runs `execute` when the instant comes. The two
+       * holds that used to live here (the auto-apply brake and the cycle-close
+       * wait) moved into that one routine, because they were two more opinions
+       * about when a decision is due.
+       */
+      execute: async (b, actorId) => {
+        const out: CloseRouting = { applied: [], held: null, proposerTold: null };
+        const fresh = await proposalById(getPool(), b.subjectRef);
         if (!fresh) return out;
-        if (!boolVar("governance.auto_apply_enabled")) {
-          out.held = "auto-apply is off";
-          // This branch tells the ADMINS and says nothing to the proposer, so
-          // proposerTold stays null and the roll's line is their word on it.
-          await notifyAdmins(
-            "governance",
-            `Passed on-site but auto-apply is off. Apply by hand: ${p.title}`,
-            `gmp:${p.id}:frozen`,
-          );
-          return out;
-        }
-        if (changeSetWaitsForCycleClose(fresh.changeSet)) {
-          out.held = "applies at next cycle close";
-          out.proposerTold = p.proposerUserId;
-          await notify({
-            userId: p.proposerUserId,
-            type: "governance",
-            title: `Passed. Your proposal applies at the next cycle close: ${p.title}`,
-            link: proposalLink(p.id),
-            dedupeKey: `gmp:${p.id}:verified-waiting`,
-          });
-          return out;
-        }
         // applyMechanicsProposal tells the proposer "Your proposal was
         // applied" on its own, which is why this counts as told.
-        out.proposerTold = p.proposerUserId;
+        out.proposerTold = fresh.proposerUserId;
         const applyResult = await applyMechanicsProposal(fresh, actorId);
         out.applied = applyResult.applied;
+        if (applyResult.refusal) {
+          out.held = applyResult.refusal.sentence;
+          await notifyAdmins("governance", `A carried proposal could not land: ${fresh.title}`, `gmp:${fresh.id}:apply-failed`);
+          return out;
+        }
         /*
          * A CARRIED MINTING CHANGE IS QUEUED, AND THE CARD HAS TO SAY SO.
          *
          * "What changed" renders every applied key as "<key> now holds the
          * value the village voted for". A minting rule does not hold it yet:
-         * the deferral in 0075 means it lands at the next moon, and a member
-         * reading that sentence would conclude the village is being paid the
-         * new amount today. `held` is the field written for exactly this, and
-         * the page reads it as "Nothing has moved yet: <held>. The change is
-         * recorded and waiting", which is the truth about a queued rule.
-         *
-         * `applied` and `queued` are never both filled on one proposal, because
-         * `validateChangeSet` refuses a set that mixes dials and minting rules.
-         * So "nothing has moved yet" is never said over a dial that did move.
+         * it lands at the next moon, and a member reading that sentence would
+         * conclude the village is being paid the new amount today.
          */
         if (applyResult.queued.length > 0) {
           out.held =
@@ -23152,10 +22890,22 @@ ${inner}
         if (applyResult.failed.length > 0) {
           await notifyAdmins(
             "governance",
-            `A ballot-passed proposal could not fully apply: ${p.title} (${applyResult.failed.length} change(s) refused)`,
-            `gmp:${p.id}:apply-failed`,
+            `A ballot-passed proposal could not fully apply: ${fresh.title} (${applyResult.failed.length} change(s) refused)`,
+            `gmp:${fresh.id}:apply-failed`,
           );
         }
+        return out;
+      },
+      settle: async (b, outcome, outcomeNote, actorId) => {
+      const out: CloseRouting = { applied: [], held: null, proposerTold: null };
+      const p = await proposalById(getPool(), b.subjectRef);
+      if (!p || p.status !== "onsite_vote") return out;
+
+      if (outcome === "passed") {
+        await getPool().query(
+          "UPDATE mechanics_proposals SET status = 'passed_onsite' WHERE id = ? AND status = 'onsite_vote'",
+          [p.id],
+        );
         return out;
       }
 
@@ -23222,6 +22972,7 @@ ${inner}
         dedupeKey: `gmp:${p.id}:failed`,
       });
       return out;
+      },
     },
 
     /*
@@ -23248,7 +22999,7 @@ ${inner}
      * and the admins are told the way a part-failed mechanics apply tells
      * them.
      */
-    power_transfer: async (b, outcome, outcomeNote, actorId) => {
+    power_transfer: twoPhase(async (b, outcome, outcomeNote, actorId) => {
       const out: CloseRouting = { applied: [], held: null, proposerTold: null };
       const asked = parseTransferRef(b.subjectRef);
       if (!asked) {
@@ -23329,7 +23080,7 @@ ${inner}
         audience: "admin",
       });
       return out;
-    },
+    }),
 
     /*
      * ── THE RUNWAY (this lane) ──────────────────────────────────────────────
@@ -23365,7 +23116,7 @@ ${inner}
      * itself is a set union, so a run that did reach here twice leaves one
      * copy of the key.
      */
-    power_grant: async (b, outcome, outcomeNote, actorId) => {
+    power_grant: twoPhase(async (b, outcome, outcomeNote, actorId) => {
       const out: CloseRouting = { applied: [], held: null, proposerTold: null };
       const asked = parseTransferRef(b.subjectRef);
       if (!asked) {
@@ -23447,7 +23198,7 @@ ${inner}
         audience: "admin",
       });
       return out;
-    },
+    }),
 
     /*
      * ── GIVING A POWER BACK (this lane) ─────────────────────────────────────
@@ -23469,7 +23220,7 @@ ${inner}
      * It calls the same helper the admin route calls, so there is one writer
      * of that delete and one shape of the row disappearing.
      */
-    power_return: async (b, outcome, outcomeNote, actorId) => {
+    power_return: twoPhase(async (b, outcome, outcomeNote, actorId) => {
       const out: CloseRouting = { applied: [], held: null, proposerTold: null };
       const cap = b.subjectRef as Capability;
       if (!ALL_CAPABILITIES.includes(cap)) {
@@ -23534,7 +23285,7 @@ ${inner}
         audience: "admin",
       });
       return out;
-    },
+    }),
 
     /*
      * ── THE VILLAGE DECLARES A ROLE (this lane, R90) ────────────────────────
@@ -23571,7 +23322,7 @@ ${inner}
      * cannot reach here (`closeBallot` guards on `status='open'`), and a run
      * that did would find the role already there and leave it alone.
      */
-    role_declare: async (b, outcome, outcomeNote, actorId) => {
+    role_declare: twoPhase(async (b, outcome, outcomeNote, actorId) => {
       const out: CloseRouting = { applied: [], held: null, proposerTold: null };
       const roleId = b.subjectRef;
       const asked = await roleDeclarationPayload(b.id);
@@ -23659,7 +23410,7 @@ ${inner}
         audience: "admin",
       });
       return out;
-    },
+    }),
 
     /*
      * ── THE VILLAGE SEATS SOMEBODY (this lane, R90) ─────────────────────────
@@ -23683,7 +23434,7 @@ ${inner}
      * two is a real state, and a village whose vote carried is owed the reason
      * rather than a silent nothing.
      */
-    role_seat: async (b, outcome, outcomeNote, actorId) => {
+    role_seat: twoPhase(async (b, outcome, outcomeNote, actorId) => {
       const out: CloseRouting = { applied: [], held: null, proposerTold: null };
       const asked = parseSeatRef(b.subjectRef);
       if (!asked) {
@@ -23719,7 +23470,7 @@ ${inner}
       }
       const member = await members.byId(asked.userId);
       if (!member) {
-        out.held = "The person this vote named is no longer a member of this village, so nobody was seated.";
+        out.held = `The person this vote named (${asked.userId}) left the village while the vote was running, so nobody was seated in ${role.name ?? asked.roleId}.`;
         await notifyAdmins("governance", `A carried seating could not land: ${b.title}`, `bal:${b.id}:seat-held`);
         return out;
       }
@@ -23808,7 +23559,7 @@ ${inner}
         audience: "admin",
       });
       return out;
-    },
+    }),
 
     /*
      * ── THE VILLAGE TAKES A SEAT BACK (this lane, R90) ──────────────────────
@@ -23826,7 +23577,7 @@ ${inner}
      * wants the POWER gone votes a `power_return`. Three separate questions,
      * three separate votes, and this one answers only the one it names.
      */
-    role_unseat: async (b, outcome, outcomeNote, actorId) => {
+    role_unseat: twoPhase(async (b, outcome, outcomeNote, actorId) => {
       const out: CloseRouting = { applied: [], held: null, proposerTold: null };
       const asked = parseSeatRef(b.subjectRef);
       if (!asked) {
@@ -23901,7 +23652,7 @@ ${inner}
         audience: "admin",
       });
       return out;
-    },
+    }),
 
     /*
      * ── THE GAME STARTS (lane GAMESTART, R67 and R74) ───────────────────────
@@ -23935,7 +23686,7 @@ ${inner}
      * new ballot opens with a NEW freeze, and the one that missed stays closed
      * and immutable with its own roll.
      */
-    [VILLAGE_LAUNCH]: async (b, outcome, outcomeNote, actorId) => {
+    [VILLAGE_LAUNCH]: twoPhase(async (b, outcome, outcomeNote, actorId) => {
       const out: CloseRouting = { applied: [], held: null, proposerTold: null };
 
       if (outcome !== "passed") {
@@ -24029,7 +23780,48 @@ ${inner}
         audience: "admin",
       });
       return out;
-    },
+    }),
+    /*
+     * HOW ONE VOTE IS WEIGHED IS ITSELF A DECISION THE VILLAGE MAKES.
+     * `governance.weight_mode` is a founder-ring dial, so an ordinary dial item
+     * refuses it: a majority flipping what a vote MEANS mid-game to entrench
+     * itself is the failure the ring exists for. This is its one door, and it
+     * lands at an instant with a window like every other Game change.
+     */
+    [GOVERNANCE_MODE]: twoPhase(async (b, outcome, outcomeNote, actorId) => {
+      const out: CloseRouting = { applied: [], held: null, proposerTold: b.openedBy };
+      const [mode, token] = String(b.subjectRef).split("@");
+      if (outcome !== "passed") {
+        await notify({
+          userId: b.openedBy, type: "governance",
+          title: outcome === "no_quorum" ? `Too few of the village voted: ${b.title}` : `The village did not take this one on: ${b.title}`,
+          body: `${outcomeNote}
+
+  How votes are weighed is exactly as it was.`,
+          link: `/governance/ballots/${b.id}`, dedupeKey: `bal:${b.id}:mode-not-carried`,
+        });
+        return out;
+      }
+      const result = await applyChangeSet(changesetDeps(), {
+        ballotId: b.id,
+        proposalRef: `bal:${b.id}`,
+        actor: actorId,
+        changes: [{ kind: "mode_switch", to: mode, ...(token ? { weightToken: token } : {}) } as any],
+      });
+      if (result.refusal) {
+        out.held = result.refusal.sentence;
+        return out;
+      }
+      out.applied = result.applied;
+      await addActivity("governance", `The village changed how it weighs a vote: ${b.title}`, {
+        actorUserId: actorId, entityType: "ballot", entityRef: b.id,
+      });
+      void recordEvent(getPool(), {
+        kind: "audit", text: `governance:mode-by-ballot:${mode}:${b.id}`,
+        entityType: "ballot", entityRef: b.id, audience: "admin",
+      });
+      return out;
+    }),
   };
 
   /*
@@ -24048,6 +23840,43 @@ ${inner}
    * is read straight off this table.
    */
   SUBJECT_CLOSERS[MINT_RULE] = SUBJECT_CLOSERS.mechanics;
+
+  /**
+   * EVERYTHING THE LANDING PATH NEEDS, so the five-minute job, the cycle close,
+   * the close route and the veto watch ask the same objects the same questions.
+   * Read fresh every call: a variable here may have moved in the landing.
+   */
+  const landingDeps = (): LandingDeps => ({
+    pool: getPool(),
+    vetoHours: () => numberVar("governance.veto_hours"),
+    autoApplyEnabled: () => boolVar("governance.auto_apply_enabled"),
+    stewardCouncil: () => boolVar("governance.steward_council"),
+    stewardVetoTiers: () => stringVar("governance.steward_veto_tiers"),
+    nextBoundaryAfter: (after: Date) => activeClock().nextBoundaryAfter(after),
+    cycleNumberAt: (at: Date) => activeClock().cycleNumberAt(at),
+    landingExpiryCycles: () => numberVar("governance.landing_expiry_cycles"),
+    composeDigest: digestComposerFor(activeClock),
+    closerFor: (subjectType: string) => SUBJECT_CLOSERS[subjectType],
+    notify: async (input) => { await notify(input); },
+    endedUnclosedCycle: async () => {
+      return (await cyclesRepo.all()).some((c: any) => c.status !== "closed" && boundsForNumber(Number(c.cycleNumber)).endsAt.getTime() <= Date.now());
+    },
+    waitsForCycleClose: (changeSet) => changeSetWaitsForCycleClose(changeSet as any[]),
+    snapsToBoundary: (changeSet) => changeSetSnapsToBoundary(changeSet as any[]),
+  });
+
+  /*
+   * THE ONE WIRE BETWEEN THE SEAT AND THE INSTANT.
+   *
+   * `server/lib/stewardship.ts` holds the seat, the record and the reason and
+   * deliberately reads no landing column; `server/lib/applyDue.ts` holds
+   * `lands_at`. Without this line the veto route answers `windowKnown: false`
+   * forever and a veto arriving after the decision landed is let through, so
+   * it is registered here, once, at boot.
+   */
+  setVetoWindowCheck(vetoWindowOn);
+  setSubjectCloserCheck((subjectType: string) => ballotBinds(subjectType));
+
 
   /**
    * What a power-transfer ballot is ABOUT, read off its frozen subject ref.
@@ -24253,7 +24082,7 @@ ${inner}
   /** A ballot as the page reads it: tallies, bars, votes on the record. */
   async function serveBallot(b: any, viewerId?: string) {
     const pool = getPool();
-    const tallies = await talliesFor(pool, b.id);
+    const tallies = await talliesFor(pool, b);
     const votes = await votesFor(pool, b.id);
     const objections = b.method === "consent" ? await objectionsFor(pool, b.id) : [];
     const standingObjections = await standingObjectionsOf(b);
@@ -24314,6 +24143,7 @@ ${inner}
       votes: await Promise.all(
         votes.map(async (v) => ({ name: await nameOf(v.userId), choice: v.choice, weight: v.weight, castAt: v.castAt })),
       ),
+      votedCount: votes.filter((v) => delegatedRowsCountOn(b) || !v.followedUserId).length, // people, never rows: a delegated row is not cast at 100 unity
       // The count the EVALUATOR uses, stated rather than left to be derived
       // from the list beside it. Zero on every method but consent.
       standingObjections,
@@ -24341,7 +24171,7 @@ ${inner}
       silent: await Promise.all(
         rollRows.map(async (r: any) => ({ name: await nameOf(String(r.user_id)), weight: Number(r.weight) })),
       ),
-      myVote: viewerId ? await voteOf(pool, b.id, viewerId) : null,
+      myVote: viewerId ? await ownVoteView(pool, b, viewerId, { nameOf }) : null,
       // The viewer's own frozen weight: null means they are outside this
       // electorate, and 0 means they are inside it holding nothing.
       myWeight: myWeightRow ? Number(myWeightRow.weight) : null,
@@ -24466,36 +24296,35 @@ ${inner}
     /*
      * WHICH SUBJECT THIS IS, READ OFF THE CHANGE SET (R81, R84).
      *
-     * A change set names game dials or minting rules, never both:
-     * `validateChangeSet` refuses the mix, and the reason is written there.
-     * So one look answers which subject the village is being asked about, and
-     * the subject is what carries the threshold.
+     * A change set names game dials or minting rules, never both while the
+     * apply runs them one after the other: `validateChangeSet` refuses that
+     * mix and the reason is there. The stamped subject is the one priced.
      *
-     * THIS IS THE OPT-IN, AND IT IS THE WHOLE POINT OF THE LINE BELOW. Of the
-     * six routes that open a village-wide ballot, five call `dialsForMethod`
-     * and never see the subject registry at all. A minting vote opened through
-     * one of those would conduct at the ordinary quorum, pass on a quiet week,
-     * and look completely correct doing it, because there is nothing on the
-     * ballot to say which threshold it should have had. `dialsForSubject`
-     * calls `dialsForMethod` itself and then raises it to the subject's floor,
-     * so this route answers for both kinds with one call and cannot forget.
+     * THIS IS THE OPT-IN. Of the six routes that open a village-wide ballot,
+     * five call `dialsForMethod` and never see the subject registry, so a
+     * minting vote opened through one of those would conduct at the ordinary
+     * quorum and look correct doing it. `priceChangeSet` calls
+     * `dialsForSubject`, which calls `dialsForMethod` and then raises it, so
+     * this route answers for every kind with one call and cannot forget.
      *
-     * ── A THIRD KIND OF RULE COSTS FOUR EDITS, NAMED HERE (R89) ────────────
-     *
-     * The end state is a village that votes on everything, so the next lane
-     * that wants a second kind of rule inside a change set needs: a key
-     * namespace of its own beside `shared/mintRuleKeys.ts`, an entry in
-     * `SUBJECT_THRESHOLDS`, a branch in `validateChangeSet`, and an apply in
-     * `applyMechanicsProposal`. This ternary becomes a lookup, and the
-     * one-vocabulary-per-proposal rule in `validateChangeSet` generalises with
-     * it: a proposal names one kind of rule, because the threshold is priced
-     * per subject and a proposal that is two subjects has no honest price.
+     * A THIRD KIND OF RULE COSTS ONE EDIT NOW (R89, and Q9). A change set is
+     * a list of TYPED items (`shared/ballotSubjects.ts`) priced at the
+     * highest floor among them, which is the founder's ruling that a bundle
+     * is as hard to pass as its hardest part. A new kind costs an entry in
+     * `SUBJECT_FOR_ITEM_KIND`, an executor, and its kind in
+     * `EXECUTABLE_ITEM_KINDS`. Nothing on this route changes for it.
      */
-    const subjectType = p.changeSet.some((c: any) => isMintRuleKey(c.key)) ? MINT_RULE : "mechanics";
-    const dials = dialsForSubject(subjectType, method, {
+    const priced = priceChangeSet(p.changeSet, method, {
       unityPct: Math.max(0, numberVar("governance.unity_pct")),
       quorumPct: Math.max(0, numberVar("governance.quorum_pct")),
-    });
+    }, thresholdSettingsFrom((key) => numberVar(key), (key) => stringVar(key)));
+    if (priced.conflict) return res.status(409).json({ error: priced.conflict });
+    // A subject may fix the method its own numbers are conducted by, and a
+    // proposal brought back after a veto is priced at the village's highest set
+    // tier: that is what makes it land whatever any steward says.
+    const { subjectType } = priced;
+    const dials = await overrideDials(getPool(), p, priced.dials);
+    const conducted: BallotMethod = priced.method ?? method;
     const snapshot = weightModeNow();
     if (snapshot.mode === "token") {
       const problem = weightTokenProblem(snapshot.token ?? "");
@@ -24531,17 +24360,22 @@ ${inner}
       subjectRef: p.id,
       title: p.title,
       docMarkdown: markdown,
-      method,
+      method: conducted,
       weightMode: snapshot.mode,
       weightToken: snapshot.token,
       unityPct: dials.unityPct,
       quorumPct: dials.quorumPct,
       durationDays: Math.max(
         1,
-        numberVar(method === "consent" ? "governance.consent_window_days" : "governance.vote_days"),
+        numberVar(conducted === "consent" ? "governance.consent_window_days" : "governance.vote_days"),
       ),
       openedBy: user.id,
       electorate,
+      // Frozen onto the ballot the way the dials are: chosen on the proposal,
+      // decided on the ballot, so an edit after the vote opened cannot move the
+      // instant the village was shown. Absent means next_moon.
+      timing: timingOf((p as { timing?: unknown }).timing),
+      window: { elements: changeSetKinds(p.changeSet), comingBackFrom: await comingBackFrom(getPool(), p.id) }, // windows lane (19E): the strictest element decides, and anything coming back gets its grace
       onOpen: async (conn, ballotId) => {
         const [r] = await conn.query<any>(
           "UPDATE mechanics_proposals SET status = 'onsite_vote', ballot_id = ? WHERE id = ? AND status = 'open'",
@@ -24625,14 +24459,14 @@ ${inner}
    */
   async function serveBallotCard(b: any, viewerId?: string) {
     const pool = getPool();
-    const tallies = await talliesFor(pool, b.id);
+    const tallies = await talliesFor(pool, b);
     const [[counts]] = await pool.query<any[]>(
-      "SELECT COUNT(*) AS voted FROM ballot_votes WHERE ballot_id = ?",
+      `SELECT COUNT(*) AS voted FROM ballot_votes WHERE ballot_id = ?${delegatedRowsCountOn(b) ? "" : " AND followed_user_id IS NULL"}`,
       [b.id],
     );
     const [mine] = viewerId
       ? await pool.query<any[]>(
-          "SELECT e.weight, v.choice FROM ballot_electorate e " +
+          "SELECT e.weight, v.choice, v.followed_user_id FROM ballot_electorate e " +
             "LEFT JOIN ballot_votes v ON v.ballot_id = e.ballot_id AND v.user_id = e.user_id " +
             "WHERE e.ballot_id = ? AND e.user_id = ?",
           [b.id, viewerId],
@@ -24669,7 +24503,7 @@ ${inner}
       unity: unityPctOf(tallies),
       quorum: quorumPctOf(tallies, b.totalWeight),
       votedCount: Number(counts?.voted ?? 0),
-      myVote: row?.choice ? { choice: row.choice, reason: null } : null,
+      myVote: await ownVoteView(pool, b, String(viewerId ?? ""), { have: row ?? null }),
       myWeight: row ? Number(row.weight) : null,
     };
   }
@@ -25037,11 +24871,14 @@ ${inner}
      * event, side by side in the same Decisions group, is exactly the noise
      * that makes a bell not worth opening.
      */
-    const routeClose = SUBJECT_CLOSERS[b.subjectType];
-    const routing: CloseRouting = routeClose
-      ? await routeClose(b, result.outcome, result.ballot.outcomeNote ?? "", user.id)
-      : { applied: [], held: null, proposerTold: null };
+    const routing = await routeOutcome(
+      landingDeps(), result.ballot, result.outcome, result.ballot.outcomeNote ?? "", user.id,
+      await itemKindsOf(landingDeps(), b),
+    );
     const { applied, held, proposerTold } = routing;
+    // A seated steward's no fails a ballot at close, so the outcome the route
+    // reports is the one routing settled and never the one the tally gave.
+    const outcome = routing.outcome ?? result.outcome;
     /*
      * The roll hears the outcome, once, keyed on the ballot. Everyone who was
      * asked is told what the answer was, INCLUDING the people who did not
@@ -25080,15 +24917,15 @@ ${inner}
     void notifyRoll(b, {
       type: !binds
         ? "ballot_advisory_closed"
-        : result.outcome === "passed"
+        : outcome === "passed"
           ? "ballot_carried"
-          : result.outcome === "no_quorum"
+          : outcome === "no_quorum"
             ? "ballot_no_quorum"
             : "ballot_failed",
       title:
-        result.outcome === "no_quorum"
+        outcome === "no_quorum"
           ? `Closed without quorum: ${b.title}`
-          : result.outcome === "passed"
+          : outcome === "passed"
             ? binds
               ? `Carried: ${b.title}`
               : `The village would have said yes: ${b.title}`
@@ -25104,7 +24941,7 @@ ${inner}
 
     res.json({
       success: true,
-      outcome: result.outcome,
+      outcome,
       binding: binds,
       unity: result.unity,
       quorum: result.quorum,
@@ -25168,12 +25005,11 @@ ${inner}
      * anything. Guarded on `onsite_vote` so a proposal somebody else moved in
      * the meantime is left alone.
      */
-    if (b.subjectType === "mechanics" || b.subjectType === MINT_RULE) {
-      await getPool().query(
-        "UPDATE mechanics_proposals SET status = 'open' WHERE id = ? AND status = 'onsite_vote'",
-        [b.subjectRef],
-      );
-    }
+    // The subject's own reset, from the one closer table. This was a second
+    // hardcoded routing table here, so a subject type added by a later lane was
+    // stranded with no way back to where it stood before the ballot.
+    await SUBJECT_CLOSERS[b.subjectType]?.onWithdraw?.(b);
+    await markNotApplicable(getPool(), b.id);
     await addActivity("governance", `A village vote was called off: ${b.title}`, {
       actorUserId: user.id,
       entityType: "ballot",
@@ -26449,6 +26285,10 @@ ${inner}
     isAdmin, authedUser, adminActor, getPool, members, firstName, notify, weightModeNow,
   });
   registerGovernanceWizardRoutes(app, { authedUser, getPool, capabilityCtx, weightModeNow });
+  registerDelegationRoutes(app, { authedUser, getPool, capabilityCtx, members, firstName });
+  registerGovernanceVetoRoutes(app, { authedUser, mayAct, isAdmin, getPool, members, firstName, notify });
+  registerGovernanceLandingRoutes(app, { authedUser, mayAct, getPool, members, firstName, notify });
+  registerGovernanceModeRoutes(app, { authedUser, getPool, capabilityCtx, firstName, weightModeNow, buildElectorate });
 
   /**
    * The subset of variables the CLIENT is allowed to know, so the UI can render
@@ -26459,11 +26299,11 @@ ${inner}
     res.json({
       gratitude: {
         baseBudget: numberVar("gratitude.base_budget"),
-        // A SHARE of the sender's own allowance, so the client cannot render
-        // it as an amount without knowing whose allowance it is a share of.
-        // `/api/game/me` carries that member's budget; this route is
-        // anonymous and describes the rule, never one person's ceiling.
-        maxSharePerRecipient: numberVar("gratitude.max_share_per_recipient"),
+        // How many full-strength gifts an allowance holds. Anonymous, so it
+        // describes the RULE and never one person's ceiling; `/api/game/me`
+        // carries that member's own cap. Replaced `maxSharePerRecipient` when
+        // the dial became a count: see `shareCapFor` in server/lib/economy.ts.
+        fullSendsPerCycle: numberVar("gratitude.full_sends_per_cycle"),
         requireMessage: boolVar("gratitude.require_message"),
         // The ReGen pool model: the community can always see how big the pool
         // is and what it pays — but a member's SHARE is unknowable before
@@ -26888,6 +26728,7 @@ ${inner}
       consentedCounts: () => claimsRepo.consentedCounts(),
       isExampleUser,
       computeStage,
+      trainingCompletions: (ids: readonly string[]) => completionsForMany(getPool(), ids),
       seasonsCompleted: () => {
         const st = seasonState();
         return st.seasons.filter((x: any) => x.endsOn && x.endsOn <= st.today).length;
@@ -27398,6 +27239,10 @@ ${inner}
     if ((loadRoles().find((r: any) => r.id === req.params.id) as any)?.isExample) {
       return res.status(409).json(EXAMPLE_REFUSAL_BODY);
     }
+    // Seating and unseating a steward happen through the role_seat and
+    // role_unseat ballots and through nothing else, the admin path included.
+    const seatLock = stewardSeatRefusal(loadRoles().find((r: any) => r.id === req.params.id) as any);
+    if (seatLock) return res.status(seatLock.status).json(seatLock.body);
     if (isExampleUser(await members.byId(String(req.body?.userId ?? "")))) {
       return res.status(409).json(EXAMPLE_REFUSAL_BODY);
     }
@@ -27491,6 +27336,7 @@ ${inner}
   registerPulseRoutes(app, { getPool });
   registerPlayersRoutes(app, {
     isAdmin, members, claimsRepo, computeStage, hasMembership, stageOf, recordStageEvent,
+    trainingCompletions: (ids: readonly string[]) => completionsForMany(getPool(), ids),
   });
 
   // S18: "delete" a member = anonymize them. Value rows persist (the ledger
@@ -28032,9 +27878,8 @@ ${inner}
   // Terminal error handler. Express 5 forwards a rejected handler promise
   // here by itself, on every verb. JSON, because every consumer is the SPA.
   app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
-    console.error("[route error]", err);
     if (res.headersSent) return next(err);
-    res.status(500).json({ error: "Internal server error" });
+    respondToTerminalError(err, res);
   });
 
   const port = parseInt(String(process.env.PORT || 3000), 10);

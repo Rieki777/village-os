@@ -1327,6 +1327,14 @@ button, a, [role="button"], input, textarea, select, summary {
      village's own --sheet-earned knob, so re-tinting what is earned re-tints
      every notice with it and nothing has to be set twice. */
   --sheet-notice: var(--sheet-earned, #dfab4d);
+
+  /* The two ends of the maturity arc, either side of the gold it is made from.
+     The ring is a gradient rather than a flat stroke so the far end reads as
+     lit and the near end as still in shadow, which is the whole reason it says
+     "coming from somewhere" instead of "a bar, bent". Both take the village's
+     own knobs, so a re-tinted gold arrives with a matching pair. */
+  --sheet-earned-deep: var(--sheet-earned-shadow, #6b4a15);
+  --sheet-earned-lit: var(--sheet-earned-highlight, #f2ce85);
   --destructive: var(--sheet-warn, #e0805e);
   --destructive-foreground: var(--sheet-ground, #0d1411);
 
@@ -1343,6 +1351,24 @@ button, a, [role="button"], input, textarea, select, summary {
      dark chrome. Without this the bio textarea keeps a light-mode caret and
      selection on a near-black field, and no token can reach either. */
   color-scheme: dark;
+
+  /*
+   * INHERITED TEXT IS MOONLIGHT, NOT THE APP'S NEAR-BLACK.
+   *
+   * Everything above redeclares TOKENS, which only reaches an element that
+   * names one (`text-foreground`, `text-muted-foreground`). Anything inside
+   * this world that sets no colour of its own kept inheriting `body`'s ink,
+   * measured on a real render as rgb(23,23,23) against this ground: 1.04:1,
+   * which is invisible rather than merely low.
+   *
+   * Nothing VISIBLE was hitting it when this was added, and that is exactly
+   * why it is worth setting. The two things that were inheriting it were an
+   * `sr-only` heading and an `sr-only` figcaption, so the defect was one
+   * unstyled `<p>` away from shipping at any time, in a world whose whole
+   * point is that components under it need no edits. A default that is right
+   * costs nothing and removes the trap.
+   */
+  color: var(--foreground);
 
   /*
    * THE CARVED FACE.

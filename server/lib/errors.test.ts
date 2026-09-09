@@ -19,7 +19,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const guardedFetchJson = vi.fn();
 vi.mock("./toolcheck", () => ({ guardedFetchJson: (...a: any[]) => guardedFetchJson(...a) }));
 
-const { reachedSomebody, reportError, reportErrorWithin, wireErrorReporting } = await import("./errors");
+const { reachedSomebody, reportError, reportErrorWithin, respondToTerminalError, terminalAnswerFor, wireErrorReporting } =
+  await import("./errors");
+// The REAL error class, so the duck-typed matcher is tested against the thing
+// it has to recognise rather than against a look-alike built to satisfy it.
+const { StaleSnapshotError } = await import("../repos/store-db");
 
 const WEBHOOK = "https://collector.example/hook";
 
@@ -107,5 +111,53 @@ describe("error delivery is reported, not assumed", () => {
     expect(second.suppressed).toBe(true);
     expect(reachedSomebody(second)).toBe(false);
     expect(guardedFetchJson).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("what the terminal handler answers", () => {
+  /**
+   * A LOST RACE IS A 409 AND NOT A 500, and it was neither until now:
+   * `StaleSnapshotError` was caught NOWHERE in the codebase, so it reached the
+   * terminal handler and answered "Internal server error" to somebody whose
+   * request had done exactly the right thing.
+   */
+  it("answers a real StaleSnapshotError with 409 and a sentence that names no table", () => {
+    // THE REAL CLASS, constructed the way store-db constructs it. A hand-made
+    // `{ code: "stale_snapshot" }` would prove only that the matcher matches
+    // itself, and the matcher is duck-typed precisely so it can be wrong about
+    // the real thing without anybody noticing.
+    const real = new StaleSnapshotError("org_roles", 3, 11);
+    const answer = terminalAnswerFor(real);
+
+    expect(answer.status).toBe(409);
+    expect(answer.body.code).toBe("stale_snapshot");
+    expect(answer.level, "a lost race is not a fault, and the log should not shout").toBe("warn");
+    expect(answer.body.error).toContain("Somebody else changed this");
+    expect(answer.body.error).toContain("Nothing was saved");
+    // The schema stays in the log. A member is not told our table names or our
+    // version numbers, and the full detail is still carried for whoever reads
+    // the console.
+    expect(answer.body.error).not.toContain("org_roles");
+    expect(answer.body.error).not.toContain("11");
+    expect(answer.detail).toContain("org_roles");
+  });
+
+  it("still answers everything else with 500, which is the control", () => {
+    // Without this, a matcher that returned 409 for every error would pass the
+    // case above and break the whole surface.
+    for (const other of [new Error("something broke"), new TypeError("nope"), "a string", null]) {
+      const answer = terminalAnswerFor(other);
+      expect(answer.status, String(other)).toBe(500);
+      expect(answer.body.error).toBe("Internal server error");
+      expect(answer.level).toBe("error");
+    }
+  });
+
+  it("responds through the res it is handed, on the right console channel", () => {
+    const sent: Array<{ status: number; body: unknown }> = [];
+    const res = { status: (code: number) => ({ json: (body: unknown) => sent.push({ status: code, body }) }) };
+    respondToTerminalError(new StaleSnapshotError("app_config", 1, 9), res);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.status).toBe(409);
   });
 });

@@ -22,30 +22,30 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 117 open and 33 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 145 open and 33 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 128 of them as soon as it is saved, and 22 of them at the next cycle close.
+Each dial also says WHEN a change lands. 155 of them as soon as it is saved, and 23 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-150 dials in 29 categories. 92 carry a minimum and a maximum. By type: 76 integer, 13 decimal, 3 percentage, 19 boolean, 20 choice, 19 text.
+178 dials in 29 categories. 104 carry a minimum and a maximum. By type: 82 integer, 13 decimal, 10 percentage, 21 boolean, 22 choice, 30 text.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
-| Gratitude | 8 | 8 | 0 |
+| Gratitude | 9 | 9 | 0 |
 | Ledger | 2 | 2 | 0 |
 | The Mint | 4 | 3 | 1 |
 | Progression | 28 | 28 | 0 |
 | Quests | 5 | 5 | 0 |
-| Governance | 16 | 12 | 4 |
+| Governance | 43 | 39 | 4 |
 | Tokens | 4 | 1 | 3 |
 | Hypha | 8 | 0 | 8 |
 | Tools | 2 | 2 | 0 |
@@ -76,15 +76,16 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 
 | Dial | Key | Category | Type | Default | Who may change it |
 | --- | --- | --- | --- | --- | --- |
-| Base sending allowance per cycle | `gratitude.base_budget` | Gratitude | integer | `100` | the whole village |
+| Base sending allowance per cycle | `gratitude.base_budget` | Gratitude | integer | `105` | the whole village |
 | Value pool distributed at each cycle close | `gratitude.pool_per_cycle` | Gratitude | integer | `1000` | the whole village |
 | Which token the pool pays | `gratitude.pool_token` | Gratitude | text | `credits` | the whole village |
-| Share of an allowance any one person can receive | `gratitude.max_share_per_recipient` | Gratitude | percentage | `25` | the whole village |
+| Full sends per cycle | `gratitude.full_sends_per_cycle` | Gratitude | integer | `7` | the whole village |
 | Require a message with every acknowledgment | `gratitude.require_message` | Gratitude | boolean | `true` | the whole village |
+| The rhythm the village keeps time by | `cycle.mode` | Gratitude | choice | `lunar` | the whole village |
 | Gratitude each heart sends | `feed.heart_amount` | Gratitude | integer | `1` | the whole village |
 | Hearts one member can tap for another per cycle | `feed.max_hearts_per_recipient_per_cycle` | Gratitude | integer | `5` | the whole village |
 | Recognition for an accepted Work With Us proposal | `gratitude.proposal_accept_award` | Gratitude | integer | `100` | the whole village |
-| Admin mint cap per lunar cycle | `ledger.admin_mint_cycle_cap` | Ledger | integer | `10000` | the whole village |
+| Admin mint cap per cycle | `ledger.admin_mint_cycle_cap` | Ledger | integer | `10000` | the whole village |
 | Second steward needed above | `ledger.admin_mint_cosign_over` | Ledger | integer | `100` | the whole village |
 | Voice needed before a member can claim | `economy.voice_claim_threshold` | The Mint | integer | `100` | the whole village |
 | How many days Claims Week stays open | `economy.claims_week_days` | The Mint | integer | `7` | the whole village |
@@ -128,9 +129,25 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | How long a topic stays open for sensing | `governance.sensing_days` | Governance | integer | `7` | the whole village |
 | Mechanics proposals per member per cycle | `governance.proposals_per_member_per_cycle` | Governance | integer | `5` | the whole village |
 | Supporters before a proposal can go to the vote | `governance.proposal_support_threshold` | Governance | integer | `0` | the whole village |
-| ReGen governance hub URL | `governance.hub_url` | Governance | text | `https://regencivics.earth` | the founder or an admin |
+| Governance hub URL | `governance.hub_url` | Governance | text | blank | the founder or an admin |
 | Apply verified proposals automatically | `governance.auto_apply_enabled` | Governance | boolean | `true` | the founder or an admin |
+| Which decisions a steward can stop | `governance.steward_subjects` | Governance | text | `all` | the whole village |
+| Which sizes of decision a steward can stop | `governance.steward_veto_tiers` | Governance | text | `constitutional` | the whole village |
+| Payouts above this wait three days before they are sent | `governance.payout_delay_over` | Governance | integer | `1000` | the whole village |
+| A veto needs a majority of the stewards | `governance.steward_council` | Governance | boolean | `false` | the whole village |
+| How long a steward has to stop a change | `governance.veto_hours` | Governance | integer | `72` | the whole village |
+| Cycles a passed decision waits before it is written off | `governance.landing_expiry_cycles` | Governance | integer | `3` | the whole village |
 | Cooldown after a governed rule change | `governance.change_cooldown_days` | Governance | integer | `0` | the whole village |
+| When a change to the Game Mechanics can go to the vote | `governance.window_changeset` | Governance | text | `always_open` | the whole village |
+| When a change to what the village mints can go to the vote | `governance.window_mint_rule` | Governance | text | `always_open` | the whole village |
+| When a change to how votes are counted can go to the vote | `governance.window_governance_mode` | Governance | text | `always_open` | the whole village |
+| When declaring a role can go to the vote | `governance.window_role_declare` | Governance | text | `always_open` | the whole village |
+| When seating a role can go to the vote | `governance.window_role_seat` | Governance | text | `always_open` | the whole village |
+| When taking a seat back can go to the vote | `governance.window_role_unseat` | Governance | text | `always_open` | the whole village |
+| When moving a power to a role can go to the vote | `governance.window_power_transfer` | Governance | text | `always_open` | the whole village |
+| When granting a power can go to the vote | `governance.window_power_grant` | Governance | text | `always_open` | the whole village |
+| When handing a power back can go to the vote | `governance.window_power_return` | Governance | text | `always_open` | the whole village |
+| How long a proposal coming back may open outside its window | `governance.window_grace_days` | Governance | integer | `7` | the whole village |
 | How voting weight is assigned | `governance.weight_mode` | Governance | choice | `equal` | the founder or an admin |
 | The weight token | `governance.weight_token` | Governance | text | `gratitude` | the founder or an admin |
 | Unity needed to pass | `governance.unity_pct` | Governance | percentage | `80` | the whole village |
@@ -138,6 +155,17 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | How long a ballot stays open | `governance.vote_days` | Governance | integer | `7` | the whole village |
 | How long a consent window stays open | `governance.consent_window_days` | Governance | integer | `7` | the whole village |
 | How village-wide ballots decide | `governance.default_method` | Governance | choice | `custom` | the whole village |
+| Routine changes: quorum floor | `governance.tier_routine_quorum_pct` | Governance | percentage | `0` | the whole village |
+| Routine changes: unity floor | `governance.tier_routine_unity_pct` | Governance | percentage | `0` | the whole village |
+| Structural changes: quorum floor | `governance.tier_structural_quorum_pct` | Governance | percentage | `50` | the whole village |
+| Structural changes: unity floor | `governance.tier_structural_unity_pct` | Governance | percentage | `80` | the whole village |
+| Constitutional changes: quorum floor | `governance.tier_constitutional_quorum_pct` | Governance | percentage | `97` | the whole village |
+| Constitutional changes: unity floor | `governance.tier_constitutional_unity_pct` | Governance | percentage | `97` | the whole village |
+| The tier a veto override is passed at | `governance.highest_tier` | Governance | choice | `constitutional` | the whole village |
+| Minting rule changes: quorum floor | `governance.subject_mint_rule_quorum_pct` | Governance | percentage | `50` | the whole village |
+| Minting rule changes: unity floor | `governance.subject_mint_rule_unity_pct` | Governance | percentage | `0` | the whole village |
+| Seats speaking for other beings count toward quorum | `governance.nonhuman_in_quorum` | Governance | boolean | `false` | the whole village |
+| Cycles of silence before a seat leaves the count | `governance.absent_cycles` | Governance | integer | `3` | the whole village |
 | Vouches to admit a member | `membership.vouch_threshold` | Governance | integer | `0` | the whole village |
 | Equity token contract address on Base | `tokens.equity_address` | Tokens | text | blank | the founder or an admin |
 | Governance token contract address on Base | `tokens.voice_address` | Tokens | text | blank | the founder or an admin |
@@ -229,21 +257,22 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 
 ## Gratitude
 
-8 dials. 8 for the whole village.
+9 dials. 9 for the whole village.
 
 ### Base sending allowance per cycle
 
-THE allowance behind every way of giving in this village: written acknowledgments on the Gratitude page, and taps of appreciation on the feed. A member's own figure is this number times their stage multiplier under Progression, so the stock ladder runs from 100 a cycle at Guest to 500 at Sage. Set it to 0 and nobody gives anything at any stage. Raise it and every stage rises with it, and so does the amount any one person may receive, because that ceiling is a share of this. Unused allowance does not roll over. Giving mints fresh Gratitude for the person being thanked and takes nothing from the giver's own balance, so this allowance is what bounds it. Works with: 'Share of an allowance any one person can receive', 'Gratitude each heart sends', 'Hearts one member can tap for another per cycle', and 'Sending-budget multiplier' under Progression.
+THE allowance behind every way of giving in this village: written acknowledgments on the Gratitude page, and taps of appreciation on the feed. A member's own figure is this number times their stage multiplier under Progression, so the stock ladder runs from 105 a cycle at Guest to 525 at Sage. Set it to 0 and nobody gives anything at any stage. Raise it and every stage rises with it, and so does the amount any one person may receive, because that ceiling is this figure divided by 'Full sends per cycle'. The default is 105 because it divides evenly by the default of 7 full sends, which is what makes a full send a whole 15 Gratitude at Guest and 75 at Sage. A figure that does not divide evenly still works: the ceiling rounds down and the remainder is given as a smaller gift. Unused allowance does not roll over. Giving mints fresh Gratitude for the person being thanked and takes nothing from the giver's own balance, so this allowance is what bounds it. Works with: 'Full sends per cycle', 'Gratitude each heart sends', 'Hearts one member can tap for another per cycle', and 'Sending-budget multiplier' under Progression.
 
 | Fact | Value |
 | --- | --- |
 | Key | `gratitude.base_budget` |
 | Type | integer, a whole number |
-| Default | `100` |
+| Default | `105` |
 | Range | 0 to 100000 |
 | Counted in | Gratitude |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
+| What it costs to change | a routine vote |
 
 ### Value pool distributed at each cycle close
 
@@ -258,6 +287,7 @@ How many tokens the village shares out when a lunar cycle closes. The pool is sp
 | Counted in | tokens |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
+| What it costs to change | a routine vote |
 
 ### Which token the pool pays
 
@@ -271,20 +301,22 @@ The token the cycle pool pays out, for example your village's credits. The list 
 | Range | no bounds are set |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
+| What it costs to change | a routine vote |
 
-### Share of an allowance any one person can receive
+### Full sends per cycle
 
-The most of a giver's cycle allowance that any one other member can receive. At the default of 25 a member can give any one person a quarter of what they have, across as many sends as they like, so it takes at least four people to spend an allowance. Set it to 100 and one person can receive somebody's whole allowance. Set it to 1 and it takes a hundred people to spend one. It counts written acknowledgments and feed hearts TOGETHER, so neither channel can carry what the other refuses. The figure it is a share of is the base sending allowance times the giver's stage multiplier, so at the stock ladder 25 means 25 Gratitude to one person at Guest and 125 at Sage. The ceiling never falls below 1 Gratitude, so a small allowance and a small share cannot combine into a village where nobody can give anything at all. This is also the dial that bounds concentrated VOICE while Gratitude is the weight token under Governance: it decides how much of one member's standing may come from a single relationship. Works with: 'Base sending allowance per cycle', 'Gratitude each heart sends', 'Hearts one member can tap for another per cycle', and 'Sending-budget multiplier' under Progression.
+How many people it takes to give a whole allowance away, and so how many full-strength gifts a member has each cycle. At the default of 7 the most any one person can receive is a seventh of the giver's allowance, across as many sends as they like, so thanking seven people spends everything. Set it to 1 and one person can receive somebody's whole allowance. Set it to 100 and it takes a hundred people to spend one. Sending to more people than this is allowed and always was: the ceiling bounds the AMOUNT one person may receive and never the number of sends, so a wider circle simply means smaller gifts. It counts written acknowledgments and feed hearts TOGETHER, so neither channel can carry what the other refuses. The ceiling is the base sending allowance times the giver's stage multiplier, divided by this number, so at the stock ladder 7 means 15 Gratitude to one person at Guest and 75 at Sage. It never falls below 1 Gratitude, so a small allowance and a large count cannot combine into a village where nobody can give anything at all. This is also the dial that bounds concentrated VOICE while Gratitude is the weight token under Governance: it decides how much of one member's standing may come from a single relationship. Works with: 'Base sending allowance per cycle', 'Gratitude each heart sends', 'Hearts one member can tap for another per cycle', and 'Sending-budget multiplier' under Progression.
 
 | Fact | Value |
 | --- | --- |
-| Key | `gratitude.max_share_per_recipient` |
-| Type | percentage, a percentage |
-| Default | `25` |
-| Range | 1 to 100 |
-| Counted in | % of the allowance |
+| Key | `gratitude.full_sends_per_cycle` |
+| Type | integer, a whole number |
+| Default | `7` |
+| Range | 1 to 1000 |
+| Counted in | full sends |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
+| What it costs to change | a routine vote |
 
 ### Require a message with every acknowledgment
 
@@ -298,6 +330,26 @@ When on, Gratitude cannot be sent silently. The message is what makes recognitio
 | Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### The rhythm the village keeps time by
+
+Whether a cycle is a moon or a calendar month. The moon is the default and is what every village has run on: budgets refill, caps reset and the settlement lands at the new moon, so the village keeps its own rhythm instead of the one on an office wall. Calendar months suit a village whose money and reporting already run that way. The switch is a constitutional change and lands only where a cycle ends, with every finished cycle settled first, so no cycle is ever cut in half or settled against a clock it was not played on. Every cycle already closed keeps the name and the dates it closed under, whichever rhythm the village moves to.
+
+| Fact | Value |
+| --- | --- |
+| Key | `cycle.mode` |
+| Type | choice, one of a fixed list |
+| Default | `lunar` |
+| Range | one of the choices below |
+| Who may change it | the whole village |
+| A change takes effect | at the next cycle close |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
+
+What it may be set to:
+
+- `lunar` The moon. New moon to new moon, about 29.5 days. Boundaries come from a checked-in table of true new moons.
+- `calendar` The calendar month. First of the month to first of the month, UTC. Cycles carry ids like month-2026-09.
 
 ### Gratitude each heart sends
 
@@ -312,6 +364,7 @@ What one tap of appreciation on the feed is worth. A heart is a real send: it co
 | Counted in | Gratitude |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
+| What it costs to change | a routine vote |
 
 ### Hearts one member can tap for another per cycle
 
@@ -326,6 +379,7 @@ How many separate taps of appreciation one member can leave for another in a cyc
 | Counted in | hearts |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
+| What it costs to change | a routine vote |
 
 ### Recognition for an accepted Work With Us proposal
 
@@ -340,14 +394,15 @@ How much recognition is minted for a member whose Work With Us proposal is accep
 | Counted in | Gratitude |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Ledger
 
 2 dials. 2 for the whole village.
 
-### Admin mint cap per lunar cycle
+### Admin mint cap per cycle
 
-The most any admins can mint by hand, in total, per token, per lunar cycle (S9's mint endpoint enforces it as an aggregate, not per call). COUNTED IN WHOLE TOKENS, so 100 means a hundred of the token and not a hundred of whatever the ledger stores underneath. A cap on manual issuance is what makes 'the numbers mean something' a property of the system instead of a promise from whoever holds admin. 0 disables manual minting entirely.
+The most any admins can mint by hand, in total, per token, per cycle (S9's mint endpoint enforces it as an aggregate, not per call). COUNTED IN WHOLE TOKENS, so 100 means a hundred of the token and not a hundred of whatever the ledger stores underneath. A cap on manual issuance is what makes 'the numbers mean something' a property of the system instead of a promise from whoever holds admin. 0 disables manual minting entirely.
 
 | Fact | Value |
 | --- | --- |
@@ -358,6 +413,7 @@ The most any admins can mint by hand, in total, per token, per lunar cycle (S9's
 | Counted in | tokens |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
+| What it costs to change | a routine vote |
 
 ### Second steward needed above
 
@@ -372,6 +428,7 @@ A hand-mint larger than this waits for a SECOND steward to agree before any toke
 | Counted in | tokens |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## The Mint
 
@@ -390,6 +447,7 @@ How much voice someone gathers before their chip turns claimable. What this real
 | Counted in | voice |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
+| What it costs to change | a routine vote |
 
 ### How many days Claims Week stays open
 
@@ -404,10 +462,11 @@ Claims open for one window each season, so a whole season of contribution formal
 | Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
+| What it costs to change | a routine vote |
 
 ### When each Claims Week begins
 
-Four dates a year, one per season, as MM-DD separated by commas. The default follows the solstices and equinoxes, which is the same rhythm the moon settlement already runs on. Leave it blank to keep claims open all year, which suits a village that would rather not batch.
+Four dates a year, one per season, as MM-DD separated by commas. The default follows the solstices and equinoxes, which is the sun's rhythm and a different clock from the cycle the settlement keeps: a season turn and a cycle boundary fall on different days, and the window opens at midnight in the village timezone. Leave it blank to keep claims open all year, which suits a village that would rather not batch.
 
 | Fact | Value |
 | --- | --- |
@@ -417,6 +476,7 @@ Four dates a year, one per season, as MM-DD separated by commas. The default fol
 | Range | no bounds are set |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
+| What it costs to change | a routine vote |
 
 ### Your Hypha space
 
@@ -430,6 +490,7 @@ The DHO slug that voice claims are raised into, from app.hypha.earth. Until this
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Progression
 
@@ -447,6 +508,7 @@ A season can end with every seat vacated and offered again. Reopening on a rhyth
 | Range | one of the choices below |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 What it may be set to:
 
@@ -468,6 +530,7 @@ Multiplies the base Gratitude sending allowance for members at the Visitor stage
 | Counted in | x base budget |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
+| What it costs to change | a routine vote |
 
 ### Sending-budget multiplier: Guest
 
@@ -482,6 +545,7 @@ Multiplies the base Gratitude sending allowance for members at the Guest stage, 
 | Counted in | x base budget |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
+| What it costs to change | a routine vote |
 
 ### Sending-budget multiplier: Immersant
 
@@ -496,6 +560,7 @@ Multiplies the base Gratitude sending allowance for members at the Immersant sta
 | Counted in | x base budget |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
+| What it costs to change | a routine vote |
 
 ### Sending-budget multiplier: Participant
 
@@ -510,6 +575,7 @@ Multiplies the base Gratitude sending allowance for members at the Participant s
 | Counted in | x base budget |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
+| What it costs to change | a routine vote |
 
 ### Sending-budget multiplier: Member
 
@@ -524,6 +590,7 @@ Multiplies the base Gratitude sending allowance for members at the Member stage,
 | Counted in | x base budget |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
+| What it costs to change | a routine vote |
 
 ### Sending-budget multiplier: Contributor
 
@@ -538,6 +605,7 @@ Multiplies the base Gratitude sending allowance for members at the Contributor s
 | Counted in | x base budget |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
+| What it costs to change | a routine vote |
 
 ### Sending-budget multiplier: Quest Seeker
 
@@ -552,6 +620,7 @@ Multiplies the base Gratitude sending allowance for members at the Quest Seeker 
 | Counted in | x base budget |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
+| What it costs to change | a routine vote |
 
 ### Sending-budget multiplier: Initiate
 
@@ -566,6 +635,7 @@ Multiplies the base Gratitude sending allowance for members at the Initiate stag
 | Counted in | x base budget |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
+| What it costs to change | a routine vote |
 
 ### Sending-budget multiplier: Co-Creator
 
@@ -580,6 +650,7 @@ Multiplies the base Gratitude sending allowance for members at the Co-Creator st
 | Counted in | x base budget |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
+| What it costs to change | a routine vote |
 
 ### Sending-budget multiplier: Role Holder
 
@@ -594,6 +665,7 @@ Multiplies the base Gratitude sending allowance for members at the Role Holder s
 | Counted in | x base budget |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
+| What it costs to change | a routine vote |
 
 ### Sending-budget multiplier: Guide
 
@@ -608,6 +680,7 @@ Multiplies the base Gratitude sending allowance for members at the Guide stage, 
 | Counted in | x base budget |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
+| What it costs to change | a routine vote |
 
 ### Sending-budget multiplier: Sage
 
@@ -622,6 +695,7 @@ Multiplies the base Gratitude sending allowance for members at the Sage stage, s
 | Counted in | x base budget |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
+| What it costs to change | a routine vote |
 
 ### Consented quests to reach Contributor
 
@@ -636,6 +710,7 @@ How many consented quests advance a member to the Contributor stage. Raising it 
 | Counted in | consented quests |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Consented quests to reach Quest Seeker
 
@@ -650,6 +725,7 @@ How many consented quests advance a member to the Quest Seeker stage. Raising it
 | Counted in | consented quests |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Stage that unlocks: forum.post
 
@@ -663,6 +739,7 @@ Which rung of the ladder grants "forum.post" by progression alone. Roles and bad
 | Range | one of the choices below |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 What it may be set to:
 
@@ -692,6 +769,7 @@ Which rung of the ladder grants "proposal.open" by progression alone. Roles and 
 | Range | one of the choices below |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 What it may be set to:
 
@@ -721,6 +799,7 @@ Which rung of the ladder grants "map.viewPeople" by progression alone. Roles and
 | Range | one of the choices below |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 What it may be set to:
 
@@ -750,6 +829,7 @@ Which rung of the ladder grants "map.contact" by progression alone. Roles and ba
 | Range | one of the choices below |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 What it may be set to:
 
@@ -779,6 +859,7 @@ Which rung of the ladder grants "stay.member_rate" by progression alone. Roles a
 | Range | one of the choices below |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 What it may be set to:
 
@@ -808,6 +889,7 @@ Which rung of the ladder grants "message.send" by progression alone. Roles and b
 | Range | one of the choices below |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 What it may be set to:
 
@@ -837,6 +919,7 @@ Which rung of the ladder grants "exchange.buy" by progression alone. Roles and b
 | Range | one of the choices below |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 What it may be set to:
 
@@ -866,6 +949,7 @@ Which rung of the ladder grants "exchange.swap" by progression alone. Roles and 
 | Range | one of the choices below |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 What it may be set to:
 
@@ -895,6 +979,7 @@ Which rung of the ladder grants "mechanics.propose" by progression alone. Roles 
 | Range | one of the choices below |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 What it may be set to:
 
@@ -924,6 +1009,7 @@ Which rung of the ladder grants "event.rsvp" by progression alone. Roles and bad
 | Range | one of the choices below |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 What it may be set to:
 
@@ -953,6 +1039,7 @@ Which rung of the ladder grants "ballot.vote" by progression alone. Roles and ba
 | Range | one of the choices below |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 What it may be set to:
 
@@ -982,6 +1069,7 @@ Which rung of the ladder grants "member.vouch" by progression alone. Roles and b
 | Range | one of the choices below |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 What it may be set to:
 
@@ -1011,6 +1099,7 @@ Which rung of the ladder grants "map.photograph" by progression alone. Roles and
 | Range | one of the choices below |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 What it may be set to:
 
@@ -1044,6 +1133,7 @@ Controls what an admin may award when consenting to finished work. Capping it at
 | Range | one of the choices below |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 What it may be set to:
 
@@ -1064,6 +1154,7 @@ When the cap mode is 'up to a multiple', this is the most that can be awarded as
 | Counted in | x posted |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Require submitted work before consent
 
@@ -1077,6 +1168,7 @@ When on, value can only be released for work that was actually filed. Turning th
 | Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Allow consenting at zero
 
@@ -1090,6 +1182,7 @@ When on, a claim can be consented with an amount of 0, meaning 'acknowledged, no
 | Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Founder may self-consent below this many members
 
@@ -1104,10 +1197,11 @@ Consent normally needs a second person to witness the work: nobody may consent t
 | Counted in | members |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Governance
 
-16 dials. 12 for the whole village, 4 for the founder or an admin.
+43 dials. 39 for the whole village, 4 for the founder or an admin.
 
 ### How sensing is weighted
 
@@ -1121,6 +1215,7 @@ Sensing gathers support before a ballot opens. Choose whether it gives everyone 
 | Range | one of the choices below |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 What it may be set to:
 
@@ -1140,6 +1235,7 @@ Earned recognition a member needs before they can OPEN mechanics proposals and s
 | Counted in | Gratitude |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### How long a topic stays open for sensing
 
@@ -1154,6 +1250,7 @@ Days a proposal collects perspectives before it can move to a decision. Long eno
 | Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Mechanics proposals per member per cycle
 
@@ -1168,6 +1265,7 @@ How many game-rule change proposals one member may open per cycle. A ceiling on 
 | Counted in | per cycle |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Supporters before a proposal can go to the vote
 
@@ -1182,19 +1280,21 @@ How many members must support a mechanics proposal in-game before it can be take
 | Counted in | supporters |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
-### ReGen governance hub URL
+### Governance hub URL
 
-Base URL of the ReGen hub that listens to the chain for this village. When a proposal's Hypha URL is pasted in, the platform registers the on-chain proposal id with this hub (signed with the shared governance secret) so the verified outcome can find its way home. Leave as the platform default unless you run your own hub.
+Base URL of the hub that listens to the chain for this village. When a proposal's Hypha URL is pasted in, the platform registers the on-chain proposal id with this hub (signed with the shared governance secret) so the verified outcome can find its way home. Empty means this village has no hub: nothing is registered and nothing is sent anywhere. Fill it in only if you run a hub or have been given one to point at.
 
 | Fact | Value |
 | --- | --- |
 | Key | `governance.hub_url` |
 | Type | text, free text |
-| Default | `https://regencivics.earth` |
+| Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Apply verified proposals automatically
 
@@ -1208,6 +1308,93 @@ When on, a proposal verified as passed on-chain applies itself: instantly for in
 | Range | on or off |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
+
+### Which decisions a steward can stop
+
+A steward can stop a decision the village has already carried, inside the window before it lands, and has to say why. This names which kinds of decision are inside that reach. Leave it as all while the village is young; name a shorter list, or none, as it learns to trust its own agreements. A village with no steward and self-executing agreements is a healthy village, not a broken one. Advisory votes are never in reach, because they change nothing. Neither is the ballot that seats or unseats a steward, so the seat can never stop its own removal.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.steward_subjects` |
+| Type | text, free text |
+| Default | `all` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
+
+### Which sizes of decision a steward can stop
+
+Every decision carries a size: routine, structural, or constitutional. This names the sizes a steward may stop inside the window before a decision lands, and a veto needs the decision to be in reach on both this list and the one above. The default is constitutional on its own, so the seat can pause the changes that reshape the village and leaves the smaller ones alone. Write them separated by commas, or write all. Leave it empty and no steward can stop anything, which is a healthy village and not a broken one. Changing this is priced at the top tier and no steward can stop the change, because a seat that could veto an edit to its own limits would have none.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.steward_veto_tiers` |
+| Type | text, free text |
+| Default | `constitutional` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
+
+### Payouts above this wait three days before they are sent
+
+A payout the village votes through is sent the moment it passes. Above this amount it waits the steward window first, so somebody can catch a send that would empty a purse or reward the wrong work. The amount is counted in whole tokens of whatever token is being sent, so a village holding several tokens with very different sizes should set this against the one it actually pays people in. Zero makes every payout wait.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.payout_delay_over` |
+| Type | integer, a whole number |
+| Default | `1000` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
+
+### A veto needs a majority of the stewards
+
+Off by default, and off means any one seated steward can stop a decision on their own. Turn it on and a village with several stewards runs them as a council: stopping a decision then takes a majority of the seated seats, so one seat alone cannot hold the village up. Changing this is priced at the top tier, and no steward can stop the change, because a seat that could veto an edit to its own limits would have none.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.steward_council` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
+
+### How long a steward has to stop a change
+
+A change to the Game that the village has passed does not take effect straight away. It is stamped with a landing instant and a steward may stop it until then, with a reason that goes on the record. This is the least notice a steward gets, counted from the moment the vote closes. 72 hours is the floor and cannot be lowered; a village may give its stewards longer. A decision that sends tokens is not held by this: a steward stops one of those by voting no while the ballot is still open.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.veto_hours` |
+| Type | integer, a whole number |
+| Default | `72` |
+| Range | 72 to 720 |
+| Counted in | hours |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
+
+### Cycles a passed decision waits before it is written off
+
+A decision the village passed is stamped with the instant it takes effect. If it is still sitting there this many cycles after that instant, it is closed and the village is told. The door back is to withdraw and rewrite it, which keeps everybody who backed it. Set it higher for a village that turns the automatic landing off for long stretches.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.landing_expiry_cycles` |
+| Type | integer, a whole number |
+| Default | `3` |
+| Range | 1 to 12 |
+| Counted in | cycles |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
 
 ### Cooldown after a governed rule change
 
@@ -1222,6 +1409,148 @@ After a dial is changed by a passed proposal, this many days must pass before a 
 | Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### When a change to the Game Mechanics can go to the vote
+
+always_open lets anyone take a change set to the vote on any day. last_days_of_cycle:7 opens it in the last seven days before the moon turns, so the village reads its changes together. last_days_of_season:14 opens it in the last two weeks of the season that is running. custom:1-7 names your own days of the cycle, counted from the moon. A window decides when a vote may OPEN: a vote already running is never closed by a window shutting, and a proposal coming back after a veto or an objection opens outside its window for the grace named below.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.window_changeset` |
+| Type | text, free text |
+| Default | `always_open` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
+
+### When a change to what the village mints can go to the vote
+
+The window a minting change opens in, in the same words as the change set window above. This one is separate because a village that wants its minting read together can hold minting to a window while everything else stays open. A change set carrying a minting element is held to the stricter of the two.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.window_mint_rule` |
+| Type | text, free text |
+| Default | `always_open` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
+
+### When a change to how votes are counted can go to the vote
+
+The window a vote-mode switch opens in, in the same words as the change set window above. A change set carrying a mode switch is held to this window as well as its own, so the biggest change in a bundle cannot ride into an open week under a small one.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.window_governance_mode` |
+| Type | text, free text |
+| Default | `always_open` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
+
+### When declaring a role can go to the vote
+
+The window a proposal that declares a new role opens in, in the same words as the change set window above.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.window_role_declare` |
+| Type | text, free text |
+| Default | `always_open` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
+
+### When seating a role can go to the vote
+
+The window a proposal that asks somebody to sit in a role opens in, in the same words as the change set window above. Hold this one open while a village is young: a seat nobody can be asked to fill is a seat that stays empty until the calendar allows it.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.window_role_seat` |
+| Type | text, free text |
+| Default | `always_open` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
+
+### When taking a seat back can go to the vote
+
+The window a proposal that takes a seat back opens in, in the same words as the change set window above. A village that windows this one is choosing to wait before it can remove somebody, so leave it always open unless you have a reason you can say out loud.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.window_role_unseat` |
+| Type | text, free text |
+| Default | `always_open` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
+
+### When moving a power to a role can go to the vote
+
+The window a proposal that moves a power from the admin panel to a role opens in, in the same words as the change set window above.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.window_power_transfer` |
+| Type | text, free text |
+| Default | `always_open` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
+
+### When granting a power can go to the vote
+
+The window a proposal that grants a power to a role opens in, in the same words as the change set window above.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.window_power_grant` |
+| Type | text, free text |
+| Default | `always_open` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
+
+### When handing a power back can go to the vote
+
+The window a proposal that hands a power back to the admin panel opens in, in the same words as the change set window above.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.window_power_return` |
+| Type | text, free text |
+| Default | `always_open` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
+
+### How long a proposal coming back may open outside its window
+
+A resubmission after objections, a veto override and a renewal of a trial are all proposals coming back, and the village has already been asked once. Each of them may open outside its kind's window for this many days after the decision it comes back from closed. Set this to 0 and a single steward's veto becomes unanswerable until the next window opens.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.window_grace_days` |
+| Type | integer, a whole number |
+| Default | `7` |
+| Range | 0 to 90 |
+| Counted in | days |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
 
 ### How voting weight is assigned
 
@@ -1235,6 +1564,7 @@ What one member's vote weighs on an on-site ballot. Equal gives every eligible m
 | Range | one of the choices below |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
 
 What it may be set to:
 
@@ -1254,6 +1584,7 @@ Which token weighs votes when the weight mode is token. Only tokens this platfor
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
 
 ### Unity needed to pass
 
@@ -1268,6 +1599,7 @@ Of the votes cast for or against, the share that must be in favor for a ballot r
 | Counted in | % |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
 
 ### Quorum needed to count
 
@@ -1282,10 +1614,11 @@ The share of the electorate's total voting weight that must show up, counting ab
 | Counted in | % |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
 
 ### How long a ballot stays open
 
-Days between a ballot opening and its votes locking. Votes can be changed freely until then. After the period ends the ballot waits for a human to close it and record the outcome; nothing executes on a timer.
+Days between a ballot opening and its votes locking. Votes can be changed freely until then. The clock closes the ballot when the window ends and the village's own engine reads the result, so nobody chooses the moment. A change to the Game then waits again, for the window a steward can stop it in.
 
 | Fact | Value |
 | --- | --- |
@@ -1296,6 +1629,7 @@ Days between a ballot opening and its votes locking. Votes can be changed freely
 | Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### How long a consent window stays open
 
@@ -1310,6 +1644,7 @@ Days an objection window runs on a consent ballot. A consent decision passes whe
 | Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### How village-wide ballots decide
 
@@ -1323,6 +1658,7 @@ The method a village-wide ballot uses when nothing more specific applies. Your o
 | Range | one of the choices below |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
 
 What it may be set to:
 
@@ -1331,6 +1667,175 @@ What it may be set to:
 - `consensus` Consensus. Everyone who takes a side agrees.
 - `consent` Consent. Passes when no reasoned objection stands.
 - `hypha` Decide on Hypha. The shipped loop: the binding vote happens in your Hypha space.
+
+### Routine changes: quorum floor
+
+The least share of the village's voting weight that must turn up before an ordinary change to the Game can be decided. Ordinary means a number the village tunes while it plays. 0 leaves it entirely to your own quorum setting above, which is the shipped posture. Raise it to ask for more attention on every change, however small.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.tier_routine_quorum_pct` |
+| Type | percentage, a percentage |
+| Default | `0` |
+| Range | 0 to 100 |
+| Counted in | % |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
+
+### Routine changes: unity floor
+
+The least share of the votes cast for or against that must be in favour before an ordinary change to the Game carries. 0 leaves it entirely to your own unity setting above, which is the shipped posture.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.tier_routine_unity_pct` |
+| Type | percentage, a percentage |
+| Default | `0` |
+| Range | 0 to 100 |
+| Counted in | % |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
+
+### Structural changes: quorum floor
+
+The least share of the village's voting weight that must turn up before a structural change can be decided. Structural means it changes how the village decides or who belongs to it: the unity and quorum settings themselves, how ballots decide, who may be admitted, what the village mints, and turning a part of the Game on or off. The shipped 50 is this platform's starting number and your village may raise it. It cannot go below the platform floor.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.tier_structural_quorum_pct` |
+| Type | percentage, a percentage |
+| Default | `50` |
+| Range | 50 to 100 |
+| Counted in | % |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
+
+### Structural changes: unity floor
+
+The least share of the votes cast for or against that must be in favour before a structural change carries. The shipped 80 is the number this platform inherited from Hypha, and it is a starting point your village may raise. It cannot go below the platform floor.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.tier_structural_unity_pct` |
+| Type | percentage, a percentage |
+| Default | `80` |
+| Range | 80 to 100 |
+| Counted in | % |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
+
+### Constitutional changes: quorum floor
+
+The least share of the village's voting weight that must turn up before a constitutional change can be decided. Constitutional means it changes the rules for changing the rules: how voting weight is assigned, which token carries weight, and these bars themselves. The shipped number is 97, which leaves room for 3 in 100 to be unreachable on the day. Going higher is allowed and the Game will warn you why it is risky.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.tier_constitutional_quorum_pct` |
+| Type | percentage, a percentage |
+| Default | `97` |
+| Range | 97 to 100 |
+| Counted in | % |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
+
+### Constitutional changes: unity floor
+
+The least share of the votes cast for or against that must be in favour before a constitutional change carries. The shipped number is 97. Going higher is allowed and the Game will warn you why it is risky.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.tier_constitutional_unity_pct` |
+| Type | percentage, a percentage |
+| Default | `97` |
+| Range | 97 to 100 |
+| Counted in | % |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
+
+### The tier a veto override is passed at
+
+A steward can veto a change the village passed. The village can bring the same proposal back and pass it again at this tier, and then it lands whatever any steward says. This names which tier that is: the highest one your village works at. Moving this setting costs whatever the tier it currently names costs, so lowering it is as hard as the bar you are lowering.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.highest_tier` |
+| Type | choice, one of a fixed list |
+| Default | `constitutional` |
+| Range | one of the choices below |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
+
+What it may be set to:
+
+- `routine` Routine. Your own unity and quorum settings decide an override.
+- `structural` Structural. An override asks the structural bar: how the village decides.
+- `constitutional` Constitutional. An override asks the highest bar this platform ships.
+
+### Minting rule changes: quorum floor
+
+The least share of the village's voting weight that must turn up before a change to what the village mints can be decided. This one sits on top of the structural tier, so raising it asks for more attention on minting alone without moving every other structural change with it. Cannot be set below the platform floor.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.subject_mint_rule_quorum_pct` |
+| Type | percentage, a percentage |
+| Default | `50` |
+| Range | 50 to 100 |
+| Counted in | % |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
+
+### Minting rule changes: unity floor
+
+The least share of the votes cast for or against that must be in favour before a change to what the village mints carries. 0 leaves it to the structural tier and your own unity setting.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.subject_mint_rule_unity_pct` |
+| Type | percentage, a percentage |
+| Default | `0` |
+| Range | 0 to 100 |
+| Counted in | % |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
+
+### Seats speaking for other beings count toward quorum
+
+Your village can seat a voice for a being that is not a person: a mountain, a river, the trees, the wolves. A member or a bot holds that seat and casts its vote. This says whether the weight on such a seat is part of the count that decides whether enough of the village turned up. Off, which is how it ships, leaves that weight out of the count on both sides of the sum, and a vote cast from the seat still counts toward agreement. On counts it like any member's, and weight that provably cannot answer drops out of the count instead.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.nonhuman_in_quorum` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
+
+### Cycles of silence before a seat leaves the count
+
+When seats speaking for other beings do count toward quorum, this is how many cycles of casting nothing it takes before such a seat's weight drops out of the count. A seat nobody holds drops out straight away. The weight is always shown beside the people count, so the village can see how much of its Voice is silent. Nothing here changes a threshold: it changes what the threshold is measured against.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.absent_cycles` |
+| Type | integer, a whole number |
+| Default | `3` |
+| Range | 1 to 24 |
+| Counted in | cycles |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
 
 ### Vouches to admit a member
 
@@ -1345,6 +1850,7 @@ How many standing members must vouch for an applicant before membership complete
 | Counted in | vouches |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
 
 ## Tokens
 
@@ -1362,6 +1868,7 @@ The ERC-20 address for the project's equity token. The platform only ever READS 
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Governance token contract address on Base
 
@@ -1375,6 +1882,7 @@ The ERC-20 address for the governance-weight token. Read-only here, exactly like
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Show the economics section
 
@@ -1388,6 +1896,7 @@ Displays token balances and Gratitude flows on member profiles. Turn off while t
 | Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Base RPC endpoint
 
@@ -1401,6 +1910,7 @@ Where balances are read from. A public endpoint is fine to start; a dedicated on
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Hypha
 
@@ -1418,6 +1928,7 @@ The one place this platform sends people for governance, proposals, treasury and
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Hypha space id (on-chain)
 
@@ -1431,6 +1942,7 @@ The numeric id of your DAO's space on Hypha's Base contracts. Every on-chain pro
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### DAO treasury address on Base
 
@@ -1444,6 +1956,7 @@ The 0x address holding your DAO's treasury on Base. The Hypha Bridge module read
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Founder Base account address
 
@@ -1457,6 +1970,7 @@ The 0x address that created your DAO and issued its first tokens on Base. The Hy
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Override: governance link
 
@@ -1470,6 +1984,7 @@ Only if your DHO's governance page is not at the org root. Blank derives from th
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Override: proposals link
 
@@ -1483,6 +1998,7 @@ Only if your DHO's proposals page is not at /agreements. Blank derives from the 
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Override: treasury link
 
@@ -1496,6 +2012,7 @@ Only if your DHO's treasury page is not at /treasury. Blank derives from the DHO
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Override: members link
 
@@ -1509,6 +2026,7 @@ Only if your DHO's members page is not at /members. Blank derives from the DHO a
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Tools
 
@@ -1526,6 +2044,7 @@ When on, opening a tool records an anonymous-friendly click row (member id attac
 | Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Days between automatic link checks
 
@@ -1540,6 +2059,7 @@ When on, opening a tool records an anonymous-friendly click row (member id attac
 | Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Accounts & sessions
 
@@ -1558,6 +2078,7 @@ How long a sign-in lasts before the member has to sign in again. Applies to sess
 | Counted in | days |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Most emails one member receives per day
 
@@ -1572,6 +2093,7 @@ Over this many notification emails in a rolling 24 hours, further ones stay in-a
 | Counted in | per day |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Abuse guards
 
@@ -1590,6 +2112,7 @@ How many account registrations one IP address may attempt per hour. Also bounds 
 | Counted in | per hour |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Failed logins per IP per 15 minutes
 
@@ -1604,6 +2127,7 @@ How many FAILED sign-in attempts one IP address may make per 15 minutes. Success
 | Counted in | per 15 min |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Failed logins per account per 15 minutes
 
@@ -1618,6 +2142,7 @@ How many FAILED sign-in attempts any one account may receive per 15 minutes, fro
 | Counted in | per 15 min |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Password-reset requests per IP per hour
 
@@ -1632,6 +2157,7 @@ How many 'forgot password' requests one IP address may make per hour. Each one c
 | Counted in | per hour |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Investor-packet requests per IP per hour
 
@@ -1646,6 +2172,7 @@ How many investor document requests one IP address may make per hour. Each reque
 | Counted in | per hour |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Data lifecycle
 
@@ -1664,6 +2191,7 @@ Form submissions carry personal details (names, emails, phone numbers). Once a s
 | Counted in | days |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Keep read notifications for
 
@@ -1678,6 +2206,7 @@ Read notifications older than this are deleted by the daily sweep. Unread ones s
 | Counted in | days |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Leave an unreferenced upload alone for
 
@@ -1692,6 +2221,7 @@ The uploads volume holds files from five doors: proposal attachments, brand imag
 | Counted in | days |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Automation
 
@@ -1709,6 +2239,7 @@ Recordings that have a transcript and no synthesis are sent to the model in one 
 | Range | on or off |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Village map
 
@@ -1726,6 +2257,7 @@ When the map module is public, anonymous visitors see circles, role titles and s
 | Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Show the coordination concierge
 
@@ -1739,6 +2271,7 @@ The 'what do you want to do?' bar that routes a member to the right circle, role
 | Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Contact requests a member may send per day
 
@@ -1753,6 +2286,7 @@ The relay's outbound brake. 0 disables the contact relay entirely.
 | Counted in | messages |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Contact requests one person receives per day
 
@@ -1767,6 +2301,7 @@ Protects busy role holders. Once someone's day is full, would-be senders are poi
 | Counted in | messages |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Show open quests on the map
 
@@ -1780,6 +2315,7 @@ Open quests orbit their circle as small satellites, capped for legibility.
 | Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Highlight vacant seats
 
@@ -1793,6 +2329,7 @@ Vacant roles pulse gently as an open call. Off renders them as plain grey rings.
 | Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Keep contact message bodies for
 
@@ -1807,6 +2344,7 @@ Relay message bodies are personal correspondence: the daily sweep clears bodies 
 | Counted in | days |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Largest photograph a member may upload
 
@@ -1821,6 +2359,7 @@ Measured on the file that arrives. The browser shrinks a picture to WebP before 
 | Counted in | MB |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Photographs one place may hold
 
@@ -1835,6 +2374,7 @@ Counts the pictures currently on a place, so a takedown frees a slot. 0 means no
 | Counted in | photos |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Photographs one member may add per day
 
@@ -1849,6 +2389,7 @@ Counted across every place over the last 24 hours. 0 closes contribution for eve
 | Counted in | photos |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Reports that hide a photograph on their own
 
@@ -1863,6 +2404,7 @@ Distinct members flagging one picture. Once this many have, it leaves the galler
 | Counted in | reports |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Keep the record of a removed photograph for
 
@@ -1877,6 +2419,7 @@ A photograph taken down loses its file immediately. What stays is the record of 
 | Counted in | days |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## The village's people
 
@@ -1894,6 +2437,7 @@ On, anyone can read the first names of the people holding each seat on the Team,
 | Range | on or off |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Events
 
@@ -1911,6 +2455,7 @@ Members can say they are coming, and a gathering with a capacity counts them aga
 | Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Show gatherings this far ahead
 
@@ -1925,6 +2470,7 @@ How far into the future the calendar looks. Anything starting beyond this is sto
 | Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Keep finished gatherings listed for
 
@@ -1939,6 +2485,7 @@ A gathering that has ended stays on the calendar this long. Dropping one the mom
 | Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Forum
 
@@ -1957,6 +2504,7 @@ When this many DIFFERENT members soft-report the same thread or reply, it hides 
 | Counted in | reports |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Messages
 
@@ -1975,6 +2523,7 @@ The send limit, counted per member across every conversation they are in. High e
 | Counted in | messages |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Largest group conversation
 
@@ -1989,6 +2538,7 @@ How many people one group thread may hold, the creator included. Every message n
 | Counted in | people |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Feed
 
@@ -2006,6 +2556,7 @@ The feed is a LENS over one forum category plus the village's system events. It 
 | Range | no bounds are set |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Weave the village's own milestones into the feed
 
@@ -2019,6 +2570,7 @@ On, the feed mixes what the village DID (quests consented, seasons turning, peop
 | Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### How much of a long post the feed shows
 
@@ -2033,6 +2585,7 @@ Posts longer than this are cut off in the feed with the rest behind the post its
 | Counted in | characters |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Stays
 
@@ -2050,6 +2603,7 @@ When off, only members can request a stay; visitors see the catalog but must joi
 | Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### New stays autopay by default
 
@@ -2063,6 +2617,7 @@ Whether a newly activated stay burns one credit per night automatically. A guest
 | Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Hour nightly credits post (UTC)
 
@@ -2077,6 +2632,7 @@ The scheduler posts each active stay's nightly credit once per day at (or after)
 | Counted in | h UTC |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Low-balance warning threshold
 
@@ -2091,6 +2647,7 @@ Notify a guest when their remaining credits cover this many nights or fewer at t
 | Counted in | nights |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Grace nights below zero
 
@@ -2105,6 +2662,7 @@ How many nights a stay may keep posting after the balance hits zero before autop
 | Counted in | nights |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Most nights purchasable at once
 
@@ -2119,6 +2677,7 @@ Ceiling on a single credit purchase, counted in nights at the room's posted rate
 | Counted in | nights |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Credit expiry (0 = never)
 
@@ -2133,6 +2692,7 @@ Days until unspent stay credits expire. 0 means they never expire. Expiry is a p
 | Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Members can gift credits to each other
 
@@ -2146,6 +2706,7 @@ Off by default: credits are personal. Turning this on lets a member transfer cre
 | Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Work-exchange quest tag
 
@@ -2159,6 +2720,7 @@ Quests carrying this tag appear on the Stay page as ways to EARN credits. The re
 | Range | no bounds are set |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Stay requests per member per day
 
@@ -2173,6 +2735,7 @@ How many stay requests one member may open in 24 hours. A cap on requests, not o
 | Counted in | per day |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Exchange
 
@@ -2191,6 +2754,7 @@ How far one posted price may move from the previous one, in percent. Big moves h
 | Counted in | % |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### The village's share of each swap
 
@@ -2205,6 +2769,7 @@ In basis points, so half a percent is expressible (50 = 0.50%). This is a POLICY
 | Counted in | bps |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Abandoned card checkouts are released after
 
@@ -2219,6 +2784,7 @@ A card purchase reserves an order the moment checkout opens, before the member h
 | Counted in | hours |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Card-bought tokens settle before they can be swapped
 
@@ -2233,6 +2799,7 @@ Tokens bought with a card are frozen from swapping for this many days, long enou
 | Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Most a member can receive in one swap
 
@@ -2247,6 +2814,7 @@ A ceiling on any single swap, whatever the caps allow across the cycle.
 | Counted in | tokens |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Library
 
@@ -2265,6 +2833,7 @@ What a donor earns, as a share of the item's appraised replacement value. Never 
 | Counted in | % |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Intake credits per member per cycle
 
@@ -2279,6 +2848,7 @@ The most one member can earn from donations in one lunation. Intake is a mint; t
 | Counted in | credits |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Dual sign-off above (appraisal)
 
@@ -2293,6 +2863,7 @@ An item appraised above this needs a SECOND steward's approval before any credit
 | Counted in | credits |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Borrowing escrow, % of value
 
@@ -2307,6 +2878,7 @@ The deposit locked while an item is out, as a share of its appraised value. Retu
 | Counted in | % |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Usage fee per loan, % of value
 
@@ -2321,6 +2893,7 @@ The default wear fee a normal return pays into the library pool, and what a disp
 | Counted in | % |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Loan length
 
@@ -2335,6 +2908,7 @@ Days from pickup to due date.
 | Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Dispute deadline
 
@@ -2349,6 +2923,7 @@ How long a disputed return may sit before stewards settle it with the default ou
 | Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Intake stall alarm
 
@@ -2363,6 +2938,7 @@ An item awaiting its second sign-off longer than this many days appears in the s
 | Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Library reservations per member per day
 
@@ -2377,6 +2953,7 @@ How many items one member may reserve in 24 hours. Bounds how fast one person ca
 | Counted in | per day |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Payments
 
@@ -2395,6 +2972,7 @@ Per-order ceiling across ALL fiat modules: stays, exchange, and anything after t
 | Counted in | USD |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### 30-day purchase limit per member (USD)
 
@@ -2409,6 +2987,7 @@ Rolling 30-day ceiling on one member's total fiat purchases, summed across every
 | Counted in | USD |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Annual purchase limit per member (USD)
 
@@ -2423,6 +3002,7 @@ Rolling 365-day ceiling on one member's total fiat purchases, summed across ever
 | Counted in | USD |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Largest checkout donation
 
@@ -2437,6 +3017,7 @@ The ceiling on a single choose-your-amount donation checkout. Anything above it 
 | Counted in | USD |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Village
 
@@ -2455,6 +3036,7 @@ How many recent happenings the public activity feed shows. Nothing is deleted; t
 | Counted in | entries |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### The date this village counts Moon 1 from
 
@@ -2468,6 +3050,7 @@ Leave blank and Moon 1 is the moon your village launched under, which is what al
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Health
 
@@ -2486,6 +3069,7 @@ After a lunation closes, any tracked metric that moved more than this against th
 | Counted in | % |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Badges
 
@@ -2504,6 +3088,7 @@ How many badges a member may pin to their byline (forum posts, map chips). 0 tur
 | Counted in | badges |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Platform
 
@@ -2521,6 +3106,7 @@ A copy of each bug report and idea submitted here reaches the platform team who 
 | Range | on or off |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Calendar
 
@@ -2538,6 +3124,7 @@ The year's first moon begins at the first new moon after this event. Twelve or t
 | Range | one of the choices below |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 What it may be set to:
 
@@ -2558,6 +3145,7 @@ Which way the seasons turn. Sets which solstice is the longest day and which the
 | Range | one of the choices below |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 What it may be set to:
 
@@ -2576,6 +3164,7 @@ Also put the four midpoints between the solstices and equinoxes on the calendar.
 | Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Introductions
 
@@ -2594,6 +3183,7 @@ Protects busy people, the map relay's per-recipient brake extended to introducti
 | Counted in | introductions |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Match score floor
 
@@ -2608,6 +3198,7 @@ Nothing scoring under this is ever shown. Few good introductions beat many okay 
 | Counted in | points |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Days an introduction stays open
 
@@ -2622,6 +3213,7 @@ How long both people have to say yes. One gentle reminder after three days; past
 | Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Keep match reasoning for
 
@@ -2636,14 +3228,17 @@ The sweep blanks an introduction's reasoning sentences, and the words of expired
 | Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## What this file is made from
 
 The generator reads these and fails loudly if any of them moves:
 
+- `shared/ballotSubjects.ts`
 - `shared/capabilities.ts`
 - `shared/gameConfig.ts`
 - `shared/gameVariables.ts`
+- `shared/governanceEngine.ts`
 - `shared/villageMoon.ts`
 
 The registry is transpiled and IMPORTED to read it, which is what makes the generated dials visible. The multiplier, quest-threshold and unlock dials under Progression are built at module load from the village's own stage ladder, so a reader of the array literal alone would print a document that looked complete and was missing a fifth of the registry.

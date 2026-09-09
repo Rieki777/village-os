@@ -11,7 +11,12 @@ import { formatTokenAmount } from "@/lib/tokenAmount";
 const CLAIM_STATUS: Record<string, { label: string; cls: string }> = {
   claimed: { label: "In progress", cls: "bg-notice/10 text-notice" },
   submitted: { label: "Awaiting consent", cls: "bg-open/10 text-open" },
-  consented: { label: "Completed", cls: "bg-emerald-100 text-emerald-700" },
+  /* The last frozen light pair on this sheet, and the only chip of the four
+     still wearing one: a near-white tint carrying dark green, which on the
+     night card is a bright slab beside three washes of the sheet's own
+     palette. The living green at 10% matches its siblings and measures
+     6.45:1. */
+  consented: { label: "Completed", cls: "bg-open/10 text-open" },
   // 4.39:1 at 12px, which is under the 4.5 floor for text this size, and the
   // one chip on the row that has to be read carefully. stone-600 on the same
   // stone-100 measures 7.00:1 and keeps the chip the quietest of the four.
@@ -20,7 +25,19 @@ const CLAIM_STATUS: Record<string, { label: string; cls: string }> = {
   declined: { label: "Not accepted", cls: "bg-muted text-muted-foreground" },
 };
 
-export default function GameDashboard() {
+/**
+ * `me` and `meFailed` are HANDED IN by Profile.tsx, which is the only caller.
+ *
+ * This component read /api/game/me itself and kept its own refresh listener,
+ * so the profile fetched that payload twice on every mount and a give updated
+ * this card and the vessel on two separate round trips, which is two chances
+ * to show two different balances on one screen.
+ *
+ * The props are optional and the component still reads for itself when nothing
+ * is passed, so it keeps working standalone and its own tests keep driving it
+ * the way they always did.
+ */
+export default function GameDashboard({ me: given, meFailed }: { me?: GameMe | null; meFailed?: boolean } = {}) {
   const [me, setMe] = useState<GameMe | null>(null);
   const currency = useTokenName("Recognition");
   /**
@@ -75,12 +92,33 @@ export default function GameDashboard() {
       .catch(() => setStatus("failed"));
   };
 
+  /*
+   * WHEN THE PAGE HANDS THE PAYLOAD DOWN, THIS DOES NOT FETCH.
+   *
+   * `given === undefined` means nobody passed one, so this reads for itself
+   * exactly as before. `given === null` is different: it means the page HAS a
+   * read and it came back empty or failed, which is a state to reflect and not
+   * a reason to go and ask again.
+   *
+   * The celebration still fires from here, because it is this card's job and
+   * `claimMoment` makes it once-only however many times the payload arrives.
+   */
+  const handedDown = given !== undefined;
   useEffect(() => {
+    if (handedDown) return;
     load();
-  }, []);
-  // A write anywhere on the sheet moves the balance and the quest chips, and
-  // this card had no way to hear about it. See lib/profileRefresh.ts.
-  useEffect(() => onProfileRefresh(() => load(true)), []);
+  }, [handedDown]);
+  useEffect(() => {
+    if (!handedDown) return;
+    setMe(given ?? null);
+    setStatus(meFailed ? "failed" : "ready");
+    const fresh = given?.lastAdvance;
+    if (fresh && claimMoment(`stage:${fresh.toStage}:${fresh.at}`)) setAdvance(fresh);
+  }, [handedDown, given, meFailed]);
+  // A write anywhere on the sheet moves the balance and the quest chips. When
+  // the page owns the read it also owns this listener, so a handed-down card
+  // must not subscribe as well or one give costs two round trips.
+  useEffect(() => (handedDown ? undefined : onProfileRefresh(() => load(true))), [handedDown]);
 
   /*
    * THESE TWO LINES SIT ON THE PAGE, NOT ON A CARD, and the whole file now
@@ -139,25 +177,45 @@ export default function GameDashboard() {
         <StageAdvanced advance={advance} stages={me.stages} onClose={() => setAdvance(null)} />
       )}
 
-      {/* Next best action */}
+      {/*
+        YOUR NEXT STEP, in the sheet's gold rather than the brand's fill.
+
+        It was a solid `bg-teal-deep` panel carrying white text. That is a safe
+        pair, and on the night ground it made the one call to action on the page
+        the darkest block on it: the brand colour is guaranteed to CARRY white,
+        which means it is dark, which means a filled brand panel recedes here
+        instead of leading.
+
+        Gold on a washed gold ground reads as the earned thing it is, and the
+        arrow became a real button because the design was right about that: an
+        arrow at the end of a row is a hint, and a member who has just been told
+        what to do next should be able to press the thing that does it.
+
+        The whole card is still ONE link. A button nested inside a link is two
+        controls a keyboard has to distinguish for one action.
+      */}
       <Link
         href={me.nextAction.href}
-        className="flex items-center justify-between gap-4 bg-teal-deep text-white rounded-2xl px-6 py-5 shadow-md hover:bg-teal transition-colors"
+        className="group flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-notice/50 bg-notice/10 px-6 py-5 shadow-md transition-colors hover:bg-notice/15"
       >
-        <div className="flex items-center gap-3 min-w-0">
-          <Compass className="w-6 h-6 text-amber shrink-0" />
+        <div className="flex min-w-0 items-center gap-3">
+          <Compass className="h-6 w-6 shrink-0 text-notice" aria-hidden="true" />
           <div className="min-w-0">
-            <p className="text-xs uppercase tracking-widest text-white font-semibold">Your next step</p>
-            {/* `truncate` cut this banner's own headline: "Continue your community
-                  training" needs 294px and the box is 241px at 393px, so a member
-                  read "Continue your community tr...". At 320 barely half survived.
-                  It is the ONE call to action on the page, so ellipsising it hides
-                  the thing the banner exists to say. Two lines is cheaper than a
-                  guess. */}
-                <p className="font-display text-lg font-semibold leading-snug">{me.nextAction.label}</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-notice">Your next step</p>
+            {/* `truncate` cut this banner's own headline once: "Continue your
+                community training" needs 294px and the box is 241px at 393px,
+                so a member read "Continue your community tr...". It is the ONE
+                call to action on the page, so ellipsising it hides the thing
+                the banner exists to say. Two lines is cheaper than a guess. */}
+            <p className="font-display text-lg font-semibold leading-snug text-card-foreground">
+              {me.nextAction.label}
+            </p>
           </div>
         </div>
-        <ArrowRight className="w-5 h-5 shrink-0" />
+        <span className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg bg-notice px-4 py-2 font-medium text-background transition-transform group-hover:translate-x-0.5">
+          Take it
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
+        </span>
       </Link>
 
       {/* The stage ladder used to stand here as "Path of Growth". It moved to
@@ -169,32 +227,19 @@ export default function GameDashboard() {
           readers announce. Drawing it in two places would have meant fixing it
           in two places. */}
 
-      {/* Gratitude + quests */}
-      <div className="grid md:grid-cols-2 gap-4">
-        <div className="bg-card rounded-2xl border border-border shadow-sm p-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Heart className="w-5 h-5 text-coral" />
-            <h2 className="font-display text-lg font-bold text-card-foreground">{currency}</h2>
-          </div>
-          {/* Recognition carries decimals 0 today, so this number does not
-              move. It divides anyway: this is the biggest number on the
-              dashboard, and it is the one a member would quote back. See
-              client/src/lib/tokenAmount.ts. */}
-          <p className="text-3xl font-display font-bold text-notice mb-1">
-            {formatTokenAmount(Number(me.gratitude.balance ?? 0), Number(me.gratitude.decimals ?? 0))}
-          </p>
-          <p className="text-sm text-muted-foreground mb-4">earned so far</p>
-          {me.gratitude.budget.total > 0 && (
-            <p className="text-sm text-muted-foreground mb-4">
-              Sending budget: <span className="font-semibold">{me.gratitude.budget.remaining}</span> of{" "}
-              {me.gratitude.budget.total} left this cycle
-            </p>
-          )}
-          <Link href="/gratitude" className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground underline underline-offset-2 hover:text-notice transition-colors">
-            Visit the {currency} Wall <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
+      {/*
+        THE GRATITUDE CARD MOVED TO THE VESSEL, and quests took the width.
 
+        This card printed the balance, the sending budget and a link to the
+        Wall. All three live in TheVessel now, beside the send control, which is
+        the point of consolidating them: a member looking at what they have left
+        to give is the member most likely to want to give it.
+
+        The two-column grid went with it. Two cards side by side was a layout
+        for two cards; one card in a two-column grid is a card with a hole
+        beside it.
+      */}
+      <div>
         <div className="bg-card rounded-2xl border border-border shadow-sm p-6">
           <div className="flex items-center gap-2 mb-3">
             <Sparkles className="w-5 h-5 text-gold" />

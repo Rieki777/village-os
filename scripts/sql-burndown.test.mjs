@@ -210,6 +210,60 @@ try {
   check("keeping the date the entry was first recorded", readBaseline(baselineFile).entries["server/lib/legacy.ts"].since, seededOn);
   check("the gate is green again", runBurndown({ root, baselinePath: baselineFile, ceiling: null }).refusals, []);
 
+  // 3f. THE HOLE, and the reason this section exists at all.
+  //
+  // Until 2026-09-06 the write path compared two GRAND TOTALS while the
+  // register was PER FILE, so a big fall in one file paid for growth in
+  // another and the write recorded the worse state while printing "lowered".
+  // On the real repository the margin was one call site: server/index.ts had
+  // fallen 14 while six other files had grown 15. One more honest extraction
+  // would have spent it.
+  //
+  // The register is written by hand here because the state cannot be reached
+  // through the tool: seeding it would itself be a raise.
+  fs.writeFileSync(
+    baselineFile,
+    `${JSON.stringify(
+      {
+        total: 9,
+        counts: { "server/lib/bulk.ts": 6, "server/lib/legacy.ts": 3 },
+        entries: { "server/lib/bulk.ts": { since: "2020-01-01" }, "server/lib/legacy.ts": { since: "2020-01-01" } },
+      },
+      null,
+      2,
+    )}
+`,
+  );
+  // bulk falls 6 -> 1 (worth five), legacy grows 3 -> 4 (costs one).
+  write("server/lib/bulk.ts", ['const b1 = await pool.query("SELECT 1");']);
+  write("server/lib/legacy.ts", [
+    'const a = await pool.query<RowDataPacket[]>("SELECT 1");',
+    'const b = await pool.query<any[]>("SELECT 2");',
+    'const c = await pool.query("SELECT 3");',
+    'const d = await pool.query<RowDataPacket[]>("SELECT 7");',
+  ]);
+  const paidFor = countsFor(root);
+  check("the fixture really does lower the TOTAL", totalOf(paidFor.counts) < 9, true);
+  check("while one file really has grown", paidFor.counts["server/lib/legacy.ts"] > 3, true);
+
+  const bought = quietly(["--root", root, "--baseline", baselineFile, "--update-baseline"]);
+  check("a fall elsewhere does NOT buy a growth: the write is refused", bought.code, 1);
+  check("and the refusal names the file that grew", bought.said.includes("server/lib/legacy.ts"), true);
+  check("and says the register falls per file", bought.said.includes("only ever falls per file"), true);
+  check("leaving the register on disk untouched", readBaseline(baselineFile).total, 9);
+
+  // The advice printed beside a fall must not send a reader to a command that
+  // would record the growth. Before the fix it named `--update-baseline` and a
+  // total that was ABOVE the ceiling, so following it literally raised the
+  // number the script's own header forbids raising.
+  const mixed = runBurndown({ root, baselinePath: baselineFile, ceiling: null });
+  const staleLine = mixed.refusals.find((l) => l.includes("server/lib/bulk.ts") && l.includes("registered at"));
+  check("a fall beside a growth is still reported", !!staleLine, true);
+  check("but the advice does not name the writing command", staleLine.includes("--update-baseline` writes the WHOLE tree"), true);
+  check("and tells the reader to clear the growth first", staleLine.includes("Clear the growth above first"), true);
+
+  fs.rmSync(path.join(root, "server", "lib", "bulk.ts"));
+
   // 3f. A walk that finds nothing must never read as a clean tree.
   const empty = fs.mkdtempSync(path.join(os.tmpdir(), "sql-burndown-empty-"));
   try {

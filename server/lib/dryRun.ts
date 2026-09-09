@@ -53,9 +53,8 @@
  * moons, a different argument.
  */
 import { GAME_CONFIG } from "../../shared/gameConfig";
-import { cycleBoundsByNumber, cycleBoundsFor } from "../../shared/lunar";
+import { activeClock, boundsForNumber, formatCycleId } from "./gratitude-cycles";
 import type { VillageMoon } from "../../shared/villageMoon";
-import { formatCycleId } from "./gratitude-cycles";
 import { villageMoonForCycle } from "./villageMoon";
 import { cyclePoolProblem } from "./cyclePool";
 import { faucetFor, toLedgerUnits, VILLAGE_VOICE } from "./economy";
@@ -301,7 +300,7 @@ function claimsOpenInside(startsAt: Date, endsAt: Date): { open: boolean; opensA
 function allowanceTable(feedOff: boolean): DryRunAllowance[] {
   const base = numberVar("gratitude.base_budget");
   const heart = numberVar("feed.heart_amount");
-  const sharePct = numberVar("gratitude.max_share_per_recipient");
+  const fullSends = Math.max(1, Math.floor(numberVar("gratitude.full_sends_per_cycle")));
   const tapCap = numberVar("feed.max_hearts_per_recipient_per_cycle");
   return GAME_CONFIG.stages.map((s) => {
     const multiplier = Math.max(0, numberVar(`progression.multiplier.${s.id}`));
@@ -309,8 +308,8 @@ function allowanceTable(feedOff: boolean): DryRunAllowance[] {
     const cap = shareCapFor(allowance);
     const spreadsAcross = cap > 0 ? Math.ceil(allowance / cap) : 0;
     const heartsSendable = allowance > 0 && heart <= cap;
-    // The share the dial asks for, before the floor of 1 is applied.
-    const asked = Math.floor((allowance * sharePct) / 100);
+    // The ceiling the dial asks for, before the floor of 1 is applied.
+    const asked = Math.floor(allowance / fullSends);
     // How many taps the share leaves room for, against how many the feed dial
     // says a member gets. Whichever is smaller is the one a member meets.
     const tapsTheShareAllows = heart > 0 ? Math.floor(cap / heart) : 0;
@@ -320,16 +319,16 @@ function allowanceTable(feedOff: boolean): DryRunAllowance[] {
     } else if (!heartsSendable && !feedOff) {
       note =
         `A heart is worth ${heart} and one person may receive ${cap} from a member at ${s.name}, ` +
-        `so every tap on the feed would be refused. Raise the share, or lower what a heart is worth.`;
+        `so every tap on the feed would be refused. Allow fewer full sends, or lower what a heart is worth.`;
     } else if (asked < 1) {
       note =
-        `A member at ${s.name} gives ${allowance} a moon. ${sharePct}% of that is under one Gratitude, ` +
-        `so the ceiling holds at 1 and the share dial is doing nothing here.`;
+        `A member at ${s.name} gives ${allowance} a moon. Split ${fullSends} ways that is under one Gratitude, ` +
+        `so the ceiling holds at 1 and the full sends dial is doing nothing here.`;
     } else if (tapsTheShareAllows < tapCap && !feedOff) {
       note =
         `A member at ${s.name} gives ${allowance} a moon and up to ${cap} of it to any one person. ` +
         `That is ${tapsTheShareAllows} hearts to one person, and the feed dial says ${tapCap}, ` +
-        `so the share is the one they meet.`;
+        `so the ceiling is the one they meet.`;
     } else {
       note =
         `A member at ${s.name} gives ${allowance} a moon and up to ${cap} of it to any one person, ` +
@@ -540,12 +539,15 @@ export function dryRun(snapshot: DryRunSnapshot, options: DryRunOptions): DryRun
   // before it gets here; this is so the function is safe on its own terms.
   const asked = Math.trunc(Number(options.moons));
   const moons = Number.isFinite(asked) ? Math.max(1, Math.min(MAX_MOONS, asked)) : 1;
-  const firstCycle = cycleBoundsFor(from).cycleNumber;
+  // The village's own clock, so a projection over "moons" counts whatever a
+  // cycle is here: lunations by default, calendar months where a village voted
+  // for them.
+  const firstCycle = activeClock().cycleNumberAt(from);
 
   const turns: DryRunTurn[] = [];
   for (let i = 0; i < moons; i++) {
     const cycle = firstCycle + i;
-    const bounds = cycleBoundsByNumber(cycle);
+    const bounds = boundsForNumber(cycle);
     const inForce = rulesInForce(snapshot.rules, cycle);
     const findings: Finding[] = [
       ...promotionFindings(snapshot.rules, cycle, firstCycle),
@@ -701,7 +703,7 @@ export function dryRun(snapshot: DryRunSnapshot, options: DryRunOptions): DryRun
 
   // ── The jobs, counted and never run ──────────────────────────────────────
   const spanDays = moons > 0
-    ? (cycleBoundsByNumber(firstCycle + moons - 1).endsAt.getTime() - cycleBoundsByNumber(firstCycle).startsAt.getTime()) / DAY_MS
+    ? (boundsForNumber(firstCycle + moons - 1).endsAt.getTime() - boundsForNumber(firstCycle).startsAt.getTime()) / DAY_MS
     : 0;
   const jobs: DryRunJobLine[] = snapshot.jobs
     .map((j) => {

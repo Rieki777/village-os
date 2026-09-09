@@ -66,8 +66,22 @@ describe.skipIf(!configured)("opaque subject references", () => {
   });
 
   it("carries nothing about its subject", async () => {
-    const ref = await subjectRefFor(pool, "ada@example.test");
-    expect(ref).not.toContain("ada");
+    /*
+     * THE PROBE MUST NOT BE SPELLABLE IN HEX.
+     *
+     * This asserted on "ada", and a reference is `sub_` plus 32 hex characters,
+     * so "ada" is a string the generator can produce BY CHANCE. Measured over
+     * 200,000 random refs it appears in 0.69% of them, and CI duly failed on
+     * `sub_b90c7c7ebb212ace01c524bcf4eaadaa` while the code was perfectly
+     * correct: the ref carried nothing about its subject, it just happened to
+     * spell the probe.
+     *
+     * "zoe" cannot occur, because z and o are not hex digits, so the assertion
+     * now fails only when the property it names is actually broken. "example"
+     * was always safe for the same reason and is kept.
+     */
+    const ref = await subjectRefFor(pool, "zoe@example.test");
+    expect(ref).not.toContain("zoe");
     expect(ref).not.toContain("example");
     expect(looksLikeSubjectRef(ref)).toBe(true);
   });

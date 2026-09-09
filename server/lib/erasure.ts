@@ -35,6 +35,7 @@
  * prevent.
  */
 import type { Pool } from "mysql2/promise";
+import { forgetStewardActs } from "./stewardship";
 import { eraseIntentsForMember } from "./intents";
 import { isExampleUser } from "./examples";
 import { forgetMemberInProposals } from "./externalProposals";
@@ -88,6 +89,17 @@ export async function anonymizeMember(
   );
   await pool.query("UPDATE tool_clicks SET user_id = NULL WHERE user_id = ?", [target.id]); // module-review-ok: tool_clicks is de-attributed rather than deleted, because the count is a real metric; the erasure sweep reaches tables that have no repo, and one repo per table would still not give the single enumerable sweep the leaving-well promise depends on
   await pool.query("DELETE FROM health_events WHERE audience = 'public' AND actor_user_id = ?", [target.id]); // module-review-ok: a public health event naming a departed member is removed; the erasure sweep reaches tables that have no repo, and one repo per table would still not give the single enumerable sweep the leaving-well promise depends on
+
+  // Governance free text: the acts a departing member WROTE keep their shape
+  // and lose their words, because what the village stopped is the village's
+  // record and the sentence about a neighbour is the member's.
+  //
+  // PORTED ON MERGE. This call was added to the copy of anonymizeMember that
+  // lived in server/index.ts while main was extracting that function to this
+  // file. Taking main's deletion of the inline copy without moving this line
+  // across would have dropped a member's erasure right silently, which is the
+  // one class of merge loss nobody would have noticed from a green suite.
+  await forgetStewardActs(pool, target.id);
 
   // Scrub PII keys inside submissions they authored; the proposal content
   // itself stays part of the village record.

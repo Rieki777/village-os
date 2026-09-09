@@ -133,7 +133,7 @@ Displayed only when `users.walletVerifiedAt` is set (signed-message proof of con
 - ledger.reconciliation_drift_alert: 0 (0–1000) — cache-vs-SUM drift tolerated before a Village Pulse alert fires; default zero because any drift is a bug
 - tokens.default_ticket_expiry_days: 90 (1–730) — expiry applied to kind:'ticket' tokens that don't set their own (sweep runs on the Phase 3 scheduler, v2)
 - tokens.chain_cache_ttl_minutes: 15 (1–1440) — how stale a Base balance may be before re-fetch; failures keep the old value or null, never zero
-- (existing, referenced not redefined) gratitude.base_budget, gratitude.max_share_per_recipient — the send-budget side; and the existing tokens.equity_address / tokens.voice_address / tokens.base_rpc_url variables become the seed values for the two hypha registry rows
+- (existing, referenced not redefined) gratitude.base_budget, gratitude.full_sends_per_cycle — the send-budget side; and the existing tokens.equity_address / tokens.voice_address / tokens.base_rpc_url variables become the seed values for the two hypha registry rows
 
 ## Admin controls
 

@@ -18,6 +18,8 @@ import {
   canConfirm,
   canSettleClaim,
   checkGive,
+  fullSendsIn,
+  shareCapFor,
   clampToCeiling,
   claimRefunds,
   CREDITS,
@@ -231,22 +233,23 @@ describe.skipIf(!configured)("the village economy engine", () => {
    * the two edges below are the ones worth pinning: it rounds DOWN, and it
    * never rounds down to zero.
    */
-  it("caps one recipient at a share of the allowance, floored at 1", () => {
+  it("caps one recipient at a fraction of the allowance, floored at 1", () => {
     const at = (total: number) => ({ total, spent: 0, remaining: total, cycleKey: "lunar-000001" });
     const send = (amount: number, total: number, already: number) =>
       checkGive({ fromUserId: "a", toUserId: "b", amount }, at(total), already);
 
-    // 25% of 100 is 25, and the 26th unit to the same person is refused.
-    expect(send(25, 100, 0).ok).toBe(true);
-    expect(send(26, 100, 0).ok).toBe(false);
+    // The default is 7 full sends, so an allowance of 105 gives 15 to any one
+    // person and the 16th unit to the same person is refused.
+    expect(send(15, 105, 0).ok).toBe(true);
+    expect(send(16, 105, 0).ok).toBe(false);
     // It is a RUNNING total for the pair, so a second small send is measured
     // against what the first one already used.
-    expect(send(5, 100, 20).ok).toBe(true);
-    expect(send(6, 100, 20).ok).toBe(false);
-    // It rounds down: 25% of 50 is 12.5, and the ceiling is 12.
-    expect(send(12, 50, 0).ok).toBe(true);
-    expect(send(13, 50, 0).ok).toBe(false);
-    // And it never rounds down to zero. 25% of 3 is 0.75, and a ceiling of 0
+    expect(send(5, 105, 10).ok).toBe(true);
+    expect(send(6, 105, 10).ok).toBe(false);
+    // It rounds down: 50 across 7 is 7.14, and the ceiling is 7.
+    expect(send(7, 50, 0).ok).toBe(true);
+    expect(send(8, 50, 0).ok).toBe(false);
+    // And it never rounds down to zero. 3 across 7 is 0.43, and a ceiling of 0
     // would refuse every gift in the village while both dials still read as
     // sane numbers.
     expect(send(1, 3, 0).ok).toBe(true);
@@ -270,19 +273,28 @@ describe.skipIf(!configured)("the village economy engine", () => {
     expect(res.ok).toBe(false);
   });
 
-  it("holds the allowance against five simultaneous gives", async () => {
+  it("holds the allowance against simultaneous gives, one more than it can hold", async () => {
     const from = await makeMember("econ-race-from");
-    const recipients = await Promise.all(
-      [1, 2, 3, 4, 5].map((n) => makeMember(`econ-race-to-${n}`)),
-    );
     const before = await allowanceFor(pool, from, 1);
-    // A quarter of the allowance, which at the stock dials is also exactly the
-    // per-recipient share (R73): any larger and the share would refuse these
-    // rather than the lock, and the test would prove nothing about the lock.
-    const each = Math.max(1, Math.floor(before.total / 4));
+    // EXACTLY the per-recipient ceiling, read from the engine rather than
+    // written down here. Any larger and that ceiling would refuse these gifts
+    // before the lock ever saw them, and the test would prove nothing about
+    // the lock. This used to be `total / 4`, which was the ceiling only while
+    // the dial happened to be 25 percent, and it stopped being true the moment
+    // the dial became a count of full sends.
+    const each = shareCapFor(before.total);
+    expect(each).toBeGreaterThan(0);
 
-    // Four of these fit in the allowance and the fifth does not. Fired
-    // together, so the only thing that can refuse the last one is the lock.
+    // One more gift than the allowance can hold, whatever the dials say: the
+    // allowance holds `fullSendsIn` of these by definition, so asking for one
+    // more guarantees the overflow the lock has to refuse.
+    const n = fullSendsIn(before.total) + 1;
+    const recipients = await Promise.all(
+      Array.from({ length: n }, (_, i) => makeMember(`econ-race-to-${i + 1}`)),
+    );
+
+    // All of them fired together, so the only thing that can refuse the last
+    // one is the lock.
     const results = await Promise.all(
       recipients.map((to) => give(pool, { fromUserId: from, toUserId: to, amount: each }, AT_GUEST)),
     );

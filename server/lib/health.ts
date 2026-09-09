@@ -24,7 +24,7 @@
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { REGEN_METRICS, SNAPSHOT_METRICS } from "../../shared/healthMetrics";
-import { cycleBoundsFor } from "../../shared/lunar";
+import { activeClock } from "./gratitude-cycles";
 
 export interface SnapshotCycle {
   id: string;
@@ -405,17 +405,24 @@ export async function doughnutData(
       };
     });
 
-  // Regen per lunation: bucket the ledger's rows by the lunar calendar in
-  // code (lunation boundaries are nobody's SQL function), then compare the
-  // current lunation to the best one this village has ever recorded.
+  // Regen per cycle: bucket the ledger's rows by the village's own clock in
+  // code (a cycle boundary is nobody's SQL function), then compare the open
+  // cycle to the best one this village has ever recorded.
+  //
+  // Re-bucketed under whatever clock the village keeps TODAY, on purpose. This
+  // is a comparison and not a settlement: nothing here is a natural key on a
+  // paid row, so a village that moved from moons to calendar months compares
+  // its whole history in the unit it now lives in. The frozen-past rule is
+  // about settled cycle ids, and it stays exactly where it is.
   const [rows] = await pool.query<RowDataPacket[]>(
     "SELECT metric_key, value, recorded_at FROM regen_entries WHERE retracted_at IS NULL AND is_example = 0",
   );
   const totals = await regenTotals(pool);
-  const nowCycle = cycleBoundsFor(new Date()).cycleNumber;
+  const clock = activeClock();
+  const nowCycle = clock.cycleNumberAt(new Date());
   const perCycle = new Map<string, Map<number, number>>();
   for (const r of rows) {
-    const cycle = cycleBoundsFor(new Date(r.recorded_at)).cycleNumber;
+    const cycle = clock.cycleNumberAt(new Date(r.recorded_at));
     const byCycle = perCycle.get(String(r.metric_key)) ?? new Map<number, number>();
     byCycle.set(cycle, (byCycle.get(cycle) ?? 0) + Number(r.value));
     perCycle.set(String(r.metric_key), byCycle);

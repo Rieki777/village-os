@@ -97,6 +97,13 @@ export const DECIDES_BY: DecidesByDef[] = [
   { id: "elders_decide", label: "Elders decide", gloss: "The elders make the call." },
   { id: "founder_decides", label: "Founder decides", gloss: "The founder makes the call." },
   { id: "do_ocracy", label: "Do-ocracy", gloss: "Whoever does the work decides how it is done." },
+  // `delegated` had an engine behind it from 0174. A member hands their voice
+  // to another member, the choice is COPIED into the delegator's own ballot
+  // row and the weight never moves, chains are transitive, and a cycle is
+  // refused when the delegation is given. The rule lives in
+  // server/lib/delegation.ts and the surfaces are under
+  // /api/governance/delegation. This gloss is the sentence the chip shows and
+  // is now a description of what happens rather than a word for it.
   { id: "delegated", label: "Delegated", gloss: "You hand your voice to someone you choose." },
   { id: "hypha", label: "Hypha", gloss: "Decided and recorded on the village's Hypha DHO." },
   { id: "other", label: "Other", gloss: "A way of this village's own, said in its own line." },

@@ -107,6 +107,13 @@ export default function YourAgentPanel() {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [inboxUrl, setInboxUrl] = useState("");
   const [inboxSecret, setInboxSecret] = useState("");
+  /*
+   * COLLAPSED BY DEFAULT, and this is the whole reason the disclosure exists.
+   * This section renders about 1,463 pixels of a page that is otherwise a third
+   * shorter, and it is the least often needed thing on it: a member sets an
+   * agent up once and never opens it again.
+   */
+  const [open, setOpen] = useState(false);
   const [inboxBusy, setInboxBusy] = useState(false);
   const [inboxNote, setInboxNote] = useState("");
 
@@ -283,15 +290,53 @@ export default function YourAgentPanel() {
     },
   };
 
+  /*
+   * A SECRET SHOWN ONCE MUST NOT BE COLLAPSIBLE.
+   *
+   * Two values here are shown exactly once and never recoverable: the agent
+   * token (`revealed`) and the inbox signing secret (`inboxSecret`). The
+   * village does not keep either. So the disclosure is FORCED OPEN while
+   * either is on screen, and the trigger says why rather than going quietly
+   * dead. Somebody who has just minted a token and reaches for the collapse is
+   * one click from losing it forever.
+   *
+   * The body is hidden with `hidden` rather than unmounted, for the same
+   * reason: unmounting drops the state, and half-typed fields, an in-flight
+   * save and an unread secret all live in it. `hidden` keeps the component
+   * mounted, keeps its requests from re-firing, and still takes the subtree out
+   * of the accessibility tree and the tab order.
+   */
+  const holdingASecret = Boolean(revealed) || Boolean(inboxSecret);
+  const shown = open || holdingASecret;
+
   return (
     <div className="bg-card rounded-2xl shadow-lg p-6 sm:p-8">
-      <div className="flex items-center gap-2 mb-1">
-        <Bot className="w-5 h-5 text-notice" />
-        <h2 className="font-display text-xl font-bold text-card-foreground">Your agent</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 mb-1">
+          <Bot className="w-5 h-5 text-notice" />
+          <h2 className="font-display text-xl font-bold text-card-foreground">Your agent</h2>
+        </div>
+        <button
+          type="button"
+          aria-expanded={shown}
+          aria-controls="agent-body"
+          disabled={holdingASecret}
+          onClick={() => setOpen((v) => !v)}
+          className="min-h-11 shrink-0 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-60"
+        >
+          {holdingASecret ? "Copy your secret first" : shown ? "Hide" : "Set up"}
+        </button>
       </div>
       <p className="text-sm text-muted-foreground mb-5">
         Connect your own agent to this village, or run the village assistant on your own key. You hold the token; the village never writes anything until you say yes.
       </p>
+      {/* One sentence a screen reader hears when the button changes what is
+          under it. Without it the longest section on the page opens and closes
+          in silence. */}
+      <p aria-live="polite" className="sr-only">
+        {shown ? "Agent settings shown." : "Agent settings hidden."}
+      </p>
+      <div id="agent-body" hidden={!shown}>
       {error && <p role="alert" className="text-xs text-destructive mb-4">{error}</p>}
 
       <div className="space-y-5">
@@ -366,7 +411,7 @@ export default function YourAgentPanel() {
               type="button"
               onClick={mint}
               disabled={minting || !tokenName.trim() || tokenScopes.length === 0}
-              className="text-sm bg-teal-deep text-white rounded-lg px-3 py-1.5 font-medium disabled:opacity-40"
+              className="text-sm border border-notice/70 bg-teal-deep text-white rounded-lg px-3 py-1.5 font-medium disabled:opacity-40"
             >
               {minting ? "Minting…" : "Mint token"}
             </button>
@@ -411,7 +456,7 @@ export default function YourAgentPanel() {
                     placeholder="https://your-agent.example/village"
                     className="flex-1 min-w-[12rem] text-sm border border-border rounded-lg px-3 py-2"
                   />
-                  <button type="button" onClick={saveInbox} disabled={inboxBusy || !inboxUrl.trim()} className="text-sm bg-teal-deep text-white rounded-lg px-3 py-1.5 font-medium disabled:opacity-40">Save</button>
+                  <button type="button" onClick={saveInbox} disabled={inboxBusy || !inboxUrl.trim()} className="text-sm border border-notice/70 bg-teal-deep text-white rounded-lg px-3 py-1.5 font-medium disabled:opacity-40">Save</button>
                   {inbox && <button type="button" onClick={testInbox} disabled={inboxBusy} className="text-sm border border-border rounded-lg px-3 py-1.5 disabled:opacity-40">Send a test</button>}
                   {inbox && <button type="button" onClick={removeInboxNow} className="text-sm text-destructive px-2 py-1.5">Remove</button>}
                 </div>
@@ -465,7 +510,7 @@ export default function YourAgentPanel() {
                 )}
               </div>
               {provider === "openai_compatible" && <p className="text-xs text-muted-foreground mb-2">OpenAI-compatible covers OpenRouter, Ollama and most gateways: a base URL, a key and a model name.</p>}
-              <button type="button" onClick={saveKey} disabled={keyBusy || keyValue.trim().length < 8} className="text-sm bg-teal-deep text-white rounded-lg px-3 py-1.5 font-medium disabled:opacity-40">
+              <button type="button" onClick={saveKey} disabled={keyBusy || keyValue.trim().length < 8} className="text-sm border border-notice/70 bg-teal-deep text-white rounded-lg px-3 py-1.5 font-medium disabled:opacity-40">
                 {keyBusy ? "Saving…" : keyView ? "Replace key" : "Save key"}
               </button>
               {keyNote && <p className="text-xs text-card-foreground mt-2">{keyNote}</p>}
@@ -530,7 +575,7 @@ export default function YourAgentPanel() {
                         placeholder="What is true instead"
                         className="flex-1 min-w-[10rem] text-sm border border-border rounded-lg px-3 py-1.5"
                       />
-                      <button type="button" onClick={() => decideStatement(s.id, "correct", correcting.text)} disabled={!correcting.text.trim()} className="text-sm bg-teal-deep text-white rounded-lg px-3 py-1.5 disabled:opacity-40">Save</button>
+                      <button type="button" onClick={() => decideStatement(s.id, "correct", correcting.text)} disabled={!correcting.text.trim()} className="text-sm border border-notice/70 bg-teal-deep text-white rounded-lg px-3 py-1.5 disabled:opacity-40">Save</button>
                       <button type="button" onClick={() => setCorrecting(null)} className="text-sm text-muted-foreground px-2">Cancel</button>
                     </div>
                   )}
@@ -554,7 +599,7 @@ export default function YourAgentPanel() {
                     <span className="block text-xs text-muted-foreground">proposed by the {d.source === "token" ? "agent" : "assistant"} · {when(d.createdAt)}</span>
                   </div>
                   <div className="flex gap-2">
-                    <button type="button" onClick={() => decideDraft(d.id, "confirm")} className="text-sm bg-teal-deep text-white rounded-lg px-3 py-1.5">Yes, send it</button>
+                    <button type="button" onClick={() => decideDraft(d.id, "confirm")} className="text-sm border border-notice/70 bg-teal-deep text-white rounded-lg px-3 py-1.5">Yes, send it</button>
                     <button type="button" onClick={() => decideDraft(d.id, "reject")} className="text-sm border border-border rounded-lg px-3 py-1.5">No</button>
                   </div>
                 </li>
@@ -562,6 +607,7 @@ export default function YourAgentPanel() {
             </ul>
           )}
         </Card>
+      </div>
       </div>
     </div>
   );

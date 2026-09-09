@@ -75,10 +75,10 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 
 | Module | Id | Shelf | Core | Tier | Data | Setup | Contract doc |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Quests | `quests` | Coordinate | yes | included | member-pii | none | none yet |
-| Gratitude | `gratitude` | Recognise | yes | included | member-pii | none | none yet |
-| Stages & Roles | `progression` | Recognise | yes | included | member-pii | none | none yet |
-| Profiles | `profiles` | Connect | yes | included | member-pii | none | none yet |
+| Quests | `quests` | Coordinate | yes | included | member-pii | none | [quests.md](modules/quests.md) |
+| Gratitude | `gratitude` | Recognise | yes | included | member-pii | none | [gratitude.md](modules/gratitude.md) |
+| Stages & Roles | `progression` | Recognise | yes | included | member-pii | none | [progression.md](modules/progression.md) |
+| Profiles | `profiles` | Connect | yes | included | member-pii | none | [profiles.md](modules/profiles.md) |
 | How Power Is Held | `map` | Know and decide | no | included | member-pii | optional | [village-map.md](modules/village-map.md) |
 | How Resources Flow | `resources` | Know and decide | no | included | village-content | optional | [how-resources-flow.md](modules/how-resources-flow.md) |
 | Forum & Decisions | `forum` | Know and decide | no | included | member-pii | none | none yet |
@@ -99,7 +99,7 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | Governance | `governance` | Know and decide | no | included | member-pii | none | none yet |
 | Hypha Bridge | `hypha` | Know and decide | no | included | village-content | required | [hypha.md](modules/hypha.md) |
 
-That is 23 modules, four of them core. Thirteen carry a contract doc under `docs/modules/` and ten do not yet; `node scripts/check-module-docs.mjs` holds that second number to a ratchet that only ever falls. Filenames there do not follow module ids, so the mapping is real data and lives in `MODULE_DOCS` in `server/lib/knowledge.ts`, which is where this table reads it.
+That is 23 modules, four of them core. Seventeen carry a contract doc under `docs/modules/` and six do not yet; `node scripts/check-module-docs.mjs` holds that second number to a ratchet that only ever falls. Filenames there do not follow module ids, so the mapping is real data and lives in `MODULE_DOCS` in `server/lib/knowledge.ts`, which is where this table reads it.
 
 ## The four core modules
 
@@ -122,7 +122,7 @@ The contribution board: post work, claim it, submit it, consent to release recog
 | Capabilities it adds | `quest.consent` |
 | Variable keys it owns | `quest.consent_cap_mode`, `quest.consent_cap_multiplier`, `quest.require_submission_before_consent` |
 | API prefixes | `/api/quests`, `/api/game/quests` |
-| Contract doc | none yet |
+| Contract doc | [quests.md](modules/quests.md) |
 
 ### Gratitude
 
@@ -139,9 +139,9 @@ Recognition sends, lunar cycles, and the value pool distributed at each close.
 | Requires | nothing |
 | Recommends | nothing |
 | Capabilities it adds | none |
-| Variable keys it owns | `gratitude.base_budget`, `gratitude.require_message`, `gratitude.max_share_per_recipient`, `gratitude.pool_per_cycle`, `gratitude.pool_token` |
+| Variable keys it owns | `gratitude.base_budget`, `gratitude.require_message`, `gratitude.full_sends_per_cycle`, `gratitude.pool_per_cycle`, `gratitude.pool_token` |
 | API prefixes | `/api/game/gratitude`, `/api/game/cycle`, `/api/admin/cycles` |
-| Contract doc | none yet |
+| Contract doc | [gratitude.md](modules/gratitude.md) |
 
 ### Stages & Roles
 
@@ -160,7 +160,7 @@ The path from guest to co-creator: stages, capabilities, and appointed roles.
 | Capabilities it adds | `proposal.open`, `proposal.decide` |
 | Variable keys it owns | none |
 | API prefixes | `/api/game/progression`, `/api/roles` |
-| Contract doc | none yet |
+| Contract doc | [progression.md](modules/progression.md) |
 
 ### Profiles
 
@@ -179,7 +179,7 @@ Member identity: handles, journeys, balances, and each member's own ledger.
 | Capabilities it adds | none |
 | Variable keys it owns | none |
 | API prefixes | `/api/profile` |
-| Contract doc | none yet |
+| Contract doc | [profiles.md](modules/profiles.md) |
 
 ## Coordinate
 
@@ -625,7 +625,7 @@ Three keys are claimed by more than one module, so switching one module off leav
 
 ## Capabilities
 
-A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which holds 31 keys in total. It never becomes a second permission mechanism. The order of the one gate is admin, then badge denies, then role, then badge grants, then stage: a badge deny beats role and stage, and only admin outranks it. Eleven modules add keys:
+A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which holds 32 keys in total. It never becomes a second permission mechanism. The order of the one gate is admin, then badge denies, then role, then badge grants, then stage: a badge deny beats role and stage, and only admin outranks it. Eleven modules add keys:
 
 | Module | Capabilities |
 | --- | --- |
@@ -680,7 +680,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "/api/quests",
         "/api/game/quests"
       ],
-      "contractDoc": null
+      "contractDoc": "docs/modules/quests.md"
     },
     {
       "id": "gratitude",
@@ -697,7 +697,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
       "variableKeys": [
         "gratitude.base_budget",
         "gratitude.require_message",
-        "gratitude.max_share_per_recipient",
+        "gratitude.full_sends_per_cycle",
         "gratitude.pool_per_cycle",
         "gratitude.pool_token"
       ],
@@ -706,7 +706,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "/api/game/cycle",
         "/api/admin/cycles"
       ],
-      "contractDoc": null
+      "contractDoc": "docs/modules/gratitude.md"
     },
     {
       "id": "progression",
@@ -728,7 +728,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "/api/game/progression",
         "/api/roles"
       ],
-      "contractDoc": null
+      "contractDoc": "docs/modules/progression.md"
     },
     {
       "id": "profiles",
@@ -746,7 +746,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
       "apiPrefixes": [
         "/api/profile"
       ],
-      "contractDoc": null
+      "contractDoc": "docs/modules/profiles.md"
     },
     {
       "id": "map",

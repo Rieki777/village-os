@@ -72,6 +72,12 @@ export const SOURCES = [
   "shared/gameConfig.ts",
   "shared/capabilities.ts",
   "shared/villageMoon.ts",
+  // Added when the governance wave landed: the registry now prices dials by
+  // criticality tier, so it reads the tier floors and the subject thresholds.
+  // The generator REFUSES an unlisted source rather than quietly walking it,
+  // which is what made this an error message instead of a silent omission.
+  "shared/governanceEngine.ts",
+  "shared/ballotSubjects.ts",
 ];
 
 /** The one file the walk starts from. Everything else is discovered. */
@@ -259,6 +265,7 @@ const RENDERED_FIELDS = [
   "unit",
   "ring",
   "applyTiming",
+  "criticality",
 ];
 
 /** What each type means, in a founder's words. Every member needs one. */
@@ -290,6 +297,12 @@ const RING_GLOSS = {
 };
 
 /** When a passed change lands. Every timing needs one. */
+const CRITICALITY_GLOSS = {
+  routine: "a routine vote",
+  structural: "a structural vote, at a higher bar",
+  constitutional: "a constitutional vote, at the highest bar the village has set",
+};
+
 const TIMING_GLOSS = {
   instant: {
     short: "as soon as it is saved",
@@ -328,7 +341,7 @@ function glossCoverage(what, members, gloss) {
 const isString = (v) => typeof v === "string";
 
 /** One dial, checked field by field. Anything unreadable stops the build. */
-function readVariable(def, index, types, rings, timings, ringOf, applyTimingOf) {
+function readVariable(def, index, types, rings, timings, ringOf, applyTimingOf, criticalityOf) {
   const where = isString(def?.key) && def.key ? `"${def.key}"` : `at position ${index}`;
   if (!def || typeof def !== "object") fail(`variables-doc: the entry ${where} is not an object`);
 
@@ -406,18 +419,20 @@ function readVariable(def, index, types, rings, timings, ringOf, applyTimingOf) 
     ringExplicit: def.ring !== undefined,
     applyTiming,
     applyTimingExplicit: def.applyTiming !== undefined,
+    criticality: criticalityOf(def),
+    criticalityExplicit: def.criticality !== undefined,
   };
 }
 
 export async function collectFacts(root = ROOT) {
   const { module, entrySource, filesRead } = await loadRegistry(root);
 
-  for (const name of ["VARIABLES", "ringOf", "applyTimingOf", "validateVariable"]) {
+  for (const name of ["VARIABLES", "ringOf", "applyTimingOf", "criticalityOf", "validateVariable"]) {
     if (module[name] === undefined) {
       fail(`variables-doc: ${ENTRY} no longer exports ${name}, and the generator reads it`);
     }
   }
-  const { VARIABLES, ringOf, applyTimingOf, validateVariable } = module;
+  const { VARIABLES, ringOf, applyTimingOf, criticalityOf, validateVariable } = module;
   if (!Array.isArray(VARIABLES) || VARIABLES.length === 0) {
     fail(`variables-doc: ${ENTRY} exports no variables at all, which is never a document`);
   }
@@ -447,7 +462,7 @@ export async function collectFacts(root = ROOT) {
   glossCoverage("VariableApplyTiming", timings, TIMING_GLOSS);
 
   const variables = VARIABLES.map((def, i) =>
-    readVariable(def, i, types, rings, timings, ringOf, applyTimingOf),
+    readVariable(def, i, types, rings, timings, ringOf, applyTimingOf, criticalityOf),
   );
 
   const seen = new Set();
@@ -566,6 +581,10 @@ function variableSection(v) {
   if (v.unit) rows.push(["Counted in", v.unit]);
   rows.push(["Who may change it", RING_GLOSS[v.ring].short]);
   rows.push(["A change takes effect", TIMING_GLOSS[v.applyTiming].short]);
+  // The tier is what PRICES a change to this dial: it sets the floor a ballot
+  // to move it has to clear, and whether a steward may stop that ballot at all.
+  // A member reading what a dial does is owed what changing it costs.
+  rows.push(["What it costs to change", CRITICALITY_GLOSS[v.criticality]]);
   lines.push(table(["Fact", "Value"], rows));
   if (v.choices.length) {
     lines.push("");

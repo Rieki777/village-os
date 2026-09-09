@@ -110,36 +110,24 @@ export default function ProfileSheet() {
               ? "You have not thanked anyone yet this season."
               : `You thanked ${g.givenThisSeason} members in return.`}
           </p>
-          <p className="mt-3 text-sm text-muted-foreground">{g.lifetime} {tokenName} held in all.</p>
+          {/* The lifetime total moved to the vessel, which prints it WITH its
+              scale. This line printed `lifetime` raw, the same minor-unit
+              defect the 5xl figure had, and two cards showing one balance was
+              half of what made six gratitude sections feel like six. */}
         </motion.div>
       ) : null}
 
-      {a ? (
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className={card}>
-          <h2 className={heading}>This moon</h2>
-          <p className="text-card-foreground">
-            {a.remaining === 0
-              ? "You have given everything you had to give this moon."
-              : `You can still give ${a.remaining} ${tokenName} this moon.`}
-          </p>
-          <div
-            className="mt-3 h-2 w-full overflow-hidden rounded-full bg-muted"
-            role="img"
-            aria-label={`${a.remaining} of ${a.total} left`}
-          >
-            <div
-              className="h-full rounded-full bg-teal-deep"
-              /* Clamped, because a dial lowered mid-cycle can leave spent above
-                 total and a bar wider than its track is a rendering bug that
-                 looks like a data one. */
-              style={{ width: `${Math.min(100, Math.max(0, (a.remaining / (a.total || 1)) * 100))}%` }}
-            />
-          </div>
-          <p className="mt-3 text-sm text-muted-foreground">
-            The allowance resets with the new moon. Nothing you were given is ever taken back.
-          </p>
-        </motion.div>
-      ) : null}
+      {/*
+        "THIS MOON" MOVED TO THE VESSEL, and its bar was invisible here.
+
+        The fill was `bg-teal-deep`, the village's brand colour, which
+        shared/brandTokens.ts guarantees only to carry WHITE text and which is
+        therefore dark. Measured on this night panel it was 1.43:1 against its
+        own track: a member could not see how much they had left to give. The
+        vessel draws the same bar in the sheet's gold at 7.10:1, beside the
+        balance and the send control, which is where somebody deciding whether
+        to give is actually looking.
+      */}
     </>
   );
 }

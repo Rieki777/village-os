@@ -318,12 +318,15 @@ describe("the badge-grant refusal and the deny map agree in the direction that i
     expect(voicesTheRunwayAllows).toEqual(["mechanics.propose"]);
   });
 
-  it("and the pair really is the vote and the vouch", () => {
+  it("and the set really is the vote, the vouch and the seat", () => {
     // Named outright, so renaming a key cannot make the agreement above hold
-    // over a pair nobody intended.
+    // over a set nobody intended. `steward.veto` joined the two electorate
+    // keys when the seat became a veto: a badge names people, and this seat
+    // is seated and unseated by the village at a ballot of its own.
     expect([...(TYPE_CAPABILITY_REFUSALS.badge_grant?.keys ?? [])].sort()).toEqual([
       "ballot.vote",
       "member.vouch",
+      "steward.veto",
     ]);
   });
 });
