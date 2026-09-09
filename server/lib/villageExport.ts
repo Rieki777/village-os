@@ -49,6 +49,7 @@ import { seatState, type OrgAssignment, type OrgRole } from "./orgChart";
 import { keyFromEnv, openWith, sealWith, type Sealed } from "./sealedBox";
 import { VILLAGE_SECRETS_ENV } from "./secrets";
 import { DECIDES_BY, DOMAINS, SHAPES } from "../../shared/power";
+import { circlesOnCycles } from "../../shared/circleView";
 
 /*
  * 0083 vocabulary, published as IDS ONLY and sanitised against the closed
@@ -639,6 +640,13 @@ export function buildOrgExport(input: OrgExportInput): OrgExport {
     if (c.parentCircleId && !circleIds.has(c.parentCircleId)) c.parentCircleId = null;
     if (c.grownFromOrgRoleId && !publishedSeatIds.has(c.grownFromOrgRoleId)) c.grownFromOrgRoleId = null;
   }
+  // A loop in `parentCircleId` has no top, so anything that draws this
+  // document from it draws nothing at all. The writers refuse a loop now
+  // (shared/circleView.ts) and the layout degrades instead of blanking, but
+  // this document leaves the village and is read by software we do not own,
+  // so it states a tree or it states no parent.
+  const looped = new Set(circlesOnCycles(circles));
+  for (const c of circles) if (looped.has(c.id)) c.parentCircleId = null;
 
   // Only links whose BOTH ends published. A relation pointing at a dropped
   // example seat is a link an agent follows into nothing, and the same rule

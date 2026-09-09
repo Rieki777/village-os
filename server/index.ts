@@ -104,7 +104,7 @@ import {
 import { buildThemeCss, sanitizeFontName } from "./lib/themeCss";
 import { applyTimingOf, ringOf, VARIABLES_BY_KEY } from "../shared/gameVariables";
 import { CONSTITUTION } from "../shared/constitution";
-import { circleViews } from "../shared/circleView";
+import { circleViews, cycleFromParenting } from "../shared/circleView";
 import { DEFAULT_MAP_SKIN, sanitiseMapSkin } from "../shared/mapSkin";
 import {
   DEFAULT_MAP_VOCABULARY,
@@ -1926,7 +1926,10 @@ async function applyOrgRolesBackfill(): Promise<void> {
   await circlesRepo.load();
   console.log(
     `[MIGRATION] org chart as rows: ${report.seatsWritten} seat(s), ${report.circlesWritten} circle(s), ` +
-      `${report.councilsToForming} council(s) moved to forming, ${report.holdersWritten} documented holder(s)`,
+      `${report.councilsToForming} council(s) moved to forming, ${report.holdersWritten} documented holder(s)` +
+      // Never silent: a looping parent in the seed would otherwise draw a
+      // flat map nobody could tell from a village that IS flat.
+      (report.circlesUnparented ? `, ${report.circlesUnparented} circle(s) unparented (parent loop in the seed)` : ""),
   );
 }
 
@@ -10323,7 +10326,21 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       );
       if (clash) return res.status(409).json({ error: `Alias "${alias}" already resolves to another circle` });
     }
-    if (merged.parentCircleId === merged.id) return res.status(400).json({ error: "A circle cannot parent itself" });
+    // Self-parent was the only check here, so two circles could each hold the
+    // other and the map drew nothing (shared/circleView.ts). The refusal names
+    // the loop, because a founder with fourteen circles needs to know WHICH.
+    const loop = cycleFromParenting(all as Array<{ id: string; parentCircleId?: string | null }>, merged.id, merged.parentCircleId);
+    if (loop) {
+      const nameOf = (cid: string) => String(all.find((c: any) => c.id === cid)?.name ?? cid);
+      return res.status(400).json({
+        error: "circle_parent_cycle",
+        message:
+          loop.length === 1
+            ? "A circle cannot be inside itself."
+            : `That would put ${nameOf(loop[0])} inside ${loop.slice(1).map(nameOf).join(", which is inside ")}, which is already inside ${nameOf(loop[0])}.`,
+        circles: loop,
+      });
+    }
     all[idx] = { ...merged, aliases };
     await circlesRepo.replaceAll(all);
     res.json(all[idx]);

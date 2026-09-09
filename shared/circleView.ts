@@ -240,6 +240,90 @@ export function cssColourForCircle(c: { id: string; color?: string | null }): st
   return `var(--circle-${tone}, ${CIRCLE_TONE_HEX[tone]})`;
 }
 
+// ── Containment, and the loop that used to erase the village ────────────────
+//
+// `parent_circle_id` is the only column that says which circle holds which,
+// and until the org editor it had exactly one check: a circle may not parent
+// ITSELF. Two circles parenting each other passed, and the layout then found
+// no root to start from and drew an empty ring. A member's whole map went
+// blank with nothing logged anywhere.
+//
+// `shared/mapLayout.ts` now degrades instead of blanking, which is the safety
+// net. This is the other half: a write that would close a loop is REFUSED,
+// so the net never has to catch anything. The refusal names the circles in
+// the loop, because "invalid parent" tells a founder nothing about which of
+// their fourteen circles to go and fix.
+
+/** The minimum a cycle check needs, so importers and drafts can call it too. */
+export interface CircleLink {
+  id: string;
+  parentCircleId?: string | null;
+}
+
+/**
+ * The chain of parents above `id`, nearest first, stopping at the first
+ * circle already seen. The stop is what makes this safe to call on data that
+ * is ALREADY looping, which every importer has to do.
+ */
+export function ancestorIds(circles: CircleLink[], id: string): string[] {
+  const byId = new Map(circles.map((c) => [c.id, c]));
+  const chain: string[] = [];
+  const seen = new Set<string>([id]);
+  let at = byId.get(id)?.parentCircleId ?? null;
+  while (at && byId.has(at) && !seen.has(at)) {
+    chain.push(at);
+    seen.add(at);
+    at = byId.get(at)?.parentCircleId ?? null;
+  }
+  return chain;
+}
+
+/**
+ * The loop `childId -> parentId` would create, or null if the move is fine.
+ *
+ * Returns the circles in the loop, child first, so a caller can say "Finance
+ * is already inside Business, which is inside Finance" instead of "invalid".
+ * `parentId` null or unknown is always fine: unparenting cannot loop.
+ */
+export function cycleFromParenting(
+  circles: CircleLink[],
+  childId: string,
+  parentId: string | null | undefined,
+): string[] | null {
+  if (!parentId) return null;
+  if (parentId === childId) return [childId];
+  if (!circles.some((c) => c.id === parentId)) return null;
+  // Walking UP from the proposed parent: meeting the child means the child
+  // is already above it, so hanging the parent's subtree under the child
+  // closes the loop.
+  const above = ancestorIds(circles, parentId);
+  const hit = above.indexOf(childId);
+  if (hit === -1) return null;
+  return [childId, parentId, ...above.slice(0, hit)];
+}
+
+/**
+ * Every circle whose parent link sits on a loop, for a batch write nobody
+ * can check row by row: an import, a seed, a whole-tree draft. A caller
+ * either refuses the batch or nulls these parents, and both are honest.
+ */
+export function circlesOnCycles(circles: CircleLink[]): string[] {
+  const byId = new Map(circles.map((c) => [c.id, c]));
+  const bad = new Set<string>();
+  for (const c of circles) {
+    // `seen` starts holding the circle itself, so a self-parent is caught by
+    // the same line that catches a longer loop.
+    const seen = new Set<string>([c.id]);
+    let at = c.parentCircleId ?? null;
+    while (at && byId.has(at)) {
+      if (seen.has(at)) { bad.add(c.id); break; }
+      seen.add(at);
+      at = byId.get(at)?.parentCircleId ?? null;
+    }
+  }
+  return Array.from(bad).sort();
+}
+
 /**
  * The map lens's own ground, ring and ink.
  *

@@ -25,6 +25,7 @@ import {
   domainsProblem,
   shapeProblem,
 } from "../../shared/power";
+import { circlesOnCycles } from "../../shared/circleView";
 
 export type SeatState = "open" | "filled" | "partial" | "forming" | "expired";
 
@@ -1089,6 +1090,8 @@ export interface BackfillInput {
 
 export interface BackfillReport {
   circlesWritten: number;
+  /** Circles whose parent link sat on a loop and was dropped to null. */
+  circlesUnparented: number;
   councilsToForming: number;
   seatsWritten: number;
   holdersWritten: number;
@@ -1137,7 +1140,7 @@ export async function backfillOrgChart(pool: Pool, input: BackfillInput): Promis
   const already = Number(existing[0]?.n ?? 0);
   const expected = (input.cards ?? []).length + ((input.corrections?.seats ?? []).filter((s: any) => s.isNew).length);
   if (already > 0 && already >= expected) {
-    return { circlesWritten: 0, councilsToForming: 0, seatsWritten: 0, holdersWritten: 0, skipped: true };
+    return { circlesWritten: 0, circlesUnparented: 0, councilsToForming: 0, seatsWritten: 0, holdersWritten: 0, skipped: true };
   }
 
   const corr = input.corrections ?? {};
@@ -1149,13 +1152,21 @@ export async function backfillOrgChart(pool: Pool, input: BackfillInput): Promis
   const circleCardById = new Map<string, any>();
   for (const c of input.circleCards ?? []) if (c?.id) circleCardById.set(c.id, c);
 
+  // A loop in `parentCircleId` makes the map draw NOTHING (see
+  // shared/circleView.ts), and this runs at first boot on every fork, from a
+  // file in the repo. Throwing here would brick the boot, which is strictly
+  // worse than a flat map, so a looping parent is dropped and counted: the
+  // village comes up with those circles at the top level and the report says
+  // how many, which is a line in the boot log rather than a silent blank.
+  const looping = new Set(circlesOnCycles(corr.circles ?? []));
+
   const circleRows = (corr.circles ?? []).map((c: any) => {
     const card = circleCardById.get(c.id);
     return [
       c.id,
       c.name,
       c.purpose ?? card?.description ?? null,
-      c.parentCircleId ?? null,
+      looping.has(c.id) ? null : c.parentCircleId ?? null,
       c.grownFromOrgRoleId ?? null,
       c.icon ?? card?.icon ?? null,
       c.color ?? card?.color ?? null,
@@ -1294,7 +1305,7 @@ export async function backfillOrgChart(pool: Pool, input: BackfillInput): Promis
        ))`,
   );
 
-  return { circlesWritten, councilsToForming, seatsWritten, holdersWritten, skipped: false };
+  return { circlesWritten, circlesUnparented: looping.size, councilsToForming, seatsWritten, holdersWritten, skipped: false };
 }
 
 // ── Who may declare how power is held (0083, P10, N5) ───────────────────────

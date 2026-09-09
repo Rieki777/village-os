@@ -12,7 +12,7 @@
  * still route through here at all.
  */
 import { describe, expect, it } from "vitest";
-import { circleView, circleViews, toneForCircle, CIRCLE_TONES, CIRCLE_TONE_HEX } from "./circleView";
+import { circleView, circleViews, toneForCircle, ancestorIds, cycleFromParenting, circlesOnCycles, CIRCLE_TONES, CIRCLE_TONE_HEX } from "./circleView";
 
 /** A row shaped like `circlesRepo.all()` returns one. */
 const row = (over: Record<string, unknown> = {}) => ({
@@ -163,5 +163,66 @@ describe("toneForCircle resolves what villages actually stored", () => {
     // class; an unknown value has to resolve to something drawable.
     const t = toneForCircle({ id: "q", color: "bg-not-a-real-colour" });
     expect(CIRCLE_TONES).toContain(t);
+  });
+});
+
+// ── The loop that erased the village ──────────────────────────────────
+//
+// `PUT /api/admin/circles/:id` checked self-parent and nothing else, so two
+// circles holding each other passed validation and the map then drew an
+// empty ring. These cover the refusal; `mapLayout.test.ts` covers the
+// degrade underneath it.
+
+describe("circle containment", () => {
+  const c = (id: string, parentCircleId: string | null = null) => ({ id, parentCircleId });
+
+  it("walks the parent chain nearest first", () => {
+    const all = [c("gcc"), c("dev", "gcc"), c("web", "dev")];
+    expect(ancestorIds(all, "web")).toEqual(["dev", "gcc"]);
+    expect(ancestorIds(all, "gcc")).toEqual([]);
+  });
+
+  it("terminates on data that is ALREADY looping", () => {
+    // Every importer has to read data it did not validate. A walk that hung
+    // here would take the boot with it.
+    const all = [c("a", "b"), c("b", "a")];
+    expect(ancestorIds(all, "a")).toEqual(["b"]);
+  });
+
+  it("refuses the move that closes a two-circle loop, and names both", () => {
+    // Business is inside Finance. Putting Finance inside Business is the
+    // exact write that blanked the map.
+    const all = [c("finance"), c("business", "finance")];
+    expect(cycleFromParenting(all, "finance", "business")).toEqual(["finance", "business"]);
+  });
+
+  it("refuses a longer loop and names the whole chain", () => {
+    const all = [c("a"), c("b", "a"), c("c", "b")];
+    expect(cycleFromParenting(all, "a", "c")).toEqual(["a", "c", "b"]);
+  });
+
+  it("refuses a circle parenting itself", () => {
+    expect(cycleFromParenting([c("a")], "a", "a")).toEqual(["a"]);
+  });
+
+  it("allows every move that does not close a loop", () => {
+    const all = [c("gcc"), c("dev", "gcc"), c("care", "gcc"), c("web", "dev")];
+    // Step 0 of the org work: hang a flat circle under the general circle.
+    expect(cycleFromParenting(all, "care", "gcc")).toBeNull();
+    // Re-home a subtree sideways.
+    expect(cycleFromParenting(all, "web", "care")).toBeNull();
+    // Unparenting can never loop.
+    expect(cycleFromParenting(all, "web", null)).toBeNull();
+    // Neither can naming a parent that is not there.
+    expect(cycleFromParenting(all, "web", "ghost")).toBeNull();
+  });
+
+  it("finds every circle sitting on a loop in a batch, and only those", () => {
+    const all = [c("gcc"), c("dev", "gcc"), c("x", "y"), c("y", "x"), c("self", "self")];
+    expect(circlesOnCycles(all)).toEqual(["self", "x", "y"]);
+  });
+
+  it("says nothing is wrong with a healthy tree", () => {
+    expect(circlesOnCycles([c("gcc"), c("dev", "gcc"), c("web", "dev")])).toEqual([]);
   });
 });

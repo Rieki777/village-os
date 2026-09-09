@@ -5,7 +5,7 @@
  * keeps someone from "improving" it with jitter or render-order dependence.
  */
 import { describe, expect, it } from "vitest";
-import { layoutMap, layoutNestedMap, radiusForLabel, wrapLabel, CANVAS, QUEST_DISPLAY_CAP, type LayoutCircle, type NestedInput } from "./mapLayout";
+import { layoutMap, layoutNestedMap, layoutForShape, radiusForLabel, wrapLabel, CANVAS, QUEST_DISPLAY_CAP, type LayoutCircle, type NestedInput } from "./mapLayout";
 
 const circle = (id: string, order: number, extra: Partial<LayoutCircle> = {}): LayoutCircle => ({
   id,
@@ -101,6 +101,80 @@ describe("layoutNestedMap canvas", () => {
   it("is deterministic: same input, same picture", () => {
     const input = [nested("a", 1), nested("b", 2, "a"), nested("c", 3)];
     expect(JSON.stringify(layoutNestedMap(input))).toBe(JSON.stringify(layoutNestedMap(input)));
+  });
+});
+
+// ── Cyclic parents ──────────────────────────────────────────────────────────
+//
+// `parent_circle_id` is written by three routes with one weak check, and the
+// org editor turns nesting into a drag anyone can perform. A loop in that
+// column used to leave EVERY node in the loop unreachable, so `roots` came
+// back empty and the village drew as an empty ring: no throw, no console
+// line, nothing to tell a member their map had gone. These assert the
+// degrade the comment always promised, which is that a looping circle stands
+// at the top instead of disappearing.
+
+describe("cyclic parents never blank the map", () => {
+  const nested = (id: string, order: number, parentId: string | null = null): NestedInput => ({
+    id, parentId, order, memberCount: 2,
+    roles: [{ id: `${id}-r1`, vacant: false }, { id: `${id}-r2`, vacant: true }],
+    questCount: 0,
+  });
+  const drawn = (l: { circles: Array<{ id: string }> }) => l.circles.map((c) => c.id).sort();
+
+  it("draws both circles when two are each other's parent", () => {
+    const l = layoutNestedMap([nested("a", 1, "b"), nested("b", 2, "a")]);
+    expect(drawn(l)).toEqual(["a", "b"]);
+    expect(l.village.r).toBeGreaterThan(0);
+  });
+
+  it("draws all three when the loop is longer than a pair", () => {
+    const l = layoutNestedMap([nested("a", 1, "c"), nested("b", 2, "a"), nested("c", 3, "b")]);
+    expect(drawn(l)).toEqual(["a", "b", "c"]);
+  });
+
+  it("keeps the circles a loop does NOT touch nested where they belong", () => {
+    // One healthy parent/child pair beside a two-circle loop. The loop must
+    // not cost the healthy pair its nesting.
+    const l = layoutNestedMap([
+      nested("parent", 1), nested("child", 2, "parent"),
+      nested("x", 3, "y"), nested("y", 4, "x"),
+    ]);
+    expect(drawn(l)).toEqual(["child", "parent", "x", "y"]);
+    const byId = new Map(l.circles.map((c) => [c.id, c]));
+    expect(byId.get("child")!.depth).toBeGreaterThan(byId.get("parent")!.depth);
+    expect(byId.get("x")!.depth).toBe(byId.get("parent")!.depth);
+  });
+
+  it("still handles a circle that is its own parent", () => {
+    const l = layoutNestedMap([nested("a", 1, "a"), nested("b", 2)]);
+    expect(drawn(l)).toEqual(["a", "b"]);
+  });
+
+  it("survives a loop in every declared village shape", () => {
+    // layoutForShape is what the map actually calls, and five of its seven
+    // branches build the same forest. A guard in one is a guard in none.
+    const looped = [nested("a", 1, "b"), nested("b", 2, "a"), nested("c", 3)];
+    for (const shape of ["circle", "pyramid", "council", "flat", "steward", "network", "other"]) {
+      const l = layoutForShape(shape, looped, []);
+      expect(drawn(l), `shape ${shape} lost a circle`).toEqual(["a", "b", "c"]);
+    }
+  });
+
+  it("leaves an acyclic map byte-identical, so the guard costs no pixels", () => {
+    // Nothing above is allowed to have moved the ordinary picture. A real
+    // nesting still nests and the canvas is unchanged.
+    const clean = [nested("gcc", 1), nested("dev", 2, "gcc"), nested("care", 3, "gcc")];
+    const l = layoutNestedMap(clean);
+    expect(drawn(l)).toEqual(["care", "dev", "gcc"]);
+    const byId = new Map(l.circles.map((c) => [c.id, c]));
+    expect(byId.get("dev")!.depth).toBe(byId.get("gcc")!.depth + 1);
+    // Each child sits inside its parent's disc.
+    for (const kid of ["dev", "care"]) {
+      const c = byId.get(kid)!;
+      const p = byId.get("gcc")!;
+      expect(Math.hypot(c.x - p.x, c.y - p.y) + c.r).toBeLessThanOrEqual(p.r + 1);
+    }
   });
 });
 
