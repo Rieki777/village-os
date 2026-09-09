@@ -500,6 +500,55 @@ export const VARIABLES: VariableDef[] = [
     ],
   },
 
+  /*
+   * WHO ASKS, NEVER WHO DECIDES.
+   *
+   * Neither value of this dial lets a machine mint anything. `manual` is the
+   * founder's button; `proposal` is the scheduler opening a vote and the
+   * village pressing the button together. In both, a person decides that value
+   * moves, which is Rye's ruling of 2026-09-05 and the property
+   * `shared/moonSettlement.ts` exists to hold.
+   *
+   * Structural, not routine: this decides HOW a village settles, and the thing
+   * being settled is the release of real value. It is a smaller decision than
+   * changing the rhythm itself (`cycle.mode`, constitutional) and a larger one
+   * than a cap.
+   */
+  {
+    key: "cycle.settlement_mode",
+    category: "Gratitude",
+    criticality: "structural",
+    label: "How the end of a moon comes to a decision",
+    description:
+      "What happens when a moon ends and its value is waiting to be released. On 'The village votes', which is the default, the platform notices the moon ended, works out exactly what each member would receive, writes that split down and opens a ballot on it; the value moves only if the village passes it, and it pays precisely the amounts the ballot showed even if a setting changes while the vote is open. On 'A founder settles by hand', no ballot is opened and the moon waits for somebody to press Close on the Cycles desk, which is how every village worked before this dial existed. Neither setting lets the platform release value on its own. A moon the village votes down stays open and no value moves; a moon nobody votes on is asked once more and then waits for a person. Works with: 'How long the village has to answer a settlement' below, and 'Cycle pool size' under Gratitude, which is the value being decided.",
+    type: "choice",
+    default: "proposal",
+    choices: [
+      {
+        value: "proposal",
+        label: "The village votes",
+        hint: "The moon's split is frozen and put to a ballot. Passing it releases exactly the amounts shown.",
+      },
+      {
+        value: "manual",
+        label: "A founder settles by hand",
+        hint: "No ballot is opened. The moon waits for the Close button on the Cycles desk.",
+      },
+    ],
+  },
+  {
+    key: "cycle.settlement_vote_days",
+    category: "Gratitude",
+    criticality: "routine",
+    label: "How long the village has to answer a settlement",
+    description:
+      "How many days a settlement ballot stays open. It is held under a moon on purpose: a window longer than a cycle means each moon's vote is still running when the next moon's opens, and a village would be answering two settlements at once with no way to tell them apart. Only read when 'How the end of a moon comes to a decision' is set to 'The village votes'. Works with: 'How the end of a moon comes to a decision' above.",
+    type: "integer",
+    default: "3",
+    min: 1,
+    max: 21,
+  },
+
   // ── The org chart and its seasons ─────────────────────────────────────────
   {
     key: "org.reassignment_cadence",

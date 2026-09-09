@@ -66,6 +66,7 @@ import {
   type VoteChoice,
   type WeighedSeat,
 } from "./governanceEngine";
+import { CYCLE_SETTLEMENT } from "./moonSettlement";
 
 export interface SubjectThresholds {
   /**
@@ -301,6 +302,37 @@ export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
      */
     method: "custom",
     why: "This one changes how every vote in the village is counted, so it asks the constitutional bar: almost everybody present, and almost everybody in favour.",
+  },
+  /*
+   * SETTLING A MOON ASKS WHAT THE VILLAGE ASKS OF ANYTHING, AND NO MORE.
+   *
+   * Every number here is zero on purpose, which means this subject sets no
+   * floor of its own and the village's own `governance.unity_pct` and
+   * `governance.quorum_pct` decide it. That is a deliberate choice against the
+   * instinct to price it high because it moves money.
+   *
+   * A settlement happens EVERY MOON, forever, and it is the mechanism by which
+   * a village pays itself. A bar this subject sets and the village cannot lower
+   * is a bar that eventually goes unmet on a quiet month, and an unmet bar here
+   * does not merely delay a decision: it stops the village's income. The
+   * failure mode of pricing it high is a village that quietly stops paying
+   * people, which is worse than the failure mode of pricing it ordinary.
+   *
+   * `criticality: "routine"` is the same judgement said in the vocabulary the
+   * veto tiers read. A steward can still stop a settlement if the village has
+   * put routine decisions in the seat's reach; what a steward cannot do is
+   * inherit that reach because this subject called itself structural.
+   *
+   * No `method` either, so a village conducting its business by consent settles
+   * its moons by consent too. There is no pair of numbers in this ruling that
+   * only `custom` could carry.
+   */
+  [CYCLE_SETTLEMENT]: {
+    minUnityPct: 0,
+    minQuorumPct: 0,
+    minElectorate: 0,
+    criticality: "routine",
+    why: "Settling a moon asks whatever this village asks of any decision. It happens every moon, so it is not priced above the village's own bar.",
   },
 };
 
