@@ -116,15 +116,24 @@ describe("platform identity defaults", () => {
 
 describe("the known-pending list", () => {
   /*
-   * These five are STILL POPULATED at main on purpose. The live deployment
-   * reads its identity from these defaults and its own record was never
-   * seeded, so for these five the platform default is the only place those
-   * values exist. The founder types them into the live Admin screen FIRST.
-   * Blanking them first would delete the value and its only copy in one move,
+   * WHATEVER IS ON THIS LIST is STILL POPULATED at main on purpose. The live
+   * deployment reads its identity from these defaults and its own record was
+   * never seeded, so for those keys the platform default is the only place the
+   * value exists. The founder types them into the live Admin screen FIRST.
+   * Blanking one first would delete the value and its only copy in one move,
    * which is the outage this whole effort exists to undo rather than repeat.
    *
+   * This paragraph said "these five" from 2026-08-31 until 2026-09-09, through
+   * a list that went five, three, one and two. It was true for nine days and
+   * quietly false for seven, and nothing failed either way, because the count
+   * is asserted a few lines below and was never read from here. The number is
+   * now left where it is checked. Same defect as the one that put
+   * season.timezone on the list: a fact with a second home nothing compares.
+   *
    * THE LIST MUST REACH ZERO once those values are confirmed in the
-   * deployment's own record. It only ever shrinks.
+   * deployment's own record. It only ever shrinks, and the one rise
+   * (2026-09-09, to two) is documented at PENDING_CEILING with the founder's
+   * ruling that authorised it.
    */
   it("holds exactly the keys that are actually still populated", () => {
     const populated = IDENTITY_KEYS.filter((key) => isViolation(key, valueAt(key) as string));

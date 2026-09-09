@@ -103,6 +103,13 @@ export const IDENTITY_KEYS = [
   "project.tagline",
   "project.memberName",
   "project.catalystName",
+  // roleName and seatName were unwatched until 2026-09-09, and the rule at the
+  // bottom of this file found them rather than a person. They sit in the brand
+  // overlay's empty `project` block in `server/index.ts` beside memberName and
+  // catalystName, so they are the same kind of thing as the two above them and
+  // were absent for no reason anybody ever wrote down.
+  "project.roleName",
+  "project.seatName",
   "project.location",
   "project.country",
   "project.fiatCurrency",
@@ -128,7 +135,23 @@ export const IDENTITY_KEYS = [
   "images.logo",
   "images.heartLogo",
   "images.favicon",
+  // A zone names a place and a place names a village. See KNOWN_PENDING.
+  "season.timezone",
 ];
+
+/**
+ * GAME_CONFIG string slots that are DELIBERATELY not identity, each with the
+ * reason somebody had. Being in here is a claim made on purpose. Being in
+ * NEITHER list is a failure rather than a silence, which is the whole point of
+ * the rule this list feeds.
+ */
+export const NOT_IDENTITY = {
+  "season.cadence":
+    "One of four enumerated rhythms (quarterly, solstice-equinox, lunar, custom), " +
+    "not a name. A village keeping solstices is not thereby claiming to be any " +
+    "particular village, and the value is held to the four by its type rather " +
+    "than by anybody's taste.",
+};
 
 /**
  * Values a key may hold while still belonging to nobody.
@@ -161,6 +184,11 @@ export const NEUTRAL = {
   // empty a rendered footer. `project.location` went the same day and needed
   // no entry: there is no neutral location, so its default is empty.
   "project.footerBlurb": ["A regenerative village where all beings belong and thrive."],
+  // What a village calls a role and a seat. Both render in the org chart and
+  // both are overlay fields, so emptying one takes away a fallback some
+  // deployment is standing on, which is what the emptied rule exists for.
+  "project.roleName": ["Role"],
+  "project.seatName": ["Seat"],
   "currency.name": ["Gratitude"],
   "currency.nameLower": ["gratitude"],
   "currency.equity.symbol": ["EQUITY"],
@@ -193,18 +221,40 @@ export const KNOWN_PENDING = [
     since: "2026-08-31",
     why: "prices render against it, so clearing it before the founder sets one changes displayed money",
   },
+  {
+    key: "season.timezone",
+    since: "2026-09-09",
+    why: "every timestamp a member reads is rendered in it (server/index.ts: \"Village time: SeasonConfig.timezone is the zone every viewer reads in\"), and the derived season list is computed against it, so blanking it before the founder sets one moves every date the village sees",
+  },
 ];
 
 /**
  * 2026-08-31: five. 2026-09-02: three, when project.country graduated.
- * THIS NUMBER ONLY EVER FALLS.
+ * 2026-09-03: one, when project.location and project.footerBlurb graduated.
+ * 2026-09-09: TWO. THIS IS THE FIRST RISE, and it is the ratchet working
+ * rather than failing.
  *
- * It has to equal KNOWN_PENDING.length, so adding an entry means editing a
- * number a line under the sentence forbidding it. That is the point: the list
- * cannot grow by accident, only by a deliberate edit that shows up in a diff
- * next to this comment.
+ * THIS NUMBER ONLY EVER FALLS, and the sentence stands. It has to equal
+ * KNOWN_PENDING.length, so adding an entry means editing a number a line under
+ * the sentence forbidding it. That is the point: the list cannot grow by
+ * accident, only by a deliberate edit that shows up in a diff next to this
+ * comment, and the comment says what the edit needs.
+ *
+ * What it needs is the founder, and this one has him. `season.timezone` held
+ * "America/Costa_Rica" as a PLATFORM DEFAULT that thirteen forks inherit, and
+ * nothing here could see it, because it was in no list. The rule at the bottom
+ * of this file found it the day that rule was written. Rye ruled on 2026-09-09
+ * that the zone comes from the founder at setup, suggested from the browser
+ * now and from the project's own coordinates once the land screen exists. So
+ * this entry is the same shape as fiatCurrency above it: a rendered value with
+ * no home yet but the one it is sitting in.
+ *
+ * It graduates, and this number returns to one, on the day either the founder
+ * field ships and Amora's own record carries a zone, or somebody confirms the
+ * live village already stores its own copy in the season document, which is
+ * the check that graduated location and footerBlurb.
  */
-export const PENDING_CEILING = 1;
+export const PENDING_CEILING = 2;
 
 // ── Reading the config ──────────────────────────────────────────────────────
 
@@ -336,7 +386,42 @@ export function emptiedNeutralDefaults(values) {
 }
 
 /**
- * The five rules, over an already-parsed config. Pure, so the test can drive
+ * EVERY STRING KEY THE CONFIG HOLDS THAT NO LIST NAMES.
+ *
+ * THE DIRECTION IS THE POINT. Every other rule in this file starts at
+ * IDENTITY_KEYS and asks the config a question. This one starts at the CONFIG
+ * and asks the lists, and it is the only rule here that can see a key nobody
+ * has thought about yet.
+ *
+ * The header above IDENTITY_KEYS argues that a DERIVED list is wrong, and it
+ * is right, for the direction it is arguing about: a derived list shrinks
+ * silently the day somebody renames a key, and a guard checking fewer things
+ * than yesterday prints the same green. That argument holds for the forward
+ * direction and it was allowed to excuse the reverse one too, which is a
+ * different question with the opposite answer. A fixed list catches a RENAME.
+ * Only the config catches an ADDITION. Both directions are needed and until
+ * 2026-09-09 only one existed.
+ *
+ * What that cost, measured the day the rule was written: the config held 33
+ * string keys and IDENTITY_KEYS named 29. One of the four was
+ * `season.timezone`, holding "America/Costa_Rica" as the default thirteen
+ * forks inherit, four days after this guard was written to stop exactly that.
+ * The gate was a required CI step and it exited 0 saying "every key outside
+ * the pending list is empty or platform-neutral". It was a true sentence about
+ * 29 keys and a false one about the config.
+ *
+ * A new key therefore fails here until somebody says which it is. That is a
+ * one-line edit and the failure names both lists, so the cost of the rule is a
+ * sentence and the cost of not having it was a live village's identity in a
+ * platform default for eight days.
+ */
+export function unwatchedKeys(values) {
+  const named = new Set([...IDENTITY_KEYS, ...Object.keys(NOT_IDENTITY)]);
+  return Object.keys(values).filter((k) => !named.has(k));
+}
+
+/**
+ * The six rules, over an already-parsed config. Pure, so the test can drive
  * it with values that do not exist on disk.
  */
 export function auditIdentity(values, pending = KNOWN_PENDING, ceiling = PENDING_CEILING) {
@@ -355,6 +440,8 @@ export function auditIdentity(values, pending = KNOWN_PENDING, ceiling = PENDING
     ceiling: pending.length === ceiling ? null : { listed: pending.length, ceiling },
     /** A neutral fallback somebody removed. The outage's actual shape. */
     emptied: emptiedNeutralDefaults(values),
+    /** A config key in neither list, so no rule above has ever seen it. */
+    unwatched: unwatchedKeys(values),
     populated,
   };
 }
@@ -376,7 +463,19 @@ function main(argv) {
 
   const result = auditIdentity(values);
 
-  console.log(`identity keys: ${IDENTITY_KEYS.length} checked, ${result.populated.length} populated, ${KNOWN_PENDING.length} known-pending (ceiling ${PENDING_CEILING})`);
+  // THE DENOMINATOR IS THE POINT. This line used to print the numerator alone,
+  // so a guard watching 29 of the config's 33 keys and a guard watching all of
+  // them printed the identical sentence. It now prints what it read as well as
+  // what it holds, and the unwatched count is the gap between them stated
+  // rather than computed, because an arithmetic identity here would be one
+  // more claim nothing checks.
+  const configKeys = Object.keys(values).length;
+  console.log(
+    `identity keys: ${configKeys} string keys in the config, ` +
+      `${IDENTITY_KEYS.length} watched, ${Object.keys(NOT_IDENTITY).length} declared not-identity, ` +
+      `${result.unwatched.length} unwatched, ${result.populated.length} populated, ` +
+      `${KNOWN_PENDING.length} known-pending (ceiling ${PENDING_CEILING})`,
+  );
   for (const p of KNOWN_PENDING) {
     console.log(`  PENDING  ${p.key}  (recorded ${p.since}) ${p.why}`);
   }
@@ -395,6 +494,14 @@ function main(argv) {
   }
   for (const key of result.stale) {
     problems.push(`${key} is listed as known-pending and is now clean. Good news, and it needs the bookkeeping: delete its entry from KNOWN_PENDING and lower PENDING_CEILING to ${KNOWN_PENDING.length - 1}. A pending entry left behind is a standing permission for that key to be repopulated without anybody noticing.`);
+  }
+  for (const key of result.unwatched) {
+    problems.push(
+      `${key} is a string key in GAME_CONFIG that neither IDENTITY_KEYS nor NOT_IDENTITY names, so no rule in this guard has ever looked at it. ` +
+        `Decide which it is and say so in one line. If its value could ever answer "whose village is this?" - a name, a place, a zone, a word a village would want to change - it goes in IDENTITY_KEYS, and then this guard will tell you what to do about its current value. ` +
+        `If it genuinely belongs to no village, add it to NOT_IDENTITY with the reason, the way season.cadence is. ` +
+        `THIS RULE EXISTS BECAUSE season.timezone SAT HERE UNWATCHED HOLDING "America/Costa_Rica", inherited by every fork, while this gate passed green. A key nobody classified is not a key nobody needs to classify.`,
+    );
   }
   for (const key of result.emptied) {
     problems.push(
@@ -422,7 +529,7 @@ function main(argv) {
     return 0;
   }
   for (const p of problems) console.error(`::error::${p}`);
-  if (!problems.length) console.log("identity guard passed: every key outside the pending list is empty or platform-neutral.");
+  if (!problems.length) console.log("identity guard passed: every string key in the config is named by a list, and every one outside the pending list is empty or platform-neutral.");
   return problems.length ? 1 : 0;
 }
 

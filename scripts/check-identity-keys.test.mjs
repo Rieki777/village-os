@@ -143,12 +143,35 @@ function cleanValues(overrides = {}) {
   return { ...values, ...overrides };
 }
 
-check("POSITIVE CONTROL: the pending five alone are accepted", () => {
+check("POSITIVE CONTROL: the pending list alone is accepted", () => {
   const r = auditIdentity(cleanValues());
   assert.deepStrictEqual(r.missing, []);
   assert.deepStrictEqual(r.unexpected, []);
   assert.deepStrictEqual(r.stale, []);
   assert.strictEqual(r.ceiling, null);
+});
+
+check("POSITIVE CONTROL: a config holding only watched keys has nothing unwatched", () => {
+  // Paired with the refusal below for the reason in this file's header: a
+  // reverse rule whose input is empty accepts everything, so "no unwatched
+  // keys" is only meaningful next to a case that finds one.
+  assert.deepStrictEqual(auditIdentity(cleanValues()).unwatched, []);
+});
+
+check("REFUSES a config key that neither list names", () => {
+  // THE SHAPE THAT SHIPPED. season.timezone held "America/Costa_Rica" as the
+  // default thirteen forks inherit, and every rule above this one started at
+  // IDENTITY_KEYS, so none of them could ask about a key that was not in it.
+  // The gate was a required CI step and it exited 0.
+  const r = auditIdentity(cleanValues({ "season.ritualName": "Fiesta de Riverside" }));
+  assert.deepStrictEqual(r.unwatched, ["season.ritualName"]);
+  // And it is unwatched RATHER than unexpected: the older rules still cannot
+  // see it, which is exactly why this one had to exist.
+  assert.ok(!r.unexpected.includes("season.ritualName"));
+});
+
+check("ACCEPTS a key declared NOT_IDENTITY, so the escape hatch is real", () => {
+  assert.deepStrictEqual(auditIdentity(cleanValues({ "season.cadence": "lunar" })).unwatched, []);
 });
 
 check("REFUSES a populated key outside the pending list", () => {
@@ -260,6 +283,11 @@ function configSource({ project = {}, dropFavicon = false } = {}) {
     // refuse it. A test that wants tagline to violate passes its own string.
     tagline: "healing the land and ourselves, together",
     memberName: "Village member",
+    // Added 2026-09-09 with the keys themselves. Both are NEUTRAL platform
+    // words, so a clean fixture carries them for the same reason catalystName
+    // below does. A test wanting either to violate passes its own string.
+    roleName: "Role",
+    seatName: "Seat",
     // Added 2026-09-03 with the key itself. "Catalyst" is the platform's own
     // word for whoever runs a village and belongs to none of them, so it is a
     // NEUTRAL value and a clean fixture carries it. A test that wants this key
@@ -304,6 +332,17 @@ ${Object.entries(p).map(([k, v]) => `    ${k}: ${JSON.stringify(v)},`).join("\n"
   images: {
 ${images}
   },
+  season: {
+    // Populated on purpose: season.timezone is on KNOWN_PENDING, and a pending
+    // key that is EMPTY reads as graduated, which would make the clean fixture
+    // fail as stale. A stand-in rather than a real zone, the way fiatCurrency
+    // above is ZZZ: the guard reads this file as text and never resolves it.
+    timezone: "Somewhere/Not_Yet_Moved",
+    // Declared NOT_IDENTITY, so the reverse rule must accept it in silence.
+    // This is the positive control for that list: if NOT_IDENTITY stopped being
+    // consulted, this line alone would turn every case in this file red.
+    cadence: "solstice-equinox",
+  },
 };
 `;
 }
@@ -327,7 +366,7 @@ function runGate(label, source, args = [], env = {}) {
   return { code: r.status, out: `${r.stdout || ""}${r.stderr || ""}`, stdout: r.stdout || "", stderr: r.stderr || "" };
 }
 
-check("FIXTURE TREE, positive control: the pending five alone exit 0", () => {
+check("FIXTURE TREE, positive control: the pending list alone exits 0", () => {
   const { code, out } = runGate("clean", configSource());
   assert.strictEqual(code, 0, out);
   assert.match(out, /identity guard passed/);
@@ -339,7 +378,7 @@ check("FIXTURE TREE: the pending list prints even on a passing run", () => {
   assert.match(out, /only ever shrinks/);
 });
 
-check("FIXTURE TREE: a sixth key populated exits 1 and names it", () => {
+check("FIXTURE TREE: one more populated key exits 1 and names it", () => {
   const { code, out } = runGate("sixth", configSource({ project: { memberName: "Riverside folk" } }));
   assert.strictEqual(code, 1);
   assert.match(out, /project\.memberName/);
@@ -373,6 +412,21 @@ check("FIXTURE TREE: emptying a NEUTRAL key exits 1 and names the outage", () =>
   assert.strictEqual(code, 1);
   assert.match(out, /project\.tagline/);
   assert.match(out, /OUTAGE/);
+});
+
+check("FIXTURE TREE: an unclassified config key exits 1 and names both lists", () => {
+  // The pure-function case above proves the RULE; this proves the WIRING, which
+  // is the half that was missing rather than wrong. Every rule in the guard was
+  // sound, and not one of them was ever handed this key.
+  const src = configSource().replace(
+    "  season: {",
+    ["  season: {", '    ritualName: "Fiesta de Riverside",'].join("\n"),
+  );
+  const { code, out } = runGate("unwatched", src);
+  assert.strictEqual(code, 1);
+  assert.match(out, /season\.ritualName/);
+  assert.match(out, /IDENTITY_KEYS/);
+  assert.match(out, /NOT_IDENTITY/);
 });
 
 check("FIXTURE TREE: a renamed key exits 1 rather than checking one fewer thing", () => {
