@@ -25,19 +25,19 @@
  * facts move, and it is deliberate. Everywhere else, ending a fact lowers the
  * answer with nothing written; here the fact cannot end.
  *
- * ── THE SUPER VOUCH, AND WHY IT IS GATED ON A STEWARD ───────────────────────
+ * ── THE SUPER VOUCH ─────────────────────────────────────────────────────────
  *
  * A village that loses one of its three before a fourth reaches Contributor
  * cannot admit anybody, and would be stuck. A steward may then admit somebody
  * outright.
  *
- * It is gated on `steward.veto`, the platform's existing steward authority,
- * and NOT on a new capability. The reason is a guard that already exists: the
- * server refuses to seat anybody in a role carrying `member.vouch`, because "a
- * few members choosing who else gets a say" is the failure mode this whole
- * membrane is built against. A brand new grantable power that admits members
- * outright would walk straight into it. Hanging the override on an authority
- * the village has already appointed through its own process adds no new door.
+ * It has its OWN key, `member.superVouch`, seeded onto the steward circle. The
+ * first version of this rode on `steward.veto` and the governance engine ruled
+ * against it: that seat moves between roles by ballot, so a shared key would
+ * mean a village voting "the Elders hold the veto" had also voted "the Elders
+ * may admit members outright" without being asked. Which guards it joins, and
+ * the one it deliberately does not, are set out in SUPER_VOUCH_PLACEMENT at
+ * the foot of this file.
  *
  * ── WHO MAY VOUCH AT ALL ────────────────────────────────────────────────────
  *
@@ -157,3 +157,36 @@ export function vouchSentence(state: VouchState): string {
   const people = left === 1 ? "one more person" : `${left} more people`;
   return `${state.count} of ${state.needed} vouches. ${people} to go.`;
 }
+
+/**
+ * SUPER_VOUCH_PLACEMENT: which guards `member.superVouch` joins, and the one
+ * it must not.
+ *
+ * The governance engine ruled on 2026-09-08 that the override needs its own
+ * key rather than riding on `steward.veto`, and the reason is that the steward
+ * seat MOVES: `server/lib/roleGrants.ts` says it "is filled and emptied by the
+ * `role_seat` and `role_unseat` ballots and by nothing else". A shared key
+ * would mean a village voting "the Elders hold the veto" had also voted "the
+ * Elders may admit members outright" without ever being asked.
+ *
+ * IT JOINS the badge-grant refusal in `server/lib/proposalDrafts.ts`, beside
+ * `ballot.vote` and `member.vouch`, so no badge can hand it to chosen people.
+ * It is `false` in both the village-held and the agent-voice maps in
+ * `shared/capabilities.ts`: admitting somebody outright is a voice in the
+ * village's decision about who joins, and software speaking as a seat may not
+ * have one.
+ *
+ * IT DOES NOT JOIN the refusal on `POST /api/governance/role-seats`, and that
+ * is the important half. The two keys listed there come from the STAGE ladder,
+ * so seating must not hand them out. The override is an APPOINTED power by
+ * Rye's ruling, and that route is how a village seats the steward who holds
+ * it. Listing it there would make any role carrying it permanently unseatable,
+ * which is not a guard but a brick: the power would exist, be seeded onto the
+ * steward circle, and be reachable by nobody, forever.
+ *
+ * The distinction is worth holding onto because both lists look alike from a
+ * distance. One asks "may seating grant this?" and the other asks "may a badge
+ * grant this?", and the override answers no to the second and yes to the first
+ * by design.
+ */
+export const SUPER_VOUCH_PLACEMENT = "member.superVouch" as const;

@@ -304,6 +304,26 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   },
 
   // ── People ────────────────────────────────────────────────────────────────
+  arrival: {
+    group: "people",
+    /*
+     * NOT CELEBRATED, and I had this wrong on the first pass.
+     *
+     * A new person joining is rare and it matters, so `celebrate: true` felt
+     * obviously right. The ration is four kinds and a test holds it there, and
+     * this file's own header says why: celebration on every action becomes
+     * wallpaper, and then the rare event has nothing left to say with. The four
+     * are things that happened TO THE READER. An arrival is somebody else's
+     * moment, and the greeter's job is to go and make it one in person.
+     *
+     * It reaches whoever holds the greeter seat (`arrival.greeter_role`), and
+     * the founders when no seat is named or the seat sits vacant, so it is
+     * never sent to everybody at once.
+     */
+    blurb: "Somebody joined the village. Greeting a new arrival is the first thing anybody here does for them.",
+    many: "{n} people joined the village.",
+    celebrate: false,
+  },
   gratitude: {
     group: "people",
     blurb: "Somebody said thank you, and put their name to it.",

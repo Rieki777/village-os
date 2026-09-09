@@ -121,7 +121,7 @@ export const TYPE_CAPABILITY_REFUSALS: Partial<
      * only two doors that are supposed to move it, which is the same hole the
      * admin routes were closed against in `server/lib/roleGrants.ts`.
      */
-    keys: ["ballot.vote", "member.vouch", "steward.veto"],
+    keys: ["ballot.vote", "member.vouch", "member.superVouch", "steward.veto"],
     why:
       "A badge names people, so handing this one to named individuals would be a few members " +
       "choosing who else gets a say. The village can still take this power on: that is a power " +
@@ -162,7 +162,7 @@ export const TYPE_CAPABILITY_REFUSALS: Partial<
    * line that does not move when that one does.
    */
   power_grant: {
-    keys: ["ballot.vote", "member.vouch"],
+    keys: ["ballot.vote", "member.vouch", "member.superVouch"],
     why:
       "A role is a set of people, so voting this one onto a role and then seating people in it " +
       "would be a few members choosing who else gets a say. Who votes here is a rule of the game, " +

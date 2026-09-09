@@ -84,18 +84,27 @@ export function register(app: Express, deps: Deps): void {
    * A steward admits somebody outright.
    *
    * For the village that has lost one of its three before a fourth reached
-   * Contributor and cannot otherwise admit anybody at all. Gated on
-   * `steward.veto`, the platform's existing steward authority, and NOT on a
-   * new grantable power: the server already refuses to seat anybody in a role
-   * carrying `member.vouch`, because "a few members choosing who else gets a
-   * say" is the failure this membrane exists to prevent, and a brand new
-   * power that admits members outright walks straight into it.
+   * Contributor and cannot otherwise admit anybody at all.
+   *
+   * ITS OWN KEY, and the first version of this used `steward.veto` instead.
+   * The governance engine ruled against that and was right: `roleGrants.ts`
+   * says the steward seat "is filled and emptied by the `role_seat` and
+   * `role_unseat` ballots and by nothing else", so the veto MOVES between
+   * roles by vote. A conflated key means a village voting "the Elders hold
+   * the veto" has also voted "the Elders may admit members outright", without
+   * ever being asked that question.
+   *
+   * The guard that made me reach for a shortcut is the thing that makes a
+   * separate key safe: `member.superVouch` joins the same refusal lists that
+   * already protect `member.vouch` and `ballot.vote`, so it cannot be seated
+   * by an admin route or voted onto a role. It is a list to join, not a wall
+   * to route around.
    */
   app.post("/api/members/:id/super-vouch", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
     if (
-      !(await guardCapability(req, res, "steward.veto", {
+      !(await guardCapability(req, res, "member.superVouch", {
         status: 403,
         body: {
           error:
