@@ -2028,7 +2028,7 @@ interface TrainingModule {
   type: string;
   url: string;
   order: number;
-  /** 0179. Required modules gate the Participant rung; optional ones do not. */
+  /** 0191. Required modules gate the Participant rung; optional ones do not. */
   mandatory?: boolean;
 }
 
@@ -2168,7 +2168,7 @@ function TrainingModulesTab({ password }: { password: string }) {
           {/* The one lever that turns the Participant rung on and off. A member
               states for themselves what they have finished; the REQUIRED ones
               are what moves them onto the next rung. Absent reads as required,
-              which is what every module shipped before 0179 is. */}
+              which is what every module shipped before 0191 is. */}
           <label className="flex min-h-11 items-center gap-2 text-sm text-gray-700">
             <input
               type="checkbox"
