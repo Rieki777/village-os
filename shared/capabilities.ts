@@ -654,6 +654,8 @@ export type CapabilitySource =
   | "admin-override"
   | "denied by warning badge"
   | "role"
+  /** Held because a GREATER key the actor holds already carries this one. */
+  | "carried by a greater key"
   | "badge"
   | "stage"
   | "not granted";
@@ -737,6 +739,50 @@ export interface CapabilityDecision {
  * commit later: a gate that can lock an operator out of a live village must
  * never exist without its escape hatch.
  */
+/**
+ * KEYS THAT CARRY OTHER KEYS, because holding the greater already means holding
+ * the lesser and pretending otherwise produces an absurdity.
+ *
+ * ── THE ONE ENTRY, AND WHY IT IS NOT SEEDING ────────────────────────────────
+ *
+ * Rye ruled on 2026-09-08 that founders and stewards may ALWAYS vouch, so a
+ * village always has a path to admit its next member. Founders are covered
+ * already: `member.vouch` is not village-held, so the admin short-circuit above
+ * passes them. Stewards hold `member.superVouch`, which admits a member
+ * OUTRIGHT, and it would be ridiculous for somebody who can do that to be
+ * refused the smaller act of adding one vouch.
+ *
+ * The obvious fix is to seed `member.vouch` onto the steward circle, and it is
+ * a trap: `POST /api/governance/role-seats` refuses to seat anybody into a role
+ * carrying that key, because it comes from the stage ladder and seating must
+ * not hand it out. A steward circle carrying it would become permanently
+ * unseatable, so the power would exist and reach nobody.
+ *
+ * ── WHY IT LIVES IN THE GATE ────────────────────────────────────────────────
+ *
+ * Because there is ONE gate. Expressing "a super vouch carries a vouch" in the
+ * route that happens to need it would be gating somewhere else, and the next
+ * surface asking the same question would get a different answer.
+ *
+ * ── WHAT IT DELIBERATELY DOES NOT DO ────────────────────────────────────────
+ *
+ * It does not chain. A key carries the keys named here and not whatever those
+ * carry in turn, so nobody can compose a path to a power the village never
+ * meant to hand over. If a chain is ever wanted it should be written down as a
+ * chain, on purpose, by somebody who has thought about the far end of it.
+ *
+ * It also runs AFTER the deny step, so a warning badge still stops a steward.
+ * A carried key is a convenience, never an override.
+ */
+const CARRIES: Partial<Record<Capability, readonly Capability[]>> = {
+  "member.superVouch": ["member.vouch"],
+};
+
+/** Does anything the actor holds carry `cap`? */
+function carriedBy(held: readonly string[], cap: Capability): boolean {
+  return held.some((k) => (CARRIES[k as Capability] ?? []).includes(cap));
+}
+
 export function capabilityDecision(cap: Capability, ctx: CapabilityCtx): CapabilityDecision {
   const villageHolds = isVillageHeld(cap, ctx.villageHeld);
   if (ctx.isAdmin && !villageHolds) {
@@ -755,6 +801,8 @@ export function capabilityDecision(cap: Capability, ctx: CapabilityCtx): Capabil
     return decided(false, "denied by warning badge");
   }
   if (ctx.roleCapabilities.includes(cap)) return decided(true, "role");
+  // A greater key the actor already holds may carry this one. See CARRIES.
+  if (carriedBy(ctx.roleCapabilities, cap)) return decided(true, "carried by a greater key");
   if ((ctx.badgeCapabilities ?? []).includes(cap)) return decided(true, "badge");
   const unlockStage = ctx.stageUnlockOverrides?.[cap] ?? STAGE_UNLOCKS[cap];
   if (unlockStage && unlockStage !== "none") {

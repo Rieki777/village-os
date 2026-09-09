@@ -31,11 +31,12 @@
 import type { Express } from "express";
 
 import type { AppDeps } from "../lib/appDeps";
+import { GAME_CONFIG } from "../../shared/gameConfig";
 import { numberVar } from "../lib/variables";
 import { DEFAULT_VOUCHES_FOR_MEMBERSHIP, refuseVouch, vouchSentence, vouchState } from "../lib/vouches";
 import { recordVouch, vouchesBy, vouchesFor } from "../repos/vouches";
 
-type Deps = Pick<AppDeps, "authedUser" | "getPool" | "members" | "guardCapability">;
+type Deps = Pick<AppDeps, "authedUser" | "getPool" | "members" | "guardCapability" | "stageOf" | "recordStageEvent">;
 
 /** The bar this village sets, floored at one by `vouchState`. */
 const neededHere = (): number => {
@@ -43,10 +44,13 @@ const neededHere = (): number => {
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_VOUCHES_FOR_MEMBERSHIP;
 };
 
+/** Where the rung this route names sits, resolved once. */
+const CONTRIBUTOR_INDEX = GAME_CONFIG.stages.findIndex((s) => s.id === "contributor");
+
 const newId = (): string => `vch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, getPool, members, guardCapability } = deps;
+  const { authedUser, getPool, members, guardCapability, stageOf, recordStageEvent } = deps;
 
   /**
    * Give one, and it may be the one that admits them.
@@ -170,6 +174,68 @@ export function register(app: Express, deps: Deps): void {
     }
     res.json({ vouches: state, admitted: state.met, sentence: vouchSentence(state) });
   }
+
+  /**
+   * NAME SOMEBODY A CONTRIBUTOR, when the village has no tokens to pay them in.
+   *
+   * Rye's ruling, 2026-09-08: Contributor is the rung the village pays you
+   * onto, and a village that runs no token economy would therefore never have
+   * one. Since Contributor is what opens `member.vouch`, such a village could
+   * never assemble the three vouchers its next member needs. This is the door
+   * out of that.
+   *
+   * ── WHY THIS KEY GATES IT ───────────────────────────────────────────────
+   *
+   * `member.superVouch`, which the steward circle holds. A steward can already
+   * admit a member OUTRIGHT, so naming somebody a contributor is strictly the
+   * smaller act, and gating the smaller act on a key that carries the larger
+   * one keeps the membrane's whole authority in a single place. It also means
+   * a village that moves the override to another role moves this with it,
+   * which is the correct coupling: both answer "who keeps the door working".
+   *
+   * ── AND WHY IT NAMES ONE RUNG RATHER THAN TAKING A STAGE ID ─────────────
+   *
+   * `PUT /api/admin/players/:id/stage` already sets any rung and is admin-only,
+   * and it should stay that way. Handing a steward a general stage setter to
+   * solve a specific problem is how a narrow power becomes a wide one. This
+   * says contributor, in the route, and cannot say anything else.
+   */
+  app.post("/api/members/:id/contributor", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    if (
+      !(await guardCapability(req, res, "member.superVouch", {
+        status: 403,
+        body: {
+          error:
+            "Naming somebody a contributor is a steward's, and it exists for a village with no tokens to pay anybody in.",
+        },
+      }))
+    ) {
+      return;
+    }
+    const target = await findMember(String(req.params.id ?? ""));
+    if (!target) return res.status(404).json({ error: "There is nobody here by that name." });
+
+    /*
+     * ONLY EVER RAISES. `stageGranted` holds one rung, so writing "contributor"
+     * over a higher grant would quietly demote somebody a village had already
+     * placed above it. A member who is already at or past this rung is told
+     * nothing changed, which is true.
+     */
+    const before = await stageOf(target);
+    const held = String(target.stageGranted ?? "");
+    if (held && GAME_CONFIG.stages.findIndex((s) => s.id === held) >= CONTRIBUTOR_INDEX) {
+      return res.json({ changed: false, stage: before, note: "They are already granted this rung or one above it." });
+    }
+    const updated = await members.update(target.id, (u: any) => {
+      u.stageGranted = "contributor";
+    });
+    if (!updated) return res.status(404).json({ error: "There is nobody here by that name." });
+    const after = await stageOf(updated);
+    await recordStageEvent(updated, before, after, "named a contributor by a steward");
+    res.json({ changed: true, stage: after });
+  });
 
   /**
    * Who has vouched for this person.
