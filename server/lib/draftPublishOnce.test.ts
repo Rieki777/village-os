@@ -198,6 +198,40 @@ describe.skipIf(!configured)("a seating written by a draft uses the same key as 
     expect(!r.ok && r.error).toContain("name");
   });
 
+  it("reports the member it seated, so the caller can tell them", async () => {
+    /*
+     * Publishing a draft notified NOBODY. The direct seating route has told
+     * the appointee since F5; `publishDraft` did not import `notify` at all,
+     * so an arrangement seating twelve people told none of them.
+     *
+     * The notification is sent by the route, after the commit, because a
+     * rollback with one already sent would tell somebody they hold a seat no
+     * publish applied. What this asserts is the half that lives here: the
+     * transaction reports WHO it seated, with the words it wrote.
+     */
+    await pool.query("INSERT INTO org_roles (id, name, aim, seats, active) VALUES ('keeper', 'Water Keeper', 'Hold the pond', 2, 1)");
+    const made = await createDraft(pool, { title: "Seat Bo", createdBy: "u-steward", sourceKind: "human", openCap: 99 });
+    if (!made.ok) throw new Error(made.error);
+    await addChange(pool, made.id, { op: "seat_holder", orgRoleId: "keeper", payload: { userId: "u-bo", displayName: "Bo" } });
+    const r = await publishDraft(pool, made.id, "u-steward");
+    expect(r.ok, !r.ok ? r.error : "").toBe(true);
+    expect(r.ok && r.seated).toHaveLength(1);
+    const st = (r as any).seated[0];
+    expect(st.userId).toBe("u-bo");
+    // The words are read INSIDE the transaction, so a later rename cannot put
+    // different ones in the message than the publish actually wrote.
+    expect(st.seatName).toBe("Water Keeper");
+    expect(st.seatAim).toBe("Hold the pond");
+    expect(String(st.assignmentId)).toBeTruthy();
+  });
+
+  it("reports NO seating for a documented holder, who has no account", async () => {
+    // The same rule the direct route follows: only a member can be told.
+    const id = await draftSeating("Bo Reyes");
+    const r = await publishDraft(pool, id, "u-steward");
+    expect(r.ok && r.seated).toHaveLength(0);
+  });
+
   it("reverts that seating, which needs the key to match on the way back", async () => {
     const id = await draftSeating(TRAILING_SPACE);
     await publishDraft(pool, id, "u-steward");

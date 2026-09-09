@@ -35,7 +35,8 @@ import {
 import { motion } from "framer-motion";
 import { wrapLabel, type NestedLayout } from "@shared/mapLayout";
 import { cssColourForCircle } from "@shared/circleView";
-import { transition, viewBoxFor, viewFor, type CameraTarget, type CameraView } from "./camera";
+import { viewBoxFor, type CameraTarget, type CameraView } from "./camera";
+import { NO_NUDGE, useCameraFlight, useMeasuredBox, useNudge } from "./mapStage";
 import SeatGlyph, { seatStateWords } from "./SeatGlyph";
 import { captionSize, fitLabelToScreen } from "./labelFit";
 import { TermArc, SeasonRing } from "./TermMarkers";
@@ -46,60 +47,6 @@ import { anyFilterOn, seatPassesFilters } from "./types";
 /** Faces stop drawing outside the focus past this many seats (spec 13). */
 const AVATAR_SEAT_CAP = 400;
 
-/*
- * ── HOW BIG THIS PICTURE ACTUALLY DRAWS, AND WHY IT WAS HALF SIZE ──────────
- *
- * The layout is a circle PACKING, so its content is a disc and its canvas is
- * the square that hugs that disc. The SVG then fits that square into the
- * element's real box with `xMidYMid meet`, which scales to whichever side is
- * smaller. On a desktop column the box is landscape (measured 864x533), so
- * the height wins, the whole drawing renders at 0.51x, and 331px of width
- * (38% of the canvas) sits empty on either side of the disc.
- *
- * The viewBox was asking for the LAYOUT's aspect, which is 1 by construction
- * and therefore told the browser nothing about the space available. Handing
- * it the CONTAINER's aspect does two things: the world coordinate system now
- * covers the full box, and the space beside the disc becomes addressable
- * world space instead of dead margin. That space is where a name too long for
- * its circle goes.
- *
- * It does NOT on its own make the disc bigger. A disc in a short wide box is
- * height-limited whatever the viewBox says, which is why `md:h-[74vh]` moved
- * too: the stage was capped at 533px while 864px wide.
- */
-function useMeasuredBox(el: SVGSVGElement | null): { w: number; h: number } {
-  const [box, setBox] = useState({ w: 0, h: 0 });
-  useEffect(() => {
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const read = () => {
-      const r = el.getBoundingClientRect();
-      // Round before comparing: a fractional resize that changes nothing
-      // visible would otherwise re-render on every scroll on some browsers.
-      const next = { w: Math.round(r.width), h: Math.round(r.height) };
-      // A HIDDEN instance measures ZERO, and zero is not a measurement.
-      //
-      // This page mounts TWO PowerMaps, one for the standing panel and one
-      // for the phone, and CSS hides whichever does not apply. The hidden
-      // one reports 0x0, and taking that as the box would divide the label
-      // floor by zero and hand every label back unchanged, which is exactly
-      // the bug this hook exists to prevent. Keep the last real size.
-      if (next.w <= 0 || next.h <= 0) return;
-      setBox((prev) => (prev.w === next.w && prev.h === next.h ? prev : next));
-    };
-    read();
-    // The first paint can land before layout has given this subtree a size,
-    // so read again on the next frame. The observer covers every later
-    // change; this covers the one before it starts.
-    const raf = typeof requestAnimationFrame === "function" ? requestAnimationFrame(read) : null;
-    const ro = new ResizeObserver(read);
-    ro.observe(el);
-    return () => {
-      if (raf !== null) cancelAnimationFrame(raf);
-      ro.disconnect();
-    };
-  }, [el]);
-  return box;
-}
 
 // The label floor lives in `labelFit.ts` so it can be tested without a
 // browser. See that file for why a world-unit floor was the wrong floor.
@@ -219,36 +166,9 @@ export default function PowerMap({
   const reduced =
     typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
-  const [view, setView] = useState<CameraView>(() => viewFor(target));
-  const viewRef = useRef(view);
-  viewRef.current = view;
-  const frame = useRef<number | null>(null);
-
-  useEffect(() => {
-    const to = viewFor(target);
-    const from = viewRef.current;
-    if (from[0] === to[0] && from[1] === to[1] && from[2] === to[2]) return;
-    if (frame.current) cancelAnimationFrame(frame.current);
-    const t = transition(from, to);
-    // A hidden tab gets no animation frames, so a flight started there would
-    // hang mid-air until the tab surfaces. Nobody is watching: jump.
-    const ms = typeof document !== "undefined" && document.hidden ? 0 : t.duration(!!reduced);
-    if (ms === 0) {
-      setView(t.at(1));
-      return;
-    }
-    const started = performance.now();
-    const step = (now: number) => {
-      const k = (now - started) / ms;
-      setView(t.at(k));
-      if (k < 1) frame.current = requestAnimationFrame(step);
-    };
-    frame.current = requestAnimationFrame(step);
-    return () => {
-      if (frame.current) cancelAnimationFrame(frame.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target.cx, target.cy, target.r, target.id]);
+  // The flight itself owns a frame loop, so it lives in mapStage.ts with
+  // the rest of the stage. `camera.ts` stays pure.
+  const view = useCameraFlight(target, !!reduced);
 
   // Focus + context (spec 3): what is interactive, what dims, what labels.
   const chain = useMemo(() => {
@@ -315,7 +235,8 @@ export default function PowerMap({
   const drawVillageRing = shape !== "pyramid";
 
   // The CONTAINER's aspect, measured, not the layout's (which is 1 by
-  // construction). See useMeasuredBox above for what this was costing.
+  // construction). See `useMeasuredBox` in mapStage.ts for what this
+  // was costing.
   /*
    * A STABLE REF CALLBACK, WHICH IS THE WHOLE DIFFERENCE.
    *
@@ -386,9 +307,7 @@ export default function PowerMap({
    * tapping a circle still flies there, and arriving resets the nudge, so
    * the two ways of moving cannot fight over where the view is.
    */
-  const [nudge, setNudge] = useState({ dx: 0, dy: 0, k: 1 });
-  useEffect(() => setNudge({ dx: 0, dy: 0, k: 1 }), [focusId, shape]);
-  const gesture = useRef<{ dist: number; mx: number; my: number } | null>(null);
+  const { nudge, setNudge, gesture } = useNudge([focusId, shape]);
   const zoomable = !!compact;
 
   // Screen pixels per world unit, at the camera's current width. Everything
@@ -944,7 +863,7 @@ export default function PowerMap({
       {zoomable && (nudge.k !== 1 || nudge.dx !== 0 || nudge.dy !== 0) && (
         <button
           type="button"
-          onClick={() => setNudge({ dx: 0, dy: 0, k: 1 })}
+          onClick={() => setNudge(NO_NUDGE)}
           className="absolute right-2 top-2 z-10 rounded-full bg-card/90 border border-border px-3 py-1.5 text-xs text-foreground shadow-sm"
         >
           Fit the village

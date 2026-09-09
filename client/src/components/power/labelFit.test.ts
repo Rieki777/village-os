@@ -172,10 +172,20 @@ describe("the label floor, at the sizes a reader actually gets", () => {
  */
 describe("the component actually feeds the floor a measurement", () => {
   const src = fs.readFileSync(path.resolve(__dirname, "PowerMap.tsx"), "utf8");
+  /*
+   * The measuring hook moved to mapStage.ts when PowerMap.tsx was cut back
+   * under the 1000-line ratchet to make room for the org editor. This suite
+   * reads SOURCE, so an extraction breaks it with a false failure unless the
+   * assertion follows the code. Both files are read, and each one carries a
+   * positive control, so a rename that empties either read fails loudly
+   * instead of passing over nothing.
+   */
+  const stage = fs.readFileSync(path.resolve(__dirname, "mapStage.ts"), "utf8");
 
-  it("finds the file and its ref (the positive control)", () => {
+  it("finds both files and the ref (the positive control)", () => {
     expect(src).toContain("useMeasuredBox");
     expect(src).toMatch(/ref=\{/);
+    expect(stage).toContain("export function useMeasuredBox");
   });
 
   it("attaches the SVG through a STABLE ref, never an inline arrow", () => {
@@ -262,7 +272,7 @@ describe("the component actually feeds the floor a measurement", () => {
     // Two PowerMaps mount on this page and CSS hides one. The hidden one
     // measures 0x0; taking that as the box zeroes pxPerWorld and hands every
     // label back unchanged, which is the bug wearing a different hat.
-    expect(src).toMatch(/if\s*\(next\.w\s*<=\s*0\s*\|\|\s*next\.h\s*<=\s*0\)\s*return;/);
+    expect(stage).toMatch(/if\s*\(next\.w\s*<=\s*0\s*\|\|\s*next\.h\s*<=\s*0\)\s*return;/);
   });
 });
 

@@ -759,7 +759,7 @@ export async function publishDraft(
    * cap, which is the right answer for a draft a founder typed.
    */
   changeCap?: number | null,
-): Promise<{ ok: true; applied: number } | { ok: false; error: string }> {
+): Promise<{ ok: true; applied: number; seated: DraftSeating[] } | { ok: false; error: string }> {
   const conn: PoolConnection = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -780,10 +780,24 @@ export async function publishDraft(
     if (!draft) { await conn.rollback(); return { ok: false, error: "No such draft" }; }
     if (draft.status !== "open") { await conn.rollback(); return { ok: false, error: `This draft is already ${draft.status}` }; }
 
+    /*
+     * SEATINGS ARE COLLECTED, NEVER NOTIFIED FROM IN HERE.
+     *
+     * `notify` writes rows of its own, and a rollback after one had been
+     * sent would leave a member told they hold a seat that no publish ever
+     * applied. So the transaction only records WHO, and the caller tells
+     * them once the commit has actually happened.
+     *
+     * The seat name and aim are read in here on purpose: read afterwards,
+     * a later edit would put different words in the message than the ones
+     * this publish wrote.
+     */
+    const seated: DraftSeating[] = [];
     for (const c of draft.changes) {
       const before = await captureBefore(conn, c);
       await conn.query("UPDATE org_draft_changes SET before_json = ? WHERE id = ?", [JSON.stringify(before), c.id]);
-      await applyChange(conn, c);
+      const s = await applyChange(conn, c);
+      if (s) seated.push(s);
     }
     // THE WHOLE POINT OF THE `status = 'open'` CLAUSE IS THIS COUNT.
     //
@@ -802,7 +816,7 @@ export async function publishDraft(
       return { ok: false, error: "This draft was published by someone else while this was being applied" };
     }
     await conn.commit();
-    return { ok: true, applied: draft.changes.length };
+    return { ok: true, applied: draft.changes.length, seated };
   } catch (e: any) {
     await conn.rollback();
     return { ok: false, error: String(e?.message ?? e).slice(0, 200) };
@@ -835,7 +849,17 @@ const SEAT_FIELDS: Record<string, string> = {
   recruiting: "recruiting",
 };
 
-async function applyChange(conn: PoolConnection, c: DraftChange): Promise<void> {
+/** The seating a change made, for the caller to tell the person about. */
+export interface DraftSeating {
+  userId: string;
+  orgRoleId: string;
+  assignmentId: string;
+  /** Read here, inside the transaction, so the words match what was applied. */
+  seatName: string;
+  seatAim: string | null;
+}
+
+async function applyChange(conn: PoolConnection, c: DraftChange): Promise<DraftSeating | null> {
   const p = c.payload ?? {};
   if (c.op === "create_seat") {
     await conn.query(
@@ -843,11 +867,11 @@ async function applyChange(conn: PoolConnection, c: DraftChange): Promise<void> 
       [c.orgRoleId, String(p.name ?? c.orgRoleId), p.circleId ?? null, p.aim ?? null, p.domain ?? null,
         JSON.stringify(Array.isArray(p.accountabilities) ? p.accountabilities : []), Number(p.seats ?? 1)],
     );
-    return;
+    return null;
   }
   if (c.op === "rest_seat") {
     await conn.query("UPDATE org_roles SET active = 0 WHERE id = ?", [c.orgRoleId]);
-    return;
+    return null;
   }
   if (c.op === "seat_holder") {
     /*
@@ -872,14 +896,25 @@ async function applyChange(conn: PoolConnection, c: DraftChange): Promise<void> 
       seasonId: p.seasonId ?? null,
     });
     if (!seated.ok) throw new Error(seated.reason ?? "That seating could not be applied");
-    return;
+    // Only a MEMBER can be told. A documented holder has no account to
+    // reach, which is the same rule the direct seating route follows.
+    if (!p.userId || !seated.assignmentId) return null;
+    const [[seat]] = await conn.query<any[]>("SELECT name, aim FROM org_roles WHERE id = ?", [c.orgRoleId]);
+    return {
+      userId: String(p.userId),
+      orgRoleId: c.orgRoleId,
+      assignmentId: seated.assignmentId,
+      seatName: String(seat?.name ?? c.orgRoleId),
+      seatAim: seat?.aim ? String(seat.aim) : null,
+    };
+    return null;
   }
   if (c.op === "end_holding") {
     await conn.query(
       "UPDATE org_role_assignments SET ended_at = CURRENT_TIMESTAMP, ended_reason = ? WHERE id = ? AND ended_at IS NULL",
       [String(p.reason ?? "reorganisation").slice(0, 200), String(p.assignmentId ?? "")],
     );
-    return;
+    return null;
   }
   // update_seat: only the fields the draft names, mapped through a fixed
   // table. A payload key is never used as a column name.
@@ -894,9 +929,10 @@ async function applyChange(conn: PoolConnection, c: DraftChange): Promise<void> 
     sets.push("`accountabilities` = ?");
     args.push(JSON.stringify(p.accountabilities));
   }
-  if (!sets.length) return;
+  if (!sets.length) return null;
   args.push(c.orgRoleId);
   await conn.query(`UPDATE org_roles SET ${sets.join(", ")} WHERE id = ?`, args);
+  return null;
 }
 
 /**

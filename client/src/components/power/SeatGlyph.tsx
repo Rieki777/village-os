@@ -13,6 +13,7 @@
  * state in words for hover; the OWNING <g> carries the aria-label, because
  * the glyph is drawing, not interaction.
  */
+import { useId } from "react";
 import type { PowerHolder, SeatStateWord } from "./types";
 
 /** An arc path from angle a0 to a1 (radians, clockwise) on radius r. */
@@ -75,6 +76,28 @@ export default function SeatGlyph({
   /** A search pick lands here: one attention ring, then quiet. */
   pulse?: boolean;
 }) {
+  /*
+   * ONE ID PER RENDERED GLYPH, because an SVG id is document-wide.
+   *
+   * The clip id was built from the holder and the seat coordinates, and
+   * BOTH map call sites pass `x={0} y={0}` and place the glyph with a
+   * transform. So every seat on the map produced the same string:
+   * `seat-face-<userId>-0-0`. A person holding two seats put two
+   * clipPaths with one id into the document, and `url(#id)` resolves to
+   * the FIRST in document order.
+   *
+   * It looked fine because the geometry also matched, so the wrong clip
+   * and the right clip were the same shape. They stop matching the moment
+   * the two seats fan a different number of faces: alone a face fills the
+   * seat, one of three sits at 62% off-centre, and the second seat would
+   * then be clipped by the first seat's circle. Rare while few people hold
+   * two seats; ordinary once faces can be dragged onto seats.
+   *
+   * `useId` is per component INSTANCE, which is exactly the scope an SVG
+   * id needs. Stripped to alphanumerics because React returns `:r1:` and a
+   * colon has no business in a fragment reference.
+   */
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const s: SeatStateWord = state ?? (held > 0 ? "filled" : "open");
   const stroke = "var(--color-teal-deep)";
 
@@ -158,9 +181,9 @@ export default function SeatGlyph({
             const fa = -Math.PI / 2 + (2 * Math.PI * i) / Math.max(1, avatars.length);
             const fx = avatars.length === 1 ? x : x + (r - fr) * Math.cos(fa);
             const fy = avatars.length === 1 ? y : y + (r - fr) * Math.sin(fa);
-            const clip = `seat-face-${h.userId ?? i}-${x.toFixed(0)}-${y.toFixed(0)}`;
+            const clip = `seat-face-${uid}-${i}`;
             return (
-              <g key={clip} opacity={greyed || h.lapsed ? 0.45 : 1}>
+              <g key={h.userId ?? i} opacity={greyed || h.lapsed ? 0.45 : 1}>
                 <clipPath id={clip}>
                   <circle cx={fx} cy={fy} r={fr} />
                 </clipPath>

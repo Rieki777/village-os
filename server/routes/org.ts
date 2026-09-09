@@ -230,6 +230,31 @@ export function register(app: Express, deps: Deps): void {
     const roster = ((await members.all()) as any[]).length;
     const r = await publishDraft(getPool(), req.params.id, actor?.id ?? null, draftChangeCap(roster));
     if (!r.ok) return res.status(409).json({ error: r.error });
+    /*
+     * TELL THE PEOPLE THE DRAFT SEATED.
+     *
+     * The direct seating route has notified since F5. Publishing a draft did
+     * not, and `publishDraft` did not import `notify` at all, so an
+     * arrangement seating twelve people told none of them and left each one to
+     * notice their own name on the map.
+     *
+     * AFTER the commit, never inside it: a rollback with a notification
+     * already sent would tell somebody they hold a seat no publish applied.
+     * Same type, same words and the same `org-seat:` dedupe key as the direct
+     * route, because it is the same act by another door, and a member seated
+     * twice by two paths should hear once.
+     */
+    for (const st of r.seated) {
+      await notify({
+        userId: st.userId,
+        type: "role_appointed",
+        title: `You were seated as ${st.seatName}`,
+        body: st.seatAim ? st.seatAim.slice(0, 140) : null,
+        link: "/map/circles",
+        actorUserId: actor?.id ?? null,
+        dedupeKey: `org-seat:${st.assignmentId}`,
+      });
+    }
     // One journal line per seat the draft touched, so a reorganisation shows up
     // in the history of every node it moved rather than only in a draft list
     // nobody opens twice.
