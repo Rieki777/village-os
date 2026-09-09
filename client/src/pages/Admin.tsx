@@ -37,6 +37,7 @@ import IdentityPackPanel from "@/components/IdentityPackPanel";
 import MapSkinPanel from "@/components/MapSkinPanel";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import MapVocabularyPanel from "@/components/admin/MapVocabularyPanel";
+import ArchetypesPanel from "@/components/admin/ArchetypesPanel";
 import EventsAdminPanel from "@/components/EventsAdminPanel";
 import ResourcesAdminPanel from "@/components/power/ResourcesAdminPanel";
 import { CrowdpoolAdminTab, ForumCategoriesEditor, ToolsCategoriesEditor } from "@/components/admin/ModuleConfigPanels";
@@ -9354,6 +9355,9 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
             </div>
           ))}
         </div>
+        {/* The five character classes are content too, and until now the only
+            way to reword them was a redeploy of the seed. */}
+        <ArchetypesPanel password={password} />
       </SetupSection>
 
       <SetupSection {...step} id="map" n={5} title="Map & styling" subtitle="How the Living Map draws your land. Blank keeps the map's own look.">
