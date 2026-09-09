@@ -15,7 +15,7 @@
  * `searchHits` is pure and exported for exactly this reason.
  */
 import { describe, expect, it } from "vitest";
-import { searchHits } from "./SearchBar";
+import { questionCore, searchHits } from "./SearchBar";
 import type { PowerCircle, PowerSeat } from "./types";
 
 const circles: PowerCircle[] = [
@@ -130,5 +130,85 @@ describe("the domain is searched, because that is the word people type", () => {
   it("still finds circles by name and purpose", () => {
     expect(searchHits(data, "gathering").some((h) => h.kind === "circle")).toBe(true);
     expect(searchHits(data, "soil").some((h) => h.kind === "circle" && h.id === "land")).toBe(true);
+  });
+});
+
+/*
+ * THE QUESTION THE FEATURE IS NAMED AFTER.
+ *
+ * This box exists to answer "who do I talk to about X", and typing exactly
+ * that matched NOTHING. The query was the whole sentence, and no seat name,
+ * aim or domain contains "who do i talk to about". A member asking the
+ * question the feature is for got an empty list, which reads as "this map
+ * cannot help me" rather than as "you phrased it wrong".
+ *
+ * Deterministic and local: a fixed list of openers, matched at the START
+ * only, no tokens spent. The Ask button still handles what a substring
+ * genuinely cannot.
+ */
+describe("a question typed as a question", () => {
+  const data = {
+    circles,
+    roles: [
+      seat({ id: "water", name: "Water Keeper", circleId: "land", domain: "The spring, the tanks and the greywater" }),
+      seat({ id: "cook", name: "Kitchen Lead", domain: "Meals and the pantry" }),
+    ],
+  };
+  const titles = (q: string) => searchHits(data, q).map((h) => h.title);
+
+  it("finds the water seat from the whole sentence", () => {
+    expect(titles("who do I talk to about water")).toContain("Water Keeper");
+  });
+
+  it("answers the other ways people ask the same thing", () => {
+    for (const q of [
+      "who handles water?",
+      "who is in charge of the water",
+      "who looks after water",
+      "where do I go for water",
+      "who should I ask about water",
+    ]) {
+      expect(titles(q), q).toContain("Water Keeper");
+    }
+  });
+
+  it("still finds a plain word, which is how most people search", () => {
+    expect(titles("water")).toContain("Water Keeper");
+    expect(titles("pantry")).toContain("Kitchen Lead");
+  });
+
+  it("drops the trailing question mark rather than searching for it", () => {
+    expect(questionCore("water?")).toBe("water");
+  });
+
+  it("drops a leading article, so the phrase reads as the subject", () => {
+    expect(questionCore("who is in charge of the kitchen")).toBe("kitchen");
+    expect(questionCore("who handles our water")).toBe("water");
+  });
+
+  it("needs a word boundary, so a longer word is not cut in half", () => {
+    // "who doesn't..." must not be read as the opener "who does".
+    expect(questionCore("who doesnt like beans")).toBe("who doesnt like beans");
+  });
+
+  it("leaves a query alone when trimming would leave nothing", () => {
+    // Somebody searching for a person called Who deserves the raw string.
+    expect(questionCore("who handles")).toBe("who handles");
+    expect(questionCore("who")).toBe("who");
+  });
+
+  it("searches whyItMatters, which is where a village explains itself", () => {
+    const d = {
+      circles,
+      roles: [
+        seat({
+          id: "spring",
+          name: "Spring Warden",
+          circleId: "land",
+          whyItMatters: "A village that loses its aquifer loses a season.",
+        }),
+      ],
+    };
+    expect(searchHits(d, "aquifer").map((h) => h.title)).toContain("Spring Warden");
   });
 });

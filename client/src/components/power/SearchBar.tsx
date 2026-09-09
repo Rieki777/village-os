@@ -27,10 +27,61 @@ export interface SearchHit {
   circleId: string | null;
 }
 
+/*
+ * A QUESTION IS NOT A SEARCH TERM, AND PEOPLE TYPE QUESTIONS.
+ *
+ * The whole point of this box is "who do I talk to about X", and typing
+ * exactly that matched NOTHING: the query was the entire sentence, and no
+ * seat name, aim or domain contains "who do i talk to about". A member
+ * asking the question the feature is named after got an empty list and
+ * concluded the map could not answer it.
+ *
+ * So the opening is trimmed off and the rest is searched. Deterministic and
+ * local: a fixed list of ways people ask this, matched only at the START,
+ * with no tokens spent and no model involved. The Ask button is still there
+ * for the questions a substring genuinely cannot answer.
+ *
+ * If trimming leaves nothing worth searching, the raw query stands, so
+ * somebody looking for a person called "Who" is not outsmarted.
+ */
+const QUESTION_OPENERS = [
+  "who do i talk to about",
+  "who do i speak to about",
+  "who do i ask about",
+  "who should i talk to about",
+  "who should i ask about",
+  "who do i contact about",
+  "who is in charge of",
+  "who is responsible for",
+  "who takes care of",
+  "who looks after",
+  "who handles",
+  "who decides",
+  "who owns",
+  "where do i go for",
+  "what circle handles",
+  "which circle handles",
+  "who does",
+];
+
+/** The part of a typed question that is actually the subject. */
+export function questionCore(query: string): string {
+  const q = query.trim().toLowerCase().replace(/[?.!]+$/, "").trim();
+  for (const opener of QUESTION_OPENERS) {
+    if (!q.startsWith(opener)) continue;
+    // A word boundary, so "who doesn't" is not read as "who does".
+    const rest = q.slice(opener.length);
+    if (rest && !/^[\s]/.test(rest)) continue;
+    const core = rest.replace(/^\s*(the|our|my|a|an)\s+/, "").trim();
+    if (core.length >= 2) return core;
+  }
+  return q;
+}
+
 /** Pure, ranked, deterministic: title prefix beats title substring beats
  *  body substring; ties break by name then id. Exported for tests. */
 export function searchHits(data: Pick<PowerData, "circles" | "roles">, query: string, cap = 8): SearchHit[] {
-  const q = query.trim().toLowerCase();
+  const q = questionCore(query);
   if (q.length < 2) return [];
   const scored: Array<{ score: number; hit: SearchHit }> = [];
 
@@ -66,7 +117,10 @@ export function searchHits(data: Pick<PowerData, "circles" | "roles">, query: st
      * the aim. So the seat that owns the question was findable exactly when
      * its aim happened to repeat its domain.
      */
-    const body = [s.description ?? "", s.domain ?? "", ...(s.accountabilities ?? [])].join(" ");
+    // `whyItMatters` joins the body here rather than only on the card: it is
+    // the field most likely to contain the word somebody types, because it
+    // is where a village explains the seat in its own terms.
+    const body = [s.description ?? "", s.domain ?? "", s.whyItMatters ?? "", ...(s.accountabilities ?? [])].join(" ");
     const score = scoreText(s.name, body);
     if (score) {
       /*
