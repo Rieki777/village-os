@@ -368,8 +368,24 @@ export function emptiedNeutralDefaults(values) {
  * when somebody renames a key. That decision is right and this is its cost,
  * so the cost is checked rather than remembered.
  */
-export function neutralKeysNotChecked() {
-  return Object.keys(NEUTRAL).filter((k) => !IDENTITY_KEYS.includes(k));
+export function neutralKeysNotChecked(neutral = NEUTRAL, keys = IDENTITY_KEYS) {
+  return Object.keys(neutral).filter((k) => !keys.includes(k));
+}
+
+/**
+ * The floor under every sweep in this file.
+ *
+ * Each rule here is a FILTER, and a filter over an empty set returns an empty
+ * set. The lists are derived rather than hand-kept, so they cannot go stale the
+ * way a written-down list does; what they can still do is be empty because a
+ * reader broke or an edit went wrong, at which point every check passes over
+ * nothing and the run prints the green it prints when everything is watched.
+ *
+ * Parameterised so it can be driven empty in a test. A floor nobody has seen
+ * refuse is a sentence in a comment.
+ */
+export function listsLookBroken(neutral = NEUTRAL, keys = IDENTITY_KEYS) {
+  return !Object.keys(neutral).length || !keys.length;
 }
 
 /**
@@ -429,6 +445,28 @@ function main(argv) {
   }
   for (const key of result.unexpected) {
     problems.push(`${key} holds a value that is neither empty nor an approved platform-neutral one. Platform defaults belong to no village: every fork inherits this file, so a value here becomes thirteen villages' default. Put it in the deployment's own record through Admin, then clear it here. If it genuinely is a neutral platform default, add it to NEUTRAL with the reason.`);
+  }
+  /*
+   * A FLOOR UNDER THE SWEEP BELOW, and it is here because the sweep is a
+   * FILTER and a filter over an empty set returns an empty set.
+   *
+   * `neutralKeysNotChecked()` derives its subjects from NEUTRAL rather than
+   * from a hand-kept list, so it cannot go stale the way a written-down list
+   * does. What it can still do is return nothing for the wrong reason: if
+   * either list is empty because a reader broke or an edit went wrong, the
+   * filter is empty, no problem is pushed, and the run says the same green it
+   * says when every key is watched.
+   *
+   * That is this file's own defect one level up. It reports what it looked at
+   * where a reader takes it for what there was, which is why the summary line
+   * prints a denominator and why this exists.
+   */
+  if (listsLookBroken()) {
+    problems.push(
+      `the guard's own lists are empty (NEUTRAL ${Object.keys(NEUTRAL).length}, ` +
+        `IDENTITY_KEYS ${IDENTITY_KEYS.length}), so every check in this run passed over nothing. ` +
+        `That is a broken reader, not a clean config.`,
+    );
   }
   for (const key of neutralKeysNotChecked()) {
     problems.push(`${key} has a NEUTRAL entry and is not in IDENTITY_KEYS, so this guard never looks at it and the entry protects nothing. Add it to IDENTITY_KEYS, or delete the NEUTRAL entry if the key is gone.`);

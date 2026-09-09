@@ -33,6 +33,8 @@ import {
   auditIdentity,
   isViolation,
   parseConfigValues,
+  listsLookBroken,
+  neutralKeysNotChecked,
 } from "./check-identity-keys.mjs";
 
 const GUARD = path.join(path.dirname(fileURLToPath(import.meta.url)), "check-identity-keys.mjs");
@@ -86,6 +88,30 @@ check("keeps an empty string, which is a value and not an absence", () => {
 
 check("is not fooled by a double slash inside a string", () => {
   assert.strictEqual(parseConfigValues(SAMPLE)["project.siteUrl"], "https://example.test/a//b");
+});
+
+check("a NEUTRAL entry the guard never walks is caught", () => {
+  // The rule itself: an entry with a watcher is fine, one without is not.
+  assert.deepStrictEqual(neutralKeysNotChecked({ "a.b": ["x"] }, ["a.b"]), []);
+  assert.deepStrictEqual(neutralKeysNotChecked({ "a.b": ["x"] }, []), ["a.b"]);
+});
+
+check("EMPTY LISTS ARE A BROKEN READER, NEVER A CLEAN SWEEP", () => {
+  /*
+   * Every rule in this file is a filter, and a filter over an empty set returns
+   * an empty set. So the failure being guarded is not "a key slipped through",
+   * it is "nothing was looked at and the run said the same green".
+   *
+   * The lists are derived rather than hand-kept, which is what keeps them from
+   * going stale, and is exactly why this floor is easy to leave out: a derived
+   * list feels like it cannot be wrong. It can still be EMPTY.
+   */
+  assert.strictEqual(listsLookBroken({ "a.b": ["x"] }, ["a.b"]), false);
+  assert.strictEqual(listsLookBroken({}, ["a.b"]), true, "no NEUTRAL entries at all");
+  assert.strictEqual(listsLookBroken({ "a.b": ["x"] }, []), true, "nothing in IDENTITY_KEYS");
+  assert.strictEqual(listsLookBroken({}, []), true, "both gone");
+  // And the sweep it sits under really would have reported nothing.
+  assert.deepStrictEqual(neutralKeysNotChecked({}, []), []);
 });
 
 check("prose naming GAME_CONFIG above the declaration does not move the anchor", () => {
