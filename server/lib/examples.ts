@@ -148,6 +148,30 @@ const REAL_CONTENT_CHECK: Record<string, (p: Pool) => Promise<boolean>> = {
     );
     return Number(r.n) > 0;
   },
+  /**
+   * "Has this village written anything for the WALL?", which is a narrower
+   * question than "is there a gratitude row".
+   *
+   * The table list would answer with any non-example row in `gratitude_log`,
+   * and that table also holds feed HEARTS: a tap on a post, whose `message` is
+   * the body of the post it was tapped on and which the wall deliberately
+   * never quotes. So a village that had only ever tapped hearts counted as
+   * having spoken for itself, seeded no voices, and opened its wall on nothing
+   * at all.
+   *
+   * This is the same computation `realVoiceCount` uses to decide what the hero
+   * DRAWS, which is the point: the question "should this village see example
+   * voices" and the question "does this village have voices of its own" must
+   * be one question, or the answer to the first stops predicting the second.
+   * `fullSendsIn` and `spreadsAcross` earned the same note on this branch.
+   */
+  gratitude: async (p) => {
+    const [[r]] = await p.query<RowDataPacket[]>(
+      "SELECT COUNT(*) n FROM gratitude_log " +
+        "WHERE is_example = 0 AND `kind` <> 'heart' AND `message` IS NOT NULL AND TRIM(`message`) <> ''",
+    );
+    return Number(r.n) > 0;
+  },
 };
 
 /**
