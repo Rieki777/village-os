@@ -75,21 +75,80 @@ function gateSources(): string {
 const GATES = gateSources();
 
 /**
- * Whether anything anywhere gates on this key.
+ * EVERY CAPABILITY ANY GATE NAMES, discovered instead of asked about.
  *
- * MATCHES THE CALL, NOT THE KEY. `member.vouch` appears in server/index.ts
- * three times today, in lists of keys two proposal types REFUSE to move, and a
- * plain substring search would read those as evidence the key gates something.
- * Naming a key is not gating on it. The call is.
+ * MATCHES THE CALL, NOT THE KEY, which is the first half. `member.vouch`
+ * appears three times in server/index.ts today inside lists of keys that two
+ * proposal types REFUSE to move. Naming a key is not gating on it.
  *
- * One spelling covers it: every literal gate in the server is
- * `hasCapability("<key>", ctx)`, 74 of them at the time of writing, with no
- * wrapper taking a literal. If a second spelling ever appears, the control
- * below fails rather than this returning a quiet false.
+ * THREE SPELLINGS, NOT ONE, which is the half this got wrong first time and
+ * the governance lane caught. Measured here: 59 `hasCapability("<key>"`, 7
+ * `mayAct(req, "<key>")`, and 2 `mayAct(req, STEWARD_VETO)` where the argument
+ * is a CONSTANT. A pattern matching only the first missed nine gated routes.
+ *
+ * `scripts/generate-governance-doc.mjs` learned this before we did, and its
+ * route classifier says so in almost these words: a pattern that matched only
+ * the literal read four gated routes as ungated, "which is the one kind of
+ * mistake this classifier is not allowed to make". Read it before changing
+ * this. The polarity here is inverted and so is the damage: that classifier
+ * called a gated route ungated, and this would call a WIRED key unwired, which
+ * is a live gate sitting in a list promising it gates nothing. Of the two
+ * directions this one fails green.
+ *
+ * THE FLOOR IS WHY THIS IS A SET AND NOT THREE REGEXES. A fourth helper, or a
+ * refactor routing gates through a wrapper, silently shrinks what this can
+ * see, and a shrunken set passes every assertion below by finding nothing.
+ * So the count is checked against a floor. A legitimate drop means lowering a
+ * number in a diff somebody reads, which is the whole trick the ratchets in
+ * scripts/ use.
  */
-function isGatedOn(key: string): boolean {
-  return new RegExp(String.raw`hasCapability\(\s*["'\`]` + key.replace(/\./g, String.raw`\.`)).test(GATES);
+const GATE_HELPERS = ["hasCapability", "mayAct"];
+
+/**
+ * `export const NAME: Capability = "key"`, so a constant argument resolves.
+ * One exists today (STEWARD_VETO); the scan finds them rather than listing it.
+ */
+function capabilityAliases(): Map<string, string> {
+  const out = new Map<string, string>();
+  const re = /export const ([A-Z][A-Z0-9_]*)\s*:\s*Capability\s*=\s*"([a-z][\w.]*)"/g;
+  const shared = fs.readFileSync(path.join(process.cwd(), "shared", "capabilities.ts"), "utf8");
+  for (const src of [GATES, shared]) {
+    for (const m of src.matchAll(re)) out.set(m[1], m[2]);
+  }
+  return out;
 }
+
+/**
+ * The first argument that is a capability, whether it is written or named.
+ *
+ * Both helpers put the key last: `hasCapability(cap, ctx)` and
+ * `mayAct(req, cap)`. So an optional leading identifier is skipped and the
+ * next thing is either a quoted key or a SHOUTING_CONSTANT to resolve.
+ */
+function gatedCapabilities(): Set<string> {
+  const alias = capabilityAliases();
+  const out = new Set<string>();
+  // A regex LITERAL, so the pattern needs no string escaping and cannot be
+  // quietly defanged by a lost backslash. `.source` splices it after the
+  // helper's name.
+  const TAIL = /\(\s*(?:[A-Za-z_$][\w$]*\s*,\s*)?(?:"([a-z][\w.]*)"|([A-Z][A-Z0-9_]{2,}))/.source;
+  for (const helper of GATE_HELPERS) {
+    for (const m of GATES.matchAll(new RegExp(helper + TAIL, "g"))) {
+      if (m[1]) out.add(m[1]);
+      else if (m[2] && alias.has(m[2])) out.add(alias.get(m[2]) as string);
+    }
+  }
+  return out;
+}
+
+const GATED = gatedCapabilities();
+
+/**
+ * The floor. 19 distinct keys were gated at c04307e across both helpers. It is
+ * a floor and not an equality so that gating a new key needs no edit here,
+ * and a REAL drop is a number somebody lowers on purpose.
+ */
+const GATED_FLOOR = 19;
 
 describe("the powers registry", () => {
   it("describes every power that can move, in one list or the other", () => {
@@ -128,37 +187,61 @@ describe("the powers registry", () => {
    * THE CONTROL FOR THE TEST BELOW, and it has to come first.
    *
    * NOT_YET_WIRED is empty most days, and on those days the test below passes
-   * by iterating nothing. A matcher that had quietly stopped matching would
+   * by iterating nothing. A scanner that had quietly stopped scanning would
    * report the same green, which is the exact failure the registry exists to
-   * prevent one level up. So the matcher is proved against a key that is
-   * definitely gated, every run, whatever the list holds.
+   * prevent one level up. So the scan is proved on every run, whatever the
+   * list holds.
+   *
+   * THE FLOOR IS THE HALF THAT CATCHES A NEW SPELLING. Naming two keys proves
+   * the scan is alive; it does not prove it still sees everything. A fourth
+   * gate helper, or a refactor putting gates behind a wrapper, shrinks this
+   * set without emptying it, and a shrunken set passes every assertion by
+   * finding less. A real drop is then a number somebody lowers in a diff.
    */
-  it("can tell a gated key from an ungated one, so the next test means something", () => {
-    expect(isGatedOn("event.rsvp"), "a key gated in server/index.ts must match").toBe(true);
-    expect(isGatedOn("forum.post"), "a second, to catch a one-off").toBe(true);
-    expect(isGatedOn("no.such.capability"), "an invented key must not match").toBe(false);
+  it("still finds every gate, so the next test means something", () => {
+    expect(GATED.has("event.rsvp"), "a hasCapability gate must be found").toBe(true);
+    expect(GATED.has("steward.veto"), "a mayAct gate named by a CONSTANT must be found").toBe(true);
+    expect(GATED.has("no.such.capability"), "an invented key must not appear").toBe(false);
+    expect(
+      GATED.size,
+      `only ${GATED.size} gated capabilities found, floor is ${GATED_FLOOR}. Either gating moved behind a helper GATE_HELPERS does not name, or a capability constant stopped matching. Both make the test below pass by seeing less`,
+    ).toBeGreaterThanOrEqual(GATED_FLOOR);
+  });
+
+  /*
+   * NAMING A KEY IS NOT GATING ON IT, and this is the reason the test above
+   * checks a constant.
+   *
+   * member.vouch appears three times in server/index.ts inside lists of keys
+   * that badge_grant and power_transfer REFUSE to move. A substring search
+   * reads those as evidence the key gates something, and would fail this file
+   * for a key that gates nothing at all.
+   */
+  it("does not mistake a key being mentioned for a key being gated", () => {
+    expect(GATES.includes('"member.vouch"'), "the fixture for this test: the key is mentioned").toBe(true);
+    expect(GATED.has("member.vouch"), "and mentioning it is not gating on it").toBe(false);
   });
 
   /*
    * THE CLAIM NOTHING CHECKED, until 2026-09-09.
    *
    * An entry here says a key gates nothing. That was written true and there
-   * was no reason it would stay true: `member.vouch` sat here from round 5
+   * was no reason it would stay true: member.vouch sat here from round 5
    * saying "the membrane's vouching step has not been built" while a lane
-   * built it, and the day the route landed this file went on saying the
-   * opposite with every test green. Nothing would ever have gone wrong because
-   * of it, which is what made it survive.
+   * built it, and the day that route lands this file goes on saying the
+   * opposite with every test green. Nothing goes wrong because of it, which is
+   * why it survives.
    *
    * The header above NOT_YET_WIRED says a line comes out when the route lands.
    * That was a convention, and a convention is what failed. This is the same
    * sentence as an assertion.
    *
-   * The forward direction is genuinely not checkable and the rot test above
+   * The forward direction is genuinely not checkable and the rot test below
    * says so: you cannot ask an Express app which routes a key gates. The
-   * REVERSE direction is a grep. That asymmetry is the whole of this test.
+   * reverse direction is a scan. That asymmetry is the whole of this test.
    */
   it("names only keys that really gate nothing", () => {
-    const wired = Object.keys(NOT_YET_WIRED).filter(isGatedOn);
+    const wired = Object.keys(NOT_YET_WIRED).filter((k) => GATED.has(k));
     expect(
       wired,
       "this key is gated somewhere in server/**, so it is a power now and its line here is a sentence a village would read and be wrong about. Delete the entry and add the key to POWERS with the routes it gates",
