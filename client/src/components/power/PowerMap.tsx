@@ -182,10 +182,40 @@ export default function PowerMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusId, byId]);
 
-  const isChildOfFocus = (id: string): boolean => parentOf(id) === focusId;
+  /*
+   * A SINGLE ROOT AND THE VILLAGE ARE THE SAME PICTURE.
+   *
+   * Bostock's rule is that only the children of the FOCUS carry labels and
+   * take clicks, which is what keeps forty circles legible. At the village
+   * level the focus is null, so "child of the focus" means "has no parent".
+   *
+   * That was fine while Amora had fifteen parentless circles. The moment the
+   * General Coordinating Circle became the parent of all of them, exactly ONE
+   * circle had no parent, and the rule collapsed: the map opened on a single
+   * big disc labelled "General Coordinating Circle" with fourteen unnamed
+   * discs inside it, none of them clickable. A reader had to guess to click
+   * the one circle before the village had any names in it at all.
+   *
+   * So when a village has ONE root, that root's ring IS the village boundary,
+   * and standing outside the village means standing inside it. Anything else
+   * is drawing the same edge twice and making the reader cross it by hand.
+   *
+   * A village with several roots is unchanged, which is every fork on its
+   * first day.
+   */
+  const soleRoot = useMemo(() => {
+    const roots = layout.circles.filter((c) => c.depth === 0);
+    return roots.length === 1 ? roots[0].id : null;
+  }, [layout]);
+  /** The focus for READING: what is named, what takes a click. */
+  const readFocus = focusId ?? soleRoot;
+
+  const isChildOfFocus = (id: string): boolean => parentOf(id) === readFocus;
   const isInteractive = (id: string): boolean =>
-    id === focusId || isChildOfFocus(id) || (focusId !== null && id === parentOf(focusId));
-  const showLabel = (id: string): boolean => isChildOfFocus(id) || id === focusId;
+    // Stepping OUT still keys on the real focus: at the village level there is
+    // no level above to go to, so the root ring is not a door.
+    id === readFocus || isChildOfFocus(id) || (focusId !== null && id === parentOf(focusId));
+  const showLabel = (id: string): boolean => isChildOfFocus(id) || id === readFocus;
 
   const filtersOn = anyFilterOn(filters);
   const seatPasses = (seat: PowerSeat | undefined): boolean =>
