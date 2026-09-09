@@ -252,6 +252,36 @@ export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
   [VILLAGE_LAUNCH]: {
     minUnityPct: 100,
     minQuorumPct: 100,
+    /*
+     * THIS NUMBER ALSO DECIDES WHO MAY BE ADMITTED. Read the next paragraph
+     * before you change it.
+     *
+     * It reads as a ballot floor and it is one, and since 2026-09-09 it is
+     * also the village's vouch bar: `DEFAULT_VOUCHES_FOR_MEMBERSHIP` in
+     * server/lib/vouches.ts and the default of `membership.vouches_required`
+     * both read this field. Move it and the membrane moves with it.
+     *
+     * That is deliberate, because the two are downstream of one idea rather
+     * than of each other. The honest name for this number is the village's
+     * MINIMUM CIRCLE OF TRUST: the smallest group who know each other well
+     * enough to let somebody in. A launch asks that circle to exist; an
+     * admission asks it to speak. The founder's arithmetic (Rye, 2026-09-08)
+     * is the same sentence: a village launches when a founder brings two more,
+     * which leaves exactly the vouchers the fourth member needs.
+     *
+     * The failure modes are not symmetric, which is why this is derived rather
+     * than left as two numbers that happen to agree. Coupled, a village
+     * wanting a higher vouch bar has to move a launch setting, which is odd
+     * and harmless, because launch happens once. Uncoupled, a village raising
+     * the bar to four before its fourth member exists produces somebody who
+     * can never be admitted, and that does not fail: it just never grows,
+     * months later, for no visible reason. Coupled fails safe. Uncoupled fails
+     * silent.
+     *
+     * Until this comment existed the coupling was asserted in prose in three
+     * files and enforced in none. It is now enforced in one and stated here,
+     * at the home the other two read.
+     */
     minElectorate: 3,
     everySeatWeighs: true,
     method: "custom",
