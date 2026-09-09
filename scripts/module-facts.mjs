@@ -11,7 +11,8 @@
  * Nothing here is hardcoded. The field list comes from the `ModuleDef`
  * interface, the tier and data-class and lifecycle vocabularies come from
  * their type aliases, the capability count comes from `ALL_CAPABILITIES`, the
- * gate commands come from `.github/workflows/ci.yml`, and the contract version
+ * gate commands come from EVERY workflow that runs on a pull request, and the
+ * contract version
  * comes from the contract document. When one of those changes, this output
  * changes with it and no human has to remember to edit anything.
  *
@@ -144,6 +145,70 @@ function unionStrings(sourceFile, aliasName) {
  * step is whether anything local reproduces it, so the block is scanned for a
  * `node scripts/*.mjs` call and that command is printed when one is there.
  */
+/**
+ * Every workflow that gates a PULL REQUEST, which is not the same set as
+ * ci.yml.
+ *
+ * THIS USED TO READ ci.yml ALONE, and CLAUDE.md pointed at this script as
+ * "the authoritative list" of gates while it did. Measured on 2026-09-06:
+ * 35 commands printed from ci.yml's 40 named steps, and nothing at all from
+ * module-intake.yml (7 steps), module-review-agent.yml (5) or codeql.yml (2).
+ * The gates reachable ONLY through module-intake include validate-module,
+ * intake-classify, contribution-scan and the whole raw-SQL burn-down, so a
+ * contributor could run everything this printed and still go red.
+ *
+ * The blindness was found because somebody mentioned the burn-down in
+ * passing, which is not a discovery mechanism. Reading the directory is.
+ *
+ * WHY A DIRECTORY WALK AND NOT A LIST OF FOUR. A hand list is a thing
+ * somebody has to remember to append to, and the failure being fixed here is
+ * exactly that failure one level up. A workflow added tomorrow is reported
+ * tomorrow, by nobody's effort.
+ */
+function gatesPullRequests(yml) {
+  // Only the `on:` block counts. The words "pull_request" appear in comments
+  // and in `if:` expressions in this repository, and either would otherwise
+  // enrol a workflow that never runs on a pull request.
+  const lines = yml.split(/\r?\n/);
+  let inOn = false;
+  for (const line of lines) {
+    if (/^"?on"?:\s*$/.test(line)) {
+      inOn = true;
+      continue;
+    }
+    // Any other top-level key ends the block.
+    if (inOn && /^\S/.test(line)) break;
+    if (inOn && /^\s{2}pull_request:/.test(line)) return true;
+  }
+  return false;
+}
+
+function prGatingWorkflows() {
+  const dir = path.join(ROOT, ".github", "workflows");
+  let names;
+  try {
+    names = fs.readdirSync(dir).filter((f) => /\.ya?ml$/.test(f)).sort();
+  } catch {
+    // A directory that cannot be read is a failure, not an empty gate set:
+    // reporting no gates would read as a repository with no gates.
+    missing.push(".github/workflows/");
+    return [];
+  }
+  const out = [];
+  for (const name of names) {
+    const rel = `.github/workflows/${name}`;
+    const yml = required(rel);
+    if (yml === null) continue;
+    if (!gatesPullRequests(yml)) continue;
+    // Named steps and RUNNABLE steps are different counts, and conflating
+    // them made codeql.yml look unreadable: it is real, it gates a pull
+    // request, and it has no `run:` at all because it is actions only.
+    const named = (yml.match(/^\s{6}-\s+name:/gm) ?? []).length;
+    out.push({ rel, named, gates: ciGates(yml) });
+  }
+  return out;
+}
+
 function ciGates(yml) {
   if (yml === null) return null;
   const lines = yml.split(/\r?\n/);
@@ -177,16 +242,19 @@ function ciGates(yml) {
        * report the first one as the local reproduction. Scanning stops at the
        * next step, so a later step's command cannot be attributed to this one.
        */
-      let local = null;
+      // EVERY command in the block, not the first. A block that runs four
+      // gates and reports one teaches a shorter truth than the real one,
+      // which is the whole defect this script exists to avoid. The intake
+      // block is the case that proved it: its first call is module-facts
+      // itself, so reporting only the first pointed the reader back here and
+      // never at validate-module, which is what actually gates them.
+      const locals = [];
       for (let j = i + 1; j < lines.length; j++) {
         if (/^\s{6}-\s+name:/.test(lines[j])) break;
         const call = /\b(node\s+scripts\/[\w.-]+\.mjs)/.exec(lines[j]);
-        if (call) {
-          local = call[1];
-          break;
-        }
+        if (call && !locals.includes(call[1])) locals.push(call[1]);
       }
-      steps.push({ name: pending, command: null, block: true, local });
+      steps.push({ name: pending, command: null, block: true, locals });
       pending = null;
       continue;
     }
@@ -224,6 +292,10 @@ const tiers = unionStrings(modulesSrc, "ModuleTier");
 const dataClasses = unionStrings(modulesSrc, "ModuleDataClass");
 const lifecycles = unionStrings(modulesSrc, "ModuleLifecycle");
 const gates = ciGates(ciYml);
+// ci.yml still supplies the Node version and the budget constants, which are
+// its own; the GATE LIST now comes from every workflow that runs on a pull
+// request, this one included.
+const prWorkflows = prGatingWorkflows();
 const docVersion = contractVersion(contractBody);
 
 let sha = null;
@@ -249,6 +321,13 @@ if (dataClasses === null) unreadable.push("the ModuleDataClass type in shared/mo
 if (lifecycles === null) unreadable.push("the ModuleLifecycle type in shared/modules.ts");
 if (capabilityCount === null) unreadable.push("ALL_CAPABILITIES in shared/capabilities.ts");
 if (gates === null || !gates.steps.length) unreadable.push("the verify job steps in .github/workflows/ci.yml");
+if (!prWorkflows.length) unreadable.push("any workflow under .github/workflows/ that runs on a pull request");
+for (const w of prWorkflows) {
+  // Zero NAMED steps means the parse failed. Zero runnable steps beside a
+  // positive named count is an actions-only workflow, which is reported
+  // rather than treated as a failure.
+  if (w.gates === null || !w.named) unreadable.push(`the steps in ${w.rel}`);
+}
 if (docVersion === null) unreadable.push("the version line in " + CONTRACT_PATH);
 
 // ── Report ───────────────────────────────────────────────────────────────────
@@ -298,12 +377,31 @@ if (asJson) {
   console.log(`Data classes: ${(dataClasses ?? []).join(", ") || "UNREADABLE"}`);
   console.log(`Lifecycle: ${(lifecycles ?? []).join(", ") || "UNREADABLE"}\n`);
 
-  console.log(`Gates, in the order CI runs them (.github/workflows/ci.yml, Node ${gates?.nodeVersion ?? "?"})`);
-  for (const s of gates?.steps ?? []) {
-    if (s.block && s.local) console.log(`  ${s.name}: a shell block in the workflow, reproduced locally by \`${s.local}\``);
-    else if (s.block) console.log(`  ${s.name}: a shell block in the workflow, no local command reproduces it`);
-    else console.log(`  ${s.command}`);
+  const namedTotal = prWorkflows.reduce((n, w) => n + w.named, 0);
+  const runnableTotal = prWorkflows.reduce((n, w) => n + (w.gates?.steps.length ?? 0), 0);
+  console.log(
+    `Gates that run on a PULL REQUEST: ${namedTotal} named step(s) across ${prWorkflows.length} workflow(s), ` +
+      `${runnableTotal} of them a shell command (Node ${gates?.nodeVersion ?? "?"}).` +
+      `\nRunning everything ci.yml lists is NOT the whole set.`,
+  );
+  for (const w of prWorkflows) {
+    console.log(`\n  ${w.rel}  (${w.named} named step(s))`);
+    if (!w.gates?.steps.length) {
+      console.log("    no shell steps: this workflow runs actions, so there is nothing to reproduce locally");
+      continue;
+    }
+    for (const step of w.gates.steps) {
+      if (step.block && step.locals.length) {
+        const cmds = step.locals.map((c) => `\`${c}\``).join(", ");
+        console.log(`    ${step.name}: a shell block, reproduced locally by ${cmds}`);
+      } else if (step.block) {
+        console.log(`    ${step.name}: a shell block in the workflow, no local command reproduces it`);
+      } else {
+        console.log(`    ${step.command}`);
+      }
+    }
   }
+
   const budgets = Object.entries(gates?.budgets ?? {});
   if (budgets.length) {
     console.log("\nBudgets CI enforces");
