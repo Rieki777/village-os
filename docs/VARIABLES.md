@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 146 open and 33 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 145 open and 33 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 156 of them as soon as it is saved, and 23 of them at the next cycle close.
+Each dial also says WHEN a change lands. 155 of them as soon as it is saved, and 23 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-179 dials in 30 categories. 104 carry a minimum and a maximum. By type: 82 integer, 13 decimal, 10 percentage, 21 boolean, 22 choice, 31 text.
+178 dials in 30 categories. 103 carry a minimum and a maximum. By type: 81 integer, 13 decimal, 10 percentage, 21 boolean, 22 choice, 31 text.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -46,7 +46,7 @@ Each dial also says WHEN a change lands. 156 of them as soon as it is saved, and
 | The Mint | 4 | 3 | 1 |
 | Progression | 27 | 27 | 0 |
 | Quests | 5 | 5 | 0 |
-| Governance | 43 | 39 | 4 |
+| Governance | 42 | 38 | 4 |
 | Tokens | 4 | 1 | 3 |
 | Hypha | 8 | 0 | 8 |
 | Tools | 2 | 2 | 0 |
@@ -168,7 +168,6 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Minting rule changes: unity floor | `governance.subject_mint_rule_unity_pct` | Governance | percentage | `0` | the whole village |
 | Seats speaking for other beings count toward quorum | `governance.nonhuman_in_quorum` | Governance | boolean | `false` | the whole village |
 | Cycles of silence before a seat leaves the count | `governance.absent_cycles` | Governance | integer | `3` | the whole village |
-| Vouches to admit a member | `membership.vouch_threshold` | Governance | integer | `0` | the whole village |
 | Equity token contract address on Base | `tokens.equity_address` | Tokens | text | blank | the founder or an admin |
 | Governance token contract address on Base | `tokens.voice_address` | Tokens | text | blank | the founder or an admin |
 | Show the economics section | `tokens.show_economics_section` | Tokens | boolean | `false` | the whole village |
@@ -263,14 +262,14 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 
 ### Vouches that admit a member
 
-How many people have to say they know somebody before that person becomes a member. Three by default, and the number is tied to how a village starts: a village launches when a founder brings two more and all three carry the launch, which leaves exactly the three vouchers the fourth member needs. The person who invited them counts as the first. A vouch cannot be taken back, so this bar is only ever crossed forwards. Lower it and the membrane is thinner; raise it and a young village may not be able to admit anybody at all, which is what the steward override exists for.
+How many people have to say they know somebody before that person becomes a member. The default matches how a village starts: it launches when a founder brings two more and all three carry the launch, which leaves exactly the vouchers the fourth member needs, so this number is read from the launch bar itself. The person who invited them counts as the first. A vouch cannot be taken back, so this bar is only ever crossed forwards. 0 turns vouching off and admission stays whatever your current process is. Raise it and a young village may not be able to admit anybody at all, which is what the steward override exists for.
 
 | Fact | Value |
 | --- | --- |
 | Key | `membership.vouches_required` |
 | Type | integer, a whole number |
 | Default | `3` |
-| Range | 1 to 20 |
+| Range | 0 to 20 |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
@@ -1220,7 +1219,7 @@ Consent normally needs a second person to witness the work: nobody may consent t
 
 ## Governance
 
-43 dials. 39 for the whole village, 4 for the founder or an admin.
+42 dials. 38 for the whole village, 4 for the founder or an admin.
 
 ### How sensing is weighted
 
@@ -1855,21 +1854,6 @@ When seats speaking for other beings do count toward quorum, this is how many cy
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a constitutional vote, at the highest bar the village has set |
-
-### Vouches to admit a member
-
-How many standing members must vouch for an applicant before membership completes on its own. 0 keeps vouching off and admission stays whatever your current process is. Vouching comes from contributors and up, a member may never vouch for themself, and every vouch is on the record.
-
-| Fact | Value |
-| --- | --- |
-| Key | `membership.vouch_threshold` |
-| Type | integer, a whole number |
-| Default | `0` |
-| Range | 0 to 20 |
-| Counted in | vouches |
-| Who may change it | the whole village |
-| A change takes effect | as soon as it is saved |
-| What it costs to change | a structural vote, at a higher bar |
 
 ## Tokens
 

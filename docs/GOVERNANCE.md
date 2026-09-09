@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `88ae03d21c66e9f9`, which regenerating reproduces.
+It describes the sources at fingerprint `f986266ef451ed67`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -82,7 +82,7 @@ Governance copy is English, and only English, in version 1.0. Nothing on these s
 <!-- written by a person: publishModule -->
 Read the module state first. While the governance module is off, every path under its prefixes answers 404 to everybody, signed in or not. The mechanics routes are never module-gated, so they answer under every lifecycle.
 
-The governance module ships **off**. Its lifecycles are `off`, `preview`, `members`, `public`, an absent row means off, and its prefixes are `/api/governance`, `/api/admin/governance`. It turns on `ballot.vote`, `member.vouch` and carries 8 settings of its own.
+The governance module ships **off**. Its lifecycles are `off`, `preview`, `members`, `public`, an absent row means off, and its prefixes are `/api/governance`, `/api/admin/governance`. It turns on `ballot.vote`, `member.vouch` and carries 7 settings of its own.
 
 ## What a decision is
 
@@ -183,12 +183,11 @@ The dials a village holds, with the ring that says who may move each one and the
 | `governance.subject_mint_rule_unity_pct` | Minting rule changes: unity floor | `open` | `0` | 0 to 100 % | when it is written |
 | `governance.nonhuman_in_quorum` | Seats speaking for other beings count toward quorum | `open` | `false` | boolean | when it is written |
 | `governance.absent_cycles` | Cycles of silence before a seat leaves the count | `open` | `3` | 1 to 24 cycles | when it is written |
-| `membership.vouch_threshold` | Vouches to admit a member | `open` | `0` | 0 to 20 vouches | when it is written |
 
 <!-- written by a person: dialsStorage -->
 Only CHANGED values are stored. An absent row means the platform default in the table above, so a fresh village starts with every one of these and no rows at all.
 
-11 settings across the whole registry wait for a cycle close instead of applying when they are written: `cycle.mode`, `economy.voice_claim_threshold`, `economy.claims_week_days`, `economy.claims_week_starts`, `gratitude.base_budget`, `gratitude.pool_per_cycle`, `gratitude.pool_token`, `gratitude.full_sends_per_cycle`, `feed.heart_amount`, `feed.max_hearts_per_recipient_per_cycle`, `ledger.admin_mint_cycle_cap`. The per-stage sending multipliers carry the same timing through their own override, one for each rung of the ladder. None of the 43 settings above is one of them, so every governance dial takes effect the moment it is written.
+11 settings across the whole registry wait for a cycle close instead of applying when they are written: `cycle.mode`, `economy.voice_claim_threshold`, `economy.claims_week_days`, `economy.claims_week_starts`, `gratitude.base_budget`, `gratitude.pool_per_cycle`, `gratitude.pool_token`, `gratitude.full_sends_per_cycle`, `feed.heart_amount`, `feed.max_hearts_per_recipient_per_cycle`, `ledger.admin_mint_cycle_cap`. The per-stage sending multipliers carry the same timing through their own override, one for each rung of the ladder. None of the 42 settings above is one of them, so every governance dial takes effect the moment it is written.
 
 ## What each kind of decision asks
 
@@ -1032,7 +1031,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "88ae03d21c66e9f9",
+  "commit": "f986266ef451ed67",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -1057,8 +1056,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "governance.quorum_pct",
       "governance.vote_days",
       "governance.consent_window_days",
-      "governance.default_method",
-      "membership.vouch_threshold"
+      "governance.default_method"
     ]
   },
   "engine": {
@@ -1624,17 +1622,6 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "default": "3",
       "min": 1,
       "max": 24,
-      "choices": null,
-      "applyTiming": "instant"
-    },
-    {
-      "key": "membership.vouch_threshold",
-      "label": "Vouches to admit a member",
-      "ring": "open",
-      "type": "integer",
-      "default": "0",
-      "min": 0,
-      "max": 20,
       "choices": null,
       "applyTiming": "instant"
     }

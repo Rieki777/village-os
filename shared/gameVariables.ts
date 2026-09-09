@@ -21,7 +21,7 @@
 import { GAME_CONFIG } from "./gameConfig";
 import { STAGE_UNLOCKS } from "./capabilities";
 import { TIER_FLOORS, type Criticality } from "./governanceEngine";
-import { MINT_RULE, SUBJECT_THRESHOLDS } from "./ballotSubjects";
+import { MINT_RULE, SUBJECT_THRESHOLDS, VILLAGE_LAUNCH } from "./ballotSubjects";
 import { isAnchorDateAcceptable } from "./villageMoon";
 
 export type VariableType = "integer" | "decimal" | "percentage" | "boolean" | "choice" | "text";
@@ -115,10 +115,26 @@ export const VARIABLES: VariableDef[] = [
     category: "Membership",
     label: "Vouches that admit a member",
     description:
-      "How many people have to say they know somebody before that person becomes a member. Three by default, and the number is tied to how a village starts: a village launches when a founder brings two more and all three carry the launch, which leaves exactly the three vouchers the fourth member needs. The person who invited them counts as the first. A vouch cannot be taken back, so this bar is only ever crossed forwards. Lower it and the membrane is thinner; raise it and a young village may not be able to admit anybody at all, which is what the steward override exists for.",
+      "How many people have to say they know somebody before that person becomes a member. The default matches how a village starts: it launches when a founder brings two more and all three carry the launch, which leaves exactly the vouchers the fourth member needs, so this number is read from the launch bar itself. The person who invited them counts as the first. A vouch cannot be taken back, so this bar is only ever crossed forwards. 0 turns vouching off and admission stays whatever your current process is. Raise it and a young village may not be able to admit anybody at all, which is what the steward override exists for.",
     type: "integer",
-    default: "3",
-    min: 1,
+    /*
+     * DERIVED. A village launches with `minElectorate` founders precisely so
+     * that the next arrival has that many vouchers available, so the two
+     * numbers are one fact. Typed here it was a copy, and the sentence
+     * explaining the coupling was written three times with nothing comparing
+     * them. See DEFAULT_VOUCHES_FOR_MEMBERSHIP in server/lib/vouches.ts, which
+     * reads the same field.
+     */
+    default: String(SUBJECT_THRESHOLDS[VILLAGE_LAUNCH].minElectorate),
+    /*
+     * ZERO IS OFF, and the floor is 0 rather than 1 on Rye's ruling of
+     * 2026-09-09. A minimum of 1 is not a default, it is a mandate: thirteen
+     * forks inherit this file, and a village that already admits people by
+     * interview or by a circle's consent would have gained a second gate it
+     * could not remove, with the steward override as its only way through.
+     * An override used for every arrival stops being read as an override.
+     */
+    min: 0,
     max: 20,
   },
   {
@@ -1067,19 +1083,6 @@ export const VARIABLES: VariableDef[] = [
     min: 1,
     max: 24,
     unit: "cycles",
-  },
-  {
-    key: "membership.vouch_threshold",
-    category: "Governance",
-    label: "Vouches to admit a member",
-    criticality: "structural",
-    description:
-      "How many standing members must vouch for an applicant before membership completes on its own. 0 keeps vouching off and admission stays whatever your current process is. Vouching comes from contributors and up, a member may never vouch for themself, and every vouch is on the record.",
-    type: "integer",
-    default: "0",
-    min: 0,
-    max: 20,
-    unit: "vouches",
   },
 
   // ── Tokens: read from Base, governed on Hypha ──────────────────────────────
