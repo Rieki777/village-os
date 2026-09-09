@@ -302,6 +302,9 @@ import {
   registerToken,
   tokenDef,
   TREASURY,
+  contributionTokens,
+  hasBeenPaidByVillage,
+  paidByVillageMany,
 } from "./lib/ledger";
 import type { TransferGuard } from "./lib/ledger";
 import {
@@ -3789,7 +3792,7 @@ function hasMembership(user: any): boolean {
 const trainingDoneHere = (done: readonly string[]): boolean =>
   trainingIsComplete(gatingModuleIds(trainingRepo.all()), done);
 
-function computeStage(user: any, consentedQuests: number, trainingDone: readonly string[]): string {
+function computeStage(user: any, consentedQuests: number, trainingDone: readonly string[], paidByVillage = false): string {
   let earned = GAME_CONFIG.stages[0].id;
   const grantedIdx = user.stageGranted ? stageIndex(user.stageGranted) : -1;
   for (const stage of GAME_CONFIG.stages) {
@@ -3800,9 +3803,9 @@ function computeStage(user: any, consentedQuests: number, trainingDone: readonly
       case "account": ok = true; break; // having a user record implies an account
       case "training-complete": ok = trainingDoneHere(trainingDone); break;
       case "membership": ok = hasMembership(user); break;
-      // The threshold reads the registry (progression.quests_for.<stage>,
-      // default = the config min), so climbing speed is village-tunable.
+      // Threshold from the registry (progression.quests_for.<stage>), so speed is tunable.
       case "quests": ok = consentedQuests >= Math.max(1, numberVar(`progression.quests_for.${stage.id}`)); break;
+      case "tokens": ok = paidByVillage; break; // ever paid BY THE VILLAGE; see hasBeenPaidByVillage
       case "granted": ok = grantedIdx >= idx; break;
     }
     if (ok && idx > stageIndex(earned)) earned = stage.id;
@@ -3813,7 +3816,7 @@ function computeStage(user: any, consentedQuests: number, trainingDone: readonly
 
 /** The one-member form: fetch the consented count, then compute. */
 async function stageOf(user: any): Promise<string> {
-  return computeStage(user, await claimsRepo.consentedCount(user.id), await completionsFor(getPool(), user.id));
+  return computeStage(user, await claimsRepo.consentedCount(user.id), await completionsFor(getPool(), user.id), await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()));
 }
 
 /**
@@ -9181,6 +9184,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // ONE query for the whole roll. A per-member read inside the loop would be
     // the N+1 the consented counts above already go out of their way to avoid.
     const trained = await completionsForMany(getPool(), (all as any[]).map((u) => String(u.id)));
+    // Third read of the same shape, and for the same reason as the two above.
+    const paid = await paidByVillageMany(getPool(), (all as any[]).map((u) => String(u.id)), contributionTokens());
     const memberIdx = stageIndex("member");
     const eligible = new Set<string>();
     for (const u of all as any[]) {
@@ -9189,7 +9194,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       if (u.isExample) continue;
       const count = consented.get(u.id) ?? 0;
       const done = trained.get(String(u.id)) ?? [];
-      if (count >= 1 || stageIndex(computeStage(u, count, done)) >= memberIdx) eligible.add(u.id);
+      if (count >= 1 || stageIndex(computeStage(u, count, done, paid.has(String(u.id)))) >= memberIdx) eligible.add(u.id);
     }
     return eligible;
   }
@@ -20299,7 +20304,7 @@ ${inner}
     // single query stageOf was already paying.
     const consentedQuests = await claimsRepo.consentedCount(user.id);
     const trained = await completionsFor(getPool(), user.id);
-    const stageId = computeStage(user, consentedQuests, trained);
+    const stageId = computeStage(user, consentedQuests, trained, await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()));
     const claims = await claimsRepo.forUser(user.id);
     const ctx = await capabilityCtx(user);
     // What each consented quest actually paid. `amount` is what the witness
@@ -21192,7 +21197,7 @@ ${inner}
     // Same substitution as /api/game/me, same single query: the count the
     // ladder measures is kept instead of collapsed into a stage id.
     const consentedQuests = await claimsRepo.consentedCount(user.id);
-    const stageId = computeStage(user, consentedQuests, await completionsFor(getPool(), user.id));
+    const stageId = computeStage(user, consentedQuests, await completionsFor(getPool(), user.id), await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()));
     const ctx = await capabilityCtx(user);
     res.json({
       stage: servedStage(stageId),
