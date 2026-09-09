@@ -14,6 +14,7 @@
  * the glyph is drawing, not interaction.
  */
 import { useId } from "react";
+import { holderFace, type HolderFace } from "./holderFace";
 import type { PowerHolder, SeatStateWord } from "./types";
 
 /** An arc path from angle a0 to a1 (radians, clockwise) on radius r. */
@@ -101,8 +102,27 @@ export default function SeatGlyph({
   const s: SeatStateWord = state ?? (held > 0 ? "filled" : "open");
   const stroke = "var(--color-teal-deep)";
 
-  const avatars = showAvatars ? holders.filter((h) => h.avatar).slice(0, 3) : [];
-  const overflow = Math.max(0, held - (avatars.length || held > 0 ? Math.min(held, 3) : 0));
+  /*
+   * EVERY HOLDER IS DRAWN, not only the ones with a portrait.
+   *
+   * This filtered on `h.avatar`, and the avatar query is an INNER JOIN on a
+   * primary character. Measured against live Amora: all twelve seatings are
+   * documented holders with no account, so the filter kept NONE of them and
+   * every held seat in the village drew a plain teal dot. A seat somebody
+   * holds looked exactly like a seat somebody else holds.
+   *
+   * `holderFace` decides which of the four marks a holder gets. The filter
+   * that remains drops only a holder the payload gave nothing to draw with
+   * at all, which below the people tier is every one of them.
+   */
+  type Drawn = { h: PowerHolder; face: Exclude<HolderFace, { kind: "anonymous" }> };
+  const faces: Drawn[] = showAvatars
+    ? holders
+        .map((h) => ({ h, face: holderFace(h) }))
+        .filter((f): f is Drawn => f.face.kind !== "anonymous")
+        .slice(0, 3)
+    : [];
+  const overflow = Math.max(0, held - (faces.length || held > 0 ? Math.min(held, 3) : 0));
   const greyed = s === "expired";
 
   return (
@@ -170,32 +190,56 @@ export default function SeatGlyph({
             cx={x}
             cy={y}
             r={r}
-            fill={avatars.length ? "var(--color-parchment, #fff)" : "var(--color-teal-deep)"}
+            fill={faces.length ? "var(--color-parchment, #fff)" : "var(--color-teal-deep)"}
             stroke={greyed ? "var(--color-muted-foreground, #6b7280)" : "white"}
             strokeWidth={2}
             opacity={greyed ? 0.75 : 1}
           />
-          {avatars.map((h, i) => {
-            // Up to three faces fanned inside the seat; alone, one fills it.
-            const fr = avatars.length === 1 ? r - 1.5 : r * 0.62;
-            const fa = -Math.PI / 2 + (2 * Math.PI * i) / Math.max(1, avatars.length);
-            const fx = avatars.length === 1 ? x : x + (r - fr) * Math.cos(fa);
-            const fy = avatars.length === 1 ? y : y + (r - fr) * Math.sin(fa);
+          {faces.map(({ h, face }, i) => {
+            // Up to three fanned inside the seat; alone, one fills it.
+            const fr = faces.length === 1 ? r - 1.5 : r * 0.62;
+            const fa = -Math.PI / 2 + (2 * Math.PI * i) / Math.max(1, faces.length);
+            const fx = faces.length === 1 ? x : x + (r - fr) * Math.cos(fa);
+            const fy = faces.length === 1 ? y : y + (r - fr) * Math.sin(fa);
             const clip = `seat-face-${uid}-${i}`;
             return (
               <g key={h.userId ?? i} opacity={greyed || h.lapsed ? 0.45 : 1}>
-                <clipPath id={clip}>
-                  <circle cx={fx} cy={fy} r={fr} />
-                </clipPath>
-                <image
-                  href={h.avatar!}
-                  x={fx - fr}
-                  y={fy - fr}
-                  width={fr * 2}
-                  height={fr * 2}
-                  clipPath={`url(#${clip})`}
-                  preserveAspectRatio="xMidYMid slice"
-                />
+                {face.kind === "face" ? (
+                  <>
+                    <clipPath id={clip}>
+                      <circle cx={fx} cy={fy} r={fr} />
+                    </clipPath>
+                    <image
+                      href={face.src}
+                      x={fx - fr}
+                      y={fy - fr}
+                      width={fr * 2}
+                      height={fr * 2}
+                      clipPath={`url(#${clip})`}
+                      preserveAspectRatio="xMidYMid slice"
+                    />
+                  </>
+                ) : (
+                  <>
+                    {/* Initials, or the agent mark. A filled disc so the
+                        letters read at 9px, and the letters themselves are
+                        never the only signal: the seat ring already carries
+                        the state (spec 4). */}
+                    <circle cx={fx} cy={fy} r={fr} fill="var(--color-teal-deep)" />
+                    <text
+                      x={fx}
+                      y={fy}
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      fontSize={face.kind === "agent" ? fr * 1.1 : fr * (face.text.length > 1 ? 0.9 : 1.15)}
+                      fill="var(--color-parchment, #fff)"
+                      fontWeight={600}
+                      pointerEvents="none"
+                    >
+                      {face.kind === "agent" ? "⚙" : face.text}
+                    </text>
+                  </>
+                )}
                 <circle cx={fx} cy={fy} r={fr} fill="none" stroke="white" strokeWidth={1} />
               </g>
             );

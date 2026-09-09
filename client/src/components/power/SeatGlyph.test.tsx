@@ -28,6 +28,7 @@
 import { describe, expect, it } from "vitest";
 import { render } from "@testing-library/react";
 import SeatGlyph from "./SeatGlyph";
+import { holderFace, initialsFrom } from "./holderFace";
 import type { PowerHolder } from "./types";
 
 const holder = (userId: string, over: Partial<PowerHolder> = {}): PowerHolder =>
@@ -90,5 +91,89 @@ describe("a face clip is unique to the glyph that drew it", () => {
       expect(r, `${r} is not a legal id fragment`).toMatch(/^[A-Za-z][A-Za-z0-9-]*$/);
       expect(ids.has(r), `${r} points at no clipPath in this document`).toBe(true);
     }
+  });
+});
+
+/*
+ * EVERY HELD SEAT ON AMORA DREW A PLAIN DOT.
+ *
+ * Measured against the live database on 2026-09-09: TWELVE of twelve live
+ * seatings are `documented` holders, real people with no account yet, and
+ * zero member holders have a primary character. The glyph filtered its
+ * holders on `h.avatar`, and the avatar query is an INNER JOIN on that
+ * character, so the filter kept NONE of them. A seat somebody holds looked
+ * exactly like a seat somebody else holds.
+ *
+ * Rye asked this map to say "whom to interact with". For every seat in the
+ * village, it was saying nothing.
+ */
+describe("what a seat draws for the person in it", () => {
+  const seat = (holders: PowerHolder[]) =>
+    render(
+      <svg>
+        <SeatGlyph x={12} y={12} r={12} state="filled" held={holders.length} seats={3} holders={holders} showAvatars />
+      </svg>,
+    );
+  const lettersIn = (c: HTMLElement) =>
+    Array.from(c.querySelectorAll("text")).map((t) => (t.textContent ?? "").trim()).filter(Boolean);
+
+  it("draws INITIALS for a documented holder, which is every live seating in this village", () => {
+    const { container } = seat([holder("", { userId: null, name: "Bo Reyes", avatar: null, kind: "documented" })]);
+    expect(lettersIn(container as unknown as HTMLElement)).toContain("BR");
+  });
+
+  it("draws initials for a member who has chosen no character yet", () => {
+    const { container } = seat([holder("u-ada", { name: "Ada", avatar: null })]);
+    expect(lettersIn(container as unknown as HTMLElement)).toContain("A");
+  });
+
+  it("still draws the PORTRAIT when there is one", () => {
+    const { container } = seat([holder("u-bo", { name: "Bo", avatar: "/uploads/bo.webp" })]);
+    expect(container.querySelectorAll("image")).toHaveLength(1);
+    expect(lettersIn(container as unknown as HTMLElement)).toEqual([]);
+  });
+
+  it("never puts a face on an AGENT, whatever the payload carries", () => {
+    const { container } = seat([
+      holder("", { userId: null, name: "Tally", avatar: "/uploads/tally.webp", isAgent: true, kind: "documented" }),
+    ]);
+    expect(container.querySelectorAll("image"), "an agent got a portrait").toHaveLength(0);
+    expect(lettersIn(container as unknown as HTMLElement)).not.toContain("T");
+  });
+
+  it("fans three holders, each with their own letters", () => {
+    const { container } = seat([
+      holder("u-a", { name: "Ada Vance", avatar: null }),
+      holder("u-b", { name: "Bo Reyes", avatar: null }),
+      holder("u-c", { name: "Kit Lo", avatar: null }),
+    ]);
+    expect(lettersIn(container as unknown as HTMLElement).sort()).toEqual(["AV", "BR", "KL"]);
+  });
+
+  it("draws nothing for a holder the payload gave no name and no face", () => {
+    const { container } = seat([holder("", { userId: null, name: null, avatar: null })]);
+    expect(lettersIn(container as unknown as HTMLElement)).toEqual([]);
+    expect(container.querySelectorAll("image")).toHaveLength(0);
+  });
+});
+
+describe("initials", () => {
+  it("takes the first and last word, never the middle", () => {
+    expect(initialsFrom("Ada Beatrice Vance")).toBe("AV");
+  });
+  it("gives one letter to a one-word name, which is what firstName() leaves", () => {
+    expect(initialsFrom("Ada")).toBe("A");
+  });
+  it("survives a name outside the basic plane rather than splitting it", () => {
+    // charAt would cut a surrogate pair in half and render a replacement box.
+    const mathA = String.fromCodePoint(0x1d400);
+    expect(initialsFrom(mathA + "da Vance")).toBe((mathA + "V").toUpperCase());
+  });
+  it("is empty for nothing, so the caller decides what nothing means", () => {
+    expect(initialsFrom("   ")).toBe("");
+    expect(initialsFrom(null)).toBe("");
+  });
+  it("puts the agent case FIRST, so no later branch can override it", () => {
+    expect(holderFace({ isAgent: true, avatar: "/x.webp", name: "Tally" })).toEqual({ kind: "agent" });
   });
 });
