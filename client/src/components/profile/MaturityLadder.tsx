@@ -61,6 +61,13 @@ const RULE_WORDS: RuleWords = {
   "training-complete": () => "Opens when you finish the community training.",
   membership: () => "Opens when you sign the membership agreement.",
   quests: (rule) => `Opens at ${rule.min} consented quest${rule.min === 1 ? "" : "s"}.`,
+  /*
+   * Deliberately says WHAT KIND of contribution rather than naming a token: a
+   * village pays in its own, and every kind of giving counts the same. Money,
+   * time, skill and knowledge are one thing here, so the sentence names none of
+   * them and says the fact they share.
+   */
+  tokens: () => "Opens once the village has paid you for something you brought it.",
   granted: () => "The village grants this one. No amount of climbing reaches it.",
 };
 

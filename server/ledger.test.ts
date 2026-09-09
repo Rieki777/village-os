@@ -33,6 +33,9 @@ import {
   registerToken,
   tokenDef,
   TREASURY,
+  hasBeenPaidByVillage,
+  paidByVillageMany,
+  contributionTokens,
 } from "./lib/ledger";
 import { repairTaintedListings } from "./lib/exchange";
 import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
@@ -521,6 +524,112 @@ describe.skipIf(!configured)("the MySQL token ledger", () => {
     expect(theirs.get("claim-other-1")).toBe(7);
   });
 
+  /**
+   * THE CONTRIBUTOR RUNG'S QUESTION, which nothing tested before this.
+   *
+   * Rye redefined Contributor on 2026-09-08: the village has paid you. Changing
+   * the rule from "one consented quest" to "tokens" broke NOT ONE TEST, which is
+   * the whole reason these exist. A rung that opens `member.vouch` had no
+   * coverage at all, so any answer it gave would have looked correct.
+   */
+  describe("has the village ever paid this member", () => {
+  /*
+   * A post that did not land must SAY SO. The first version of these tests
+   * dropped the result, so a refused transfer left the member unpaid and the
+   * assertion below simply read false, naming nothing. Same lesson the
+   * save-honesty gate enforces on the client: hold the answer and read it.
+   */
+  const expectPosted = (r: { ok: boolean; error?: string }) => {
+    expect(r.error ?? "", `the ledger refused this post: ${r.error ?? ""}`).toBe("");
+    expect(r.ok).toBe(true);
+    return r;
+  };
+
+    it("says no to somebody the village has never paid", async () => {
+      expect(await hasBeenPaidByVillage(pool, "paid-none", contributionTokens())).toBe(false);
+    });
+
+    it("says yes once the village pays them, in a token that is not recognition", async () => {
+      expectPosted(await postTransfer(pool, {
+        from: CYCLE_POOL_FAUCET,
+        to: memberAccount("paid-one"),
+        amount: 25,
+        tokenType: "credits",
+        source: "quest_consent",
+        idempotencyKey: "paid-one-first",
+      }));
+      expect(await hasBeenPaidByVillage(pool, "paid-one", contributionTokens())).toBe(true);
+    });
+
+    it("STILL SAYS YES AFTER THEY SPEND IT, which is the point", async () => {
+      // Rye: spending what you earned does not undo having earned it. Reading a
+      // balance would demote somebody the moment they spent, and this rung opens
+      // the power to vouch a member in, so it would strip that from somebody who
+      // had already spoken for a neighbour.
+      expectPosted(await postTransfer(pool, {
+        from: memberAccount("paid-one"),
+        to: TREASURY,
+        amount: 25,
+        tokenType: "credits",
+        source: "exchange_purchase",
+        idempotencyKey: "paid-one-spent",
+      }));
+      expect(await balancesFor(pool, memberAccount("paid-one"))).toMatchObject({ credits: 0 });
+      expect(await hasBeenPaidByVillage(pool, "paid-one", contributionTokens())).toBe(true);
+    });
+
+    it("DOES NOT COUNT A COIN FROM A NEIGHBOUR, which is the collusion door", async () => {
+      // Both of Rye's examples are the village paying: rewarding work, and
+      // selling a stake. Counting peer transfers would let one member buy in,
+      // send a single credit to two friends, and manufacture three Contributors
+      // who could then vouch somebody straight through the membrane.
+      expectPosted(await postTransfer(pool, {
+        from: CYCLE_POOL_FAUCET,
+        to: memberAccount("paid-rich"),
+        amount: 10,
+        tokenType: "credits",
+        source: "exchange_purchase",
+        idempotencyKey: "rich-buys-in",
+      }));
+      expectPosted(await postTransfer(pool, {
+        from: memberAccount("paid-rich"),
+        to: memberAccount("paid-friend"),
+        amount: 5,
+        tokenType: "credits",
+        source: "gratitude_received",
+        idempotencyKey: "rich-gifts-friend",
+      }));
+      expect(await hasBeenPaidByVillage(pool, "paid-rich", contributionTokens())).toBe(true);
+      expect(await hasBeenPaidByVillage(pool, "paid-friend", contributionTokens())).toBe(false);
+    });
+
+    it("never counts recognition, because a thank-you is not a wage", async () => {
+      // Recognition is minted whenever anybody thanks anybody. If it counted, one
+      // tap would hand a stranger the power to admit members.
+      expect(contributionTokens()).not.toContain("gratitude");
+      expectPosted(await postTransfer(pool, {
+        from: RECOGNITION_FAUCET,
+        to: memberAccount("paid-thanked"),
+        amount: 100,
+        source: "gratitude_received",
+        idempotencyKey: "thanked-only",
+      }));
+      expect(await hasBeenPaidByVillage(pool, "paid-thanked", contributionTokens())).toBe(false);
+    });
+
+    it("answers the whole roll in one query, and agrees with the single read", async () => {
+      const ids = ["paid-none", "paid-one", "paid-rich", "paid-friend", "paid-thanked"];
+      const many = await paidByVillageMany(pool, ids, contributionTokens());
+      for (const id of ids) {
+        expect(many.has(id)).toBe(await hasBeenPaidByVillage(pool, id, contributionTokens()));
+      }
+    });
+
+    it("asks nothing of the database when there is nothing to ask", async () => {
+      expect(await paidByVillageMany(pool, [], contributionTokens())).toEqual(new Set());
+      expect(await hasBeenPaidByVillage(pool, "paid-one", [])).toBe(false);
+    });
+  });
 });
 
 /**
@@ -571,4 +680,5 @@ describe("a ledger refusal, translated for the person who caused it", () => {
     expect(refusalForMember(undefined, ctx)).toBe("That send did not go through");
     expect(refusalForMember("", ctx)).toBe("That send did not go through");
   });
+
 });

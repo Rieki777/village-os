@@ -81,6 +81,7 @@ const REQUIREMENT: Record<Exclude<StageRule["type"], "quests">, string> = {
   account: "Create an account",
   "training-complete": "Finish community training",
   membership: "Sign the membership covenant",
+  tokens: "Be paid for something you brought",
   granted: "The village grants this one",
 };
 
