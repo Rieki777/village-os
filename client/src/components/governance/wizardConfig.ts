@@ -855,6 +855,17 @@ export const SUBJECT_NOUN: Record<string, string> = {
    */
   advisory: "Advisory vote",
   /*
+   * ALSO NOT A WIZARD TYPE: no member opens one of these. The moon does, at the
+   * end of a cycle, and the village decides whether to settle it.
+   *
+   * "Cycle settlement" is what the table calls it and the chip says the THING:
+   * a moon ended and the village is deciding what to do about it. Without this
+   * entry the first vote a village is ever asked to cast about its own money
+   * would be chipped "Decision", which tells a reader nothing at the exact
+   * moment they most need telling.
+   */
+  cycle_settlement: "The end of a moon",
+  /*
    * ALSO NOT A WIZARD TYPE. A launch vote is opened from the journey to
    * launch, once in a village's life, and `ballots.subject_type` carries it
    * here like every other. The noun is the THING and not the machinery: the

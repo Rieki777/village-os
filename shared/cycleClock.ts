@@ -85,6 +85,7 @@ import {
   cycleBoundsFor,
   cycleStartMs,
 } from "./lunar";
+import { settlementModeFrom, settlementVoteDaysFrom } from "./moonSettlement";
 
 // ── Modes and ids ───────────────────────────────────────────────────────────
 
@@ -426,6 +427,15 @@ function clockName(mode: ClockMode): string {
  */
 export const CYCLE_SETTING_READERS: Readonly<Record<string, (raw: string) => unknown>> = {
   "cycle.mode": (raw: string) => clockFor(raw),
+  /*
+   * The two settlement dials, read by the `moon-proposal` job and by nothing
+   * else. They are in the `cycle.` namespace because they re-time a village's
+   * end-of-moon the way `cycle.mode` re-times its start, and being in that
+   * namespace is what puts them under this guard, which is where a dial about
+   * releasing value belongs.
+   */
+  "cycle.settlement_mode": (raw: string) => settlementModeFrom(raw),
+  "cycle.settlement_vote_days": (raw: string) => settlementVoteDaysFrom(raw),
 };
 
 /**
