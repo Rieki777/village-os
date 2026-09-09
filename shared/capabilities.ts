@@ -53,6 +53,7 @@ export type Capability =
   | "org.declare" // declare how the village and its circles hold power (0083)
   | "ballot.vote" // cast a vote on an on-site ballot (round 5 governance engine)
   | "member.vouch" // vouch for an applicant at the membrane (round 5)
+  | "member.superVouch" // admit a member outright when the village cannot reach its bar
   // ── The five handover keys (0098) ────────────────────────────────────────
   //
   // 159 admin write routes had no capability behind them and no key that
@@ -128,6 +129,7 @@ export const ALL_CAPABILITIES: Capability[] = [
   "org.declare",
   "ballot.vote",
   "member.vouch",
+  "member.superVouch",
   "org.seat",
   "org.seatAgent",
   "intake.moderate",
@@ -181,6 +183,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "org.declare": "Declare how the village holds power",
   "ballot.vote": "Cast a vote on a ballot",
   "member.vouch": "Vouch for an applicant",
+  "member.superVouch": "Admit a member outright",
   "org.seat": "Seat and unseat the holders of the village's seats",
   "org.seatAgent": "Seat and unseat the software agents that hold seats",
   "intake.moderate": "Work the village's queues and act on what gets reported",
@@ -447,9 +450,13 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   // something request-shaped is the ballot engine's own work, not a gate
   // swap, and it belongs to the lane that owns the snapshot.
   "ballot.vote": false,
-  // Declared in the round 5 capability set and gated by nothing at all: the
-  // membrane's vouching step does not exist, so there is no power here yet.
+  // The membrane's vouching step EXISTS now (server/routes/vouches.ts), and
+  // this stays false for the reason the roll builder gives above rather than
+  // for the reason this comment used to give.
   "member.vouch": false,
+  // Admitting somebody outright, which bypasses the bar the village set for
+  // itself. Everything true of the vouch above is more true of this.
+  "member.superVouch": false,
 };
 
 /**
@@ -508,10 +515,13 @@ export const DENIABLE: Record<Capability, boolean> = {
   // Vouching for an applicant at the membrane. It is a member's say in the
   // village's decision about who joins, it is earned by climbing to
   // contributor, and it is spoken as themselves rather than as a seat. That
-  // is a voice in a decision by every part of the definition. Gated by
-  // nothing today, because the membrane's vouching step does not exist yet,
-  // which makes this the cheapest possible moment to close the door.
+  // is a voice in a decision by every part of the definition. The door was
+  // closed before the step was built, which was the cheapest possible moment;
+  // the step is built now and the door stays shut.
   "member.vouch": false,
+  // And the steward's override, which is the same say exercised alone. A seat
+  // may hold it; software speaking as that seat may not.
+  "member.superVouch": false,
   /*
    * Proposing a change to the Game's own rules. The founder ruled on this one
    * in round 7, and the reason is that it is the say itself, one step

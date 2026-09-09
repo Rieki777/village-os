@@ -26069,7 +26069,7 @@ ${inner}
       return res.status(409).json({ error: "That is one of the platform's example roles, not one of this village's. Declare a role of your own first." });
     }
     const carried = ((role.capabilities ?? []) as string[]).filter((c) =>
-      ["ballot.vote", "member.vouch"].includes(c),
+      ["ballot.vote", "member.vouch"].includes(c), // superVouch absent: SUPER_VOUCH_PLACEMENT
     );
     if (carried.length) {
       return res.status(409).json({

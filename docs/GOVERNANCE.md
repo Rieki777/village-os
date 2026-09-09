@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `67b6c6789a3d5f03`, which regenerating reproduces.
+It describes the sources at fingerprint `ceee4dac59c56d3e`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -416,6 +416,7 @@ Powers are keys, not job titles. A member holds one by climbing to the rung that
 | `org.declare` | Declare how the village holds power | never by rung; a role or a badge grants it | yes |
 | `ballot.vote` | Cast a vote on a ballot | `member` | **no** |
 | `member.vouch` | Vouch for an applicant | `contributor` | **no** |
+| `member.superVouch` | Admit a member outright | never by rung; a role or a badge grants it | **no** |
 | `org.seat` | Seat and unseat the holders of the village's seats | never by rung; a role or a badge grants it | yes |
 | `org.seatAgent` | Seat and unseat the software agents that hold seats | never by rung; a role or a badge grants it | yes |
 | `dial.set` | Turn the village's own dials | never by rung; a role or a badge grants it | yes |
@@ -1031,7 +1032,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "67b6c6789a3d5f03",
+  "commit": "ceee4dac59c56d3e",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -1717,6 +1718,12 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "key": "member.vouch",
       "label": "Vouch for an applicant",
       "unlocksAtStage": "contributor",
+      "deniableByBadge": false
+    },
+    {
+      "key": "member.superVouch",
+      "label": "Admit a member outright",
+      "unlocksAtStage": null,
       "deniableByBadge": false
     },
     {
