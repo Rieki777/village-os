@@ -38,7 +38,7 @@
 import type { Pool, PoolConnection } from "mysql2/promise";
 import { draftStatus, withdrawDraftRow } from "../repos/orgDrafts";
 import { stageIndex } from "../../shared/gameConfig";
-import { listOrgAssignments, listOrgRoles, peopleOnly, seatState, type LapseContext, type OrgAssignment } from "./orgChart";
+import { documentedKey, listOrgAssignments, listOrgRoles, peopleOnly, seatHolder, seatState, type LapseContext, type OrgAssignment } from "./orgChart";
 
 export type DraftOp = "create_seat" | "update_seat" | "rest_seat" | "seat_holder" | "end_holding";
 export type DraftStatus = "open" | "published" | "reverted" | "withdrawn";
@@ -330,7 +330,12 @@ export async function measureVisionMetrics(
   return measured;
 }
 
-export async function listDrafts(pool: Pool): Promise<Draft[]> {
+/**
+ * Every draft with its changes. Takes a CONNECTION as happily as a pool,
+ * so `publishDraft` can read the draft inside its own transaction and act
+ * on the same snapshot it wrote against.
+ */
+export async function listDrafts(pool: Pool | PoolConnection): Promise<Draft[]> {
   const [drafts]: any = await pool.query("SELECT * FROM org_drafts ORDER BY created_at DESC");
   const [changes]: any = await pool.query("SELECT * FROM org_draft_changes ORDER BY sort_order, id");
   const byDraft = new Map<string, DraftChange[]>();
@@ -464,7 +469,13 @@ export interface PreviewLine {
  * WHOLE thing if any single change is blocked, and never half-apply.
  */
 export async function previewDraft(
-  pool: Pool,
+  /**
+   * A pool, or the connection of a transaction in progress. `publishDraft`
+   * passes its own connection so the state the preview VALIDATES is the
+   * state the writes then change, with no window in between for another
+   * request to move a seat out from under a check that already passed.
+   */
+  pool: Pool | PoolConnection,
   draftId: string,
   /**
    * The volume cap, from `draftChangeCap`. Applied only to a machine-sourced
@@ -630,30 +641,47 @@ export async function publishDraft(
    */
   changeCap?: number | null,
 ): Promise<{ ok: true; applied: number } | { ok: false; error: string }> {
-  const preview = await previewDraft(pool, draftId, changeCap);
-  if (!preview.lines.length) return { ok: false, error: "This draft has no changes in it" };
-  if (preview.blocked > 0) {
-    const first = preview.lines.find((l) => l.blocked);
-    return { ok: false, error: `${preview.blocked} change(s) cannot be applied. First: ${first?.blocked}` };
-  }
-
-  const drafts = await listDrafts(pool);
-  const draft = drafts.find((d) => d.id === draftId);
-  if (!draft) return { ok: false, error: "No such draft" };
-  if (draft.status !== "open") return { ok: false, error: `This draft is already ${draft.status}` };
-
   const conn: PoolConnection = await pool.getConnection();
   try {
     await conn.beginTransaction();
+
+    // READ INSIDE THE TRANSACTION. These used to run on the pool before
+    // `beginTransaction`, so the seats the preview approved and the draft
+    // status it trusted were both read from a snapshot the writes below
+    // never saw. Two publishes of one draft could each pass the status
+    // check out here and then both apply.
+    const preview = await previewDraft(conn, draftId, changeCap);
+    if (!preview.lines.length) { await conn.rollback(); return { ok: false, error: "This draft has no changes in it" }; }
+    if (preview.blocked > 0) {
+      const first = preview.lines.find((l) => l.blocked);
+      await conn.rollback();
+      return { ok: false, error: `${preview.blocked} change(s) cannot be applied. First: ${first?.blocked}` };
+    }
+    const draft = (await listDrafts(conn)).find((d) => d.id === draftId);
+    if (!draft) { await conn.rollback(); return { ok: false, error: "No such draft" }; }
+    if (draft.status !== "open") { await conn.rollback(); return { ok: false, error: `This draft is already ${draft.status}` }; }
+
     for (const c of draft.changes) {
       const before = await captureBefore(conn, c);
       await conn.query("UPDATE org_draft_changes SET before_json = ? WHERE id = ?", [JSON.stringify(before), c.id]);
       await applyChange(conn, c);
     }
-    await conn.query(
+    // THE WHOLE POINT OF THE `status = 'open'` CLAUSE IS THIS COUNT.
+    //
+    // The guard was here and its result was thrown away, so a second
+    // publish of the same draft matched zero rows, committed anyway and
+    // answered 200. That is not merely a duplicate: `before_json` is
+    // rewritten above with whatever is there NOW, so the second pass
+    // overwrote every revert value with the ALREADY-PUBLISHED state and
+    // the draft became unrevertable behind a success.
+    const [done]: any = await conn.query(
       "UPDATE org_drafts SET status = 'published', published_by = ?, published_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'open'",
       [publishedBy, draftId],
     );
+    if (!done?.affectedRows) {
+      await conn.rollback();
+      return { ok: false, error: "This draft was published by someone else while this was being applied" };
+    }
     await conn.commit();
     return { ok: true, applied: draft.changes.length };
   } catch (e: any) {
@@ -703,13 +731,28 @@ async function applyChange(conn: PoolConnection, c: DraftChange): Promise<void> 
     return;
   }
   if (c.op === "seat_holder") {
-    const holderKey = p.userId ? String(p.userId) : `doc:${String(p.displayName ?? "unnamed").toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-    await conn.query(
-      `INSERT INTO org_role_assignments (id, org_role_id, holder_kind, user_id, display_name, holder_key, focus, season_id)
-       VALUES (?,?,?,?,?,?,?,?)`,
-      [newId("orgasg"), c.orgRoleId, p.userId ? "member" : "documented", p.userId ?? null,
-        p.displayName ?? null, holderKey, p.focus ?? null, p.seasonId ?? null],
-    );
+    /*
+     * THROUGH `seatHolder`, NOT A SECOND INSERT BESIDE IT.
+     *
+     * This branch built its own holder key with an inline slug that was
+     * MISSING the trailing-dash trim `documentedKey` does, so "Alex "
+     * became `doc:alex` through the seating route and `doc:alex-` through a
+     * draft. The unique index on the active holder key therefore could not
+     * see that those were one person, and the same human could be seated
+     * twice in the same seat.
+     *
+     * Going through the real function also buys the refusals: a documented
+     * holder with no name is caught here, and a duplicate answers "They
+     * already hold this seat" instead of surfacing a raw MySQL ER_DUP_ENTRY
+     * string to whoever pressed Publish.
+     */
+    const seated = await seatHolder(conn, c.orgRoleId, {
+      userId: p.userId ? String(p.userId) : null,
+      displayName: p.displayName ?? null,
+      focus: p.focus ?? null,
+      seasonId: p.seasonId ?? null,
+    });
+    if (!seated.ok) throw new Error(seated.reason ?? "That seating could not be applied");
     return;
   }
   if (c.op === "end_holding") {
@@ -767,8 +810,12 @@ export async function revertDraft(
       } else if (c.op === "seat_holder") {
         await conn.query(
           "UPDATE org_role_assignments SET ended_at = CURRENT_TIMESTAMP, ended_reason = 'draft reverted' WHERE org_role_id = ? AND ended_at IS NULL AND holder_key = ?",
+          // The same key `applyChange` seated under, from the same function.
+          // Built by hand here it did not match, so reverting a seating of
+          // anyone whose name ended in a space or punctuation ended nothing
+          // and reported success.
           [c.orgRoleId, c.payload?.userId ? String(c.payload.userId)
-            : `doc:${String(c.payload?.displayName ?? "unnamed").toLowerCase().replace(/[^a-z0-9]+/g, "-")}`],
+            : documentedKey(String(c.payload?.displayName ?? "unnamed"))],
         );
       } else if (c.op === "end_holding" && c.beforeJson) {
         const b = c.beforeJson;
@@ -793,10 +840,16 @@ export async function revertDraft(
         );
       }
     }
-    await conn.query(
+    // Same count, same reason as publish: without it a second revert put
+    // every `before_json` value back a second time and reported success.
+    const [done]: any = await conn.query(
       "UPDATE org_drafts SET status = 'reverted', reverted_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'published'",
       [draftId],
     );
+    if (!done?.affectedRows) {
+      await conn.rollback();
+      return { ok: false, error: "This draft was reverted by someone else while this was being undone" };
+    }
     await conn.commit();
     return { ok: true, reverted: draft.changes.length };
   } catch (e: any) {

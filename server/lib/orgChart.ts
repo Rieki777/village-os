@@ -19,7 +19,7 @@
  * village genuinely knows better than the derivation, and it carries an
  * expiry so it lapses back rather than outliving the moment somebody meant it.
  */
-import type { Pool } from "mysql2/promise";
+import type { Pool, PoolConnection } from "mysql2/promise";
 import {
   decidesByProblem,
   domainsProblem,
@@ -859,7 +859,12 @@ export async function updateOrgRole(pool: Pool, id: string, body: any): Promise<
  * at the write rather than at each of the readers.
  */
 export async function seatHolder(
-  pool: Pool,
+  /**
+   * A pool, or a transaction's connection. `orgDrafts.applyChange` passes
+   * its own connection so a published draft seats people through THIS
+   * function rather than through a second hand-rolled INSERT.
+   */
+  pool: Pool | PoolConnection,
   orgRoleId: string,
   h: {
     userId?: string | null;
