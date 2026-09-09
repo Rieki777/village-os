@@ -170,6 +170,42 @@ describe("PowersMap", () => {
     expect(screen.getByText("1 of 1 consented quest")).toBeTruthy();
   });
 
+  /*
+   * The shared fixture has no `training-complete` rung, so these two carry
+   * their own ladder. Worth saying out loud: the first version of this test
+   * asserted against the shared one and failed for that reason alone, which
+   * looked exactly like the feature being broken.
+   */
+  const withTraining: GameStagePublic[] = [
+    { id: "guest", name: "Guest", description: "Created a profile.", rule: { type: "account" }, gratitudeMultiplier: 1 },
+    {
+      id: "participant",
+      name: "Participant",
+      description: "Completed community training.",
+      rule: { type: "training-complete" },
+      gratitudeMultiplier: 1,
+    },
+  ];
+
+  it("prices the training rung by the modules that actually gate it", () => {
+    // A boolean was the wrong shape for a rung somebody is working toward: it
+    // could only say "Finish community training", which is the price with no
+    // word about how much of it has been paid. Only MANDATORY modules count,
+    // because only those gate the rung.
+    render(
+      <PowersMap catalogue={catalogue} stages={withTraining} stageIndex={0} training={{ done: 2, required: 4 }} />,
+    );
+    expect(screen.getByText("2 of 4 required modules")).toBeTruthy();
+    expect(screen.queryByText("Finish community training")).toBeNull();
+  });
+
+  it("names the requirement without a count when the server sends none", () => {
+    // An older server, or a village with no mandatory modules at all. Inventing
+    // a 0 of 0 would tell somebody a rung was waiting on nothing.
+    render(<PowersMap catalogue={catalogue} stages={withTraining} stageIndex={0} training={{ done: 0, required: 0 }} />);
+    expect(screen.getByText("Finish community training")).toBeTruthy();
+  });
+
   it("states the bar alone when the member's own count is unknown", () => {
     // null means UNKNOWN, and inventing a 0 would tell somebody they have done
     // nothing when the truth is that nobody asked.

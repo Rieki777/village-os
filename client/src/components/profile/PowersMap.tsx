@@ -84,7 +84,22 @@ const REQUIREMENT: Record<Exclude<StageRule["type"], "quests">, string> = {
   granted: "The village grants this one",
 };
 
-function requirementOf(rule: StageRule, consented: number | null): string {
+function requirementOf(
+  rule: StageRule,
+  consented: number | null,
+  training?: { done: number; required: number } | null,
+): string {
+  /*
+   * The training rung shows the same shape the quest rungs do. It could only
+   * ever say "Finish community training", which tells somebody the price and
+   * never how much of it they have paid, and the count has been on the payload
+   * since the rung became reachable at all. Only MANDATORY modules are counted,
+   * because only those gate the rung.
+   */
+  if (rule.type === "training-complete" && training && training.required > 0) {
+    const unit = training.required === 1 ? "required module" : "required modules";
+    return `${Math.min(training.done, training.required)} of ${training.required} ${unit}`;
+  }
   if (rule.type !== "quests") return REQUIREMENT[rule.type];
   const unit = rule.min === 1 ? "consented quest" : "consented quests";
   // Progress, when the member's own count is known. A bare "3 consented
@@ -123,6 +138,7 @@ function buildClimb(
   stages: GameStagePublic[],
   stageIndex: number,
   consentedQuests: number | null,
+  training?: { done: number; required: number } | null,
 ): Rung[] {
   const byRung = new Map<string, ProgressionCapability[]>();
   for (const row of catalogue) {
@@ -135,7 +151,7 @@ function buildClimb(
     id: s.id,
     name: s.name,
     description: s.description,
-    requirement: requirementOf(s.rule, consentedQuests),
+    requirement: requirementOf(s.rule, consentedQuests, training),
     // The allowance earns its line only where it MOVES. Printed on every rung
     // it was "Base sending allowance" five times running, which buries the two
     // rungs where the number actually rises. Shown only on the change, the
@@ -188,18 +204,21 @@ export default function PowersMap({
   stages,
   stageIndex,
   consentedQuests = null,
+  training = null,
 }: {
   catalogue: ProgressionCapability[];
   stages: GameStagePublic[];
   stageIndex: number;
   /** The member's own consented-quest count, for the rungs priced in quests. */
   consentedQuests?: number | null;
+  /** Their progress through the modules that gate the training rung. */
+  training?: { done: number; required: number } | null;
 }) {
   const [showClosed, setShowClosed] = useState(true);
 
   if (catalogue.length === 0) return null;
 
-  const climb = buildClimb(catalogue, stages, stageIndex, consentedQuests);
+  const climb = buildClimb(catalogue, stages, stageIndex, consentedQuests, training);
   const appointed = catalogue.filter((c) => c.opens.via === "appointment");
   const openCount = catalogue.filter((c) => c.held).length;
   const climbCount = catalogue.length - appointed.length;

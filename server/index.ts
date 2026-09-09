@@ -84,6 +84,7 @@ import { register as registerHousingRoutes } from "./routes/housing";
 import { register as registerJourneyRoutes } from "./routes/journey";
 import { register as registerProfileRoutes } from "./routes/profile";
 import { register as registerPathLadderRoutes } from "./routes/pathLadders";
+import { register as registerVouchRoutes } from "./routes/vouches";
 import { register as registerPlacesRoutes } from "./routes/places";
 import { register as registerMapSceneRoutes } from "./routes/mapScene";
 import { register as registerBadgesRoutes } from "./routes/badges";
@@ -317,7 +318,7 @@ import { loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle }
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
 import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requestVoiceClaim, settleVoiceClaim } from "./lib/voiceClaim";
 import { defaultSeasonsFor, seasonRunningProblem, suggestNextSeasonDates } from "./lib/seasonCalendar";
-import { completionsFor, completionsForMany, gatingModuleIds, trainingIsComplete } from "./lib/trainingRecord";
+import { completionsFor, completionsForMany, gatingModuleIds, trainingIsComplete, trainingProgress } from "./lib/trainingRecord";
 import { respondToTerminalError, installCrashHandlers, installShutdownHandlers, reachedSomebody, reportError, reportErrorWithin, wireErrorReporting } from "./lib/errors";
 import {
   STAY_CREDIT,
@@ -17915,6 +17916,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   // because it answers only to the account behind the token, and derived from
   // live rows on every read so a rung falls with nothing written anywhere.
   registerPathLadderRoutes(app, { authedUser, getPool, lapseContext });
+  registerVouchRoutes(app, { authedUser, getPool, members, guardCapability });
 
   // Journey to Launch: the founding team's own tracker, read and written
   // through the admin gate. Registered at exactly the point it used to sit.
@@ -20339,7 +20341,7 @@ ${inner}
       ),
       journeys: user.journeys ?? {},
       membership: hasMembership(user),
-      trainingComplete: trainingDoneHere(trained),
+      trainingComplete: trainingDoneHere(trained), training: trainingProgress(trainingRepo.all(), trained), // done/required, mandatory only
       // The third rule type as a number, beside the two booleans that were
       // already here. With the ladder now carrying its rules, these three
       // fields are everything a reader needs to evaluate any rung except

@@ -2919,6 +2919,8 @@ Both look like intentional work and neither is.
 
 | 2026-09-08 | first-hour lane (profile) | migration `0179`, `drizzle/0179_a_training_module_says_whether_it_is_mandatory.sql` | `wt/first-hour` | HELD. Ceiling measured TWO WAYS per the rule above: every remote ref and every file on disk reach `0178`, and `check-migration-numbers.mjs --next` agrees at `0179`. Adds one column to `training_modules`, `mandatory TINYINT(1) NOT NULL DEFAULT 1`, so every existing row keeps today's behaviour exactly (all modules mandatory = all must be finished, which is what `trainingIsComplete` already requires). Expand-only, no backfill needed, and the previous release ignores the column. |
 
+| 2026-09-08 | first-hour lane (profile) | migration `0190`, `drizzle/0190_a_member_is_vouched_into_membership.sql` | `wt/first-hour` | HELD, AND READ WHY THE NUMBER IS NOT 0180. `check-migration-numbers.mjs --next` said **0180**, because it measures against `origin/main` alone. A two-way scan says otherwise: remote refs reach `0189` and sibling worktrees reach `0189`, and `0180`-`0189` are all taken by other lanes (`the_wall_speaks_first`, `a_circle_holds_its_own_treasury`, `one_gift_one_key`, `a_member_redeems_what_they_hold`, `a_village_spends_its_credits_in_hundredths`, `voice_that_waned`, `a_village_says_what_it_is_for`, `a_member_says_how_they_are`, `a_circle_has_two_caps`, `the_voices_reach_a_village_that_already_exists`). Taking the script's answer would have collided with TEN lanes at once. This is the same failure the 2026-09-05 row records, and the script still cannot see either source. |
+
 ### 27d — Verification: CI runs the full suite, lanes run what they touched
 
 **Measured, 2026-09-03/04.** A local full suite is 25 minutes on a quiet machine and 46.6 minutes

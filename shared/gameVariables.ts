@@ -111,6 +111,17 @@ export const VOICE_WEIGHTING_CHOICES = [
 export const VARIABLES: VariableDef[] = [
   // ── Gratitude: the in-site recognition economy ────────────────────────────
   {
+    key: "membership.vouches_required",
+    category: "Membership",
+    label: "Vouches that admit a member",
+    description:
+      "How many people have to say they know somebody before that person becomes a member. Three by default, and the number is tied to how a village starts: a village launches when a founder brings two more and all three carry the launch, which leaves exactly the three vouchers the fourth member needs. The person who invited them counts as the first. A vouch cannot be taken back, so this bar is only ever crossed forwards. Lower it and the membrane is thinner; raise it and a young village may not be able to admit anybody at all, which is what the steward override exists for.",
+    type: "integer",
+    default: "3",
+    min: 1,
+    max: 20,
+  },
+  {
     key: "arrival.greeter_role",
     category: "Membership",
     label: "The seat that greets a new arrival",

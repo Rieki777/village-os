@@ -196,3 +196,21 @@ export async function withdrawCompletion(pool: Pool, userId: string, moduleId: s
     [userId, moduleId],
   );
 }
+
+/**
+ * How far along a member is on the training that actually gates the climb.
+ *
+ * `trainingComplete` is a boolean, and a boolean is the wrong shape for a rung
+ * a member is working toward: the quest rungs say "1 of 3 consented quests" and
+ * this one could only say "not yet". Both numbers count MANDATORY modules only,
+ * for the same reason the gate does, so the figure a member reads is the figure
+ * the rung is judged on and never a second opinion about it.
+ */
+export function trainingProgress(
+  modules: readonly { id?: unknown; mandatory?: unknown }[],
+  completed: readonly string[],
+): { done: number; required: number } {
+  const gating = gatingModuleIds(modules);
+  const held = new Set(completed);
+  return { done: gating.filter((id) => held.has(id)).length, required: gating.length };
+}
