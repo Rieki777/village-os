@@ -46,6 +46,7 @@ import {
   getDraft,
   listRevisions,
   publishScene,
+  pendingDraft,
   publishedScene,
   publishedVersion,
   restoreRevision,
@@ -182,13 +183,22 @@ export function register(app: Express, deps: Deps): void {
   app.get("/api/map/draft", async (req, res) => {
     const { user, canEdit, canPublish } = await mapHand(req);
     const draft = user && canEdit ? await getDraft(getPool(), user.id) : null;
+    // ONLY when there is something to compare. A scene is megabytes and this
+    // runs on every boot of every map, the overwhelming majority of them
+    // visitors with no draft at all. `liveCard` avoids the body for the same
+    // reason and says so; this must not undo that on the common path.
+    const live = draft ? await publishedScene(getPool()) : null;
+    // A draft byte-identical to live is not unpublished work. The rule and
+    // the reason live in `pendingDraft` (server/lib/mapScene.ts), beside the
+    // rebase that creates the condition.
+    const pending = pendingDraft(draft, live?.scene);
     res.json({
       canEdit,
       canPublish,
       live: await liveCard(),
-      liveVersion: await publishedVersion(getPool()),
-      draft: draft
-        ? { scene: draft.scene, baseVersion: draft.baseVersion, updatedAt: draft.updatedAt }
+      liveVersion: live?.version ?? (await publishedVersion(getPool())),
+      draft: pending
+        ? { scene: pending.scene, baseVersion: pending.baseVersion, updatedAt: pending.updatedAt }
         : null,
     });
   });

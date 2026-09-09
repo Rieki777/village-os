@@ -21,6 +21,7 @@ import {
   discardDraft,
   getDraft,
   listRevisions,
+  pendingDraft,
   publishScene,
   publishedScene,
   publishedVersion,
@@ -233,5 +234,67 @@ describe.skipIf(!configured)("the map's draft, publish and undo", () => {
     expect(rows.map((r) => r.baseVersion)).toEqual([1, 0]);
     // A history page must not cost one megabyte per row.
     expect(rows.every((r) => !("scene" in r))).toBe(true);
+  });
+
+  /*
+   * THE MAP THAT SAVED AND WAS EXPERIENCED AS ONE THAT DID NOT.
+   *
+   * Reported from live Amora on 2026-09-09: "I'm publishing my map to live
+   * but it's not saving", then "it says it saves but when I save and reload
+   * it gives me the old one."
+   *
+   * It was saving. Version 6 held exactly the 23 buildings and 53 changes the
+   * banner named. What the map drew on every reload afterwards was
+   *
+   *   "You have an unpublished draft of the map: 23 buildings, 53 changes."
+   *
+   * because `publishScene` rebases the draft on success and the route offered
+   * any row that existed. The count is the scene's whole edit log rather than
+   * a difference, so it reads as pending work that is not pending.
+   *
+   * And the artifact resolves draft conflicts by letting the SERVER'S copy
+   * win over the browser-saved session, so accepting that offer replaces
+   * newer local work with the state already published. A correct save,
+   * experienced as a lost one.
+   */
+  describe("the draft offered after a publish", () => {
+    it("keeps the rebased row, because a second publish must not be stale", async () => {
+      await saveDraft(pool, "u-rye", AWKWARD_SCENE, 0);
+      const r = await publishScene(pool, { scene: AWKWARD_SCENE, baseVersion: 0, actorUserId: "u-rye" });
+      expect(r.ok).toBe(true);
+      await saveDraft(pool, "u-rye", AWKWARD_SCENE, r.ok ? r.version : 0);
+      const row = await getDraft(pool, "u-rye");
+      expect(row, "the rebase is deliberate and stays").not.toBeNull();
+      expect(row!.baseVersion).toBe(1);
+    });
+
+    it("does NOT offer it, because it is the map that is already live", async () => {
+      await saveDraft(pool, "u-rye", AWKWARD_SCENE, 0);
+      const r = await publishScene(pool, { scene: AWKWARD_SCENE, baseVersion: 0, actorUserId: "u-rye" });
+      await saveDraft(pool, "u-rye", AWKWARD_SCENE, r.ok ? r.version : 0);
+      const live = await publishedScene(pool);
+      const row = await getDraft(pool, "u-rye");
+      expect(pendingDraft(row, live?.scene)).toBeNull();
+    });
+
+    it("DOES offer real work, which is the half that must not break", async () => {
+      await publishScene(pool, { scene: AWKWARD_SCENE, baseVersion: 0, actorUserId: "u-rye" });
+      const mine = JSON.stringify({ ...JSON.parse(AWKWARD_SCENE), map_edits: [{ seq: 99, action: "move" }] });
+      await saveDraft(pool, "u-rye", mine, 1);
+      const live = await publishedScene(pool);
+      const row = await getDraft(pool, "u-rye");
+      const offered = pendingDraft(row, live?.scene);
+      expect(offered, "a draft that differs is still a draft").not.toBeNull();
+      expect(offered!.scene).toBe(mine);
+    });
+
+    it("offers nothing when there is no draft at all", () => {
+      expect(pendingDraft(null, "{}")).toBeNull();
+    });
+
+    it("offers a draft when nothing has ever been published", () => {
+      // liveScene is undefined before version 1, and a first draft is real.
+      expect(pendingDraft({ scene: "{}" }, undefined)).not.toBeNull();
+    });
   });
 });
