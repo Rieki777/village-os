@@ -1846,7 +1846,6 @@ const KNOWN_DIALS = [
   // The two that arrived with 19G: whose weight the quorum counts.
   "governance.nonhuman_in_quorum",
   "governance.absent_cycles",
-  "membership.vouch_threshold",
 ];
 
 export function dialCoverageProblem(keys, known = KNOWN_DIALS) {

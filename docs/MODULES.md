@@ -457,7 +457,7 @@ The village decides on-site: staged proposals go to weighted ballots with frozen
 | Requires | nothing |
 | Recommends | `forum` |
 | Capabilities it adds | `ballot.vote`, `member.vouch` |
-| Variable keys it owns | `governance.weight_mode`, `governance.weight_token`, `governance.unity_pct`, `governance.quorum_pct`, `governance.vote_days`, `governance.consent_window_days`, `governance.default_method`, `membership.vouch_threshold` |
+| Variable keys it owns | `governance.weight_mode`, `governance.weight_token`, `governance.unity_pct`, `governance.quorum_pct`, `governance.vote_days`, `governance.consent_window_days`, `governance.default_method` |
 | API prefixes | `/api/governance`, `/api/admin/governance` |
 | Contract doc | none yet |
 
@@ -613,7 +613,7 @@ Read the other way: `map` cannot be switched off while `resources` is on, `forum
 
 ## The dials a module owns
 
-Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 23 modules own 75 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
+Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 23 modules own 74 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
 
 Three keys are claimed by more than one module, so switching one module off leaves the dial owned by the other:
 
@@ -1201,8 +1201,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "governance.quorum_pct",
         "governance.vote_days",
         "governance.consent_window_days",
-        "governance.default_method",
-        "membership.vouch_threshold"
+        "governance.default_method"
       ],
       "apiPrefixes": [
         "/api/governance",

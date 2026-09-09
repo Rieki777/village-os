@@ -46,6 +46,7 @@
  * speaking for somebody else. The capability check belongs to the ONE gate and
  * is made by the route; this file decides only what a set of vouches MEANS.
  */
+import { SUBJECT_THRESHOLDS, VILLAGE_LAUNCH } from "../../shared/ballotSubjects";
 
 /** A stored vouch, in the shape this file needs. */
 export interface Vouch {
@@ -59,12 +60,23 @@ export interface Vouch {
 /**
  * How many vouches admit a member.
  *
- * Three, and the number is tied to the launch rule rather than free: a village
- * launches with three people so that a fourth can be admitted. Changing it
- * changes what a village needs before it can grow, which is why it is a
- * village variable and not a constant hidden in here.
+ * READ FROM THE LAUNCH RULE, NOT TYPED, and the derivation is the point.
+ *
+ * The number is tied to the launch bar rather than free: a village launches
+ * with three people so that a fourth can be admitted. That sentence was true
+ * and it was written in three places, here and in this dial's description and
+ * in the launch threshold itself, with nothing comparing them. Two of those
+ * three were prose. A later lane moving the launch bar to four would have left
+ * two files quietly claiming an arithmetic that no longer held, and nothing
+ * anywhere would have gone red, because a village that cannot admit its fourth
+ * member does not fail: it just never grows, months later, for no visible
+ * reason.
+ *
+ * So there is one home now and it is the one the ballot actually enforces.
+ * Move `minElectorate` and this follows.
  */
-export const DEFAULT_VOUCHES_FOR_MEMBERSHIP = 3;
+export const DEFAULT_VOUCHES_FOR_MEMBERSHIP =
+  SUBJECT_THRESHOLDS[VILLAGE_LAUNCH].minElectorate;
 
 export interface VouchState {
   /** Distinct people who have vouched. */
