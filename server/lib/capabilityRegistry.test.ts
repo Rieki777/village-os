@@ -46,6 +46,51 @@ function routeSources(): string {
 
 const SERVER = routeSources();
 
+/**
+ * Everything that can GATE, which is a wider set than everything that can mount.
+ *
+ * Kept separate from routeSources() on purpose rather than widening it. That
+ * one answers "is this path still mounted", and feeding it more text can only
+ * make a missing path look present, so growing its input silently weakens it.
+ * This one answers the opposite question and wants every file that could hold
+ * a gate: `hasCapability` is called with a literal from server/index.ts, from
+ * server/routes/, and from server/lib/orgChart.ts, and the third of those is
+ * outside routeSources() altogether.
+ */
+function gateSources(): string {
+  const files: string[] = [path.join(process.cwd(), "server", "index.ts")];
+  const walk = (d: string) => {
+    if (!fs.existsSync(d)) return;
+    for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+      const full = path.join(d, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) files.push(full);
+    }
+  };
+  walk(path.join(process.cwd(), "server", "routes"));
+  walk(path.join(process.cwd(), "server", "lib"));
+  return files.map((f) => fs.readFileSync(f, "utf8")).join("\n");
+}
+
+const GATES = gateSources();
+
+/**
+ * Whether anything anywhere gates on this key.
+ *
+ * MATCHES THE CALL, NOT THE KEY. `member.vouch` appears in server/index.ts
+ * three times today, in lists of keys two proposal types REFUSE to move, and a
+ * plain substring search would read those as evidence the key gates something.
+ * Naming a key is not gating on it. The call is.
+ *
+ * One spelling covers it: every literal gate in the server is
+ * `hasCapability("<key>", ctx)`, 74 of them at the time of writing, with no
+ * wrapper taking a literal. If a second spelling ever appears, the control
+ * below fails rather than this returning a quiet false.
+ */
+function isGatedOn(key: string): boolean {
+  return new RegExp(String.raw`hasCapability\(\s*["'\`]` + key.replace(/\./g, String.raw`\.`)).test(GATES);
+}
+
 describe("the powers registry", () => {
   it("describes every power that can move, in one list or the other", () => {
     // A transferable key with no entry anywhere is a power a village can be
@@ -77,6 +122,47 @@ describe("the powers registry", () => {
     for (const key of Object.keys(NOT_YET_WIRED)) {
       expect(POWERS.some((p) => p.capability === key), key).toBe(false);
     }
+  });
+
+  /*
+   * THE CONTROL FOR THE TEST BELOW, and it has to come first.
+   *
+   * NOT_YET_WIRED is empty most days, and on those days the test below passes
+   * by iterating nothing. A matcher that had quietly stopped matching would
+   * report the same green, which is the exact failure the registry exists to
+   * prevent one level up. So the matcher is proved against a key that is
+   * definitely gated, every run, whatever the list holds.
+   */
+  it("can tell a gated key from an ungated one, so the next test means something", () => {
+    expect(isGatedOn("event.rsvp"), "a key gated in server/index.ts must match").toBe(true);
+    expect(isGatedOn("forum.post"), "a second, to catch a one-off").toBe(true);
+    expect(isGatedOn("no.such.capability"), "an invented key must not match").toBe(false);
+  });
+
+  /*
+   * THE CLAIM NOTHING CHECKED, until 2026-09-09.
+   *
+   * An entry here says a key gates nothing. That was written true and there
+   * was no reason it would stay true: `member.vouch` sat here from round 5
+   * saying "the membrane's vouching step has not been built" while a lane
+   * built it, and the day the route landed this file went on saying the
+   * opposite with every test green. Nothing would ever have gone wrong because
+   * of it, which is what made it survive.
+   *
+   * The header above NOT_YET_WIRED says a line comes out when the route lands.
+   * That was a convention, and a convention is what failed. This is the same
+   * sentence as an assertion.
+   *
+   * The forward direction is genuinely not checkable and the rot test above
+   * says so: you cannot ask an Express app which routes a key gates. The
+   * REVERSE direction is a grep. That asymmetry is the whole of this test.
+   */
+  it("names only keys that really gate nothing", () => {
+    const wired = Object.keys(NOT_YET_WIRED).filter(isGatedOn);
+    expect(
+      wired,
+      "this key is gated somewhere in server/**, so it is a power now and its line here is a sentence a village would read and be wrong about. Delete the entry and add the key to POWERS with the routes it gates",
+    ).toEqual([]);
   });
 
   /*
