@@ -93,6 +93,8 @@ export default function Profile() {
   const [prog, setProg] = useState<{
     stageIndex: number;
     consentedQuests: number;
+    /** Mandatory-module progress, absent on a server that predates the field. */
+    training?: { done: number; required: number };
     capabilityCatalogue: ProgressionCapability[];
   } | null>(null);
   /*
@@ -600,6 +602,7 @@ export default function Profile() {
                   stages={config.stages}
                   stageIndex={prog.stageIndex}
                   consentedQuests={prog.consentedQuests}
+                  training={prog.training ?? null}
                 />
               ) : null}
 
