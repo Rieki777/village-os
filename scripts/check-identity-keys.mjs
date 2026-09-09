@@ -150,7 +150,7 @@ export const NEUTRAL = {
   // The platform's word for the thing a member signs. Names no village, the
   // same standing as "Village member" and "Catalyst" above. Amora says "Love
   // Letter" and holds that in its own brand record rather than here.
-  "project.commitmentName": ["membership commitment"],
+  "project.commitmentName": ["membership agreement"],
   "project.adminPath": ["/admin"],
   // Retired from KNOWN_PENDING on 2026-08-31, in the order the list was built
   // for: the founder entered Amora's own tagline in the live Admin FIRST, so
@@ -263,7 +263,20 @@ function skipArray(src, i) {
  * otherwise report the same green as a clean config.
  */
 export function parseConfigValues(src) {
-  const anchor = src.indexOf("GAME_CONFIG");
+  // ANCHOR ON THE DECLARATION, NEVER ON THE NAME.
+  //
+  // This used to be `src.indexOf("GAME_CONFIG")`, the first textual occurrence
+  // anywhere in the file, and on 2026-09-09 a COMMENT mentioning GAME_CONFIG
+  // was added above the declaration to explain a placeholder. The anchor moved
+  // into the prose, the reader parsed the wrong object, and the guard reported
+  // five image keys and a currency key as missing from a file that still had
+  // every one of them.
+  //
+  // It failed LOUDLY, which is the design working: a reader that breaks is a
+  // failure and not a note. But a guard that any sentence can move is a guard
+  // whose next break is somebody documenting the thing it reads.
+  const decl = /\bconst\s+GAME_CONFIG\b/.exec(src);
+  const anchor = decl ? decl.index : -1;
   if (anchor < 0) return null;
   const open = src.indexOf("{", anchor);
   if (open < 0) return null;

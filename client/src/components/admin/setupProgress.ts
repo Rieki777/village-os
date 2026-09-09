@@ -121,7 +121,7 @@ export const IDENTITY_WIZARD_FIELDS = [
   ["roleName", "What a position somebody can hold is called"],
   ["seatName", "What one person's turn holding it is called"],
   // What a member signs (Rye, 2026-09-08). Amora says "Love Letter"; the
-  // platform says "membership commitment". Defaulted like the three above,
+  // platform says "membership agreement". Defaulted like the three above,
   // so it is a rename rather than a blank and stays out of `fields`. The
   // FORM TYPE id `membership-508` is frozen and unaffected: this renames
   // what a member reads, never what the submission row says.

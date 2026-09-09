@@ -88,6 +88,52 @@ check("is not fooled by a double slash inside a string", () => {
   assert.strictEqual(parseConfigValues(SAMPLE)["project.siteUrl"], "https://example.test/a//b");
 });
 
+check("prose naming GAME_CONFIG above the declaration does not move the anchor", () => {
+  /*
+   * THIS HAPPENED, on 2026-09-09. The reader anchored on the first textual
+   * occurrence of "GAME_CONFIG" anywhere in the file. A comment was added above
+   * the declaration to explain a placeholder, the anchor landed in the prose,
+   * and the guard reported six keys missing from a file that still held every
+   * one. It failed loudly, which is the design working, but a guard any
+   * sentence can move is a guard whose next break is somebody documenting it.
+   */
+  // THE INTERVENING BRACE IS THE WHOLE POINT. My first version of this fixture
+  // put the prose immediately above the declaration and PASSED against the
+  // broken reader, because the next `{` after the prose was still the right
+  // one. In the real file an `export interface GameConfig {` sits between them,
+  // and that brace is what the old anchor walked into. A fixture without it
+  // tests nothing and reads as protection.
+  const withProse = `
+/**
+ * A comment that mentions GAME_CONFIG before the declaration, the way a real
+ * explanation of a placeholder inside it has to.
+ */
+export interface GameConfig {
+  project: { name: string };
+}
+
+export const GAME_CONFIG = {
+  project: { name: "Unnamed Village" },
+};
+`;
+  const v = parseConfigValues(withProse);
+  assert.strictEqual(v["project.name"], "Unnamed Village");
+});
+
+check("a placeholder brace inside a string does not break the object walk", () => {
+  // The other half of the same change: `{commitment}` sits inside a string
+  // value in the real config, and a brace counter that did not skip strings
+  // would lose the rest of the object from there on.
+  const withBrace = `
+export const GAME_CONFIG = {
+  project: { name: "Signed the {commitment}", tagline: "after the brace" },
+};
+`;
+  const v = parseConfigValues(withBrace);
+  assert.strictEqual(v["project.name"], "Signed the {commitment}");
+  assert.strictEqual(v["project.tagline"], "after the brace");
+});
+
 check("is not fooled by braces inside comments", () => {
   const v = parseConfigValues(SAMPLE);
   assert.strictEqual(v["currency.name"], "Gratitude", "a } in a block comment must not close the object");
@@ -266,11 +312,11 @@ function configSource({ project = {}, dropFavicon = false } = {}) {
     // to violate passes its own string.
     catalystName: "Catalyst",
     // Added 2026-09-09 with the key itself, same standing as catalystName
-    // above: "membership commitment" is the platform's own word for the
+    // above: "membership agreement" is the platform's own word for the
     // thing a member signs and belongs to no village, so it is NEUTRAL and
     // a clean fixture carries it. A test that wants this key to violate
     // passes its own string.
-    commitmentName: "membership commitment",
+    commitmentName: "membership agreement",
     // Was "Somewhere the founder has not moved yet". project.location graduated
     // on 2026-09-03 and its platform default is EMPTY, because there is no
     // neutral location, so a clean fixture is empty here for the same reason
