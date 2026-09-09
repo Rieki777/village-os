@@ -5,6 +5,8 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  neutralObjectiveText,
+  tierDraftWords,
   visionMetricKnown,
   visionProblem,
   visionProgress,
@@ -111,5 +113,64 @@ describe("where a vision stands", () => {
     const before = JSON.stringify(v);
     visionProgress(v, measure);
     expect(JSON.stringify(v)).toBe(before);
+  });
+});
+
+/*
+ * WHO MAY READ THE WORDS ON A DRAFT.
+ *
+ * `/api/org/vision` answers ANONYMOUS callers whenever `map.public_structure`
+ * is on. It tiered the holder NAME behind `map.viewPeople` and then published
+ * the sentences next to it: the draft title, its rationale, and every
+ * objective in the village's own words.
+ *
+ * Survivable only while nothing but an admin could draft. The org editor opens
+ * drafting to any member, and the first "Move Sarah out of Finance, she keeps
+ * missing meetings" is then a signed-out stranger's to read and to cache.
+ */
+describe("the words on a draft, and who gets them", () => {
+  const objectives = [
+    { text: "Every seat in the kitchen held", metric: "seats_filled_in:kitchen" },
+    { text: "Sarah agrees to step back", metric: null },
+  ];
+  const draft = { title: "Move Sarah out of Finance", rationale: "She keeps missing meetings" };
+
+  it("gives a member every word, because that is village life", () => {
+    const w = tierDraftWords(true, draft, objectives);
+    expect(w.title).toBe("Move Sarah out of Finance");
+    expect(w.rationale).toBe("She keeps missing meetings");
+    expect(w.objectives[1].text).toBe("Sarah agrees to step back");
+  });
+
+  it("gives a stranger the SHAPE and none of the sentences", () => {
+    const w = tierDraftWords(false, draft, objectives);
+    expect(w.title).not.toContain("Sarah");
+    expect(w.rationale).toBeNull();
+    for (const o of w.objectives) expect(o.text).not.toContain("Sarah");
+  });
+
+  it("still says something true below the tier, from platform vocabulary", () => {
+    // Blanking the line would make the panel useless to a visitor. The
+    // fallback is the METRIC, which the platform owns; the village never
+    // typed it, so it can carry no name.
+    const w = tierDraftWords(false, draft, objectives);
+    expect(w.objectives[0].text).toBe("Seats filled in a circle");
+    expect(w.objectives[1].text).toBe("An objective the village has set");
+  });
+
+  it("names every metric family it knows, and degrades for one it does not", () => {
+    expect(neutralObjectiveText("seats_filled")).toBe("Seats filled");
+    expect(neutralObjectiveText("seasons_completed")).toBe("Seasons completed");
+    expect(neutralObjectiveText("members_at_stage:steward")).toBe("Members at a stage");
+    // A metric added later must not fall through to a village's own words.
+    expect(neutralObjectiveText("something_new:x")).toBe("An objective the village is measuring");
+  });
+
+  it("does not mutate the objectives it was handed", () => {
+    // The route reuses `progress.objectives`, so a tiering that wrote through
+    // would leak the neutral text back into a member's own view.
+    const mine = [{ text: "Sarah agrees to step back", metric: null }];
+    tierDraftWords(false, draft, mine);
+    expect(mine[0].text).toBe("Sarah agrees to step back");
   });
 });

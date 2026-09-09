@@ -14,6 +14,7 @@
 import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 import mysql from "mysql2/promise";
 import { forgetDocumentedHolder, releaseSeatingsForUser } from "./orgChart";
+import { forgetMemberInDrafts } from "./orgDrafts";
 import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 
 const configured = testDbConfigured();
@@ -173,6 +174,86 @@ describe.skipIf(!configured)("taking a person off the org chart", () => {
       expect(d2.display_name).toBe("Ada Vance");
       expect(d2.ended_at).toBeNull();
       expect(d2.holder_key).toBe("doc:ada-vance");
+    });
+  });
+
+  /*
+   * THE SEATINGS THAT HAVE NOT HAPPENED YET.
+   *
+   * Everything above is a column, so the sweep reaches it with one UPDATE. A
+   * DRAFT restates a person inside JSON: `seat_holder` keeps
+   * `{ userId, displayName }` in `payload`, and `end_holding` keeps a whole
+   * assignment row in `before_json`. Nothing swept either, so a member could
+   * exercise deletion, watch every column-shaped trace go, and have their name
+   * sit in an open draft that `/api/org/vision` publishes.
+   *
+   * Read at the ROW, like the rest of this file, because none of these fields
+   * reaches HTTP in a shape a request could prove empty.
+   */
+  describe("a member named in a draft that has not been published", () => {
+    const ANON = "A departed member";
+
+    beforeEach(async () => {
+      await pool.query("DELETE FROM org_draft_changes");
+      await pool.query("DELETE FROM org_drafts");
+      await pool.query(
+        "INSERT INTO org_drafts (id, title, created_by, status) VALUES ('d', 'A season of changes', 'u-steward', 'open')",
+      );
+    });
+
+    const change = async (id: string, op: string, payload: unknown, before: unknown = null) =>
+      pool.query(
+        "INSERT INTO org_draft_changes (id, draft_id, op, org_role_id, payload, before_json, sort_order) VALUES (?,?,?,?,?,?,0)",
+        [id, "d", op, "seat-a", JSON.stringify(payload), before === null ? null : JSON.stringify(before)],
+      );
+
+    const readChange = async (id: string) => {
+      const [[row]] = await pool.query<any[]>("SELECT payload, before_json FROM org_draft_changes WHERE id = ?", [id]);
+      const j = (v: any) => (v == null ? null : typeof v === "string" ? JSON.parse(v) : v);
+      return { payload: j(row.payload), before: j(row.before_json) };
+    };
+
+    it("takes their name and id out of a pending seating", async () => {
+      await change("c1", "seat_holder", { userId: "u-leaver", displayName: "Bo Reyes", focus: "the pond" });
+      expect(await forgetMemberInDrafts(pool, "u-leaver", ANON)).toBe(1);
+      const { payload } = await readChange("c1");
+      expect(payload.userId).toBeNull();
+      expect(payload.displayName).toBe(ANON);
+      // De-attribution is not erasure: the words beside the id go too.
+      expect(payload.focus).toBeNull();
+    });
+
+    it("empties the revert row of an end_holding, name, note and key", async () => {
+      await change("c2", "end_holding", { assignmentId: "a1" }, {
+        id: "a1", org_role_id: "seat-a", holder_kind: "member", user_id: "u-leaver",
+        display_name: "Bo Reyes", holder_key: "u-leaver", focus: "the pond", note: "asked to step back",
+      });
+      expect(await forgetMemberInDrafts(pool, "u-leaver", ANON)).toBe(1);
+      const { before } = await readChange("c2");
+      expect(before.user_id).toBeNull();
+      expect(before.display_name).toBe(ANON);
+      expect(before.note).toBeNull();
+      expect(before.focus).toBeNull();
+      expect(String(before.holder_key)).toContain("doc:forgotten-");
+      // The STRUCTURE survives, so reverting the change still works and only
+      // the person is gone.
+      expect(before.org_role_id).toBe("seat-a");
+    });
+
+    it("leaves everybody else in the same draft alone", async () => {
+      await change("c1", "seat_holder", { userId: "u-leaver", displayName: "Bo Reyes" });
+      await change("c3", "seat_holder", { userId: "u-stays", displayName: "Ada Vance" });
+      expect(await forgetMemberInDrafts(pool, "u-leaver", ANON)).toBe(1);
+      const { payload } = await readChange("c3");
+      expect(payload.userId).toBe("u-stays");
+      expect(payload.displayName).toBe("Ada Vance");
+    });
+
+    it("leaves a documented holder who is not a member alone", async () => {
+      // No user id to match, so nothing here is about the departing member.
+      await change("c4", "seat_holder", { displayName: "Bo Reyes" });
+      expect(await forgetMemberInDrafts(pool, "u-leaver", ANON)).toBe(0);
+      expect((await readChange("c4")).payload.displayName).toBe("Bo Reyes");
     });
   });
 });

@@ -468,7 +468,7 @@ import {
   type Candidate,
 } from "./lib/map";
 import { ensureInstanceIdentity, instanceIdentity, PLATFORM_VERSION } from "./lib/identity";
-import { listDrafts, measureVisionMetrics, visionProgress } from "./lib/orgDrafts";
+import { listDrafts, measureVisionMetrics, tierDraftWords, visionProgress } from "./lib/orgDrafts";
 import { DECIDES_BY, DOMAINS, HOW_CHOSEN, SHAPES } from "../shared/power";
 import { noteSeen, readSeen } from "./lib/sheetSeen"; import { displayCurrencyProblem } from "../shared/money";
 import { latestRates, refreshDailyRates } from "./lib/fxRates";
@@ -26723,8 +26723,8 @@ ${inner}
   /**
    * The Vision layer (0083, P1, N2): open drafts as ghosts, each with its
    * vision block re-measured on read. Rides the same tier the org chart
-   * does: structure for anyone the map admits, PEOPLE only behind
-   * map.viewPeople, so a ghost says "a member" to everyone else.
+   * does: structure for anyone the map admits, PEOPLE and every word a
+   * member TYPED behind map.viewPeople. See `tierDraftWords`.
    *
    * Nothing here applies anything. The panel's prompt links to the existing
    * admin publish button, and `publishDraft`'s only caller stays that route.
@@ -26765,12 +26765,14 @@ ${inner}
     res.json({
       drafts: drafts.map((d) => {
         const progress = d.vision ? visionProgress(d.vision, measure) : null;
+        // Words a MEMBER typed, and this route answers the street.
+        const words = tierDraftWords(maySeePeople, d, progress?.objectives ?? []);
         return {
           id: d.id,
-          title: d.title,
-          rationale: d.rationale,
+          title: words.title,
+          rationale: words.rationale,
           vision: progress
-            ? { objectives: progress.objectives, trigger: d.vision!.trigger }
+            ? { objectives: words.objectives, trigger: d.vision!.trigger }
             : null,
           progress: progress
             ? { done: progress.done, total: progress.total, allDone: progress.allDone }

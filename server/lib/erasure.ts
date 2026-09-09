@@ -42,6 +42,7 @@ import { forgetMemberInProposals } from "./externalProposals";
 import { forgetMemberEverywhere, type ErasureOutcome } from "./memberDrivers";
 import { recordEvent } from "./events";
 import { releaseSeatingsForUser } from "./orgChart";
+import { forgetMemberInDrafts } from "./orgDrafts";
 
 export type ErasureDeps = {
   /** The users repository. Its `update` writes the tombstone. */
@@ -127,6 +128,12 @@ export async function anonymizeMember(
   // on holding a departed member's seat under their real user id while
   // /api/org republished it to everyone with map.viewPeople.
   await releaseSeatingsForUser(pool, target.id, "member left the village");
+
+  // And the seatings that have not happened YET. An open draft restates a
+  // person inside JSON rather than in a column, so every column-shaped trace
+  // could go while their name sat in a draft `/api/org/vision` publishes.
+  // The shape of that JSON is decided in orgDrafts.ts, so the emptying is too.
+  await forgetMemberInDrafts(pool, target.id, anon);
 
   /*
    * THE TRACES A TOMBSTONE DOES NOT COVER.

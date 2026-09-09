@@ -131,6 +131,125 @@ export function visionMetricKnown(metric: string): boolean {
   return VISION_METRIC_PREFIXES.some((p) => metric.startsWith(p) && metric.length > p.length);
 }
 
+/**
+ * Take a departed member out of every draft that names them.
+ *
+ * WHY THIS IS ITS OWN FUNCTION AND NOT A LINE IN `erasure.ts`. Every other
+ * trace in that sweep is a COLUMN, so it is one UPDATE. A draft restates a
+ * person inside JSON: `seat_holder` carries `{ userId, displayName }` in
+ * `payload`, and `end_holding` carries a whole assignment row in
+ * `before_json`, `display_name`, `user_id`, `focus` and `note` included. The
+ * shape of those two blobs is decided in this file, so the code that empties
+ * them belongs beside the code that fills them, or it goes stale the first
+ * time a payload gains a key.
+ *
+ * WHAT IT WAS BEFORE. Nothing swept these at all. A member exercised deletion,
+ * every column-shaped trace went, and their name sat in an open draft forever
+ * while `/api/org/vision` published it to anyone the map admits.
+ *
+ * DE-ATTRIBUTION IS NOT ERASURE, the rule this file inherits: the id is nulled
+ * AND the name goes, because a sentence naming somebody identifies them with
+ * no id at all.
+ *
+ * `before_json` is the revert data, so emptying it costs a published draft its
+ * undo for THAT holding. That is the right trade and it is deliberate: the
+ * alternative is keeping a departed member's name to preserve the ability to
+ * seat them again, which is the thing they asked the village to stop doing.
+ * Every other field of the row is left alone, so reverting the structure still
+ * works and only the person is gone.
+ */
+export async function forgetMemberInDrafts(pool: Pool, userId: string, anon: string): Promise<number> {
+  const [rows]: any = await pool.query(
+    "SELECT id, op, payload, before_json FROM org_draft_changes WHERE op IN ('seat_holder', 'end_holding')",
+  );
+  const parse = (v: unknown) => {
+    if (v == null) return null;
+    if (typeof v !== "string") return v as any;
+    try { return JSON.parse(v); } catch { return null; }
+  };
+  let touched = 0;
+  for (const r of rows as any[]) {
+    const payload = parse(r.payload);
+    const before = parse(r.before_json);
+    let changed = false;
+    if (payload && String(payload.userId ?? "") === userId) {
+      payload.userId = null;
+      payload.displayName = anon;
+      if (payload.focus) payload.focus = null;
+      changed = true;
+    }
+    if (before && String(before.user_id ?? "") === userId) {
+      before.user_id = null;
+      before.display_name = anon;
+      before.focus = null;
+      before.note = null;
+      // The generated active-holder key is derived from this, so it goes too
+      // or the row still points at them by id.
+      if (before.holder_key) before.holder_key = `doc:forgotten-${String(r.id)}`;
+      changed = true;
+    }
+    if (!changed) continue;
+    await pool.query(
+      "UPDATE org_draft_changes SET payload = ?, before_json = ? WHERE id = ?",
+      [payload === null ? null : JSON.stringify(payload), before === null ? null : JSON.stringify(before), r.id],
+    );
+    touched += 1;
+  }
+  return touched;
+}
+
+/*
+ * ── THE FREE TEXT ON A DRAFT, AND WHO MAY READ IT ────────────────────────
+ *
+ * `/api/org/vision` answers ANONYMOUS callers whenever `map.public_structure`
+ * is on, and it was returning three fields a member types in their own words:
+ * the draft's `title`, its `rationale`, and every objective's `text`. It
+ * tiered `holder` correctly and then published the sentence next to it.
+ *
+ * Survivable only while nothing but an admin could draft. The org editor
+ * opens drafting to any member, and the first time somebody writes "Move
+ * Sarah out of Finance, she keeps missing meetings" that is a signed-out
+ * stranger's to read, cache and index.
+ *
+ * So the three go behind `map.viewPeople`, the same key the holder name sits
+ * behind. That key stands at the `guest` rung, which every signed-in account
+ * reaches, so this costs a member nothing and closes the door on the street.
+ *
+ * Below the tier the ghost is still DRAWABLE and still COUNTS: the shape, the
+ * seat names, the numbers and the progress all stay, because those are
+ * structure and structure is what that tier is for. Only the sentences go.
+ */
+
+/** A neutral line for an objective, from platform vocabulary, never a village's. */
+export function neutralObjectiveText(metric: string | null): string {
+  if (!metric) return "An objective the village has set";
+  if (metric === "seats_filled") return "Seats filled";
+  if (metric === "seasons_completed") return "Seasons completed";
+  if (metric.startsWith("seats_filled_in:")) return "Seats filled in a circle";
+  if (metric.startsWith("members_at_stage:")) return "Members at a stage";
+  return "An objective the village is measuring";
+}
+
+/**
+ * The words of a draft as this viewer may have them.
+ *
+ * Lives here rather than in the route so the tier and the vocabulary it falls
+ * back to sit beside each other, and so a test can ask what an anonymous
+ * reader gets without booting a server.
+ */
+export function tierDraftWords<T extends { text: string; metric: string | null }>(
+  maySeePeople: boolean,
+  d: { title: string; rationale?: string | null },
+  objectives: T[],
+): { title: string; rationale: string | null; objectives: T[] } {
+  if (maySeePeople) return { title: d.title, rationale: d.rationale ?? null, objectives };
+  return {
+    title: "A change being drafted",
+    rationale: null,
+    objectives: objectives.map((o) => ({ ...o, text: neutralObjectiveText(o.metric) })),
+  };
+}
+
 /** What is wrong with a proposed vision block, in the words somebody would use. */
 export function visionProblem(v: unknown): string | null {
   if (v === null || v === undefined) return null; // clearing the block is allowed
