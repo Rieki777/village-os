@@ -108,7 +108,7 @@
     "astronomy-engine": "2.1.19",
     "autoprefixer": "^10.5.4",
     "drizzle-kit": "^0.31.10",
-    "esbuild": "^0.25.12",
+    "esbuild": "^0.28.1",
     "jsdom": "^30.0.1",
     "postcss": "^8.5.26",
     "prettier": "^3.6.2",
