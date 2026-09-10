@@ -309,6 +309,22 @@ jobs:
         # Before the build, with the other guards: it reads source files.
         run: node scripts/check-save-honesty.mjs
 
+      - name: Hook order guard
+        # This repo has no eslint, so it has no react-hooks/rules-of-hooks, and
+        # on 2026-09-07 a hook shipped below two guards in Profile.tsx. React
+        # counts hooks per render, so the count changed and the page threw
+        # "Rendered more hooks than during the previous render".
+        #
+        # Nothing caught it: not tsc, not 950 tests, not a live QA pass at two
+        # viewports. The route is lazy, so on an ordinary load the chunk lands
+        # after auth resolves and the first render already runs the hook; the
+        # deterministic break is SIGN OUT, and no pass that never signs out can
+        # see it. Clean at this ref across 721 components with no waivers, and
+        # verified against the real bug before landing.
+        #
+        # Before the build, with the other guards: it reads source files.
+        run: node scripts/check-hook-order.mjs
+
       - name: Repo payload guard
         # The guard above proves a founder can REACH a route. This one asks
         # whether the route works, because two shipped that could never succeed

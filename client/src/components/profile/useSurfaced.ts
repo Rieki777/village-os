@@ -64,21 +64,61 @@ export function useSurfaced(openNow: readonly string[], ready: boolean): Surface
   const [settledLocally, setSettledLocally] = useState<Record<string, true>>({});
   const counted = useRef(false);
 
+  /*
+   * The sections open at the moment the read lands, held in a ref because the
+   * effect below runs once and must not re-run when the list changes.
+   */
+  const openAtRead = useRef<readonly string[]>(openNow);
+  openAtRead.current = openNow;
+
   useEffect(() => {
     let alive = true;
     gameFetch("/api/profile/prefs")
-      .then((r) => (r.ok ? r.json() : null))
+      /*
+       * A REFUSAL IS A FAILURE, not an empty answer. This used to map a non-ok
+       * response to null and then to `{}`, which is the same value a member
+       * with a genuinely empty map gets, so a 500 read as "they have seen
+       * nothing" and lifted every open section.
+       */
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("prefs read refused"))))
       .then((d) => {
-        if (alive) setSeen(d && typeof d.sheetSeen === "object" ? d.sheetSeen : {});
+        if (!alive) return;
+        const raw = d?.sheetSeen;
+        if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+          setSeen(raw as Record<string, number>);
+          return;
+        }
+        /*
+         * NO MAP AT ALL MEANS THIS MEMBER PREDATES THE MECHANIC, so everything
+         * already open to them opened before anybody was counting. Announcing
+         * those would tell somebody who has walked a path for six months that
+         * it is "newly open", which is the one thing this banner may not say.
+         *
+         * It is safe for a new member too, and that is why the backfill is
+         * keyed on what is open RIGHT NOW rather than on everything: somebody
+         * who has just signed up walks no path, so their backfill is empty and
+         * the first path they claim still surfaces properly.
+         */
+        const already = openAtRead.current;
+        setSeen(Object.fromEntries(already.map((id) => [id, MAX_SIGHTINGS])));
+        if (already.length > 0) {
+          void gameFetch("/api/profile/prefs", {
+            // save-ok: a backfill nobody is told about. If it does not land,
+            // the only cost is that the same sections settle again on the next
+            // load, which is the harmless direction.
+            method: "PUT",
+            body: JSON.stringify({ sawSections: already, acknowledged: true }),
+          }).catch(() => {});
+        }
       })
       .catch(() => {
         /*
-         * A FAILED READ SURFACES NOTHING, which is the safe direction. Treating
-         * "we could not ask" as "they have seen nothing" would lift a section
-         * at every member on every blip, and this mechanic's whole value is
-         * that it is rare.
+         * A FAILED READ SURFACES NOTHING, and now it actually does. `seen`
+         * stays null, and `candidate` below is null while it is, so the sheet
+         * paints in its settled order. Treating "we could not ask" as "they
+         * have seen nothing" lifted a section at every member on every blip,
+         * which is the opposite of a mechanic whose value is that it is rare.
          */
-        if (alive) setSeen({});
       });
     return () => {
       alive = false;

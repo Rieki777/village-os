@@ -354,10 +354,24 @@ export interface VentureParticular {
 /** One reservation, carrying none of the contact data on its row. */
 export interface ReservationParticular {
   id: string;
+  /** The stored slug, e.g. "tiny-home". Humanized for reading, never parsed. */
   homeType: string;
   /** Which structure on the map, when one was chosen. */
   structureKey: string | null;
+  /** The stored status, kept for a fork that wants the raw pipeline word. */
   status: string;
+  /**
+   * THE SAME FACT IN THE MEMBER'S OWN TERMS, resolved on the server.
+   *
+   * `status` is the founders' pipeline: "new", "contacted", "reserved",
+   * "withdrawn". Those are the right words for the admin screen and the wrong
+   * ones on somebody's own profile, where "new" reads as a label on the person.
+   * The union lives in `server/lib/housing.ts`, so the SERVER maps it and the
+   * switch is exhaustive there; a client-side table would be the hand-kept
+   * `Record<string, T>` the house rules name, one enum member from silence.
+   * Same reasoning as `live` and `listed`: the client never re-derives.
+   */
+  standing: string;
   madeMoon: VillageMoon | null;
 }
 
