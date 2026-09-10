@@ -524,12 +524,14 @@ not, any more.** `anonymizeMember` writes through `members.update`, so it can on
 users repository owns, and `title` and `home_structure_key` are not among them. The tombstone handle
 is deterministic (`departed-` plus the last eight characters of the user id) and appears on their
 forum bylines, so `GET /api/profiles/<that handle>` still answers with their remaining standing
-chips and whatever `title` they carried. Today `title` is always NULL because nothing writes it, so
-that half is latent rather than live; a fork that adds a title editor without also adding a line to
-the erasure sweep makes it live in one commit. `home_structure_key` is the sharper of the two, since
-it is where a person sleeps and something does write it. **Both are still open**, and closing them
-means a repository statement of their own, because the tombstone cannot reach a column the users
-repository does not map.
+chips, whatever `title` they carried and wherever `home_structure_key` says they sleep. Both columns
+are READ (`server/lib/profile.ts` names them in its SELECT and publishes them) and NEITHER is
+written by anything in the tree: no route, no repository and no migration sets either one. So the
+exposure is latent rather than live, and it is latent in the way that ends in one commit. A fork
+that adds a title editor, or a "where I sleep" control, without also adding a line to the erasure
+sweep makes it live the day it ships. **Both are still open**, and closing them means a repository
+statement of their own, because the tombstone writes through `members.update` and cannot reach a
+column the users repository does not map.
 
 The `player_characters` and `character_portraits` halves are closed. The sweep now runs a
 `character-sheet` step (`forgetCharactersForMember`, which clears `users.primary_character_id`
