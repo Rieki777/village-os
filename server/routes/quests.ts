@@ -62,6 +62,7 @@ import {
   leaveConversation,
 } from "../lib/messaging";
 import { effectiveLifecycle } from "../lib/modules";
+import { questClosed } from "../repos/quests";
 import { captureIntoCurrentPattern } from "../lib/seasonPatterns";
 
 /** The share-card raster. 1200x630 is what every major unfurler crops to. */
@@ -539,6 +540,26 @@ export function register(app: Express, deps: Deps): void {
     if (await isExampleRow(getPool(), "quests", req.params.id)) {
       return res.status(409).json(EXAMPLE_REFUSAL_BODY);
     }
+    /*
+     * A CLOSED QUEST IS NOT AN INVITATION, and this route never asked.
+     *
+     * It checked `is_example`, `min_stage`, `requires_role` and the member's
+     * own claims, and never `quest.status`. Nothing on the client covered for
+     * it either: `Quests.tsx` filters the board by circle and difficulty only,
+     * so a quest an admin closed kept rendering with a live claim button, and
+     * the whole chain behind it stayed open. Refusing the claim closes the
+     * chain, the same reasoning the example guard above is written on.
+     *
+     * SUBMIT IS DELIBERATELY NOT GUARDED THIS WAY. Closing the board must
+     * never strand work already in flight: a member holding a claim from
+     * before the quest closed still hands it in and is still consented.
+     */
+    if (questClosed(quest.status)) {
+      return res.status(409).json({
+        error: "This quest is closed, so it is not taking new claims. The board has others open.",
+        status: String(quest.status ?? ""),
+      });
+    }
 
     // Progression gates (revision 2, step 3). Structured fields enforce; the
     // legacy free-text `roleRequired` stays display-only prose. Refusals name
@@ -563,9 +584,18 @@ export function register(app: Express, deps: Deps): void {
       }
     }
 
-    const mine = await claimsRepo.forUser(user.id);
-    const existing = mine.find((c) => c.questId === quest.id && c.status !== "declined");
-    if (existing) return res.status(409).json({ error: "Already claimed", claim: existing });
+    /*
+     * ONE CLAIM PER MEMBER PER QUEST, DECIDED UNDER A LOCK.
+     *
+     * This was `forUser()`, a `find()`, and an insert several awaits later,
+     * with nothing in the schema behind it: two taps arriving together both
+     * read no claim and both inserted one, and the member then held two rows
+     * a steward could consent separately. There is no unique index to fall
+     * back on and there cannot be one, because a declined claim frees the
+     * quest on purpose and a member declined once legitimately holds two rows
+     * for the same pair. `openClaim` holds the rule where it can be held, on
+     * the quest's own row. Its header and `drizzle/0196` carry the rest.
+     */
     const claim = {
       id: `claim-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       questId: quest.id,
@@ -577,7 +607,11 @@ export function register(app: Express, deps: Deps): void {
       artifactUrl: "",
       note: "",
     };
-    await claimsRepo.add(claim);
+    const taken = await claimsRepo.openClaim(claim);
+    if (!taken.ok) {
+      if (taken.reason === "gone") return res.status(404).json({ error: "Quest not found" });
+      return res.status(409).json({ error: "Already claimed", claim: taken.existing });
+    }
     res.json(claim);
   });
 

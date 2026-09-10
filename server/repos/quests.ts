@@ -12,10 +12,36 @@
  * paths; `consentedCounts()` (grouped) exists so listing N members costs one
  * query, not N.
  */
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { parseRewardRange } from "../../shared/questRewards";
 import { calendarRemove, calendarUpsert } from "../lib/calendar";
 import { questCalendarInput } from "../lib/calendarProviders";
+
+/**
+ * Retry a whole transaction that InnoDB killed as a deadlock victim.
+ *
+ * The same three attempts `postTransfer` takes, for the same reason written
+ * over it: perfect lock ordering does not stop InnoDB picking a victim under
+ * real contention, because a balance recompute reads rows a neighbour is
+ * writing. Both transactions below reach the ledger's hot faucet row through
+ * their caller's post callback, so they are under exactly that pressure.
+ *
+ * A rolled-back transaction moved nothing, so a retry is safe and honest, and
+ * every write inside these two is either an insert of a fresh row or an
+ * idempotency-keyed post. Giving up after three keeps a pathological case
+ * from hiding as latency.
+ */
+async function withDeadlockRetry<T>(run: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await run();
+    } catch (e: any) {
+      const retryable = e?.code === "ER_LOCK_DEADLOCK" || e?.code === "ER_LOCK_WAIT_TIMEOUT";
+      if (!retryable || attempt >= 3) throw e;
+      await new Promise((r) => setTimeout(r, 25 * attempt + Math.floor(Math.random() * 25)));
+    }
+  }
+}
 
 const toIso = (v: unknown): string | null =>
   v == null ? null : v instanceof Date ? v.toISOString() : new Date(String(v)).toISOString();
@@ -72,6 +98,26 @@ export interface QuestRecord {
   startsAt?: string | null;
   endsAt?: string | null;
   dueAt?: string | null;
+}
+
+/**
+ * Has the board shut this quest? One reading, for every door into a claim.
+ *
+ * A DENY-LIST AND NOT AN ALLOW-LIST, deliberately. Admin offers exactly two
+ * words ("Open", "Closed"); `server/seeds/quests-seed.json` ships a
+ * "Seasonal" one, `server/seeds/examples-seed.json` writes lowercase "open",
+ * and the column is a free varchar a village can type its own word into. An
+ * allow-list of "open" would have refused every seasonal quest on the board
+ * and locked any village that renamed the state out of its own work, which is
+ * a worse failure than the one being closed here. "Closed" is the only value
+ * in the product that MEANS not taking claims, so it is the only one refused.
+ *
+ * Case and whitespace tolerant, matching `statusIs` in
+ * `client/src/lib/questBoard.ts`: the board stores display casing and two call
+ * sites there had already drifted apart over exactly that.
+ */
+export function questClosed(status: unknown): boolean {
+  return String(status ?? "").trim().toLowerCase() === "closed";
 }
 
 export interface QuestsRepo {
@@ -290,11 +336,92 @@ export interface ClaimRecord {
   confidenceAt?: string | null;
 }
 
+/** What `openClaim` answers with, so a caller never has to guess. */
+export type OpenClaimOutcome =
+  | { ok: true; claim: ClaimRecord }
+  /** The quest row was gone by the time the lock was taken. */
+  | { ok: false; reason: "gone" }
+  /** This member already holds a live claim on this quest. */
+  | { ok: false; reason: "already"; existing: ClaimRecord };
+
+/** What `consentOnce` answers with. Every branch is a different remedy. */
+export type ConsentOutcome =
+  | { ok: true; claim: ClaimRecord }
+  /** No claim with that id, under the lock. */
+  | { ok: false; reason: "missing" }
+  /** Somebody else resolved it first, or it was never consentable. */
+  | { ok: false; reason: "status"; status: ClaimRecord["status"] }
+  /** The value could not move, so NOTHING was written. `error` is the ledger's own. */
+  | { ok: false; reason: "post"; error: string };
+
+/**
+ * Move value at the same instant the claim flips, or move nothing.
+ *
+ * Runs inside `consentOnce`'s transaction, on its connection, after the claim
+ * row is locked and written and before the commit. Return the ledger's own
+ * sentence to refuse, which rolls the flip back with it.
+ */
+export type ConsentPost = (
+  conn: PoolConnection,
+  claim: ClaimRecord,
+) => Promise<{ ok: true } | { ok: false; error: string }>;
+
 export interface ClaimsRepo {
   all(): Promise<ClaimRecord[]>;
   byId(id: string): Promise<ClaimRecord | null>;
   forUser(userId: string): Promise<ClaimRecord[]>;
   add(c: ClaimRecord): Promise<ClaimRecord>;
+  /**
+   * Take a quest, at most once per member, under the quest's own row lock.
+   *
+   * ONE CLAIM PER MEMBER PER QUEST IS A READ-THEN-WRITE WITH NOTHING BEHIND
+   * IT, and there is no unique index to fall back on. There cannot be one:
+   * a declined claim frees the quest deliberately (see `remove` below and the
+   * claim route's `status !== "declined"` test), so a member who was declined
+   * and picked the quest up again holds TWO rows for the same pair, and a
+   * member declined twice holds three. The natural key is not
+   * `(quest_id, user_id)` and it is not `(quest_id, user_id, status)` either:
+   * it is "at most one row that is not declined per (quest_id, user_id)",
+   * which MySQL has no partial index to express, and which a plain UNIQUE
+   * index would refuse to apply to any populated database that already holds
+   * a decline cycle. `drizzle/0196` writes that reasoning down beside the
+   * index it does add.
+   *
+   * So the invariant is held where it can be held: the quest row is locked
+   * FOR UPDATE, and the existence test and the insert happen underneath it.
+   * This is the shape `writeGratitudeRowOnce` uses in `server/lib/economy.ts`
+   * for the allowance, for the same reason.
+   *
+   * The quest row is the lock rather than the member's, because it is the one
+   * the caller has already proved exists and because a quest deleted between
+   * the route's read and this insert then answers "gone" instead of leaving a
+   * claim behind pointing at nothing.
+   */
+  openClaim(c: ClaimRecord): Promise<OpenClaimOutcome>;
+  /**
+   * Consent, as ONE commit: check the status, flip the row, move the value.
+   *
+   * The three steps used to be three transactions with awaits between them,
+   * and both halves of that were reachable. A steward whose credit was
+   * refused got a 500 over a claim permanently marked `consented` and a
+   * member paid nothing, with no way back in: re-consent answers 409 on a
+   * claim that is no longer `submitted`, and `remove` only deletes a
+   * `claimed` one. And two stewards consenting the same claim at the same
+   * moment both read `submitted` through a plain SELECT, both passed, and
+   * both wrote: the ledger answered the second one `duplicate: true` and
+   * moved nothing, so `amount` and `consented_by` were left naming a figure
+   * and a witness with no posting behind them.
+   *
+   * `from` is the compare-and-set. The status is re-read under the row lock
+   * and must still be one of these, so the second consenter is refused with
+   * the status it actually found instead of overwriting the first.
+   */
+  consentOnce(
+    id: string,
+    from: ClaimRecord["status"][],
+    mutate: (c: ClaimRecord) => void,
+    post: ConsentPost | null,
+  ): Promise<ConsentOutcome>;
   update(id: string, mutate: (c: ClaimRecord) => void): Promise<ClaimRecord | null>;
   /**
    * Put back a quest that was picked up and not yet worked on.
@@ -364,6 +491,47 @@ function rowToClaim(r: RowDataPacket): ClaimRecord {
   };
 }
 
+/*
+ * ONE INSERT AND ONE UPDATE, NAMED ONCE.
+ *
+ * `add` and `openClaim` write the same row, and `update` and `consentOnce`
+ * write the same columns. Two copies of either would be two things to keep in
+ * agreement, and the pair that matters here writes the amount and the witness
+ * a member is paid on. Same reasoning as `questParams` above.
+ */
+const CLAIM_INSERT =
+  "INSERT INTO quest_claims (id, quest_id, quest_title, user_id, user_name, status, artifact_url, note, amount, claimed_at, submitted_at, consented_at) " +
+  "VALUES (?,?,?,?,?,?,?,?,?,COALESCE(?, CURRENT_TIMESTAMP),?,?)";
+
+const claimParams = (c: ClaimRecord): any[] => [
+  c.id,
+  c.questId,
+  c.questTitle ?? "",
+  c.userId,
+  c.userName ?? "",
+  c.status ?? "claimed",
+  c.artifactUrl ?? null,
+  c.note ?? null,
+  c.amount ?? null,
+  toDb(c.claimedAt),
+  toDb(c.submittedAt),
+  toDb(c.resolvedAt),
+];
+
+const CLAIM_UPDATE =
+  "UPDATE quest_claims SET status=?, artifact_url=?, note=?, amount=?, submitted_at=?, consented_at=?, consented_by=? WHERE id=?";
+
+const claimUpdateParams = (c: ClaimRecord, id: string): any[] => [
+  c.status,
+  c.artifactUrl ?? null,
+  c.note ?? null,
+  c.amount ?? null,
+  toDb(c.submittedAt),
+  toDb(c.resolvedAt),
+  c.consentedBy ?? null,
+  id,
+];
+
 export function claimsRepo(pool: Pool): ClaimsRepo {
   return {
     async all() {
@@ -385,25 +553,88 @@ export function claimsRepo(pool: Pool): ClaimsRepo {
     },
 
     async add(c) {
-      await pool.query(
-        "INSERT INTO quest_claims (id, quest_id, quest_title, user_id, user_name, status, artifact_url, note, amount, claimed_at, submitted_at, consented_at) " +
-          "VALUES (?,?,?,?,?,?,?,?,?,COALESCE(?, CURRENT_TIMESTAMP),?,?)",
-        [
-          c.id,
-          c.questId,
-          c.questTitle ?? "",
-          c.userId,
-          c.userName ?? "",
-          c.status ?? "claimed",
-          c.artifactUrl ?? null,
-          c.note ?? null,
-          c.amount ?? null,
-          toDb(c.claimedAt),
-          toDb(c.submittedAt),
-          toDb(c.resolvedAt),
-        ],
-      );
+      await pool.query(CLAIM_INSERT, claimParams(c));
       return c;
+    },
+
+    async openClaim(c) {
+      return withDeadlockRetry(async () => {
+        const conn = await pool.getConnection();
+        try {
+          await conn.beginTransaction();
+          // The lock. Everything after this reads a world nobody else can move.
+          const [quest] = await conn.query<RowDataPacket[]>(
+            "SELECT id FROM quests WHERE id = ? FOR UPDATE",
+            [c.questId],
+          );
+          if (!quest.length) {
+            await conn.rollback();
+            return { ok: false, reason: "gone" } as const;
+          }
+          // The claim route's own test, run here under the lock instead of
+          // several awaits before the insert. A declined row is not a live
+          // claim: it is the quest handed back, and it must not block the
+          // member from picking the quest up again.
+          const [held] = await conn.query<RowDataPacket[]>(
+            `${CLAIM_SELECT} WHERE quest_id = ? AND user_id = ? AND status <> 'declined' ` +
+              "ORDER BY claimed_at DESC, id DESC LIMIT 1",
+            [c.questId, c.userId],
+          );
+          if (held[0]) {
+            const existing = rowToClaim(held[0]);
+            await conn.rollback();
+            return { ok: false, reason: "already", existing } as const;
+          }
+          await conn.query(CLAIM_INSERT, claimParams(c));
+          await conn.commit();
+          return { ok: true, claim: c } as const;
+        } catch (e) {
+          await conn.rollback();
+          throw e;
+        } finally {
+          conn.release();
+        }
+      });
+    },
+
+    async consentOnce(id, from, mutate, post) {
+      return withDeadlockRetry(async () => {
+        const conn = await pool.getConnection();
+        try {
+          await conn.beginTransaction();
+          const [rows] = await conn.query<RowDataPacket[]>(`${CLAIM_SELECT} WHERE id = ? FOR UPDATE`, [id]);
+          if (!rows[0]) {
+            await conn.rollback();
+            return { ok: false, reason: "missing" } as const;
+          }
+          const claim = rowToClaim(rows[0]);
+          // The compare-and-set, under the lock the row is already holding.
+          if (!from.includes(claim.status)) {
+            const status = claim.status;
+            await conn.rollback();
+            return { ok: false, reason: "status", status } as const;
+          }
+          mutate(claim);
+          await conn.query(CLAIM_UPDATE, claimUpdateParams(claim, id));
+          if (post) {
+            const moved = await post(conn, claim);
+            if (!moved.ok) {
+              // Nothing is written. The claim is still whatever it was, the
+              // member is still owed, and the steward can try again once the
+              // ledger's own reason is dealt with.
+              await conn.rollback();
+              return { ok: false, reason: "post", error: moved.error } as const;
+            }
+          }
+          await conn.commit();
+          return { ok: true, claim } as const;
+        } catch (e) {
+          await conn.rollback();
+          throw e;
+        } finally {
+          conn.release();
+        }
+      });
     },
 
     async update(id, mutate) {
@@ -417,19 +648,7 @@ export function claimsRepo(pool: Pool): ClaimsRepo {
         }
         const claim = rowToClaim(rows[0]);
         mutate(claim);
-        await conn.query(
-          "UPDATE quest_claims SET status=?, artifact_url=?, note=?, amount=?, submitted_at=?, consented_at=?, consented_by=? WHERE id=?",
-          [
-            claim.status,
-            claim.artifactUrl ?? null,
-            claim.note ?? null,
-            claim.amount ?? null,
-            toDb(claim.submittedAt),
-            toDb(claim.resolvedAt),
-            claim.consentedBy ?? null,
-            id,
-          ],
-        );
+        await conn.query(CLAIM_UPDATE, claimUpdateParams(claim, id));
         await conn.commit();
         return claim;
       } catch (e) {

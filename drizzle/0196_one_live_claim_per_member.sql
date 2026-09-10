@@ -1,0 +1,70 @@
+-- 0196: the index behind "one live claim per member per quest", and the
+-- written reason there is no unique key on it.
+--
+-- WHAT THE RULE ACTUALLY IS
+--
+-- Read from the code that enforces it, `POST /api/game/quests/:id/claim` in
+-- server/routes/quests.ts and the claim branch of `/api/map/promise` in
+-- server/index.ts, the rule is not "one row per (quest_id, user_id)". Both
+-- routes test `status <> 'declined'`, and they mean it: a declined claim is
+-- the quest handed BACK. The decline notification says so in as many words
+-- ("The claim was declined or cleared. The quest is open again."), and the
+-- member is expected to pick it up again.
+--
+-- So a member declined once legitimately holds two rows for the same pair, and
+-- a member declined twice holds three. The natural key is "at most one row
+-- that is NOT declined per (quest_id, user_id)", which is a partial uniqueness
+-- MySQL has no index shape for.
+--
+-- WHY THERE IS NO UNIQUE INDEX HERE, AND WHY ADDING ONE WOULD BE WORSE
+--
+-- Three separate reasons, any one of which is enough.
+--
+--  1. It is wrong. `UNIQUE (quest_id, user_id)` refuses the decline cycle
+--     above, which is a supported flow, and `UNIQUE (quest_id, user_id,
+--     status)` refuses the SECOND decline, which is the same flow run twice.
+--     Neither key describes the invariant.
+--
+--  2. It cannot apply. Migrations run at boot, fail loud, on thirteen founder
+--     instances. A unique key that collides with rows already present does not
+--     fail a deploy, it stops a village starting, and any village whose board
+--     has seen one decline-and-reclaim already holds the collision. A
+--     migration that cannot apply to a populated database is worse than the
+--     defect it was written for.
+--
+--  3. It is on the never-in-the-same-release list. CLAUDE.md's expand/contract
+--     table names "a new UNIQUE index or FOREIGN KEY on an existing table"
+--     explicitly, and scripts/check-migration-compat.mjs enforces it: the
+--     PREVIOUS release does not know the pair must be unique and writes a
+--     duplicate, so a rollback over this migration would be the thing left
+--     broken.
+--
+-- The same third reason rules out a FOREIGN KEY from `quest_claims.quest_id`
+-- to `quests.id`, and the first rules out what people reach for next. A
+-- CASCADE would delete consented claims when an admin tidies a finished quest
+-- off the board, which erases work that was witnessed and PAID: the stage
+-- ladder reads `consentedCount`, the `quests_consented` badge metric reads the
+-- same rows, and the ledger holds a posting keyed to a claim that would no
+-- longer exist. A RESTRICT would contradict the delete route's own design,
+-- which refuses only claims still in flight and settles the rest on purpose.
+--
+-- WHERE THE INVARIANT LIVES INSTEAD
+--
+-- `claimsRepo.openClaim` (server/repos/quests.ts) locks the quest row FOR
+-- UPDATE and does the existence test and the insert underneath it, which is
+-- the shape `writeGratitudeRowOnce` in server/lib/economy.ts uses to hold the
+-- gratitude allowance exactly. A lock is what the schema cannot express here.
+--
+-- WHAT THIS FILE ADDS
+--
+-- The index that lookup wants. `quest_claims` carried `(user_id)` and
+-- `(quest_id)` separately since 0001, so the new query had to seek on one and
+-- filter the rest, scanning every claim a busy member has ever made while
+-- holding a row lock. Leading with `quest_id` matches the lock's own grain;
+-- `status` rides third so the `<> 'declined'` test is answered from the index.
+--
+-- NON-UNIQUE, so the previous release can still write whatever it likes
+-- through it, which is the safe half of expand-never-contract.
+
+ALTER TABLE `quest_claims`
+  ADD KEY `quest_claims_quest_member_idx` (`quest_id`, `user_id`, `status`);

@@ -296,7 +296,7 @@ import {
   ledgerEntryExists,
   memberAccount,
   MINT_FAUCET,
-  postTransfer,
+  postTransfer, postTransferOn,
   questCreditsFor, refusalForMember,
   registerToken,
   tokenDef,
@@ -435,7 +435,7 @@ import {
 } from "./lib/exchange";
 import { usersRepo } from "./repos/users";
 import { gratitudeCyclesRepo, gratitudeDistributionsRepo, gratitudeLogRepo } from "./repos/gratitude";
-import { claimsRepo as claimsRepoFactory, questsRepo as questsRepoFactory } from "./repos/quests";
+import { claimsRepo as claimsRepoFactory, questClosed, questsRepo as questsRepoFactory, type ClaimRecord } from "./repos/quests";
 import { asBudget, sendGratitude, type GratitudeBudget, type GratitudeDeps } from "./lib/gratitude";
 import { recentEvents, recordEvent } from "./lib/events";
 import { checkToolLink } from "./lib/toolcheck";
@@ -19692,7 +19692,9 @@ ${inner}
       }
 
       if (held) return reply({ ok: true, state: "on" });
-      if (await isExampleRow(pool, "quests", quest.id)) {
+      // A closed quest is not taking claims, read exactly as the claim route
+      // reads it: `closed` is this vocabulary's own "not taking answers".
+      if ((await isExampleRow(pool, "quests", quest.id)) || questClosed(quest.status)) {
         return reply({ ok: false, state: "off", reason: "closed" });
       }
       if (quest.minStage) {
@@ -19704,7 +19706,9 @@ ${inner}
       if (quest.requiresRole && !roleIdsFor(user.id).includes(quest.requiresRole)) {
         return reply({ ok: false, state: "off", reason: "not-yet" });
       }
-      await claimsRepo.add({
+      // The same locked insert the claim route takes: `held` above is a read
+      // several awaits back, and two taps can pass it together.
+      const taken = await claimsRepo.openClaim({
         id: `claim-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         questId: quest.id,
         questTitle: quest.title,
@@ -19715,6 +19719,8 @@ ${inner}
         artifactUrl: "",
         note: "",
       });
+      // "already" is the answer `held` gives: the person's intent is satisfied.
+      if (!taken.ok && taken.reason === "gone") return reply({ ok: false, state: "off", reason: "gone" });
       return reply({ ok: true, state: "on" });
     } catch (err) {
       // The map reverts and says so. A promise is not worth a 500 page inside
@@ -20064,13 +20070,12 @@ ${inner}
     // Without this an admin could credit a quest that was claimed and never
     // done, which quietly breaks the one promise the recognition economy makes:
     // that credit lands after the work was shown and consented to. Declining
-    // stays legal from any state, since a stale claim needs clearing.
-    if (boolVar("quest.require_submission_before_consent") && claim.status !== "submitted") {
-      return res.status(409).json({
-        error: `Cannot consent a claim with status "${claim.status}". The member has to submit their work first.`,
-        status: claim.status,
-      });
-    }
+    // stays legal from any state, since a stale claim needs clearing. The test
+    // itself moved DOWN into `consentOnce`, under the claim's row lock: read
+    // here it was a plain SELECT several awaits from the write it guarded, and
+    // two stewards consenting at once both passed it.
+    const consentableFrom: ClaimRecord["status"][] =
+      boolVar("quest.require_submission_before_consent") ? ["submitted"] : ["claimed", "submitted"];
     // Item 7: the award was unbounded and never compared to the posted amount,
     // so the quest board was not a contract. The ceiling is a village choice.
     const requested = Math.max(0, Number(amount) || 0);
@@ -20116,23 +20121,18 @@ ${inner}
       }
     }
     /*
-     * ISSUANCE WAITS FOR THE VILLAGE (R67), ASKED BEFORE THE CLAIM FLIPS.
+     * ISSUANCE WAITS FOR THE VILLAGE (R67), ASKED BEFORE ANY WORK IS DONE.
      *
      * The ledger refuses a faucet posting until the launch vote carries, and
-     * every other issuing path in this file finds that out AFTER it has
-     * already changed something. Here that would be the worst version of it:
-     * the claim flips to `consented`, the credit is refused, the route answers
-     * 500, and consenting again is a 409 because the claim is no longer
-     * submitted. A member's work would be recorded as done and paid nothing,
-     * with no way to run it again.
+     * `postTransferOn` asks the same question inside the transaction below,
+     * where a refusal now rolls the flip back with it. So this is no longer
+     * the thing standing between a member and a lost consent; it is a cheap
+     * first ask that hands back the ledger's own sentence verbatim, before a
+     * multiplier lookup and a transaction are spent finding out.
      *
-     * So this route asks first. `granted > 0` because a village that has opted
-     * into consenting at zero posts nothing at all, and refusing that would be
-     * withholding an acknowledgement that costs no tokens.
-     *
-     * The other faucet callers are not guarded this way and are not silent
-     * either: each one returns or logs the ledger's own sentence. This is the
-     * only one that loses a member's work by finding out late.
+     * `granted > 0` because a village that has opted into consenting at zero
+     * posts nothing at all, and refusing that would be withholding an
+     * acknowledgement that costs no tokens.
      */
     if (granted > 0) {
       const notStarted = await issuanceRefusal(getPool());
@@ -20145,66 +20145,91 @@ ${inner}
     const claimant = await members.byId(claim.userId);
     const stageBefore = claimant ? await stageOf(claimant) : null;
 
-    const consented = await claimsRepo.update(claim.id, (c) => {
-      c.status = "consented";
-      c.amount = granted;
-      c.resolvedAt = new Date().toISOString();
-      // WHO witnessed it (0070). The guard above already refuses self-consent
-      // in the moment; recording the witness is what lets the audit see a
-      // reciprocal pair afterwards, and what makes the rule checkable at all
-      // once the request is over.
-      c.consentedBy = actor.userId ?? null;
-    });
-    // Credit the player's balance
-    if (claimant && consented) {
-      // Through the ledger, not `+=`. The idempotency key is the claim, so a
-      // retried or double-clicked consent credits exactly once, and the balance
-      // column is RECOMPUTED from the ledger rather than incremented. S7:
-      // recognition issues from the faucet account, so issuance is visible.
-      // At granted === 0 (allow_zero_consent) there is nothing to post and
-      // nothing to recompute: the cache write is skipped entirely — the old
-      // code assigned the failed post's toBalance (0) and wiped the member.
-      let after: any = claimant;
-      // A standing badge can carry a reward multiplier (0050): ten years in
-      // the village, a 20% bonus on everything. It applies AFTER the consent
-      // cap on purpose. The cap governs what this piece of WORK is worth,
-      // which is a question about the quest; a multiplier is a standing the
-      // person carries into every quest, which is a question about them.
-      //
-      // Multiplying rather than adding keeps it honest at every scale, and
-      // the reason rides into the ledger description so a member reading
-      // their history can see where the extra came from.
-      //
-      // With no multiplier badge anywhere this is exactly 1, so a village
-      // that never makes one sees byte-identical behaviour.
-      const multiplier =
-        effectiveLifecycle("badges") === "off"
-          ? 1
-          : await rewardMultiplierFor(getPool(), consented.userId, await dormantBadgeIds());
-      const payout = multiplier === 1 ? granted : Math.floor(granted * multiplier);
-      if (payout > 0) {
-        const credit = await postTransfer(getPool(), {
+    // A standing badge can carry a reward multiplier (0050): ten years in
+    // the village, a 20% bonus on everything. It applies AFTER the consent
+    // cap on purpose. The cap governs what this piece of WORK is worth,
+    // which is a question about the quest; a multiplier is a standing the
+    // person carries into every quest, which is a question about them.
+    //
+    // Multiplying rather than adding keeps it honest at every scale, and
+    // the reason rides into the ledger description so a member reading
+    // their history can see where the extra came from.
+    //
+    // With no multiplier badge anywhere this is exactly 1, so a village
+    // that never makes one sees byte-identical behaviour.
+    const multiplier =
+      effectiveLifecycle("badges") === "off"
+        ? 1
+        : await rewardMultiplierFor(getPool(), claim.userId, await dormantBadgeIds());
+    const payout = multiplier === 1 ? granted : Math.floor(granted * multiplier);
+    // The recomputed balance, set by the post below and read after it commits.
+    // At payout 0 (allow_zero_consent) nothing posts and this stays null, so
+    // the cache write is skipped: the old code wrote the failed post's 0.
+    let credited: number | null = null;
+    // ONE COMMIT: the status check, the flip and the credit, or none of them.
+    // These were three transactions with awaits between them and both gaps were
+    // reachable; `consentOnce` in server/repos/quests.ts carries the whole
+    // account, and `give()` does the same thing with the gratitude allowance.
+    const outcome = await claimsRepo.consentOnce(
+      claim.id,
+      consentableFrom,
+      (c) => {
+        c.status = "consented";
+        c.amount = granted;
+        c.resolvedAt = new Date().toISOString();
+        // WHO witnessed it (0070). The guard above already refuses self-consent
+        // in the moment; recording the witness is what lets the audit see a
+        // reciprocal pair afterwards, and what makes the rule checkable at all
+        // once the request is over.
+        c.consentedBy = actor.userId ?? null;
+      },
+      // No member row means no account to credit, which is what the old
+      // `if (claimant && consented)` said. Same for a payout of zero.
+      !claimant || payout <= 0 ? null : async (conn) => {
+        // Through the ledger, not `+=`. The idempotency key is the claim, so a
+        // retried or double-clicked consent credits exactly once, and the balance
+        // column is RECOMPUTED from the ledger rather than incremented. S7:
+        // recognition issues from the faucet account, so issuance is visible.
+        const credit = await postTransferOn(conn, {
           from: RECOGNITION_FAUCET,
-          to: memberAccount(consented.userId),
+          to: memberAccount(claim.userId),
           amount: payout,
           source: "quest_consent",
-          sourceRef: consented.id,
+          sourceRef: claim.id,
           description:
             multiplier === 1
-              ? `Quest consented: ${consented.questTitle}`
-              : `Quest consented: ${consented.questTitle} (${granted} x${multiplier} for a standing badge)`,
-          idempotencyKey: `quest_consent:${consented.id}`,
+              ? `Quest consented: ${claim.questTitle}`
+              : `Quest consented: ${claim.questTitle} (${granted} x${multiplier} for a standing badge)`,
+          idempotencyKey: `quest_consent:${claim.id}`,
         });
-        if (!credit.ok) {
-          // The claim has already flipped; say so honestly instead of
-          // answering 200 with a wiped cache. The ledger key makes a later
-          // repair-post safe.
-          console.error(`[quests] consent credit failed for claim ${consented.id}: ${credit.error}`);
-          return res.status(500).json({
-            error: `The claim was marked consented but the credit could not be posted: ${credit.error}`,
-          });
-        }
-        after = await members.update(claimant.id, (u: any) => { u.recognitionBalance = credit.toBalance; });
+        if (!credit.ok) return { ok: false as const, error: credit.error ?? "the ledger refused the credit" };
+        credited = credit.toBalance;
+        return { ok: true as const };
+      },
+    );
+    if (!outcome.ok) {
+      if (outcome.reason === "missing") return res.status(404).json({ error: "Not found" });
+      if (outcome.reason === "status") {
+        return res.status(409).json({
+          error: outcome.status === "claimed"
+            ? `Cannot consent a claim with status "claimed". The member has to submit their work first.`
+            : `Cannot consent a claim with status "${outcome.status}". It has already been resolved, so there is nothing left to witness.`,
+          status: outcome.status,
+        });
+      }
+      // Nothing was written, so this is a refusal and not a 500: the claim is
+      // untouched, the member is still owed, and consenting again is the retry.
+      console.error(`[quests] consent credit refused for claim ${claim.id}: ${outcome.error}`);
+      return res.status(409).json({
+        error: `The credit could not be posted, so nothing was recorded and the claim is untouched: ${outcome.error}`,
+      });
+    }
+    const consented = outcome.claim;
+    // Credit the player's balance
+    if (claimant) {
+      let after: any = claimant;
+      if (credited !== null) {
+        after = await members.update(claimant.id, (u: any) => { u.recognitionBalance = credited; });
       }
       // Whatever else the village's rules say a confirmed contribution mints,
       // which today is its voice token. Hearts are NOT re-minted here: the
