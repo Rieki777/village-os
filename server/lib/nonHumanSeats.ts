@@ -49,13 +49,37 @@
  * and never as "no seat speaks for a being". Those are different facts, and a
  * quorum that treated the second as the first would quietly count weight the
  * village had voted out of its own arithmetic.
+ *
+ * ── WHERE THE STATEMENTS LIVE ──────────────────────────────────────────────
+ *
+ * Two tables answer the two questions above, and each has its own module:
+ * `server/repos/beingRoles.ts` (the `represents_being` flag, and the schema
+ * probe that guards reading it) and `server/repos/beingRepresentatives.ts`
+ * (who holds those roles). What stays in this file is the arithmetic and the
+ * rulings behind it: that silence is measured in cycles of the active clock
+ * and never in ballots, that ONLY non-human seats carry a silence, and that a
+ * being nobody holds puts nothing on the roll. None of those is a query, and
+ * all of them are what a reviewer has to read together.
+ *
+ * The one read still spelled out below is `ballot_votes`, and its waiver on
+ * the line says why: the ballot plane's statements are gathered in
+ * `server/lib/ballots.ts` and moving one of them from here would scatter that
+ * plane rather than gather it.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import type { QuorumPolicy, WeighedSeat } from "../../shared/governanceEngine";
 import type { CycleClock } from "../../shared/cycleClock";
+import { beingRoleIds, type BeingRoles } from "../repos/beingRoles";
+import { holdersOfRoles } from "../repos/beingRepresentatives";
 
-/** The column on `roles` that says this seat speaks for a being. */
-export const REPRESENTS_BEING_COLUMN = "represents_being";
+/*
+ * Re-exported, not redefined. The column name and the shape of the answer are
+ * facts about the statement that reads them, so they live beside it; importers
+ * of this file (and its own test) keep the names they already had, and there is
+ * no second copy of the string to drift from the WHERE clause.
+ */
+export { REPRESENTS_BEING_COLUMN } from "../repos/beingRoles";
+export type { BeingRoles };
 
 /** How many cycles of silence strand a seat's weight, when nothing is set. */
 export const ABSENT_CYCLES_DEFAULT = 3;
@@ -67,22 +91,8 @@ export const ABSENT_CYCLES_DEFAULT = 3;
  * not tell" answer and it is deliberately different from an empty `roleIds`,
  * which is "this village has named no beings".
  */
-export interface BeingRoles {
-  known: boolean;
-  roleIds: string[];
-}
-
 export async function beingRoles(pool: Pool): Promise<BeingRoles> {
-  const [cols] = await pool.query<RowDataPacket[]>(
-    "SELECT COLUMN_NAME FROM information_schema.COLUMNS " +
-      "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'roles' AND COLUMN_NAME = ?",
-    [REPRESENTS_BEING_COLUMN],
-  );
-  if (cols.length === 0) return { known: false, roleIds: [] };
-  const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT id FROM roles WHERE \`${REPRESENTS_BEING_COLUMN}\` = 1`,
-  );
-  return { known: true, roleIds: rows.map((r) => String(r.id)) };
+  return beingRoleIds(pool);
 }
 
 /** One seat on a roll, with everything the quorum arithmetic asks of it. */
@@ -130,11 +140,7 @@ export async function seatFacts(pool: Pool, input: SeatFactsInput): Promise<{ kn
   });
   if (!beings.known || beings.roleIds.length === 0 || roll.length === 0) return plain();
 
-  const [holders] = await pool.query<RowDataPacket[]>(
-    `SELECT DISTINCT user_id FROM role_holders WHERE role_id IN (${beings.roleIds.map(() => "?").join(",")})`,
-    beings.roleIds,
-  );
-  const representatives = new Set(holders.map((r) => String(r.user_id)));
+  const representatives = new Set(await holdersOfRoles(pool, beings.roleIds));
   if (representatives.size === 0) return plain();
 
   const cycles = Math.max(1, Math.trunc(Number(input.absentCycles) || ABSENT_CYCLES_DEFAULT));

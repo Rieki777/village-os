@@ -30,6 +30,7 @@
  * never be. Boot invariants enforce that with a loud failure, not a comment.
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
+import { balanceRowsFor } from "../repos/tokenBalances";
 import { issuanceRefusal } from "./gameStart";
 
 export type TokenType = string;
@@ -866,15 +867,17 @@ export async function balanceOf(pool: Pool | PoolConnection, accountId: string, 
   return Number(rows[0]?.balance ?? 0);
 }
 
-/** All of one account's balances: slug -> cached balance. */
+/**
+ * All of one account's balances: slug -> cached balance.
+ *
+ * The statement moved to server/repos/tokenBalances.ts; the signature stays
+ * because other files import this name. `balanceOf` directly above did NOT
+ * move: it takes `Pool | PoolConnection` because postTransfer reads it INSIDE
+ * the transaction, after the account rows are locked, and a pool-taking version
+ * would read a world that transaction cannot see.
+ */
 export async function balancesFor(pool: Pool, accountId: string): Promise<Record<string, number>> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT token_type, balance FROM token_balances WHERE account_id = ?",
-    [accountId],
-  );
-  const out: Record<string, number> = {};
-  for (const r of rows) out[String(r.token_type)] = Number(r.balance);
-  return out;
+  return balanceRowsFor(pool, accountId);
 }
 
 /** A member-perspective ledger line: amount signed from the member's side. */

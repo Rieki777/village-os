@@ -253,3 +253,50 @@ export function usersRepo(pool: Pool = getPool()): UsersRepo {
     },
   };
 }
+
+/**
+ * Every catalyst's member id, in id order.
+ *
+ * ── WHY THIS IS NOT `all()` WITH A FILTER OVER IT ──────────────────────────
+ *
+ * Because `all()` reads twenty-three columns of every member in the village to
+ * answer a question about one column of a handful of them, and because the
+ * answer is wanted at the one moment nothing else should be slow: the launch
+ * closer, running with no transaction around it, seating the catalysts as
+ * stewards once the Birthing carries.
+ *
+ * It lives on this file because `users` has one repository and this is it. A
+ * steward-shaped read of the members table sitting in
+ * `server/lib/stewardship.ts` would be a reader of this table that nobody
+ * listing this table's readers would ever find, which is the whole failure the
+ * repo rule exists to prevent.
+ *
+ * ── `founder` IS THE STORED VALUE AND `Catalyst` IS THE WORD ───────────────
+ *
+ * The `role` column holds `founder`, which is the value every existing village
+ * already has on disk; the word a player reads is Catalyst, and the mapping
+ * between the two belongs to the surfaces that render it. This is not one of
+ * those surfaces, so it asks for what the column holds. Changing the value
+ * would be a migration and a rename of history.
+ *
+ * ── EXAMPLE MEMBERS ARE NOT EXCLUDED ───────────────────────────────────────
+ *
+ * Deliberately, and it matches the statement this replaced. `is_example` marks
+ * a village's standing demonstration rows, and a village that carries an
+ * example catalyst has a row that can hold a real seat. Filtering it out here
+ * would leave a member the capability gate can see and this read cannot, which
+ * is the shape of a permission bug and not of a display one.
+ *
+ * ── THE ORDER BY IS LOAD-BEARING ───────────────────────────────────────────
+ *
+ * `id` is the primary key, so this is a TOTAL order: two reads of the same
+ * rows answer identically, the seating loop writes its holdings in a stable
+ * sequence, and its report lists them the same way twice. Without it MySQL is
+ * free to answer in any order it likes.
+ */
+export async function catalystUserIds(pool: Pool): Promise<string[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT id FROM users WHERE role = 'founder' ORDER BY id",
+  );
+  return rows.map((r) => String(r.id));
+}

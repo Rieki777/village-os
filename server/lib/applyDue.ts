@@ -72,7 +72,7 @@
  * dealt with. It runs when a tick crosses a cycle boundary, after that
  * assertion, once per cycle id. See `server/lib/moonDigest.ts`.
  */
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool } from "mysql2/promise";
 import {
   defaultTimingFor,
   executesAtPassWithNoWindow,
@@ -95,6 +95,66 @@ import { numberVar, stringVar } from "./variables";
 import { keyIsVetoMap, recordVeto as recordStewardAct, stewardNoBlocks, stewardsSeated, tierIsInStewardReach, vetoWatchMarksDue, type VetoWindowVerdict } from "./stewardship";
 import { asChangeItem, pricingOf, type ChangeInput } from "./mechanics";
 import { criticalityOfItems } from "../../shared/ballotSubjects";
+/*
+ * THE STATEMENTS THIS MODULE USED TO CARRY, NOW IN FOUR REPOS.
+ *
+ * Every rule in this file is unchanged and every statement is byte-identical to
+ * the one it replaced; what moved is WHERE the SQL lives, so that a table's
+ * readers stay enumerable. Which repo answers which table:
+ *
+ *   ballotLandings.ts            `ballots`, the landing and veto column family
+ *   proposalLandings.ts          `mechanics_proposals`, the mirrored instant and
+ *                                the columns the landing rules derive from
+ *   governanceExecutorPending.ts `governance_executor_pending`, the whole table
+ *   voteReasons.ts               `ballot_votes.reason`, one member at a time
+ *   digestBoundaries.ts          `governance_moon_digests`, the one read that
+ *                                says which cycle is owed a digest
+ *
+ * The POLICIES stayed here, beside the sentences that argue them: when a
+ * decision lands, who may stop it, how long a note may be, and the total order
+ * rows due at one instant are applied in. A repo function below decides none of
+ * those; each is one statement and the guard clauses in its WHERE.
+ */
+import {
+  claimDueRow,
+  countUnfinishedBefore,
+  dueBallotIds,
+  expiryCandidates,
+  failByStewardNo,
+  landingRowOf,
+  markApplied,
+  markExpired,
+  markLandingNotApplicable,
+  markStalled,
+  newestBallotVeto,
+  openBallotIdsPastClose,
+  openVetoWindows,
+  recordVetoOnBallot,
+  releaseClaimToPending,
+  reopenStalledWindow,
+  restampLateSettled,
+  stampBallotLanding,
+  vetoAndLandingTally,
+  vetoLockedOn,
+  vetoedBallotCount,
+  type LandingRow,
+} from "../repos/ballotLandings";
+import {
+  rawChangeSet,
+  returnProposalToProposer,
+  stampProposalLanding,
+  stampProposalVeto,
+  supersedesLink,
+} from "../repos/proposalLandings";
+import {
+  annotateNewestOpenAttempt,
+  attemptCount,
+  closeNewestOpenAttempt,
+  insertAttempt,
+  unclearedBallotIds,
+} from "../repos/governanceExecutorPending";
+import { voteReasonOf } from "../repos/voteReasons";
+import { lastDigestedCycleEnd } from "../repos/digestBoundaries";
 /*
  * The digest composer is re-exported from beside the `composeDigest` dep that
  * takes it, so a caller wiring the landing job reaches one module for the job
@@ -190,7 +250,14 @@ export interface LandingDeps extends VetoDeps {
 
 const nowOf = (deps: VetoDeps): Date => (deps.now ? deps.now() : new Date());
 
-const sqlInstant = (d: Date): string => d.toISOString().slice(0, 19).replace("T", " ");
+/*
+ * `sqlInstant` USED TO LIVE HERE and now lives in
+ * `server/repos/ballotLandings.ts`, exported, with the "never NOW()" warning
+ * that belongs to it. It moved because it is only ever a statement's parameter:
+ * every one of its callers was a query in this file, so leaving the formatter
+ * behind would have left one file deciding the instant format and three others
+ * binding it. The repo functions below take a `Date` and format it themselves.
+ */
 
 /** Is this subject's ballot backed by a mechanics proposal row? */
 const hasProposal = (subjectType: string): boolean => subjectType === "mechanics" || subjectType === "mint_rule";
@@ -297,22 +364,20 @@ export function timingOfBallot(b: BallotRow & { timing?: unknown }, kind: Govern
  * the same date.
  */
 export async function stampLanding(deps: LandingDeps, b: BallotRow, landing: Landing): Promise<void> {
-  const at = landing.landsAt ? sqlInstant(landing.landsAt) : null;
-  await deps.pool.query(
-    "UPDATE ballots SET lands_at = ?, veto_closes_at = ?, landing_status = ?, veto_locked = ? WHERE id = ?",
-    [at, at, landing.executesAtClose ? "not_applicable" : "pending", landing.vetoable ? 0 : 1, b.id],
-  );
+  await stampBallotLanding(deps.pool, {
+    ballotId: b.id,
+    landsAt: landing.landsAt,
+    landingStatus: landing.executesAtClose ? "not_applicable" : "pending",
+    vetoLocked: landing.vetoable ? 0 : 1,
+  });
   if (hasProposal(b.subjectType)) {
-    await deps.pool.query(
-      "UPDATE mechanics_proposals SET lands_at = ?, veto_closes_at = ? WHERE id = ?",
-      [at, at, b.subjectRef],
-    );
+    await stampProposalLanding(deps.pool, b.subjectRef, landing.landsAt);
   }
 }
 
 /** A row that never lands: an advisory vote, a failed vote, a withdrawn one. */
 export async function markNotApplicable(pool: Pool, ballotId: string): Promise<void> {
-  await pool.query("UPDATE ballots SET landing_status = 'not_applicable' WHERE id = ?", [ballotId]);
+  await markLandingNotApplicable(pool, ballotId);
 }
 
 // ── The steward's two doors ─────────────────────────────────────────────────
@@ -355,11 +420,7 @@ export async function stewardNoVote(
   // seated steward's no, so nobody else's words are read here at all.
   const votes: Array<{ userId: string; choice: string; reason: string | null }> = [];
   for (const v of noes) {
-    const [rows] = await deps.pool.query<RowDataPacket[]>(
-      "SELECT reason FROM ballot_votes WHERE ballot_id = ? AND user_id = ?",
-      [b.id, v.userId],
-    );
-    votes.push({ userId: v.userId, choice: "no", reason: rows[0]?.reason == null ? null : String(rows[0].reason) });
+    votes.push({ userId: v.userId, choice: "no", reason: await voteReasonOf(deps.pool, b.id, v.userId) });
   }
   const verdict = stewardNoBlocks({
     ballot: { subjectType: b.subjectType, subjectRef: b.subjectRef, itemKinds },
@@ -449,12 +510,13 @@ export async function recordVeto(
     };
   }
 
-  const [res] = await deps.pool.query<any>(
-    "UPDATE ballots SET vetoed_at = ?, vetoed_by = ?, veto_reason = ?, landing_status = 'vetoed' " +
-      "WHERE id = ? AND vetoed_at IS NULL AND landing_status = 'pending'",
-    [sqlInstant(at), input.stewardId, reason, b.id],
-  );
-  if (Number(res.affectedRows) === 0) {
+  const moved = await recordVetoOnBallot(deps.pool, {
+    ballotId: b.id,
+    at,
+    stewardId: input.stewardId,
+    reason,
+  });
+  if (moved === 0) {
     return { ok: false, error: "Somebody got to this one first, or it landed while you were reading it." };
   }
   /*
@@ -475,54 +537,24 @@ export async function recordVeto(
    * `vetoDisplayFor` below.
    */
   if (hasProposal(b.subjectType)) {
-    await deps.pool.query(
-      "UPDATE mechanics_proposals SET status = 'open' WHERE id = ? AND status IN ('passed_onsite','passed_verified','onsite_vote')",
-      [b.subjectRef],
-    );
+    await returnProposalToProposer(deps.pool, b.subjectRef);
   }
   return { ok: true, landsAt: row.landsAt.toISOString(), stewardId: input.stewardId };
 }
 
-export interface LandingRow {
-  ballotId: string;
-  subjectType: string;
-  subjectRef: string;
-  landsAt: Date | null;
-  vetoedAt: Date | null;
-  vetoedBy: string | null;
-  vetoReason: string | null;
-  landingStatus: string;
-  status: string;
-  timing: ProposalTiming;
-  /** True when no steward may stop this one, window or no window. */
-  vetoLocked: boolean;
-  /** Set when the row reached passed with its instant already behind it. */
-  lateSettledAt: Date | null;
-}
+/*
+ * THE SHAPE MOVED WITH THE STATEMENT, AND THE NAME DID NOT.
+ *
+ * `LandingRow` is declared in `server/repos/ballotLandings.ts` beside the SELECT
+ * that fills it, and re-exported here under the same name, because
+ * `server/index.ts` and `server/routes/governanceLanding.ts` both import it from
+ * this module and a rename would be a change to this file's exported surface
+ * wearing a burn-down commit message.
+ */
+export type { LandingRow } from "../repos/ballotLandings";
 
 export async function landingRow(pool: Pool, ballotId: string): Promise<LandingRow | null> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT id, subject_type, subject_ref, lands_at, vetoed_at, vetoed_by, veto_reason, landing_status, status, timing, " +
-      "veto_locked, late_settled_at FROM ballots WHERE id = ?",
-    [ballotId],
-  );
-  const r = rows[0];
-  if (!r) return null;
-  const asDate = (v: unknown): Date | null => (v === null || v === undefined ? null : v instanceof Date ? v : new Date(String(v)));
-  return {
-    ballotId: String(r.id),
-    subjectType: String(r.subject_type),
-    subjectRef: String(r.subject_ref),
-    landsAt: asDate(r.lands_at),
-    vetoedAt: asDate(r.vetoed_at),
-    vetoedBy: r.vetoed_by === null || r.vetoed_by === undefined ? null : String(r.vetoed_by),
-    vetoReason: r.veto_reason === null || r.veto_reason === undefined ? null : String(r.veto_reason),
-    landingStatus: String(r.landing_status),
-    status: String(r.status),
-    timing: timingOf(r.timing),
-    vetoLocked: Number(r.veto_locked ?? 0) === 1,
-    lateSettledAt: asDate(r.late_settled_at),
-  };
+  return landingRowOf(pool, ballotId);
 }
 
 /**
@@ -539,20 +571,7 @@ export async function vetoDisplayFor(
   subjectType: string,
   subjectRef: string,
 ): Promise<{ vetoedAt: string; vetoedBy: string | null; reason: string | null; ballotId: string } | null> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT id, vetoed_at, vetoed_by, veto_reason FROM ballots " +
-      "WHERE subject_type = ? AND subject_ref = ? ORDER BY opens_at DESC, id DESC LIMIT 1",
-    [subjectType, subjectRef],
-  );
-  const r = rows[0];
-  if (!r || !r.vetoed_at) return null;
-  const at = r.vetoed_at instanceof Date ? r.vetoed_at : new Date(String(r.vetoed_at));
-  return {
-    ballotId: String(r.id),
-    vetoedAt: at.toISOString(),
-    vetoedBy: r.vetoed_by === null || r.vetoed_by === undefined ? null : String(r.vetoed_by),
-    reason: r.veto_reason === null || r.veto_reason === undefined ? null : String(r.veto_reason),
-  };
+  return newestBallotVeto(pool, subjectType, subjectRef);
 }
 
 // ── The election, and the executor-pending row ──────────────────────────────
@@ -565,12 +584,7 @@ export async function vetoDisplayFor(
  * belongs to somebody else or to nobody.
  */
 export async function claimDue(pool: Pool, ballotId: string, at: Date): Promise<boolean> {
-  const [res] = await pool.query<any>(
-    "UPDATE ballots SET landing_status = 'applying' " +
-      "WHERE id = ? AND status = 'passed' AND landing_status = 'pending' AND lands_at <= ? AND vetoed_at IS NULL",
-    [ballotId, sqlInstant(at)],
-  );
-  return Number(res.affectedRows) === 1;
+  return (await claimDueRow(pool, ballotId, at)) === 1;
 }
 
 /**
@@ -584,55 +598,36 @@ export async function claimDue(pool: Pool, ballotId: string, at: Date): Promise<
  * rows that came before.
  */
 export async function openPending(pool: Pool, ballotId: string): Promise<void> {
-  const [prior] = await pool.query<RowDataPacket[]>(
-    "SELECT COUNT(*) AS n FROM governance_executor_pending WHERE ballot_id = ?",
-    [ballotId],
-  );
-  await pool.query(
-    /*
-     * `sqlInstant(new Date())` AND NEVER `NOW()`. Everything else in this
-     * module stamps a UTC instant from Node; `NOW()` is the DATABASE server's
-     * local time. Mixing the two put `claimed_at` seven hours below the bound
-     * on a developer box at UTC-7, so the claim query always matched and the
-     * defect below was invisible here while failing on a UTC runner.
-     */
-    "INSERT INTO governance_executor_pending (ballot_id, claimed_at, attempts) VALUES (?, ?, ?)",
-    [ballotId, sqlInstant(new Date()), Number(prior[0]?.n ?? 0) + 1],
-  );
+  /*
+   * A UTC INSTANT FROM NODE AND NEVER `NOW()`. The statement and that warning
+   * both live in `server/repos/governanceExecutorPending.ts` now; what stays
+   * here is the reading of `attempts`, which is "how many came before this
+   * one" and not a counter incremented in place. The table keys on its own id
+   * so that a second attempt cannot overwrite the failure the first one
+   * recorded, and this is where that decision is spent.
+   */
+  // The count is read BEFORE the claim instant is taken, which is the order the
+  // two statements ran in when they were one function: `claimed_at` is the
+  // moment the row is written and not the moment the job started thinking.
+  const prior = await attemptCount(pool, ballotId);
+  await insertAttempt(pool, { ballotId, claimedAt: new Date(), attempts: prior + 1 });
 }
 
 /** Close, or annotate, the newest open attempt on this ballot. */
 export async function clearPending(pool: Pool, ballotId: string, error?: string): Promise<void> {
   if (error) {
-    await pool.query(
-      "UPDATE governance_executor_pending SET last_error = ? WHERE ballot_id = ? AND cleared_at IS NULL " +
-        "ORDER BY id DESC LIMIT 1",
-      [error.slice(0, 1000), ballotId],
-    );
+    // Clipped HERE, at the call site, where the column's width is the thing
+    // being argued. A repo that clipped would own a second opinion about a
+    // limit it cannot see the schema for.
+    await annotateNewestOpenAttempt(pool, ballotId, error.slice(0, 1000));
     return;
   }
-  await pool.query(
-    "UPDATE governance_executor_pending SET cleared_at = ?, last_error = NULL WHERE ballot_id = ? " +
-      "AND cleared_at IS NULL ORDER BY id DESC LIMIT 1",
-    [sqlInstant(new Date()), ballotId],
-  );
+  await closeNewestOpenAttempt(pool, ballotId, new Date());
 }
 
 /** Decisions that started landing and never finished. A human can act on these. */
 export async function unfinishedLandings(pool: Pool, olderThanMs = 10 * 60 * 1000): Promise<string[]> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    /*
-     * `<=` AND NOT `<`. `claimed_at` is a TIMESTAMP, so it holds whole
-     * seconds. With `olderThanMs` at 0 the bound IS the claim instant, and a
-     * strict comparison asks `x < x` and answers empty: the row that was just
-     * claimed is the one row this query cannot see, which is the opposite of
-     * what it is for.
-     */
-    "SELECT DISTINCT ballot_id FROM governance_executor_pending WHERE cleared_at IS NULL AND claimed_at <= ? " +
-      "ORDER BY ballot_id",
-    [sqlInstant(new Date(Date.now() - olderThanMs))],
-  );
-  return rows.map((r) => String(r.ballot_id));
+  return unclearedBallotIds(pool, new Date(Date.now() - olderThanMs));
 }
 
 // ── The job ─────────────────────────────────────────────────────────────────
@@ -672,23 +667,14 @@ export async function applyDueGovernance(deps: LandingDeps, at: Date = new Date(
    * Phase 2's reversion table joins this sequence AHEAD of the ballots at the
    * same instant; the header says why.
    */
-  const [rows] = await deps.pool.query<RowDataPacket[]>(
-    "SELECT id FROM ballots WHERE status = 'passed' AND landing_status IN ('pending','stalled') " +
-      "AND lands_at IS NOT NULL AND lands_at <= ? AND vetoed_at IS NULL ORDER BY lands_at ASC, id ASC",
-    [sqlInstant(at)],
-  );
-  const dueIds = rows.map((r) => String(r.id));
+  const dueIds = await dueBallotIds(deps.pool, at);
 
   if (!deps.autoApplyEnabled()) {
     // The brake is ON. Nothing lands, and every row that came due while it was
     // on is marked so the reopened window can be honest about it later.
     let stalled = 0;
     for (const id of dueIds) {
-      const [res] = await deps.pool.query<any>(
-        "UPDATE ballots SET landing_status = 'stalled' WHERE id = ? AND landing_status = 'pending'",
-        [id],
-      );
-      if (Number(res.affectedRows) === 1) stalled += 1;
+      if ((await markStalled(deps.pool, id)) === 1) stalled += 1;
     }
     return {
       ran: true,
@@ -735,12 +721,7 @@ export async function applyDueGovernance(deps: LandingDeps, at: Date = new Date(
        * second time a row stalls it goes to `writeOffExpired` instead.
        */
       const reopened = await snappedWindowEnd(deps, b, at);
-      const [res] = await deps.pool.query<any>(
-        "UPDATE ballots SET lands_at = ?, veto_closes_at = ?, landing_status = 'pending', " +
-          "stall_reopens = stall_reopens + 1 WHERE id = ? AND landing_status = 'stalled' AND stall_reopens < 1",
-        [sqlInstant(reopened), sqlInstant(reopened), id],
-      );
-      if (Number(res.affectedRows) !== 1) {
+      if ((await reopenStalledWindow(deps.pool, id, reopened)) !== 1) {
         notes.push(
           `${b.title}: applying was off when this came due for the second time. Its window was already reopened once, ` +
             "so it stays held until somebody looks at it.",
@@ -748,11 +729,7 @@ export async function applyDueGovernance(deps: LandingDeps, at: Date = new Date(
         continue;
       }
       if (hasProposal(b.subjectType)) {
-        await deps.pool.query("UPDATE mechanics_proposals SET lands_at = ?, veto_closes_at = ? WHERE id = ?", [
-          sqlInstant(reopened),
-          sqlInstant(reopened),
-          b.subjectRef,
-        ]);
+        await stampProposalLanding(deps.pool, b.subjectRef, reopened);
       }
       await tellStewards(deps, b, reopened, "reopened");
       stalled += 1;
@@ -778,14 +755,14 @@ export async function applyDueGovernance(deps: LandingDeps, at: Date = new Date(
     const closer = deps.closerFor(b.subjectType);
     if (!closer?.execute) {
       // Nothing to run. That is the advisory shape and it is not a failure.
-      await deps.pool.query("UPDATE ballots SET landing_status = 'applied' WHERE id = ?", [id]);
+      await markApplied(deps.pool, id);
       await clearPending(deps.pool, id);
       landed += 1;
       continue;
     }
     try {
       const routing = await closer.execute(b, before.vetoedBy ?? "governance");
-      await deps.pool.query("UPDATE ballots SET landing_status = 'applied' WHERE id = ?", [id]);
+      await markApplied(deps.pool, id);
       await clearPending(deps.pool, id);
       landed += 1;
       if (routing.held) notes.push(`${b.title}: ${routing.held}`);
@@ -793,7 +770,7 @@ export async function applyDueGovernance(deps: LandingDeps, at: Date = new Date(
       const message = e instanceof Error ? e.message : String(e);
       // Back to pending, so the next tick tries again and a human can see the
       // pending row and its last error in the meantime.
-      await deps.pool.query("UPDATE ballots SET landing_status = 'pending' WHERE id = ? AND landing_status = 'applying'", [id]);
+      await releaseClaimToPending(deps.pool, id);
       await clearPending(deps.pool, id, message);
       failed += 1;
       notes.push(`${b.title}: landing failed and will be tried again. ${message}`);
@@ -827,27 +804,18 @@ export async function applyDueGovernance(deps: LandingDeps, at: Date = new Date(
  */
 async function writeOffExpired(deps: LandingDeps, at: Date, notes: string[]): Promise<number> {
   const cycles = Math.max(1, Math.trunc(deps.landingExpiryCycles()) || 3);
-  const [rows] = await deps.pool.query<RowDataPacket[]>(
-    "SELECT id, title, lands_at FROM ballots WHERE status = 'passed' AND landing_status IN ('pending','stalled') " +
-      "AND lands_at IS NOT NULL AND lands_at <= ? ORDER BY lands_at ASC, id ASC",
-    [sqlInstant(at)],
-  );
+  const rows = await expiryCandidates(deps.pool, at);
   let expired = 0;
   for (const r of rows) {
-    const landsAt = r.lands_at instanceof Date ? r.lands_at : new Date(String(r.lands_at));
     // The deadline is N boundaries of the ACTIVE clock after the instant it was
     // supposed to land, so a village on calendar months gets months.
-    let deadline = landsAt;
+    let deadline = r.landsAt;
     for (let i = 0; i < cycles; i += 1) deadline = deps.nextBoundaryAfter(deadline);
     if (at.getTime() < deadline.getTime()) continue;
-    const [res] = await deps.pool.query<any>(
-      "UPDATE ballots SET landing_status = 'expired' WHERE id = ? AND landing_status IN ('pending','stalled')",
-      [String(r.id)],
-    );
-    if (Number(res.affectedRows) !== 1) continue;
+    if ((await markExpired(deps.pool, r.id)) !== 1) continue;
     expired += 1;
     notes.push(
-      `${String(r.title)}: this one carried and then sat unlanded through ${cycles} cycle(s), so it is closed. ` +
+      `${r.title}: this one carried and then sat unlanded through ${cycles} cycle(s), so it is closed. ` +
         "Withdraw and rewrite it to bring it back, and it keeps the people who backed it.",
     );
   }
@@ -900,15 +868,11 @@ async function composeDigestIfBoundaryCrossed(
   const boundary = await boundaryOwedADigest(deps, at);
   if (!boundary) return "nothing_to_compose";
 
-  const [unfinished] = await deps.pool.query<RowDataPacket[]>(
-    "SELECT COUNT(*) AS n FROM ballots WHERE status = 'passed' AND landing_status IN ('pending','applying') " +
-      "AND lands_at IS NOT NULL AND lands_at < ?",
-    [sqlInstant(boundary)],
-  );
-  if (Number(unfinished[0]?.n ?? 0) > 0) {
+  const unfinished = await countUnfinishedBefore(deps.pool, boundary);
+  if (unfinished > 0) {
     notes.push(
       `No digest was composed for the cycle that ended at ${boundary.toISOString()}: ` +
-        `${Number(unfinished[0]?.n ?? 0)} decision(s) due inside it are neither applied, vetoed nor stalled.`,
+        `${unfinished} decision(s) due inside it are neither applied, vetoed nor stalled.`,
     );
     return "held";
   }
@@ -936,10 +900,7 @@ async function composeDigestIfBoundaryCrossed(
  * whatever the history is; `governance_moon_digests_ended_idx` is the index.
  */
 async function boundaryOwedADigest(deps: LandingDeps, at: Date): Promise<Date | null> {
-  const [rows] = await deps.pool.query<RowDataPacket[]>(
-    "SELECT MAX(ended_at) AS last_ended FROM governance_moon_digests",
-  );
-  const raw = rows[0]?.last_ended ?? null;
+  const raw = await lastDigestedCycleEnd(deps.pool);
   if (raw === null || raw === undefined) {
     // Never composed one. The edge test, exactly as it was.
     const boundary = deps.nextBoundaryAfter(new Date(at.getTime() - TICK_MS));
@@ -982,11 +943,7 @@ async function snappedWindowEnd(deps: LandingDeps, b: BallotRow, at: Date): Prom
 async function touchesCycleTimed(deps: LandingDeps, b: BallotRow): Promise<boolean> {
   if (b.subjectType === "mint_rule") return true;
   if (b.subjectType !== "mechanics") return false;
-  const [rows] = await deps.pool.query<RowDataPacket[]>(
-    "SELECT change_set FROM mechanics_proposals WHERE id = ?",
-    [b.subjectRef],
-  );
-  const raw = rows[0]?.change_set;
+  const raw = await rawChangeSet(deps.pool, b.subjectRef);
   if (!raw) return false;
   const set = typeof raw === "string" ? JSON.parse(raw) : raw;
   return Array.isArray(set) ? deps.waitsForCycleClose(set) : false;
@@ -1068,11 +1025,7 @@ export async function tellStewards(deps: LandingDeps, b: BallotRow, landsAt: Dat
    * answer, and the defect being fixed here IS a second copy that drifted: the
    * notice promised a door the route had already been refusing.
    */
-  const [lockRows] = await deps.pool.query<RowDataPacket[]>(
-    "SELECT veto_locked FROM ballots WHERE id = ?",
-    [b.id],
-  );
-  const locked = Number(lockRows[0]?.veto_locked ?? 0) === 1;
+  const locked = await vetoLockedOn(deps.pool, b.id);
   const titles = locked ? MOMENT_TITLE_LOCKED : MOMENT_TITLE;
   const body = locked
     ? `It takes effect at ${landsAt.toISOString()}. This decision is about what a steward may stop, so no steward may stop it, and it lands when the window shuts.`
@@ -1119,21 +1072,16 @@ export interface WatchReport {
  * steward they have half a window left when they have minutes.
  */
 export async function runVetoWatch(deps: LandingDeps, at: Date = new Date()): Promise<WatchReport> {
-  const [rows] = await deps.pool.query<RowDataPacket[]>(
-    "SELECT id, closes_at, lands_at, late_settled_at FROM ballots " +
-      "WHERE status = 'passed' AND landing_status = 'pending' AND lands_at IS NOT NULL AND lands_at > ? AND vetoed_at IS NULL",
-    [sqlInstant(at)],
-  );
+  const rows = await openVetoWindows(deps.pool, at);
   let halfway = 0;
   let twoHours = 0;
   for (const r of rows) {
-    const b = await ballotById(deps.pool, String(r.id));
+    const b = await ballotById(deps.pool, r.id);
     if (!b) continue;
-    const landsAt = r.lands_at instanceof Date ? r.lands_at : new Date(String(r.lands_at));
+    const landsAt = r.landsAt;
     // The window was carried FROM the late-settle instant when there was one,
     // because that is the moment the steward was actually told.
-    const late = r.late_settled_at ? (r.late_settled_at instanceof Date ? r.late_settled_at : new Date(String(r.late_settled_at))) : null;
-    const carriedAt = late ?? new Date(b.closesAt);
+    const carriedAt = r.lateSettledAt ?? new Date(b.closesAt);
     const marks = vetoWatchMarksDue({ carriedAt, landsAt }, at);
     const latest = marks[marks.length - 1];
     if (latest === "two-hours-left") {
@@ -1186,16 +1134,22 @@ export async function routeOutcome(
 
   if (stewardVeto) {
     const at = nowOf(deps);
-    await deps.pool.query(
-      "UPDATE ballots SET status = 'failed', outcome_note = ?, vetoed_at = ?, vetoed_by = ?, veto_reason = ?, landing_status = 'vetoed' " +
-        "WHERE id = ? AND status = 'passed'",
-      [note.slice(0, 4000), sqlInstant(at), stewardVeto.stewardIds[0], stewardVeto.reason.slice(0, 4000), b.id],
-    );
+    // Both clips stay HERE, at the call site, where the column width is the
+    // thing being argued. The two statements take the strings as given.
+    await failByStewardNo(deps.pool, {
+      ballotId: b.id,
+      outcomeNote: note.slice(0, 4000),
+      at,
+      stewardId: stewardVeto.stewardIds[0],
+      reason: stewardVeto.reason.slice(0, 4000),
+    });
     if (hasProposal(b.subjectType)) {
-      await deps.pool.query(
-        "UPDATE mechanics_proposals SET vetoed_at = ?, vetoed_by = ?, veto_reason = ? WHERE id = ?",
-        [sqlInstant(at), stewardVeto.stewardIds[0], stewardVeto.reason.slice(0, 4000), b.subjectRef],
-      );
+      await stampProposalVeto(deps.pool, {
+        proposalId: b.subjectRef,
+        at,
+        stewardId: stewardVeto.stewardIds[0],
+        reason: stewardVeto.reason.slice(0, 4000),
+      });
     }
     /*
      * STEWARD-VETO LANE: the block is written as a VETO ACT as well as a set
@@ -1264,16 +1218,9 @@ export async function routeOutcome(
       `The vote's window ended at ${new Date(b.closesAt).toISOString()} and it was not read until ` +
       `${at.toISOString()}, so the instant it should have landed at was already past. ` +
       "The window is counted from now instead, so nobody loses the notice they were owed.";
-    await deps.pool.query(
-      "UPDATE ballots SET lands_at = ?, veto_closes_at = ?, late_settled_at = ?, late_settled_reason = ? WHERE id = ?",
-      [sqlInstant(restamped), sqlInstant(restamped), sqlInstant(at), why.slice(0, 1000), b.id],
-    );
+    await restampLateSettled(deps.pool, { ballotId: b.id, restamped, at, reason: why.slice(0, 1000) });
     if (hasProposal(b.subjectType)) {
-      await deps.pool.query("UPDATE mechanics_proposals SET lands_at = ?, veto_closes_at = ? WHERE id = ?", [
-        sqlInstant(restamped),
-        sqlInstant(restamped),
-        b.subjectRef,
-      ]);
+      await stampProposalLanding(deps.pool, b.subjectRef, restamped);
     }
     await tellStewards(deps, b, restamped, "late_settled");
     routing.held = `${why} It lands at ${restamped.toISOString()}.`;
@@ -1284,7 +1231,7 @@ export async function routeOutcome(
     await openPending(deps.pool, b.id);
     try {
       const done = await closer.execute(b, actorId);
-      await deps.pool.query("UPDATE ballots SET landing_status = 'applied' WHERE id = ?", [b.id]);
+      await markApplied(deps.pool, b.id);
       await clearPending(deps.pool, b.id);
       return { ...done, proposerTold: done.proposerTold ?? routing.proposerTold, outcome: effective };
     } catch (e) {
@@ -1345,15 +1292,11 @@ export async function autoSettleExpired(
   ) => Promise<{ ok: boolean; outcome?: "passed" | "failed" | "no_quorum"; ballot?: BallotRow; error?: string }>,
   at: Date = new Date(),
 ): Promise<AutoSettleReport> {
-  const [rows] = await deps.pool.query<RowDataPacket[]>(
-    "SELECT id FROM ballots WHERE status = 'open' AND closes_at <= ? ORDER BY closes_at, id",
-    [sqlInstant(at)],
-  );
+  const ids = await openBallotIdsPastClose(deps.pool, at);
   const notes: string[] = [];
   let closed = 0;
   let failed = 0;
-  for (const r of rows) {
-    const id = String(r.id);
+  for (const id of ids) {
     const b = await ballotById(deps.pool, id);
     if (!b) continue;
     let itemKinds: string[] | undefined;
@@ -1376,17 +1319,14 @@ export async function autoSettleExpired(
       notes.push(`${b.title}: closing threw. ${e instanceof Error ? e.message : String(e)}`);
     }
   }
-  if (rows.length === 0) notes.push("No ballot's window had ended.");
-  return { ran: true, expired: rows.length, closed, failed, notes };
+  if (ids.length === 0) notes.push("No ballot's window had ended.");
+  return { ran: true, expired: ids.length, closed, failed, notes };
 }
 
 /** The change-set item kinds behind a mechanics ballot, for the bundle rule. */
 export async function itemKindsOf(deps: LandingDeps, b: BallotRow): Promise<string[] | undefined> {
   if (!hasProposal(b.subjectType)) return undefined;
-  const [rows] = await deps.pool.query<RowDataPacket[]>("SELECT change_set FROM mechanics_proposals WHERE id = ?", [
-    b.subjectRef,
-  ]);
-  const raw = rows[0]?.change_set;
+  const raw = await rawChangeSet(deps.pool, b.subjectRef);
   if (!raw) return undefined;
   const set = typeof raw === "string" ? JSON.parse(raw) : raw;
   if (!Array.isArray(set)) return undefined;
@@ -1407,10 +1347,7 @@ export async function itemKindsOf(deps: LandingDeps, b: BallotRow): Promise<stri
 export async function snapsToBoundary(deps: LandingDeps, b: BallotRow): Promise<boolean> {
   if (b.subjectType === "mint_rule") return true;
   if (!hasProposal(b.subjectType)) return false;
-  const [rows] = await deps.pool.query<RowDataPacket[]>("SELECT change_set FROM mechanics_proposals WHERE id = ?", [
-    b.subjectRef,
-  ]);
-  const raw = rows[0]?.change_set;
+  const raw = await rawChangeSet(deps.pool, b.subjectRef);
   if (!raw) return false;
   const set = typeof raw === "string" ? JSON.parse(raw) : raw;
   if (!Array.isArray(set)) return false;
@@ -1445,10 +1382,7 @@ export async function changeSetOf(
   b: { subjectType: string; subjectRef: string },
 ): Promise<Array<{ key?: unknown; kind?: unknown }>> {
   if (!hasProposal(b.subjectType)) return [];
-  const [rows] = await pool.query<RowDataPacket[]>("SELECT change_set FROM mechanics_proposals WHERE id = ?", [
-    b.subjectRef,
-  ]);
-  const raw = rows[0]?.change_set;
+  const raw = await rawChangeSet(pool, b.subjectRef);
   if (!raw) return [];
   const set = typeof raw === "string" ? JSON.parse(raw) : raw;
   return Array.isArray(set) ? set : [];
@@ -1490,11 +1424,7 @@ export async function vetoWindowOn(pool: Pool, ballotId: string, now: Date = new
  */
 export async function isOverride(pool: Pool, subjectType: string, subjectRef: string): Promise<{ of: string } | null> {
   if (!hasProposal(subjectType)) return null;
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT p.supersedes_proposal_id AS sup, p.supersedes_relation AS rel FROM mechanics_proposals p WHERE p.id = ?",
-    [subjectRef],
-  );
-  const r = rows[0];
+  const r = await supersedesLink(pool, subjectRef);
   /*
    * THE RELATION IS EXPLICIT, and that is the fix.
    *
@@ -1530,23 +1460,13 @@ export async function isOverride(pool: Pool, subjectType: string, subjectRef: st
  * proposal with one is running whatever its history holds.
  */
 export async function stoppedAndNeverLanded(pool: Pool, proposalId: string): Promise<boolean> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT SUM(vetoed_at IS NOT NULL) AS vetoed, SUM(landing_status = 'applied') AS applied " +
-      "FROM ballots WHERE subject_type = 'mechanics' AND subject_ref = ?",
-    [proposalId],
-  );
-  const vetoed = Number(rows[0]?.vetoed ?? 0);
-  const applied = Number(rows[0]?.applied ?? 0);
+  const { vetoed, applied } = await vetoAndLandingTally(pool, proposalId);
   return vetoed > 0 && applied === 0;
 }
 
 /** Was any ballot ever held on this proposal stopped by a steward? */
 export async function wasVetoed(pool: Pool, proposalId: string): Promise<boolean> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT COUNT(*) AS n FROM ballots WHERE subject_type = 'mechanics' AND subject_ref = ? AND vetoed_at IS NOT NULL",
-    [proposalId],
-  );
-  return Number(rows[0]?.n ?? 0) > 0;
+  return (await vetoedBallotCount(pool, proposalId)) > 0;
 }
 
 /**

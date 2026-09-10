@@ -98,7 +98,7 @@ export const BASELINE_PATH = path.join(ROOT, "scripts", "module-sql-pending.json
  * that shows up in a diff next to this comment. Raising it is not the answer
  * to a red run. Moving the query into `server/repos` is.
  */
-export const BURNDOWN_CEILING = 762;
+export const BURNDOWN_CEILING = 741;
 
 /** The dirs the register covers. Mirrors the rule's own scope. */
 export const SCAN_DIRS = ["server", "shared", "client"];
