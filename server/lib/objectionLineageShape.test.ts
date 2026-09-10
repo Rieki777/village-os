@@ -250,8 +250,12 @@ describe("no surface turns an objection into a score against a member", () => {
 
 describe("integrated still means the objection STANDS", () => {
   it("keeps integrated inside the blocking set of standingObjectionCount", () => {
-    const src = readFileSync(path.join(ROOT, "server", "lib", "ballots.ts"), "utf8");
-    const fn = src.slice(src.indexOf("export async function standingObjectionCount"));
+    // The statement moved to the repo in the raw-SQL burn-down; the pin follows
+    // it, because a pin that reads the wrong file passes on an empty slice.
+    const src = readFileSync(path.join(ROOT, "server", "repos", "ballotObjections.ts"), "utf8");
+    const marker = "export async function standingObjectionCount";
+    expect(src, "the pin must be reading the file that holds the statement").toContain(marker);
+    const fn = src.slice(src.indexOf(marker));
     const body = fn.slice(0, fn.indexOf("\n}"));
     expect(body, "standingObjectionCount must still count integrated as blocking").toContain(
       "'open','integrated'",
