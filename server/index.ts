@@ -20447,6 +20447,12 @@ ${inner}
       clientNonce: typeof clientNonce === "string" ? clientNonce : undefined,
     }, stageMultiplierById);
     if (!outcome.ok) return res.status(400).json({ error: outcome.error });
+    // `users.recognition_balance` is a cache of the ledger that the profile
+    // card, the players list and the reconciliation panel all read. Every other
+    // recognition credit refreshes it — the acknowledgement door does it in
+    // sendGratitude — and this door dropped the balance `give` hands back, so a
+    // Heart landed in the ledger and the recipient's card kept its old number.
+    await members.update(recipient.id, (u: any) => { u.recognitionBalance = outcome.balance; });
 
     await notify({
       userId: recipient.id,
@@ -20851,10 +20857,11 @@ ${inner}
     const allMembers = await members.all();
     const nameOf = (id: string) => firstName(allMembers.find((u: any) => u.id === id)?.name ?? "Member");
     const eligible = await eligibleSenderIds();
+    const reversed = await gratitudeRepo.reversedIds();
 
     const due = (unreadable ? [] : dueCycles(cycles, entries, new Date())).map((cycle) => {
       const persisted = dists.filter((d) => d.cycleId === cycle.id);
-      const totals = settleCycle(entries, cycle.id, eligible);
+      const totals = settleCycle(entries, cycle.id, eligible, reversed);
       const totalEligible = totals.reduce((n, t) => n + t.receivedEligible, 0);
       const shares = persisted.length > 0
         ? persisted.map((d) => ({
@@ -20957,8 +20964,12 @@ ${inner}
     const closed: CycleRecord[] = [];
     let totalCredited = 0;
     const eligible = await eligibleSenderIds();
+    // Read once for the whole loop, and read with the same repo call the
+    // preview above uses, so the numbers an admin read before pressing are the
+    // numbers this settles. A gift that was undone is not part of the moon.
+    const reversed = await gratitudeRepo.reversedIds();
     for (const cycle of due) {
-      const totals = settleCycle(entries, cycle.id, eligible);
+      const totals = settleCycle(entries, cycle.id, eligible, reversed);
       // Split by ELIGIBLE recognition, not the raw total: value follows the
       // same Sybil filter the breadth metric answers to. `t.received` stays
       // the honest figure for reporting.
