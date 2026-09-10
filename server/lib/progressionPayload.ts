@@ -25,7 +25,7 @@ import {
   type Capability,
   type CapabilityCtx,
 } from "../../shared/capabilities";
-import { GAME_CONFIG, getStage, type GameStage, type StageRule } from "../../shared/gameConfig";
+import { GAME_CONFIG, withCommitmentName, getStage, type GameStage, type StageRule } from "../../shared/gameConfig";
 import { MODULES } from "../../shared/modules";
 import { effectiveLifecycle } from "./modules";
 import { numberVar } from "./variables";
@@ -196,11 +196,18 @@ export function servedStage(stageId: string) {
  * PLAYED rather than as configured, and one function means the next field
  * cannot reach one payload and miss the other.
  */
-export function servedLadder() {
+/**
+ * @param commitmentName What this village calls the thing a member signs.
+ *   The member rung's description carries `{commitment}` because GAME_CONFIG
+ *   is static and the village's word is not. Passing it here rather than
+ *   reading it inside keeps this function pure and testable, which is what
+ *   let the brace assertion below be written at all.
+ */
+export function servedLadder(commitmentName: string) {
   return GAME_CONFIG.stages.map((s) => ({
     id: s.id,
     name: s.name,
-    description: s.description,
+    description: withCommitmentName(s.description, commitmentName),
     rule: servedRule(s),
     // The multiplier ships on the LADDER too, through the same expression
     // `servedStage` uses, so the sheet can say what the next rung is worth.

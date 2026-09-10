@@ -107,6 +107,27 @@ export interface NextActionRule {
   href: string;
 }
 
+/**
+ * Substitute a village's word for the thing its members sign.
+ *
+ * The two strings carrying `{commitment}` live in GAME_CONFIG, which is a
+ * static literal evaluated at module load, so they CANNOT read a database
+ * value in place. The village's word arrives from `brand.project.commitmentName`
+ * at request time, which means the substitution happens where the payload is
+ * built and nowhere else.
+ *
+ * The convention is the repository's own: DEFAULT_WORK_WITH_US's
+ * `assistantGreeting` already carries `{name}` for exactly this reason.
+ *
+ * A MISSED SUBSTITUTION IS VISIBLE, not silent: a member reads the literal
+ * `{commitment}`. `server/lib/progressionPayload.test.ts` asserts no served
+ * payload carries a brace, so a third string added later without a
+ * substitution point fails rather than shipping.
+ */
+export function withCommitmentName<T extends string>(text: T, commitmentName: string): string {
+  return text.replace(/\{commitment\}/g, commitmentName);
+}
+
 export interface GameConfig {
   project: {
     name: string;
@@ -156,6 +177,20 @@ export interface GameConfig {
      */
     roleName: string;
     seatName: string;
+    /**
+     * WHAT THIS VILLAGE CALLS THE THING A MEMBER SIGNS (Rye, 2026-09-08).
+     *
+     * The platform's word is "membership agreement". Amora's is "Love
+     * Letter", and that word was baked into platform code and into admin
+     * help text a different village would read, which is a white-label
+     * defect rather than a naming preference.
+     *
+     * A LABEL AND NOTHING ELSE, the same standing as roleName and seatName.
+     * The form type id `membership-508` is FROZEN and is not this: it is
+     * stored on every existing submission row, so renaming it orphans data.
+     * This renames what a member READS, never what the record says.
+     */
+    commitmentName: string;
     location: string;
     /** ISO 3166 alpha-2 country the project lives in (0083, P8). Blank means
      *  unsaid, and money display falls back to the universal CHF default. */
@@ -323,6 +358,10 @@ export const GAME_CONFIG: GameConfig = {
     // plural from one heuristic, so a village types the word once.
     roleName: "Role",
     seatName: "Seat",
+    // The platform's own word for the thing a member signs, belonging to no
+    // village, so it is NEUTRAL to scripts/check-identity-keys.mjs rather
+    // than pending. Amora says "Love Letter" and sets that in Admin.
+    commitmentName: "membership agreement",
     // Empty on purpose: there is no neutral location. A village sets its own
     // in Admin, Make This Yours. Graduated out of the identity guard's pending
     // list on 2026-09-03, AFTER confirming the live village stores its own
@@ -494,7 +533,7 @@ export const GAME_CONFIG: GameConfig = {
     { id: "guest", name: "Guest", description: "Created a profile and stepped inside.", rule: { type: "account" }, gratitudeMultiplier: 1 },
     { id: "immersant", name: "Immersant", description: "Spent immersive time with the community.", rule: { type: "granted" }, gratitudeMultiplier: 1 },
     { id: "participant", name: "Participant", description: "Completed community training.", rule: { type: "training-complete" }, gratitudeMultiplier: 1 },
-    { id: "member", name: "Member", description: "Signed the Love Letter and joined the community.", rule: { type: "membership" }, gratitudeMultiplier: 2 },
+    { id: "member", name: "Member", description: "Signed the {commitment} and joined the community.", rule: { type: "membership" }, gratitudeMultiplier: 2 },
     { id: "contributor", name: "Contributor", description: "Completed a first quest for the village.", rule: { type: "quests", min: 1 }, gratitudeMultiplier: 2 },
     { id: "quest-seeker", name: "Quest Seeker", description: "Contributing steadily through quests.", rule: { type: "quests", min: 3 }, gratitudeMultiplier: 2 },
     { id: "initiate", name: "Initiate", description: "Walking the Co-Creator Right of Passage.", rule: { type: "granted" }, gratitudeMultiplier: 2 },
@@ -512,7 +551,7 @@ export const GAME_CONFIG: GameConfig = {
 
   nextActions: [
     { id: "training", when: "no-training", label: "Continue your community training", href: "/training" },
-    { id: "membership", when: "no-membership", label: "Sign the Love Letter", href: "/love-letter" },
+    { id: "membership", when: "no-membership", label: "Sign the {commitment}", href: "/love-letter" },
     { id: "first-quest", when: "no-quest-claimed", label: "Claim your first quest", href: "/quests" },
     { id: "finish-quest", when: "quest-in-progress", label: "Finish your active quest", href: "/quests" },
     { id: "send-gratitude", when: "gratitude-unspent", label: "Send gratitude to someone this month", href: "/gratitude" },

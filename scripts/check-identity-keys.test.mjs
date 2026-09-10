@@ -33,6 +33,8 @@ import {
   auditIdentity,
   isViolation,
   parseConfigValues,
+  listsLookBroken,
+  neutralKeysNotChecked,
 } from "./check-identity-keys.mjs";
 
 const GUARD = path.join(path.dirname(fileURLToPath(import.meta.url)), "check-identity-keys.mjs");
@@ -86,6 +88,76 @@ check("keeps an empty string, which is a value and not an absence", () => {
 
 check("is not fooled by a double slash inside a string", () => {
   assert.strictEqual(parseConfigValues(SAMPLE)["project.siteUrl"], "https://example.test/a//b");
+});
+
+check("a NEUTRAL entry the guard never walks is caught", () => {
+  // The rule itself: an entry with a watcher is fine, one without is not.
+  assert.deepStrictEqual(neutralKeysNotChecked({ "a.b": ["x"] }, ["a.b"]), []);
+  assert.deepStrictEqual(neutralKeysNotChecked({ "a.b": ["x"] }, []), ["a.b"]);
+});
+
+check("EMPTY LISTS ARE A BROKEN READER, NEVER A CLEAN SWEEP", () => {
+  /*
+   * Every rule in this file is a filter, and a filter over an empty set returns
+   * an empty set. So the failure being guarded is not "a key slipped through",
+   * it is "nothing was looked at and the run said the same green".
+   *
+   * The lists are derived rather than hand-kept, which is what keeps them from
+   * going stale, and is exactly why this floor is easy to leave out: a derived
+   * list feels like it cannot be wrong. It can still be EMPTY.
+   */
+  assert.strictEqual(listsLookBroken({ "a.b": ["x"] }, ["a.b"]), false);
+  assert.strictEqual(listsLookBroken({}, ["a.b"]), true, "no NEUTRAL entries at all");
+  assert.strictEqual(listsLookBroken({ "a.b": ["x"] }, []), true, "nothing in IDENTITY_KEYS");
+  assert.strictEqual(listsLookBroken({}, []), true, "both gone");
+  // And the sweep it sits under really would have reported nothing.
+  assert.deepStrictEqual(neutralKeysNotChecked({}, []), []);
+});
+
+check("prose naming GAME_CONFIG above the declaration does not move the anchor", () => {
+  /*
+   * THIS HAPPENED, on 2026-09-09. The reader anchored on the first textual
+   * occurrence of "GAME_CONFIG" anywhere in the file. A comment was added above
+   * the declaration to explain a placeholder, the anchor landed in the prose,
+   * and the guard reported six keys missing from a file that still held every
+   * one. It failed loudly, which is the design working, but a guard any
+   * sentence can move is a guard whose next break is somebody documenting it.
+   */
+  // THE INTERVENING BRACE IS THE WHOLE POINT. My first version of this fixture
+  // put the prose immediately above the declaration and PASSED against the
+  // broken reader, because the next `{` after the prose was still the right
+  // one. In the real file an `export interface GameConfig {` sits between them,
+  // and that brace is what the old anchor walked into. A fixture without it
+  // tests nothing and reads as protection.
+  const withProse = `
+/**
+ * A comment that mentions GAME_CONFIG before the declaration, the way a real
+ * explanation of a placeholder inside it has to.
+ */
+export interface GameConfig {
+  project: { name: string };
+}
+
+export const GAME_CONFIG = {
+  project: { name: "Unnamed Village" },
+};
+`;
+  const v = parseConfigValues(withProse);
+  assert.strictEqual(v["project.name"], "Unnamed Village");
+});
+
+check("a placeholder brace inside a string does not break the object walk", () => {
+  // The other half of the same change: `{commitment}` sits inside a string
+  // value in the real config, and a brace counter that did not skip strings
+  // would lose the rest of the object from there on.
+  const withBrace = `
+export const GAME_CONFIG = {
+  project: { name: "Signed the {commitment}", tagline: "after the brace" },
+};
+`;
+  const v = parseConfigValues(withBrace);
+  assert.strictEqual(v["project.name"], "Signed the {commitment}");
+  assert.strictEqual(v["project.tagline"], "after the brace");
 });
 
 check("is not fooled by braces inside comments", () => {
@@ -265,6 +337,12 @@ function configSource({ project = {}, dropFavicon = false } = {}) {
     // NEUTRAL value and a clean fixture carries it. A test that wants this key
     // to violate passes its own string.
     catalystName: "Catalyst",
+    // Added 2026-09-09 with the key itself, same standing as catalystName
+    // above: "membership agreement" is the platform's own word for the
+    // thing a member signs and belongs to no village, so it is NEUTRAL and
+    // a clean fixture carries it. A test that wants this key to violate
+    // passes its own string.
+    commitmentName: "membership agreement",
     // Was "Somewhere the founder has not moved yet". project.location graduated
     // on 2026-09-03 and its platform default is EMPTY, because there is no
     // neutral location, so a clean fixture is empty here for the same reason

@@ -12,7 +12,7 @@ import { fileURLToPath } from "url";
 import crypto from "crypto";
 import multer from "multer";
 import bcrypt from "bcrypt";
-import { claimPaths, GAME_CONFIG, getStage, stageIndex } from "../shared/gameConfig";
+import { claimPaths, GAME_CONFIG, getStage, stageIndex, withCommitmentName } from "../shared/gameConfig";
 import { recognitionNameCheck } from "../shared/launchRequirements";
 // `daysRemainingInCycle` is gone with the clock seam: every consumer reads
 // the active clock now, and it had no caller left here. `sceneStopsFor` and
@@ -977,7 +977,7 @@ const DEFAULT_INVESTOR_SUMMARY = SITE_CONTENT.investorSummary;
 // values until they change them. This is what makes a new project live-editable
 // from the browser without a code deploy. Merged over GAME_CONFIG on read.
 const DEFAULT_BRAND = {
-  project: { name: "", tagline: "", memberName: "", catalystName: "", roleName: "", seatName: "", location: "", country: "", fiatCurrency: "", siteUrl: "", eventsUrl: "", contactEmail: "", footerBlurb: "" },
+  project: { name: "", tagline: "", memberName: "", catalystName: "", roleName: "", seatName: "", commitmentName: "", location: "", country: "", fiatCurrency: "", siteUrl: "", eventsUrl: "", contactEmail: "", footerBlurb: "" },
   currency: { name: "", nameLower: "" },
   images: { hero: "", investorHero: "", residentHero: "", stewardHero: "", prosperityHero: "", masterPlanHero: "", logo: "", heartLogo: "", favicon: "" },
   // Setup Wizard progress — projects tick these off as they make the site theirs.
@@ -2712,6 +2712,9 @@ function mergedConfig() {
       memberName: pick(brand.project.memberName, p.memberName),
       catalystName: pick((brand.project as any).catalystName, p.catalystName), // three LABELS, gating nothing
       roleName: pick((brand.project as any).roleName, p.roleName), seatName: pick((brand.project as any).seatName, p.seatName), // why role and seat stay two words: shared/gameConfig.ts
+      // What a member signs. A label like the three above; the form type id
+      // `membership-508` is frozen and is not affected by it.
+      commitmentName: pick((brand.project as any).commitmentName, p.commitmentName),
       location: pick(brand.project.location, p.location),
       // 0083 (P8): where the project lives and what it counts in. Display
       // only, like every overlay field; blank inherits the platform default.
@@ -4561,6 +4564,19 @@ async function nextActionFor(user: any): Promise<{ id: string; label: string; hr
     }
   }
   return GAME_CONFIG.nextActions[GAME_CONFIG.nextActions.length - 1];
+}
+
+/**
+ * The next action a member is shown, with this village's own words in it.
+ *
+ * `nextActionFor` returns a rule straight out of the static GAME_CONFIG, and
+ * one of those labels carries `{commitment}`. Every caller goes through here
+ * so the substitution cannot be forgotten at one call site and done at
+ * another, which is how the two ladder serializers already diverged once.
+ */
+async function servedNextAction(user: any): Promise<{ id: string; label: string; href: string }> {
+  const rule = await nextActionFor(user);
+  return { ...rule, label: withCommitmentName(rule.label, mergedConfig().project.commitmentName) };
 }
 
 /**
@@ -19360,7 +19376,7 @@ ${inner}
       currency: { ...m.currency, value: { slug: valueSlug, name: valueDef?.name ?? valueSlug } },
       images: m.images,
       paths: GAME_CONFIG.paths,
-      stages: servedLadder(),
+      stages: servedLadder(mergedConfig().project.commitmentName),
       season: seasonState(),
     });
   });
@@ -20326,7 +20342,7 @@ ${inner}
     res.json({
       stage: servedStage(stageId),
       stageIndex: stageIndex(stageId),
-      stages: servedLadder(),
+      stages: servedLadder(mergedConfig().project.commitmentName),
       gratitude: { balance: user.recognitionBalance ?? 0, decimals: tokenDef(PLATFORM_TOKEN)?.decimals ?? 0, budget: await gratitudeBudget(user) }, // `balance` is the cached MINOR-unit column; `decimals` is what turns it into the number on the card
       quests: claims.map((c: any) =>
         questCredits.has(c.id) ? { ...c, credited: questCredits.get(c.id) } : c,
@@ -20340,7 +20356,7 @@ ${inner}
       // "granted", which is a decision the team makes and not a thing anyone
       // can be shown progress toward.
       consentedQuests,
-      nextAction: await nextActionFor(user),
+      nextAction: await servedNextAction(user),
       lastAdvance,
       // Revision 2: progression is no longer decoration. The client renders
       // what you can DO, so the gates are legible instead of mysterious.
