@@ -111,6 +111,7 @@ import { recordEvent } from "./events";
 import { releaseSeatingsForUser } from "./orgChart";
 import { forgetPortraitsForMember } from "../repos/characterPortraits";
 import { forgetCharactersForMember } from "../repos/playerCharacters";
+import { forgetAgentForMember } from "../repos/memberAgent";
 import {
   beginErasure,
   erasureRecord,
@@ -394,6 +395,32 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "module-records",
       run: async () => {
         await forgetMemberInProposals(pool, target.id);
+      },
+    },
+    {
+      /*
+       * THE MEMBER'S OWN AGENT, and the reason it is listed here at all.
+       *
+       * This sweep was rewritten into a named step list, and the list named
+       * exactly the tables the findings that prompted it had named. Four were
+       * absent: `agent_inboxes`, `agent_deliveries`, `member_llm_keys` and
+       * `member_drafts`. Enumerating a sweep makes it LOOK complete, which is
+       * why the omission survived a rewrite whose whole purpose was
+       * completeness.
+       *
+       * The inbox is the sharp one. `agent-week-ahead` runs every 24 hours and
+       * selects `FROM agent_inboxes WHERE enabled = 1` with no join to `users`,
+       * so a tombstoned member's endpoint kept receiving the village's payloads
+       * for as long as the row stood. `member_llm_keys` is the other: a
+       * third-party API key, encrypted at rest, belonging to somebody who asked
+       * to be forgotten.
+       *
+       * Order and idempotency live in the repo, because deliveries key on the
+       * inbox rather than on the member and carry no foreign key.
+       */
+      name: "member-agent",
+      run: async () => {
+        await forgetAgentForMember(pool, target.id);
       },
     },
     {

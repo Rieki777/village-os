@@ -42,6 +42,7 @@ import os from "node:os";
 import path from "node:path";
 import mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { agentRowsRemaining } from "../repos/memberAgent";
 import { anonymizeMember, resumeErasure, type ErasureDeps } from "./erasure";
 import { clearMemberDrivers } from "./memberDrivers";
 import { usersRepo } from "../repos/users";
@@ -334,5 +335,61 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
     // Still outstanding, because it is. A resume that reported success here
     // would clear the one row that says somebody is owed something.
     expect((await unfinishedErasures(pool)).map((r) => r.userId)).toContain(id);
+  });
+
+  it("takes the member's own agent with them: inbox, queue, key and drafts", async () => {
+    /*
+     * THE GAP A REVIEWER FOUND BY ASKING WHAT A MEMBER OWNS, rather than by
+     * reading the step list. The sweep was rewritten into named steps and the
+     * list named exactly the tables the prompting findings had named; these four
+     * were in neither. Enumerating a sweep makes it LOOK complete, which is how
+     * the omission survived a rewrite whose purpose was completeness.
+     *
+     * The inbox is the sharp one: `agent-week-ahead` selects
+     * `FROM agent_inboxes WHERE enabled = 1` with no join to `users`, so this
+     * row standing meant a departed member's endpoint kept receiving the
+     * village's payloads. `member_llm_keys` holds their third-party API key.
+     *
+     * ASSERTS COMPLETENESS, NOT THAT THE STEP RAN. "It did not throw" is what
+     * the sweep already reported before these tables were in it.
+     */
+    const id = "er-agent-1";
+    const target = await seedMember(id);
+
+    // Every NOT NULL column is supplied and every enum value is a real member
+    // of its set. Strict MySQL REFUSES a row that is missing either, so a
+    // fixture that guesses does not insert a partial row, it inserts nothing —
+    // and the assertion below would then pass over an empty table.
+    await pool.query(
+      "INSERT INTO `agent_inboxes` (`id`, `user_id`, `url`, `enabled`) VALUES (?,?,?,1)",
+      [`inbox-${id}`, id, "https://example.test/hook"],
+    );
+    await pool.query(
+      "INSERT INTO `agent_deliveries` (`id`, `inbox_id`, `kind`, `payload`) VALUES (?,?,?,?)",
+      [`del-${id}`, `inbox-${id}`, "week-ahead", JSON.stringify({ note: "queued" })],
+    );
+    await pool.query(
+      "INSERT INTO `member_llm_keys` (`user_id`, `provider`, `ciphertext`, `iv`, `tag`, `last4`) VALUES (?,?,?,?,?,?)",
+      [id, "anthropic", "cipher", "iv", "tag", "abcd"],
+    );
+    await pool.query(
+      "INSERT INTO `member_drafts` (`id`, `user_id`, `kind`, `payload`, `source`, `status`) VALUES (?,?,?,?,?,?)",
+      [`draft-${id}`, id, "note", JSON.stringify({ body: "unsent" }), "assistant", "proposed"],
+    );
+
+    const before = await agentRowsRemaining(pool, id);
+    expect(
+      before,
+      "the fixture must actually put rows there, or the assertion below passes over nothing",
+    ).toEqual({ deliveries: 1, inboxes: 1, keys: 1, drafts: 1 });
+
+    await anonymizeMember(pool, target, "admin-1", deps());
+
+    expect(await agentRowsRemaining(pool, id)).toEqual({
+      deliveries: 0,
+      inboxes: 0,
+      keys: 0,
+      drafts: 0,
+    });
   });
 });

@@ -415,6 +415,19 @@ export interface ClaimsRepo {
    * `from` is the compare-and-set. The status is re-read under the row lock
    * and must still be one of these, so the second consenter is refused with
    * the status it actually found instead of overwriting the first.
+   *
+   * WHAT THIS REPLACED, and why the whole account lives here rather than at the
+   * route. Consent was THREE transactions with awaits between them: a plain
+   * SELECT that checked the status, a separate write that flipped it, and a
+   * separate post that moved the tokens. Both gaps were reachable. Two stewards
+   * consenting at once both passed the SELECT, and the loser's write landed, so
+   * `amount` and `consented_by` held a figure and a witness with no ledger
+   * movement behind them; and a post that failed after the flip left the claim
+   * permanently consented, the member credited nothing, and no in-product way
+   * back, because re-consent refuses a claim that is no longer submitted.
+   *
+   * `give()` in server/lib/economy.ts carries the gratitude allowance the same
+   * way, for the same reason.
    */
   consentOnce(
     id: string,
@@ -441,6 +454,42 @@ export interface ClaimsRepo {
   fieldCounts(): Promise<Map<string, { active: number; done: number }>>;
   /** The newest consented claims, capped. Examples excluded, both kinds. */
   recentConsented(limit: number): Promise<FieldCompletion[]>;
+  /**
+   * The holder's own confidence flag, on an OPEN claim of THEIRS (0055).
+   *
+   * The ownership test and the status test ride in the WHERE rather than in a
+   * read before it, so a claim that was consented between the caller's check
+   * and this write is not re-flagged, and a member cannot set the flag on
+   * somebody else's work. `false` means nothing matched, which is the route's
+   * 404: no open claim of yours with that id.
+   *
+   * `value` is the raw field from the request and the caller has already
+   * decided it is one of the four legal words. An empty string CLEARS the
+   * flag, which is why the timestamp column is written literally rather than
+   * as a parameter: MySQL takes CURRENT_TIMESTAMP or NULL there, never a
+   * placeholder, and the branch is chosen from the value and never from input.
+   */
+  setConfidence(id: string, userId: string, value: string, note: string | null): Promise<boolean>;
+  /** Open claims whose holder has flagged trouble, worst first. */
+  needingAttention(): Promise<AttentionClaim[]>;
+}
+
+/**
+ * An open claim somebody has flagged, as the attention list reads it.
+ *
+ * `userName` is the STORED name, not a display name: `firstName()` lives at
+ * the route, because who may see how much of a name is a surface's decision
+ * and not a table's.
+ */
+export interface AttentionClaim {
+  id: string;
+  questTitle: string;
+  userName: string;
+  status: string;
+  confidence: string;
+  note: string | null;
+  saidAt: string | null;
+  claimedAt: string | null;
 }
 
 export interface FieldCompletion {
@@ -717,6 +766,40 @@ export function claimsRepo(pool: Pool): ClaimsRepo {
         questTitle: String(r.quest_title ?? ""),
         userName: String(r.user_name ?? ""),
         when: toIso(r.consented_at),
+      }));
+    },
+
+    async setConfidence(id, userId, value, note) {
+      const [r] = await pool.query<any>(
+        `UPDATE quest_claims
+            SET confidence = ?, confidence_note = ?, confidence_at = ${value ? "CURRENT_TIMESTAMP" : "NULL"}
+          WHERE id = ? AND user_id = ? AND status IN ('claimed','submitted')`,
+        [value || null, value ? note : null, id, userId],
+      );
+      return Number(r?.affectedRows ?? 0) > 0;
+    },
+
+    async needingAttention() {
+      const [rows] = await pool.query<RowDataPacket[]>(
+        `SELECT id, quest_title, user_name, status, confidence, confidence_note, confidence_at, claimed_at
+           FROM quest_claims
+          WHERE status IN ('claimed','submitted') AND confidence IN ('at_risk','stuck')
+          ORDER BY FIELD(confidence, 'stuck', 'at_risk'), confidence_at`,
+      );
+      // Field for field what the route used to build inline, so the response
+      // shape is decided in one place and the move changed nothing about it.
+      // `toIso` is deliberately NOT used: it answers null on an unparseable
+      // date and this column has always thrown on one, which is the difference
+      // between a silent hole in a steward's queue and a reported fault.
+      return (rows as any[]).map((c) => ({
+        id: String(c.id),
+        questTitle: c.quest_title ?? "",
+        userName: String(c.user_name ?? "Member"),
+        status: String(c.status),
+        confidence: String(c.confidence),
+        note: c.confidence_note ?? null,
+        saidAt: c.confidence_at ? new Date(c.confidence_at).toISOString() : null,
+        claimedAt: c.claimed_at ? new Date(c.claimed_at).toISOString() : null,
       }));
     },
   };
