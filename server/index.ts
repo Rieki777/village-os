@@ -434,7 +434,9 @@ import {
   upsertSettings,
 } from "./lib/exchange";
 import { usersRepo } from "./repos/users";
-import { gratitudeCyclesRepo, gratitudeDistributionsRepo, gratitudeLogRepo } from "./repos/gratitude";
+import { distributionsForMember, gratitudeCyclesRepo, gratitudeDistributionsRepo, gratitudeLogRepo } from "./repos/gratitude";
+import { grantsForMember, portraitsForMember } from "./repos/characterPortraits";
+import { charactersForMember } from "./repos/playerCharacters";
 import { claimsRepo as claimsRepoFactory, questClosed, questsRepo as questsRepoFactory, type ClaimRecord } from "./repos/quests";
 import { asBudget, sendGratitude, type GratitudeBudget, type GratitudeDeps } from "./lib/gratitude";
 import { recentEvents, recordEvent } from "./lib/events";
@@ -2866,8 +2868,8 @@ function withRoleHolderLock<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
-/** The five module-local singletons the erasure sweep cannot import. */
-const erasureDeps = { members, submissionsRepo, roleHoldersRepo, withRoleHolderLock, loadRoleHolders };
+/** The module-local singletons and the volume path the erasure sweep cannot import. */
+const erasureDeps = { members, submissionsRepo, roleHoldersRepo, withRoleHolderLock, loadRoleHolders, uploadsDir: UPLOADS_DIR };
 
 /** Role ids a member holds. */
 function roleIdsFor(userId: string): string[] {
@@ -17887,7 +17889,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   app.get("/api/profile/prefs", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
-    res.json({ notify: resolveNotifyPrefs(user.prefs), sheetSeen: readSeen(user.prefs) }); // which sections this member has already met; server/lib/sheetSeen.ts
+    res.json({ notify: resolveNotifyPrefs(user.prefs), sheetSeen: readSeen(user.prefs), displayCurrency: user.prefs?.displayCurrency ?? null }); // which sections this member has already met (server/lib/sheetSeen.ts), plus the display currency the PUT below validates, writes and echoes: a reader of this route got undefined for it and had no way to tell that from "no choice made"
   });
 
   app.put("/api/profile/prefs", async (req, res) => {
@@ -27110,7 +27112,7 @@ ${inner}
     isAdmin, authedUser, guardCapability, mayAct, adminActor, getPool, members, questsRepo,
   });
   registerHoldersRoutes(app, { guardCapability, getPool });
-  registerErasureQueueRoutes(app, { guardCapability, getPool });
+  registerErasureQueueRoutes(app, { guardCapability, getPool, erasureDeps });
 
   // ── Season patterns (0050) ───────────────────────────────────────────────
   //
@@ -27511,6 +27513,24 @@ ${inner}
       memberIntents: await exportIntentsForMember(pool, user.id),
       onchainBalances: await mine("SELECT * FROM onchain_balances WHERE user_id = ?"),
       exits: await mine("SELECT * FROM exits WHERE user_id = ?"),
+      /*
+       * THE FACE, THE BUDGET IT COST, AND WHAT THE POOL CREDITED THEM.
+       *
+       * Four tables this document had never read. A member's party carries the
+       * presentation and tone they chose, which is a description of their own
+       * body; the portraits are every picture they uploaded or forged; the
+       * grants are what the forge cost them; the distributions are their share
+       * of each cycle's split. A file that omits a person's face and their
+       * share of the value pool is not "everything the village holds".
+       *
+       * Filenames rather than addresses, which is what the rows hold. A URL in
+       * a downloaded file stops resolving the moment the account is erased,
+       * and a dead link reads as a promise the village broke.
+       */
+      party: await charactersForMember(pool, user.id),
+      portraits: await portraitsForMember(pool, user.id),
+      portraitBudget: await grantsForMember(pool, user.id),
+      gratitudeDistributions: await distributionsForMember(pool, user.id),
       /*
        * ── Lane C: the domains that are not in this database ────────────────
        *

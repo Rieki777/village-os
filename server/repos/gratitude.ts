@@ -318,3 +318,40 @@ export function gratitudeDistributionsRepo(pool: Pool): DistributionsRepo {
     },
   };
 }
+
+/**
+ * What the value pool credited ONE member, cycle by cycle.
+ *
+ * A standalone read and not a method on `DistributionsRepo`, because its one
+ * caller is the member's own data export and that route holds a pool rather
+ * than the repo. It is here because this file is the table's enumerable home.
+ *
+ * `all()` above exists and is the wrong instrument: it reads every row for
+ * every member in the village, and the export needs one person's. Filtering a
+ * whole-table read in TypeScript would put every other member's settlement in
+ * the memory of the request that builds one member's download, one spread
+ * operator away from shipping.
+ */
+export async function distributionsForMember(
+  pool: Pool,
+  userId: string,
+): Promise<DistributionRecord[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT id, cycle_id, user_id, received, received_hearts, received_acks, distinct_senders, " +
+      "credited, pool_token, created_at FROM gratitude_distributions WHERE user_id = ? " +
+      "ORDER BY created_at, id",
+    [userId],
+  );
+  return rows.map((r) => ({
+    id: String(r.id),
+    cycleId: String(r.cycle_id),
+    userId: String(r.user_id),
+    received: Number(r.received ?? 0),
+    receivedHearts: Number(r.received_hearts ?? 0),
+    receivedAcks: Number(r.received_acks ?? 0),
+    distinctSenders: Number(r.distinct_senders ?? 0),
+    credited: Number(r.credited ?? 0),
+    poolToken: r.pool_token ?? null,
+    createdAt: toIso(r.created_at),
+  })) as DistributionRecord[];
+}

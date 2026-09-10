@@ -651,7 +651,10 @@ The retention sweep never deletes an unstamped row, at any age.
 - **Export** (`GET /api/profile/export`): everything the village
   holds on the member — profile minus secrets, stage, claims, gratitude
   both directions, full signed ledger, balances, stage events, submissions,
-  notifications, preferences — as a downloadable JSON (Law 8968 posture).
+  notifications, preferences, their party and every portrait with its forge
+  budget, and what each gratitude cycle credited them — as a downloadable
+  JSON (Law 8968 posture). The last four landed in 0195; a member's own
+  face was missing from the file whose button says everything.
 - **Anonymisation = deletion** (`anonymizeMember` in
   `server/lib/erasure.ts`). Value rows are
   NEVER deleted — conservation must keep holding — so the member row
@@ -675,6 +678,23 @@ The retention sweep never deletes an unstamped row, at any age.
   seating sharing that `holder_key` and rewrites the key, because
   `documentedKey` derives it from the name and a slug is a name with
   hyphens.
+  **THE PUBLISHED FACE TOO** (0195): a member's `player_characters` rows
+  and every `character_portraits` row go, and the picture FILES are
+  unlinked from the volume. Nulling an id does not take a picture off the
+  internet, because `/api/uploads/:filename` has no sign-in in front of it
+  and the address is therefore the capability. Withdrawing a portrait
+  short of deleting the account revokes its address the gentler way, by
+  copying the bytes to a fresh stamped name and unlinking the old one, so
+  the member keeps the picture and the old URL stops resolving.
+  **AND IT RESUMES** (`member_erasures`, 0195). The sweep is a sequence of
+  about twenty writes that cannot be one transaction: three participants
+  are repositories on their own connections with their own caches, one
+  calls outside vendors over the network, and one unlinks a file. So every
+  step is idempotent and NAMED, the row records which landed and where a
+  failure stopped, and `resumeErasure` finishes it from the steward's
+  erasure queue. A wrapper around the statements that could join one
+  transaction would leave the rest outside it and still fail half way,
+  while looking closed.
 - **Member exit** (`server/lib/exit.ts`, S52/F12): `openStateCheck`
   semantics applied to a person. ENUMERATE every domain's open state
   (loans, stays, orders, debts block; balances, roles, warnings inform);

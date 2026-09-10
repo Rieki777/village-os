@@ -36,7 +36,7 @@ import fs from "node:fs";
 import path from "node:path";
 import multer from "multer";
 import type { AppDeps } from "../lib/appDeps";
-import { CarriesLocationData, LocationDataSurvived } from "../lib/uploads";
+import { CarriesLocationData, LocationDataSurvived, stampedName, writeToVolume } from "../lib/uploads";
 import { listArchetypes } from "../lib/characters";
 import {
   ACCEPTED_PORTRAIT_TYPES,
@@ -73,6 +73,60 @@ function forgetFile(uploadsDir: string, fileName: string | null | undefined): vo
   } catch {
     /* already gone, or never written */
   }
+}
+
+/**
+ * Move a withdrawn portrait's bytes to a name nobody has been handed, and say
+ * whether the old address is really dead.
+ *
+ * COPY, ADOPT, THEN UNLINK, and no other order works. A rename before the row
+ * is updated leaves the row naming a file that is gone, which is a broken
+ * image for the owner; an unlink before the row is updated is the same thing
+ * with the bytes destroyed. Copying first means both files exist while the row
+ * moves, and the worst case is one orphan the uploads sweep collects.
+ *
+ * Returns false, never throws. The withdrawal itself has already been written
+ * by the time this runs, so a throw here would report failure for a change
+ * that landed. The caller passes the answer on to the member instead.
+ */
+async function revokeAddress(
+  uploadsDir: string,
+  pool: ReturnType<AppDeps["getPool"]>,
+  userId: string,
+  archetypeKey: string,
+  fileName: string | null | undefined,
+): Promise<boolean> {
+  // A row that held only a candidate has no published address to revoke, so
+  // there is nothing to do and the answer is honestly yes.
+  const from = String(fileName ?? "").trim();
+  if (!from) return true;
+  if (from.includes("/") || from.includes("\\") || from.includes("..")) return false;
+
+  let to: string;
+  try {
+    const bytes = fs.readFileSync(path.join(uploadsDir, from));
+    to = stampedName("portrait", path.extname(from) || ".webp");
+    writeToVolume(uploadsDir, to, bytes);
+  } catch (err: any) {
+    // The file is already gone, so the address is already dead. Any other
+    // failure means the copy did not happen and the old name still resolves.
+    if (err?.code === "ENOENT") return true;
+    console.error(`[portraits] could not copy "${from}" while withdrawing: ${err?.message ?? err}`);
+    return false;
+  }
+
+  const adopted = await portraits.renamePortraitFile(
+    pool, PORTRAIT_VILLAGE, userId, archetypeKey, from, to,
+  );
+  if (!adopted) {
+    // The row moved under us: the member replaced the picture between the read
+    // and this write. The copy is unwanted and the file it was made from is
+    // one the newer write already dealt with.
+    forgetFile(uploadsDir, to);
+    return false;
+  }
+  forgetFile(uploadsDir, from);
+  return true;
 }
 
 export function register(app: Express, deps: Deps): void {
@@ -320,13 +374,42 @@ export function register(app: Express, deps: Deps): void {
    * The explicit act the whole privacy rule turns on. Nothing else in this
    * feature writes `published_at`, so a portrait becomes visible to anybody
    * else only because its owner pressed this.
+   *
+   * ── TAKING IT BACK MEANS TAKING IT BACK ─────────────────────────────────
+   *
+   * Clearing `published_at` removes the picture from every listing and every
+   * stranger's payload, and it used to be all this did. It is not a
+   * revocation. `/api/uploads/:filename` has no sign-in in front of it, so
+   * while the bytes sit under the name a published page handed out, everybody
+   * who ever loaded that page is still holding a working address, and the
+   * member who pressed "take it back" has been told something that is not
+   * true.
+   *
+   * So the bytes MOVE. They are copied to a fresh stamped name nobody has
+   * seen, the row is pointed at the copy, and the old file is unlinked. The
+   * old URL then answers 404 and the member still has their picture, which is
+   * the difference between this and deleting it: withdrawing is not the same
+   * act as `DELETE /api/me/portraits/:key` and must not quietly become it.
+   *
+   * ORDER, AND WHAT EACH FAILURE COSTS. The withdrawal is written FIRST and is
+   * unconditional, because taking something back must always be allowed to
+   * work: the member's intent lands even if the volume is full or read-only.
+   * The move is then attempted, and if any part of it fails the response says
+   * `addressRevoked: false` rather than reporting a clean success. A silent
+   * best-effort here would be the original defect with extra steps.
    */
   app.post("/api/me/portraits/:key/publish", async (req, res) => {
     const who = await standing(req, res);
     if (!who) return;
     const published = (req.body ?? {}).published !== false;
+    const pool = getPool();
+    // Read BEFORE the write: the filename this withdrawal is revoking is the
+    // one that was live when the member pressed the button.
+    const existing = published
+      ? null
+      : await portraits.portraitFor(pool, PORTRAIT_VILLAGE, who.user.id, who.archetype.key);
     const changed = await portraits.setPublished(
-      getPool(), PORTRAIT_VILLAGE, who.user.id, who.archetype.key, published,
+      pool, PORTRAIT_VILLAGE, who.user.id, who.archetype.key, published,
     );
     if (!changed) {
       return res.status(404).json({
@@ -335,7 +418,14 @@ export function register(app: Express, deps: Deps): void {
           : "There is nothing on that path to take back.",
       });
     }
-    res.json({ success: true, ...(await studioView(getPool(), PORTRAIT_VILLAGE, who.user.id)) });
+    const addressRevoked = published
+      ? undefined
+      : await revokeAddress(uploadsDir, pool, who.user.id, who.archetype.key, existing?.fileName);
+    res.json({
+      success: true,
+      ...(addressRevoked === undefined ? {} : { addressRevoked }),
+      ...(await studioView(pool, PORTRAIT_VILLAGE, who.user.id)),
+    });
   });
 
   /** Remove it, picture and row together. */

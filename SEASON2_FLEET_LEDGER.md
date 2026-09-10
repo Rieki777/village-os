@@ -208,6 +208,14 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   not declined per pair", which no MySQL index expresses, and a unique key would collide with any
   populated board that has seen one decline-and-reclaim, which at boot is a village that will not
   start. The invariant lives in `claimsRepo.openClaim`'s row lock instead.
+- **data-rights lane, 2026-09-10: holds 0195** for
+  `drizzle/0195_an_erasure_records_how_far_it_got.sql` (one new table, `member_erasures`, plus
+  one non-unique index on it). Additive only, and the previous release neither reads nor writes
+  it, so a rollback over it is a no-op. The number was NOT measured by this lane and was handed
+  down with the brief, which is the one case section 3's method does not cover: if it collides,
+  the fix is a new file rather than a rename, because the applied ledger keys on filename.
+  `check-migration-numbers.mjs --next` answered 0190 on this worktree, which is the usual
+  under-report (it reads only this tree's `drizzle/`), and the gate passes at 0195.
 - **profile-rebase integration, 2026-09-04: RENUMBERED to 0156, 0157, 0158, 0159.** The four
   entries below (path-data's 0144/0145/0146, portraits' 0147, and the 0144-to-0151 move made
   earlier the same day) are HISTORY now, not allocation. Main reached 0153 while the branch

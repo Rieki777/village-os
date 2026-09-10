@@ -110,16 +110,18 @@ handlers used to occupy, because Express matches in registration order.
 | `GET /api/profile` | the signed-in member | `publicUser(user)`: the whole account record minus `passwordHash`, `tokenVersion` and `prefs.googleLink` |
 | `PUT /api/profile` | the signed-in member | `name`, `bio`, `avatar`, `handle`, `paths`, each optional |
 | `POST /api/profile/contribution` | the signed-in member | a journal entry, `type` and `description`, clipped to 120 and 2000 characters |
-| `GET /api/profile/prefs` | the signed-in member | `{ notify }` and nothing else |
+| `GET /api/profile/prefs` | the signed-in member | `{ notify }`, `sheetSeen` and `displayCurrency` |
 | `PUT /api/profile/prefs` | the signed-in member | accepts and echoes `notify` PLUS `displayCurrency` |
 | `GET /api/profile/export` | the signed-in member | roughly thirty domains of their own data, as a download |
 | `POST /api/profile/request-exit` | the signed-in member, password confirmed | opens a departure |
 | `POST /api/profile/delete-account` | the signed-in member, password confirmed | anonymises the account |
 
-The prefs asymmetry is the interesting half of that pair. `GET` answers
-`{ notify: resolveNotifyPrefs(user.prefs) }`, so a client that reads its display currency from the
-GET gets `undefined`; `displayCurrency` is validated and written by PUT and appears only in PUT's
-own response.
+The prefs pair used to be asymmetric, and it is worth recording what the asymmetry was.
+`GET` answered `{ notify, sheetSeen }` while `displayCurrency` was validated, written and echoed by
+PUT alone, so a client reading its own display currency from the GET got `undefined` and had no way
+to tell that from "no choice made". `CurrencyPicker` was never bitten because it reads the whole
+prefs blob off `GET /api/profile` instead, which is why the gap survived: the one live caller was
+using a different door. The GET now answers with the currency too, and `null` means no choice.
 
 **That `notify` blob is the switchboard for every email the platform sends a member, and it is
 opt-OUT.** `registerJob("notification-digest", 24h)` in `server/index.ts` runs `runNotificationDigest`
@@ -372,18 +374,23 @@ email and handle to tombstones, bumps `tokenVersion` so every session dies, clea
 paths, journeys, prefs and contributions, then sweeps the tables that restate the person
 independently of the join (`gratitude_log` names, `quest_claims.user_name`, notification titles and
 bodies, skill tags, push subscriptions, forum subscriptions, wallet challenges, concierge queries,
-contact request messages, intents, vendor records), releases org seatings and role holdings, and
+contact request messages, intents, vendor records, the character sheet and every portrait including
+the files on the volume), releases org seatings and role holdings, and
 asks the external stores last so a slow vendor never delays the local sweep. Value rows stay: the
 ledger, gratitude, claims, loans, orders and badge awards are the village's record of what happened
 and what is owed, and deleting them would break the conservation proof.
 
-**The sweep is a sequence and not a transaction.** `server/lib/erasure.ts` opens no connection and
-calls no `beginTransaction`: it is roughly twenty sequential `pool.query` calls plus
-`releaseSeatingsForUser`, `forgetMemberInProposals`, `eraseIntentsForMember` and `members.update`,
-with no `try`/`catch` anywhere in the file. `POST /api/profile/delete-account` has no catch either.
-A throw partway leaves a member anonymised in the tables already swept and untouched in the rest,
-the member sees a 500, and there is no resume path: re-running is the only recovery and nothing
-schedules one.
+**The sweep is a sequence and not a transaction, on purpose, and it resumes.** `server/lib/erasure.ts`
+opens no connection and calls no `beginTransaction`, and its header argues at length why it must
+not: three of the participants are repositories that take their own connections and hold their own
+caches, one makes network calls to outside vendors, and one unlinks a file. What it has instead is a
+named, ordered list of steps that are each idempotent by construction (a DELETE keyed on the member,
+or an UPDATE writing a constant keyed on the member), with `member_erasures` recording that a sweep
+began, which steps landed, and where it stopped. A throw partway still leaves the member anonymised
+in the tables already swept, still returns a 500, and now says so in a row a steward can see and
+finish. `resumeErasure` runs only the steps the record does not hold, and `server/lib/erasure.test.ts`
+interrupts a real sweep and asserts what a resume does, because a test over the happy path passes
+whether or not any of this exists.
 
 **A store that does not confirm leaves a member half-erased, and only a person clears it.**
 `forgetMemberEverywhere` retires the subject reference only when every connected store confirmed.
@@ -512,35 +519,59 @@ what a handle used to be, so a member who renames releases their old handle imme
 them answers 404, because `userIdForHandle` returns null and there is nothing to redirect to. This
 is the platform's one public identity URL.
 
-**A departed member's title, home and characters survive the tombstone.** `anonymizeMember` writes
-through `members.update`, so it can only clear columns the users repository owns. `title` and
-`home_structure_key` are not among them, and neither are the `player_characters` and
-`character_portraits` rows, which no erasure path touches. The tombstone handle is deterministic
-(`departed-` plus the last eight characters of the user id) and appears on their forum bylines, so
-`GET /api/profiles/<that handle>` still answers with their party, any portrait they had published,
-their remaining standing chips, and whatever `title` they carried. Today `title` is always NULL
-because nothing writes it, so the exposure is latent rather than live; a fork that adds a title
-editor without also adding a line to the erasure sweep makes it live in one commit.
+**A departed member's title and home still survive the tombstone. Their characters and portraits do
+not, any more.** `anonymizeMember` writes through `members.update`, so it can only clear columns the
+users repository owns, and `title` and `home_structure_key` are not among them. The tombstone handle
+is deterministic (`departed-` plus the last eight characters of the user id) and appears on their
+forum bylines, so `GET /api/profiles/<that handle>` still answers with their remaining standing
+chips and whatever `title` they carried. Today `title` is always NULL because nothing writes it, so
+that half is latent rather than live; a fork that adds a title editor without also adding a line to
+the erasure sweep makes it live in one commit. `home_structure_key` is the sharper of the two, since
+it is where a person sleeps and something does write it. **Both are still open**, and closing them
+means a repository statement of their own, because the tombstone cannot reach a column the users
+repository does not map.
 
-**A portrait URL is a bearer capability, and neither un-publishing nor deleting the account revokes
-it.** `portraitUrl` in `server/lib/characterPortraits.ts` returns `/api/uploads/<stamped name>`, and
-`server/index.ts` states in its own comment that "`/api/uploads/:filename` has no authentication, so
-the file IS the capability". Three consequences follow and each is separate.
-`POST /api/me/portraits/:key/publish` with `published: false` clears `published_at` and nothing else,
-so a member taking their picture back removes it from the sheet while the bytes stay served at the
-same one-year-immutable URL to anybody who ever saw it. Only `DELETE /api/me/portraits/:key` calls
-`forgetFile`. And `server/lib/erasure.ts` unlinks nothing at all, so account deletion leaves both the
-rows and the files.
+The `player_characters` and `character_portraits` halves are closed. The sweep now runs a
+`character-sheet` step (`forgetCharactersForMember`, which clears `users.primary_character_id`
+first and then drops the rows) and a `portraits` step, so the party and the pictures leave with the
+person.
 
-**The export does not contain this module's own tables.** No query in the `exportDoc` literal touches
-`player_characters`, `character_portraits` or `portrait_grants`, so a departing member's party, the
-pictures they uploaded or forged and their forge budget are missing from the file whose button says
-everything. The handler's own comment sets the standard it now falls short of.
+**A portrait URL is a bearer capability, and both doors now revoke it.** `portraitUrl` in
+`server/lib/characterPortraits.ts` returns `/api/uploads/<stamped name>`, and `server/index.ts`
+states in its own comment that "`/api/uploads/:filename` has no authentication, so the file IS the
+capability". That makes an address a thing that has to be taken away, and until 0195 neither door
+took it away. `POST /api/me/portraits/:key/publish` with `published: false` cleared `published_at`
+and nothing else, so a member taking their picture back removed it from the sheet while the bytes
+stayed served at the same one-year-immutable URL to anybody who had ever seen it, and
+`server/lib/erasure.ts` unlinked nothing at all, so account deletion left both the rows and the
+files.
 
-**The erasure sweep has no transaction and no resume.** Twenty-odd sequential queries, no
-`beginTransaction`, no `try`/`catch` in `server/lib/erasure.ts`, and no catch in the
-`POST /api/profile/delete-account` handler above it. A failure partway is a half-anonymised member,
-a 500, and a state nothing will notice or retry.
+Withdrawing now MOVES the bytes: they are copied to a fresh stamped name, the row is pointed at the
+copy, and the old file is unlinked, so the old address answers 404 and the member still has their
+picture. Withdrawing is not deleting, and `DELETE /api/me/portraits/:key` stays the other door. The
+response carries `addressRevoked`, because a best-effort move that failed silently would be the
+original defect wearing a fix. Erasure does the blunter version: rows, forge budget and files all go.
+
+**The export contains this module's own tables.** `party`, `portraits`, `portraitBudget` and
+`gratitudeDistributions` were all absent from the `exportDoc` literal, so a departing member's
+party, the pictures they uploaded or forged, their forge budget and what the value pool credited
+them were missing from the file whose button says everything. All four are read now, each through
+its own repository function keyed on the member alone.
+
+**The erasure sweep is resumable, and deliberately not one transaction.** It used to be twenty-odd
+sequential queries with no `beginTransaction` and no `try`/`catch` anywhere in the file, so a
+failure partway was a half-anonymised member, a 500, and a state nothing would notice or retry. It
+is now a named, ordered list of idempotent steps recorded in `member_erasures` (0195): the row says
+a sweep began, which steps landed, where it stopped and what the error said, and
+`resumeErasure` finishes it from the steward's queue at `/review`.
+
+One transaction was considered and rejected, and the reasoning is in the file's own header so that
+somebody reaching for `beginTransaction` reads it first. A MySQL transaction lives on one
+connection; `members`, `submissionsRepo` and `roleHoldersRepo` take their own and keep their own
+caches, `forgetMemberEverywhere` makes network calls to outside vendors, and unlinking a file is not
+transactional in any database. A wrapper around the statements that COULD join one would leave the
+rest outside it, still able to fail half way, while looking closed, which is worse than an honest
+sequence because a reviewer sees `beginTransaction` and stops asking.
 
 **The headline balance on the member's own profile is unformatted minor units.**
 `client/src/pages/Profile.tsx` renders the member's `recognitionBalance` directly, with no `decimals`
