@@ -79,6 +79,7 @@ import { notifyRollRows, type RollNotice } from "./lib/ballotNotices";
 import { forgetStewardActs, holdingHasLapsed, runTermWatch, setVetoWindowCheck, stewardMailRefusal } from "./lib/stewardship";
 import { decideRoleCapabilities, stewardSeatRefusal } from "./lib/roleGrants";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
+import { type ConsentActor, register as registerQuestClaimRoutes } from "./routes/questClaims";
 import { register as registerHousingRoutes } from "./routes/housing";
 import { register as registerJourneyRoutes } from "./routes/journey";
 import { register as registerProfileRoutes } from "./routes/profile";
@@ -282,7 +283,6 @@ import { timingOf } from "../shared/governanceKinds";
 /** The two dials a started Game answers for itself, through a governance_mode ballot. */
 const WEIGHT_KEYS_AFTER_START = new Set(["governance.weight_mode", "governance.weight_token"]);
 import { isMintRuleKey, parseMintRuleKey } from "../shared/mintRuleKeys";
-import { describeRange, parseRewardRange } from "../shared/questRewards";
 import {
   allTokens,
   tokenNameClash, slugFreezeRefusal,
@@ -311,7 +311,7 @@ import {
   spendSurfacesFor,
 } from "./lib/spending";
 import { seatChargeFor, seatEscrowDrift, seatPriceFor, settleFinishedSeats } from "./lib/eventSeats";
-import { allowanceFor, applyMintRuleChanges, canConfirm, checkIn, cycleWindow, economyReady, fromLedgerUnits, give, HEARTS, mintForConfirmedClaim, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, runSettlement, startEconomyEpoch, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
+import { allowanceFor, applyMintRuleChanges, canConfirm, checkIn, cycleWindow, economyReady, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, runSettlement, startEconomyEpoch, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
 import { addCharacter, avatarFor, listArchetypes, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
 import { loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
@@ -434,8 +434,10 @@ import {
   upsertSettings,
 } from "./lib/exchange";
 import { usersRepo } from "./repos/users";
-import { gratitudeCyclesRepo, gratitudeDistributionsRepo, gratitudeLogRepo } from "./repos/gratitude";
-import { claimsRepo as claimsRepoFactory, questsRepo as questsRepoFactory } from "./repos/quests";
+import { distributionsForMember, gratitudeCyclesRepo, gratitudeDistributionsRepo, gratitudeLogRepo } from "./repos/gratitude";
+import { grantsForMember, portraitsForMember } from "./repos/characterPortraits";
+import { charactersForMember } from "./repos/playerCharacters";
+import { claimsRepo as claimsRepoFactory, questClosed, questsRepo as questsRepoFactory} from "./repos/quests";
 import { asBudget, sendGratitude, type GratitudeBudget, type GratitudeDeps } from "./lib/gratitude";
 import { recentEvents, recordEvent } from "./lib/events";
 import { checkToolLink } from "./lib/toolcheck";
@@ -596,7 +598,7 @@ import {
   recordLaunchCarried,
   type LaunchDeps,
 } from "./lib/launch";
-import { founderPowerStands, issuanceRefusal, readGameStart, recordGameStart } from "./lib/gameStart";
+import { founderPowerStands, readGameStart, recordGameStart } from "./lib/gameStart";
 import {
   assertModuleGraph,
   attachModuleReadiness,
@@ -703,7 +705,6 @@ import {
   listPatterns,
   planRoll,
   removeMember as removePatternMember,
-  rewardMultiplierFor,
   seasonallyDormantBadgeIds,
   type PatternKind,
 } from "./lib/seasonPatterns";
@@ -2866,8 +2867,8 @@ function withRoleHolderLock<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
-/** The five module-local singletons the erasure sweep cannot import. */
-const erasureDeps = { members, submissionsRepo, roleHoldersRepo, withRoleHolderLock, loadRoleHolders };
+/** The module-local singletons and the volume path the erasure sweep cannot import. */
+const erasureDeps = { members, submissionsRepo, roleHoldersRepo, withRoleHolderLock, loadRoleHolders, uploadsDir: UPLOADS_DIR };
 
 /** Role ids a member holds. */
 function roleIdsFor(userId: string): string[] {
@@ -17887,7 +17888,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   app.get("/api/profile/prefs", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
-    res.json({ notify: resolveNotifyPrefs(user.prefs), sheetSeen: readSeen(user.prefs) }); // which sections this member has already met; server/lib/sheetSeen.ts
+    res.json({ notify: resolveNotifyPrefs(user.prefs), sheetSeen: readSeen(user.prefs), displayCurrency: user.prefs?.displayCurrency ?? null }); // which sections this member has already met (server/lib/sheetSeen.ts), plus the display currency the PUT below validates, writes and echoes: a reader of this route got undefined for it and had no way to tell that from "no choice made"
   });
 
   app.put("/api/profile/prefs", async (req, res) => {
@@ -19692,7 +19693,9 @@ ${inner}
       }
 
       if (held) return reply({ ok: true, state: "on" });
-      if (await isExampleRow(pool, "quests", quest.id)) {
+      // A closed quest is not taking claims, read exactly as the claim route
+      // reads it: `closed` is this vocabulary's own "not taking answers".
+      if ((await isExampleRow(pool, "quests", quest.id)) || questClosed(quest.status)) {
         return reply({ ok: false, state: "off", reason: "closed" });
       }
       if (quest.minStage) {
@@ -19704,7 +19707,9 @@ ${inner}
       if (quest.requiresRole && !roleIdsFor(user.id).includes(quest.requiresRole)) {
         return reply({ ok: false, state: "off", reason: "not-yet" });
       }
-      await claimsRepo.add({
+      // The same locked insert the claim route takes: `held` above is a read
+      // several awaits back, and two taps can pass it together.
+      const taken = await claimsRepo.openClaim({
         id: `claim-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         questId: quest.id,
         questTitle: quest.title,
@@ -19715,6 +19720,8 @@ ${inner}
         artifactUrl: "",
         note: "",
       });
+      // "already" is the answer `held` gives: the person's intent is satisfied.
+      if (!taken.ok && taken.reason === "gone") return reply({ ok: false, state: "off", reason: "gone" });
       return reply({ ok: true, state: "on" });
     } catch (err) {
       // The map reverts and says so. A promise is not worth a 500 page inside
@@ -19801,7 +19808,7 @@ ${inner}
 
   // Quests: team consent (value release is always human-gated)
   /**
-   * THE consent gate, for both routes below.
+   * THE consent gate, for both routes that ask it.
    *
    * `quest.consent` was declared in shared/capabilities.ts, granted by the
    * seeded steward-circle role, and shown to members on their own progression
@@ -19820,19 +19827,21 @@ ${inner}
    * This function is asked by the two routes that RELEASE something: the
    * consent that mints recognition, and the check-in that witnesses somebody
    * was there. The third caller used to be `GET /api/admin/quest-claims`,
-   * which reads the queue, and it was moved to `consentQueueViewer` below in
-   * the same edit. Reading a queue is looking, and `mayAct` would have put
+   * which reads the queue, and it was moved to `consentQueueViewer`, which now
+   * lives beside that route in server/routes/questClaims.ts. Only the check-in
+   * is still asked here; the consent route asks this from that same module,
+   * which is why the gate is passed to it rather than copied into it.
+   * Reading a queue is looking, and `mayAct` would have put
    * "acted on a power this village holds" on the public pulse for it.
    *
    * `isAdminActor` still names the ACCOUNT and never the gate's verdict. It
    * unlocks exactly one thing, the solo-founder self-consent window, and the
    * rule there is that role authority is not founder authority. An admin who
    * broke the glass is still an admin.
+   *
+   * The RETURN TYPE moved to server/routes/questClaims.ts with the route that
+   * reads every branch of it, and is imported back at the top of this file.
    */
-  type ConsentActor =
-    | { ok: true; userId: string | null; isAdminActor: boolean }
-    | { ok: false; status: number; body: Record<string, unknown> };
-
   async function consentActor(req: express.Request): Promise<ConsentActor> {
     markAdminGate(req);
     const verdict = await mayAct(req, "quest.consent");
@@ -19859,438 +19868,15 @@ ${inner}
     return { ok: false, status: 403, body: { error: "Consenting to finished work is for stewards" } };
   }
 
-  /**
-   * WHO MAY READ THE QUEUE. A look, and it writes nothing.
-   *
-   * The queue and the consent button sit on the same panel, so it would have
-   * been one line shorter to keep one helper for both. That is the RSVP
-   * defect: a curator opening a list is not an act, and an admin whose
-   * request happened to carry an override would have been recorded reaching
-   * past a power for having opened a page.
-   *
-   * The operator keeps the read on a village-held key (`adminSees`). A
-   * village taking on consent takes the button, and there is no break-glass
-   * on a GET to hand an operator their eyes back.
-   */
-  async function consentQueueViewer(
-    req: express.Request,
-  ): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
-    markAdminGate(req);
-    if (!(await authedUser(req))) return { ok: false, status: 401, error: "Unauthorized" };
-    if (!(await mayStillSee(req, "quest.consent"))) {
-      return { ok: false, status: 403, error: "Consenting to finished work is for stewards" };
-    }
-    return { ok: true };
-  }
-
-  app.get("/api/admin/quest-claims", async (req, res) => {
-    const viewer = await consentQueueViewer(req);
-    if (!viewer.ok) return res.status(viewer.status).json({ error: viewer.error });
-    const claims = await claimsRepo.all();
-    claims.sort((a, b) => new Date(b.claimedAt ?? 0).getTime() - new Date(a.claimedAt ?? 0).getTime());
-    res.json(claims);
-  });
-
-  /**
-   * How it is going, said by the person doing it (0055).
-   *
-   * The failure this catches: a claim sits in `claimed` for six weeks and
-   * looks identical whether somebody is halfway through or quietly stuck. The
-   * season retrospective can already see "claimed, never consented", but only
-   * once the season has ENDED, which is exactly too late to help.
-   *
-   * Only the holder may set it, and only while the claim is still open. A
-   * steward setting it would make it a judgement of somebody's work instead of
-   * a signal from them, and the whole value is that asking for help costs
-   * nothing here.
-   */
-  app.put("/api/game/quest-claims/:id/confidence", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required" });
-    const value = String(req.body?.confidence ?? "");
-    // Clearing it is allowed: somebody who flagged a wobble and then sorted it
-    // out should not have to leave the flag up.
-    const allowed = ["on_track", "at_risk", "stuck", ""];
-    if (!allowed.includes(value)) {
-      return res.status(400).json({ error: "confidence must be on_track, at_risk, stuck, or empty" });
-    }
-    const note = String(req.body?.note ?? "").slice(0, 280) || null;
-    const [r]: any = await getPool().query(
-      `UPDATE quest_claims
-          SET confidence = ?, confidence_note = ?, confidence_at = ${value ? "CURRENT_TIMESTAMP" : "NULL"}
-        WHERE id = ? AND user_id = ? AND status IN ('claimed','submitted')`,
-      [value || null, value ? note : null, req.params.id, user.id],
-    );
-    if (!r.affectedRows) {
-      return res.status(404).json({ error: "No open claim of yours with that id" });
-    }
-    /*
-     * SWEEP (the incomplete loop). This handler's own comment says the point
-     * of collecting the signal is that a steward SEES it, and the only place
-     * it landed was a queue somebody had to think to open. A member typing
-     * "stuck" is asking for help, and asking for help must not cost a week.
-     *
-     * Only the two flags that mean trouble ring. Clearing the flag, and
-     * saying "on track", are the member reassuring the village and need no
-     * summons. The key carries the claim AND the value, so re-saying the same
-     * thing with a longer note rings once, and going from at_risk to stuck is
-     * its own word.
-     *
-     * WHAT IT CARRIES: the quest and the flag, never the note. The note is
-     * how somebody describes being stuck, which is the most private sentence
-     * on the whole screen, and the queue behind the gate holds it.
-     */
-    if (value === "at_risk" || value === "stuck") {
-      const claim: any = (await claimsRepo.forUser(user.id)).find((c) => c.id === req.params.id);
-      const questTitle = String(claim?.questTitle ?? "a quest");
-      await notifyAdmins(
-        "quest_help",
-        value === "stuck"
-          ? `${firstName(user.name)} is stuck on ${questTitle}`
-          : `${firstName(user.name)} flagged a wobble on ${questTitle}`,
-        `quest-confidence:${req.params.id}:${value}`,
-        "/admin?tab=quest-claims",
-      );
-    }
-    res.json({ success: true });
-  });
-
-  /**
-   * Open claims that somebody has flagged, worst first.
-   *
-   * The point of collecting the signal is that a steward SEES it, and a signal
-   * nobody reads is a form nobody fills in.
-   */
-  app.get("/api/admin/quest-claims/attention", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const [rows]: any = await getPool().query(
-      `SELECT id, quest_title, user_name, status, confidence, confidence_note, confidence_at, claimed_at
-         FROM quest_claims
-        WHERE status IN ('claimed','submitted') AND confidence IN ('at_risk','stuck')
-        ORDER BY FIELD(confidence, 'stuck', 'at_risk'), confidence_at`,
-    );
-    res.json((rows as any[]).map((c) => ({
-      id: String(c.id),
-      questTitle: c.quest_title ?? "",
-      holder: firstName(String(c.user_name ?? "Member")),
-      status: String(c.status),
-      confidence: String(c.confidence),
-      note: c.confidence_note ?? null,
-      saidAt: c.confidence_at ? new Date(c.confidence_at).toISOString() : null,
-      claimedAt: c.claimed_at ? new Date(c.claimed_at).toISOString() : null,
-    })));
-  });
-
-  app.post("/api/admin/quest-claims/:id/consent", async (req, res) => {
-    const actor = await consentActor(req);
-    if (!actor.ok) return res.status(actor.status).json(actor.body);
-    const { approve, amount } = req.body ?? {};
-    const claim = await claimsRepo.byId(req.params.id);
-    if (!claim) return res.status(404).json({ error: "Not found" });
-    // The last door on the example-quest chain. Claim and submit both refuse
-    // an example, so a claim can only reach here if it predates those guards
-    // — and this is the step that actually mints, so it refuses too. The
-    // DECLINE branch stays open on purpose: a stranded claim has to be
-    // clearable, and declining creates nothing.
-    if (approve !== false && (await isExampleRow(getPool(), "quests", claim.questId))) {
-      return res.status(409).json(EXAMPLE_REFUSAL_BODY);
-    }
-    // NO SELF-CONSENT — load-bearing, not decorative. Consent mints
-    // recognition from the faucet, grants stay credits and advances stages;
-    // without this guard, widening the gate to role-holders would let a
-    // steward claim a quest, submit it and pay themselves.
-    //
-    // ONE exception, deliberately narrow (Rye, 2026-07-31): a founder
-    // building alone has nobody to witness anything, so while the village
-    // has FEWER than quest.self_consent_until_members members, an ADMIN may
-    // consent to their own claims. The moment the village reaches that size
-    // the witness rule applies to everyone, admins included. Stewards never
-    // get the exception — role authority is not founder authority — and
-    // tombstoned members do not count toward the size.
-    if (claim.userId === actor.userId) {
-      const soloWindow = Math.max(0, numberVar("quest.self_consent_until_members"));
-      // Neither tombstones nor standing examples are people, and three
-      // phantom identities would shrink the solo-founder window from six real
-      // members to three.
-      const livingMembers = (await members.all()).filter(
-        (u: any) => !u.isExample && u.email && !String(u.email).endsWith("@anonymized.invalid"),
-      ).length;
-      const soloFounder = actor.isAdminActor && livingMembers < soloWindow;
-      if (!soloFounder) {
-        return res.status(403).json({
-          error: "You cannot consent to your own claim. Someone else has to witness the work.",
-        });
-      }
-      void recordEvent(getPool(), {
-        kind: "audit",
-        text: `quest:self-consent:solo-founder:${claim.id}`,
-        actorUserId: actor.userId,
-        entityType: "quest_claim",
-        entityRef: claim.id,
-        audience: "admin",
-      });
-    }
-    if (approve === false) {
-      const declined = await claimsRepo.update(claim.id, (c) => {
-        c.status = "declined";
-        c.resolvedAt = new Date().toISOString();
-      });
-      if (declined) {
-        await notify({
-          userId: declined.userId,
-          type: "quest_declined",
-          title: `Your claim on "${declined.questTitle}" was released`,
-          body: "The claim was declined or cleared. The quest is open again.",
-          // The quest itself, not the board it sits on. A member reading this
-          // wants to see the thing they were working on.
-          link: `/quests/${declined.questId}`,
-          // The real actor, admin or steward: adminActor() only populates for
-          // password/admin callers, so a steward's decision was anonymous.
-          actorUserId: actor.userId,
-          dedupeKey: `quest:${declined.id}:declined`,
-        });
-        // The /api/admin audit middleware attributes isAdmin actors only, so
-        // a steward's decision would otherwise leave no trail at all.
-        if (!actor.isAdminActor) {
-          void recordEvent(getPool(), {
-            kind: "audit", text: `quest:declined:${declined.id}`,
-            actorUserId: actor.userId, entityType: "quest_claim", entityRef: declined.id, audience: "admin",
-          });
-        }
-      }
-      return res.json(declined);
-    }
-    // Consent releases value, so it may only follow an actual submission.
-    // Without this an admin could credit a quest that was claimed and never
-    // done, which quietly breaks the one promise the recognition economy makes:
-    // that credit lands after the work was shown and consented to. Declining
-    // stays legal from any state, since a stale claim needs clearing.
-    if (boolVar("quest.require_submission_before_consent") && claim.status !== "submitted") {
-      return res.status(409).json({
-        error: `Cannot consent a claim with status "${claim.status}". The member has to submit their work first.`,
-        status: claim.status,
-      });
-    }
-    // Item 7: the award was unbounded and never compared to the posted amount,
-    // so the quest board was not a contract. The ceiling is a village choice.
-    const requested = Math.max(0, Number(amount) || 0);
-    // Quests advertise a RANGE ("50-100"), not a number: the same work done
-    // thoroughly is worth more than done adequately, and the consenting admin
-    // decides where in the range it landed. parseRewardRange is the one place
-    // that knows the format.
-    const consentedQuest = await questsRepo.byId(claim.questId);
-    const range = parseRewardRange(consentedQuest?.gratitude);
-    const capMode = stringVar("quest.consent_cap_mode");
-    const granted = requested;
-    // Consent at 0 used to "succeed" while the failed ledger post zeroed the
-    // member's CACHED balance — the worst of both worlds. Now it is refused
-    // unless the village has explicitly opted into "acknowledged, no
-    // recognition" (quest.allow_zero_consent), in which case the claim
-    // completes with no ledger movement and the balance is left alone.
-    if (granted <= 0 && !boolVar("quest.allow_zero_consent")) {
-      return res.status(400).json({
-        error:
-          "Consent releases value: the amount must be at least 1. To allow consenting at zero (acknowledged, no recognition), enable 'Allow consenting at zero' in Admin → Variables → Quests.",
-      });
-    }
-    // A cap needs a number to cap, so BOTH capping modes have to refuse a label naming none. This used to sit inside the posted branch, which left "capped" to compute a multiple of the 0 an unreadable label parses to and answer with a ceiling-shaped error for a label-shaped problem. Only "unlimited" is exempt, because that village asked for no ceiling at all.
-    if (capMode !== "unlimited" && !range.valid) {
-      return res.status(409).json({ error: "This quest does not advertise a readable amount, so it cannot be consented while a cap is set. Give the quest a number on the board first." });
-    }
-    if (capMode === "posted") {
-      if (requested < range.min || requested > range.max) {
-        return res.status(409).json({
-          error: `${requested} is outside what this quest advertises (${describeRange(range)}). The board is the contract.`,
-          min: range.min,
-          max: range.max,
-        });
-      }
-    } else if (capMode === "capped") {
-      const ceiling = Math.round(range.max * numberVar("quest.consent_cap_multiplier"));
-      if (requested > ceiling) {
-        return res.status(409).json({
-          error: `${requested} is above the ceiling for this quest. It advertises ${describeRange(range)} and the bonus ceiling is ${ceiling}.`,
-          max: range.max,
-          ceiling,
-        });
-      }
-    }
-    /*
-     * ISSUANCE WAITS FOR THE VILLAGE (R67), ASKED BEFORE THE CLAIM FLIPS.
-     *
-     * The ledger refuses a faucet posting until the launch vote carries, and
-     * every other issuing path in this file finds that out AFTER it has
-     * already changed something. Here that would be the worst version of it:
-     * the claim flips to `consented`, the credit is refused, the route answers
-     * 500, and consenting again is a 409 because the claim is no longer
-     * submitted. A member's work would be recorded as done and paid nothing,
-     * with no way to run it again.
-     *
-     * So this route asks first. `granted > 0` because a village that has opted
-     * into consenting at zero posts nothing at all, and refusing that would be
-     * withholding an acknowledgement that costs no tokens.
-     *
-     * The other faucet callers are not guarded this way and are not silent
-     * either: each one returns or logs the ledger's own sentence. This is the
-     * only one that loses a member's work by finding out late.
-     */
-    if (granted > 0) {
-      const notStarted = await issuanceRefusal(getPool());
-      if (notStarted) return res.status(409).json({ error: notStarted });
-    }
-
-    // Stage depends on consented-quest count, so the snapshot must be taken
-    // BEFORE the claim flips to consented; taking it after would always compare
-    // equal and the advancement event would never fire.
-    const claimant = await members.byId(claim.userId);
-    const stageBefore = claimant ? await stageOf(claimant) : null;
-
-    const consented = await claimsRepo.update(claim.id, (c) => {
-      c.status = "consented";
-      c.amount = granted;
-      c.resolvedAt = new Date().toISOString();
-      // WHO witnessed it (0070). The guard above already refuses self-consent
-      // in the moment; recording the witness is what lets the audit see a
-      // reciprocal pair afterwards, and what makes the rule checkable at all
-      // once the request is over.
-      c.consentedBy = actor.userId ?? null;
-    });
-    // Credit the player's balance
-    if (claimant && consented) {
-      // Through the ledger, not `+=`. The idempotency key is the claim, so a
-      // retried or double-clicked consent credits exactly once, and the balance
-      // column is RECOMPUTED from the ledger rather than incremented. S7:
-      // recognition issues from the faucet account, so issuance is visible.
-      // At granted === 0 (allow_zero_consent) there is nothing to post and
-      // nothing to recompute: the cache write is skipped entirely — the old
-      // code assigned the failed post's toBalance (0) and wiped the member.
-      let after: any = claimant;
-      // A standing badge can carry a reward multiplier (0050): ten years in
-      // the village, a 20% bonus on everything. It applies AFTER the consent
-      // cap on purpose. The cap governs what this piece of WORK is worth,
-      // which is a question about the quest; a multiplier is a standing the
-      // person carries into every quest, which is a question about them.
-      //
-      // Multiplying rather than adding keeps it honest at every scale, and
-      // the reason rides into the ledger description so a member reading
-      // their history can see where the extra came from.
-      //
-      // With no multiplier badge anywhere this is exactly 1, so a village
-      // that never makes one sees byte-identical behaviour.
-      const multiplier =
-        effectiveLifecycle("badges") === "off"
-          ? 1
-          : await rewardMultiplierFor(getPool(), consented.userId, await dormantBadgeIds());
-      const payout = multiplier === 1 ? granted : Math.floor(granted * multiplier);
-      if (payout > 0) {
-        const credit = await postTransfer(getPool(), {
-          from: RECOGNITION_FAUCET,
-          to: memberAccount(consented.userId),
-          amount: payout,
-          source: "quest_consent",
-          sourceRef: consented.id,
-          description:
-            multiplier === 1
-              ? `Quest consented: ${consented.questTitle}`
-              : `Quest consented: ${consented.questTitle} (${granted} x${multiplier} for a standing badge)`,
-          idempotencyKey: `quest_consent:${consented.id}`,
-        });
-        if (!credit.ok) {
-          // The claim has already flipped; say so honestly instead of
-          // answering 200 with a wiped cache. The ledger key makes a later
-          // repair-post safe.
-          console.error(`[quests] consent credit failed for claim ${consented.id}: ${credit.error}`);
-          return res.status(500).json({
-            error: `The claim was marked consented but the credit could not be posted: ${credit.error}`,
-          });
-        }
-        after = await members.update(claimant.id, (u: any) => { u.recognitionBalance = credit.toBalance; });
-      }
-      // Whatever else the village's rules say a confirmed contribution mints,
-      // which today is its voice token. Hearts are NOT re-minted here: the
-      // block above has posted them since S7 with the range, the cap and the
-      // standing multiplier, and a rule minting them again would pay twice for
-      // one piece of work.
-      //
-      // Deliberately not awaited into the response contract and never allowed
-      // to throw: a quest that was witnessed and credited must not fail because
-      // a secondary mint had a bad afternoon. The occurrence key makes a later
-      // repair-post safe.
-      try {
-        const extra = await mintForConfirmedClaim(getPool(), {
-          id: consented.id,
-          questId: consented.questId,
-          userId: consented.userId,
-          confirmedAt: consented.resolvedAt,
-        });
-        if (extra.skipped) {
-          console.log(`[economy] claim ${consented.id}: no rule mint (${extra.skipped})`);
-        }
-      } catch (err) {
-        console.error(`[economy] rule mint failed for claim ${consented.id}:`, err);
-      }
-      // S31 work-exchange (F2 firewall): a quest may ALSO carry stay credits,
-      // released by the same human consent — a separate column, a separate
-      // token, the same claim-keyed idempotency. Never blended with recognition.
-      const stayReward = Math.max(0, Math.floor(Number(consentedQuest?.stayCreditReward ?? 0)));
-      if (stayReward > 0) {
-        const stayCredit = await mintStayCredits(getPool(), {
-          userId: consented.userId,
-          amount: stayReward,
-          source: "quest_stay_reward",
-          sourceRef: consented.id,
-          description: `Work exchange: ${consented.questTitle}`,
-          idempotencyKey: `queststay:${consented.id}`,
-        });
-        if (stayCredit.ok) {
-          await notify({
-            userId: consented.userId,
-            type: "stays",
-            title: `+${stayReward} stay credit(s) for "${consented.questTitle}"`,
-            link: "/stay",
-            dedupeKey: `queststay:${consented.id}:notify`,
-          });
-        } else {
-          console.error(`[stays] work-exchange release failed for claim ${consented.id}: ${stayCredit.error}`);
-        }
-      }
-      await addActivity("quest", `${firstName(consented.userName)} completed the quest "${consented.questTitle}"`, { actorUserId: consented.userId, entityType: "quest", entityRef: consented.questId });
-      await notify({
-        userId: consented.userId,
-        type: "quest_consented",
-        // What was actually CREDITED, not what was consented. A standing
-        // badge can multiply the two apart, and telling a member a number
-        // their balance does not match is the fastest way to lose their
-        // trust in the ledger.
-        title: multiplier === 1
-          ? `Your quest was consented: ${consented.questTitle} (+${payout})`
-          : `Your quest was consented: ${consented.questTitle} (+${payout}, including your badge bonus)`,
-        link: `/quests/${consented.questId}`,
-        // The real actor, admin or steward (see the declines branch above).
-        actorUserId: actor.userId,
-        dedupeKey: `quest:${consented.id}:consented`,
-      });
-      // Releasing value must always be attributable. The /api/admin audit
-      // middleware only stamps isAdmin actors, so a steward's consent — the
-      // whole point of widening this gate — needs its own row.
-      if (!actor.isAdminActor) {
-        void recordEvent(getPool(), {
-          // Both figures: what the steward decided, and what the ledger
-          // moved. An audit row carrying only the first would misstate the
-          // release it exists to attribute.
-          kind: "audit",
-          text: multiplier === 1
-            ? `quest:consented:${consented.id}:${payout}`
-            : `quest:consented:${consented.id}:granted=${granted}:paid=${payout}:x${multiplier}`,
-          actorUserId: actor.userId, entityType: "quest_claim", entityRef: consented.id, audience: "admin",
-        });
-      }
-      if (after) {
-        const stageAfter = await stageOf(after);
-        if (stageBefore) await recordStageEvent(after, stageBefore, stageAfter, `quest consented: ${consented.questTitle}`);
-      }
-    }
-    res.json(consented);
+  // The consent queue, the holder's own confidence flag, the attention list
+  // and the human gate that releases value, all four registered at exactly the
+  // point they used to sit. Express matches in registration order, and
+  // /api/admin/quest-claims/attention only wins over
+  // /api/admin/quest-claims/:id/consent because it comes first.
+  registerQuestClaimRoutes(app, {
+    isAdmin, authedUser, mayStillSee, getPool, members, claimsRepo, questsRepo,
+    firstName, notify, notifyAdmins, stageOf, recordStageEvent,
+    consentActor, addActivity, dormantBadgeIds,
   });
 
 
@@ -20447,6 +20033,12 @@ ${inner}
       clientNonce: typeof clientNonce === "string" ? clientNonce : undefined,
     }, stageMultiplierById);
     if (!outcome.ok) return res.status(400).json({ error: outcome.error });
+    // `users.recognition_balance` is a cache of the ledger that the profile
+    // card, the players list and the reconciliation panel all read. Every other
+    // recognition credit refreshes it — the acknowledgement door does it in
+    // sendGratitude — and this door dropped the balance `give` hands back, so a
+    // Heart landed in the ledger and the recipient's card kept its old number.
+    await members.update(recipient.id, (u: any) => { u.recognitionBalance = outcome.balance; });
 
     await notify({
       userId: recipient.id,
@@ -20851,10 +20443,11 @@ ${inner}
     const allMembers = await members.all();
     const nameOf = (id: string) => firstName(allMembers.find((u: any) => u.id === id)?.name ?? "Member");
     const eligible = await eligibleSenderIds();
+    const reversed = await gratitudeRepo.reversedIds();
 
     const due = (unreadable ? [] : dueCycles(cycles, entries, new Date())).map((cycle) => {
       const persisted = dists.filter((d) => d.cycleId === cycle.id);
-      const totals = settleCycle(entries, cycle.id, eligible);
+      const totals = settleCycle(entries, cycle.id, eligible, reversed);
       const totalEligible = totals.reduce((n, t) => n + t.receivedEligible, 0);
       const shares = persisted.length > 0
         ? persisted.map((d) => ({
@@ -20957,8 +20550,12 @@ ${inner}
     const closed: CycleRecord[] = [];
     let totalCredited = 0;
     const eligible = await eligibleSenderIds();
+    // Read once for the whole loop, and read with the same repo call the
+    // preview above uses, so the numbers an admin read before pressing are the
+    // numbers this settles. A gift that was undone is not part of the moon.
+    const reversed = await gratitudeRepo.reversedIds();
     for (const cycle of due) {
-      const totals = settleCycle(entries, cycle.id, eligible);
+      const totals = settleCycle(entries, cycle.id, eligible, reversed);
       // Split by ELIGIBLE recognition, not the raw total: value follows the
       // same Sybil filter the breadth metric answers to. `t.received` stays
       // the honest figure for reporting.
@@ -27074,7 +26671,7 @@ ${inner}
     isAdmin, authedUser, guardCapability, mayAct, adminActor, getPool, members, questsRepo,
   });
   registerHoldersRoutes(app, { guardCapability, getPool });
-  registerErasureQueueRoutes(app, { guardCapability, getPool });
+  registerErasureQueueRoutes(app, { guardCapability, getPool, erasureDeps });
 
   // ── Season patterns (0050) ───────────────────────────────────────────────
   //
@@ -27475,6 +27072,24 @@ ${inner}
       memberIntents: await exportIntentsForMember(pool, user.id),
       onchainBalances: await mine("SELECT * FROM onchain_balances WHERE user_id = ?"),
       exits: await mine("SELECT * FROM exits WHERE user_id = ?"),
+      /*
+       * THE FACE, THE BUDGET IT COST, AND WHAT THE POOL CREDITED THEM.
+       *
+       * Four tables this document had never read. A member's party carries the
+       * presentation and tone they chose, which is a description of their own
+       * body; the portraits are every picture they uploaded or forged; the
+       * grants are what the forge cost them; the distributions are their share
+       * of each cycle's split. A file that omits a person's face and their
+       * share of the value pool is not "everything the village holds".
+       *
+       * Filenames rather than addresses, which is what the rows hold. A URL in
+       * a downloaded file stops resolving the moment the account is erased,
+       * and a dead link reads as a promise the village broke.
+       */
+      party: await charactersForMember(pool, user.id),
+      portraits: await portraitsForMember(pool, user.id),
+      portraitBudget: await grantsForMember(pool, user.id),
+      gratitudeDistributions: await distributionsForMember(pool, user.id),
       /*
        * ── Lane C: the domains that are not in this database ────────────────
        *

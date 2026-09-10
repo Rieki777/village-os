@@ -256,6 +256,14 @@ export async function clearCandidate(
  * `file_name IS NOT NULL` in the WHERE clause, so a row holding only a
  * candidate cannot be published into visibility. Withdrawing has no such
  * condition, because taking something back must always be allowed to work.
+ *
+ * WHAT WITHDRAWING HERE DOES NOT DO, and the caller owns the rest. Clearing
+ * `published_at` takes the picture out of every listing and out of every
+ * stranger's payload. It does NOT take the picture off the internet:
+ * `/api/uploads/:filename` has no sign-in in front of it, so anybody who saw
+ * the page while it was published is holding a working address. Revoking that
+ * is `renamePortraitFile` below, driven from the route, because it needs the
+ * volume and a repository may not touch the volume.
  */
 export async function setPublished(
   pool: Pool,
@@ -271,6 +279,39 @@ export async function setPublished(
       : "UPDATE `character_portraits` SET `published_at` = NULL " +
           "WHERE `village_id` = ? AND `user_id` = ? AND `archetype_key` = ?",
     [villageId, userId, archetypeKey],
+  );
+  return r.affectedRows > 0;
+}
+
+/**
+ * Point one portrait row at a different file, and only if it still holds the
+ * one the caller measured.
+ *
+ * WHAT THIS IS FOR. Withdrawing a published portrait has to revoke its
+ * ADDRESS, and the address is the filename. The caller copies the bytes to a
+ * fresh stamped name, calls this, and unlinks the old file, at which point the
+ * URL a stranger wrote down stops resolving and the member still has their
+ * picture.
+ *
+ * `file_name = ?` in the WHERE clause is the guard, and it is the whole reason
+ * this is not a plain UPDATE. Between the caller reading the row and calling
+ * this, the member may have uploaded a replacement or kept a candidate. Without
+ * the condition this would point the row at a copy of the picture they just
+ * replaced, and the upload they made would be the file that gets unlinked. With
+ * it, the loser of that race changes nothing and says so.
+ */
+export async function renamePortraitFile(
+  pool: Pool,
+  villageId: string,
+  userId: string,
+  archetypeKey: string,
+  from: string,
+  to: string,
+): Promise<boolean> {
+  const [r] = await pool.query<ResultSetHeader>(
+    "UPDATE `character_portraits` SET `file_name` = ? " +
+      "WHERE `village_id` = ? AND `user_id` = ? AND `archetype_key` = ? AND `file_name` = ?",
+    [to, villageId, userId, archetypeKey, from],
   );
   return r.affectedRows > 0;
 }
@@ -476,4 +517,72 @@ export async function refundGrant(pool: Pool, villageId: string, userId: string)
       "WHERE `village_id` = ? AND `user_id` = ?",
     [villageId, userId],
   );
+}
+
+// ── Leaving, and the file that says what was held ──────────────────────────
+//
+// Two doors that are about the PERSON and not about the studio: the export
+// that promises everything the village holds about them, and the sweep that
+// erases them. Both are keyed on the member ALONE and carry no village filter,
+// on purpose. A village-scoped read of either would answer completely for one
+// scope and silently omit the rest, which is the exact shape of partial answer
+// those two promises exist to rule out.
+
+/** One member's portraits everywhere, in any state, for their own file. */
+export async function portraitsForMember(pool: Pool, userId: string): Promise<PortraitRow[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT ${COLUMNS} FROM \`character_portraits\` WHERE \`user_id\` = ? ` +
+      "ORDER BY `village_id`, `archetype_key`",
+    [userId],
+  );
+  return rows.map(rowToPortrait);
+}
+
+/** One member's forge budget everywhere, for their own file. */
+export async function grantsForMember(
+  pool: Pool,
+  userId: string,
+): Promise<Array<GrantCounters & { villageId: string }>> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT `village_id`, `setup_remaining`, `moon_remaining`, `moon_cycle`, `spent` " +
+      "FROM `portrait_grants` WHERE `user_id` = ? ORDER BY `village_id`",
+    [userId],
+  );
+  return rows.map((r) => ({
+    villageId: String(r.village_id),
+    setupRemaining: Number(r.setup_remaining ?? 0),
+    moonRemaining: Number(r.moon_remaining ?? 0),
+    moonCycle: r.moon_cycle == null ? null : Number(r.moon_cycle),
+    spent: Number(r.spent ?? 0),
+  }));
+}
+
+/**
+ * Revoke a departing member's face: every portrait row goes, and the caller is
+ * handed the filenames so the BYTES can go too.
+ *
+ * WHY THE FILENAMES COME BACK INSTEAD OF BEING UNLINKED HERE. This file may not
+ * touch the volume. `deletePortrait` above returns names for the same reason,
+ * and the uploads directory is a dependency the server passes in, never a
+ * constant a repository reaches for.
+ *
+ * WHY THE ROW GOES AND `published_at` IS NOT MERELY CLEARED. Un-publishing
+ * takes a picture out of listings. It does not take it off the volume, and
+ * `/api/uploads/:filename` has no sign-in in front of it, so the URL IS the
+ * capability. Clearing the flag for a member who has left would leave every
+ * portrait they ever published fetchable by anybody who had ever seen the page.
+ *
+ * WHY THE BUDGET GOES WITH IT. `portrait_grants` is a per-member counter and
+ * not a value row: no conservation proof reads it and nothing aggregates it
+ * across members (its only other readers are this file and its tests). It is a
+ * record about a person, so it leaves with the person.
+ *
+ * IDEMPOTENT, because the erasure sequence may re-run it. A second pass finds
+ * no rows, returns no filenames, and unlinks nothing.
+ */
+export async function forgetPortraitsForMember(pool: Pool, userId: string): Promise<string[]> {
+  const held = await portraitsForMember(pool, userId);
+  await pool.query("DELETE FROM `character_portraits` WHERE `user_id` = ?", [userId]);
+  await pool.query("DELETE FROM `portrait_grants` WHERE `user_id` = ?", [userId]);
+  return held.flatMap((p) => [p.fileName, p.candidateFileName]).filter((f): f is string => !!f);
 }

@@ -21,6 +21,52 @@ const toDb = (v: unknown): Date | null => {
   return Number.isNaN(d.getTime()) ? null : d;
 };
 
+/**
+ * WHICH GRATITUDE ROWS HAVE BEEN UNDONE, written once because two answers to
+ * this question is the defect it replaces.
+ *
+ * A `FROM ... WHERE` fragment binding `g` to `gratitude_log`, so a caller adds
+ * its own `SELECT` and its own extra `AND`s and gets the SAME definition of
+ * "reversed" that every other caller gets. Two callers today:
+ * `allowanceFor` (server/lib/economy.ts) sums what a giver may have back, and
+ * `reversedIds` below hands the settlement the ids to leave out. They used to
+ * disagree: the allowance refunded a reversed gift and the settlement still
+ * paid a pool share on it.
+ *
+ * ── IT IS ANCHORED ON THE NOTE, NOT ON A KEY PREFIX ─────────────────────────
+ *
+ * `allowanceFor` matched reversals with `source_ref LIKE 'gratitude.given:%'`,
+ * which is the key `give()` writes and NOT the key the acknowledgement door
+ * writes (`gratitude_received:<noteId>`, server/lib/gratitude.ts). One door's
+ * reversals were therefore invisible to the refund while both doors' gifts
+ * were counted in the spend. Walking the three rows — the mirror, the posting
+ * it undoes, the note that posting delivered — asks the question the product
+ * actually means, and it holds for any key either door writes next.
+ *
+ * ── AND IT IS DRIVEN FROM THE MIRROR, WHICH IS WHAT KEEPS IT CHEAP ──────────
+ *
+ * `rev` leads because `token_ledger_source_idx (source)` makes reversals a
+ * short list — one correction is rare and a gift is not. From there both hops
+ * are index lookups: `token_ledger_idempotency_unique` for the posting, the
+ * primary key for the note. Reading it the other way round would probe
+ * `source_ref`, which carries no index, once per gift; this runs inside the
+ * lock `writeGratitudeRow` holds on every give, so that direction is not
+ * available to it. Same reasoning as the uncredited-notes check in
+ * server/lib/ledger.ts, which had to solve the identical shape.
+ *
+ * `rev.source_ref` IS the reversed posting's whole idempotency key: `reverse()`
+ * writes it there, clipped at `MAX_SOURCE_REF` (120) only for keys longer than
+ * that. Every gratitude key is under 50 characters, and
+ * `server/lib/economy.allowance.test.ts` asserts that against a real key both
+ * doors wrote rather than trusting this sentence to stay true.
+ */
+export const REVERSED_GRATITUDE_FROM =
+  "FROM `token_ledger` rev " +
+  "JOIN `token_ledger` orig ON orig.`idempotency_key` = rev.`source_ref` " +
+  "AND orig.`source` IN ('gratitude_received', 'heart_received') " +
+  "JOIN `gratitude_log` g ON g.`id` = orig.`source_ref` " +
+  "WHERE rev.`source` = 'reversal'";
+
 export interface GratitudeEntry {
   id: string;
   kind: string;
@@ -80,6 +126,28 @@ export interface GratitudeLogRepo {
    * SAME locked connection it writes through. Informational only from here.
    */
   sumPair(fromId: string, toId: string, cycleId: string): Promise<number>;
+  /**
+   * The ids of gratitude rows whose delivery has been reversed.
+   *
+   * The settlement's missing term. `settleCycle` sums `gratitude_log` and had
+   * no idea a gift could be undone, so a reversed gift still counted toward
+   * the recipient's `received`, still counted toward `receivedEligible`, and
+   * still earned them a share of the cycle's value pool — while the mirror
+   * posting had already taken the recognition back out of their balance and
+   * `allowanceFor` had already handed the giver their allowance back. The
+   * ledger, the allowance and the settlement were three readings of one moon.
+   *
+   * A SET AND NOT A FILTERED SUM, because the settlement is a pure function
+   * over rows it is handed (server/lib/gratitude-cycles.ts) and that is worth
+   * keeping: it stays testable with no database, and the preview an admin
+   * reads and the close they press go on sharing one implementation.
+   *
+   * Whole-table, not per cycle. A close settles several finished lunations in
+   * one pass and the preview beside it previews all of them, so one read
+   * serves the whole loop; the row count here is the number of corrections a
+   * village has ever made, which is small by construction.
+   */
+  reversedIds(): Promise<Set<string>>;
 }
 
 export function gratitudeLogRepo(pool: Pool): GratitudeLogRepo {
@@ -120,6 +188,13 @@ export function gratitudeLogRepo(pool: Pool): GratitudeLogRepo {
         [fromId, toId, cycleId],
       );
       return Number(row.s);
+    },
+
+    async reversedIds() {
+      const [rows] = await pool.query<RowDataPacket[]>(
+        "SELECT g.`id` AS id " + REVERSED_GRATITUDE_FROM,
+      );
+      return new Set(rows.map((r) => String(r.id)));
     },
 
     async add(e) {
@@ -242,4 +317,41 @@ export function gratitudeDistributionsRepo(pool: Pool): DistributionsRepo {
       );
     },
   };
+}
+
+/**
+ * What the value pool credited ONE member, cycle by cycle.
+ *
+ * A standalone read and not a method on `DistributionsRepo`, because its one
+ * caller is the member's own data export and that route holds a pool rather
+ * than the repo. It is here because this file is the table's enumerable home.
+ *
+ * `all()` above exists and is the wrong instrument: it reads every row for
+ * every member in the village, and the export needs one person's. Filtering a
+ * whole-table read in TypeScript would put every other member's settlement in
+ * the memory of the request that builds one member's download, one spread
+ * operator away from shipping.
+ */
+export async function distributionsForMember(
+  pool: Pool,
+  userId: string,
+): Promise<DistributionRecord[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT id, cycle_id, user_id, received, received_hearts, received_acks, distinct_senders, " +
+      "credited, pool_token, created_at FROM gratitude_distributions WHERE user_id = ? " +
+      "ORDER BY created_at, id",
+    [userId],
+  );
+  return rows.map((r) => ({
+    id: String(r.id),
+    cycleId: String(r.cycle_id),
+    userId: String(r.user_id),
+    received: Number(r.received ?? 0),
+    receivedHearts: Number(r.received_hearts ?? 0),
+    receivedAcks: Number(r.received_acks ?? 0),
+    distinctSenders: Number(r.distinct_senders ?? 0),
+    credited: Number(r.credited ?? 0),
+    poolToken: r.pool_token ?? null,
+    createdAt: toIso(r.created_at),
+  })) as DistributionRecord[];
 }

@@ -197,6 +197,25 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   under-reports, so run all three scans (the directory, `git ls-tree` over every remote AND
   local ref, and every `drizzle/*.sql` on disk across the worktrees), then
   `node scripts/check-migration-numbers.mjs --next` to confirm.
+- **quest-consent integrity lane, 2026-09-10: holds 0196** for
+  `drizzle/0196_one_live_claim_per_member.sql`. The number was ASSIGNED by the coordinator, not
+  measured by this lane, and `check-migration-numbers.mjs` reported next-free 0190 in this
+  worktree, so 0196 sits six above what the directory scan can see and is deliberately clear of
+  it. One `ALTER TABLE quest_claims ADD KEY` and nothing else: a NON-unique
+  `(quest_id, user_id, status)` index. The file's header is most of its value, because it is
+  where the answer to "why is there no unique index and no foreign key on this table" is written
+  down. Both were reported as defects and neither is one: the rule is "at most one row that is
+  not declined per pair", which no MySQL index expresses, and a unique key would collide with any
+  populated board that has seen one decline-and-reclaim, which at boot is a village that will not
+  start. The invariant lives in `claimsRepo.openClaim`'s row lock instead.
+- **data-rights lane, 2026-09-10: holds 0195** for
+  `drizzle/0195_an_erasure_records_how_far_it_got.sql` (one new table, `member_erasures`, plus
+  one non-unique index on it). Additive only, and the previous release neither reads nor writes
+  it, so a rollback over it is a no-op. The number was NOT measured by this lane and was handed
+  down with the brief, which is the one case section 3's method does not cover: if it collides,
+  the fix is a new file rather than a rename, because the applied ledger keys on filename.
+  `check-migration-numbers.mjs --next` answered 0190 on this worktree, which is the usual
+  under-report (it reads only this tree's `drizzle/`), and the gate passes at 0195.
 - **profile-rebase integration, 2026-09-04: RENUMBERED to 0156, 0157, 0158, 0159.** The four
   entries below (path-data's 0144/0145/0146, portraits' 0147, and the 0144-to-0151 move made
   earlier the same day) are HISTORY now, not allocation. Main reached 0153 while the branch
@@ -246,8 +265,11 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   `external_proposal_drops` (a content-free counter, so an empty queue can be told apart from
   a queue where everything was refused). `0141_quest_proposals.sql` adds `quest_proposals`,
   which deliberately carries NO reward or gate column: a quest cannot exist unpublished
-  (`GET /api/quests` is public and unfiltered and the claim route never reads status), and the
-  five columns a machine must never write are absent rather than guarded. `0142` adds
+  (`GET /api/quests` is public and unfiltered), and the five columns a machine must never write
+  are absent rather than guarded. The second half of that parenthetical said "and the claim route
+  never reads status", which was true when it was written and stopped being true on 2026-09-10:
+  the claim route and the map-promise branch both ask `questClosed` now, so a Closed quest still
+  renders on the unfiltered board and no longer accepts a claim. `0142` adds
   `is_agent` to `org_role_assignments`, with no enum ALTER: an agent is
   `holder_kind='documented'`, which is already excluded from the settlement job and from the
   0083 declare door by filters that exist. `0143` adds `origin_module_id` to `health_events`

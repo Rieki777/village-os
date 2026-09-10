@@ -1722,6 +1722,16 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(real.json.notify.gratitudeEmail).toBe("off");
     expect(real.json.notify.emailsOff).toBe(true);
     expect((await api("GET", "/api/profile/prefs", undefined, peerToken)).json.notify.emailsOff).toBe(true);
+
+    // The display currency: written and echoed by the PUT, and READABLE from
+    // the GET. It was absent from the GET's payload, so a client reading its
+    // own choice from this route got undefined and could not tell that from
+    // "no choice made".
+    const cur = await api("PUT", "/api/profile/prefs", { displayCurrency: "eur" }, peerToken);
+    expect(cur.json.displayCurrency).toBe("EUR");
+    expect((await api("GET", "/api/profile/prefs", undefined, peerToken)).json.displayCurrency).toBe("EUR");
+    await api("PUT", "/api/profile/prefs", { displayCurrency: "" }, peerToken);
+    expect((await api("GET", "/api/profile/prefs", undefined, peerToken)).json.displayCurrency).toBeNull();
   });
 
   it("S18: export gives a member everything; deletion anonymizes without touching value", async () => {
@@ -1747,6 +1757,13 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(exported.json.member.passwordHash).toBeUndefined();
     expect(exported.json.gratitudeReceived.length).toBe(1);
     expect(exported.json.balances.gratitude).toBe(1);
+    // The four domains this file used to omit. Empty for a member who never
+    // walked a path or uploaded a picture, and PRESENT, which is the point: an
+    // absent key cannot be told from a member who holds nothing, and the
+    // difference is whether the village answered about their face at all.
+    for (const key of ["party", "portraits", "portraitBudget", "gratitudeDistributions"]) {
+      expect(Array.isArray(exported.json[key]), `${key} is in the export`).toBe(true);
+    }
 
     // Deletion needs the password; then the account is a tombstone.
     expect((await api("POST", "/api/profile/delete-account", { password: "wrong" }, leaverToken)).status).toBe(403);

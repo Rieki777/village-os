@@ -89,15 +89,34 @@ no-self-consent rule checkable after the request is over. `confidence`, `confide
 `confidence_at` (0055) are the claimant's own account of how it is going, deliberately excluded
 from the repo's generic `update()` SET list so no other write path can clobber them.
 
-Two things this table does **not** have, both load-bearing. There is no unique index on
-`(quest_id, user_id)`: 0001 declares a primary key on `id` and three non-unique keys, so the
-one-non-declined-claim-per-member rule is a read-then-write in the claim route and nothing under
-it. And there is no foreign key to `quests.id`. The delete route refuses only while a claim is
-`claimed` or `submitted`, so a quest carrying `consented` and `declined` claims deletes cleanly
-and those rows survive pointing at nothing: `GET /api/game/me` still returns them,
-`client/src/pages/QuestDetail.tsx` links each to `/quests/:id`, where `GET /api/quests/:id` answers
-`404 {"error":"No such quest"}`, and `consentedCount` still counts them, so a deleted quest keeps
-advancing the stage ladder and keeps feeding the `quests_consented` badge metric.
+Two things this table does **not** have, and both absences are now deliberate and written down in
+`drizzle/0196_one_live_claim_per_member.sql`.
+
+**There is no unique index on `(quest_id, user_id)`, and there cannot be one.** The rule the routes
+actually enforce is `status <> 'declined'`, and they mean it: a declined claim is the quest handed
+back, the decline notification says the quest is open again, and the member is expected to pick it
+up. So a member declined once legitimately holds two rows for that pair and a member declined
+twice holds three, which makes `(quest_id, user_id, status)` wrong as well. The natural key is "at
+most one row that is not declined per pair", a partial uniqueness MySQL has no index shape for.
+Beyond correctness, a unique key that collides with rows already present would not fail a deploy,
+it would stop a village booting, and a new UNIQUE index on an existing table is on the
+expand/contract never-list that `scripts/check-migration-compat.mjs` enforces. The invariant lives
+in `claimsRepo.openClaim` instead, which locks the quest row `FOR UPDATE` and does the existence
+test and the insert underneath it, the same shape `writeGratitudeRowOnce` uses for the gratitude
+allowance. 0196 adds the non-unique `(quest_id, user_id, status)` index that lookup wants.
+
+**There is no foreign key to `quests.id`, and adding one would be worse than the gap.** The delete
+route refuses only while a claim is `claimed` or `submitted`, so a quest carrying `consented` and
+`declined` claims deletes cleanly and those rows survive: `GET /api/game/me` still returns them,
+`client/src/pages/QuestDetail.tsx` links each to `/quests/:id`, and `GET /api/quests/:id` answers
+`404 {"error":"No such quest"}`. What survives with them is correct, though. `consentedCount`, the
+stage ladder and the `quests_consented` badge metric all keep counting a consented claim after its
+quest is gone, which is the right answer: the work was witnessed and paid, and tidying a finished
+quest off the board must not take a member's stage with it. A `CASCADE` would delete exactly those
+rows and orphan the ledger posting keyed to them; a `RESTRICT` would contradict the delete route's
+own settle-first design. What is genuinely left broken is the dead link, and the divergence between
+the counters that join `quests` (`fieldCounts`, `recentConsented`, which drop the row) and the ones
+that do not (`consentedCount`, the badge metric, which keep it).
 
 **`quest_crews`** and **`quest_crew_members`** (0067). A crew is a named group walking one quest.
 The roster lives here rather than on `conversation_members` because messaging ships off and quests
@@ -152,7 +171,7 @@ that file alphabetically would make `field` a quest id that does not exist.
 | `POST /api/admin/quests` | `isAdmin` | Off-site image URLs refused: a poster comes through the village's own upload. |
 | `PUT /api/admin/quests/:id` | `isAdmin` | Refuses an example row, so an example cannot be edited into real work. |
 | `DELETE /api/admin/quests/:id` | `isAdmin` | Refuses an example row, and refuses with 409 while any claim on it is `claimed` or `submitted`. |
-| `POST /api/game/quests/:id/claim` | signed-in member | Enforces `min_stage` and `requires_role`, refuses an example, refuses a second non-declined claim. |
+| `POST /api/game/quests/:id/claim` | signed-in member | Enforces `min_stage` and `requires_role`, refuses an example, refuses a closed quest, refuses a second non-declined claim (under the quest's row lock, via `claimsRepo.openClaim`). |
 | `POST /api/game/quests/:id/submit` | signed-in member | Needs a link or a note. Accepts a second submit on an already-submitted claim. Notifies everyone who may consent. |
 | `PUT /api/game/quest-claims/:id/confidence` | the claim's holder | Only while the claim is `claimed` or `submitted`. Only `at_risk` and `stuck` ring a bell. |
 | `GET /api/admin/quest-claims` | `mayStillSee("quest.consent")` | A read, so it asks the see-path and never `mayAct`. There is no break-glass on a GET. |
@@ -266,36 +285,48 @@ what runs first:
    stranded claim has to be clearable and a decline creates nothing.
 4. Self-consent, unless the solo-founder window is open.
 5. The decline branch returns here.
-6. `quest.require_submission_before_consent` (default on): the claim must be `submitted`.
-7. `granted <= 0` is refused unless `quest.allow_zero_consent` is on.
-8. If the cap mode is not `unlimited` and the label is unreadable, 409.
-9. The cap comparison itself.
-10. `issuanceRefusal`: the launch vote must have carried before any token issues. **Asked before
-    the claim flips**, and this is the only faucet caller in the file that does so. Finding out
-    afterwards would leave the claim `consented`, the credit refused, and no way to re-run it,
-    because consenting again would 409 on a claim that is no longer submitted.
-11. The claim flips, then the ledger post, then the rule mint, then the stay credits.
+6. `granted <= 0` is refused unless `quest.allow_zero_consent` is on.
+7. If the cap mode is not `unlimited` and the label is unreadable, 409.
+8. The cap comparison itself.
+9. `issuanceRefusal`: the launch vote must have carried before any token issues. Asked here as a
+   cheap first ask that hands back the ledger's own sentence before a multiplier lookup and a
+   transaction are spent finding out. It is no longer the thing standing between a member and a
+   lost consent, because `postTransferOn` asks the same question inside the transaction below.
+10. The badge reward multiplier and the payout.
+11. `claimsRepo.consentOnce`: one transaction that locks the claim row, re-checks the status,
+    flips the row and posts the credit on the same connection.
+12. After it commits: the balance cache, the rule mint, the stay credits, the activity line, the
+    notification and the stage event.
 
-**Step 11 is four separate commits and not a transaction**, and the reasoning behind step 10 covers
-exactly one of the ways the post can fail. `claimsRepo.update` commits on its own connection, and
-only then does `postTransfer` run. If that post fails for any reason the launch-vote check did not
-already catch, the route answers `500` with "The claim was marked consented but the credit could
-not be posted", and the claim is permanently `consented`: the member is credited nothing,
-`quest.require_submission_before_consent` refuses a re-consent on a claim that is no longer
-`submitted`, no route reverts a consented claim (`claimsRepo.remove` deletes only `status =
-'claimed'`), and nothing in the product can retry it. The idempotency key
-`quest_consent:<claimId>` makes a hand-made repair post safe, and a hand-made repair post is the
-only repair there is.
+**Step 11 is one commit**, and `quest.require_submission_before_consent` is enforced inside it
+rather than as a separate read: the variable decides which statuses `consentOnce` accepts
+(`submitted` alone when it is on, `claimed` or `submitted` when it is off), and the status is
+re-read under the claim's own row lock. Both of the gaps this used to have are closed by the same
+change.
 
-**Conflicting writes.** The handler reads the claim with `claimsRepo.byId`, a plain SELECT taking
-no lock, runs all ten checks, and only then calls `claimsRepo.update`, which takes `FOR UPDATE`
-inside itself. Two stewards consenting the same submitted claim therefore both pass the
-`status !== "submitted"` check. The second `postTransfer` hits `ER_DUP_ENTRY` on
-`quest_consent:<claimId>`, and `server/lib/ledger.ts` answers a duplicate with
-`{ ok: true, duplicate: true, toBalance }`, so the loser's write succeeds silently: `amount` and
-`consented_by` end up holding a figure and a witness the ledger never paid for. The one-claim rule
-has the same shape one step earlier, a read-then-write with no database constraint behind it, so
-two concurrent claims both land.
+The first gap was that `claimsRepo.update` committed on its own connection and only then did
+`postTransfer` run. A post that failed for any reason the launch-vote check did not already catch
+answered `500` over a claim permanently marked `consented`, with the member credited nothing and
+nothing in the product able to retry it: `quest.require_submission_before_consent` refuses a
+re-consent on a claim that is no longer `submitted`, and no route reverts a consented claim
+(`claimsRepo.remove` deletes only `status = 'claimed'`). A refused post now rolls the flip back
+with it and answers `409` saying nothing was recorded, so consenting again is a real retry.
+
+The second gap was concurrent stewards. The handler read the claim with `claimsRepo.byId`, a plain
+SELECT taking no lock, ran every check, and only then called `claimsRepo.update`, which took
+`FOR UPDATE` inside itself. Two stewards consenting the same submitted claim both passed the
+status check; the second `postTransfer` hit `ER_DUP_ENTRY` on `quest_consent:<claimId>`, and
+`server/lib/ledger.ts` answers a duplicate with `{ ok: true, duplicate: true, toBalance }`, so the
+loser's write succeeded silently and `amount` and `consented_by` ended up holding a figure and a
+witness the ledger never paid for. `consentOnce` re-reads the status under the lock and refuses the
+loser with the status it actually found, which the route turns into a `409`. Both races are driven
+concurrently against a real MySQL in `server/repos/questClaimConcurrency.test.ts`; that file's
+header records what the pre-fix algorithm produced under the same driver (five duplicate claim rows
+from five taps, and a row saying 90 by one steward over a ledger that moved 60 for another).
+
+Note what a warmed connection pool has to do with any of this: mysql2 opens connections lazily, so
+an unwarmed fan-out is serialised by the driver and every one of these races is invisible. The same
+five taps left one row unwarmed and five rows warmed, on identical code.
 
 **The cap.** `quest.consent_cap_mode` reads the quest's advertised label through
 `parseRewardRange` and compares it to the amount in the request body:
@@ -558,16 +589,28 @@ drawn from `not-here | gone | closed | not-yet | error`, because the map is an i
 nobody can see. `missingReason` answers `not-here` for every key until some quest carries a map
 key, which is the honest answer for a village that never imported a scene.
 
-**A closed quest is still claimable, and nothing hides it.** The claim route checks the example
-flag, `min_stage`, `requires_role` and the member's existing claims. It does not read
-`quest.status`. Nor does anything upstream: `GET /api/quests` is `res.json(await questsRepo.all())`
-with no filter, and the board's own filter in `client/src/pages/Quests.tsx` is
-`circleMatch && diffMatch`, which never reads status. `statusIs` in
-`client/src/lib/questBoard.ts` exists but does not filter the board; its three consumers draw a
-"Seasonal" chip twice and filter `suggestNext` once. So a quest an admin marked Closed renders on
-the board like any other card, with a working claim button, and walks through to consent normally.
-No deep link is needed. Making Closed mean closed is a check in the claim route and in the
-`map.promise` branch, not in the client.
+**Closed now means closed, and the check is on the server because the client never had one.** The
+claim route used to check the example flag, `min_stage`, `requires_role` and the member's existing
+claims, and never `quest.status`. Nothing upstream covered for it either: `GET /api/quests` is
+`res.json(await questsRepo.all())` with no filter, and the board's own filter in
+`client/src/pages/Quests.tsx` is `circleMatch && diffMatch`, which never reads status. `statusIs`
+in `client/src/lib/questBoard.ts` exists and does not filter the board; its consumers draw a
+"Seasonal" chip and filter `suggestNext`. So a quest an admin marked Closed rendered on the board
+like any other card, with a working claim button, and walked through to consent normally. No deep
+link was needed.
+
+`questClosed` in `server/repos/quests.ts` is now asked by both doors: `POST
+/api/game/quests/:id/claim` answers `409`, and the `map.promise` claim branch answers
+`reason: "closed"`, which that vocabulary already defines as "not taking answers". It is a
+**deny-list on the single word `closed`**, not an allow-list on `open`, because the column is a free
+varchar: Admin offers `Open` and `Closed`, `server/seeds/quests-seed.json` ships a `Seasonal` quest,
+`server/seeds/examples-seed.json` writes lowercase `open`, and a village can type its own word.
+Refusing everything that is not `open` would have locked a village out of its own board, which is a
+worse failure than the one being closed. Case and whitespace are tolerated, matching `statusIs`.
+
+**Submit is deliberately not guarded this way.** Closing the board must never strand work already
+in flight: a member holding a claim from before the quest closed still hands it in and is still
+consented.
 
 **Two spellings of "open", and the capital is the one that ships.** `POST /api/admin/quests` seeds
 `status: "Open"`, `acceptQuestProposal` writes `"Open"` too, and the Admin edit form offers `Open`
