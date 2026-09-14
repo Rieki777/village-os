@@ -100,3 +100,30 @@ export async function accountBalanceRowsBySlug(pool: Pool, accountId: string): P
   );
   return waned;
 }
+
+/*
+ * Moved from server/lib/circleTreasury.ts, where each read was waived on the
+ * grounds that no repo read these tables and that a repo would add a second
+ * cache. Neither held once this file existed: it reads them with no cache,
+ * so the waivers became moves. Statements are verbatim, and each runs on the
+ * connection its caller passes.
+ */
+export async function balanceRowFor(conn: Pool | PoolConnection, accountId: string, tokenType: string): Promise<RowDataPacket[]> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    "SELECT balance FROM token_balances WHERE account_id = ? AND token_type = ?",
+    [accountId, tokenType],
+  );
+  return rows;
+}
+
+/** Balance held per token across the accounts matching `accountPattern`, a LIKE pattern. */
+export async function heldByTokenRows(conn: Pool | PoolConnection, accountPattern: string, slug?: string): Promise<RowDataPacket[]> {
+  const where = slug ? " AND token_type = ?" : "";
+  const [rows] = await conn.query<RowDataPacket[]>(
+    "SELECT token_type, COALESCE(SUM(balance), 0) AS held, " +
+      "COUNT(CASE WHEN balance <> 0 THEN 1 END) AS accounts " +
+      `FROM token_balances WHERE account_id LIKE ?${where} GROUP BY token_type`,
+    slug ? [accountPattern, slug] : [accountPattern],
+  );
+  return rows;
+}

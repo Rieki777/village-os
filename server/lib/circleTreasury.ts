@@ -111,6 +111,8 @@ import {
   type PendingModeChange,
   type TreasuryTotal,
 } from "../../shared/circleTreasury";
+import { balanceRowFor, heldByTokenRows } from "../repos/tokenBalances";
+import { circleFundingRows, ledgerAccountRows, treasuryFlowRows } from "../repos/tokenLedger";
 
 // ── The account, and the only place one is ever created ─────────────────────
 
@@ -275,25 +277,8 @@ export async function treasuryHoldings(
   if (problem) throw new Error(problem);
   const account = circleTreasuryAccount(circleId);
 
-  const [balRows] = await conn.query<RowDataPacket[]>( // module-review-ok: an aggregate read over the ledger's own tables; server/repos holds no reader for token_ledger or token_balances and a repo would be a second cache above the one conservation is checked against
-    "SELECT balance FROM token_balances WHERE account_id = ? AND token_type = ?",
-    [account, tokenType],
-  );
-  const [flowRows] = await conn.query<RowDataPacket[]>( // module-review-ok: an aggregate read over the ledger's own tables; server/repos holds no reader for token_ledger or token_balances and a repo would be a second cache above the one conservation is checked against
-    `SELECT
-       COALESCE(SUM(CASE WHEN to_account = ? AND from_account = ? THEN amount ELSE 0 END), 0) AS funded,
-       COALESCE(SUM(CASE WHEN from_account = ? AND to_account <> ? THEN amount ELSE 0 END), 0) AS spent,
-       COALESCE(SUM(CASE WHEN from_account = ? AND to_account = ? THEN amount ELSE 0 END), 0) AS returned,
-       COUNT(*) AS n
-     FROM token_ledger
-     WHERE token_type = ? AND (from_account = ? OR to_account = ?)`,
-    [
-      account, MINT_FAUCET,
-      account, MINT_FAUCET,
-      account, MINT_FAUCET,
-      tokenType, account, account,
-    ],
-  );
+  const balRows = await balanceRowFor(conn, account, tokenType);
+  const flowRows = await treasuryFlowRows(conn, account, MINT_FAUCET, tokenType);
   const f = (flowRows as any[])[0] ?? {};
   return {
     account,
@@ -544,10 +529,7 @@ export type DormancyDestination = "master_treasury" | "retired";
  * which would leave the sweep failing at the moment nobody is watching.
  */
 export async function masterTreasuryExists(conn: Pool | PoolConnection): Promise<boolean> {
-  const [rows] = await conn.query<RowDataPacket[]>( // module-review-ok: an aggregate read over the ledger's own tables; server/repos holds no reader for token_ledger or token_balances and a repo would be a second cache above the one conservation is checked against
-    "SELECT id FROM ledger_accounts WHERE id = ? LIMIT 1",
-    [TREASURY],
-  );
+  const rows = await ledgerAccountRows(conn, TREASURY);
   return (rows as any[]).length > 0;
 }
 
@@ -744,16 +726,7 @@ export async function circleFundingSince(
   tokenSlug: string,
   since: Date,
 ): Promise<CircleFunding[]> {
-  const [rows] = await conn.query<RowDataPacket[]>( // module-review-ok: an aggregate read over the ledger's own tables; server/repos holds no reader for token_ledger or token_balances and a repo would be a second cache above the one conservation is checked against
-    `SELECT source_ref,
-       COALESCE(SUM(CASE WHEN from_account = ? THEN amount ELSE 0 END), 0) AS funded,
-       COALESCE(SUM(CASE WHEN to_account = ? THEN amount ELSE 0 END), 0) AS returned
-     FROM token_ledger
-     WHERE token_type = ? AND at >= ? AND source_ref LIKE ?
-       AND (from_account = ? OR to_account = ?)
-     GROUP BY source_ref`,
-    [MINT_FAUCET, MINT_FAUCET, tokenSlug, since, `${TREASURY_REF_PREFIX}%`, MINT_FAUCET, MINT_FAUCET],
-  );
+  const rows = await circleFundingRows(conn, MINT_FAUCET, tokenSlug, since, `${TREASURY_REF_PREFIX}%`);
   const out: CircleFunding[] = [];
   for (const r of rows as any[]) {
     const circleId = String(r.source_ref ?? "").slice(TREASURY_REF_PREFIX.length);
@@ -877,13 +850,7 @@ export async function treasuryHeldByToken(
   conn: Pool | PoolConnection,
   slug?: string,
 ): Promise<Record<string, { heldMinor: number; accounts: number }>> {
-  const where = slug ? " AND token_type = ?" : "";
-  const [rows] = await conn.query<RowDataPacket[]>( // module-review-ok: an aggregate read over the ledger's own tables; server/repos holds no reader for token_ledger or token_balances and a repo would be a second cache above the one conservation is checked against
-    "SELECT token_type, COALESCE(SUM(balance), 0) AS held, " +
-      "COUNT(CASE WHEN balance <> 0 THEN 1 END) AS accounts " +
-      `FROM token_balances WHERE account_id LIKE ?${where} GROUP BY token_type`,
-    slug ? [`${CIRCLE_TREASURY_PREFIX}%`, slug] : [`${CIRCLE_TREASURY_PREFIX}%`],
-  );
+  const rows = await heldByTokenRows(conn, `${CIRCLE_TREASURY_PREFIX}%`, slug);
   const out: Record<string, { heldMinor: number; accounts: number }> = {};
   for (const r of rows as any[]) {
     out[String(r.token_type)] = {

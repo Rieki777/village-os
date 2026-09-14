@@ -142,3 +142,54 @@ export async function questConsentCreditRows(pool: Pool, accountId: string, toke
   );
   return rows;
 }
+
+/*
+ * Moved from server/lib/circleTreasury.ts, where each read was waived on the
+ * grounds that no repo read these tables and that a repo would add a second
+ * cache. Neither held once this file existed: it reads them with no cache,
+ * so the waivers became moves. Statements are verbatim, and each runs on the
+ * connection its caller passes.
+ */
+/** What moved between one account and a faucet in one token: funded, spent and returned. */
+export async function treasuryFlowRows(conn: Pool | PoolConnection, account: string, faucet: string, tokenType: string): Promise<RowDataPacket[]> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    `SELECT
+       COALESCE(SUM(CASE WHEN to_account = ? AND from_account = ? THEN amount ELSE 0 END), 0) AS funded,
+       COALESCE(SUM(CASE WHEN from_account = ? AND to_account <> ? THEN amount ELSE 0 END), 0) AS spent,
+       COALESCE(SUM(CASE WHEN from_account = ? AND to_account = ? THEN amount ELSE 0 END), 0) AS returned,
+       COUNT(*) AS n
+     FROM token_ledger
+     WHERE token_type = ? AND (from_account = ? OR to_account = ?)`,
+    [
+      account, faucet,
+      account, faucet,
+      account, faucet,
+      tokenType, account, account,
+    ],
+  );
+  return rows;
+}
+
+/** Whether a ledger account row exists. */
+export async function ledgerAccountRows(conn: Pool | PoolConnection, id: string): Promise<RowDataPacket[]> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    "SELECT id FROM ledger_accounts WHERE id = ? LIMIT 1",
+    [id],
+  );
+  return rows;
+}
+
+/** Funded and returned per source_ref since an instant, for refs matching `refPattern`. */
+export async function circleFundingRows(conn: Pool | PoolConnection, faucet: string, tokenSlug: string, since: Date, refPattern: string): Promise<RowDataPacket[]> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    `SELECT source_ref,
+       COALESCE(SUM(CASE WHEN from_account = ? THEN amount ELSE 0 END), 0) AS funded,
+       COALESCE(SUM(CASE WHEN to_account = ? THEN amount ELSE 0 END), 0) AS returned
+     FROM token_ledger
+     WHERE token_type = ? AND at >= ? AND source_ref LIKE ?
+       AND (from_account = ? OR to_account = ?)
+     GROUP BY source_ref`,
+    [faucet, faucet, tokenSlug, since, refPattern, faucet, faucet],
+  );
+  return rows;
+}
