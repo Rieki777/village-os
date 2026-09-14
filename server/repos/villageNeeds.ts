@@ -1,6 +1,6 @@
 /**
- * The needs scope's three tables: `village_needs`, `need_links` (0186) and
- * `member_needs` (0187). Every statement `server/lib/needs.ts` runs against
+ * The needs scope's three tables: `village_needs`, `need_links` (0204) and
+ * `member_needs` (0205). Every statement `server/lib/needs.ts` runs against
  * them, moved verbatim.
  *
  * ── WHAT MOVED, AND WHAT DELIBERATELY DID NOT ────────────────────────────

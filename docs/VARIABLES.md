@@ -36,7 +36,7 @@ Each dial also says WHEN a change lands. 175 of them as soon as it is saved, and
 
 ## At a glance
 
-178 dials in 29 categories. 104 carry a minimum and a maximum. By type: 82 integer, 13 decimal, 10 percentage, 21 boolean, 22 choice, 30 text.
+201 dials in 31 categories. 118 carry a minimum and a maximum. By type: 88 integer, 14 decimal, 17 percentage, 23 boolean, 28 choice, 31 text.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |

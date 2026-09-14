@@ -263,7 +263,7 @@ export interface CircleEnvelope {
   /** The season this row is tied to, or null for a standing envelope. */
   seasonId: string | null;
   /**
-   * WHICH MODEL THIS CIRCLE RUNS ON (0181). Every row before 0181 is `cap`.
+   * WHICH MODEL THIS CIRCLE RUNS ON (0200). Every row before 0200 is `cap`.
    *
    * The two caps above are read only under `cap`. Under `treasury` they are
    * not consulted at all, because a treasury has a balance and no ceiling, and

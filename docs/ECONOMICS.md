@@ -137,7 +137,8 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `exit:<exitId>:convert:<token>` | `server/lib/exit.ts` |
 | `exit:<exitId>:sweep:<token>` | `server/lib/exit.ts` |
 | `gratitude_pool:<cycleNumber>:<userId>` | `server/index.ts` |
-| `gratitude.given:<esc(v)>:<esc(noteId)>` | `server/lib/economy.ts`, `server/lib/gratitude.ts` |
+| `gratitude_received:<noteId>` | `server/lib/gratitude.ts` |
+| `gratitude.given:<esc(v)>:<esc(noteId)>` | `server/lib/economy.ts` |
 | `intake:<itemId>` | `server/lib/library.ts` |
 | `intake:li-<Date.now()>-<Math.random().toString(36).slice(2, 6)>` | `server/lib/library.ts` |
 | `ladj-<Date.now()>-<Math.random().toString(36).slice(2, 6)>` | `server/index.ts` |
@@ -159,9 +160,9 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `pp:<purchaseId>:reversal:manual` | `server/index.ts` |
 | `pp:<purchaseId>:reversal:pi_<payment_intent>` | `server/index.ts` |
 | `proposal_accepted:<id>` | `server/index.ts` |
-| `quest_consent:<id>` | `server/index.ts` |
+| `quest_consent:<id>` | `server/routes/questClaims.ts` |
 | `quest.completed:<esc(v)>:<esc(questId)>:<esc(claimId)>:<esc(userId)>:<esc(tokenSlug)>` | `server/lib/economy.ts` |
-| `queststay:<id>` | `server/index.ts` |
+| `queststay:<id>` | `server/routes/questClaims.ts` |
 | `redemption:<esc(v)>:<esc(redemptionId)>:hold` | `server/lib/redemptionStore.ts` |
 | `reversal:<esc(v)>:<eventKey>` | `server/lib/economy.ts` |
 | `role.cycle:<esc(v)>:<esc(cycleKey)>:<esc(seatId)>:<esc(userId)>:<esc(tokenSlug)>` | `server/lib/economy.ts` |
@@ -176,7 +177,7 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `xstock-<Date.now()>-<Math.random().toString(36).slice(2, 8)>` | `server/index.ts` |
 | `xstock:<slug>:<body>` | `server/index.ts` |
 
-50 distinct shapes across 57 posting site(s), plus 6 site(s) that forward a key their caller decided (`mint()` and `mintStayCredits` hand on what they were given, and every caller of those is read above). A shape ending in a timestamp and a random suffix is a key the caller did not make idempotent: the admin mint and the exchange stocking route both fall back to one when no client nonce is sent, so a retried request there is a second posting rather than a no-op.
+51 distinct shapes across 57 posting site(s), plus 6 site(s) that forward a key their caller decided (`mint()` and `mintStayCredits` hand on what they were given, and every caller of those is read above). A shape ending in a timestamp and a random suffix is a key the caller did not make idempotent: the admin mint and the exchange stocking route both fall back to one when no client nonce is sent, so a retried request there is a second posting rather than a no-op.
 <!-- generated:triggers end -->
 
 ---
