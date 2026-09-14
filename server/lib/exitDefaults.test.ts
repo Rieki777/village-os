@@ -113,7 +113,7 @@ describe.skipIf(!configured)("a departure on the shipped Exit defaults", () => {
      * so every reading below is the platform default inherited, which is the
      * state every village is in on the day these dials land.
      */
-    const [rows] = await pool.query<any[]>(
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT `config_key` FROM `game_variables` WHERE `config_key` LIKE 'exit.%'",
     );
     expect(rows).toEqual([]);
@@ -272,7 +272,7 @@ describe.skipIf(!configured)("a departure on the shipped Exit defaults", () => {
     // Resolve itself is not reachable from here: `anonymizeMember` is a
     // module-private function inside server/index.ts, so what resolve does to
     // the LEDGER (nothing) is asserted as the absence of any further row.
-    const [[all]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM `token_ledger`");
+    const [[all]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM `token_ledger`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     // Three seeds and three sweeps for the leaver above, plus the one seed and
     // one sweep the capture case opened a second departure for. Every re-run
     // of an already-settled sweep added nothing, which is the other half of
@@ -283,7 +283,7 @@ describe.skipIf(!configured)("a departure on the shipped Exit defaults", () => {
 
 /** Every posting on this schema, ordered so two runs are comparable. */
 async function ledgerRows(pool: mysql.Pool): Promise<unknown[]> {
-  const [rows] = await pool.query<any[]>(
+  const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "SELECT `from_account`, `to_account`, `token_type`, `amount`, `source`, `description`, `idempotency_key` " +
       "FROM `token_ledger` ORDER BY `idempotency_key`",
   );
@@ -292,7 +292,7 @@ async function ledgerRows(pool: mysql.Pool): Promise<unknown[]> {
 
 /** The sweep's own rows for one exit, in token order. */
 async function sweepRowsFor(pool: mysql.Pool, exitId: string): Promise<unknown[]> {
-  const [rows] = await pool.query<any[]>(
+  const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "SELECT `from_account`, `to_account`, `token_type`, `amount`, `source`, `source_ref`, `description`, `idempotency_key` " +
       "FROM `token_ledger` WHERE `source_ref` = ? ORDER BY `token_type`",
     [exitId],

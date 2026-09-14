@@ -136,7 +136,7 @@ describe.skipIf(!configured)("a stay credit redeemed, and a stay credit spent", 
    * afterwards with no access to the code that wrote it.
    */
   const postings = async () => {
-    const [rows] = await pool.query<any[]>(
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT `source`, `from_account`, `to_account`, `amount` FROM `token_ledger` " +
         "WHERE `token_type` = ? ORDER BY `id`",
       [STAY_CREDIT],

@@ -33,6 +33,7 @@ import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { balanceRowsFor } from "../repos/tokenBalances";
 import { accountEntryRows, idempotencyKeyRows, keysCollatingWith, questConsentCreditRows } from "../repos/tokenLedger";
 import { issuanceRefusal } from "./gameStart";
+import { keyClashRows, keyRowsWithSource, postingRowForKey, reversalMirrorRows } from "../repos/tokenLedger";
 
 export type TokenType = string;
 
@@ -721,10 +722,7 @@ export async function pairSiblingKey(
   const m = /^(.*):leg([12])$/.exec(key);
   if (!m) return null;
   const sibling = `${m[1]}:leg${m[2] === "1" ? "2" : "1"}`;
-  const [rows] = await db.query<RowDataPacket[]>(
-    "SELECT `idempotency_key` FROM `token_ledger` WHERE `idempotency_key` = ? AND `source` = ? LIMIT 1",
-    [sibling, source],
-  );
+  const rows = await keyRowsWithSource(db, sibling, source);
   // Byte-exact, like every other key read here: the collation would happily
   // hand back a different key that merely collates equal.
   return rows.some((r) => String(r.idempotency_key) === sibling) ? sibling : null;
@@ -793,11 +791,7 @@ async function clawbackRefusal(
     return `a clawback mirror is keyed "reversal:<village>:<original key>" and ${JSON.stringify(leg.idempotencyKey.slice(0, 60))} names no original posting`;
   }
 
-  const [rows] = await conn.query<RowDataPacket[]>(
-    "SELECT `idempotency_key`, `source`, `from_account`, `to_account`, `token_type`, `amount` " +
-      "FROM `token_ledger` WHERE `idempotency_key` = ? LIMIT 1",
-    [original],
-  );
+  const rows = await postingRowForKey(conn, original);
   const row = rows[0];
   // BYTE-EXACT: `WHERE idempotency_key = ?` answers under a case-insensitive
   // PAD SPACE collation, so it happily returns a row whose key is NOT the one
@@ -846,12 +840,7 @@ async function clawbackRefusal(
    * original key can contain `%` (every builder percent-encodes) and a LIKE
    * over it would need escaping that a collation would then fold anyway.
    */
-  const [mirrors] = await conn.query<RowDataPacket[]>(
-    "SELECT `idempotency_key` FROM `token_ledger` " +
-      "WHERE `to_account` = ? AND `token_type` = ? AND `from_account` = ? AND `amount` = ? " +
-      "AND CAST(`source` AS BINARY) = 'reversal'",
-    [leg.to, tokenType, leg.from, amount],
-  );
+  const mirrors = await reversalMirrorRows(conn, leg.to, tokenType, leg.from, amount);
   const already = mirrors
     .map((r) => String(r.idempotency_key))
     .find((k) => k !== leg.idempotencyKey && originalKeyOf(k) === original);
@@ -1058,10 +1047,7 @@ export async function postTransferOn(
        * skip. `keys` percent-encodes case and colons for exactly this
        * reason; this is the net under every hand-written key as well.
        */
-      const [clash] = await conn.query<RowDataPacket[]>(
-        "SELECT idempotency_key FROM token_ledger WHERE idempotency_key = ? LIMIT 1",
-        [input.idempotencyKey],
-      );
+      const clash = await keyClashRows(conn, input.idempotencyKey);
       const stored = clash[0] ? String(clash[0].idempotency_key) : null;
       if (stored !== null && stored !== input.idempotencyKey) {
         return {

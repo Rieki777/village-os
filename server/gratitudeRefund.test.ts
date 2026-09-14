@@ -62,10 +62,10 @@ describe.skipIf(!configured)("a reversed gift refunds its giver", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 10 });
+    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 10 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await loadTokenRegistry(pool);
     await loadVariables(pool);
-    const [rows] = await pool.query<any[]>("SELECT `decimals` FROM `tokens` WHERE `slug` = ?", [HEARTS]);
+    const [rows] = await pool.query<any[]>("SELECT `decimals` FROM `tokens` WHERE `slug` = ?", [HEARTS]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     ONE = 10 ** Number(rows[0]?.decimals ?? 0);
   });
 
@@ -75,12 +75,12 @@ describe.skipIf(!configured)("a reversed gift refunds its giver", () => {
   });
 
   const member = async (id: string): Promise<string> => {
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x') " + // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "ON DUPLICATE KEY UPDATE `name` = VALUES(`name`)",
       [id, id, `${id}@examples.invalid`],
     );
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT IGNORE INTO `ledger_accounts` (`id`, `kind`, `user_id`, `label`, `faucet`) VALUES (?,?,?,?,0)", // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       [memberAccount(id), "member", id, id],
     );
@@ -209,7 +209,7 @@ describe.skipIf(!configured)("a reversed gift refunds its giver", () => {
     // reversed for real. The join reaches it; the village filter must not.
     const elsewhere = "gr-note-elsewhere";
     const otherVillage = "elsewhere";
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT INTO `gratitude_log` " + // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "(`id`, `village_id`, `kind`, `from_id`, `to_id`, `amount`, `message`, `cycle_id`) " +
         "VALUES (?,?,?,?,?,?,?,?)",

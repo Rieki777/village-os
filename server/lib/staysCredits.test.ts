@@ -279,7 +279,7 @@ describe.skipIf(!configured)("a night paid in village credits", () => {
     expect(await balanceOf(pool, TREASURY, CREDITS_4)).toBe(160_000);
 
     // Each posted leg is one night at the token's own scale.
-    const [legs] = await pool.query<any[]>(
+    const [legs] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT amount FROM token_ledger WHERE token_type = ? AND source = 'stay_night' AND from_account = ? ORDER BY idempotency_key",
       [CREDITS_4, memberAccount("u-6")],
     );
@@ -334,7 +334,7 @@ describe.skipIf(!configured)("a night paid in village credits", () => {
     });
     expect(r.ok).toBe(true);
     expect(await balanceOf(pool, memberAccount("u-8"), STAY_CREDIT)).toBe(40_000);
-    const [rows] = await pool.query<any[]>(
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT amount, to_account FROM token_ledger WHERE idempotency_key = ?",
       ["ord:sp-unit-1:leg1"],
     );

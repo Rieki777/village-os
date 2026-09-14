@@ -61,7 +61,7 @@ describe.skipIf(!configured)("the material library, in the units the ledger actu
 
   /** The scale, read off the `tokens` ROW. Never through the code under test. */
   const decimalsOnTheRow = async (): Promise<number> => {
-    const [[r]] = await pool.query<any[]>("SELECT decimals FROM tokens WHERE slug = ?", [LIBRARY_CREDIT]);
+    const [[r]] = await pool.query<any[]>("SELECT decimals FROM tokens WHERE slug = ?", [LIBRARY_CREDIT]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     return Number(r.decimals);
   };
 
@@ -75,13 +75,13 @@ describe.skipIf(!configured)("the material library, in the units the ledger actu
 
   /** The ledger row a leg wrote, by its idempotency key, or null if it never posted. */
   const postedUnits = async (key: string): Promise<number | null> => {
-    const [rows] = await pool.query<any[]>("SELECT amount FROM token_ledger WHERE idempotency_key = ?", [key]);
+    const [rows] = await pool.query<any[]>("SELECT amount FROM token_ledger WHERE idempotency_key = ?", [key]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     return rows.length ? Number(rows[0].amount) : null;
   };
 
   /** The stored mirror of the escrow leg, straight off the column. */
   const storedEscrow = async (loanId: string): Promise<number> => {
-    const [[r]] = await pool.query<any[]>("SELECT escrow_credits FROM library_loans WHERE id = ?", [loanId]);
+    const [[r]] = await pool.query<any[]>("SELECT escrow_credits FROM library_loans WHERE id = ?", [loanId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     return Number(r.escrow_credits);
   };
 
@@ -126,7 +126,7 @@ describe.skipIf(!configured)("the material library, in the units the ledger actu
       expect(await postedUnits(`intake:${r.itemId}`)).toBe(75 * scale);
       expect(await held(donor)).toBe(75 * scale);
       // And the appraisal is stored as the steward typed it, never scaled.
-      const [[item]] = await pool.query<any[]>("SELECT credit_value FROM library_items WHERE id = ?", [r.itemId]);
+      const [[item]] = await pool.query<any[]>("SELECT credit_value FROM library_items WHERE id = ?", [r.itemId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       expect(Number(item.credit_value)).toBe(100);
     });
 
@@ -180,7 +180,7 @@ describe.skipIf(!configured)("the material library, in the units the ledger actu
         if (third.ok) throw new Error("the intake cap did not bite");
         expect(third.error).toContain("150 of 200");
         // A refused intake creates no item, so the shelves never learned of it.
-        const [[cnt]] = await pool.query<any[]>(
+        const [[cnt]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
           "SELECT COUNT(*) AS n FROM library_items WHERE name = ?", [`Hoe ${tag}`],
         );
         expect(Number(cnt.n)).toBe(0);
@@ -262,14 +262,14 @@ describe.skipIf(!configured)("the material library, in the units the ledger actu
       expect(await balanceOf(pool, MINT_FAUCET, LIBRARY_CREDIT)).toBe(0);
       expect(await balanceOf(pool, TREASURY, LIBRARY_CREDIT)).toBe(0);
 
-      const [[minted]] = await pool.query<any[]>(
+      const [[minted]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT COALESCE(SUM(CASE WHEN from_account = ? THEN amount ELSE 0 END),0) " +
           "- COALESCE(SUM(CASE WHEN to_account = ? THEN amount ELSE 0 END),0) AS s " +
           "FROM token_ledger WHERE token_type = ?",
         [LIBRARY_MINT, LIBRARY_MINT, LIBRARY_CREDIT],
       );
       const outstandingUnits = Number(minted.s);
-      const [[shelves]] = await pool.query<any[]>(
+      const [[shelves]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT COALESCE(SUM(credit_value),0) AS s FROM library_items WHERE status <> 'written_off' AND is_example = 0",
       );
 
@@ -289,8 +289,8 @@ describe.skipIf(!configured)("the material library, in the units the ledger actu
 
       // The positive control: the flag is not merely stuck at false. Take the
       // shelves away and the credits already issued stop being backed.
-      const [rows] = await pool.query<any[]>("SELECT id, status FROM library_items");
-      await pool.query("UPDATE library_items SET status = 'written_off' WHERE status <> 'written_off'");
+      const [rows] = await pool.query<any[]>("SELECT id, status FROM library_items"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("UPDATE library_items SET status = 'written_off' WHERE status <> 'written_off'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       try {
         const bare = await supplyVsBacking(pool);
         expect(bare.backing).toBe(0);
@@ -298,7 +298,7 @@ describe.skipIf(!configured)("the material library, in the units the ledger actu
         expect(bare.flagged).toBe(true);
       } finally {
         for (const r of rows) {
-          await pool.query("UPDATE library_items SET status = ? WHERE id = ?", [String(r.status), String(r.id)]);
+          await pool.query("UPDATE library_items SET status = ? WHERE id = ?", [String(r.status), String(r.id)]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         }
       }
       const restored = await supplyVsBacking(pool);
@@ -349,9 +349,9 @@ describe.skipIf(!configured)("the material library, in the units the ledger actu
       // column is deliberately untouched. `0202` refuses instead of doing this,
       // because it cannot know what a fork holds; a village that DID hold rows
       // would have to move them exactly like this.
-      await pool.query("UPDATE tokens SET decimals = 4 WHERE slug = ?", [LIBRARY_CREDIT]);
-      await pool.query("UPDATE token_ledger SET amount = amount * 10000 WHERE token_type = ?", [LIBRARY_CREDIT]);
-      await pool.query("UPDATE token_balances SET balance = balance * 10000 WHERE token_type = ?", [LIBRARY_CREDIT]);
+      await pool.query("UPDATE tokens SET decimals = 4 WHERE slug = ?", [LIBRARY_CREDIT]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("UPDATE token_ledger SET amount = amount * 10000 WHERE token_type = ?", [LIBRARY_CREDIT]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("UPDATE token_balances SET balance = balance * 10000 WHERE token_type = ?", [LIBRARY_CREDIT]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       await loadTokenRegistry(pool);
     });
 

@@ -213,7 +213,7 @@ describe.skipIf(!configured)("the needs store", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
   }, 180_000);
 
   afterAll(async () => {
@@ -222,20 +222,20 @@ describe.skipIf(!configured)("the needs store", () => {
   });
 
   beforeEach(async () => {
-    await pool.query("DELETE FROM `need_links`");
-    await pool.query("DELETE FROM `village_needs`");
-    await pool.query("DELETE FROM `org_role_assignments`");
-    await pool.query("DELETE FROM `org_roles`");
+    await pool.query("DELETE FROM `need_links`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `village_needs`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `org_role_assignments`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `org_roles`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
   });
 
   /** A seat with `seats` places, the way org_roles declares one. */
   const seat = async (id: string, name: string, seats = 1) => {
-    await pool.query("INSERT INTO `org_roles` (`id`, `name`, `seats`, `active`) VALUES (?,?,?,1)", [id, name, seats]);
+    await pool.query("INSERT INTO `org_roles` (`id`, `name`, `seats`, `active`) VALUES (?,?,?,1)", [id, name, seats]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
   };
 
   /** A live seating. `ended_at IS NULL` is what the settlement calls held. */
   const seatedBy = async (roleId: string, holder: string) => {
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT INTO `org_role_assignments` (`id`, `org_role_id`, `holder_kind`, `display_name`, `holder_key`) " +
         "VALUES (?,?, 'documented', ?, ?)",
       [`asg-${roleId}-${holder}`, roleId, holder, `doc:${holder}`],
@@ -246,13 +246,13 @@ describe.skipIf(!configured)("the needs store", () => {
     it("applies nothing the second time and leaves the schema alone", async () => {
       const schema = new URL(db.url).pathname.replace("/", "");
       const shapeOf = async () => {
-        const [cols] = await db.conn.query<any[]>(
+        const [cols] = await db.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
           "SELECT TABLE_NAME, ORDINAL_POSITION, COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, EXTRA " +
             "FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME IN ('village_needs','need_links') " +
             "ORDER BY TABLE_NAME, ORDINAL_POSITION",
           [schema],
         );
-        const [idx] = await db.conn.query<any[]>(
+        const [idx] = await db.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
           "SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE, SEQ_IN_INDEX, COLUMN_NAME " +
             "FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = ? AND TABLE_NAME IN ('village_needs','need_links') " +
             "ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX",
@@ -279,7 +279,7 @@ describe.skipIf(!configured)("the needs store", () => {
 
     it("has no foreign keys, the house norm for this schema", async () => {
       const schema = new URL(db.url).pathname.replace("/", "");
-      const [fks] = await db.conn.query<any[]>(
+      const [fks] = await db.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS " +
           "WHERE TABLE_SCHEMA = ? AND TABLE_NAME IN ('village_needs','need_links') AND CONSTRAINT_TYPE = 'FOREIGN KEY'",
         [schema],
@@ -503,7 +503,7 @@ describe.skipIf(!configured)("the needs store", () => {
       // The settlement calls a seating live while `ended_at IS NULL`. Ending
       // it must empty the seat here too, or a needs screen and a payout
       // disagree about what a held seat is.
-      await pool.query("UPDATE `org_role_assignments` SET `ended_at` = NOW() WHERE `org_role_id` = 'r-water'");
+      await pool.query("UPDATE `org_role_assignments` SET `ended_at` = NOW() WHERE `org_role_id` = 'r-water'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       const [after] = await needSeatings(pool);
       expect(after.seatsFilled).toBe(0);
       expect(after.rolesWithNobodyInThem.map((r) => r.name)).toEqual(["Water Steward"]);
@@ -512,7 +512,7 @@ describe.skipIf(!configured)("the needs store", () => {
     it("ignores a role the village has switched off", async () => {
       await upsertScopeNeed(pool, { needKey: "vitality" });
       await seat("r-old", "Retired Steward", 1);
-      await pool.query("UPDATE `org_roles` SET `active` = 0 WHERE `id` = 'r-old'");
+      await pool.query("UPDATE `org_roles` SET `active` = 0 WHERE `id` = 'r-old'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       await linkNeed(pool, { needKey: "vitality", subjectType: "role", subjectRef: "r-old" });
       const [row] = await needSeatings(pool);
       expect(row.seatsNeeded).toBe(0);
@@ -588,7 +588,7 @@ describe.skipIf(!configured)("the member's own needs card", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
   }, 180_000);
 
   afterAll(async () => {
@@ -597,13 +597,13 @@ describe.skipIf(!configured)("the member's own needs card", () => {
   });
 
   beforeEach(async () => {
-    await pool.query("DELETE FROM `member_needs`");
-    await pool.query("DELETE FROM `need_links`");
-    await pool.query("DELETE FROM `village_needs`");
+    await pool.query("DELETE FROM `member_needs`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `need_links`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `village_needs`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
   });
 
   const rowsOf = async (userId: string) => {
-    const [rows] = await pool.query<any[]>("SELECT * FROM `member_needs` WHERE `user_id` = ?", [userId]);
+    const [rows] = await pool.query<any[]>("SELECT * FROM `member_needs` WHERE `user_id` = ?", [userId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     return rows;
   };
 
@@ -611,13 +611,13 @@ describe.skipIf(!configured)("the member's own needs card", () => {
     it("applies nothing the second time and leaves the schema alone", async () => {
       const schema = new URL(db.url).pathname.replace("/", "");
       const shapeOf = async () => {
-        const [cols] = await db.conn.query<any[]>(
+        const [cols] = await db.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
           "SELECT ORDINAL_POSITION, COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, EXTRA " +
             "FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'member_needs' " +
             "ORDER BY ORDINAL_POSITION",
           [schema],
         );
-        const [idx] = await db.conn.query<any[]>(
+        const [idx] = await db.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
           "SELECT INDEX_NAME, NON_UNIQUE, SEQ_IN_INDEX, COLUMN_NAME FROM information_schema.STATISTICS " +
             "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'member_needs' ORDER BY INDEX_NAME, SEQ_IN_INDEX",
           [schema],
@@ -648,7 +648,7 @@ describe.skipIf(!configured)("the member's own needs card", () => {
 
     it("has no foreign keys, the house norm for this schema", async () => {
       const schema = new URL(db.url).pathname.replace("/", "");
-      const [fks] = await db.conn.query<any[]>(
+      const [fks] = await db.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS " +
           "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'member_needs' AND CONSTRAINT_TYPE = 'FOREIGN KEY'",
         [schema],
@@ -658,7 +658,7 @@ describe.skipIf(!configured)("the member's own needs card", () => {
 
     it("indexes user id through the unique key's leftmost column, so no second index is written on every insert", async () => {
       const schema = new URL(db.url).pathname.replace("/", "");
-      const [idx] = await db.conn.query<any[]>(
+      const [idx] = await db.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT INDEX_NAME, SEQ_IN_INDEX, COLUMN_NAME FROM information_schema.STATISTICS " +
           "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'member_needs' ORDER BY INDEX_NAME, SEQ_IN_INDEX",
         [schema],
@@ -724,7 +724,7 @@ describe.skipIf(!configured)("the member's own needs card", () => {
       // The refusal above is a sentence for a member. THIS is the guarantee:
       // even with every line of TypeScript removed, the database refuses.
       await expect(
-        pool.query("UPDATE `member_needs` SET `visibility` = 'village' WHERE `user_id` = ?", [ANA]),
+        pool.query("UPDATE `member_needs` SET `visibility` = 'village' WHERE `user_id` = ?", [ANA]), // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       ).rejects.toThrow();
       const [row] = await rowsOf(ANA);
       expect(row.visibility).toBe("private");
@@ -756,7 +756,7 @@ describe.skipIf(!configured)("the member's own needs card", () => {
     it("two members answering the same need in the same moon are two rows", async () => {
       await saveMemberNeed(pool, ANA, { needKey: "love", depth: "unmet" });
       await saveMemberNeed(pool, BEN, { needKey: "love", depth: "thriving" });
-      const [rows] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM `member_needs`");
+      const [rows] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM `member_needs`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       expect(Number(rows[0].n)).toBe(2);
     });
   });
@@ -853,7 +853,7 @@ describe.skipIf(!configured)("the member's own needs card", () => {
     it("is deletion and not anonymization, so no sentence of theirs is left behind", async () => {
       await saveMemberNeed(pool, ANA, { needKey: "love", depth: "deprived", note: "I am lonely" });
       await forgetMemberNeeds(pool, ANA);
-      const [rows] = await pool.query<any[]>(
+      const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT COUNT(*) AS n FROM `member_needs` WHERE `note` LIKE '%lonely%'",
       );
       expect(Number(rows[0].n)).toBe(0);

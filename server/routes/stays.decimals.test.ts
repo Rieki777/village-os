@@ -69,7 +69,7 @@ describe.skipIf(!configured)("stay credits across a decimals flip", () => {
   const users = new Map<string, { id: string; name: string }>();
 
   const api = async (method: string, path: string, body?: unknown) => {
-    const res = await fetch(`${base}${path}`, {
+    const res = await fetch(`${base}${path}`, { // module-review-ok: the test client dialling the server this suite started on localhost
       method,
       headers: { "content-type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -84,7 +84,7 @@ describe.skipIf(!configured)("stay credits across a decimals flip", () => {
   };
 
   const storedPrice = async (accId: string, token: string, audience = "guest") => {
-    const [rows] = await pool.query<any[]>(
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT amount_minor FROM accommodation_prices WHERE accommodation_id = ? AND token_type = ? AND audience = ?",
       [accId, token, audience],
     );
@@ -92,7 +92,7 @@ describe.skipIf(!configured)("stay credits across a decimals flip", () => {
   };
 
   const legFor = async (key: string) => {
-    const [rows] = await pool.query<any[]>(
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT amount, from_account, to_account FROM token_ledger WHERE idempotency_key = ?",
       [key],
     );
@@ -148,7 +148,7 @@ describe.skipIf(!configured)("stay credits across a decimals flip", () => {
     // The module ships OFF, and every route in this file mounts behind
     // `requireModule('stays')`, so the suite has to open it the way an admin does.
     await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-      "INSERT INTO module_settings (module_id, lifecycle) VALUES ('stays','public') " +
+      "INSERT INTO module_settings (module_id, lifecycle) VALUES ('stays','public') " + // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "ON DUPLICATE KEY UPDATE lifecycle = 'public'",
     );
     await loadModuleSettings(pool);
@@ -370,7 +370,7 @@ describe.skipIf(!configured)("stay credits across a decimals flip", () => {
        * with no conversion on any of them, which is what makes an asymmetric
        * reversal impossible rather than merely untested.
        */
-      const [[purchase]] = await pool.query<any[]>(
+      const [[purchase]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT credits_granted, status FROM stay_purchases WHERE id = ?",
         [manual.json.id],
       );

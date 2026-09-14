@@ -610,7 +610,7 @@ describe.skipIf(!configured)("carrying voice to Hypha", () => {
      * derived from whatever scale the registry holds and every one is a whole
      * number of minor units by construction.
      */
-    const [voiceRow] = await pool.query<any[]>("SELECT `decimals` FROM `tokens` WHERE `slug` = ?", [VILLAGE_VOICE]);
+    const [voiceRow] = await pool.query<any[]>("SELECT `decimals` FROM `tokens` WHERE `slug` = ?", [VILLAGE_VOICE]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     const vScale = 10 ** Number((voiceRow as any[])[0]?.decimals ?? 0);
     const shapes = [
       137 * vScale + Math.floor(vScale / 2), // half a token, where the scale holds one

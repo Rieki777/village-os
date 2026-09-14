@@ -193,7 +193,7 @@ describe.skipIf(!configured)("what a circle has spent", () => {
       const w = wholeSeason();
       const spend = await circleSpendIn(pool, widest, TOKEN, w.from, w.to);
       expect(spend.issuedMinor).toBe(77);
-      const [rows]: any = await pool.query(
+      const [rows]: any = await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT source_ref FROM token_ledger WHERE source_ref = ?",
         [circleSpendRef(widest)],
       );
@@ -233,7 +233,7 @@ describe.skipIf(!configured)("what a circle has spent", () => {
       // Strict MySQL refuses it outright. Either shape is a failure, and what
       // matters is the third assertion: the spend is simply not there.
       expect(threw || !ok).toBe(true);
-      const [rows]: any = await pool.query(
+      const [rows]: any = await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT COUNT(*) AS n FROM token_ledger WHERE idempotency_key = ?",
         [key],
       );

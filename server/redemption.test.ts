@@ -123,12 +123,12 @@ let seq = 0;
 const DB_HEAVY = 420_000;
 
 async function makeMember(id: string): Promise<string> {
-  await pool.query(
+  await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x') " +
       "ON DUPLICATE KEY UPDATE `name` = VALUES(`name`)",
     [id, id, `${id}@examples.invalid`],
   );
-  await pool.query(
+  await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "INSERT IGNORE INTO `ledger_accounts` (`id`, `kind`, `user_id`, `label`, `faucet`) VALUES (?,?,?,?,0)",
     [memberAccount(id), "member", id, id],
   );
@@ -164,7 +164,7 @@ async function giveCredits(userId: string, human: number): Promise<void> {
  * faucet's negative is the issued supply.
  */
 async function conservation(tokenSlug: string): Promise<number> {
-  const [rows] = await pool.query<any[]>(
+  const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "SELECT COALESCE(SUM(`balance`),0) AS s FROM `token_balances` WHERE `token_type` = ?",
     [tokenSlug],
   );
@@ -173,7 +173,7 @@ async function conservation(tokenSlug: string): Promise<number> {
 
 /** Does the cached balance still match what the postings actually say? */
 async function cacheDrift(tokenSlug: string): Promise<number> {
-  const [rows] = await pool.query<any[]>(
+  const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "SELECT COUNT(*) AS n FROM `token_balances` tb LEFT JOIN (" +
       "  SELECT account_id, token_type, SUM(delta) actual FROM (" +
       "    SELECT to_account account_id, token_type, amount delta FROM token_ledger" +
@@ -195,7 +195,7 @@ async function cacheDrift(tokenSlug: string): Promise<number> {
  * would prove only that a function equals itself.
  */
 async function issuedFromFaucet(tokenSlug: string): Promise<number> {
-  const [rows] = await pool.query<any[]>(
+  const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "SELECT COALESCE(-SUM(tb.`balance`),0) AS issued FROM `token_balances` tb " +
       "JOIN `ledger_accounts` a ON a.`id` = tb.`account_id` " +
       "WHERE a.`faucet` = 1 AND tb.`balance` < 0 AND tb.`token_type` = ?",
@@ -206,7 +206,7 @@ async function issuedFromFaucet(tokenSlug: string): Promise<number> {
 
 /** `mintView`'s reading: gross outflow from the faucets, which never falls. */
 async function issuedFromRows(tokenSlug: string): Promise<number> {
-  const [rows] = await pool.query<any[]>(
+  const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "SELECT COALESCE(SUM(l.`amount`),0) AS out_ FROM `token_ledger` l " +
       "JOIN `ledger_accounts` a ON a.`id` = l.`from_account` " +
       "WHERE a.`faucet` = 1 AND l.`token_type` = ?",
@@ -316,7 +316,7 @@ describe("who confirms", () => {
 describe.skipIf(!configured)("turning tokens into something real", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 10 });
+    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 10 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await loadTokenRegistry(pool);
     await loadVariables(pool);
     // The stays and library modules register these at boot and a scratch
@@ -362,12 +362,12 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
    * would then report.
    */
   beforeEach(async () => {
-    await pool.query("DELETE FROM `redemptions`");
-    await pool.query("DELETE FROM `token_ledger`");
-    await pool.query("DELETE FROM `token_balances`");
-    await pool.query("DELETE FROM `event_seat_charges`");
-    await pool.query("DELETE FROM `events`");
-    await pool.query("DELETE FROM `exits`");
+    await pool.query("DELETE FROM `redemptions`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `token_ledger`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `token_balances`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `event_seat_charges`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `events`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `exits`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await setVariable(pool, "redemption.confirmed_by", "steward");
     await setVariable(pool, "redemption.holds_on_propose", "true");
     await setVariable(pool, "redemption.per_member_per_cycle", "2");
@@ -430,7 +430,7 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
     const out = await ask(wren, 100);
     expect(out.ok).toBe(false);
     if (!out.ok) expect(out.error).toContain("You hold 40 Village Credits");
-    const [rows] = await pool.query<any[]>("SELECT COUNT(*) n FROM `redemptions`");
+    const [rows] = await pool.query<any[]>("SELECT COUNT(*) n FROM `redemptions`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(Number(rows[0].n)).toBe(0);
   });
 
@@ -510,7 +510,7 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
   it("refuses a seat fee through chargeForPlace itself, in the member's own words", async () => {
     const wren = await makeMember("rd-seat");
     await giveCredits(wren, 500);
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT INTO `events` (`id`, `title`, `starts_at`, `status`, `seat_price`, `seat_token`) " +
         "VALUES ('rd-evt','A work party', NOW(), 'scheduled', ?, ?)",
       [500, CREDITS],
@@ -665,7 +665,7 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
     });
     expect(second.ok).toBe(false);
     expect(await balanceOf(pool, REDEEMED, CREDITS)).toBe(toLedgerUnits(CREDITS, 400));
-    const [rows] = await pool.query<any[]>(
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COUNT(*) n FROM `token_ledger` WHERE `idempotency_key` = ?",
       [keys.redemptionBurn(villageId(), out.row.id)],
     );
@@ -759,7 +759,7 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
        * invariants would report nothing.
        */
       const phantomId = "rd-phantom-row";
-      await pool.query(
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "INSERT INTO `redemptions` (`id`,`village_id`,`user_id`,`token_slug`,`amount`,`asked_for`," +
           "`state`,`confirmed_by_mode`,`held_account`,`hold_key`,`burn_key`) " +
           "VALUES (?,?,?,?,?,?,'requested','steward',?,?,?)",
@@ -904,11 +904,11 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
       });
       expect(done.ok).toBe(true);
 
-      const [balanceRows] = await pool.query<any[]>(
+      const [balanceRows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT `balance` FROM `token_balances` WHERE `account_id` = ? AND `token_type` = ?",
         [memberAccount(wren), CREDITS],
       );
-      const [retiredRows] = await pool.query<any[]>(
+      const [retiredRows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT `balance` FROM `token_balances` WHERE `account_id` = ? AND `token_type` = ?",
         [REDEEMED, CREDITS],
       );

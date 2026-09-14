@@ -85,7 +85,7 @@ describe.skipIf(!configured)("a quest carries the needs it meets", () => {
 
   /** How many tags this subject carries, read from the table itself. */
   const linkCount = async (subjectRef: string): Promise<number> => {
-    const [rows] = await pool.query<any[]>(
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COUNT(*) AS n FROM `need_links` WHERE `subject_type` = 'quest' AND `subject_ref` = ?",
       [subjectRef],
     );
@@ -94,7 +94,7 @@ describe.skipIf(!configured)("a quest carries the needs it meets", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     const { app, handlers: h } = collect();
     register(app, {
       isAdmin: async () => true,
@@ -126,10 +126,10 @@ describe.skipIf(!configured)("a quest carries the needs it meets", () => {
 
   beforeEach(async () => {
     signedIn = true;
-    await pool.query("DELETE FROM `quest_claims`");
-    await pool.query("DELETE FROM `quests`");
-    await pool.query("DELETE FROM `need_links`");
-    await pool.query("DELETE FROM `village_needs`");
+    await pool.query("DELETE FROM `quest_claims`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `quests`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `need_links`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `village_needs`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await upsertScopeNeed(pool, { needKey: "vitality" });
     await upsertScopeNeed(pool, { needKey: "play" });
   });
@@ -210,7 +210,7 @@ describe.skipIf(!configured)("a quest carries the needs it meets", () => {
     await linkNeed(pool, { needKey: "play", subjectType: "quest", subjectRef: "q-flight" });
     // A claim in flight refuses the delete. The tag has to survive that, or a
     // failed delete would quietly strip what the village said the work was for.
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT INTO quest_claims (id, quest_id, quest_title, user_id, user_name, status) VALUES (?,?,?,?,?,?)",
       ["c-1", "q-flight", "Harvest week", "u-other", "Someone", "claimed"],
     );
@@ -235,11 +235,11 @@ describe.skipIf(!configured)("a quest carries the needs it meets", () => {
      * it exists yet and counts the member's rows when it does. Either way the
      * count is zero and the claim below has to go through.
      */
-    const [tables] = await pool.query<any[]>(
+    const [tables] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'member_needs'",
     );
     if (Number(tables[0].n) > 0) {
-      const [mine] = await pool.query<any[]>(
+      const [mine] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT COUNT(*) AS n FROM `member_needs` WHERE `user_id` = 'u-claimer'",
       );
       expect(Number(mine[0].n), "the claimer has said nothing about their own needs").toBe(0);
@@ -254,7 +254,7 @@ describe.skipIf(!configured)("a quest carries the needs it meets", () => {
     // Same shape, key for key. A tag that reached the gate would show up here
     // as an extra field, a missing one, or a different status.
     expect(Object.keys(tagged.body).sort()).toEqual(Object.keys(untagged.body).sort());
-    const [claims] = await pool.query<any[]>(
+    const [claims] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT quest_id FROM quest_claims WHERE user_id = 'u-claimer' ORDER BY quest_id",
     );
     expect(claims.map((c: any) => String(c.quest_id))).toEqual(["q-tagged", "q-untagged"]);

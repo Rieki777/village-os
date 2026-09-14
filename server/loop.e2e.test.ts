@@ -164,7 +164,7 @@ const scaleCache = new Map<string, number>();
 async function scale(slug: string): Promise<number> {
   const hit = scaleCache.get(slug);
   if (hit !== undefined) return hit;
-  const [rows] = await testDb.conn.query<any[]>("SELECT `decimals` FROM `tokens` WHERE `slug` = ?", [slug]);
+  const [rows] = await testDb.conn.query<any[]>("SELECT `decimals` FROM `tokens` WHERE `slug` = ?", [slug]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
   if (!rows.length) return 1; // not registered yet: do not cache the miss
   const v = 10 ** Number(rows[0].decimals ?? 0);
   scaleCache.set(slug, v);
@@ -2477,11 +2477,11 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
      * literal here would be a decimals-0 coincidence wearing an assertion's
      * clothes, which is what every existing stay-credit test in this file is.
      */
-    const [[granted]] = await testDb.conn.query<any[]>(
+    const [[granted]] = await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT credits_granted FROM stay_purchases WHERE id = ?",
       [orderId],
     );
-    const [[mintLeg]] = await testDb.conn.query<any[]>(
+    const [[mintLeg]] = await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT amount FROM token_ledger WHERE idempotency_key = ?",
       [`ord:${orderId}:leg1`],
     );
@@ -2575,7 +2575,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
      * retry can correct, and `payment_reversal` is on ALLOW_NEGATIVE_SOURCES
      * so nothing downstream refuses it.
      */
-    const [[clawLeg]] = await testDb.conn.query<any[]>(
+    const [[clawLeg]] = await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT amount FROM token_ledger WHERE idempotency_key = ?",
       [`ord:${orderId}:reversal-leg1`],
     );
@@ -2621,11 +2621,11 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
      * which is why the literal above is right at any decimals. The column and
      * the ledger leg behind it are minor, and they are equal to each other.
      */
-    const [[manualRow]] = await testDb.conn.query<any[]>(
+    const [[manualRow]] = await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT credits_granted FROM stay_purchases WHERE id = ?",
       [manual.json.id],
     );
-    const [[manualLeg]] = await testDb.conn.query<any[]>(
+    const [[manualLeg]] = await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT amount FROM token_ledger WHERE idempotency_key = ?",
       [`ord:${manual.json.id}:leg1`],
     );
@@ -2850,7 +2850,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // the arithmetic instead of restating a number the registry owns: at
     // decimals 0 this is 30 and at 4 it is 300000, and the assertion is the
     // same sentence either way.
-    const [[creditToken]] = await testDb.conn.query<any[]>(
+    const [[creditToken]] = await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT decimals FROM tokens WHERE slug = 'stay-credits'",
     );
     const creditScale = 10 ** Number(creditToken?.decimals ?? 0);
@@ -4036,7 +4036,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // Both sides of a swap can sit at different scales, so each token's own
     // decimals are read and the assertions below state the human number times
     // its own scale. At decimals 0 every number here is unchanged.
-    const [swapTokenRows] = await testDb.conn.query<any[]>(
+    const [swapTokenRows] = await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT slug, decimals FROM tokens WHERE slug IN ('swap-a','swap-b')",
     );
     const scaleOf = (slug: string) =>

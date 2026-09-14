@@ -62,13 +62,13 @@ async function makeMember(id: string): Promise<string> {
 
 /** Rows in `token_ledger` right now, for the "nothing moved" assertions. */
 async function ledgerRowCount(): Promise<number> {
-  const [[row]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM token_ledger");
+  const [[row]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM token_ledger"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
   return Number(row.n);
 }
 
 /** The raw minor figure, read past every converter. */
 async function rawBalance(account: string, slug: string): Promise<number> {
-  const [[row]] = await pool.query<any[]>(
+  const [[row]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "SELECT COALESCE(balance, 0) AS b FROM token_balances WHERE account_id = ? AND token_type = ?",
     [account, slug],
   );
@@ -77,7 +77,7 @@ async function rawBalance(account: string, slug: string): Promise<number> {
 
 /** The legs one order posted, in the order the ledger holds them. */
 async function legsFor(sourceRef: string): Promise<any[]> {
-  const [rows] = await pool.query<any[]>(
+  const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "SELECT token_type, amount, from_account, to_account FROM token_ledger WHERE source_ref = ? ORDER BY at, id",
     [sourceRef],
   );
@@ -283,7 +283,7 @@ describe.skipIf(!configured)("the exchange's units, at two scales", () => {
         // 500 stocked, 10 swapped out.
         expect((await treasuryStock(pool))[RECV]).toBe(490);
 
-        const [[sum]] = await pool.query<any[]>(
+        const [[sum]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
           "SELECT COALESCE(SUM(amount),0) AS s FROM token_ledger " +
             "WHERE from_account = ? AND token_type = ? AND source = 'exchange_swap'",
           [TREASURY, RECV],
@@ -380,7 +380,7 @@ describe.skipIf(!configured)("the exchange's units, at two scales", () => {
           [seedId],
         );
         await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-          "UPDATE token_ledger SET at = (NOW() - INTERVAL 30 DAY) WHERE idempotency_key = ?",
+          "UPDATE token_ledger SET at = (NOW() - INTERVAL 30 DAY) WHERE idempotency_key = ?", // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
           [`units-grant-${decimals}`],
         );
         const cleared = await swappableBalance(pool, holder, HOLD_TOKEN, 7);

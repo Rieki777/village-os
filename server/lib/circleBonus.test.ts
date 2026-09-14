@@ -96,7 +96,7 @@ let n = 0;
 const key = (label: string) => `bo-${label}-${++n}`;
 
 async function conservation(token = TOKEN): Promise<number> {
-  const [[row]] = await pool.query<any[]>(
+  const [[row]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "SELECT COALESCE(SUM(balance), 0) AS n FROM token_balances WHERE token_type = ?",
     [token],
   );

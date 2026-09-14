@@ -168,7 +168,7 @@ describe.skipIf(!configured)("a departure on dials a village actually moved", ()
 
   /** Every posting one exit produced, in a stable order. */
   const rowsFor = async (exitId: string): Promise<any[]> => {
-    const [rows] = await pool.query<any[]>(
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT `from_account`, `to_account`, `token_type`, `amount`, `description`, `idempotency_key` " +
         "FROM `token_ledger` WHERE `source_ref` = ? ORDER BY `idempotency_key`",
       [exitId],
@@ -182,7 +182,7 @@ describe.skipIf(!configured)("a departure on dials a village actually moved", ()
    * unit shows up here whatever the two ends looked like.
    */
   const conserves = async (): Promise<void> => {
-    const [sums] = await pool.query<any[]>(
+    const [sums] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT `token_type`, SUM(`balance`) AS total FROM `token_balances` GROUP BY `token_type`",
     );
     for (const row of sums) {
@@ -214,7 +214,7 @@ describe.skipIf(!configured)("a departure on dials a village actually moved", ()
       decimals: 4,
     });
     await loadTokenRegistry(pool);
-    const [dec] = await pool.query<any[]>("SELECT `slug`, `decimals` FROM `tokens` WHERE `slug` IN (?, ?)", [WHOLE, VOICE]);
+    const [dec] = await pool.query<any[]>("SELECT `slug`, `decimals` FROM `tokens` WHERE `slug` IN (?, ?)", [WHOLE, VOICE]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     vDec = Number((dec as any[]).find((r) => String(r.slug) === VOICE)?.decimals ?? 0);
     wDec = Number((dec as any[]).find((r) => String(r.slug) === WHOLE)?.decimals ?? 0);
   });

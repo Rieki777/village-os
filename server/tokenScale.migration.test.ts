@@ -61,7 +61,7 @@ describe.skipIf(!configured)("0202, the scale ruling, run against a real schema"
 
   /** Execute the real file. Throws exactly the way the boot runner would. */
   const runMigration = async () => {
-    for (const sql of statements()) await pool.query(sql);
+    for (const sql of statements()) await pool.query(sql); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
   };
 
   /**
@@ -78,12 +78,12 @@ describe.skipIf(!configured)("0202, the scale ruling, run against a real schema"
   };
 
   const scales = async (): Promise<Record<string, number>> => {
-    const [rows] = await pool.query<any[]>("SELECT `slug`, `decimals` FROM `tokens`");
+    const [rows] = await pool.query<any[]>("SELECT `slug`, `decimals` FROM `tokens`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     return Object.fromEntries(rows.map((r) => [String(r.slug), Number(r.decimals)]));
   };
 
   const guardRows = async (): Promise<string[]> => {
-    const [rows] = await pool.query<any[]>("SELECT `refusal` FROM `_token_scale_guard`");
+    const [rows] = await pool.query<any[]>("SELECT `refusal` FROM `_token_scale_guard`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     return rows.map((r) => String(r.refusal));
   };
 
@@ -94,7 +94,7 @@ describe.skipIf(!configured)("0202, the scale ruling, run against a real schema"
    * an assertion about "every token" would be asserting about five.
    */
   const seedRuntimeTokens = async () => {
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT IGNORE INTO `tokens` (`slug`, `name`, `kind`, `governance`, `transferable`, `decimals`) VALUES " +
         "('village-voice','Village Voice','voice','platform',0,3)," +
         "('stay-credit','Stay Credits','credit','platform',0,0)," +
@@ -104,8 +104,8 @@ describe.skipIf(!configured)("0202, the scale ruling, run against a real schema"
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, connectionLimit: 4, timezone: "Z" });
-    await pool.query("SET time_zone = '+00:00'");
+    pool = mysql.createPool({ uri: db.url, connectionLimit: 4, timezone: "Z" }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("SET time_zone = '+00:00'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await seedRuntimeTokens();
   }, 180_000);
 
@@ -169,13 +169,13 @@ describe.skipIf(!configured)("0202, the scale ruling, run against a real schema"
 
   it("refuses, and names the token, when a ledger row already stores an amount", async () => {
     await windBack();
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT INTO `ledger_accounts` (`id`,`kind`,`user_id`,`label`,`faucet`) VALUES " +
         "('sys:cycle-pool','system',NULL,'Cycle pool',1), ('mem:scale-a','member','scale-a','Ash',0) " +
         "ON DUPLICATE KEY UPDATE `id` = `id`",
     ); // module-review-ok: fixture against the S5 scratch schema
-    await pool.query(
-      "INSERT INTO `token_ledger` (`id`,`from_account`,`to_account`,`token_type`,`amount`,`source`,`idempotency_key`) " +
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO `token_ledger` (`id`,`from_account`,`to_account`,`token_type`,`amount`,`source`,`idempotency_key`) " + // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "VALUES ('tl-scale-1','sys:cycle-pool','mem:scale-a','credits',500,'test','scale-guard-1')",
     ); // module-review-ok: fixture against the S5 scratch schema
 
@@ -196,16 +196,16 @@ describe.skipIf(!configured)("0202, the scale ruling, run against a real schema"
     // price, and that price is in the same minor units the rescale would
     // multiply. This is the case that makes the guard wider than the ruling as
     // it was handed down.
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT INTO `accommodations` (`id`,`name`,`capacity`) VALUES ('scale-room','Scale Room',2) " +
         "ON DUPLICATE KEY UPDATE `id` = `id`",
     ); // module-review-ok: fixture against the S5 scratch schema
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT INTO `accommodation_prices` (`id`,`accommodation_id`,`token_type`,`audience`,`amount_minor`) " +
         "VALUES ('ap-scale-1','scale-room','stay-credit','guest',3)",
     ); // module-review-ok: fixture against the S5 scratch schema
 
-    const [ledger] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM `token_ledger`");
+    const [ledger] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM `token_ledger`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(Number(ledger[0].n)).toBe(0); // issued supply really is zero here
 
     await expect(runMigration()).rejects.toThrow(/stay-credit/);
@@ -221,8 +221,8 @@ describe.skipIf(!configured)("0202, the scale ruling, run against a real schema"
     const held = 5;
     // Step OVER the guard and run only the registry updates, which is what a
     // village would get if this file trusted its ledger instead of asking.
-    await pool.query(statements()[2]);
-    await pool.query(statements()[3]);
+    await pool.query(statements()[2]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query(statements()[3]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     const after = (await scales()).credits;
     expect(after).toBe(CURRENCY_DECIMALS);
     // The row did not move, so the same 5 now reads as five hundredths. The

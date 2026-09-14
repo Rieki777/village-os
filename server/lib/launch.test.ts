@@ -152,7 +152,7 @@ describe.skipIf(!configured)("the issuance cap on the launch journey", () => {
     const declinedDecision = await issuanceCapDecisionFor(pool);
 
     // Neither village holds an override row. Read it, do not assume it.
-    const [rows] = await pool.query<any[]>(
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT config_key FROM game_variables WHERE config_key = ?",
       [ISSUANCE_CAP_KEY],
     );
@@ -168,7 +168,7 @@ describe.skipIf(!configured)("the issuance cap on the launch journey", () => {
     expect(declinedDecision.capTokens).toBe(10000);
 
     // The record is in the document, so a later reader can tell them apart too.
-    const [[doc]] = await pool.query<any[]>(
+    const [[doc]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT value FROM app_config WHERE config_key = 'launch-state'",
     );
     const parsed = typeof doc.value === "string" ? JSON.parse(doc.value) : doc.value;

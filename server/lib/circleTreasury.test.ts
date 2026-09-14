@@ -84,7 +84,7 @@ const key = (label: string) => `tr-${label}-${++n}`;
 
 /** Per token, SUM(balance) over every account. The platform invariant. */
 async function conservation(token = TOKEN): Promise<number> {
-  const [[row]] = await pool.query<any[]>(
+  const [[row]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "SELECT COALESCE(SUM(balance), 0) AS n FROM token_balances WHERE token_type = ?",
     [token],
   );
@@ -285,7 +285,7 @@ describe.skipIf(!configured)("a circle's treasury", () => {
 
     // And the record, because reissuing what it had is a different act from
     // funding it afresh, and after the sweep the account remembers nothing.
-    const [[row]] = await pool.query<any[]>(
+    const [[row]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT dormant_held_minor, dormant_at, dormant_to FROM circle_budgets WHERE id = ?",
       [budgetId],
     );
@@ -539,7 +539,7 @@ describe.skipIf(!configured)("a circle's treasury", () => {
     expect(await queueModeChange(pool, budgetId, "treasury", boundary, "usr-steward")).toBe(true);
 
     const read = async () => {
-      const [[row]] = await pool.query<any[]>(
+      const [[row]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT mode, pending_mode, pending_from FROM circle_budgets WHERE id = ?",
         [budgetId],
       );
@@ -599,7 +599,7 @@ describe.skipIf(!configured)("a circle's treasury", () => {
      * "read the accounts, never funded minus spent" means, and separately
      * against the standings as a floor.
      */
-    const [[direct]] = await pool.query<any[]>(
+    const [[direct]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COALESCE(SUM(balance), 0) AS n FROM token_balances " +
         "WHERE token_type = ? AND account_id LIKE 'sys:circle:%'",
       [TOKEN],
@@ -654,7 +654,7 @@ describe.skipIf(!configured)("a circle's treasury", () => {
       amountMinor: 10, actorId: null, note: "x", idempotencyKey: key("wide"), permit: ALLOW,
     });
     expect(r.ok).toBe(false);
-    const [[row]] = await pool.query<any[]>(
+    const [[row]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COUNT(*) AS n FROM ledger_accounts WHERE id LIKE 'sys:circle:cc%'",
     );
     expect(Number(row.n), "nothing was written at all").toBe(0);
@@ -662,7 +662,7 @@ describe.skipIf(!configured)("a circle's treasury", () => {
 
   /** One account's cached balance, minor units. */
   async function balanceOf(account: string): Promise<number> {
-    const [[row]] = await pool.query<any[]>(
+    const [[row]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COALESCE(balance, 0) AS n FROM token_balances WHERE account_id = ? AND token_type = ?",
       [account, TOKEN],
     );

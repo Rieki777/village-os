@@ -77,7 +77,7 @@ describe.skipIf(!configured)("a seat carries the needs it is held for", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     const { app, handlers: h } = collect();
     register(app, {
       isAdmin: async () => true,
@@ -102,10 +102,10 @@ describe.skipIf(!configured)("a seat carries the needs it is held for", () => {
 
   beforeEach(async () => {
     signedIn = true;
-    await pool.query("DELETE FROM `need_links`");
-    await pool.query("DELETE FROM `village_needs`");
-    await pool.query("DELETE FROM `org_role_assignments`");
-    await pool.query("DELETE FROM `org_roles`");
+    await pool.query("DELETE FROM `need_links`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `village_needs`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `org_role_assignments`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `org_roles`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await upsertScopeNeed(pool, { needKey: "vitality" });
   });
 
@@ -167,7 +167,7 @@ describe.skipIf(!configured)("a seat carries the needs it is held for", () => {
       (await needSeatings(pool))[0].seatsNeeded,
       "a seat the village retired counts toward nothing",
     ).toBe(0);
-    const [rows] = await pool.query<any[]>(
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COUNT(*) AS n FROM `need_links` WHERE `subject_type` = 'role' AND `subject_ref` = ?",
       [id],
     );

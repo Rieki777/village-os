@@ -110,7 +110,7 @@ async function call(method: string, route: string, body?: unknown, token?: strin
 describe.skipIf(!DB_CONFIGURED)("a village runs caps and treasuries side by side", () => {
   /** One account's cached balance. Zero when it holds no row for this token. */
   const balanceOf = async (account: string): Promise<number> => {
-    const [[row]] = await testDb!.conn.query<any[]>(
+    const [[row]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COALESCE(SUM(balance), 0) AS n FROM token_balances WHERE account_id = ? AND token_type = ?",
       [account, TOKEN],
     );
@@ -119,7 +119,7 @@ describe.skipIf(!DB_CONFIGURED)("a village runs caps and treasuries side by side
 
   /** Per token, SUM(balance) over every account. Zero, always. */
   const conservation = async (): Promise<number> => {
-    const [[row]] = await testDb!.conn.query<any[]>(
+    const [[row]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COALESCE(SUM(balance), 0) AS n FROM token_balances WHERE token_type = ?",
       [TOKEN],
     );
@@ -327,7 +327,7 @@ describe.skipIf(!DB_CONFIGURED)("a village runs caps and treasuries side by side
     expect(funded.json.balanceMinor).toBe(60 * scale);
 
     // In the circle's own account, read from the ledger and not from the reply.
-    const [[held]] = await testDb!.conn.query<any[]>(
+    const [[held]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT balance FROM token_balances WHERE account_id = ? AND token_type = ?",
       [`sys:circle:${kitchenId}`, TOKEN],
     );
@@ -390,7 +390,7 @@ describe.skipIf(!DB_CONFIGURED)("a village runs caps and treasuries side by side
     }, founderToken);
     expect(r.status, `pay: ${r.text.slice(0, 400)}`).toBe(409);
     expect(String(r.json?.error)).toContain("standing before a bonus");
-    const [[row]] = await testDb!.conn.query<any[]>(
+    const [[row]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COUNT(*) AS n FROM token_ledger WHERE source = 'circle_cap_bonus'",
     );
     expect(Number(row?.n ?? 0), "no bonus has ever been posted here").toBe(0);
@@ -410,7 +410,7 @@ describe.skipIf(!DB_CONFIGURED)("a village runs caps and treasuries side by side
     expect(await conservation()).toBe(0);
 
     // The member really was paid, read off the ledger.
-    const [[paid]] = await testDb!.conn.query<any[]>(
+    const [[paid]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT balance FROM token_balances WHERE account_id = ? AND token_type = ?",
       [`mem:${memberId}`, TOKEN],
     );
@@ -467,7 +467,7 @@ describe.skipIf(!DB_CONFIGURED)("a village runs caps and treasuries side by side
     // NOTHING WAS MINTED BY THE REFUSAL. The guard runs inside the transfer.
     expect((await guardView()).minted).toBe(room + 50);
     expect(await conservation()).toBe(0);
-    const [[none]] = await testDb!.conn.query<any[]>(
+    const [[none]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COALESCE(balance, 0) AS n FROM token_balances WHERE account_id = ? AND token_type = ?",
       [`sys:circle:${eleventhId}`, TOKEN],
     );
@@ -533,7 +533,7 @@ describe.skipIf(!DB_CONFIGURED)("a village runs caps and treasuries side by side
     expect(atBoundary.sentence).toContain("nothing has been minted into it yet");
 
     // The stored column is untouched, which is what "queued" means.
-    const [[row]] = await testDb!.conn.query<any[]>(
+    const [[row]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT mode, pending_mode FROM circle_budgets WHERE id = ?",
       [workshopBudget],
     );
@@ -593,7 +593,7 @@ describe.skipIf(!DB_CONFIGURED)("a village runs caps and treasuries side by side
     expect(dormant.json.treasurySwept[0].destination).toBe("master_treasury");
 
     // A DORMANT CIRCLE HOLDS NOTHING. That is the objection, answered.
-    const [[after]] = await testDb!.conn.query<any[]>(
+    const [[after]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COALESCE(balance, 0) AS n FROM token_balances WHERE account_id = ? AND token_type = ?",
       [`sys:circle:${sleepyId}`, TOKEN],
     );
@@ -653,7 +653,7 @@ describe.skipIf(!DB_CONFIGURED)("a village runs caps and treasuries side by side
     expect(credits.treasuryHeld.accountsHolding).toBeGreaterThan(1);
 
     // The figure is the sum of the real balances and nothing else.
-    const [[direct]] = await testDb!.conn.query<any[]>(
+    const [[direct]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COALESCE(SUM(balance), 0) AS n FROM token_balances " +
         "WHERE token_type = ? AND account_id LIKE 'sys:circle:%'",
       [TOKEN],

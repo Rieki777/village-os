@@ -77,14 +77,14 @@ function cycleOf(day: number): SnapshotCycle {
 const inside = (day: number) => new Date(Date.UTC(2026, 0, day, 12, 0, 0));
 
 async function member(id: string): Promise<void> {
-  await pool.query(
+  await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x')",
     [id, id, `${id}@village.test`],
   );
 }
 
 async function gift(id: string, from: string, to: string, amount: number, cycle: SnapshotCycle): Promise<void> {
-  await pool.query(
+  await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "INSERT INTO `gratitude_log` (`id`,`kind`,`from_id`,`to_id`,`amount`,`message`,`cycle_id`,`cycle_number`,`at`) " +
       "VALUES (?,'gratitude',?,?,?,'thank you',?,?,?)",
     [id, from, to, amount, cycle.id, cycle.cycleNumber, inside(cycle.cycleNumber)],
@@ -105,20 +105,20 @@ async function gift(id: string, from: string, to: string, amount: number, cycle:
  */
 async function reverse(id: string, noteId: string, amount: number, at: Date): Promise<void> {
   const key = "gratitude_received:" + noteId;
-  await pool.query(
+  await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "INSERT IGNORE INTO `token_ledger` (`id`,`from_account`,`to_account`,`token_type`,`amount`,`source`,`source_ref`,`idempotency_key`,`at`) " +
       "VALUES (?,?,?,'gratitude',?,'gratitude_received',?,?,?)",
     ["post-" + noteId, "sys:gratitude-pool", "mem:reversed", amount, noteId, key, at],
   );
-  await pool.query(
-    "INSERT INTO `token_ledger` (`id`,`from_account`,`to_account`,`token_type`,`amount`,`source`,`source_ref`,`idempotency_key`,`at`) " +
+  await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    "INSERT INTO `token_ledger` (`id`,`from_account`,`to_account`,`token_type`,`amount`,`source`,`source_ref`,`idempotency_key`,`at`) " + // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "VALUES (?,?,?,'gratitude',?,'reversal',?,?,?)",
     [id, "mem:reversed", "sys:gratitude-pool", amount, key, "rev-" + id, at],
   );
 }
 
 async function snapshotOf(cycleNumber: number): Promise<Record<string, { value: number; raw: unknown; meta: any }>> {
-  const [rows] = await pool.query<any[]>(
+  const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "SELECT metric_key, value, meta FROM health_snapshots WHERE cycle_number = ?",
     [cycleNumber],
   );
@@ -141,10 +141,10 @@ const stagesFrom = (byId: Record<string, number>) => ({
 describe.skipIf(!configured)("R9: the allowance a village left unused", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 5 });
+    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 5 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     // A base of 10 rather than the shipped 100, so every figure below can be
     // stated as a whole number a reader can check by hand.
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT INTO `game_variables` (`config_key`,`value`,`value_type`) VALUES ('gratitude.base_budget','10','integer') " +
         "ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)",
     );
@@ -158,7 +158,7 @@ describe.skipIf(!configured)("R9: the allowance a village left unused", () => {
 
   beforeEach(async () => {
     for (const t of ["health_snapshots", "gratitude_log", "token_ledger", "users"]) {
-      await pool.query("DELETE FROM `" + t + "`");
+      await pool.query("DELETE FROM `" + t + "`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     }
   });
 
@@ -250,7 +250,7 @@ describe.skipIf(!configured)("R9: the allowance a village left unused", () => {
 
     await snapshotCycle(pool, cycle, new Set(), stages);
     const first = await snapshotOf(cycle.cycleNumber);
-    const [[before]] = await pool.query<any[]>(
+    const [[before]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COUNT(*) AS n FROM health_snapshots WHERE cycle_number = ?",
       [cycle.cycleNumber],
     );
@@ -262,7 +262,7 @@ describe.skipIf(!configured)("R9: the allowance a village left unused", () => {
     await snapshotCycle(pool, cycle, new Set(), stagesFrom({ "gives-two": 1, "late-arrival": 3 }));
 
     const second = await snapshotOf(cycle.cycleNumber);
-    const [[after]] = await pool.query<any[]>(
+    const [[after]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COUNT(*) AS n FROM health_snapshots WHERE cycle_number = ?",
       [cycle.cycleNumber],
     );
@@ -310,7 +310,7 @@ describe.skipIf(!configured)("R9: the allowance a village left unused", () => {
     await gift("g-two", "gives-two", "gives-all", 2, cycle);
     await snapshotCycle(pool, cycle, new Set(), stagesFrom({ "gives-two": 1, "gives-all": 1 }));
 
-    const [rows] = await pool.query<any[]>(
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT metric_key, meta FROM health_snapshots WHERE cycle_number = ?",
       [cycle.cycleNumber],
     );

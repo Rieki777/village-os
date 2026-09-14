@@ -127,3 +127,22 @@ export async function heldByTokenRows(conn: Pool | PoolConnection, accountPatter
   );
   return rows;
 }
+
+/*
+ * Moved from server/lib/economy.ts and server/lib/ledger.ts because the module
+ * intake check flagged them as raw SQL on lines this branch changed. Each is a
+ * plain read with no lock of its own and runs on the connection its caller
+ * passes, so a read inside the ledger's transaction stays inside it.
+ * Statements are verbatim.
+ */
+/** Members holding a positive balance of one token, with their user id. */
+export async function memberHolderRows(conn: Pool | PoolConnection, tokenType: string): Promise<RowDataPacket[]> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    "SELECT b.`account_id`, a.`user_id`, b.`balance` FROM `token_balances` b " +
+      "JOIN `ledger_accounts` a ON a.`id` = b.`account_id` " +
+      "WHERE b.`token_type` = ? AND a.`kind` = 'member' AND a.`user_id` IS NOT NULL " +
+      "AND b.`balance` > 0",
+    [tokenType],
+  );
+  return rows;
+}

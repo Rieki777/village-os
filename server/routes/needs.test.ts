@@ -198,7 +198,7 @@ describe.skipIf(!configured)("the scope round trips through the routes", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     const { app, handlers: h } = collect();
     register(app, {
       isAdmin: async () => true,
@@ -214,10 +214,10 @@ describe.skipIf(!configured)("the scope round trips through the routes", () => {
   });
 
   beforeEach(async () => {
-    await pool.query("DELETE FROM `need_links`");
-    await pool.query("DELETE FROM `village_needs`");
-    await pool.query("DELETE FROM `org_role_assignments`");
-    await pool.query("DELETE FROM `org_roles`");
+    await pool.query("DELETE FROM `need_links`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `village_needs`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `org_role_assignments`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `org_roles`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
   });
 
   it("an unanswered village reads as unanswered, and carries the ten to choose from", async () => {
@@ -278,13 +278,13 @@ describe.skipIf(!configured)("the scope round trips through the routes", () => {
     expect(second.status).toBe(200);
     expect(second.body.changed).toBe(false);
 
-    const [rows] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM `need_links`");
+    const [rows] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM `need_links`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(Number(rows[0].n), "a retired need keeps its links").toBe(1);
   });
 
   it("names a seat the scope leans on that nobody is in", async () => {
     await call(handlers, "PUT /api/admin/needs/scope", { body: { needs: [{ needKey: "vitality" }] } });
-    await pool.query("INSERT INTO `org_roles` (`id`, `name`, `seats`, `active`) VALUES ('r-water','Water Steward',1,1)");
+    await pool.query("INSERT INTO `org_roles` (`id`, `name`, `seats`, `active`) VALUES ('r-water','Water Steward',1,1)"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await call(handlers, "POST /api/admin/needs/links", {
       body: { needKey: "vitality", subjectType: "role", subjectRef: "r-water" },
     });
@@ -462,7 +462,7 @@ describe.skipIf(!configured)("the member's card round trips through the routes",
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     const { app, handlers: h } = collect();
     register(app, {
       isAdmin: async () => true,
@@ -479,9 +479,9 @@ describe.skipIf(!configured)("the member's card round trips through the routes",
 
   beforeEach(async () => {
     whoami = SOMEBODY_ELSE;
-    await pool.query("DELETE FROM `member_needs`");
-    await pool.query("DELETE FROM `need_links`");
-    await pool.query("DELETE FROM `village_needs`");
+    await pool.query("DELETE FROM `member_needs`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `need_links`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `village_needs`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
   });
 
   it("saves a row as private when the body carries no visibility field", async () => {
@@ -491,7 +491,7 @@ describe.skipIf(!configured)("the member's card round trips through the routes",
     expect(saved.status).toBe(200);
     expect(saved.body.need.visibility).toBe("private");
 
-    const [rows] = await pool.query<any[]>("SELECT `visibility` FROM `member_needs`");
+    const [rows] = await pool.query<any[]>("SELECT `visibility` FROM `member_needs`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(rows).toHaveLength(1);
     expect(rows[0].visibility).toBe("private");
   });
@@ -530,7 +530,7 @@ describe.skipIf(!configured)("the member's card round trips through the routes",
    */
   it("states the floor the village voted, not the one the platform ships", async () => {
     try {
-      await pool.query(
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "INSERT INTO `game_variables` (`config_key`, `value`, `value_type`) VALUES ('needs.aggregate_floor','5','text') " +
           "ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)",
       );
@@ -556,7 +556,7 @@ describe.skipIf(!configured)("the member's card round trips through the routes",
       expect(five.body.needs.find((n: any) => n.needKey === "love")?.suppressed).toBe(false);
       expect(five.body.needs.find((n: any) => n.needKey === "love")?.answers).toBe(5);
     } finally {
-      await pool.query("DELETE FROM `game_variables` WHERE `config_key` = 'needs.aggregate_floor'");
+      await pool.query("DELETE FROM `game_variables` WHERE `config_key` = 'needs.aggregate_floor'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       await loadVariables(pool);
     }
   });

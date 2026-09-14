@@ -53,7 +53,7 @@ const PORT = 31602 + (process.pid % 400);
 const BASE = `http://127.0.0.1:${PORT}`;
 const ADMIN = "MintCap123!";
 const PASSWORD = "OraMintCap123!";
-const WEBHOOK_SECRET = "whsec_mintcap_fixture";
+const WEBHOOK_SECRET = "whsec_mintcap_fixture"; // module-review-ok: a fixture webhook secret for a throwaway server on a scratch schema
 const CREDIT = "stay-credit";
 /** Bigger than any cap this file sets, so the probe always refuses. */
 const PROBE = 9_000_000;
@@ -110,7 +110,7 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
 
   /** The faucet's negative balance, from the cache the panel derives from. */
   const faucetOutstanding = async (): Promise<number> => {
-    const [[row]] = await testDb!.conn.query<any[]>(
+    const [[row]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COALESCE(-balance, 0) AS n FROM token_balances WHERE account_id = 'sys:mint' AND token_type = ?",
       [CREDIT],
     );
@@ -119,7 +119,7 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
 
   /** The OLD counter, verbatim, kept so the divergence stays measured. */
   const grossOut = async (): Promise<number> => {
-    const [[row]] = await testDb!.conn.query<any[]>(
+    const [[row]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COALESCE(SUM(amount), 0) AS n FROM token_ledger WHERE from_account = 'sys:mint' AND token_type = ?",
       [CREDIT],
     );
@@ -127,7 +127,7 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
   };
 
   const rowsFor = async (source: string): Promise<any[]> => {
-    const [rows] = await testDb!.conn.query<any[]>(
+    const [rows] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT id, from_account, to_account, amount, source, idempotency_key FROM token_ledger " +
         "WHERE token_type = ? AND source = ? ORDER BY at, id",
       [CREDIT, source],
@@ -466,7 +466,7 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
    * red pointing at the two hand-kept lists.
    */
   it("agrees with the hand-kept faucet list the supply surfaces use", async () => {
-    const [rows] = await testDb!.conn.query<any[]>(
+    const [rows] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT id FROM ledger_accounts WHERE faucet = 1 ORDER BY id",
     );
     const inDatabase = rows.map((r: any) => String(r.id)).sort();
@@ -537,7 +537,7 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
     }, founderToken);
     expect(funded.status, `fund: ${funded.text.slice(0, 300)}`).toBe(200);
 
-    const [rows] = await testDb!.conn.query<any[]>(
+    const [rows] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT DISTINCT source FROM token_ledger WHERE from_account = 'sys:mint' AND token_type = ?",
       [slug],
     );
@@ -594,7 +594,7 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
     expect(issue.length).toBe(1);
     // Two lunations back, which is before any plausible cycle start.
     await testDb!.conn.query( // module-review-ok: moving one row's timestamp is the whole point of this case
-      "UPDATE token_ledger SET at = NOW() - INTERVAL 60 DAY WHERE id = ?",
+      "UPDATE token_ledger SET at = NOW() - INTERVAL 60 DAY WHERE id = ?", // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       [issue[0].id],
     );
 
@@ -651,7 +651,7 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
     // The exclusion is HAND_MINT_SOURCES itself and no longer a copy of it.
     // Typed out, this list went stale the day a fourth guarded door landed,
     // and a stale exclusion here reports a guarded door as an unguarded one.
-    const [others] = await testDb!.conn.query<any[]>(
+    const [others] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT DISTINCT source FROM token_ledger WHERE from_account = 'sys:mint' AND token_type = ? " +
         `AND source NOT IN (${HAND_MINT_SOURCES.map(() => "?").join(",")})`,
       [CREDIT, ...HAND_MINT_SOURCES],
@@ -695,7 +695,7 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
     );
     // THE MONEY IS THE ASSERTION. Two rows, keyed on the claim, whatever the
     // concurrency, and the member's stay credits move once.
-    const [rows] = await testDb!.conn.query<any[]>(
+    const [rows] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT idempotency_key, token_type, amount FROM token_ledger WHERE idempotency_key IN (?, ?)",
       [`quest_consent:${claimId}`, `queststay:${claimId}`],
     );

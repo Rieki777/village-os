@@ -63,7 +63,7 @@ interface RuleRow {
  * instead of restating today's scale as a literal.
  */
 async function scaleOf(slug: string): Promise<number> {
-  const [rows] = await pool.query<any[]>(
+  const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "SELECT `decimals` FROM `tokens` WHERE `slug` = ?",
     [slug],
   );

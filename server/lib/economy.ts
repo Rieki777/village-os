@@ -190,6 +190,8 @@ export async function ensureVoiceToken(pool: Pool, displayName?: string): Promis
  */
 export { CURRENCY_DECIMALS, VOICE_DECIMALS } from "../../shared/tokenScale";
 import { CURRENCY_DECIMALS, VOICE_DECIMALS, decayUnits } from "../../shared/tokenScale";
+import { faucetAccountRows, issuedBySourceRows, legRowsForKeys } from "../repos/tokenLedger";
+import { memberHolderRows } from "../repos/tokenBalances";
 
 /**
  * THE ONE REGISTRY READ FOR A TOKEN'S SCALE.
@@ -1282,11 +1284,7 @@ export async function reversePair(
     if (tooLong) return { ok: false, error: tooLong };
   }
 
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT `idempotency_key`, `source`, `from_account`, `to_account`, `token_type`, `amount` " +
-      "FROM `token_ledger` WHERE `idempotency_key` IN (?, ?)",
-    [keyLeg1, keyLeg2],
-  );
+  const rows = await legRowsForKeys(pool, keyLeg1, keyLeg2);
   // Byte-exact both times: the collation matches keys this caller did not ask for.
   const legs = [keyLeg1, keyLeg2].map((k) => rows.find((r) => String(r.idempotency_key) === k));
   for (let i = 0; i < 2; i++) {
@@ -2684,13 +2682,7 @@ export async function decayVoice(
    * a system account added later is exempt by construction instead of by
    * somebody remembering to add it to a list.
    */
-  const [holders] = await pool.query<RowDataPacket[]>(
-    "SELECT b.`account_id`, a.`user_id`, b.`balance` FROM `token_balances` b " +
-      "JOIN `ledger_accounts` a ON a.`id` = b.`account_id` " +
-      "WHERE b.`token_type` = ? AND a.`kind` = 'member' AND a.`user_id` IS NOT NULL " +
-      "AND b.`balance` > 0",
-    [VILLAGE_VOICE],
-  );
+  const holders = await memberHolderRows(pool, VILLAGE_VOICE);
 
   /*
    * Each DISTINCT refusal once, for the reason the seat loop gives two hundred
@@ -3204,9 +3196,7 @@ export async function publicRules(pool: Pool): Promise<Array<{ trigger: string; 
  * feed down with a message about SQL.
  */
 export async function faucetAccounts(pool: Pool): Promise<string[]> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT `id` FROM `ledger_accounts` WHERE `faucet` = 1 ORDER BY `id`",
-  );
+  const rows = await faucetAccountRows(pool);
   return rows.map((r) => String(r.id));
 }
 
@@ -3639,12 +3629,7 @@ export async function mintView(pool: Pool): Promise<MintView> {
   // could not see a single credit this village had ever issued.
   const faucets = await faucetAccounts(pool);
   const [supply] = faucets.length
-    ? await pool.query<RowDataPacket[]>(
-        "SELECT `token_type` AS token, `source`, SUM(`amount`) AS issued FROM `token_ledger` " +
-          `WHERE \`from_account\` IN (${faucets.map(() => "?").join(",")}) ` +
-          "GROUP BY `token_type`, `source` ORDER BY `token_type`, `source`",
-        faucets,
-      )
+    ? [await issuedBySourceRows(pool, faucets)]
     : // An unmigrated database, said as an empty breakdown rather than as a
       // SQL parse error on `IN ()`. Nothing here can tell it from a village
       // that has issued nothing, which is why `faucetAccounts` says so.

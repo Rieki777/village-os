@@ -134,7 +134,7 @@ async function register(name: string, email: string): Promise<{ token: string; i
  * rename door is the one production surface that reloads it.
  */
 async function setDecimals(slug: string, decimals: number): Promise<void> {
-  await pool.query("UPDATE tokens SET decimals = ? WHERE slug = ?", [decimals, slug]);
+  await pool.query("UPDATE tokens SET decimals = ? WHERE slug = ?", [decimals, slug]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
   const reloaded = await call("PUT", `/api/admin/tokens/${slug}`, { body: { active: true } });
   expect(reloaded.status, `reload the registry for ${slug}: ${JSON.stringify(reloaded.json)}`).toBe(200);
   expect(reloaded.json?.token?.decimals, `${slug} must answer at ${decimals} decimals`).toBe(decimals);
@@ -150,7 +150,7 @@ async function makeToken(slug: string, name: string): Promise<void> {
 
 /** The raw MINOR sum this faucet has issued of one token. The ledger is the witness. */
 async function mintedMinor(slug: string): Promise<number> {
-  const [[row]] = await pool.query<any[]>(
+  const [[row]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "SELECT COALESCE(SUM(amount),0) AS n FROM token_ledger WHERE from_account = 'sys:mint' AND token_type = ?",
     [slug],
   );
@@ -159,7 +159,7 @@ async function mintedMinor(slug: string): Promise<number> {
 
 /** A member's raw MINOR balance, straight off the column, never off a payload. */
 async function minorBalance(userId: string, slug: string): Promise<number> {
-  const [[row]] = await pool.query<any[]>(
+  const [[row]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "SELECT COALESCE(balance,0) AS b FROM token_balances WHERE account_id = ? AND token_type = ?",
     [`mem:${userId}`, slug],
   );
@@ -438,7 +438,7 @@ describe.skipIf(!DB_CONFIGURED)("four decimals, through the routes that post and
     // the token and it could never be swappable again. The founder holds it
     // because swapping opens at the member stage and this case is about the
     // unit a payload reports, not about who may reach the door.
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT INTO exchange_orders (id, receipt_no, user_id, token_slug, quantity, price_minor_each, amount_minor, status) " +
         "VALUES ('xo-dec-seed', 951, ?, 'swap-x', 100, 500, 50000, 'pending')",
       [founderId],
@@ -572,7 +572,7 @@ describe.skipIf(!DB_CONFIGURED)("four decimals, through the routes that post and
     expect(current.status).toBe(200);
     const prevNumber = Number(current.json.cycleNumber) - 1;
     const prevId = `lunar-${String(prevNumber).padStart(6, "0")}`;
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT INTO gratitude_log (id, kind, from_id, from_name, to_id, to_name, amount, message, cycle_id, cycle_number, at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
       [
         "grat-decimals-prev", "gratitude", benId, "Ben Orr", annaId, "Anna Vale", 8,
@@ -597,7 +597,7 @@ describe.skipIf(!DB_CONFIGURED)("four decimals, through the routes that post and
     // THE LEDGER. A thousand whole tokens at three decimals is a million
     // minor units: 1000.000, not 1.000, which is what the dial released
     // before the conversion.
-    const [[row]] = await pool.query<any[]>(
+    const [[row]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT amount, token_type FROM token_ledger WHERE source = 'gratitude_pool' AND to_account = ?",
       [`mem:${annaId}`],
     );
@@ -610,7 +610,7 @@ describe.skipIf(!DB_CONFIGURED)("four decimals, through the routes that post and
     // only when the close hands `snapshotCycle` a stage source. Without that
     // wiring line the three rows are ABSENT — deliberately not zero, because
     // a zero here reads as "this village gave its whole allowance away".
-    const [metrics] = await pool.query<any[]>(
+    const [metrics] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT metric_key, value FROM health_snapshots WHERE cycle_number = ? AND metric_key LIKE 'gratitude_allowance_%'",
       [prevNumber],
     );

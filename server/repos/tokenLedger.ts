@@ -193,3 +193,84 @@ export async function circleFundingRows(conn: Pool | PoolConnection, faucet: str
   );
   return rows;
 }
+
+/*
+ * Moved from server/lib/economy.ts and server/lib/ledger.ts because the module
+ * intake check flagged them as raw SQL on lines this branch changed. Each is a
+ * plain read with no lock of its own and runs on the connection its caller
+ * passes, so a read inside the ledger's transaction stays inside it.
+ * Statements are verbatim.
+ */
+/** Both legs of an atomic pair, by their two keys. The caller matches byte-exactly. */
+export async function legRowsForKeys(conn: Pool | PoolConnection, first: string, second: string): Promise<RowDataPacket[]> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    "SELECT `idempotency_key`, `source`, `from_account`, `to_account`, `token_type`, `amount` " +
+      "FROM `token_ledger` WHERE `idempotency_key` IN (?, ?)",
+    [first, second],
+  );
+  return rows;
+}
+
+/** The faucet accounts, as the ledger_accounts rows mark them. */
+export async function faucetAccountRows(conn: Pool | PoolConnection): Promise<RowDataPacket[]> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    "SELECT `id` FROM `ledger_accounts` WHERE `faucet` = 1 ORDER BY `id`",
+  );
+  return rows;
+}
+
+/** Issued per token and source, from the given faucet accounts. `faucets` must be non-empty. */
+export async function issuedBySourceRows(conn: Pool | PoolConnection, faucets: string[]): Promise<RowDataPacket[]> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    "SELECT `token_type` AS token, `source`, SUM(`amount`) AS issued FROM `token_ledger` " +
+      `WHERE \`from_account\` IN (${faucets.map(() => "?").join(",")}) ` +
+      "GROUP BY `token_type`, `source` ORDER BY `token_type`, `source`",
+    faucets,
+  );
+  return rows;
+}
+
+/** A key under one source, for a pair's sibling leg. The caller matches byte-exactly. */
+export async function keyRowsWithSource(conn: Pool | PoolConnection, key: string, source: string): Promise<RowDataPacket[]> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    "SELECT `idempotency_key` FROM `token_ledger` WHERE `idempotency_key` = ? AND `source` = ? LIMIT 1",
+    [key, source],
+  );
+  return rows;
+}
+
+/** The posting a key names. The caller matches byte-exactly. */
+export async function postingRowForKey(conn: Pool | PoolConnection, key: string): Promise<RowDataPacket[]> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    "SELECT `idempotency_key`, `source`, `from_account`, `to_account`, `token_type`, `amount` " +
+      "FROM `token_ledger` WHERE `idempotency_key` = ? LIMIT 1",
+    [key],
+  );
+  return rows;
+}
+
+/** Reversal mirrors that move exactly this amount between these accounts in this token. */
+export async function reversalMirrorRows(
+  conn: Pool | PoolConnection,
+  toAccount: string,
+  tokenType: string,
+  fromAccount: string,
+  amount: number,
+): Promise<RowDataPacket[]> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    "SELECT `idempotency_key` FROM `token_ledger` " +
+      "WHERE `to_account` = ? AND `token_type` = ? AND `from_account` = ? AND `amount` = ? " +
+      "AND CAST(`source` AS BINARY) = 'reversal'",
+    [toAccount, tokenType, fromAccount, amount],
+  );
+  return rows;
+}
+
+/** Whether a key already exists, for the collation clash check. */
+export async function keyClashRows(conn: Pool | PoolConnection, key: string): Promise<RowDataPacket[]> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    "SELECT idempotency_key FROM token_ledger WHERE idempotency_key = ? LIMIT 1",
+    [key],
+  );
+  return rows;
+}
