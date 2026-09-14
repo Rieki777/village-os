@@ -259,6 +259,39 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
     expect(portraitFileExists(id)).toBe(false);
   });
 
+  it("STOPS AT A FILE THAT WILL NOT COME OFF, keeps the rows naming it, and the resume takes it down", async () => {
+    // This used to log the failure and record the step as done, AFTER the rows
+    // naming the file had already been deleted, so nothing could ever find the
+    // file again and `/api/uploads/:filename` went on serving it. A directory
+    // standing where the file was makes unlink refuse with something other than
+    // ENOENT on every platform (EPERM on Windows and macOS, EISDIR on Linux).
+    const id = "er-stuck-file-1";
+    const target = await seedMember(id);
+    const onVolume = path.join(uploadsDir, `portrait-${id}.webp`);
+    fs.rmSync(onVolume, { force: true });
+    fs.mkdirSync(onVolume);
+
+    await expect(anonymizeMember(pool, target, null, deps())).rejects.toThrow(/could not take .* off the volume/);
+
+    const record = await erasureRecord(pool, id);
+    expect(record!.failedStep).toBe("portraits");
+    expect(record!.finishedAt).toBeNull();
+    expect(record!.stepsDone).not.toContain("portraits");
+    // The rows are still there, which is the only way a resume finds the file.
+    expect(await portraits.portraitsForMember(pool, id)).toHaveLength(1);
+
+    // Whatever stood in the way clears, and the picture is still on the volume.
+    fs.rmdirSync(onVolume);
+    fs.writeFileSync(onVolume, Buffer.from("still a picture"));
+
+    const out = await resumeErasure(pool, id, deps());
+    expect(out.finished).toBe(true);
+    expect(out.ran).toContain("portraits");
+    expect(portraitFileExists(id)).toBe(false);
+    expect(await portraits.portraitsForMember(pool, id)).toHaveLength(0);
+    expect(await portraits.grantsForMember(pool, id)).toHaveLength(0);
+  });
+
   it("is safe to resume twice, and a finished sweep stays finished", async () => {
     const id = "er-resume-2";
     const target = await seedMember(id);

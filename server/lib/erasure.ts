@@ -109,7 +109,7 @@ import { forgetMemberInProposals } from "./externalProposals";
 import { forgetMemberEverywhere, type ErasureOutcome } from "./memberDrivers";
 import { recordEvent } from "./events";
 import { releaseSeatingsForUser } from "./orgChart";
-import { forgetPortraitsForMember } from "../repos/characterPortraits";
+import { forgetPortraitsForMember, portraitFilesForMember } from "../repos/characterPortraits";
 import { forgetCharactersForMember } from "../repos/playerCharacters";
 import { forgetAgentForMember } from "../repos/memberAgent";
 import {
@@ -159,14 +159,20 @@ const ANON = "A departed member";
 const ASKED_NOBODY: ErasureOutcome = { asked: [], confirmed: [], unconfirmed: [] };
 
 /**
- * Unlink a file the database no longer names.
+ * Take one file off the volume, or say why not by throwing.
  *
- * Never throws, and the same shape `server/routes/characterPortraits.ts` uses
- * for the same reason: bytes lingering after their row is gone are a wasted few
- * hundred kilobytes, while a throw here would abort an erasure whose database
- * work had already landed. A failure to unlink is REPORTED, because a portrait
- * that is still fetchable after a deletion is exactly the thing this step
- * exists to prevent and it must not go by in silence.
+ * ENOENT is the ordinary case and passes: the row named a file the volume no
+ * longer has, which is also what a resume meets for a file an earlier attempt
+ * already removed. ANY OTHER FAILURE THROWS, and that is the change from what
+ * stood here. This used to log and return, so the step was recorded as done
+ * while the picture stayed on the volume, and `/api/uploads/:filename` serves
+ * whatever file is there to anybody holding the address. A throw stops the
+ * sweep at this step, `runSweep` records where, and a resume comes back for the
+ * same file, which it can still find because the rows naming it are deleted
+ * only after every file is off.
+ *
+ * A name that could climb out of the uploads directory is skipped: it is not a
+ * file this village wrote, and nothing of the member's sits at that path.
  */
 function unlink(uploadsDir: string, fileName: string): void {
   const name = String(fileName ?? "").trim();
@@ -174,11 +180,8 @@ function unlink(uploadsDir: string, fileName: string): void {
   try {
     fs.unlinkSync(path.join(uploadsDir, name));
   } catch (err: any) {
-    // ENOENT is the ordinary case: the row named a file the volume no longer
-    // has. Anything else is a picture this village failed to take down.
-    if (err?.code !== "ENOENT") {
-      console.error(`[erasure] could not unlink "${name}": ${err?.message ?? err}`);
-    }
+    if (err?.code === "ENOENT") return;
+    throw new Error(`could not take "${name}" off the volume: ${err?.message ?? err}`);
   }
 }
 
@@ -436,22 +439,35 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       /*
        * THE PUBLISHED FACE.
        *
-       * The rows come out and the FILES come off the volume, in that order.
-       * The order is the safe one: a death between them leaves files on disk
-       * that no row names, which the uploads sweep collects, while the other
-       * order would leave rows pointing at bytes that are gone and a studio
-       * rendering broken images at their owner.
+       * The FILES come off the volume first, and only then do the rows go.
        *
-       * Unlinking is what makes this a revocation. `/api/uploads/:filename` has
-       * no sign-in in front of it, so while the bytes are there the address is
-       * a capability, and deleting a row that nobody can read any more removes
-       * the picture from listings and from nothing else.
+       * THE OTHER ORDER STOOD HERE, and its comment called it the safe one: a
+       * death between the two "leaves files on disk that no row names, which
+       * the uploads sweep collects". Nothing collects them. The daily uploads
+       * job only measures orphans, removing one takes an admin pressing a
+       * button, and `/api/uploads/:filename` serves any file on the volume to
+       * anybody holding the address. The rows are the only record of which
+       * files are this member's face, so a resume that found them gone found
+       * nothing to unlink, and the pictures stayed public for good.
+       *
+       * This order's cost is the one the old comment feared: a death between
+       * the two leaves rows naming files that are already gone, so a studio
+       * shows a broken image to a member who is being erased. That is the right
+       * way round. The resume re-reads the rows, meets ENOENT, which passes,
+       * and deletes them.
+       *
+       * Unlinking is what makes this a revocation. While the bytes are there
+       * the address is a capability, and deleting a row nobody can read any
+       * more takes the picture out of listings and out of nothing else. A file
+       * that refuses to come off throws (see `unlink`), so the step is recorded
+       * as failed with its rows still in place.
        */
       name: "portraits",
       run: async () => {
-        for (const file of await forgetPortraitsForMember(pool, target.id)) {
+        for (const file of await portraitFilesForMember(pool, target.id)) {
           unlink(deps.uploadsDir, file);
         }
+        await forgetPortraitsForMember(pool, target.id);
       },
     },
     {
