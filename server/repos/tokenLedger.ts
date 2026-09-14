@@ -1,5 +1,6 @@
 /**
- * `token_ledger`, read for one question: has the village ever paid this account.
+ * `token_ledger`, read for one question: has the village ever paid this account
+ * for something the person brought it.
  *
  * ── A HOME BEING STARTED, THE SAME WAY `tokenBalances.ts` IS ────────────────
  *
@@ -25,37 +26,44 @@
  * second spelling of it in this file would be a second home for one fact with
  * nothing forcing the two to agree.
  *
- * ── WHY THE FROM SIDE, AND WHY NOT RECOGNITION ──────────────────────────────
+ * ── AND WHY THE MOVEMENT HAPPENED IS PART OF THE QUESTION ───────────────────
  *
- * Written once, on `hasBeenPaidByVillage` in server/lib/ledger.ts, which is the
- * function everything calls. In short: a peer gift does not count, or one
- * member could buy in and manufacture Contributors; and the caller passes the
- * token slugs, from which recognition is already excluded.
+ * Who paid and in which token is not enough. A guest who buys stay credits with
+ * a card receives a village token from a village account, and has not brought
+ * the village anything. The caller passes the `source` values that count, from
+ * server/lib/contributionPay.ts, which is where that decision is made and where
+ * a new source has to be decided on. The from side still matters beside it: a
+ * gift from a neighbour is not the village paying, whatever it is labelled.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
 
 /** `prefix%` for LIKE, with LIKE's own wildcards in the prefix taken literally. */
 const startsWith = (prefix: string): string => `${prefix.replace(/[\\%_]/g, "\\$&")}%`;
 
+const placeholders = (values: readonly unknown[]): string => values.map(() => "?").join(",");
+
 /**
  * Whether `accountId` has ever received a positive amount of one of
- * `tokenSlugs` from an account whose id does not start with `memberPrefix`.
+ * `tokenSlugs`, for one of `sources`, from an account whose id does not start
+ * with `memberPrefix`.
  *
- * An empty slug list answers false without asking, because `IN ()` is a syntax
- * error and a village paying in no tokens has paid nobody.
+ * An empty slug or source list answers false without asking, because `IN ()` is
+ * a syntax error, and a village that counts nothing has paid nobody.
  */
 export async function receivedFromVillage(
   pool: Pool,
   accountId: string,
   tokenSlugs: readonly string[],
+  sources: readonly string[],
   memberPrefix: string,
 ): Promise<boolean> {
-  if (tokenSlugs.length === 0) return false;
+  if (tokenSlugs.length === 0 || sources.length === 0) return false;
   const [rows] = await pool.query<RowDataPacket[]>(
     "SELECT 1 FROM token_ledger WHERE to_account = ? AND amount > 0 " +
-      `AND token_type IN (${tokenSlugs.map(() => "?").join(",")}) ` +
+      `AND token_type IN (${placeholders(tokenSlugs)}) ` +
+      `AND source IN (${placeholders(sources)}) ` +
       "AND from_account NOT LIKE ? LIMIT 1",
-    [accountId, ...tokenSlugs, startsWith(memberPrefix)],
+    [accountId, ...tokenSlugs, ...sources, startsWith(memberPrefix)],
   );
   return rows.length > 0;
 }
@@ -69,16 +77,18 @@ export async function accountsReceivedFromVillage(
   pool: Pool,
   accountIds: readonly string[],
   tokenSlugs: readonly string[],
+  sources: readonly string[],
   memberPrefix: string,
 ): Promise<Set<string>> {
   const paid = new Set<string>();
-  if (accountIds.length === 0 || tokenSlugs.length === 0) return paid;
+  if (accountIds.length === 0 || tokenSlugs.length === 0 || sources.length === 0) return paid;
   const [rows] = await pool.query<RowDataPacket[]>(
     "SELECT DISTINCT to_account FROM token_ledger " +
-      `WHERE to_account IN (${accountIds.map(() => "?").join(",")}) AND amount > 0 ` +
-      `AND token_type IN (${tokenSlugs.map(() => "?").join(",")}) ` +
+      `WHERE to_account IN (${placeholders(accountIds)}) AND amount > 0 ` +
+      `AND token_type IN (${placeholders(tokenSlugs)}) ` +
+      `AND source IN (${placeholders(sources)}) ` +
       "AND from_account NOT LIKE ?",
-    [...accountIds, ...tokenSlugs, startsWith(memberPrefix)],
+    [...accountIds, ...tokenSlugs, ...sources, startsWith(memberPrefix)],
   );
   for (const r of rows) paid.add(String(r.to_account));
   return paid;

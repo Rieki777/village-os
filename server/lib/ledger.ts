@@ -32,6 +32,7 @@
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { balanceRowsFor } from "../repos/tokenBalances";
 import { accountsReceivedFromVillage, receivedFromVillage } from "../repos/tokenLedger";
+import { contributionSources } from "./contributionPay";
 import { issuanceRefusal } from "./gameStart";
 
 export type TokenType = string;
@@ -1152,8 +1153,11 @@ export async function hasBeenPaidByVillage(
   tokenSlugs: readonly string[],
 ): Promise<boolean> {
   // The query lives in server/repos/tokenLedger.ts. What makes an account a
-  // member's is this file's to say, so the prefix travels with the call.
-  return receivedFromVillage(pool, memberAccount(userId), tokenSlugs, memberAccount(""));
+  // member's is this file's to say, so the prefix travels with the call. Which
+  // movements are PAY is server/lib/contributionPay.ts's to say: a guest buying
+  // stay credits receives a village token from a village account, and that is
+  // not the village paying them for anything.
+  return receivedFromVillage(pool, memberAccount(userId), tokenSlugs, contributionSources(), memberAccount(""));
 }
 
 /**
@@ -1191,7 +1195,7 @@ export async function paidByVillageMany(
   // Back from each account to the exact id the caller asked about, by lookup
   // rather than by stripping a prefix off whatever the database returned.
   const idByAccount = new Map(userIds.map((id) => [memberAccount(id), id] as const));
-  const accounts = await accountsReceivedFromVillage(pool, Array.from(idByAccount.keys()), tokenSlugs, memberAccount(""));
+  const accounts = await accountsReceivedFromVillage(pool, Array.from(idByAccount.keys()), tokenSlugs, contributionSources(), memberAccount(""));
   accounts.forEach((account) => {
     const id = idByAccount.get(account);
     if (id !== undefined) paid.add(id);

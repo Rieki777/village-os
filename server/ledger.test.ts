@@ -617,8 +617,47 @@ describe.skipIf(!configured)("the MySQL token ledger", () => {
       expect(await hasBeenPaidByVillage(pool, "paid-thanked", contributionTokens())).toBe(false);
     });
 
+    it("DOES NOT COUNT BUYING YOUR OWN STAY, which the loop test caught", async () => {
+      // A guest who bought ten stay credits with a card had been "paid by the
+      // village" under the first version of this rule, became a Contributor,
+      // and booked their own room at the member price.
+      expectPosted(await postTransfer(pool, {
+        from: CYCLE_POOL_FAUCET,
+        to: memberAccount("paid-guest"),
+        amount: 10,
+        tokenType: "credits",
+        source: "stay_purchase",
+        idempotencyKey: "guest-buys-a-stay",
+      }));
+      expect(await hasBeenPaidByVillage(pool, "paid-guest", contributionTokens())).toBe(false);
+    });
+
+    it("does not count a swap, which only trades what somebody already held", async () => {
+      expectPosted(await postTransfer(pool, {
+        from: CYCLE_POOL_FAUCET,
+        to: memberAccount("paid-swapper"),
+        amount: 4,
+        tokenType: "credits",
+        source: "exchange_swap",
+        idempotencyKey: "swapper-swaps",
+      }));
+      expect(await hasBeenPaidByVillage(pool, "paid-swapper", contributionTokens())).toBe(false);
+    });
+
+    it("counts an item brought into the shared library, which is a resource contributed", async () => {
+      expectPosted(await postTransfer(pool, {
+        from: CYCLE_POOL_FAUCET,
+        to: memberAccount("paid-donor"),
+        amount: 3,
+        tokenType: "credits",
+        source: "library_intake",
+        idempotencyKey: "donor-brings-a-wheelbarrow",
+      }));
+      expect(await hasBeenPaidByVillage(pool, "paid-donor", contributionTokens())).toBe(true);
+    });
+
     it("answers the whole roll in one query, and agrees with the single read", async () => {
-      const ids = ["paid-none", "paid-one", "paid-rich", "paid-friend", "paid-thanked"];
+      const ids = ["paid-none", "paid-one", "paid-rich", "paid-friend", "paid-thanked", "paid-guest", "paid-swapper", "paid-donor"];
       const many = await paidByVillageMany(pool, ids, contributionTokens());
       for (const id of ids) {
         expect(many.has(id)).toBe(await hasBeenPaidByVillage(pool, id, contributionTokens()));
