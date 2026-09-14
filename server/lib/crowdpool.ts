@@ -52,22 +52,19 @@
  * their own on 2026-09-04 and relayed here. This side re-verified only what is
  * verifiable from this side, which is what OUR code does with the answers.
  *
- * 1. `pledgedTotal` IS A FLOOR, NEVER A TOTAL. The hub sums a campaign's
- *    pledged value filtering on the ACCEPTED status alone, and delivered and
- *    thanked are later states of the same lifecycle. So the moment a steward
- *    confirms a delivery, that value leaves the number. Their measurement:
- *    accept ten thousand, deliver it, accept five thousand more, and the
- *    campaign reports five thousand where the honest figure is fifteen. They
- *    also recompute in one branch only, so the drop is DEFERRED and lands
- *    later, when an unrelated pledge is accepted. A member watching a village
- *    do well therefore sees the ring go backwards at a moment that looks
- *    unrelated. It is theirs to fix and they are fixing it. Ours is to stop
- *    presenting it as our own truth: `percentPledged` below still divides by
- *    the hub's number, because inventing a correction here would be worse than
- *    an honest gap, and the client names the figure as a floor everywhere a
- *    reader meets it (`HUB_PLEDGED_TOTAL_IS_A_FLOOR` in
- *    `client/src/components/crowdpool/PoolPieces.tsx` is the one switch that
- *    turns that language off when the hub lands its fix).
+ * 1. `pledgedTotal` WAS A FLOOR UNTIL 2026-09-05, AND THE HUB FIXED IT. The
+ *    hub summed a campaign's pledged value filtering on the ACCEPTED status
+ *    alone, so the moment a steward confirmed a delivery that value left the
+ *    number. Their measurement: accept ten thousand, deliver it, accept five
+ *    thousand more, and the campaign reported five thousand where the honest
+ *    figure was fifteen, the drop deferred to a later, unrelated acceptance.
+ *    The hub's commit b835c28 counts accepted, fulfilled and thanked, confirmed
+ *    live on their main with CI and the deploy green, and 7c83ef4 switched
+ *    `HUB_PLEDGED_TOTAL_IS_A_FLOOR` in `client/src/components/crowdpool/PoolPieces.tsx`
+ *    off. `percentPledged` below divides by the hub's number, as it always did,
+ *    because inventing a correction here would be worse than an honest gap.
+ *    This side reads no hub contract version, so a fork pointed at a hub older
+ *    than b835c28 would show a floor as a total; that flag is the one switch.
  *
  * 2. THE THREE-SLOT METER CAN ARRIVE WITH DELIVERED ABOVE WANTED. Their fulfil
  *    path is not idempotent despite a comment claiming it is: two stewards at
@@ -188,9 +185,9 @@ export interface CrowdpoolCampaign {
   currency: string;
   totalValue: number;
   /**
-   * The hub's campaign-wide pledged value. A FLOOR, never a total: the hub
-   * filters on the accepted status alone, so confirmed deliveries drop out of
-   * it. See defect 1 at the top of this file.
+   * The hub's campaign-wide pledged value: accepted, fulfilled and thanked
+   * pledges, since the hub's b835c28 on 2026-09-05. It was a floor before that;
+   * see item 1 at the top of this file.
    */
   pledgedTotal: number;
   financialTarget: number;
