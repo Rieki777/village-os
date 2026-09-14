@@ -603,6 +603,25 @@ export const VARIABLES: VariableDef[] = [
     max: 720,
     unit: "hours",
   },
+  // Rye, 2026-09-14: "if all stewards already voted yes, then there is no veto
+  // window needed", and "It's also the villages countdown (they share it)". So
+  // consent removes the veto and shortens the wait to this notice. It defaults
+  // to a day, not to zero: the countdown is the village's notice as well as the
+  // stewards' door. Veto-locked (`CONSENT_NOTICE_HOURS_KEY` in
+  // server/lib/stewardship.ts) for the same reason the window length is.
+  {
+    key: "governance.consent_notice_hours",
+    category: "Governance",
+    label: "How long a change waits when every steward already said yes",
+    criticality: "constitutional",
+    description:
+      "When every seated steward votes yes on a decision, nobody is left to stop it, so it does not need the whole steward window. It still waits this many hours after the vote closes, because the countdown is the village's notice that a change is coming. It only ever shortens the wait: a number above the steward window counts as the steward window. A village with no seated stewards never gets this, because nobody said yes. Zero lets a change land as soon as the vote closes whenever every steward agrees.",
+    type: "integer",
+    default: "24",
+    min: 0,
+    max: 720,
+    unit: "hours",
+  },
   // A decision that carried and then never landed. It happens: the auto-apply
   // brake sits off for a season, a village goes quiet, a landing keeps throwing.
   // Without a limit the row waits forever and a member reads a countdown that

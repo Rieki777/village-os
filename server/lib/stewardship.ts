@@ -212,6 +212,8 @@ export const AUTO_EXECUTE_SUBJECTS_KEY = "governance.auto_execute_subjects";
  */
 export const VETO_HOURS_KEY = "governance.veto_hours";
 export const HIGHEST_TIER_KEY = "governance.highest_tier";
+/** How long a change waits when every steward already said yes (2026-09-14). A limit on the window, so veto-locked. */
+export const CONSENT_NOTICE_HOURS_KEY = "governance.consent_notice_hours";
 
 /**
  * THE VETO MAP: the two settings that say what the seat may stop.
@@ -262,6 +264,7 @@ export const VETO_LOCKED_KEYS: readonly string[] = [
   STEWARD_COUNCIL_KEY,
   VETO_HOURS_KEY,
   HIGHEST_TIER_KEY,
+  CONSENT_NOTICE_HOURS_KEY,
 ];
 
 /**
@@ -297,6 +300,32 @@ export function tierIsInStewardReach(tier: Criticality, raw: unknown): boolean {
 /** True when changing this setting is outside every steward's reach. */
 export function keyIsVetoLocked(key: string): boolean {
   return VETO_LOCKED_KEYS.includes(String(key));
+}
+
+/**
+ * DID EVERY SEATED STEWARD SAY YES? The mirror of the steward's blocking no.
+ *
+ * Rye, 2026-09-14: "if all stewards already voted yes, then there is no veto
+ * window needed". The same set `stewardNoVote` reads, at the same moment, looking
+ * for every yes where that one looks for any no, so the two can never disagree
+ * about who a steward is.
+ *
+ * ZERO STEWARDS IS NEVER CONSENT. `every` over an empty list is true, and
+ * `governance.steward_veto_tiers` calls a village with nobody able to stop
+ * anything "a healthy village and not a broken one", so the empty set is an
+ * ordinary case. Read without this guard, every such village would silently
+ * lose its window on every decision.
+ *
+ * An abstention, a missing vote or a no keeps the full window. Only an explicit
+ * yes from every seat counts.
+ */
+export function everyStewardSaidYes(
+  seatedUserIds: readonly string[],
+  votes: readonly { userId: string; choice: string }[],
+): boolean {
+  if (seatedUserIds.length === 0) return false;
+  const yes = new Set(votes.filter((v) => v.choice === "yes").map((v) => v.userId));
+  return seatedUserIds.every((id) => yes.has(id));
 }
 
 /**
