@@ -135,12 +135,15 @@ export const VARIABLES: VariableDef[] = [
      */
     default: String(SUBJECT_THRESHOLDS[VILLAGE_LAUNCH].minElectorate),
     /*
-     * ZERO IS OFF, and the floor is 0 rather than 1 on Rye's ruling of
-     * 2026-09-09. A minimum of 1 is not a default, it is a mandate: thirteen
-     * forks inherit this file, and a village that already admits people by
-     * interview or by a circle's consent would have gained a second gate it
-     * could not remove, with the steward override as its only way through.
-     * An override used for every arrival stops being read as an override.
+     * ZERO IS OFF, and the floor is 0 rather than 1. The contract is not new:
+     * main's own `membership.vouch_threshold` documented "0 keeps vouching
+     * off" with a minimum of 0 before this dial replaced it. A minimum of 1
+     * would not be a default, it would be a mandate: thirteen forks inherit
+     * this file, and a village that already admits people by interview or by
+     * a circle's consent would have gained a second gate it could not remove,
+     * with the steward override as its only way through. An override used for
+     * every arrival stops being read as an override. `vouchBar` in
+     * server/lib/vouches.ts is the one reading of this number.
      */
     min: 0,
     max: 20,
