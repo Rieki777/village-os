@@ -29,7 +29,7 @@ import { describe, expect, it } from "vitest";
 import {
   ADVISORY,
   AUTO_EXECUTE_SUBJECTS_KEY,
-  DEFAULT_TERM_CYCLES,
+
   HIGHEST_TIER_KEY,
   REASON_MAX,
   REASON_NOTICE,
@@ -443,9 +443,6 @@ describe("a term is an instant from the clock, never a season", () => {
     }
   });
 
-  it("runs for three cycles by default, which is a season's worth of moons", () => {
-    expect(DEFAULT_TERM_CYCLES).toBe(3);
-  });
 });
 
 describe("the seat is the village's, and no admin route may give or take it", () => {

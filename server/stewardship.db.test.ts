@@ -73,7 +73,11 @@ let db: TestDb;
 let pool: Pool;
 
 const LAUNCH_BALLOT = "bal-birthing";
-const SEASON = { currentSeasonId: "rooting-2026" };
+/** A running season that ends forty days out, in whole seconds like the column. */
+const SEASON = {
+  currentSeasonId: "rooting-2026",
+  seasonEndsAt: new Date(Math.floor((Date.now() + 40 * 86400000) / 1000) * 1000),
+};
 
 async function member(id: string, name: string, role: string): Promise<void> {
   await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema
@@ -151,6 +155,22 @@ describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
     expect(Number(count[0].n), "and it wrote nothing on its way out").toBe(0);
   });
 
+  it("REFUSES to seat anybody when no season end is known at all", async () => {
+    // Every seat has a term, so a launch that cannot name the season's end
+    // seats nobody and says why, the same way an open-ended season does.
+    const r = await seatCatalystsAsStewards(pool, LAUNCH_BALLOT, { currentSeasonId: null });
+    expect(r.ok).toBe(false);
+    expect(r.termEndsAt).toBeNull();
+    expect(String(r.error)).toContain("end date");
+    const past = await seatCatalystsAsStewards(pool, LAUNCH_BALLOT, {
+      ...SEASON,
+      seasonEndsAt: new Date(Date.now() - 86400000),
+    });
+    expect(past.ok, "a season that has already ended cannot hold a term either").toBe(false);
+    const [count]: any = await pool.query("SELECT COUNT(*) AS n FROM role_holders");
+    expect(Number(count[0].n)).toBe(0);
+  });
+
   it("seats every catalyst, creates the role, and grants the one power", async () => {
     const r = await seatCatalystsAsStewards(pool, LAUNCH_BALLOT, SEASON);
     expect(r.ok).toBe(true);
@@ -187,10 +207,9 @@ describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
     expect(rows[0].term_ends_at, "the seat ends on an instant").toBeTruthy();
     const ends = new Date(rows[0].term_ends_at);
     expect(ends.getTime()).toBeGreaterThan(Date.now());
-    // Within a minute of the clock's own answer, which is the point: the
-    // season is recorded beside it and does not decide it.
-    const expected = termEndsAtFromCycles(3);
-    expect(Math.abs(ends.getTime() - expected.getTime())).toBeLessThan(60_000);
+    // The season's end, which is the ruling of 2026-09-14: a steward's seat
+    // resets each season at the latest, and the launch seats it that long.
+    expect(Math.abs(ends.getTime() - SEASON.seasonEndsAt.getTime())).toBeLessThan(1_000);
     expect(rows[0].season_id).toBe("rooting-2026");
     expect(rows[0].granted_by, "the village put them here, not an administrator").toBe(LAUNCH_BALLOT);
   });

@@ -284,8 +284,12 @@ export interface AppDeps {
    */
   questConsentRecipients(): Promise<string[]>;
 
-  /** The season banner payload. Extracted routes read `current` from it. */
-  seasonState(): { current: any };
+  /**
+   * The season banner payload. Extracted routes read `current` from it, and
+   * since 0199 the whole dated list and the zone too, because a seat's term is
+   * decided against them (shared/seatTerms.ts).
+   */
+  seasonState(): { current: any; seasons: any[]; timezone: string };
 
   /** The pattern the running season names, or null. Most villages: null. */
   currentPatternId(): string | null;

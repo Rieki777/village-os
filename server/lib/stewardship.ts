@@ -91,12 +91,14 @@
  * deliberately does not strip powers on its own: every permission role in
  * every existing village would silently disarm at the next season turn.
  *
- * THE TERM IS AN INSTANT FROM THE CLOCK, NEVER A SEASON. Seasons are an
- * ungoverned admin list; entries can be open-ended and their dates run out,
- * and the audit of 2026-09-03 found that a term hung on that list is a term
- * that never comes due. `termEndsAtFromCycles` computes the instant from the
- * lunar clock instead, and `seatCatalystsAsStewards` refuses to seat anybody
- * against an open-ended season rather than writing a term nothing will end.
+ * THE TERM IS AN INSTANT, AND BY DEFAULT IT IS THE SEASON'S END. Seasons are
+ * an admin list; entries can be open-ended and their dates run out, and the
+ * audit of 2026-09-03 found that a term hung on that list is a term that never
+ * comes due. Rye ruled on 2026-09-14 that seats end with the season all the
+ * same, so the season's end is resolved to an instant when a seat is made
+ * (shared/seatTerms.ts), `seatCatalystsAsStewards` refuses to seat anybody
+ * against an open-ended season, and a later edit to the season moves the seat
+ * (server/lib/seatTermLanding.ts) without ever making it indefinite.
  *
  * ── WHERE THE STATEMENTS LIVE, AND WHY THEY LEFT ───────────────────────────
  *
@@ -926,7 +928,9 @@ export function holdingHasLapsed(
 /**
  * A term's end, as an instant, computed from the cycle clock.
  *
- * THE ONE NAMED HELPER, and everything that stamps a term goes through it.
+ * A helper for terms counted in moons. Seat terms are decided in
+ * shared/seatTerms.ts since 0199, and end with the season by default; this
+ * stays for the callers that still measure in cycles.
  * The clock lane owns `CycleClock` and will own `termEndAfter`; until that
  * merges, this reads `shared/lunar.ts` directly and is the single place that
  * has to change when it does.
@@ -951,8 +955,6 @@ export function termEndsAtFromCycles(cycles: number, from: Date = new Date()): D
   return new Date(Math.ceil(cycleStartMs(here.cycleNumber + n)));
 }
 
-/** How many cycles a fresh steward seat runs for before the village re-seats. */
-export const DEFAULT_TERM_CYCLES = 3;
 
 /**
  * Every role that carries the veto, read from the roles table.
@@ -1346,8 +1348,12 @@ export interface SeasonTurn {
   currentSeasonId: string | null;
   /** True when the running season has no end date at all. */
   openEnded?: boolean;
-  /** How many cycles the term runs. Defaults to DEFAULT_TERM_CYCLES. */
-  termCycles?: number;
+  /**
+   * The instant the running season ends (0199). A steward's seat resets each
+   * season at the latest, so the launch seats the catalysts exactly that long.
+   * Absent means no season end is known, and nobody is seated.
+   */
+  seasonEndsAt?: Date | null;
   /** The instant the term is measured from. Defaults to now. */
   now?: Date;
 }
@@ -1383,11 +1389,14 @@ export interface SeatingReport {
  * an act of virtue. Nobody has to decide they are ready to give up power; they
  * have to be re-granted it.
  *
- * THE TERM IS COMPUTED FROM THE CLOCK, NOT FROM THE SEASON. The audit of
- * 2026-09-03 traced the old path: the term was "the next season turn", seasons
- * are an ungoverned admin list, both shipped entries end on one date, and a
- * founding season is documented as open-ended. A term hung on that list never
- * comes due, and the term is the only backstop on a seat that can veto.
+ * THE TERM IS THE SEASON'S END, RESOLVED TO AN INSTANT. Rye, 2026-09-14: a
+ * steward's seat resets each season at the latest. The audit of 2026-09-03
+ * found the old season-shaped term never came due, because seasons are an
+ * admin list, both shipped entries ended on one date, and a founding season is
+ * documented as open-ended. So the caller hands in the season's end as an
+ * instant, the seat stores that instant, and a later edit to the season moves
+ * it through `restampSeatsToCalendar` (server/lib/seatTermLanding.ts) without
+ * ever making it indefinite.
  *
  * AND IT REFUSES AN OPEN-ENDED SEASON outright, rather than seating anybody
  * against a calendar that will not turn. A village whose season has no end has
@@ -1417,7 +1426,7 @@ export async function seatCatalystsAsStewards(
   turn: SeasonTurn = { currentSeasonId: null },
 ): Promise<SeatingReport> {
   const now = turn.now ?? new Date();
-  const termDate = termEndsAtFromCycles(turn.termCycles ?? DEFAULT_TERM_CYCLES, now);
+  const termDate = turn.seasonEndsAt ?? null;
   const base: SeatingReport = {
     ok: true,
     roleCreated: false,
@@ -1425,17 +1434,19 @@ export async function seatCatalystsAsStewards(
     holdingMoved: false,
     seated: [],
     alreadySeated: [],
-    termEndsAt: termDate.toISOString(),
+    termEndsAt: termDate ? termDate.toISOString() : null,
   };
 
-  if (turn.openEnded) {
+  if (turn.openEnded || !termDate || termDate.getTime() <= now.getTime()) {
     return {
       ...base,
       ok: false,
       termEndsAt: null,
-      error:
-        "This village's season has no end date, so a steward's term would have nothing to end it. " +
-        "Give the season an end, or start the next one, and seat the stewards after that.",
+      error: turn.openEnded
+        ? "This village's season has no end date, so a steward's term would have nothing to end it. " +
+          "Give the season an end, or start the next one, and seat the stewards after that."
+        : "No running season has an end date ahead of today, so a steward's term would have nothing to end it. " +
+          "Start the season in Admin with its end date, and seat the stewards after that.",
     };
   }
 
@@ -1523,6 +1534,7 @@ export async function seatCatalystsAsStewards(
       grantedBy: launchBallotId,
       termEndsAt: termDate,
       seasonId: turn.currentSeasonId,
+      termFollowsSeason: true,
     });
     await recordTermStarted(pool, {
       roleId: STEWARD_ROLE_ID,
