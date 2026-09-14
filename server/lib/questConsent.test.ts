@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { parseRewardRange } from "../../shared/questRewards";
-import { checkConsentAmount, consentCapMode, payoutFor, type ConsentAmountInput } from "./questConsent";
+import { checkConsentAmount, consentBounds, consentCapMode, payoutFor, type ConsentAmountInput } from "./questConsent";
 
 const input = (over: Partial<Omit<ConsentAmountInput, "range">> & { label?: string } = {}): ConsentAmountInput => {
   const { label = "50-100", ...rest } = over;
@@ -161,5 +161,58 @@ describe("a badge lifts a consent toward the cap, never past it (ruling 8)", () 
 
   it("a zero grant pays zero whatever the badge", () => {
     expect(payoutFor({ granted: 0, multiplier: 3, liftTop: 100 })).toBe(0);
+  });
+});
+
+describe("consentBounds states exactly what checkConsentAmount enforces (finding 10)", () => {
+  it("agrees with the refusal for every mode, label, zero dial and amount", () => {
+    const labels = ["50-100", "0", "0-50", "200", "tbd", ""];
+    const amounts = [0, 1, 49, 50, 75, 100, 101, 150, 199, 200, 201, 400, 401];
+    let compared = 0;
+    for (const capMode of ["posted", "capped", "unlimited", "typo"]) {
+      for (const label of labels) {
+        for (const allowZero of [false, true]) {
+          const base = { range: parseRewardRange(label), capMode, capMultiplier: 2, allowZero };
+          const b = consentBounds(base);
+          for (const requested of amounts) {
+            const enforced = checkConsentAmount({ ...base, requested }).ok;
+            const shown =
+              requested === 0
+                ? b.zeroAllowed
+                : (b.mode === "unlimited" || b.readable) &&
+                  (b.floor === null || requested >= b.floor) &&
+                  (b.ceiling === null || requested <= b.ceiling);
+            expect(shown, `${capMode} "${label}" zero=${allowZero} amount=${requested}`).toBe(enforced);
+            compared += 1;
+          }
+        }
+      }
+    }
+    // Printed denominator: a grid that silently shrank would still be green.
+    expect(compared).toBe(4 * 6 * 2 * 13);
+  });
+
+  it("names the numbers a steward needs", () => {
+    const dials = { capMultiplier: 2, allowZero: false };
+    expect(consentBounds({ range: parseRewardRange("100-200"), capMode: "capped", ...dials })).toEqual({
+      label: "100-200",
+      readable: true,
+      floor: 100,
+      ceiling: 400,
+      zeroAllowed: false,
+      mode: "capped",
+    });
+    expect(consentBounds({ range: parseRewardRange("100-200"), capMode: "posted", ...dials })).toMatchObject({
+      floor: 100,
+      ceiling: 200,
+    });
+    expect(consentBounds({ range: parseRewardRange("100-200"), capMode: "unlimited", ...dials })).toMatchObject({
+      floor: null,
+      ceiling: null,
+    });
+    // An unreadable label under a cap refuses everything, zero included, and says no numbers.
+    expect(
+      consentBounds({ range: parseRewardRange("tbd"), capMode: "posted", capMultiplier: 2, allowZero: true }),
+    ).toMatchObject({ readable: false, floor: null, ceiling: null, zeroAllowed: false });
   });
 });

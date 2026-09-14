@@ -53,6 +53,18 @@ export function consentCapMode(raw: unknown): ConsentCapMode {
   return raw === "capped" || raw === "unlimited" ? raw : "posted";
 }
 
+/**
+ * The most a consent may grant on a quest. Null under `unlimited`, which bounds
+ * no grant. A ceiling multiplier that is not a number, or is below 1, reads as
+ * 1, so the bonus ceiling fails closed to the top of the advertised range.
+ */
+function capFor(mode: ConsentCapMode, range: RewardRange, capMultiplier: number): number | null {
+  if (mode === "unlimited") return null;
+  if (mode === "posted") return range.max;
+  const multiplier = Number.isFinite(capMultiplier) && capMultiplier >= 1 ? capMultiplier : 1;
+  return Math.round(range.max * multiplier);
+}
+
 export interface ConsentAmountInput {
   /** The amount in the request body, already clamped at zero. Whole tokens. */
   requested: number;
@@ -119,12 +131,7 @@ export function checkConsentAmount(input: ConsentAmountInput): ConsentAmountVerd
     };
   }
 
-  // A ceiling multiplier that is not a number, or below 1, is read as 1: the
-  // bonus ceiling fails closed to the top of the advertised range.
-  const ceilingMultiplier =
-    Number.isFinite(input.capMultiplier) && input.capMultiplier >= 1 ? input.capMultiplier : 1;
-  const ceiling =
-    mode === "posted" ? range.max : mode === "capped" ? Math.round(range.max * ceilingMultiplier) : null;
+  const ceiling = capFor(mode, range, input.capMultiplier);
   // Where a badge lift stops. Under a cap it is the ceiling; under `unlimited`
   // it is the advertised top, and a quest naming no readable top gets no lift.
   const liftTop = ceiling !== null ? ceiling : range.valid ? range.max : null;
@@ -186,4 +193,44 @@ export function payoutFor(input: { granted: number; multiplier: number; liftTop:
   const multiplier = Number.isFinite(input.multiplier) && input.multiplier > 1 ? input.multiplier : 1;
   const lifted = multiplier === 1 ? granted : Math.floor(granted * multiplier);
   return Math.max(granted, Math.min(lifted, liftTop));
+}
+
+/** What a steward may grant on one quest, for a surface to show before anybody presses. */
+export interface ConsentBounds {
+  /** The quest's advertised label, verbatim. */
+  label: string;
+  /** Whether the label names a number. Under a cap, a quest naming none refuses every consent. */
+  readable: boolean;
+  /** The lowest grant above zero. Null when nothing bounds it: `unlimited`, or an unreadable label. */
+  floor: number | null;
+  /** The highest grant. Null under the same conditions, since `unlimited` bounds no grant. */
+  ceiling: number | null;
+  /** Whether a consent of exactly 0 passes. */
+  zeroAllowed: boolean;
+  mode: ConsentCapMode;
+}
+
+/**
+ * The bounds `checkConsentAmount` enforces, stated ahead of time.
+ *
+ * The consent queue's amount box opened at a hardcoded 50 and showed nothing
+ * from the quest, so under `posted` the first press on any quest whose range
+ * left out 50 was a guaranteed refusal. A surface that shows these bounds and
+ * the route that enforces them read one definition, and a test holds the two to
+ * the same answer for every combination, so what the screen promises and what
+ * consent refuses cannot drift apart.
+ */
+export function consentBounds(input: Omit<ConsentAmountInput, "requested">): ConsentBounds {
+  const mode = consentCapMode(input.capMode);
+  const { range } = input;
+  const capped = mode !== "unlimited";
+  const unreadableUnderCap = capped && !range.valid;
+  return {
+    label: range.label,
+    readable: range.valid,
+    floor: !capped || unreadableUnderCap ? null : range.min,
+    ceiling: unreadableUnderCap ? null : capFor(mode, range, input.capMultiplier),
+    zeroAllowed: !unreadableUnderCap && (input.allowZero || (range.valid && range.min === 0)),
+    mode,
+  };
 }

@@ -279,6 +279,49 @@ describe.skipIf(!configured)("what a quest consent moves (MySQL, real ledger)", 
     expect(consentedTitle()).not.toContain("badge");
   });
 
+  // ── The queue states the bounds consent enforces (finding 10) ──────────────
+
+  const queue = async () => {
+    const r = await fetch(`${base}/api/admin/quest-claims`); // module-review-ok: the suite's own in-process server on 127.0.0.1, never an outbound call, so there is no correlation id to carry
+    expect(r.status).toBe(200);
+    return (await r.json()) as any[];
+  };
+
+  it("the queue carries what each claim's quest lets a steward grant, under the dials in force", async () => {
+    ctl.vars = { "quest.consent_cap_mode": "capped", "quest.consent_cap_multiplier": "2" };
+    const id = await submittedOn("queue-bounds", "100-200");
+    const row = (await queue()).find((c) => c.id === id);
+    expect(row?.bounds).toEqual({
+      label: "100-200",
+      readable: true,
+      floor: 100,
+      ceiling: 400,
+      zeroAllowed: false,
+      mode: "capped",
+    });
+    // And consent refuses exactly outside what the queue showed.
+    expect((await consent(id, 99)).status).toBe(409);
+    expect((await consent(id, 401)).status).toBe(409);
+    expect(await claimRow(id)).toEqual({ status: "submitted", amount: null });
+  });
+
+  it("a claim whose quest is gone carries no bounds", async () => {
+    await claims.add({
+      id: "claim-orphaned-quest",
+      questId: "q-never-existed",
+      questTitle: "A quest that was deleted",
+      userId: MEMBER.id,
+      userName: MEMBER.name,
+      status: "consented",
+      claimedAt: new Date().toISOString(),
+      artifactUrl: "",
+      note: "",
+    });
+    const row = (await queue()).find((c) => c.id === "claim-orphaned-quest");
+    expect(row).toBeTruthy();
+    expect(row.bounds).toBeNull();
+  });
+
   describe("a consent at 0 mints no quest.completed rule token (economics and governance, 2026-09-14)", () => {
     /** The rule tokens minted for this claim, read off the token segment of each occurrence key. */
     const ruleMints = async (claimId: string) => {
