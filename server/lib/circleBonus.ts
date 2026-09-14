@@ -43,7 +43,7 @@
  * circle bonuses. Adding it to the list would hide that from the sentence
  * written to reveal it.
  *
- * ── THE ATTRIBUTION KEY IS ITS OWN, FOR THE REASON 0181 GIVES ──────────────
+ * ── THE ATTRIBUTION KEY IS ITS OWN, FOR THE REASON 0200 GIVES ──────────────
  *
  * `circle:<id>` is the CAP meter's key and rows carrying it that leave a
  * faucet count as issuance the circle made against its cap. A bonus is paid

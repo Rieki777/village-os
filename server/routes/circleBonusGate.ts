@@ -137,7 +137,7 @@ export function register(app: Express, deps: Deps): void {
       seasonCapMinor: b.amountMinor,
       cycleCapMinor: b.cycleAmountMinor,
       seasonId: b.seasonId,
-      // 0181: which model the circle runs on, the change queued against it,
+      // 0200: which model the circle runs on, the change queued against it,
       // and what it held when it last went dormant. `burnFor` decides which
       // model is RUNNING at the instant asked for; this only carries them.
       mode: b.mode,

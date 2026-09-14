@@ -282,6 +282,29 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   found no deployed schema holding the economics filenames, only `village_tpl_` templates and
   `village_test_` scratch schemas. **Never refill `0182`**: a template or scratch schema may still
   record the filename, and the applied ledger keys on it.
+- **econ renumber lane 2, 2026-09-14: holds 0200 to 0206** on `wt/econ-renumber-2`, for the seven
+  economics migrations that `wt/econ` still carried at or below main's ceiling after the merge at
+  `fb2d94b`, kept in the same relative order: `0181`->`0200`, `0183`->`0201`, `0184`->`0202`,
+  `0185`->`0203`, `0186`->`0204`, `0187`->`0205`, `0188`->`0206`. `0182` stays burned and is not
+  refilled. Measured four ways between 12:46 and 12:58 PDT, after `git fetch origin`: all 271
+  origin refs, all 444 local branch refs and every worktree HEAD reach **0196**; the `drizzle/`
+  directories on disk across 360 worktrees reach **0199**, and that is
+  `drizzle/0199_every_seat_has_a_term.sql` UNTRACKED in `wt-govbuild` on `wt/seat-terms`, with no
+  claim for it in this file on any ref or in any worktree's copy on disk. `wt-theme` holds `0197`
+  and `0198` as STAGED renames on `wt/first-hour`, claimed only in that worktree's uncommitted
+  copy of this section. The brief this lane was handed measured the disk at 0198 and proposed
+  `0199` to `0205`; the untracked `0199` appeared after that, so the whole block moved up one.
+  `check-migration-numbers --next` answers 0197 in this tree, which is below the real ceiling.
+  Every `drizzle/` on this machine above 0199 (up to 0244) belongs to a clone of a different
+  repository, `ReGenCivics.Earth`, which numbers its migrations separately. Replay, measured at
+  12:58 PDT on the local MariaDB at 127.0.0.1:3307: 25 schemas hold `_migrations_applied` and
+  exactly one holds any of the seven old filenames, `village_tpl_e86746be575f_default`, a test
+  template. No persistent schema holds any of them, and none of the seven appears anywhere in the
+  history of `origin/main` or of any tag. **Re-measured at 13:03 PDT, immediately before the
+  rename, and the channels had already moved:** `0199` was COMMITTED and pushed on
+  `origin/wt/seat-terms` and on a second local branch `wt/seat-terms-ui`, and `0197` and `0198`
+  were committed and pushed on `origin/wt/first-hour` with that lane's claim now on a ref. The
+  ceiling was still **0199** on all four channels and nothing anywhere held `0200` or above.
 - **quest-consent integrity lane, 2026-09-10: holds 0196** for
   `drizzle/0196_one_live_claim_per_member.sql`. The number was ASSIGNED by the coordinator, not
   measured by this lane, and `check-migration-numbers.mjs` reported next-free 0190 in this

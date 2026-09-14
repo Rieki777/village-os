@@ -358,7 +358,7 @@ describe.skipIf(!configured)("the rollover, and the bonus that follows from it",
 
   it("keeps the bonus OUT of the cap meter, so next season is not billed for it", async () => {
     /*
-     * The boundary bug 0181 avoided, one namespace along. A bonus wearing the
+     * The boundary bug 0200 avoided, one namespace along. A bonus wearing the
      * cap meter's key would be counted as issuance the circle made, against
      * the cap of whichever period it was paid in.
      */

@@ -138,7 +138,7 @@ export interface CircleBudgetRow {
   /** The SEASON cap. 0084's original column, meaning unchanged. */
   amountMinor: number;
   /**
-   * The CYCLE cap (0188). Null means the village set none, which is every
+   * The CYCLE cap (0206). Null means the village set none, which is every
    * village until it sets one and is why the column is nullable. Zero is a
    * real value and means zero: a circle with a cycle cap of 0 may issue
    * nothing this cycle, the same way every other cap in this build fails
@@ -146,9 +146,9 @@ export interface CircleBudgetRow {
    */
   cycleAmountMinor: number | null;
   /**
-   * WHICH MODEL THIS CIRCLE RUNS ON (0181), and it is per circle by ruling.
+   * WHICH MODEL THIS CIRCLE RUNS ON (0200), and it is per circle by ruling.
    *
-   * `cap` is every row that existed before 0181 and is the column's default:
+   * `cap` is every row that existed before 0200 and is the column's default:
    * the two caps above bound a right to ISSUE and nothing is held. `treasury`
    * means real tokens in `sys:circle:<circleId>`, which persist across a
    * period and are read from the ledger, never from this table.
@@ -284,7 +284,7 @@ export function budgetProblem(body: any, tokenExists: (slug: string) => boolean)
     }
   }
   /*
-   * A MODE IS OPTIONAL AND, WHEN GIVEN, IT IS ONE OF TWO WORDS (0181).
+   * A MODE IS OPTIONAL AND, WHEN GIVEN, IT IS ONE OF TWO WORDS (0200).
    *
    * It only reaches the INSERT, and `upsertBudget` never names `mode` on its
    * UPDATE, so
@@ -782,14 +782,14 @@ export async function upsertBudget(pool: Pool, body: any, actorId: string | null
   const seasonId = body.seasonId ? String(body.seasonId).slice(0, 64) : null;
   const unit = String(body.unit);
   const amount = Number(body.amountMinor);
-  // Absent and null both mean "no cycle cap"; 0 means a cap of zero (0188).
+  // Absent and null both mean "no cycle cap"; 0 means a cap of zero (0206).
   const cycleAmount =
     body.cycleAmountMinor === undefined || body.cycleAmountMinor === null
       ? null
       : Number(body.cycleAmountMinor);
   const note = body.note ? String(body.note).slice(0, 500) : null;
   /*
-   * THE MODE IS SETTABLE AT CREATION AND NEVER ON AN EDIT (0181).
+   * THE MODE IS SETTABLE AT CREATION AND NEVER ON AN EDIT (0200).
    *
    * A budget being written for the first time has no period to finish, so a
    * village saying "this circle runs on a treasury" is a starting condition

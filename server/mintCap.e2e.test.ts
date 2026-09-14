@@ -483,7 +483,7 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
    * a guarded door with a new source would otherwise be reported to a
    * founder as somebody else's issuance, quietly and wrongly.
    *
-   * DOOR 4 IS 0181's CIRCLE TREASURY FUNDING and it is here because this
+   * DOOR 4 IS 0200's CIRCLE TREASURY FUNDING and it is here because this
    * assertion went red when it landed, which is the tripwire working. Minting
    * a circle its treasury is a steward deciding to issue, so it belongs beside
    * the hand-mint instead of beside the stays doors nobody clicks.
@@ -516,7 +516,7 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
     expect(approved.status, `approve: ${approved.text.slice(0, 300)}`).toBe(200);
     await setVar("ledger.admin_mint_cosign_over", "0");
 
-    // Door 4 (0181): a circle treasury funded from the same faucet. Resources
+    // Door 4 (0200): a circle treasury funded from the same faucet. Resources
     // hard-depends on `map` (`requires` in shared/modules.ts), and a missing
     // dependency answers 409 on the lifecycle write, so the map goes on first.
     expect((await call("PUT", "/api/admin/modules/map/lifecycle", {

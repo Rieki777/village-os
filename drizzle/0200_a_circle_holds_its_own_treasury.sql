@@ -1,7 +1,7 @@
--- 0181: a circle budget says WHICH MODEL it runs on, and a change to that
+-- 0200: a circle budget says WHICH MODEL it runs on, and a change to that
 -- model is queued for a period boundary instead of applied.
 --
--- 0084 gave a circle a declared envelope. 0188 gave that envelope a second
+-- 0084 gave a circle a declared envelope. 0206 gave that envelope a second
 -- cap. Both are the same model: a right to ISSUE, bounded, measured off the
 -- ledger, holding nothing. Rye ruled that a village may instead mint a circle
 -- a TREASURY up front, per circle, so both models run in one village at once:
@@ -109,7 +109,7 @@
 ALTER TABLE `circle_budgets`
   -- AFTER `amount_minor`, NOT after `cycle_amount_minor`, and the difference is the whole
   -- reason this file boots. `cycle_amount_minor` is added by
-  -- `0188_a_circle_has_two_caps.sql`, which was `0168` when this file was written and sorted
+  -- `0206_a_circle_has_two_caps.sql`, which was `0168` when this file was written and sorted
   -- BEFORE it. The renumber lane had to move that file above `0181` (numbers only go
   -- forward, and `0181` had already taken its place in the base), so it now sorts AFTER this
   -- one and the column does not exist yet when this statement runs. Naming it here failed
@@ -117,7 +117,7 @@ ALTER TABLE `circle_budgets`
   -- platform is not a failed deploy, it is a village that cannot start.
   --
   -- The final column layout is UNCHANGED, which is what makes this edit equivalent and not
-  -- merely tolerable: `0188` adds `cycle_amount_minor` AFTER `amount_minor` too, and it runs
+  -- merely tolerable: `0206` adds `cycle_amount_minor` AFTER `amount_minor` too, and it runs
   -- second, so the table ends up `amount_minor`, `cycle_amount_minor`, `mode`, exactly as it
   -- read when the two files ran the other way round. `AFTER` decides ordinal position and
   -- nothing else, and nothing in this codebase reads an ordinal position.

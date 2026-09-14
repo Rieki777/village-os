@@ -79,7 +79,7 @@ export function register(app: Express, deps: Deps): void {
       seasonCapMinor: b.amountMinor,
       cycleCapMinor: b.cycleAmountMinor,
       seasonId: b.seasonId,
-      // 0181: which model, and the change queued against it. `burnFor` decides
+      // 0200: which model, and the change queued against it. `burnFor` decides
       // which one is RUNNING at the instant asked for; this only carries both.
       mode: b.mode,
       pending: b.pending,
@@ -110,7 +110,7 @@ export function register(app: Express, deps: Deps): void {
 
     const words = burnWords(circlesRepo);
     /*
-     * A CIRCLE'S STATUS IS READ FROM THE REPO AND NEVER DEFAULTED (0181).
+     * A CIRCLE'S STATUS IS READ FROM THE REPO AND NEVER DEFAULTED (0200).
      *
      * A circle this route cannot find is reported `dormant` and not `active`.
      * The reading uses the status to decide whether a treasury balance is a

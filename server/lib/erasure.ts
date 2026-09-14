@@ -387,7 +387,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       },
     },
     {
-      // member_needs (0187) tells its member "Only you can read this", so it
+      // member_needs (0205) tells its member "Only you can read this", so it
       // leaves with them. A named step rather than a line in a block, so a
       // resumed erasure knows whether it already ran.
       name: "needs",

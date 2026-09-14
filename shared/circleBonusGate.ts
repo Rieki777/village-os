@@ -235,7 +235,7 @@ export type SpendState =
    */
   | "at_cap"
   /**
-   * THIS CIRCLE RUNS ON A TREASURY AND HAS NO CAP AT ALL (0181).
+   * THIS CIRCLE RUNS ON A TREASURY AND HAS NO CAP AT ALL (0200).
    *
    * Its own state, and it arrived because `TreasuryReading` joining
    * `CircleBurnReading` broke this file at compile time. That is the gate

@@ -185,7 +185,7 @@ export function register(app: Express, deps: Deps): void {
       )
       .slice(0, 3);
     /*
-     * WHAT NEED THIS QUEST MEETS (R1, R18, migration 0186).
+     * WHAT NEED THIS QUEST MEETS (R1, R18, migration 0204).
      *
      * A DESCRIPTION AND NEVER A GATE. The claim handler at the bottom of this
      * file reads `minStage` and `requiresRole` and nothing else, and no tag
