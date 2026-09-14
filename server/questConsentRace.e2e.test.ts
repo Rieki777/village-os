@@ -221,7 +221,12 @@ describe.skipIf(!DB_CONFIGURED)("one consent, one 200, and the claim agrees with
       approve: true, amount: 90,
     }, founderToken);
     expect(second.status, `the second consent must refuse: ${second.text.slice(0, 300)}`).toBe(409);
-    expect(String(second.json?.error ?? "")).toContain("already consented");
+    // The STATUS, not a sentence, for the reason the case below gives. This
+    // line asserted the refusal sentence of the compare-and-swap this branch
+    // used to carry, which the merge with main replaced with #233 and its
+    // consentOnce: that refuses with a different sentence and reports the
+    // status of the claim beside it.
+    expect(second.json?.status, `the refusal names the status of the claim: ${second.text.slice(0, 300)}`).toBe("consented");
 
     // THE ASSERTION THE OLD CODE FAILED, in the units each side actually holds:
     // `quest_claims.amount` is the human number a witness typed and the ledger
