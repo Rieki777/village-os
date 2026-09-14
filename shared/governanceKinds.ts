@@ -323,6 +323,12 @@ export interface LandingInput {
    * the two into one flag is what made a veto-map edit execute at close with no
    * notice to anybody, which is the harm the rule was written against.
    */
+  /**
+   * True when this payout is large enough that the village asked it to wait.
+   * Computed by the caller with `payoutWaitsForWindow`, because the amount and
+   * the threshold are the caller's business and the timing is this file's.
+   */
+  payoutWaits?: boolean;
   notVetoable?: boolean;
   /**
    * WHY it cannot be stopped, for the sentence a member reads. `veto_map` is
@@ -420,7 +426,29 @@ export function landingFor(input: LandingInput): Landing {
       ? "No steward can stop this one: the village has not put decisions of this size in the seat's reach."
       : "Nobody can stop this one: the village decided it about the seat itself, so the seat has no say in it.";
 
-  if (input.kind === "token_send" && input.timing === "at_acceptance" && !input.snapToBoundary) {
+  /*
+   * A PAYOUT GOES AT THE CLOSE, UNLESS IT IS BIG ENOUGH TO WAIT.
+   *
+   * Rye, 2026-09-04: payouts "go the moment they pass all conditions", and then
+   * "another settings where you can say which payouts require a 3 day delay to
+   * confirm and set it above $1000 as a default".
+   *
+   * `payoutWaits` is that setting already applied, by the caller that knows the
+   * amount. It arrives as a decided boolean rather than as an amount and a
+   * threshold, because this function is the timing table and has no business
+   * knowing what a token is or how many of one a village considers large.
+   *
+   * A payout that waits takes the ORDINARY window, which makes it vetoable, and
+   * that is the point rather than a side effect: the founder's earlier ruling is
+   * that "stewards can also block payouts", and a three-day delay nobody can act
+   * inside is a delay and not a confirmation.
+   */
+  if (
+    input.kind === "token_send" &&
+    input.timing === "at_acceptance" &&
+    !input.snapToBoundary &&
+    !input.payoutWaits
+  ) {
     return {
       landsAt: null,
       vetoClosesAt: null,

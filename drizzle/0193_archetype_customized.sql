@@ -1,0 +1,28 @@
+-- A village's own words for its classes survive a deploy.
+--
+-- WHAT WAS WRONG. `archetypes` has been per-village and editable-looking since
+-- 0069, and `server/lib/economySeed.ts` reseeds it on every boot with
+-- `ON DUPLICATE KEY UPDATE subtitle, blurb, examples, sigil, sort_order`. So a
+-- village that changed any of those would have the platform's copy put back at
+-- the next restart, silently. The seed's own comment promised a `renamed` flag
+-- would protect them and no such column was ever added, which is the reason the
+-- admin editor could not ship: there was nowhere for an edit to be safe.
+--
+-- `name` was already absent from that update list, so a rename already survived.
+-- This extends the same protection to the other five columns.
+--
+-- WHY A FLAG AND NOT `INSERT IGNORE`. Dropping the update entirely would protect
+-- every village and also freeze every village: a correction to the platform's
+-- copy would never reach a fork that had touched nothing. The flag keeps both
+-- halves, which is what the seed comment was reaching for.
+--
+-- WHY NOT AN `updated_at` COMPARISON. The table has `created_at` and no
+-- `updated_at`, and adding one would make "has a human edited this" a guess from
+-- a timestamp that any future write would also move. A boolean set by the admin
+-- route says exactly the thing that matters and nothing else.
+--
+-- DEFAULT 0 IS CORRECT FOR EVERY EXISTING ROW. Nothing could have edited one
+-- before this, because no route existed, so every row on disk today holds the
+-- platform's copy and should keep receiving improvements to it.
+ALTER TABLE `archetypes`
+  ADD COLUMN `customized` tinyint(1) NOT NULL DEFAULT 0;

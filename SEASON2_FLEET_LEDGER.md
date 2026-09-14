@@ -273,6 +273,34 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   universe that reaches 0219, and the six in this document and in
   `docs/GOVERNANCE_EVOLUTION_PROMPT.md` are dated measurements of what a disk held on a given
   day. Rewriting a measurement is how a record stops being one.
+- **econ merge, 2026-09-14: `0182` is RETIRED, and the number stays burned.**
+  `drizzle/0182_one_gift_one_key.sql` was deleted before it reached `main`. It renamed gratitude
+  postings' `idempotency_key` to `keys.gratitudeGiven` and left every `source_ref` alone, while
+  main's #233 finds a reversal by matching a mirror's `source_ref` to the posting's
+  `idempotency_key`. Both landing would have cut every acknowledgement-door reversal made before
+  the rename out of that join, so main's design stands and the rename went. RN's measurement above
+  found no deployed schema holding the economics filenames, only `village_tpl_` templates and
+  `village_test_` scratch schemas. **Never refill `0182`**: a template or scratch schema may still
+  record the filename, and the applied ledger keys on it.
+- **quest-consent integrity lane, 2026-09-10: holds 0196** for
+  `drizzle/0196_one_live_claim_per_member.sql`. The number was ASSIGNED by the coordinator, not
+  measured by this lane, and `check-migration-numbers.mjs` reported next-free 0190 in this
+  worktree, so 0196 sits six above what the directory scan can see and is deliberately clear of
+  it. One `ALTER TABLE quest_claims ADD KEY` and nothing else: a NON-unique
+  `(quest_id, user_id, status)` index. The file's header is most of its value, because it is
+  where the answer to "why is there no unique index and no foreign key on this table" is written
+  down. Both were reported as defects and neither is one: the rule is "at most one row that is
+  not declined per pair", which no MySQL index expresses, and a unique key would collide with any
+  populated board that has seen one decline-and-reclaim, which at boot is a village that will not
+  start. The invariant lives in `claimsRepo.openClaim`'s row lock instead.
+- **data-rights lane, 2026-09-10: holds 0195** for
+  `drizzle/0195_an_erasure_records_how_far_it_got.sql` (one new table, `member_erasures`, plus
+  one non-unique index on it). Additive only, and the previous release neither reads nor writes
+  it, so a rollback over it is a no-op. The number was NOT measured by this lane and was handed
+  down with the brief, which is the one case section 3's method does not cover: if it collides,
+  the fix is a new file rather than a rename, because the applied ledger keys on filename.
+  `check-migration-numbers.mjs --next` answered 0190 on this worktree, which is the usual
+  under-report (it reads only this tree's `drizzle/`), and the gate passes at 0195.
 - **profile-rebase integration, 2026-09-04: RENUMBERED to 0156, 0157, 0158, 0159.** The four
   entries below (path-data's 0144/0145/0146, portraits' 0147, and the 0144-to-0151 move made
   earlier the same day) are HISTORY now, not allocation. Main reached 0153 while the branch
@@ -322,8 +350,11 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   `external_proposal_drops` (a content-free counter, so an empty queue can be told apart from
   a queue where everything was refused). `0141_quest_proposals.sql` adds `quest_proposals`,
   which deliberately carries NO reward or gate column: a quest cannot exist unpublished
-  (`GET /api/quests` is public and unfiltered and the claim route never reads status), and the
-  five columns a machine must never write are absent rather than guarded. `0142` adds
+  (`GET /api/quests` is public and unfiltered), and the five columns a machine must never write
+  are absent rather than guarded. The second half of that parenthetical said "and the claim route
+  never reads status", which was true when it was written and stopped being true on 2026-09-10:
+  the claim route and the map-promise branch both ask `questClosed` now, so a Closed quest still
+  renders on the unfiltered board and no longer accepts a claim. `0142` adds
   `is_agent` to `org_role_assignments`, with no enum ALTER: an agent is
   `holder_kind='documented'`, which is already excluded from the settlement job and from the
   0083 declare door by filters that exist. `0143` adds `origin_module_id` to `health_events`
@@ -2934,9 +2965,24 @@ AND as untracked files on sibling worktrees, which no git command reaches at all
 are NOT enough. Run both of these, every time:
 
 ```
-git log --all --name-only --diff-filter=A --format="" -- 'drizzle/*.sql' | grep -oE '[0-9]{4}' | sort -n | tail
+git log --all --name-status --diff-filter=AR --format="" -- 'drizzle/*.sql' | grep -oE 'drizzle/[0-9]{4}' | grep -oE '[0-9]{4}' | sort -n | tail
 ls /c/Users/taren/Desktop/Amora/*/drizzle/*.sql | grep -oE '[0-9]{4}_' | sort -n | tail
 ```
+
+**`--diff-filter=AR`, AND NOT `A`. THIS ENTRY SHIPPED WRONG AND A LANE CAUGHT IT.** A renumber is a
+RENAME, git detects renames and marks them `R`, and `--diff-filter=A` excludes them. So the scan this
+section told every lane to trust was blind to exactly the files most likely to collide, because a
+file that has been renumbered once is a file somebody already had to move out of somebody else's way.
+
+Measured on this repository the day it was corrected: the `A`-only form sees `0178` and **misses
+`0179` and `0180`**, both of which arrived by rename and both of which are live. It reported a
+ceiling of `0181` while two numbers below it were invisible, which is the worst shape an undercount
+can take: the answer looked right.
+
+The condition is worth knowing, because it explains why this survived so long. **A rename that
+reaches main through a SQUASH looks like an addition**, since the squash flattens the history, so
+every renumber that has already landed shows up fine. A rename sitting on a BRANCH stays a rename.
+The blindness is therefore precisely for in-flight work, which is the only case the scan exists for.
 
 Run them SEPARATELY: the first walks every ref and takes close to two minutes, and chaining them
 behind it inside one two-minute timeout is how you get a confident empty answer from the second.
@@ -3200,6 +3246,23 @@ checked it.
 1. **Refetch, then rebase on `origin/main`.** The local tree runs behind origin far more often than
    it feels, and every line number and every "not implemented" claim taken from a stale checkout is
    suspect. `git fetch origin`, rebase, then re-verify the claims your work rests on.
+1a. **FETCH BEFORE YOU MEASURE, not only before you rebase, and this is the one that keeps costing.**
+   Measuring is a separate act from rebasing and happens far more often: reading a function to answer
+   a question, checking whether a column exists, telling another lane what the code does. A stale
+   tree does not refuse those. It answers them, correctly, about a world that has moved.
+
+   **The dangerous form is a CROSS-LANE CORRECTION**, because it arrives carrying authority. Two
+   lanes traded three corrections on the circle franchise in one exchange. One read a seat COUNT as
+   a table of holders. The other read a real function on a real tree that was 38 commits behind, and
+   sent a confident correction to a lane standing on the tree after the change: no lapse filter, no
+   term column, so expiry must be built. All true of their checkout, all false of main, and the
+   receiving lane would have removed a working mechanism on the strength of it.
+
+   **Both lanes already had this hazard written down and both walked into it anyway**, which is the
+   part worth keeping: the note is not what prevents it. `git fetch origin` immediately before the
+   read is. A claim about the codebase is a measurement, and a measurement carries the timestamp of
+   the tree it was taken on whether or not anybody says so.
+
 2. **Assert the ANCESTRY of every commit your work depends on** before naming a head for a pair
    merge: `git merge-base --is-ancestor <sha> HEAD` per dependency, and say which ones you checked.
    Being level with your own remote is a different question, and a branch that merged main days ago

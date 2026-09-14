@@ -137,6 +137,30 @@ function waitingSentence(waitingOn: Record<string, number>): string {
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
+/**
+ * Where the stopped sweeps stopped, as a sentence a steward can act on.
+ *
+ * The step name is the handle. "It stopped at portraits" points somebody at a
+ * volume that may be full or unwritable; a bare count points them nowhere.
+ * "unknown" is its own answer and is spelled out: a sweep whose process was
+ * killed never got to record a step, and that is worse news than a named
+ * failure, so it may not read as one.
+ */
+function stoppedSentence(stoppedAt: Record<string, number>): string {
+  const named = Object.keys(stoppedAt).filter((s) => s !== "unknown").sort();
+  const unknown = stoppedAt.unknown ?? 0;
+  const parts: string[] = [];
+  if (named.length) parts.push(`Stopped at ${named.join(", ")}`);
+  if (unknown) {
+    parts.push(
+      named.length
+        ? `${unknown} stopped somewhere nothing recorded`
+        : `${unknown} stopped somewhere nothing recorded, which usually means the process was killed`,
+    );
+  }
+  return parts.join(". ") || "Started and never completed";
+}
+
 /** How long the OLDEST obligation has been outstanding, in whole days. */
 function agedFor(oldestSince: string | null): string {
   if (!oldestSince) return "";
@@ -169,7 +193,18 @@ export default function Review() {
    * store never confirmed it deleted its copy. Kept state that nobody watches
    * is how "we still owe you a confirmation" becomes "kept forever".
    */
-  const [owed, setOwed] = useState<{ count: number; oldestSince: string | null; waitingOn: Record<string, number> } | null>(null);
+  const [owed, setOwed] = useState<{
+    count: number;
+    oldestSince: string | null;
+    waitingOn: Record<string, number>;
+    /**
+     * The other way to be half-erased: the sweep in THIS database stopped part
+     * way. Optional because a village running an older server answers without
+     * it, and a missing key must read as "nothing outstanding" and never as a
+     * crash on the queue screen.
+     */
+    local?: { count: number; oldestSince: string | null; stoppedAt: Record<string, number> };
+  } | null>(null);
   const [asking, setAsking] = useState(false);
 
   const headers = useCallback((): Record<string, string> => {
@@ -185,17 +220,39 @@ export default function Review() {
     setAsking(true);
     try {
       const r = await fetch("/api/review/erasure/retry", { method: "POST", headers: headers() });
-      const d = (await r.json().catch(() => ({}))) as { asked?: number; finished?: number; error?: string };
+      const d = (await r.json().catch(() => ({}))) as {
+        asked?: number;
+        finished?: number;
+        resumed?: number;
+        swept?: number;
+        error?: string;
+      };
       if (!r.ok) {
         toast.error(d?.error ?? "That did not go through");
         return;
       }
       const finished = d.finished ?? 0;
-      toast.success(
-        finished > 0
-          ? `${finished} of ${d.asked ?? 0} finished. The rest have still not confirmed.`
-          : `Asked about ${d.asked ?? 0}. None of them confirmed yet.`,
-      );
+      // The two halves are reported separately because they are separate work.
+      // Folding a finished local sweep into the vendor count would say a store
+      // confirmed something no store was ever asked about.
+      const swept = d.swept ?? 0;
+      if (d.resumed) {
+        toast.success(
+          swept > 0
+            ? `${swept} of ${d.resumed} unfinished sweeps completed here.`
+            : `${d.resumed} unfinished sweeps are still stuck. The queue says which step.`,
+        );
+      }
+      if (d.asked) {
+        toast.success(
+          finished > 0
+            ? `${finished} of ${d.asked} finished. The rest have still not confirmed.`
+            : `Asked about ${d.asked}. None of them confirmed yet.`,
+        );
+      }
+      // A press that found nothing to do still says so. A silent button is one
+      // a steward presses again, and again.
+      if (!d.resumed && !d.asked) toast.success("Nothing was outstanding.");
       await load();
     } catch {
       toast.error("Could not reach the server");
@@ -467,6 +524,30 @@ export default function Review() {
             a draft you can preview and undo.
           </p>
         </div>
+
+        {/* A sweep that stopped inside this database. Its own card, because it
+            is a different problem from a vendor that will not answer: the work
+            is here, it can be finished here, and until it is the member is
+            partly erased in the village's own tables. */}
+        {owed?.local && owed.local.count > 0 && (
+          <div className={card}>
+            <h2 className="text-sm font-semibold text-foreground">
+              {owed.local.count === 1 ? "One erasure" : `${owed.local.count} erasures`} started here and did not finish
+            </h2>
+            <p className="text-sm text-muted-foreground mt-2">
+              {stoppedSentence(owed.local.stoppedAt)}
+              {agedFor(owed.local.oldestSince)}. Finishing runs the same steps again, and every step
+              is safe to repeat, so pressing this twice costs nothing.
+            </p>
+            <button
+              className="mt-3 text-sm bg-teal-deep text-white rounded-lg px-3 py-2 font-medium disabled:opacity-40"
+              disabled={asking}
+              onClick={() => void askAgain()}
+            >
+              {asking ? "Finishing" : "Finish them"}
+            </button>
+          </div>
+        )}
 
         {/* What the village still owes somebody who left. The only item on
             this screen about a person already gone, and it is here because

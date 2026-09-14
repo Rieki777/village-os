@@ -53,8 +53,37 @@
  * would strand every open ballot behind a 404 while the landing job kept
  * running, and the vote that turned it back on could not be held. The module id
  * is on `NEVER_BY_CHANGESET` and the refusal names it.
+ *
+ * ── WHERE THE STATEMENTS LIVE, AND WHY IN FIVE FILES ───────────────────────
+ *
+ * This file touches five tables and each has its own module under
+ * `server/repos`:
+ *
+ *   `gameVariableRows.ts`          what a dial held BEFORE, read past the cache
+ *   `governanceWeightRows.ts`      what a member was allocated BEFORE
+ *   `governanceElementLedger.ts`   one row per write, the trail
+ *   `mechanicsChanges.ts`          the amendment ledger's one INSERT
+ *   `mechanicsProposals.ts`        stamping the proposal applied
+ *
+ * Five and not one, because a module named for THIS FILE would be a home for a
+ * job rather than for a table, and the question worth being able to answer is
+ * "who else reads this table". Two of the five already have a second reader in
+ * the repository — the element ledger is read by the moon digest as well as by
+ * the decision page — and that is only visible because the readers sit
+ * together.
+ *
+ * WHAT STAYS HERE IS EVERY DECISION. The order the writes go in, what NULL
+ * means in the amendment ledger, that a trail's failure may never fail the deed
+ * it is a trail of, and the two-phase validation the whole file is built
+ * around. None of those is a query, and none of them belongs anywhere a
+ * reviewer would have to go looking for it.
  */
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool } from "mysql2/promise";
+import { storedVariableValue } from "../repos/gameVariableRows";
+import { allocatedWeight } from "../repos/governanceWeightRows";
+import { elementRowsForBallot, upsertElementRow } from "../repos/governanceElementLedger";
+import { insertMechanicsChange } from "../repos/mechanicsChanges";
+import { markProposalApplied } from "../repos/mechanicsProposals";
 import { VARIABLES_BY_KEY, applyTimingOf, ringOf } from "../../shared/gameVariables";
 import { isMintRuleKey } from "../../shared/mintRuleKeys";
 import { asChangeItem, type ChangeInput, type ChangeItem } from "./mechanics";
@@ -336,20 +365,13 @@ export function notVetoableMixRefusal(
 
 /** The value in force for a dial right now, or null when it sits at its default. */
 async function currentDialValue(deps: ChangesetDeps, key: string): Promise<string | null> {
-  const [rows] = await deps.pool.query<RowDataPacket[]>(
-    "SELECT value FROM game_variables WHERE config_key = ?",
-    [key],
-  );
-  if (rows[0]) return String(rows[0].value);
+  const stored = await storedVariableValue(deps.pool, key);
+  if (stored !== null) return stored;
   return VARIABLES_BY_KEY[key]?.default ?? null;
 }
 
 async function currentWeight(deps: ChangesetDeps, userId: string): Promise<number | null> {
-  const [rows] = await deps.pool.query<RowDataPacket[]>(
-    "SELECT weight FROM governance_weights WHERE user_id = ?",
-    [userId],
-  );
-  return rows[0] ? Number(rows[0].weight) : null;
+  return allocatedWeight(deps.pool, userId);
 }
 
 export interface ElementLedgerInput {
@@ -391,27 +413,25 @@ export async function recordElement(pool: Pool, input: ElementLedgerInput): Prom
      * elements that succeeded the first time write again. With an autoincrement
      * key that produced two rows for one element and a trail saying the dial
      * moved twice, which is the one thing a ledger must never say.
+     *
+     * The statement is in `server/repos/governanceElementLedger.ts`. The three
+     * defaults below stay here, with the caller that knows what they mean: a
+     * write with no proposal behind it, a write whose sequence is its own
+     * index, and a sentence clipped to the column's 1000 characters BEFORE it
+     * travels, so a long one is shortened rather than refused by strict mode.
      */
-    await pool.query(
-      "INSERT INTO governance_element_ledger " +
-        "(ballot_id, proposal_id, element_index, write_seq, element_kind, sentence, wrote_table, wrote_id, old_value, new_value) " +
-        "VALUES (?,?,?,?,?,?,?,?,?,?) " +
-        "ON DUPLICATE KEY UPDATE proposal_id = VALUES(proposal_id), write_seq = VALUES(write_seq), " +
-        "element_kind = VALUES(element_kind), sentence = VALUES(sentence), wrote_table = VALUES(wrote_table), " +
-        "wrote_id = VALUES(wrote_id), new_value = VALUES(new_value), applied_at = CURRENT_TIMESTAMP",
-      [
-        input.ballotId,
-        input.proposalId ?? null,
-        input.elementIndex,
-        input.writeSeq ?? input.elementIndex,
-        input.elementKind,
-        input.sentence.slice(0, 1000),
-        input.wroteTable,
-        input.wroteId,
-        input.oldValue,
-        input.newValue,
-      ],
-    );
+    await upsertElementRow(pool, {
+      ballotId: input.ballotId,
+      proposalId: input.proposalId ?? null,
+      elementIndex: input.elementIndex,
+      writeSeq: input.writeSeq ?? input.elementIndex,
+      elementKind: input.elementKind,
+      sentence: input.sentence.slice(0, 1000),
+      wroteTable: input.wroteTable,
+      wroteId: input.wroteId,
+      oldValue: input.oldValue,
+      newValue: input.newValue,
+    });
   } catch (e) {
     // The id is an ARGUMENT and never part of the format string. `console.error`
     // reads %s and %j in its first argument, so an id carrying one would consume
@@ -424,19 +444,7 @@ export async function recordElement(pool: Pool, input: ElementLedgerInput): Prom
 export async function elementsFor(pool: Pool, ballotId: string): Promise<
   Array<{ index: number; kind: string; sentence: string; oldValue: string | null; newValue: string | null; appliedAt: string }>
 > {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT element_index, element_kind, sentence, old_value, new_value, applied_at " +
-      "FROM governance_element_ledger WHERE ballot_id = ? ORDER BY write_seq, element_index",
-    [ballotId],
-  );
-  return rows.map((r) => ({
-    index: Number(r.element_index),
-    kind: String(r.element_kind),
-    sentence: String(r.sentence),
-    oldValue: r.old_value === null || r.old_value === undefined ? null : String(r.old_value),
-    newValue: r.new_value === null || r.new_value === undefined ? null : String(r.new_value),
-    appliedAt: r.applied_at instanceof Date ? r.applied_at.toISOString() : String(r.applied_at),
-  }));
+  return elementRowsForBallot(pool, ballotId);
 }
 
 export interface ApplySetInput {
@@ -711,7 +719,7 @@ export async function applyMechanicsProposal(
   });
 
   if (result.applied.length > 0 || result.queued.length > 0) {
-    await deps.pool.query("UPDATE mechanics_proposals SET status = 'applied' WHERE id = ?", [p.id]);
+    await markProposalApplied(deps.pool, p.id);
     await hooks.onApplied(p, result);
   }
   return result;
@@ -742,21 +750,18 @@ export async function recordMechanicsChangeRow(
   if (result.value === result.previous) return;
   try {
     const def = VARIABLES_BY_KEY[key];
-    await pool.query(
-      "INSERT INTO mechanics_changes (id, config_key, old_value, new_value, actor_user_id, source, proposal_ref, note) VALUES (?,?,?,?,?,?,?,?)",
-      [
-        `mech-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        key,
-        // NULL means "the platform default at the time": the row records the
-        // village's act, and not a snapshot of the platform's defaults.
-        result.previous === def?.default ? null : result.previous ?? null,
-        result.value === def?.default ? null : result.value ?? null,
-        actorUserId,
-        source,
-        proposalRef ?? null,
-        note ?? null,
-      ],
-    );
+    await insertMechanicsChange(pool, {
+      id: `mech-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      configKey: key,
+      // NULL means "the platform default at the time": the row records the
+      // village's act, and not a snapshot of the platform's defaults.
+      oldValue: result.previous === def?.default ? null : result.previous ?? null,
+      newValue: result.value === def?.default ? null : result.value ?? null,
+      actorUserId,
+      source,
+      proposalRef: proposalRef ?? null,
+      note: note ?? null,
+    });
   } catch (e) {
     // Same shape, and this is the one CodeQL named: `key` arrives from a change
     // set, so it is a user-provided value in a format string. Passed as data.

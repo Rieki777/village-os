@@ -89,6 +89,55 @@ describe("settleCycle", () => {
     );
     expect(totals[0].distinctSenders).toBe(2);
   });
+
+  /**
+   * A REVERSED GIFT IS OUT OF EVERY TOTAL, INCLUDING THE ONE VALUE IS PAID ON.
+   *
+   * This function had no reversal term at all, so an undone gift kept its
+   * place in `received`, in `receivedEligible` — which is what a share of the
+   * cycle's value pool is computed from — and in `distinctSenders`, while
+   * `reverse()` had already taken the recognition back out of the recipient's
+   * ledger balance and `allowanceFor` had already handed the giver's allowance
+   * back. The settlement was the last reader still believing the gift.
+   */
+  it("leaves a reversed gift out of received, the pool basis and breadth", () => {
+    const kept = entry({ id: "g-kept", fromId: "x", amount: 5 });
+    const undone = entry({ id: "g-undone", fromId: "y", amount: 40 });
+
+    // What it looked like before, and still looks like when nothing is undone.
+    const believed = settleCycle([kept, undone], "lunar-000100");
+    expect(believed[0]).toMatchObject({ received: 45, receivedEligible: 45, distinctSenders: 2 });
+
+    const settled = settleCycle([kept, undone], "lunar-000100", undefined, new Set(["g-undone"]));
+    expect(settled[0]).toMatchObject({
+      received: 5,
+      receivedEligible: 5,
+      receivedAcks: 5,
+      // Dropped, not zeroed: somebody whose only gift was undone did not
+      // acknowledge you, so they are not one of the people who did.
+      distinctSenders: 1,
+    });
+  });
+
+  it("drops a recipient entirely when every gift to them was reversed", () => {
+    const totals = settleCycle(
+      [entry({ id: "g-only", fromId: "x", amount: 9 })],
+      "lunar-000100",
+      undefined,
+      new Set(["g-only"]),
+    );
+    expect(totals).toEqual([]);
+  });
+
+  it("an id in the reversed set that belongs to another cycle changes nothing", () => {
+    const totals = settleCycle(
+      [entry({ id: "g-here", fromId: "x", amount: 3 })],
+      "lunar-000100",
+      undefined,
+      new Set(["g-elsewhere"]),
+    );
+    expect(totals[0].received).toBe(3);
+  });
 });
 
 /**

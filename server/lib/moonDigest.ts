@@ -31,8 +31,38 @@
  * it gets a digest saying so. A moon whose digest never ran is a fault. From
  * the feed the two look identical, so every answer this module returns says
  * which of the two it is, in words, in `why`.
+ *
+ * ── WHERE THE STATEMENTS LIVE, AND WHY IN THREE FILES ──────────────────────
+ *
+ * A digest reads three tables and each has its own module:
+ *
+ *   `server/repos/governanceElementLedger.ts`  what actually landed
+ *   `server/repos/ballotCycleFacts.ts`         what the ballots table recorded
+ *   `server/repos/moonDigests.ts`              the digest row itself
+ *
+ * Three rather than one, because one module named for this FILE would be a
+ * home for a job and not for a table, and the question the burn-down exists to
+ * answer is "who else reads this table". The element ledger is read by the
+ * decision page as well as by this digest, and putting both readers in one
+ * place is how it stays obvious that a digest reports the executor's own
+ * sentences rather than a summary it invented.
+ *
+ * WHAT STAYS HERE IS THE ONE OPINION ABOUT TIME. `sqlInstant` turns a `Date`
+ * into the string every one of those statements is windowed on, and it is
+ * applied here, once, so the six windows a digest opens can never disagree
+ * about where the moon began. A repo module that formatted its own bounds
+ * would be a second opinion about the session's timezone.
  */
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool } from "mysql2/promise";
+import {
+  closedCountBetween,
+  heldCountsDueBetween,
+  openedCountBetween,
+  paidTitlesClosedBetween,
+  vetoedBetween,
+} from "../repos/ballotCycleFacts";
+import { sentencesAppliedBetween } from "../repos/governanceElementLedger";
+import { claimDigest, digestRow, markDigestPosted } from "../repos/moonDigests";
 import { recordEvent } from "./events";
 
 export interface DigestDeps {
@@ -80,52 +110,26 @@ export async function digestFacts(pool: Pool, startedAt: Date, endedAt: Date): P
   const from = sqlInstant(startedAt);
   const to = sqlInstant(endedAt);
 
-  const [ledger] = await pool.query<RowDataPacket[]>(
-    "SELECT sentence FROM governance_element_ledger WHERE applied_at >= ? AND applied_at < ? " +
-      "ORDER BY applied_at ASC, ballot_id ASC, element_index ASC",
-    [from, to],
-  );
-
-  const [paid] = await pool.query<RowDataPacket[]>(
-    "SELECT title FROM ballots WHERE landing_status = 'applied' AND status = 'passed' " +
-      "AND subject_type IN ('token_send','quest_payout','founding_allocation') " +
-      "AND closes_at >= ? AND closes_at < ? ORDER BY closes_at ASC, id ASC",
-    [from, to],
-  );
-
-  const [vetoed] = await pool.query<RowDataPacket[]>(
-    "SELECT title, veto_reason FROM ballots WHERE vetoed_at >= ? AND vetoed_at < ? ORDER BY vetoed_at ASC, id ASC",
-    [from, to],
-  );
-
-  const [opened] = await pool.query<RowDataPacket[]>(
-    "SELECT COUNT(*) AS n FROM ballots WHERE opens_at >= ? AND opens_at < ?",
-    [from, to],
-  );
-  const [closed] = await pool.query<RowDataPacket[]>(
-    "SELECT COUNT(*) AS n FROM ballots WHERE status IN ('passed','failed','no_quorum') AND closes_at >= ? AND closes_at < ?",
-    [from, to],
-  );
-  const [held] = await pool.query<RowDataPacket[]>(
-    "SELECT landing_status AS s, COUNT(*) AS n FROM ballots WHERE landing_status IN ('stalled','expired') " +
-      "AND lands_at >= ? AND lands_at < ? GROUP BY landing_status",
-    [from, to],
-  );
-
-  const heldBy = (name: string): number =>
-    Number(held.find((r) => String(r.s) === name)?.n ?? 0);
+  // Read one after another, as the raw statements were. A digest runs once per
+  // moon inside the landing job and nothing is waiting on it, so six sequential
+  // round trips cost a village nothing; issuing them together would be a change
+  // to how many connections the landing job holds at its busiest moment, made
+  // inside a refactor, for no reader's benefit.
+  const landed = await sentencesAppliedBetween(pool, from, to);
+  const paid = await paidTitlesClosedBetween(pool, from, to);
+  const vetoed = await vetoedBetween(pool, from, to);
+  const opened = await openedCountBetween(pool, from, to);
+  const closed = await closedCountBetween(pool, from, to);
+  const held = await heldCountsDueBetween(pool, from, to);
 
   return {
-    landed: ledger.map((r) => String(r.sentence)),
-    paid: paid.map((r) => String(r.title)),
-    vetoed: vetoed.map((r) => ({
-      title: String(r.title),
-      reason: r.veto_reason === null || r.veto_reason === undefined ? null : String(r.veto_reason),
-    })),
-    opened: Number(opened[0]?.n ?? 0),
-    closed: Number(closed[0]?.n ?? 0),
-    stalled: heldBy("stalled"),
-    expired: heldBy("expired"),
+    landed,
+    paid,
+    vetoed,
+    opened,
+    closed,
+    stalled: held.stalled,
+    expired: held.expired,
   };
 }
 
@@ -175,17 +179,12 @@ export async function composeMoonDigest(deps: DigestDeps): Promise<DigestResult>
   const facts = await digestFacts(deps.pool, deps.startedAt, deps.endedAt);
   const text = digestText(deps.cycleId, facts);
 
-  let claimed = false;
-  try {
-    const [res] = await deps.pool.query<any>(
-      "INSERT INTO governance_moon_digests (cycle_id, ended_at, composed_at, body) VALUES (?,?,?,?)",
-      [deps.cycleId, sqlInstant(deps.endedAt), sqlInstant(deps.at), text],
-    );
-    claimed = Number(res.affectedRows) === 1;
-  } catch (e: any) {
-    if (e?.code !== "ER_DUP_ENTRY") throw e;
-    claimed = false;
-  }
+  const claimed = await claimDigest(deps.pool, {
+    cycleId: deps.cycleId,
+    endedAt: sqlInstant(deps.endedAt),
+    composedAt: sqlInstant(deps.at),
+    body: text,
+  });
   if (!claimed) {
     return {
       composed: false,
@@ -201,10 +200,7 @@ export async function composeMoonDigest(deps: DigestDeps): Promise<DigestResult>
     entityType: "governance_digest",
     entityRef: deps.cycleId,
   });
-  await deps.pool.query("UPDATE governance_moon_digests SET posted_at = ? WHERE cycle_id = ?", [
-    sqlInstant(deps.at),
-    deps.cycleId,
-  ]);
+  await markDigestPosted(deps.pool, deps.cycleId, sqlInstant(deps.at));
 
   const empty = facts.landed.length === 0 && facts.paid.length === 0 && facts.vetoed.length === 0;
   return {
@@ -231,14 +227,7 @@ function summaryLine(facts: DigestFacts): string {
 
 /** Read a composed digest back, for the page that renders it. */
 export async function digestFor(pool: Pool, cycleId: string): Promise<{ cycleId: string; body: string; composedAt: string } | null> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT cycle_id, body, composed_at FROM governance_moon_digests WHERE cycle_id = ?",
-    [cycleId],
-  );
-  const r = rows[0];
-  if (!r) return null;
-  const at = r.composed_at instanceof Date ? r.composed_at : new Date(String(r.composed_at));
-  return { cycleId: String(r.cycle_id), body: String(r.body), composedAt: at.toISOString() };
+  return digestRow(pool, cycleId);
 }
 
 /**

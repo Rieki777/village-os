@@ -45,7 +45,10 @@ const COLUMNS =
   "a.id, a.org_role_id, a.holder_kind, a.user_id, a.season_id, a.term_ends_at, " +
   "a.started_at, a.ended_at, a.ended_reason, a.is_example, " +
   "r.expires_each_season, r.represents_circle, r.active AS role_active, " +
-  "r.is_example AS role_is_example";
+  // `r.name` joins nothing new: the LEFT JOIN on org_roles is already here for
+  // the flags. Without it a seat can only be named by its id, which is the
+  // exact defect `namedRoles` was written to fix on the other payload.
+  "r.name AS role_name, r.is_example AS role_is_example";
 
 const toDate = (v: unknown): Date | null => {
   if (v == null) return null;
@@ -54,7 +57,11 @@ const toDate = (v: unknown): Date | null => {
 };
 
 const toRow = (r: RowDataPacket): SeatingFacts => ({
+  id: String(r.id),
   orgRoleId: String(r.org_role_id),
+  // A seat whose role row is gone falls back to the id and says so out loud,
+  // the same posture `capabilityLabel` and `namedRoles` both take.
+  roleName: r.role_name == null ? String(r.org_role_id) : String(r.role_name),
   holderKind: String(r.holder_kind),
   seasonId: r.season_id == null ? null : String(r.season_id),
   termEndsAt: toDate(r.term_ends_at),

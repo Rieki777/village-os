@@ -196,8 +196,9 @@ export function bonusFor(input: BonusInput): BonusOutcome {
     return {
       kind: "veto_window_open",
       reason:
-        "The window a steward can stop this decision in has not run out yet. No veto stands right " +
-        "now, and that is not the same as none coming, so the bonus waits for the window to close.",
+        "The village's countdown on this decision has not run out yet, and it does not pass until " +
+        "it does. No veto stands right now, and that is not the same as none coming, so the bonus " +
+        "waits for the countdown to end.",
     };
   }
   if (veto === "unknown") {

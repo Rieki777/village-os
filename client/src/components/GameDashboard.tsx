@@ -25,7 +25,19 @@ const CLAIM_STATUS: Record<string, { label: string; cls: string }> = {
   declined: { label: "Not accepted", cls: "bg-muted text-muted-foreground" },
 };
 
-export default function GameDashboard() {
+/**
+ * `me` and `meFailed` are HANDED IN by Profile.tsx, which is the only caller.
+ *
+ * This component read /api/game/me itself and kept its own refresh listener,
+ * so the profile fetched that payload twice on every mount and a give updated
+ * this card and the vessel on two separate round trips, which is two chances
+ * to show two different balances on one screen.
+ *
+ * The props are optional and the component still reads for itself when nothing
+ * is passed, so it keeps working standalone and its own tests keep driving it
+ * the way they always did.
+ */
+export default function GameDashboard({ me: given, meFailed }: { me?: GameMe | null; meFailed?: boolean } = {}) {
   const [me, setMe] = useState<GameMe | null>(null);
   const currency = useTokenName("Recognition");
   /**
@@ -80,12 +92,33 @@ export default function GameDashboard() {
       .catch(() => setStatus("failed"));
   };
 
+  /*
+   * WHEN THE PAGE HANDS THE PAYLOAD DOWN, THIS DOES NOT FETCH.
+   *
+   * `given === undefined` means nobody passed one, so this reads for itself
+   * exactly as before. `given === null` is different: it means the page HAS a
+   * read and it came back empty or failed, which is a state to reflect and not
+   * a reason to go and ask again.
+   *
+   * The celebration still fires from here, because it is this card's job and
+   * `claimMoment` makes it once-only however many times the payload arrives.
+   */
+  const handedDown = given !== undefined;
   useEffect(() => {
+    if (handedDown) return;
     load();
-  }, []);
-  // A write anywhere on the sheet moves the balance and the quest chips, and
-  // this card had no way to hear about it. See lib/profileRefresh.ts.
-  useEffect(() => onProfileRefresh(() => load(true)), []);
+  }, [handedDown]);
+  useEffect(() => {
+    if (!handedDown) return;
+    setMe(given ?? null);
+    setStatus(meFailed ? "failed" : "ready");
+    const fresh = given?.lastAdvance;
+    if (fresh && claimMoment(`stage:${fresh.toStage}:${fresh.at}`)) setAdvance(fresh);
+  }, [handedDown, given, meFailed]);
+  // A write anywhere on the sheet moves the balance and the quest chips. When
+  // the page owns the read it also owns this listener, so a handed-down card
+  // must not subscribe as well or one give costs two round trips.
+  useEffect(() => (handedDown ? undefined : onProfileRefresh(() => load(true))), [handedDown]);
 
   /*
    * THESE TWO LINES SIT ON THE PAGE, NOT ON A CARD, and the whole file now

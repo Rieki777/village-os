@@ -16,7 +16,7 @@ import { parseCycleId } from "./gratitude-cycles";
 import { isExampleUser } from "./examples";
 import { issuanceRefusal } from "./gameStart";
 import { PLATFORM_TOKEN, memberAccount, postTransferOn, RECOGNITION_FAUCET } from "./ledger";
-import { allowanceFor, writeGratitudeRow, shareCapFor, recognitionName, toLedgerUnits, keys, villageId, type Allowance } from "./economy";
+import { allowanceFor, writeGratitudeRow, shareCapFor, fullSendsIn, recognitionName, toLedgerUnits, type Allowance } from "./economy";
 import { userIdForHandle } from "./profile";
 import type { GratitudeLogRepo, GratitudeEntry } from "../repos/gratitude";
 import type { UsersRepo } from "../repos/users";
@@ -48,6 +48,20 @@ export interface GratitudeBudget {
   spent: number;
   remaining: number;
   cycleId: string;
+  /**
+   * The most any ONE person may receive from this member this cycle, and how
+   * many gifts of that size the allowance holds. The wall draws the second as
+   * hearts, one heart per person.
+   *
+   * Carried on the budget rather than fetched from the rules route, because
+   * both are functions of THIS member's allowance and the rules route is
+   * anonymous. A client that had to combine an anonymous percentage with its
+   * own total would be a second place the ceiling gets computed, and two
+   * places is how the caps R73 replaced drifted apart. The server divides
+   * once and says the answer.
+   */
+  cap: number;
+  fullSends: number;
 }
 
 /**
@@ -59,7 +73,17 @@ export interface GratitudeBudget {
  * computes nothing.
  */
 export function asBudget(a: Allowance): GratitudeBudget {
-  return { total: a.total, spent: a.spent, remaining: a.remaining, cycleId: a.cycleKey };
+  return {
+    total: a.total,
+    spent: a.spent,
+    remaining: a.remaining,
+    cycleId: a.cycleKey,
+    // The same two functions the engine refuses sends with, so the hearts a
+    // member counts on the wall and the ceiling that stops them are one
+    // computation and cannot disagree.
+    cap: shareCapFor(a.total),
+    fullSends: fullSendsIn(a.total),
+  };
 }
 
 /**
@@ -313,7 +337,7 @@ export async function sendGratitude(deps: GratitudeDeps, input: SendInput): Prom
           status: 409,
           error:
             `${cap} is the most you can give one person this cycle, and you have given them ${alreadyGiven}. ` +
-            `That leaves ${left} for them (gratitude.max_share_per_recipient)`,
+            `That leaves ${left} for them (gratitude.full_sends_per_cycle)`,
         };
       }
 
@@ -404,38 +428,18 @@ export async function sendGratitude(deps: GratitudeDeps, input: SendInput): Prom
         sourceRef: noteId,
         description: `${recognitionName()} from ${String(user.name ?? "").split(" ")[0]}`,
         /*
-         * THE SAME BUILDER `give()` POSTS UNDER, AND THE VILLAGE IS IN IT.
+         * A HAND-BUILT KEY, AND NOT A DEFECT ANY MORE. A reversal finds its
+         * gift through the posting it undoes (`REVERSED_GRATITUDE_FROM`,
+         * server/repos/gratitude.ts), never by matching this string, so either
+         * door's key shape reaches the refund and the settlement alike.
          *
-         * This door used to write `gratitude_received:<note id>` by hand. Two
-         * things were wrong with that string and they are one defect.
-         *
-         * The allowance's refund arm (`gratitudeGivenInCycle` in
-         * server/lib/economy.ts) recovers the giver by rebuilding the keys
-         * THIS member's notes were posted under, with `keys.gratitudeGiven`,
-         * and keeping only the reversal mirrors whose `source_ref` matches
-         * one. A note written through this door carried a key that builder can
-         * never produce, so its mirror matched nothing: reversing an
-         * acknowledgement refunded the giver nothing and the member was out
-         * that amount for the rest of the cycle, with no surface anywhere
-         * reporting it. Both doors write one `gratitude_log` row apiece and
-         * both spend one allowance, so one allowance may not be able to read
-         * only half of them.
-         *
-         * The second half is the village. Every other occurrence key in this
-         * economy carries it, because two villages running one image must not
-         * collide on a UNIQUE index and because the allowance and the health
-         * snapshot both narrow their scan by it. This key carried no scope at
-         * all.
-         *
-         * `server/lib/health.ts` reads the same prefix for the
-         * `gratitude_allowance_given` snapshot, so the village's own reading
-         * of how much it gave was short by every reversed acknowledgement too.
-         *
-         * Rows written under the old spelling are repaired by
-         * drizzle/0182_one_gift_one_key.sql, which rewrites the key and moves
-         * no value.
+         * The economics branch once rewrote this to `keys.gratitudeGiven` and
+         * repaired old rows with a migration. That design was retired when it
+         * met main's: the migration renamed the postings and not the mirrors
+         * whose `source_ref` points at them, which would have cut every
+         * historical reversal from this door out of the join.
          */
-        idempotencyKey: keys.gratitudeGiven(villageId(), noteId),
+        idempotencyKey: `gratitude_received:${noteId}`,
       });
       if (!res.ok) return { ok: false, error: res.error ?? "ledger refused the credit", status: 500 };
       return { ok: true, duplicate: res.duplicate, balance: res.toBalance };

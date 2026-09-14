@@ -31,6 +31,7 @@ import { cycleBoundsFor } from "../../shared/lunar";
 import { villageId, type StageMultiplierFor } from "./economy";
 import { numberVar } from "./variables";
 import { activeClock } from "./gratitude-cycles";
+import { REVERSED_GRATITUDE_FROM } from "../repos/gratitude";
 
 export interface SnapshotCycle {
   id: string;
@@ -275,13 +276,9 @@ async function snapshotAllowance(
    *
    * TWO PLACES THIS IS A VILLAGE FIGURE AND NOT A SUM OF MEMBERS. The floor
    * at zero is applied to the village total, where `allowanceFor` applies it
-   * per member, and a reversal posted this moon against a gift from LAST moon
-   * is subtracted here the same way the engine subtracts it from that
-   * member. Both agree whenever every reversal in the window reverses a gift
-   * in the window, which is every case a test could find and the ordinary
-   * one; a village that reverses an old gift reads a slightly smaller given
-   * than the sum of its members would. Counting reversals per member would
-   * mean a query per member on top of the one the allowance already costs.
+   * per member, and a reversal counts against the cycle its gift was made in, the same
+   * rule the engine applies to each member, so this total and the sum of
+   * members agree on an old gift reversed late as well.
    *
    * Joined to the roster because the total is: a gift from somebody the
    * total never counted would push `given` above what the village could
@@ -295,10 +292,16 @@ async function snapshotAllowance(
       "AND u.email NOT LIKE '%anonymized.invalid' AND u.is_example = 0",
     [villageId(), start, end],
   );
+  // Reversals found through the posting they undo, windowed on the GIFT, the
+  // same definition the allowance and the settlement read. The old prefix
+  // match saw one door's reversals, windowed them on the correction's own
+  // moment, and subtracted ledger minor units from human ones.
   const [[reversedRow]] = await pool.query<any[]>(
-    "SELECT COALESCE(SUM(t.amount), 0) AS back FROM token_ledger t " +
-      "WHERE t.source = 'reversal' AND t.at >= ? AND t.at < ? AND t.source_ref LIKE ?",
-    [start, end, `gratitude.given:${villageId()}:%`],
+    "SELECT COALESCE(SUM(g.amount), 0) AS back " +
+      REVERSED_GRATITUDE_FROM +
+      " AND g.village_id = ? AND g.at >= ? AND g.at < ? AND g.is_example = 0 " +
+      "AND g.from_id IN (SELECT u.id FROM users u WHERE u.email NOT LIKE '%anonymized.invalid' AND u.is_example = 0)",
+    [villageId(), start, end],
   );
   const raw = Number(givenRow.given);
   const reversed = Number(reversedRow.back);

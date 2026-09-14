@@ -292,3 +292,98 @@ export const LADDER_PATH_IDS = Object.keys(PATH_LADDERS) as LadderPathId[];
 
 export const hasLadder = (pathId: string): pathId is LadderPathId =>
   Object.prototype.hasOwnProperty.call(PATH_LADDERS, pathId);
+
+/**
+ * ── THE PARTICULARS, WHICH RIDE BESIDE A LADDER AND NEVER INSIDE ONE ────────
+ *
+ * A ladder says WHERE somebody stands. These say WHAT the rows actually are:
+ * the venture's name, the fact's detail, the seat's title, the home type
+ * reserved. Both come off the same rows in the same query, and they are
+ * separate types on purpose, because the rules at the top of this file bind
+ * the ladder and would be wrong for these. A rung may carry no number and no
+ * free text; a venture's name IS free text and is the whole point of it.
+ *
+ * Keeping them apart is also what stops the derivation growing a field. If
+ * `LadderRung` could hold a name, the next thing it holds is a count, and the
+ * plane that exists to refuse a second source of truth for the cap table
+ * becomes one.
+ *
+ * WHAT IS DELIBERATELY ABSENT. No amounts, still: these tables have no numeric
+ * column and a test holds that against `information_schema`. And no reserver
+ * name, email, phone or note, though the row carries all four. The route's own
+ * header commits to never returning them, the founder's read of that table
+ * sits behind `map.publish` for that reason, and a member already knows their
+ * own name. Serving it back would buy nothing and would put three pieces of
+ * contact data on a payload that four other surfaces will eventually reuse.
+ *
+ * Every instant is a moon, resolved once for the whole response. No raw
+ * timestamp goes out, so no client can date-compare and no client has to.
+ */
+
+/** One dated fact on the investor path. */
+export interface InvestorParticular {
+  id: string;
+  /** One of `INVESTOR_FACTS`. Unknown values print themselves. */
+  fact: string;
+  /** Words a human wrote. Never parsed, never summed. */
+  detail: string | null;
+  documentId: string | null;
+  /** Derived from `ended_at IS NULL`, so no client date-compares. */
+  live: boolean;
+  startedMoon: VillageMoon | null;
+  endedMoon: VillageMoon | null;
+  endedReason: string | null;
+}
+
+/** One venture a member opened. */
+export interface VentureParticular {
+  id: string;
+  name: string;
+  summary: string | null;
+  /** Free words, never an enum: a village names its own kinds. */
+  kind: string | null;
+  link: string | null;
+  live: boolean;
+  listed: boolean;
+  openedMoon: VillageMoon | null;
+  listedMoon: VillageMoon | null;
+  closedMoon: VillageMoon | null;
+  closedReason: string | null;
+}
+
+/** One reservation, carrying none of the contact data on its row. */
+export interface ReservationParticular {
+  id: string;
+  homeType: string;
+  /** Which structure on the map, when one was chosen. */
+  structureKey: string | null;
+  status: string;
+  madeMoon: VillageMoon | null;
+}
+
+/** One seat a member has held, live or ended. */
+export interface SeatParticular {
+  id: string;
+  /** `org_roles.name`, falling back to the id the way `namedRoles` does. */
+  roleName: string;
+  live: boolean;
+  representsCircle: boolean;
+  startedMoon: VillageMoon | null;
+  endedMoon: VillageMoon | null;
+  endedReason: string | null;
+}
+
+/**
+ * The particulars for every path a member walks, keyed by path id.
+ *
+ * Keyed BY PATH so a fifth path adds a key and nothing else. A path the member
+ * does not walk is absent rather than empty, which is the same posture the
+ * ladders take and means "we did not look" and "there is nothing" stay
+ * different answers.
+ */
+export interface PathParticulars {
+  investor?: { facts: InvestorParticular[] };
+  "prosperity-creator"?: { ventures: VentureParticular[] };
+  resident?: { reservations: ReservationParticular[] };
+  steward?: { seats: SeatParticular[] };
+}

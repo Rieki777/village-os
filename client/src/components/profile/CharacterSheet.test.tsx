@@ -131,56 +131,104 @@ describe("PowersMap", () => {
   const catalogue: ProgressionCapability[] = [
     cap("forum.post", "Start a thread in the forum", true, { via: "stage", stage: "member" }),
     cap("map.viewPeople", "See who holds seats", true, { via: "stage", stage: "guest" }),
-    // Nothing opens at co-creator here, and quest-seeker opens two. The next
-    // rung is therefore quest-seeker, which is stageIndex + 1 by luck; the
-    // test below removes that luck.
     cap("member.vouch", "Vouch for an applicant", false, { via: "stage", stage: "quest-seeker" }),
     cap("proposal.open", "Open a governance decision", false, { via: "stage", stage: "co-creator" }),
     cap("org.seat", "Seat and unseat holders", false, { via: "appointment" }),
   ];
 
-  it("names the lowest rung that opens something, skipping rungs that open nothing", () => {
-    // Standing at member (index 3). The rung immediately above is contributor
-    // (index 4), which opens NOTHING in this catalogue. Pointing at it would
-    // promise a reward the config does not hold, so the next group must name
-    // Quest Seeker.
-    render(<PowersMap catalogue={catalogue} stages={stages} stageIndex={3} />);
-    expect(screen.getByText("Opens at Quest Seeker")).toBeTruthy();
-    expect(screen.queryByText("Opens at Contributor")).toBeNull();
+  it("draws every rung of the ladder, in the order the server sent them", () => {
+    // The whole point of the redesign: the map stays whole, so a member can
+    // see what they are climbing through. A tree that renders only the rungs
+    // carrying a power hides eight of this ladder's twelve.
+    const { container } = render(<PowersMap catalogue={catalogue} stages={stages} stageIndex={3} />);
+    const items = container.querySelectorAll("ol > li");
+    expect(items).toHaveLength(stages.length);
+    // Matched by the name each rung OPENS with, so the assertion survives any
+    // change to what follows it on the line and still pins the order.
+    const shown = Array.from(items).map(
+      (li) => stages.find((s) => (li.textContent ?? "").startsWith(s.name))?.name ?? li.textContent,
+    );
+    expect(shown).toEqual(stages.map((s) => s.name));
   });
 
-  it("counts what is open against what this village runs", () => {
-    render(<PowersMap catalogue={catalogue} stages={stages} stageIndex={3} />);
-    expect(screen.getByText(/5 powers exist in this village/)).toBeTruthy();
-    // The open tally sits in its own span next to the sentence. Queried by its
-    // element, because a bare "2" also matches the per-group counts.
-    const openTally = screen.getByText(/5 powers exist in this village/).querySelector("span");
-    expect(openTally?.textContent).toBe("2");
+  it("hangs each power on the rung its `opens` names, with no table in this file", () => {
+    const { container } = render(<PowersMap catalogue={catalogue} stages={stages} stageIndex={3} />);
+    const rung = (name: string) =>
+      Array.from(container.querySelectorAll("ol > li")).find((li) => li.textContent?.startsWith(name)) as HTMLElement;
+    expect(within(rung("Guest")).getByText("See who holds seats")).toBeTruthy();
+    expect(within(rung("Member")).getByText("Start a thread in the forum")).toBeTruthy();
+    expect(within(rung("Co-Creator")).getByText("Open a governance decision")).toBeTruthy();
+    // A rung that opens nothing renders, and carries no power list.
+    expect(rung("Immersant").querySelector("ul")).toBeNull();
   });
 
-  it("separates what is appointed from what is climbed", () => {
+  it("prices a rung by the SERVED threshold and says how far along the member is", () => {
+    // The fixture's quest-seeker sits at 7, which is not the platform default,
+    // so a component reading GAME_CONFIG instead of the payload fails here.
+    render(<PowersMap catalogue={catalogue} stages={stages} stageIndex={3} consentedQuests={2} />);
+    expect(screen.getByText("2 of 7 consented quests")).toBeTruthy();
+    expect(screen.getByText("1 of 1 consented quest")).toBeTruthy();
+  });
+
+  it("states the bar alone when the member's own count is unknown", () => {
+    // null means UNKNOWN, and inventing a 0 would tell somebody they have done
+    // nothing when the truth is that nobody asked.
     render(<PowersMap catalogue={catalogue} stages={stages} stageIndex={3} />);
-    const appointed = screen.getByText("The village appoints these").closest("div")?.parentElement;
-    expect(within(appointed as HTMLElement).getByText("Seat and unseat holders")).toBeTruthy();
+    expect(screen.getByText("7 consented quests")).toBeTruthy();
+    expect(screen.queryByText(/of 7 consented quests/)).toBeNull();
   });
 
   it("never tells a member a closed power opens at a rung they already walked", () => {
     // A badge deny beats the ladder, so this member stands at co-creator with
-    // a member-rung power still closed. The honest bucket says it is closed;
-    // what it must not say is "At Member".
+    // a member-rung power still closed. The row has to name the mechanism,
+    // because a bare "Closed" under a rung they can see they walked reads as
+    // the page contradicting itself.
     const denied = [cap("forum.post", "Start a thread in the forum", false, { via: "stage", stage: "member" })];
     render(<PowersMap catalogue={denied} stages={stages} stageIndex={6} />);
     expect(screen.getByText("Closed on your account")).toBeTruthy();
-    expect(screen.queryByText("Opens at Member")).toBeNull();
   });
 
-  it("hides the closed groups on request and keeps what is open", () => {
+  it("does not blame the account for a power that is simply further up", () => {
+    // The mirror of the test above, and the one that keeps it honest: nothing
+    // this member has yet reached is closed, so that phrase must be absent.
+    // The row itself stays on the map, carrying NO standing label, because the
+    // locked rung above it has already said everything there is to say.
     render(<PowersMap catalogue={catalogue} stages={stages} stageIndex={3} />);
+    expect(screen.queryByText("Closed on your account")).toBeNull();
+    expect(screen.queryByText("Closed")).toBeNull();
+    const row = screen.getByText("Vouch for an applicant").closest("li") as HTMLElement;
+    expect(row.querySelectorAll("span")).toHaveLength(1);
+  });
+
+  it("counts what is open, what is climbed and what is appointed, off the payload", () => {
+    render(<PowersMap catalogue={catalogue} stages={stages} stageIndex={3} />);
+    expect(screen.getByText(/of 5 open to you now/)).toBeTruthy();
+    expect(screen.getByText(/4 open by climbing, 1 by appointment/)).toBeTruthy();
+    const tally = screen.getByText(/of 5 open to you now/).querySelector("span");
+    expect(tally?.textContent).toBe("2");
+  });
+
+  it("separates what the village entrusts from what is climbed", () => {
+    const { container } = render(<PowersMap catalogue={catalogue} stages={stages} stageIndex={3} />);
+    // Appointed rows live outside the climb's list, which is what stops them
+    // being read as a rung somebody could reach by trying harder.
+    const inClimb = container.querySelector("ol");
+    expect(within(inClimb as HTMLElement).queryByText("Seat and unseat holders")).toBeNull();
+    expect(screen.getByText("Seat and unseat holders")).toBeTruthy();
+    expect(screen.getByText("Entrusted by the village")).toBeTruthy();
+  });
+
+  it("hides what is closed on request and keeps the climb walked so far", () => {
+    const { container } = render(<PowersMap catalogue={catalogue} stages={stages} stageIndex={3} />);
     const toggle = screen.getByRole("button", { name: /Hide what is closed/ });
     expect(toggle.getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(toggle);
-    expect(screen.getByText("Open to you")).toBeTruthy();
-    expect(screen.queryByText("The village appoints these")).toBeNull();
+    // Four rungs walked or standing on, and the three above are gone.
+    expect(container.querySelectorAll("ol > li")).toHaveLength(4);
+    expect(screen.queryByText("Quest Seeker")).toBeNull();
+    expect(screen.getByText("Start a thread in the forum")).toBeTruthy();
+    // An unheld appointed power is closed too, so it goes with the rest.
+    expect(screen.queryByText("Seat and unseat holders")).toBeNull();
   });
 });
 

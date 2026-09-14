@@ -30,8 +30,11 @@ in `.claude/skills/`.
 
 ## Gates — all of these before calling anything done
 
-The authoritative list is printed straight from `.github/workflows/ci.yml`, in the order CI runs
-them, so it is right on the day you run it:
+The authoritative list is printed straight from the workflows themselves, so it is right on the
+day you run it. It reads EVERY workflow that runs on a pull request, not only `ci.yml`: four of
+them do, and the gates reachable only through `module-intake.yml` include the raw-SQL burn-down.
+This sentence used to say "straight from `ci.yml`", which was true of the source and got read as
+true of the gate set, and the gap was 14 named steps:
 
 ```
 node scripts/module-facts.mjs

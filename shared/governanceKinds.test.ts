@@ -282,6 +282,52 @@ describe("weight_allocation is a Game change, and the table says so once", () =>
   });
 });
 
+describe("a payout that waits takes the window, and the window is the point", () => {
+  /*
+   * Rye, 2026-09-04: payouts go the moment they pass, and "another settings
+   * where you can say which payouts require a 3 day delay to confirm".
+   *
+   * The delay has to make the payout VETOABLE or it is a delay rather than a
+   * confirmation: three days nobody can act inside changes nothing. His earlier
+   * ruling that "stewards can also block payouts" is what it is for.
+   */
+  it("sends a small payout at the close, as it always did", () => {
+    const l = landingFor({
+      closesAt: CLOSE, kind: "token_send", timing: "at_acceptance", vetoHours: 72,
+      nextBoundaryAfter: farMoon, payoutWaits: false,
+    });
+    expect(l.executesAtClose).toBe(true);
+    expect(l.landsAt).toBeNull();
+    expect(l.vetoable, "nothing to stop, because it is already done").toBe(false);
+  });
+
+  it("holds a big one for the window, and a steward can stop it there", () => {
+    const l = landingFor({
+      closesAt: CLOSE, kind: "token_send", timing: "at_acceptance", vetoHours: 72,
+      nextBoundaryAfter: farMoon, payoutWaits: true,
+    });
+    expect(l.executesAtClose, "it no longer goes at the close").toBe(false);
+    expect(l.landsAt?.toISOString()).toBe(new Date(CLOSE.getTime() + 72 * HOUR).toISOString());
+    expect(l.vetoable, "a delay nobody can act inside is not a confirmation").toBe(true);
+  });
+
+  it("leaves the absent flag meaning what it always meant", () => {
+    // The control. Every caller written before this existed passes no flag, and
+    // must keep getting the old answer rather than a new wait.
+    const l = landingFor({ closesAt: CLOSE, kind: "token_send", timing: "at_acceptance", vetoHours: 72, nextBoundaryAfter: farMoon });
+    expect(l.executesAtClose).toBe(true);
+  });
+
+  it("does not touch a Game change, whatever the flag says", () => {
+    // The flag is about payouts. A Game change already waits and already has a
+    // window, and nothing here may make that answer depend on a payout setting.
+    const withFlag = landingFor({ closesAt: CLOSE, kind: "game_change", timing: "at_acceptance", vetoHours: 72, nextBoundaryAfter: farMoon, payoutWaits: true });
+    const without = landingFor({ closesAt: CLOSE, kind: "game_change", timing: "at_acceptance", vetoHours: 72, nextBoundaryAfter: farMoon });
+    expect(withFlag.landsAt?.toISOString()).toBe(without.landsAt?.toISOString());
+    expect(withFlag.vetoable).toBe(without.vetoable);
+  });
+});
+
 describe("which payouts wait, and which go at once", () => {
   /*
    * Rye, 2026-09-04: payouts go the moment they pass, and a village can name an

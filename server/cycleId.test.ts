@@ -113,45 +113,52 @@ describe.skipIf(!configured)("one cycle, one name", () => {
     const people = [];
     for (let i = 0; i < 8; i++) people.push(await makeMember(`cyc-friend-${i}`));
 
-    // Stock dials, and this test's stage multiplier is 1: an allowance of 100
-    // and a per-recipient share of 25% of it, so 25 to any one person.
+    // Stock dials, and this test's stage multiplier is 1: an allowance of 105
+    // across 7 full sends, so 15 to any one person.
     const ack = (to: string, amount: number) =>
       sendGratitude(depsOver(pool), { fromUser: { id: giver, name: giver }, toId: to, amount, message: "thank you" });
     const hearts = (to: string, amount: number, nonce: string) =>
       give(pool, { fromUserId: giver, toUserId: to, amount, clientNonce: nonce }, async () => 1);
 
     // Door one: the Hearts economy, on the one allowance.
-    expect((await hearts(people[0], 25, "n-0")).ok).toBe(true);
+    expect((await hearts(people[0], 15, "n-0")).ok).toBe(true);
 
-    // The share, on this door, and measured while 75 of the allowance is still
-    // unspent so the ALLOWANCE cannot be what refuses it. Order of refusals is
-    // part of the contract: the remaining allowance is checked first, because
-    // it is the harder limit and the more useful sentence when both bind.
-    const hogging = await hearts(people[1], 26, "n-hog");
+    // The ceiling, on this door, and measured while 90 of the allowance is
+    // still unspent so the ALLOWANCE cannot be what refuses it. Order of
+    // refusals is part of the contract: the remaining allowance is checked
+    // first, because it is the harder limit and the more useful sentence when
+    // both bind.
+    const hogging = await hearts(people[1], 16, "n-hog");
     expect(hogging.ok).toBe(false);
-    expect(hogging.ok === false && hogging.error).toContain("25 is the most you can give one person");
+    expect(hogging.ok === false && hogging.error).toContain("15 is the most you can give one person");
 
-    expect((await hearts(people[1], 25, "n-1")).ok).toBe(true);
-    expect((await hearts(people[2], 25, "n-2")).ok).toBe(true);
+    expect((await hearts(people[1], 15, "n-1")).ok).toBe(true);
+    expect((await hearts(people[2], 15, "n-2")).ok).toBe(true);
 
-    // Door two: the acknowledgement flow. Its budget already sees the 75.
+    // Door two: the acknowledgement flow. Its budget already sees the 45.
     const budget = await budgetFor(depsOver(pool), { id: giver, name: giver });
-    expect(budget.total).toBe(100);
-    expect(budget.spent).toBe(75);
-    expect(budget.remaining).toBe(25);
+    expect(budget.total).toBe(105);
+    expect(budget.spent).toBe(45);
+    expect(budget.remaining).toBe(60);
 
-    // THE SAME PERSON, TWICE, inside the share. At 6b44084 the second of
+    // THE SAME PERSON, TWICE, inside the ceiling. At 6b44084 the second of
     // these was a 409: `gratitude.max_per_recipient_per_cycle` counted sends
     // and was set to 1.
-    expect((await ack(people[3], 12)).ok).toBe(true);
-    expect((await ack(people[3], 13)).ok).toBe(true);
+    expect((await ack(people[3], 7)).ok).toBe(true);
+    expect((await ack(people[3], 8)).ok).toBe(true);
+
+    // The remaining three full sends, which is what it now takes to empty an
+    // allowance: seven people at the ceiling, and no fewer.
+    expect((await ack(people[4], 15)).ok).toBe(true);
+    expect((await ack(people[5], 15)).ok).toBe(true);
+    expect((await ack(people[6], 15)).ok).toBe(true);
 
     const byFormat = await spentByFormat(giver);
     // One name for one lunation. Nothing under any other key.
     expect(Object.keys(byFormat)).toEqual([cycleIdFor()]);
-    // 75 through one door and 25 through the other, against one allowance of
-    // 100. At b5bed01 this shape moved 130.
-    expect(Object.values(byFormat).reduce((a, b) => a + b, 0)).toBe(100);
+    // 45 through one door and 60 through the other, against one allowance of
+    // 105. At b5bed01 this shape moved 130.
+    expect(Object.values(byFormat).reduce((a, b) => a + b, 0)).toBe(105);
 
     // Nothing at all is left to give, through either door.
     const spent = await ack(people[4], 1);
@@ -174,13 +181,13 @@ describe.skipIf(!configured)("one cycle, one name", () => {
     const entries = await gratitudeLogRepo(pool).all();
     const [[row]] = await pool.query<any[]>("SELECT COALESCE(SUM(`amount`),0) AS s FROM `gratitude_log`");
     const inTheTable = Number(row.s);
-    expect(inTheTable).toBe(100);
+    expect(inTheTable).toBe(105);
 
     const totals = settleCycle(entries as any, cycleIdFor());
     const settled = totals.reduce((n, t) => n + t.received, 0);
     // The number this test exists to state: nothing invisible.
     expect(inTheTable - settled).toBe(0);
-    expect(settled).toBe(100);
+    expect(settled).toBe(105);
 
     // And the lunation is offered for closing once it has ended.
     const fortyDaysOn = new Date(Date.now() + 40 * 24 * 60 * 60 * 1000);
@@ -222,18 +229,18 @@ describe.skipIf(!configured)("one cycle, one name", () => {
     const ack = (to: string, amount: number) =>
       sendGratitude(depsOver(pool), { fromUser: { id: giver, name: giver }, toId: to, amount, message: "thank you" });
 
-    // 25% of an allowance of 100. A single send of the whole allowance to one
-    // person is the thing the old sends cap permitted and this refuses.
-    const all = await ack(friend, 100);
+    // A seventh of an allowance of 105. A single send of the whole allowance
+    // to one person is the thing the old sends cap permitted and this refuses.
+    const all = await ack(friend, 105);
     expect(all.ok).toBe(false);
-    expect(all.ok === false && all.error).toContain("gratitude.max_share_per_recipient");
+    expect(all.ok === false && all.error).toContain("gratitude.full_sends_per_cycle");
 
-    // Up to the share, in as many sends as the giver likes.
-    expect((await ack(friend, 20)).ok).toBe(true);
+    // Up to the ceiling, in as many sends as the giver likes.
+    expect((await ack(friend, 10)).ok).toBe(true);
     expect((await ack(friend, 5)).ok).toBe(true);
     const overByOne = await ack(friend, 1);
     expect(overByOne.ok).toBe(false);
-    expect(overByOne.ok === false && overByOne.error).toContain("you have given them 25");
+    expect(overByOne.ok === false && overByOne.error).toContain("you have given them 15");
 
     // The other door reads the same running total and the same ceiling.
     const viaHearts = await give(
@@ -242,10 +249,10 @@ describe.skipIf(!configured)("one cycle, one name", () => {
       async () => 1,
     );
     expect(viaHearts.ok).toBe(false);
-    expect(viaHearts.ok === false && viaHearts.error).toContain("you have given them 25");
+    expect(viaHearts.ok === false && viaHearts.error).toContain("you have given them 15");
 
     // And somebody else is entirely unaffected: the ceiling is per pair.
-    expect((await ack(other, 25)).ok).toBe(true);
+    expect((await ack(other, 15)).ok).toBe(true);
   });
 
   /**
@@ -285,7 +292,7 @@ describe.skipIf(!configured)("one cycle, one name", () => {
 
     const gift = await give(
       pool,
-      { fromUserId: giver, toUserId: friend, amount: 20, clientNonce: "rev-gift" },
+      { fromUserId: giver, toUserId: friend, amount: 15, clientNonce: "rev-gift" },
       async () => 1,
     );
     expect(gift.ok).toBe(true);
@@ -293,7 +300,7 @@ describe.skipIf(!configured)("one cycle, one name", () => {
     expect(noteId).not.toBe("");
 
     const spent = await bothDoors();
-    expect(spent.budget.spent).toBe(20);
+    expect(spent.budget.spent).toBe(15);
     expect(spent.budget.remaining).toBe(spent.allowance.remaining);
 
     // Undo it. A refund is always a reversal (a fresh mint would inherit none
@@ -302,7 +309,7 @@ describe.skipIf(!configured)("one cycle, one name", () => {
       from: memberAccount(friend),
       to: RECOGNITION_FAUCET,
       tokenSlug: HEARTS,
-      amount: 20,
+      amount: 15,
       note: "given to the wrong person",
     });
     expect(back.ok).toBe(true);
@@ -315,7 +322,7 @@ describe.skipIf(!configured)("one cycle, one name", () => {
     expect(after.allowance.remaining).toBe(after.allowance.total);
 
     // THE ASSERTION THIS TEST EXISTS FOR. Before the fix `budgetFor` still
-    // read 20 spent and 80 remaining here, against 0 and 100 from the other
+    // read 15 spent and 90 remaining here, against 0 and 105 from the other
     // door, and the profile page printed both of them.
     expect(after.budget.total).toBe(after.allowance.total);
     expect(after.budget.spent).toBe(after.allowance.spent);

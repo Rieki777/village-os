@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { gameFetch } from "@/lib/gameApi";
-import type { PathLadder } from "@shared/pathLadders";
+import type { PathLadder, PathParticulars } from "@shared/pathLadders";
 
 /**
  * The signed-in member's per-path ladders, or null while nobody knows yet.
@@ -27,9 +27,21 @@ import type { PathLadder } from "@shared/pathLadders";
  * `gameFetch` carries the bearer token, which this route requires: it refuses a
  * stranger with 401 and every read inside it is scoped to the token's own
  * account.
+ *
+ * IT RETURNS TWO PROJECTIONS OF ONE FETCH. `ladders` is where the member
+ * stands; `particulars` is what their rows actually say. The server builds both
+ * from the same four queries in the same handler, so asking for them
+ * separately would have doubled the round trips on every profile paint for
+ * data already in memory. They are held in one state object so a render can
+ * never show one of them updated and the other stale.
  */
-export function usePathLadders(paths: readonly string[]): PathLadder[] | null {
-  const [ladders, setLadders] = useState<PathLadder[] | null>(null);
+export interface PathLadderData {
+  ladders: PathLadder[] | null;
+  particulars: PathParticulars | null;
+}
+
+export function usePathLadders(paths: readonly string[]): PathLadderData {
+  const [data, setData] = useState<PathLadderData>({ ladders: null, particulars: null });
   const key = paths.join(",");
 
   useEffect(() => {
@@ -41,7 +53,15 @@ export function usePathLadders(paths: readonly string[]): PathLadder[] | null {
         // Only an array counts. A refusal, a proxy's HTML error page or a body
         // shaped like something else leaves the state null, which draws
         // nothing, instead of half a ladder assembled out of undefined.
-        if (live && Array.isArray(d?.ladders)) setLadders(d.ladders as PathLadder[]);
+        if (!live || !Array.isArray(d?.ladders)) return;
+        // `paths` is checked on its own: an older server that serves ladders
+        // and no particulars leaves that half null and draws nothing, which is
+        // the same unknown-draws-nothing contract one field further in.
+        const p = d.paths;
+        setData({
+          ladders: d.ladders as PathLadder[],
+          particulars: p && typeof p === "object" && !Array.isArray(p) ? (p as PathParticulars) : null,
+        });
       })
       .catch(() => {});
     return () => {
@@ -49,5 +69,5 @@ export function usePathLadders(paths: readonly string[]): PathLadder[] | null {
     };
   }, [key]);
 
-  return ladders;
+  return data;
 }

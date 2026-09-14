@@ -26,6 +26,7 @@ import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { loadTokenRegistry, memberAccount } from "./ledger";
 import { loadVariables } from "./variables";
 import { budgetFor, sendGratitude, type GratitudeDeps } from "./gratitude";
+import { fullSendsIn, shareCapFor } from "./economy";
 import { gratitudeLogRepo } from "../repos/gratitude";
 import type { UsersRepo } from "../repos/users";
 
@@ -87,18 +88,33 @@ describe.skipIf(!configured)("the gratitude send door under concurrency", () => 
     await db?.drop();
   });
 
-  it("holds the allowance against five simultaneous sends", async () => {
+  it("holds the allowance against simultaneous sends, one more than it can hold", async () => {
     const giver = await makeMember("send-race-from");
-    const recipients = await Promise.all([1, 2, 3, 4, 5].map((n) => makeMember(`send-race-to-${n}`)));
     const before = await budgetFor(deps(), giver);
-    // A quarter of the allowance, which at the stock dials (100 total, a 25%
-    // share) is also exactly the per-recipient share cap: any larger and the
-    // share would refuse these before the lock got a chance to, and the test
-    // would prove nothing about the lock. Five different recipients, so the
-    // share cap never binds either, so only the allowance can refuse the fifth.
-    const each = Math.max(1, Math.floor(before.total / 4));
+    // EXACTLY the per-recipient ceiling, read from the engine rather than
+    // written down here. Any larger and that ceiling refuses these gifts before
+    // the lock ever sees them, and the test proves nothing about the lock.
+    //
+    // This was `total / 4`, which was the ceiling only while the dial happened
+    // to be a 25% share, and it stopped being true the moment the dial became
+    // `gratitude.full_sends_per_cycle`. The suite then failed in CI having
+    // passed everywhere else, because every send was refused by the ceiling and
+    // `accepted` came back 0. Deriving it means the next dial change cannot
+    // silently turn this into a test of the wrong thing.
+    const each = shareCapFor(before.total);
+    expect(each).toBeGreaterThan(0);
 
-    // Fired together, so the only thing that can refuse the fifth is the lock.
+    // One more gift than the allowance can hold, whatever the dials say: it
+    // holds `fullSendsIn` of these by definition, so asking for one more
+    // guarantees the overflow the lock has to refuse. Different recipients
+    // throughout, so the per-recipient ceiling never binds and only the
+    // allowance can refuse the last.
+    const n = fullSendsIn(before.total) + 1;
+    const recipients = await Promise.all(
+      Array.from({ length: n }, (_, i) => makeMember(`send-race-to-${i + 1}`)),
+    );
+
+    // Fired together, so the only thing that can refuse the last is the lock.
     const results = await Promise.all(
       recipients.map((to) =>
         sendGratitude(deps(), { fromUser: giver, toId: to.id, amount: each, message: "thank you" }),
@@ -122,7 +138,13 @@ describe.skipIf(!configured)("the gratitude send door under concurrency", () => 
     const giver = await makeMember("share-race-from");
     const recipient = await makeMember("share-race-to");
     const before = await budgetFor(deps(), giver);
-    const share = Math.max(1, Math.floor((before.total * 25) / 100));
+    // The ceiling itself, from the engine. Hardcoded as `total * 25 / 100`
+    // before, which is the same twin as the one above: once the dial became a
+    // count of full sends this asked for more than the ceiling allows, so all
+    // five were refused by the ceiling and none by the lock, and `accepted`
+    // came back 0 where the test wanted exactly 1.
+    const share = shareCapFor(before.total);
+    expect(share).toBeGreaterThan(0);
 
     const results = await Promise.all(
       Array.from({ length: 5 }, () =>

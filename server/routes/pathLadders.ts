@@ -42,7 +42,7 @@ import type { Express } from "express";
 import { LADDER_PATH_IDS, type LadderPathId } from "../../shared/pathLadders";
 import type { AppDeps } from "../lib/appDeps";
 import { } from "../lib/housing";
-import { laddersFor, type MoonOf } from "../lib/pathLadders";
+import { laddersFor, particularsFor, type MoonOf } from "../lib/pathLadders";
 import { moonOneCycle, villageMoonFor } from "../lib/villageMoon";
 import { factsForMember } from "../repos/investorPath";
 import { seatingsForMember } from "../repos/pathLadders";
@@ -63,7 +63,7 @@ export function register(app: Express, deps: Deps): void {
     // same as walking a path.
     const walked = new Set<string>((Array.isArray(user.paths) ? user.paths : []).map(String));
     const wanted = LADDER_PATH_IDS.filter((id) => walked.has(id));
-    if (wanted.length === 0) return res.json({ ladders: [] });
+    if (wanted.length === 0) return res.json({ ladders: [], paths: {} });
 
     const pool = getPool();
     const needs = (id: LadderPathId) => wanted.includes(id);
@@ -89,15 +89,19 @@ export function register(app: Express, deps: Deps): void {
       return Number.isFinite(date.getTime()) ? villageMoonFor(date, anchor) : null;
     };
 
+    // The member's own order, so the panel draws each ladder inside the tile
+    // it belongs to and the two orders cannot drift apart.
+    const claimed = Array.isArray(user.paths) ? user.paths.map(String) : [];
+    const rows = { seatings, reservations, investorFacts, ventures };
+
     res.json({
-      ladders: laddersFor(
-        // The member's own order, so the panel draws each ladder inside the
-        // tile it belongs to and the two orders cannot drift apart.
-        Array.isArray(user.paths) ? user.paths.map(String) : [],
-        { seatings, reservations, investorFacts, ventures },
-        lapseContext(),
-        moonOf,
-      ),
+      ladders: laddersFor(claimed, rows, lapseContext(), moonOf),
+      // THE SAME ROWS, READ FOR WHAT THEY SAY. A ladder answers where somebody
+      // stands and drops everything else, which left the profile unable to
+      // name one thing a member had actually done. Both projections come off
+      // this one fetch: a second route would re-run these four queries and add
+      // a round trip to every profile paint for data already in memory here.
+      paths: particularsFor(claimed, rows, moonOf),
     });
   });
 }

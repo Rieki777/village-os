@@ -32,6 +32,7 @@ import type { LapseContext } from "./orgChart";
 import {
   investorLadder,
   laddersFor,
+  particularsFor,
   prosperityLadder,
   residentLadder,
   stewardLadder,
@@ -402,5 +403,132 @@ describe("which ladders a member is handed", () => {
     const wire = JSON.stringify(laddersFor(["steward"], { seatings: [seating()] }, CTX, NO_MOONS));
     expect(wire).not.toMatch(/"rung"/);
     expect(wire).not.toMatch(/"toRung"/);
+  });
+});
+
+/**
+ * The particulars, projected off the same rows.
+ *
+ * The ladder tests above guard a POSITION. These guard what the rows SAY, and
+ * the property that matters most is an absence: `housing_reservations` carries
+ * a name, an email, a phone number and free-text notes, the route's header
+ * commits to returning none of them, and a projection is exactly where such a
+ * commitment gets quietly broken by somebody spreading a row.
+ */
+describe("particularsFor", () => {
+  // A resolver that proves a moon was asked for, without a clock or an anchor.
+  const moon = (v: unknown) =>
+    v == null ? null : ({ ordinal: 7, standing: "counted", cycleNumber: 1000 } as never);
+
+  const reservation = {
+    id: "res-1",
+    homeType: "casita",
+    structureKey: "casita-3",
+    status: "confirmed",
+    createdAt: new Date("2026-04-01T00:00:00Z"),
+    // Everything below is on the real row and none of it may ever ship.
+    name: "Wren Alder",
+    email: "wren@example.test",
+    phone: "+1-555-0100",
+    notes: "Allergic to woodsmoke",
+    arrivedFrom: "Lisbon",
+  };
+
+  const venture = {
+    id: "ven-1",
+    name: "Hollow Oak Bakery",
+    summary: "Bread three mornings a week",
+    kind: "food",
+    link: "https://example.test/bakery",
+    openedAt: new Date("2026-02-01T00:00:00Z"),
+    listedAt: new Date("2026-03-01T00:00:00Z"),
+    closedAt: null,
+    closedReason: null,
+    isExample: false,
+  };
+
+  const fact = {
+    id: "ipf-1",
+    fact: "packet_released",
+    detail: "Sent after the Tuesday call",
+    documentId: "doc-7",
+    startedAt: new Date("2026-01-01T00:00:00Z"),
+    endedAt: null,
+    endedReason: null,
+    isExample: false,
+  };
+
+  it("NEVER puts a reserver's name, email, phone or notes on the wire", () => {
+    const out = particularsFor(["resident"], { reservations: [reservation] }, moon);
+    const wire = JSON.stringify(out);
+    for (const secret of ["Wren Alder", "wren@example.test", "555-0100", "woodsmoke", "Lisbon"]) {
+      expect(wire).not.toContain(secret);
+    }
+    // What it DOES say is what the section is for.
+    expect(out.resident?.reservations[0]).toMatchObject({
+      homeType: "casita",
+      structureKey: "casita-3",
+      status: "confirmed",
+    });
+  });
+
+  it("leaves a path the member does not walk ABSENT, never empty", () => {
+    // Absent and empty are different answers: one means nobody looked, the
+    // other means there is nothing there. A client that cannot tell them apart
+    // prints "no ventures yet" at somebody who never claimed the path.
+    const out = particularsFor(["resident"], { reservations: [], ventures: [venture] }, moon);
+    expect(out.resident).toEqual({ reservations: [] });
+    expect("prosperity-creator" in out).toBe(false);
+    expect(out.investor).toBeUndefined();
+  });
+
+  it("carries the particulars a ladder throws away", () => {
+    const out = particularsFor(["prosperity-creator"], { ventures: [venture] }, moon);
+    expect(out["prosperity-creator"]?.ventures[0]).toMatchObject({
+      name: "Hollow Oak Bakery",
+      summary: "Bread three mornings a week",
+      kind: "food",
+      link: "https://example.test/bakery",
+    });
+  });
+
+  it("derives live and listed, and ships no raw timestamp at all", () => {
+    const closed = { ...venture, id: "ven-2", closedAt: new Date("2026-05-01T00:00:00Z"), closedReason: "Moved away" };
+    const out = particularsFor(["prosperity-creator"], { ventures: [venture, closed] }, moon);
+    const [open, shut] = out["prosperity-creator"]!.ventures;
+    expect(open!.live).toBe(true);
+    expect(open!.listed).toBe(true);
+    expect(shut!.live).toBe(false);
+    expect(shut!.closedReason).toBe("Moved away");
+    // No client should ever have to date-compare, so no date goes out as one.
+    const wire = JSON.stringify(out);
+    expect(wire).not.toContain("2026-02-01");
+    expect(wire).not.toContain("openedAt");
+  });
+
+  it("drops a seeded example instead of calling it the member's own", () => {
+    const demo = { ...venture, id: "ven-x", name: "Example Venture", isExample: true };
+    const out = particularsFor(["prosperity-creator"], { ventures: [venture, demo] }, moon);
+    expect(out["prosperity-creator"]!.ventures.map((v) => v.name)).toEqual(["Hollow Oak Bakery"]);
+
+    const demoFact = { ...fact, id: "ipf-x", isExample: true };
+    const inv = particularsFor(["investor"], { investorFacts: [fact, demoFact] }, moon);
+    expect(inv.investor!.facts.map((f) => f.id)).toEqual(["ipf-1"]);
+  });
+
+  it("drops a real-looking seating whose ROLE is an example", () => {
+    // The assignment row is not an example; the seat it names is scaffolding,
+    // so printing it would tell a member they hold a role nobody holds.
+    const real = seating({ id: "a-1", roleName: "Water Steward" });
+    const onDemoRole = seating({ id: "a-2", roleName: "Example Seat", roleIsExample: true });
+    const out = particularsFor(["steward"], { seatings: [real, onDemoRole] }, moon);
+    expect(out.steward!.seats.map((s) => s.roleName)).toEqual(["Water Steward"]);
+  });
+
+  it("names a seat by its id when the role row is gone, and says nothing else", () => {
+    const orphan = seating({ id: "a-3", roleName: undefined });
+    const out = particularsFor(["steward"], { seatings: [orphan] }, moon);
+    expect(out.steward!.seats[0]!.roleName).toBe("role-1");
+    expect(out.steward!.seats[0]!.live).toBe(true);
   });
 });

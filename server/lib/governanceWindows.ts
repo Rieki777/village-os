@@ -60,6 +60,15 @@
  * started, and a vote that changes nothing needs no gate. Both are absent from
  * `WINDOW_KINDS`, and absence means always open, the same safe direction
  * `shared/ballotSubjects.ts` takes for a subject it has never heard of.
+ *
+ * ── WHERE THE ONE STATEMENT LIVES ──────────────────────────────────────────
+ *
+ * This file asks the database exactly one question — when did the decision a
+ * proposal comes back FROM finish — and that statement now lives in
+ * `server/repos/mechanicsProposals.ts` with the rest of that table's traffic.
+ * What stays here is every rule that reads the answer: the grace, the
+ * intersection, the three clocks and each refusal's words. None of those is a
+ * query, and all of them are things a reviewer has to read together.
  */
 import { LUNAR_CLOCK, type CycleClock } from "../../shared/cycleClock";
 import { GOVERNANCE_MODE, MINT_RULE, SUBJECT_FOR_ITEM_KIND } from "../../shared/ballotSubjects";
@@ -67,7 +76,8 @@ import { governanceWindowSyntaxProblem } from "../../shared/gameVariables";
 import { VETO_HOURS_FLOOR } from "../../shared/governanceKinds";
 import { isMintRuleKey } from "../../shared/mintRuleKeys";
 import { zonedTimeToUtc } from "../../shared/lunar";
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool } from "mysql2/promise";
+import { supersededDecisionClose } from "../repos/mechanicsProposals";
 import { activeClock } from "./gratitude-cycles";
 import { numberVar, stringVar } from "./variables";
 
@@ -432,15 +442,7 @@ export function relationProblem(raw: unknown): string | null {
  * pointing at nothing gets null, which means no grace and the ordinary window.
  */
 export async function comingBackFrom(pool: Pool, proposalId: string): Promise<Date | null> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT b.closes_at AS closes_at, o.vetoed_at AS vetoed_at FROM mechanics_proposals p " +
-      "LEFT JOIN mechanics_proposals o ON o.id = p.supersedes_proposal_id " +
-      "LEFT JOIN ballots b ON b.id = o.ballot_id WHERE p.id = ?",
-    [proposalId],
-  );
-  const row = rows[0];
-  const at = row?.closes_at ?? row?.vetoed_at ?? null;
-  return at ? new Date(at) : null;
+  return supersededDecisionClose(pool, proposalId);
 }
 
 export interface OpeningRequest {

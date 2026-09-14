@@ -79,6 +79,10 @@ import {
   RECOGNITION_FAUCET,
   type TransferResult,
 } from "./ledger";
+// The one definition of "this gratitude row has been undone". It lives in the
+// repo because that is where queries live, and it is imported rather than
+// restated because the settlement reads it too: see its header.
+import { givenInWindow, reversedInWindow } from "../repos/gratitude";
 
 /** Seeded by 0024. Named here rather than imported so this module does not
  *  depend on the library module being present. */
@@ -1215,10 +1219,17 @@ export async function reverse(
     // time. What actually stops the debt, though, is not the door: it is the
     // law inside the ledger, which derives this row from the posting the key
     // names and refuses anything it did not derive.
-    // Prefix, because source_ref is varchar(120) and a quest occurrence key can
-    // run past it. A prefix is enough for the allowance query, which matches on
-    // `gratitude.given:<village>:%`, and the whole key rides in the note so a
-    // human reading the row can still find what was undone.
+    // THE KEY THIS UNDOES, clipped only because `source_ref` is varchar(120)
+    // and a quest occurrence key can run past it (`idempotency_key` allows
+    // 191). The whole key also rides in the description, so a human reading
+    // the row can find what was undone even when it was clipped.
+    //
+    // IT IS ALSO A JOIN COLUMN. `REVERSED_GRATITUDE_FROM` (server/repos/
+    // gratitude.ts) walks from this mirror back to the posting it undoes by
+    // matching this against that posting's `idempotency_key`, so a key long
+    // enough to be clipped is a key that walk cannot follow. Every gratitude
+    // key is under 50 characters and server/lib/economy.allowance.test.ts
+    // holds that shut.
     sourceRef: originalKey.slice(0, MAX_SOURCE_REF),
     description: reversalDescription(opts.note, originalKey),
     idempotencyKey: mirrorKey,
@@ -1389,43 +1400,29 @@ export interface Allowance {
 }
 
 /**
- * ONE GIVER'S GRATITUDE SPENDING FOR ONE CYCLE, GIFT BY GIFT.
+ * WHAT ONE GIVER GAVE IN A WINDOW, AND WHAT OF IT HAS BEEN UNDONE.
  *
- * Both halves of the allowance come from here and both are keyed on the member
- * who gave: the notes THIS giver wrote inside the window, and the reversals of
- * THOSE notes.
+ * Read by `allowanceFor` and by `writeGratitudeRow`, which weighs the same two
+ * figures for the per-recipient share cap under its lock. One function, so the
+ * allowance and the share cap can never disagree about a gift.
  *
- * ── D30, WHICH THIS EXISTS TO CLOSE ────────────────────────────────────────
+ * Two rules, and main's #233 settled both before this branch met it:
  *
- * The refund half used to be one SUM over `token_ledger` selected by
- * `source_ref LIKE 'gratitude.given:<village>:%'`. That predicate names the
- * GIFT and never the GIVER, so it summed every reversed gift in the village
- * and handed the whole of it back to everybody's allowance at once. It was
- * measured, not theorised: the gratitude units lane failed two cases at both
- * scales by exactly the five units a DIFFERENT member had reversed, and had to
- * run its reversal case last in each describe block to keep the rest green.
+ *   WHO. The reversals counted are the reversals of THIS giver's notes. The old
+ *   sum filtered on neither the giver nor the gift, so one correction refunded
+ *   every member in the village.
  *
- * ── HOW THE GIVER IS RECOVERED WITHOUT A COLUMN ────────────────────────────
+ *   WHEN. An allowance is spent in the cycle the gift was made, so a refund
+ *   belongs to that cycle too. The window is the GIFT's timestamp and the
+ *   mirror's own is never read: undoing a gift from a closed moon changes
+ *   nothing about this one, and undoing this moon's gift returns this moon's
+ *   budget however long the correction took to arrive.
  *
- * A reversal moves value between two accounts that name people, and neither of
- * them is the giver: the mirror debits the RECIPIENT and credits the faucet the
- * gift was minted from. What carries the giver is the NOTE. The mirror's
- * `source_ref` is the gift's own occurrence key, that key is built from the
- * note id, and `gratitude_log` holds `from_id` on the same row. So this builds
- * the keys THIS member's notes were posted under, with the same builder `give`
- * posts them under, and keeps only the mirrors that match one. Nothing is added
- * to any table and no migration is involved.
- *
- * ── WHY THE MATCH IS MADE HERE AND NOT IN THE PREDICATE ────────────────────
- *
- * `keys.gratitudeGiven` percent-escapes every segment (the keystone lane's
- * change), so the note id inside a key is not always the note id in the column,
- * and rebuilding that escape in SQL would be a second copy of it to keep in
- * step. The `LIKE` below is now only a NARROWING of the scan, and the exact map
- * is what decides; a village id that widened the pattern could no longer widen
- * the answer. The notes read is bounded by one member's own giving and the
- * mirror read by the village's reversals, which are an administrative act, so
- * neither side grows with the roster.
+ * Both reads live in server/repos/gratitude.ts beside `REVERSED_GRATITUDE_FROM`,
+ * which walks mirror to posting to note instead of matching a key prefix. That
+ * is why both doors' reversals reach the refund whatever key shape each writes,
+ * and it is the same definition the settlement uses to leave a reversed gift
+ * out of the pool.
  */
 interface CycleGiving {
   /** HUMAN units, the way `gratitude_log.amount` holds them: what was given. */
@@ -1443,67 +1440,23 @@ async function gratitudeGivenInCycle(
   endsAt: Date,
 ): Promise<CycleGiving> {
   const v = villageId();
-  const [notes] = await conn.query<RowDataPacket[]>(
-    "SELECT `id`, `to_id`, `amount` FROM `gratitude_log` " +
-      "WHERE `village_id` = ? AND `from_id` = ? AND `at` >= ? AND `at` < ?",
-    [v, userId, startsAt, endsAt],
-  );
   const out: CycleGiving = { given: 0, back: 0, byRecipient: new Map() };
-  // AN EMPTY WINDOW AND A FULLY REVERSED ONE ARE DIFFERENT FACTS, and both
-  // report a spend of zero. Leaving early here is about the second query
-  // having nothing to match, never about the answer: a member who gave nothing
-  // has no keys, so no mirror in the village can be theirs.
-  if (!notes.length) return out;
-
-  // The occurrence key each note was posted under, cut the way `reverse` cuts
-  // it into `source_ref` (varchar(120), MAX_SOURCE_REF) so the two strings are
-  // the same string, and lower-cased because that column answers under a
-  // case-insensitive collation and `esc` already emits nothing but lower case.
-  const mine = new Map<string, string>();
-  for (const n of notes) {
-    const toId = String(n.to_id);
-    const amount = Number(n.amount);
-    out.given += amount;
-    const seat = out.byRecipient.get(toId) ?? { given: 0, back: 0 };
-    seat.given += amount;
-    out.byRecipient.set(toId, seat);
-    mine.set(keys.gratitudeGiven(v, String(n.id)).slice(0, MAX_SOURCE_REF).toLowerCase(), toId);
+  for (const row of await givenInWindow(conn, v, userId, startsAt, endsAt)) {
+    out.given += row.amount;
+    out.byRecipient.set(row.toId, { given: row.amount, back: 0 });
   }
-
-  const [mirrors] = await conn.query<RowDataPacket[]>(
-    "SELECT t.`source_ref` AS ref, COALESCE(SUM(t.`amount`), 0) AS back FROM `token_ledger` t " +
-      "WHERE t.`source` = 'reversal' AND t.`at` >= ? AND t.`at` < ? " +
-      "AND t.`source_ref` LIKE ? GROUP BY t.`source_ref`",
-    // Built by the key builder, so the village segment is escaped here exactly
-    // as it is escaped in the keys stored. Spelt by hand, as it was, this put a
-    // RAW village id in front of ESCAPED ones: a fork hazard and not a live bug,
-    // because `villageId()` is "local" today and escapes to itself, and a fork
-    // whose id carried a colon or a capital would have matched nothing at all.
-    [startsAt, endsAt, `${keys.gratitudeGiven(v, "")}%`],
-  );
-  for (const m of mirrors) {
-    const toId = mine.get(String(m.ref).toLowerCase());
-    // Somebody else's reversed gift. It is in this result set and it is not in
-    // this member's allowance, and that sentence is the whole of D30.
-    if (toId === undefined) continue;
-    // MINOR OUT OF THE LEDGER, HUMAN INTO THE SUBTRACTION (sweep lane F).
-    // `given` above is `gratitude_log.amount`, the unit a member typed;
-    // `token_ledger.amount` is minor. At decimals 0 the two coincide and this
-    // call is the identity; at 4 they are ten thousand apart, and subtracting
-    // raw would floor the spend at zero and refund the giver their whole moon.
-    //
-    // Converted PER MIRROR ROW and not once over the total, because the total
-    // and the per-recipient figure are both made of it: one conversion feeding
-    // both readers is one number they cannot come apart on.
-    const undone = fromLedgerUnits(HEARTS, Number(m.back));
-    out.back += undone;
-    const seat = out.byRecipient.get(toId);
-    if (seat) seat.back += undone;
+  // AN EMPTY WINDOW AND A FULLY REVERSED ONE ARE DIFFERENT FACTS. A giver with
+  // no notes here has nothing that could have been undone, so the second read
+  // is not spent on them.
+  if (out.byRecipient.size === 0) return out;
+  for (const row of await reversedInWindow(conn, v, userId, startsAt, endsAt)) {
+    out.back += row.amount;
+    const seat = out.byRecipient.get(row.toId);
+    if (seat) seat.back += row.amount;
   }
   return out;
 }
 
-/** The dial times the stage, which is the whole of `Allowance.total`. */
 function allowanceTotalFor(stageMultiplier: number): number {
   // ONE ALLOWANCE (R73). This read the engine's own flat
   // `economy.giving_allowance_per_moon` (30) while the acknowledgement flow
@@ -1576,6 +1529,22 @@ export async function allowanceFor(
   at: Date = new Date(),
 ): Promise<Allowance> {
   const { startsAt, endsAt, key } = cycleWindow(at);
+  // ONE ALLOWANCE (R73). This read the engine's own flat
+  // `economy.giving_allowance_per_moon` (30) while the acknowledgement flow
+  // read `gratitude.base_budget` times the giver's stage multiplier (100 and
+  // up). Both sum their spending out of the same `gratitude_log` rows, so the
+  // two totals were two answers to one question and the stricter one silently
+  // won for anyone who used that door.
+  //
+  // The multiplier is a NUMBER the caller has already resolved, never a
+  // resolver this function calls: `give` reads it before it opens its
+  // SERIALIZABLE transaction, so nothing here reaches for a second pooled
+  // connection while holding a lock on the first.
+  //
+  // What a reversal hands back, to whom and in which cycle is decided in one
+  // place, `gratitudeGivenInCycle` above, because `writeGratitudeRow` weighs
+  // the same two figures for the share cap under its lock and the two must
+  // never read a gift differently.
   const giving = await gratitudeGivenInCycle(conn, userId, startsAt, endsAt);
   return allowanceFrom(allowanceTotalFor(stageMultiplier), key, giving);
 }
@@ -1602,14 +1571,27 @@ export interface GiveInput {
 /**
  * The most one member may put on ONE other member this cycle (R73).
  *
- * A share of the giver's own allowance, so it means the same thing at 100 and
- * at 500 and a village that doubles `gratitude.base_budget` does not silently
- * double how much of one person's standing can come from one relationship. A
- * cap of 1/N is the sentence "at least N people" written as one number.
+ * A fraction of the giver's own allowance, so it means the same thing at 105
+ * and at 525 and a village that doubles `gratitude.base_budget` does not
+ * silently double how much of one person's standing can come from one
+ * relationship.
  *
- * The floor of 1 is a bound, never a guess: 1% of an allowance of 50 rounds to
- * zero, and a zero here would refuse every send in the village while both
- * dials still read as sane numbers. It is stated on the dial itself.
+ * THE DIAL IS THE COUNT NOW, and this comment used to argue for it before the
+ * registry caught up: "a cap of 1/N is the sentence 'at least N people' written
+ * as one number." It was carrying a percentage and dividing it back out, which
+ * is the same arithmetic with a worse unit on the founder's screen. 25% and
+ * "4 people" are the same rule, and only one of them is a sentence anybody
+ * says out loud. `gratitude.full_sends_per_cycle` is N directly, so the
+ * division happens once, here, and the hearts a member sees on the wall are
+ * this same N rather than a second figure that could drift from it.
+ *
+ * Sending to MORE than N people stays allowed, because this bounds the amount
+ * one person may receive and never the number of sends. Past N the allowance
+ * is simply spread thinner, which is the honest shape of a wider circle.
+ *
+ * The floor of 1 is a bound, never a guess: an allowance of 5 across 7 sends
+ * rounds to zero, and a zero here would refuse every send in the village while
+ * both dials still read as sane numbers. It is stated on the dial itself.
  *
  * LIVES HERE, not in `server/lib/gratitude.ts`, as of the concurrency fix
  * below: this file is the guarded engine both gratitude doors write through
@@ -1627,8 +1609,52 @@ export interface GiveInput {
  */
 export function shareCapFor(allowanceTotal: number): number {
   if (allowanceTotal <= 0) return 0;
-  const share = numberVar("gratitude.max_share_per_recipient");
-  return Math.max(1, Math.floor((allowanceTotal * share) / 100));
+  // Guarded rather than trusted: the dial's own min is 1, and a village that
+  // reaches the column some other way must not divide by zero and hand every
+  // member an Infinity ceiling, which reads as "no limit" and is the one
+  // failure this function exists to prevent.
+  const fullSends = Math.max(1, Math.floor(numberVar("gratitude.full_sends_per_cycle")));
+  return Math.max(1, Math.floor(allowanceTotal / fullSends));
+}
+
+/**
+ * How many full-strength gifts this allowance holds, which is what the wall
+ * draws as hearts.
+ *
+ * Derived from the cap rather than read off the dial, and that is the whole
+ * point. `shareCapFor` floors, so an allowance of 100 across 7 sends gives a
+ * ceiling of 14 and SEVEN of those is 98: the dial says 7 and the allowance
+ * genuinely holds 7. But an allowance of 5 across 7 sends floors the ceiling
+ * to the bound of 1, and five 1s is all there is, so the honest answer is 5
+ * and not the 7 on the dial. Reading the dial directly would have drawn two
+ * hearts a member could never fill, which is the displayed-number-versus-
+ * actual-behaviour defect this codebase keeps finding.
+ *
+ * ── IT IS NOT `spreadsAcross`, AND THEY MUST NOT BE RECONCILED ───────────
+ *
+ * server/lib/dryRun.ts computes `ceil(allowance / cap)` and calls it
+ * `spreadsAcross`. The two disagree whenever the allowance does not divide
+ * evenly, and both are right, because they answer different questions:
+ *
+ *   fullSendsIn    how many FULL-STRENGTH gifts the allowance holds.
+ *                  100 across 7 is 7, each of 14, and 2 are left over.
+ *   spreadsAcross  how many PEOPLE it takes to spend the allowance to zero.
+ *                  100 across 7 is 8, because somebody has to take the last 2.
+ *
+ * The wall draws this one as hearts, because the dial is named after full
+ * sends and a heart is one of them. A future reader finding the mismatch
+ * should not make them agree; they should check that neither is wearing the
+ * other's words, which is the bug that actually shipped once: the hearts row
+ * borrowed "the fewest who can take your whole allowance" and was false in six
+ * of ten plausible dial settings.
+ */
+export function fullSendsIn(allowanceTotal: number): number {
+  const cap = shareCapFor(allowanceTotal);
+  if (cap <= 0) return 0;
+  return Math.min(
+    Math.max(1, Math.floor(numberVar("gratitude.full_sends_per_cycle"))),
+    Math.floor(allowanceTotal / cap),
+  );
 }
 
 /**

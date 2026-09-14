@@ -93,7 +93,11 @@ describe("GET /api/paths/ladders", () => {
     const handler = mounted({ id: "u1", paths: [] }, pool);
     const { res, out } = makeRes();
     await handler({}, res);
-    expect(out.body).toEqual({ ladders: [] });
+    // `paths` is present and empty on purpose. The client holds null as
+    // UNKNOWN and draws nothing for it, so omitting the key would make a
+    // member who walks no path indistinguishable from a request that never
+    // came back. Empty is an answer; absent is not.
+    expect(out.body).toEqual({ ladders: [], paths: {} });
     expect(asked).toHaveLength(0);
   });
 

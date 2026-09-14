@@ -97,12 +97,75 @@
  * that never comes due. `termEndsAtFromCycles` computes the instant from the
  * lunar clock instead, and `seatCatalystsAsStewards` refuses to seat anybody
  * against an open-ended season rather than writing a term nothing will end.
+ *
+ * ── WHERE THE STATEMENTS LIVE, AND WHY THEY LEFT ───────────────────────────
+ *
+ * This file held twenty-five raw SQL statements across seven tables. It holds
+ * none now. Every one of them moved into `server/repos`, one module per table,
+ * and this module kept the rules:
+ *
+ *   server/repos/ballotVetoes.ts         `ballot_vetoes`, the acts themselves
+ *   server/repos/stewardshipBallots.ts   `ballots`: the subject census, and
+ *                                        the ballot's copy of a veto reason
+ *   server/repos/proposalVetoReasons.ts  `mechanics_proposals.veto_reason`,
+ *                                        the proposer's copy
+ *   server/repos/stewardRoles.ts         `roles`, where the veto is carried
+ *   server/repos/permissionHoldings.ts   `role_holders`, the permission plane
+ *   server/repos/roleHolderTerms.ts      `role_holder_terms`, the history
+ *   server/repos/users.ts                `catalystUserIds`, on the members
+ *                                        repository that already existed
+ *
+ * THE SPLIT IS NOT FILING. Two of this module's promises are promises about
+ * ENUMERABILITY and neither survives scattered statements:
+ *
+ *  1. A REDACTION REACHES EVERY COPY. `VETO_TEXT_COLUMNS` names three columns
+ *     on three tables holding one steward's words, and the first build of the
+ *     redaction reached one of them. Three repo modules, each openable, is
+ *     what makes "did we get all of it" a question with an answer.
+ *  2. THE CACHES ABOVE `roles` AND `role_holders` STAY CORRECT. Both are
+ *     served from memory by `rolesRepo` and `roleHoldersRepo` in
+ *     server/index.ts, and the capability gate reads them. Every write that
+ *     goes underneath one now sits in a file that says so at the top.
+ *
+ * Nothing here holds a lock or sits inside a caller's transaction, so every
+ * statement moved as a function taking a pool and none had to stay.
  */
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool } from "mysql2/promise";
 import type { Criticality } from "../../shared/governanceEngine";
 import type { Capability } from "../../shared/capabilities";
 import { kindOfSet, kindOfSubject, type GovernanceKind } from "../../shared/governanceKinds";
 import { cycleBoundsFor, cycleStartMs } from "../../shared/lunar";
+import {
+  blankVetoActReason,
+  blankVetoActReasonsBy,
+  insertVetoActIfAbsent,
+  vetoActById,
+  vetoActFor,
+  vetoRowsForBallot,
+} from "../repos/ballotVetoes";
+import {
+  holdingsEndingBy,
+  holdingsForRoles,
+  insertHoldingIfAbsent,
+  userIdsHolding,
+} from "../repos/permissionHoldings";
+import {
+  blankProposalVetoReasonForBallot,
+  blankProposalVetoReasonsBy,
+} from "../repos/proposalVetoReasons";
+import { closeTerm, insertTerm, openTermRow, termRowsFor } from "../repos/roleHolderTerms";
+import {
+  allRoleCapabilities,
+  insertRoleIfAbsent,
+  roleCapabilityRow,
+  setRoleCapabilities,
+} from "../repos/stewardRoles";
+import {
+  blankBallotVetoReason,
+  blankBallotVetoReasonsBy,
+  subjectTypesOnBallots,
+} from "../repos/stewardshipBallots";
+import { catalystUserIds } from "../repos/users";
 import { moveCapabilityToVillage } from "./capabilityHolding";
 import { boolVar, stringVar } from "./variables";
 
@@ -342,8 +405,7 @@ export function stewardMayVetoAnything(raw: string = stringVar(STEWARD_SUBJECTS_
  * copy of it in this file would be the two-copies-of-one-rule trap.
  */
 export async function subjectTypesSeen(pool: Pool): Promise<string[]> {
-  const [rows] = await pool.query<RowDataPacket[]>("SELECT DISTINCT subject_type FROM ballots");
-  const seen = new Set(rows.map((r) => String(r.subject_type)));
+  const seen = new Set(await subjectTypesOnBallots(pool));
   for (const named of Array.from(parseList(stringVar(STEWARD_SUBJECTS_KEY)).named)) seen.add(named);
   return Array.from(seen).sort();
 }
@@ -584,26 +646,11 @@ export type VetoResult =
   | { ok: true; row: VetoRow; fresh: boolean }
   | { ok: false; error: string; standing: VetoRow | null };
 
-const VETO_COLS = "id, ballot_id, act, decided_by, reason, redacted_at, redacted_by, decided_at";
-
 /** The cap the founder's record holds. Plain text, counted in characters. */
 export const REASON_MAX = 2000;
 
 const iso = (v: unknown): string | null =>
   v === null || v === undefined ? null : v instanceof Date ? v.toISOString() : String(v);
-
-function rowToVeto(r: RowDataPacket): VetoRow {
-  return {
-    id: String(r.id),
-    ballotId: String(r.ballot_id),
-    act: r.act as StewardAct,
-    decidedBy: String(r.decided_by),
-    reason: String(r.reason ?? ""),
-    redactedAt: iso(r.redacted_at),
-    redactedBy: r.redacted_by === null || r.redacted_by === undefined ? null : String(r.redacted_by),
-    decidedAt: iso(r.decided_at) ?? "",
-  };
-}
 
 /**
  * The reason a veto has to carry.
@@ -650,13 +697,17 @@ export const REASON_NOTICE =
   "This reason is public and permanent. The village reads it beside the decision, and it stays there. " +
   "The words can be redacted later; the veto, your name and its time stay on the record.";
 
-/** Every act on a ballot, oldest first. */
+/**
+ * Every act on a ballot, oldest first.
+ *
+ * The statement, the column list and the ordering live in
+ * `server/repos/ballotVetoes.ts`. This stays exported under its own name
+ * because `server/routes/governanceVetoes.ts` and `server/lib/applyDue.ts`
+ * both import it, and the point of the move was the table's readers becoming
+ * enumerable rather than every caller learning a new word.
+ */
 export async function vetoesFor(pool: Pool, ballotId: string): Promise<VetoRow[]> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT ${VETO_COLS} FROM ballot_vetoes WHERE ballot_id = ? ORDER BY decided_at, id`,
-    [ballotId],
-  );
-  return rows.map(rowToVeto);
+  return vetoRowsForBallot(pool, ballotId);
 }
 
 /** One steward's act of one kind on one ballot, or null. */
@@ -666,11 +717,7 @@ export async function actFor(
   decidedBy: string,
   act: StewardAct,
 ): Promise<VetoRow | null> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT ${VETO_COLS} FROM ballot_vetoes WHERE ballot_id = ? AND decided_by = ? AND act = ?`,
-    [ballotId, decidedBy, act],
-  );
-  return rows[0] ? rowToVeto(rows[0]) : null;
+  return vetoActFor(pool, ballotId, decidedBy, act);
 }
 
 /**
@@ -699,11 +746,20 @@ async function record(
   }
   const before = await actFor(pool, input.ballotId, input.decidedBy, act);
   if (!before) {
-    await pool.query(
-      "INSERT INTO ballot_vetoes (id, ballot_id, act, decided_by, reason) VALUES (?,?,?,?,?) " +
-        "ON DUPLICATE KEY UPDATE id = id",
-      [`bv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, input.ballotId, act, input.decidedBy, reason],
-    );
+    /*
+     * THE ID IS MINTED HERE AND NOT IN THE REPO, the way
+     * `server/repos/subjectRefs.ts` leaves a reference's shape with the lib
+     * that owns it. `bv-` plus the millisecond plus six random characters is
+     * this lane's shape, and the repo takes whatever it is handed: a repo that
+     * minted would own a second opinion about what an act is called.
+     */
+    await insertVetoActIfAbsent(pool, {
+      id: `bv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      ballotId: input.ballotId,
+      act,
+      decidedBy: input.decidedBy,
+      reason,
+    });
   }
   const row = await actFor(pool, input.ballotId, input.decidedBy, act);
   if (!row) {
@@ -765,14 +821,19 @@ export const VETO_TEXT_COLUMNS: readonly string[] = [
   "mechanics_proposals.veto_reason",
 ];
 
-/** Blank the mirrored copies of one steward's veto reason on one ballot. */
+/**
+ * Blank the mirrored copies of one steward's veto reason on one ballot.
+ *
+ * Two tables, so two repo modules: `server/repos/stewardshipBallots.ts` holds
+ * the ballot's copy and `server/repos/proposalVetoReasons.ts` holds the
+ * proposer's. This function stays here because the thing it knows is not a
+ * statement, it is the LIST: the promise a redaction makes is about every copy
+ * of the words, and the one place that promise can be read whole is beside
+ * `VETO_TEXT_COLUMNS`.
+ */
 async function blankVetoMirrors(pool: Pool, ballotId: string, stewardId: string): Promise<void> {
-  await pool.query("UPDATE ballots SET veto_reason = '' WHERE id = ? AND vetoed_by = ?", [ballotId, stewardId]);
-  await pool.query(
-    "UPDATE mechanics_proposals SET veto_reason = '' WHERE vetoed_by = ? AND id IN " +
-      "(SELECT subject_ref FROM ballots WHERE id = ?)",
-    [stewardId, ballotId],
-  );
+  await blankBallotVetoReason(pool, ballotId, stewardId);
+  await blankProposalVetoReasonForBallot(pool, ballotId, stewardId);
 }
 
 /**
@@ -794,18 +855,14 @@ export async function redactVetoReason(
   vetoId: string,
   redactedBy: string,
 ): Promise<RedactionResult> {
-  const [rows] = await pool.query<RowDataPacket[]>(`SELECT ${VETO_COLS} FROM ballot_vetoes WHERE id = ?`, [vetoId]);
-  if (!rows[0]) return { ok: false, error: "No such act." };
-  const before = rowToVeto(rows[0]);
+  const before = await vetoActById(pool, vetoId);
+  if (!before) return { ok: false, error: "No such act." };
   if (before.redactedAt) return { ok: true, row: before, alreadyRedacted: true };
-  await pool.query(
-    "UPDATE ballot_vetoes SET reason = '', redacted_at = CURRENT_TIMESTAMP, redacted_by = ? WHERE id = ? AND redacted_at IS NULL",
-    [redactedBy, vetoId],
-  );
+  await blankVetoActReason(pool, vetoId, redactedBy);
   await blankVetoMirrors(pool, before.ballotId, before.decidedBy);
-  const [after] = await pool.query<RowDataPacket[]>(`SELECT ${VETO_COLS} FROM ballot_vetoes WHERE id = ?`, [vetoId]);
-  if (!after[0]) return { ok: false, error: "The act could not be read back after it was redacted." };
-  return { ok: true, row: rowToVeto(after[0]), alreadyRedacted: false };
+  const after = await vetoActById(pool, vetoId);
+  if (!after) return { ok: false, error: "The act could not be read back after it was redacted." };
+  return { ok: true, row: after, alreadyRedacted: false };
 }
 
 /**
@@ -828,21 +885,10 @@ export async function forgetStewardActs(
   pool: Pool,
   userId: string,
 ): Promise<{ redacted: number; ballots: number; proposals: number }> {
-  const [res] = await pool.query(
-    "UPDATE ballot_vetoes SET reason = '', redacted_at = CURRENT_TIMESTAMP, redacted_by = ? " +
-      "WHERE decided_by = ? AND redacted_at IS NULL",
-    [userId, userId],
-  );
-  const [onBallots] = await pool.query(
-    "UPDATE ballots SET veto_reason = '' WHERE vetoed_by = ? AND veto_reason IS NOT NULL AND veto_reason <> ''",
-    [userId],
-  );
-  const [onProposals] = await pool.query(
-    "UPDATE mechanics_proposals SET veto_reason = '' WHERE vetoed_by = ? AND veto_reason IS NOT NULL AND veto_reason <> ''",
-    [userId],
-  );
-  const rows = (r: unknown): number => Number((r as { affectedRows?: number }).affectedRows ?? 0);
-  return { redacted: rows(res), ballots: rows(onBallots), proposals: rows(onProposals) };
+  const redacted = await blankVetoActReasonsBy(pool, userId);
+  const ballots = await blankBallotVetoReasonsBy(pool, userId);
+  const proposals = await blankProposalVetoReasonsBy(pool, userId);
+  return { redacted, ballots, proposals };
 }
 
 // ── The seat ────────────────────────────────────────────────────────────────
@@ -918,10 +964,9 @@ export const DEFAULT_TERM_CYCLES = 3;
  * has to see that role or it would leave the real seat unprotected.
  */
 export async function rolesCarryingVeto(pool: Pool): Promise<Map<string, string>> {
-  const [rows] = await pool.query<RowDataPacket[]>("SELECT id, name, capabilities FROM roles");
   const out = new Map<string, string>();
-  for (const r of rows) {
-    if (roleCapabilityList(r.capabilities).includes(STEWARD_VETO)) out.set(String(r.id), String(r.name ?? r.id));
+  for (const r of await allRoleCapabilities(pool)) {
+    if (roleCapabilityList(r.capabilities).includes(STEWARD_VETO)) out.set(r.id, String(r.name ?? r.id));
   }
   return out;
 }
@@ -956,20 +1001,18 @@ export async function stewardsSeated(pool: Pool, now: Date = new Date()): Promis
   const roles = await rolesCarryingVeto(pool);
   if (roles.size === 0) return [];
   const ids = Array.from(roles.keys());
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT id, role_id, user_id, granted_at, term_ends_at, season_id FROM role_holders " +
-      `WHERE role_id IN (${ids.map(() => "?").join(",")}) ORDER BY granted_at, id`,
-    ids,
-  );
+  // The early return above is `holdingsForRoles`'s precondition as well as
+  // this function's answer: an empty list would reach the statement as `IN ()`.
+  const rows = await holdingsForRoles(pool, ids);
   return rows.map((r) => ({
-    id: String(r.id),
-    roleId: String(r.role_id),
-    roleName: roles.get(String(r.role_id)) ?? String(r.role_id),
-    userId: String(r.user_id),
-    termEndsAt: iso(r.term_ends_at),
-    seasonId: r.season_id === null || r.season_id === undefined ? null : String(r.season_id),
-    grantedAt: iso(r.granted_at) ?? "",
-    lapsed: holdingHasLapsed({ termEndsAt: r.term_ends_at as Date | null }, now),
+    id: r.id,
+    roleId: r.roleId,
+    roleName: roles.get(r.roleId) ?? r.roleId,
+    userId: r.userId,
+    termEndsAt: iso(r.termEndsAt),
+    seasonId: r.seasonId,
+    grantedAt: iso(r.grantedAt) ?? "",
+    lapsed: holdingHasLapsed({ termEndsAt: r.termEndsAt }, now),
   }));
 }
 
@@ -1360,10 +1403,13 @@ export interface SeatingReport {
  *
  * THE CALLER MUST RELOAD THE ROLE CACHES. `roles` and `role_holders` are
  * served from an in-process cache built at boot (`rolesRepo`,
- * `roleHoldersRepo` in server/index.ts), and this writes SQL underneath it. A
- * caller that does not call `rolesRepo.load()` and `roleHoldersRepo.load()`
- * after a report with `roleCreated` or a non-empty `seated` will serve the old
- * answer until the process restarts, and the capability gate reads that cache.
+ * `roleHoldersRepo` in server/index.ts), and the writes this makes go
+ * underneath it: `server/repos/stewardRoles.ts` and
+ * `server/repos/permissionHoldings.ts` carry the same warning on the
+ * statements themselves. A caller that does not call `rolesRepo.load()` and
+ * `roleHoldersRepo.load()` after a report with `roleCreated` or a non-empty
+ * `seated` will serve the old answer until the process restarts, and the
+ * capability gate reads that cache.
  */
 export async function seatCatalystsAsStewards(
   pool: Pool,
@@ -1396,31 +1442,25 @@ export async function seatCatalystsAsStewards(
   // 1. Find or create the role. A village that already renamed it keeps its
   //    name: only the slug is looked up, and the name column is never
   //    overwritten by this call.
-  const [existing] = await pool.query<RowDataPacket[]>(
-    "SELECT id, name, capabilities FROM roles WHERE id = ?",
-    [STEWARD_ROLE_ID],
-  );
-  if (!existing[0]) {
-    await pool.query(
-      "INSERT INTO roles (id, name, description, capabilities, sort_order) VALUES (?,?,?,?,?) " +
-        "ON DUPLICATE KEY UPDATE id = id",
-      [
-        STEWARD_ROLE_ID,
-        STEWARD_ROLE_NAME,
+  const existing = await roleCapabilityRow(pool, STEWARD_ROLE_ID);
+  if (!existing) {
+    await insertRoleIfAbsent(pool, {
+      id: STEWARD_ROLE_ID,
+      name: STEWARD_ROLE_NAME,
+      description:
         "Can stop a decision the village has already carried, inside the window before it lands, and has to say why. Training wheels: a village that no longer needs the seat lets it stand empty, and its decisions land the same way.",
-        JSON.stringify([STEWARD_VETO]),
-        0,
-      ],
-    );
+      capabilitiesJson: JSON.stringify([STEWARD_VETO]),
+      sortOrder: 0,
+    });
     base.roleCreated = true;
     base.capabilityGranted = true;
   } else {
-    const list = roleCapabilityList(existing[0].capabilities);
+    const list = roleCapabilityList(existing.capabilities);
     if (!list.includes(STEWARD_VETO)) {
-      await pool.query("UPDATE roles SET capabilities = ? WHERE id = ?", [
-        JSON.stringify([...list, STEWARD_VETO]),
-        STEWARD_ROLE_ID,
-      ]);
+      // The union is computed here and the repo writes what it is handed, so
+      // this call can never be silently additive: a caller that meant to
+      // REMOVE a power uses the same door.
+      await setRoleCapabilities(pool, STEWARD_ROLE_ID, JSON.stringify([...list, STEWARD_VETO]));
       base.capabilityGranted = true;
     }
   }
@@ -1453,19 +1493,13 @@ export async function seatCatalystsAsStewards(
   base.holdingMoved = moved.ok;
   if (!moved.ok) base.error = moved.error;
 
-  // 3. Every catalyst. The stored role value is `founder`; the word a player
-  //    reads is Catalyst, and this query is not a surface a player reads.
-  const [catalysts] = await pool.query<RowDataPacket[]>(
-    "SELECT id FROM users WHERE role = 'founder' ORDER BY id",
-  );
-  const [held] = await pool.query<RowDataPacket[]>(
-    "SELECT user_id FROM role_holders WHERE role_id = ?",
-    [STEWARD_ROLE_ID],
-  );
-  const already = new Set(held.map((r) => String(r.user_id)));
+  // 3. Every catalyst. The stored role value is `founder` and the word a
+  //    player reads is Catalyst; `catalystUserIds` in server/repos/users.ts
+  //    holds the statement and the argument for asking by the stored value.
+  const catalysts = await catalystUserIds(pool);
+  const already = new Set(await userIdsHolding(pool, STEWARD_ROLE_ID));
 
-  for (const c of catalysts) {
-    const userId = String(c.id);
+  for (const userId of catalysts) {
     if (already.has(userId)) {
       base.alreadySeated.push(userId);
       continue;
@@ -1474,24 +1508,22 @@ export async function seatCatalystsAsStewards(
      * BOUND AS A Date, NEVER AS THE ISO STRING. MySQL refuses
      * `2026-12-01T00:00:00.000Z` for a `timestamp` column outright, so passing
      * a string through made every seating throw, inside a launch closer that
-     * runs with no transaction around it.
+     * runs with no transaction around it. `insertHoldingIfAbsent` now types
+     * the parameter as `Date | null`, so the compiler holds the rule that
+     * this comment used to hold alone.
      *
      * The ballot is the grantor, the same way a role_seat ballot is. A holding
      * whose granted_by is a ballot id reads back as "the village put them
      * here" rather than as an administrator's hand.
      */
-    await pool.query(
-      "INSERT INTO role_holders (id, role_id, user_id, granted_by, term_ends_at, season_id) VALUES (?,?,?,?,?,?) " +
-        "ON DUPLICATE KEY UPDATE role_id = role_id",
-      [
-        `rh-steward-${userId}`.slice(0, 64),
-        STEWARD_ROLE_ID,
-        userId,
-        launchBallotId,
-        termDate,
-        turn.currentSeasonId,
-      ],
-    );
+    await insertHoldingIfAbsent(pool, {
+      id: `rh-steward-${userId}`.slice(0, 64),
+      roleId: STEWARD_ROLE_ID,
+      userId,
+      grantedBy: launchBallotId,
+      termEndsAt: termDate,
+      seasonId: turn.currentSeasonId,
+    });
     await recordTermStarted(pool, {
       roleId: STEWARD_ROLE_ID,
       userId,
@@ -1543,45 +1575,25 @@ export async function recordTermStarted(
   const open = await openTermFor(pool, input.roleId, input.userId);
   if (open) return { id: open.id, fresh: false };
   const id = `rht-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  await pool.query(
-    "INSERT INTO role_holder_terms (id, role_id, user_id, term_started_at, term_ends_at, season_id) VALUES (?,?,?,?,?,?)",
-    [id, input.roleId, input.userId, input.startedAt ?? new Date(), input.termEndsAt, input.seasonId],
-  );
+  await insertTerm(pool, {
+    id,
+    roleId: input.roleId,
+    userId: input.userId,
+    startedAt: input.startedAt ?? new Date(),
+    termEndsAt: input.termEndsAt,
+    seasonId: input.seasonId,
+  });
   return { id, fresh: true };
-}
-
-const TERM_COLS = "id, role_id, user_id, term_started_at, term_ends_at, season_id, ended_at, ended_by";
-
-function rowToTerm(r: RowDataPacket): TermRow {
-  return {
-    id: String(r.id),
-    roleId: String(r.role_id),
-    userId: String(r.user_id),
-    termStartedAt: iso(r.term_started_at) ?? "",
-    termEndsAt: iso(r.term_ends_at),
-    seasonId: r.season_id === null || r.season_id === undefined ? null : String(r.season_id),
-    endedAt: iso(r.ended_at),
-    endedBy: r.ended_by === null || r.ended_by === undefined ? null : String(r.ended_by),
-  };
 }
 
 /** The term on this seat that has not been closed, or null. */
 export async function openTermFor(pool: Pool, roleId: string, userId: string): Promise<TermRow | null> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT ${TERM_COLS} FROM role_holder_terms WHERE role_id = ? AND user_id = ? AND ended_at IS NULL ` +
-      "ORDER BY term_started_at DESC, id DESC",
-    [roleId, userId],
-  );
-  return rows[0] ? rowToTerm(rows[0]) : null;
+  return openTermRow(pool, roleId, userId);
 }
 
 /** Every term this seat has ever held, oldest first. */
 export async function termHistoryFor(pool: Pool, roleId: string, userId: string): Promise<TermRow[]> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT ${TERM_COLS} FROM role_holder_terms WHERE role_id = ? AND user_id = ? ORDER BY term_started_at, id`,
-    [roleId, userId],
-  );
-  return rows.map(rowToTerm);
+  return termRowsFor(pool, roleId, userId);
 }
 
 /**
@@ -1598,11 +1610,7 @@ export async function recordTermEnded(
 ): Promise<{ ended: boolean }> {
   const open = await openTermFor(pool, input.roleId, input.userId);
   if (!open) return { ended: false };
-  await pool.query("UPDATE role_holder_terms SET ended_at = ?, ended_by = ? WHERE id = ? AND ended_at IS NULL", [
-    input.endedAt ?? new Date(),
-    input.endedBy ?? null,
-    open.id,
-  ]);
+  await closeTerm(pool, open.id, input.endedAt ?? new Date(), input.endedBy ?? null);
   return { ended: true };
 }
 
@@ -1631,19 +1639,18 @@ export async function expiringHoldings(
   withinDays = 14,
   now: Date = new Date(),
 ): Promise<ExpiringHolding[]> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT h.id, h.role_id, h.user_id, h.term_ends_at, r.name AS role_name FROM role_holders h " +
-      "LEFT JOIN roles r ON r.id = h.role_id " +
-      "WHERE h.term_ends_at IS NOT NULL AND h.term_ends_at <= ? ORDER BY h.term_ends_at, h.id",
-    [new Date(now.getTime() + withinDays * 86400000)],
-  );
+  // The window is the JOB'S policy and stays here; the statement takes the
+  // instant it produces. See `holdingsEndingBy` in
+  // server/repos/permissionHoldings.ts for why already-ended holdings are in
+  // the answer rather than filtered out of it.
+  const rows = await holdingsEndingBy(pool, new Date(now.getTime() + withinDays * 86400000));
   return rows.map((r) => {
-    const ends = r.term_ends_at instanceof Date ? r.term_ends_at : new Date(String(r.term_ends_at));
+    const ends = r.termEndsAt instanceof Date ? r.termEndsAt : new Date(String(r.termEndsAt));
     return {
-      id: String(r.id),
-      roleId: String(r.role_id),
-      roleName: String(r.role_name ?? r.role_id),
-      userId: String(r.user_id),
+      id: r.id,
+      roleId: r.roleId,
+      roleName: String(r.roleName ?? r.roleId),
+      userId: r.userId,
       termEndsAt: ends.toISOString(),
       daysLeft: Math.ceil((ends.getTime() - now.getTime()) / 86400000),
       ended: ends.getTime() <= now.getTime(),

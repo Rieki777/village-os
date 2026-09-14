@@ -530,9 +530,6 @@ export default function VillageMap() {
                       lenses={lensNodes}
                       svgRef={svgRef}
                     />
-                    <div className="absolute left-2 bottom-2 z-10">
-                      <Legend seats={data.roles} power={data.power} footer={<CurrencyPicker />} />
-                    </div>
                   </div>
                   <aside data-scroll-contain className="w-80 shrink-0 bg-card border border-border rounded-2xl p-5 sticky top-24 max-h-[80vh] overflow-y-auto hidden md:block">
                     {selectedSeat ? (
@@ -565,6 +562,22 @@ export default function VillageMap() {
                         }}
                       />
                     )}
+
+                    {/* THE KEY BELONGS BESIDE THE PICTURE, NOT ON TOP OF IT.
+                        It floated at the canvas's bottom-left corner, and
+                        once the stage grew to 86vh the disc reaches every
+                        corner: it was sitting over Business & Finance and
+                        Community Life, hiding the two circles a reader would
+                        have to move the panel to see.
+
+                        There is no free corner on a disc that fills its box,
+                        so the honest place is the column that already has
+                        room. The panel is `sticky top-24` and scrolls, so the
+                        key travels with whatever card is open instead of
+                        competing with the map for the same pixels. */}
+                    <div className="mt-5 pt-5 border-t border-border">
+                      <Legend seats={data.roles} power={data.power} footer={<CurrencyPicker />} />
+                    </div>
                   </aside>
                 </div>
               )}
