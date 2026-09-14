@@ -32,7 +32,7 @@
  * the CALLER's connection cannot become a function that takes a pool, however
  * much tidier the count would look.
  */
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 
 /**
  * Every token balance held by one account, as slug to cached balance.
@@ -51,4 +51,52 @@ export async function balanceRowsFor(pool: Pool, accountId: string): Promise<Rec
   const out: Record<string, number> = {};
   for (const r of rows) out[String(r.token_type)] = Number(r.balance);
   return out;
+}
+
+/**
+ * One account's balance row in one token, locked FOR UPDATE ON THE CALLER'S
+ * CONNECTION.
+ *
+ * This is the rule in the header kept, not bent: the statement depends on the
+ * caller's connection, so the function takes that connection and nothing
+ * else. Its caller is `requestRedemption` (server/lib/redemptionStore.ts),
+ * which re-reads the balance inside the SERIALIZABLE transaction it opened
+ * and commits the redemption row under this lock.
+ */
+export async function lockedBalanceRows(
+  conn: PoolConnection,
+  accountId: string,
+  tokenType: string,
+): Promise<RowDataPacket[]> {
+  const [bal] = await conn.query<RowDataPacket[]>(
+    "SELECT `balance` FROM `token_balances` WHERE `account_id` = ? AND `token_type` = ? FOR UPDATE",
+    [accountId, tokenType],
+  );
+  return bal;
+}
+
+/**
+ * Every token balance one SYSTEM account holds, as the driver returned the
+ * rows. A display and reconciliation read on the pool, outside any
+ * transaction. Callers: `holdReconciliation` and `retiredSupply` in
+ * server/lib/redemptionStore.ts, for `sys:redemption-hold` and `sys:redeemed`.
+ */
+export async function accountBalanceRows(pool: Pool, accountId: string): Promise<RowDataPacket[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT `token_type`, `balance` FROM `token_balances` WHERE `account_id` = ?",
+    [accountId],
+  );
+  return rows;
+}
+
+/**
+ * The same read with the token column named `slug`, which is the shape
+ * `publicSupply` in server/lib/economy.ts reads the waning sink in.
+ */
+export async function accountBalanceRowsBySlug(pool: Pool, accountId: string): Promise<RowDataPacket[]> {
+  const [waned] = await pool.query<RowDataPacket[]>(
+    "SELECT `token_type` AS slug, `balance` FROM `token_balances` WHERE `account_id` = ?",
+    [accountId],
+  );
+  return waned;
 }

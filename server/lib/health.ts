@@ -31,7 +31,8 @@ import { cycleBoundsFor } from "../../shared/lunar";
 import { villageId, type StageMultiplierFor } from "./economy";
 import { numberVar } from "./variables";
 import { activeClock } from "./gratitude-cycles";
-import { REVERSED_GRATITUDE_FROM } from "../repos/gratitude";
+import { givenByRealMembersInWindow, reversedFromRealMembersInWindow } from "../repos/gratitude";
+import { realMemberIdRows } from "../repos/users";
 
 export interface SnapshotCycle {
   id: string;
@@ -244,9 +245,7 @@ async function snapshotAllowance(
    * resolver reads a member row and a quest count, so this is bounded by the
    * roster and not by anything a member can drive.
    */
-  const [roster] = await pool.query<RowDataPacket[]>(
-    "SELECT id FROM users WHERE email NOT LIKE '%anonymized.invalid' AND is_example = 0",
-  );
+  const roster = await realMemberIdRows(pool);
   let total = 0;
   for (const r of roster) {
     const multiplier = Math.max(0, Number(await stageMultiplierFor(String(r.id))) || 0);
@@ -285,24 +284,12 @@ async function snapshotAllowance(
    * give, and unspent to a floor of zero, which is the shape of a lie that
    * looks like health.
    */
-  const [[givenRow]] = await pool.query<any[]>(
-    "SELECT COALESCE(SUM(g.amount), 0) AS given FROM gratitude_log g " +
-      "JOIN users u ON u.id = g.from_id " +
-      "WHERE g.village_id = ? AND g.at >= ? AND g.at < ? AND g.is_example = 0 " +
-      "AND u.email NOT LIKE '%anonymized.invalid' AND u.is_example = 0",
-    [villageId(), start, end],
-  );
+  const [givenRow] = await givenByRealMembersInWindow(pool, villageId(), start, end);
   // Reversals found through the posting they undo, windowed on the GIFT, the
   // same definition the allowance and the settlement read. The old prefix
   // match saw one door's reversals, windowed them on the correction's own
   // moment, and subtracted ledger minor units from human ones.
-  const [[reversedRow]] = await pool.query<any[]>(
-    "SELECT COALESCE(SUM(g.amount), 0) AS back " +
-      REVERSED_GRATITUDE_FROM +
-      " AND g.village_id = ? AND g.at >= ? AND g.at < ? AND g.is_example = 0 " +
-      "AND g.from_id IN (SELECT u.id FROM users u WHERE u.email NOT LIKE '%anonymized.invalid' AND u.is_example = 0)",
-    [villageId(), start, end],
-  );
+  const [reversedRow] = await reversedFromRealMembersInWindow(pool, villageId(), start, end);
   const raw = Number(givenRow.given);
   const reversed = Number(reversedRow.back);
   const given = Math.max(0, raw - reversed);

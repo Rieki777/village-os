@@ -31,6 +31,7 @@
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { balanceRowsFor } from "../repos/tokenBalances";
+import { accountEntryRows, idempotencyKeyRows, keysCollatingWith, questConsentCreditRows } from "../repos/tokenLedger";
 import { issuanceRefusal } from "./gameStart";
 
 export type TokenType = string;
@@ -670,10 +671,7 @@ function validateLeg(input: TransferInput): { tokenType: string; amount: number 
  * a looser test.
  */
 export async function ledgerEntryExists(pool: Pool, idempotencyKey: string): Promise<boolean> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT 1 FROM token_ledger WHERE idempotency_key = ? LIMIT 1",
-    [idempotencyKey],
-  );
+  const rows = await idempotencyKeyRows(pool, idempotencyKey);
   return rows.length > 0;
 }
 
@@ -1377,10 +1375,7 @@ async function postTransferPairOnce(
       // different orders minted the same key — unreachable under a single
       // transaction, so it is a key-shape bug, and the honest response is to
       // refuse rather than guess which half is real.
-      const [found] = await pool.query<RowDataPacket[]>(
-        "SELECT idempotency_key FROM token_ledger WHERE idempotency_key IN (?, ?)",
-        [legs[0].idempotencyKey, legs[1].idempotencyKey],
-      );
+      const found = await keysCollatingWith(pool, legs[0].idempotencyKey, legs[1].idempotencyKey);
       // BYTE-EXACT, for the reason the single-leg poster spells out: the
       // index folds case and pads spaces, so a row it returned here may be a
       // DIFFERENT key that merely collates equal, and counting it as one of
@@ -1575,11 +1570,7 @@ export interface MemberLedgerEntry {
 /** A member's movements, newest first, signed from their perspective. */
 export async function entriesForMember(pool: Pool, userId: string): Promise<MemberLedgerEntry[]> {
   const acct = memberAccount(userId);
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT id, from_account, to_account, token_type, amount, source, source_ref, description, at " +
-      "FROM token_ledger WHERE to_account = ? OR from_account = ? ORDER BY at DESC, id DESC",
-    [acct, acct],
-  );
+  const rows = await accountEntryRows(pool, acct);
   return rows.map((r) => ({
     id: String(r.id),
     tokenType: String(r.token_type),
@@ -1620,11 +1611,7 @@ export async function entriesForMember(pool: Pool, userId: string): Promise<Memb
  * looks like.
  */
 export async function questCreditsFor(pool: Pool, userId: string): Promise<Map<string, number>> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT source_ref, amount FROM token_ledger " +
-      "WHERE to_account = ? AND source = 'quest_consent' AND token_type = ? AND source_ref IS NOT NULL",
-    [memberAccount(userId), PLATFORM_TOKEN],
-  );
+  const rows = await questConsentCreditRows(pool, memberAccount(userId), PLATFORM_TOKEN);
   const credits = new Map<string, number>();
   for (const r of rows) credits.set(String(r.source_ref), Number(r.amount));
   return credits;

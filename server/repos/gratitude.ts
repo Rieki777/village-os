@@ -109,6 +109,50 @@ export async function reversedInWindow(
   return rows.map((r) => ({ toId: String(r.to_id), amount: Number(r.back) }));
 }
 
+/**
+ * What the village's REAL members gave in a window, in HUMAN units, as one
+ * row. Joined to `users` so a gift from somebody anonymised or an example row
+ * is left out, the same roster `realMemberIdRows` (server/repos/users.ts)
+ * reads. Its caller is `snapshotAllowance` in server/lib/health.ts, which
+ * subtracts the row below and floors the difference.
+ */
+export async function givenByRealMembersInWindow(
+  pool: Pool,
+  villageId: string,
+  start: Date,
+  end: Date,
+): Promise<any[]> {
+  const [rows] = await pool.query<any[]>(
+    "SELECT COALESCE(SUM(g.amount), 0) AS given FROM gratitude_log g " +
+      "JOIN users u ON u.id = g.from_id " +
+      "WHERE g.village_id = ? AND g.at >= ? AND g.at < ? AND g.is_example = 0 " +
+      "AND u.email NOT LIKE '%anonymized.invalid' AND u.is_example = 0",
+    [villageId, start, end],
+  );
+  return rows;
+}
+
+/**
+ * The part of those gifts since reversed, as one row, windowed on the GIFT's
+ * timestamp through `REVERSED_GRATITUDE_FROM`, the same definition the
+ * allowance and the settlement read.
+ */
+export async function reversedFromRealMembersInWindow(
+  pool: Pool,
+  villageId: string,
+  start: Date,
+  end: Date,
+): Promise<any[]> {
+  const [rows] = await pool.query<any[]>(
+    "SELECT COALESCE(SUM(g.amount), 0) AS back " +
+      REVERSED_GRATITUDE_FROM +
+      " AND g.village_id = ? AND g.at >= ? AND g.at < ? AND g.is_example = 0 " +
+      "AND g.from_id IN (SELECT u.id FROM users u WHERE u.email NOT LIKE '%anonymized.invalid' AND u.is_example = 0)",
+    [villageId, start, end],
+  );
+  return rows;
+}
+
 export interface GratitudeEntry {
   id: string;
   kind: string;

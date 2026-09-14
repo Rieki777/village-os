@@ -30,8 +30,25 @@
  *
  * UNITS: minor everywhere in this file, human only at the route boundary.
  */
-import type { Pool, RowDataPacket, ResultSetHeader } from "mysql2/promise";
+import type { Pool, RowDataPacket } from "mysql2/promise";
 import { balanceOf, ledgerEntryExists, memberAccount, postTransfer, tokenDef } from "./ledger";
+import {
+  claimRedemptionState,
+  expiredIdRows,
+  heldRowsByToken,
+  historyRows,
+  insertRedemptionRow,
+  markHoldRefused,
+  openCountRows,
+  openedSinceRows,
+  openRedemptionRows,
+  owedRowsByToken,
+  queueRows,
+  redemptionRowsById,
+  unclaimConfirmation,
+} from "../repos/redemptions";
+import { accountBalanceRows, lockedBalanceRows } from "../repos/tokenBalances";
+import { lockUserRowForUpdate } from "../repos/users";
 import { fromLedgerUnits, keys, reverse, villageId } from "./economy";
 import { numberVar, stringVar, boolVar } from "./variables";
 import {
@@ -89,20 +106,13 @@ function rowToRedemption(r: RowDataPacket): RedemptionRow {
 }
 
 export async function redemptionById(pool: Pool, id: string): Promise<RedemptionRow | null> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT * FROM `redemptions` WHERE `id` = ? AND `village_id` = ?",
-    [id, villageId()],
-  );
+  const rows = await redemptionRowsById(pool, id, villageId());
   return rows[0] ? rowToRedemption(rows[0]) : null;
 }
 
 /** Everything this member has open. Ordered oldest first. */
 export async function openRedemptionsFor(pool: Pool, userId: string): Promise<RedemptionRow[]> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT * FROM `redemptions` WHERE `village_id` = ? AND `user_id` = ? AND `state` = 'requested' " +
-      "ORDER BY `created_at`",
-    [villageId(), userId],
-  );
+  const rows = await openRedemptionRows(pool, villageId(), userId);
   return rows.map(rowToRedemption);
 }
 
@@ -113,12 +123,7 @@ export async function openRedemptionsFor(pool: Pool, userId: string): Promise<Re
  * pools every member's. The two are compared by `holdReconciliation`.
  */
 export async function heldForRedemption(pool: Pool, userId: string): Promise<Record<string, number>> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT `token_slug`, COALESCE(SUM(`amount`),0) AS held FROM `redemptions` " +
-      "WHERE `village_id` = ? AND `user_id` = ? AND `state` = 'requested' AND `held_account` IS NOT NULL " +
-      "GROUP BY `token_slug`",
-    [villageId(), userId],
-  );
+  const rows = await heldRowsByToken(pool, villageId(), userId);
   const out: Record<string, number> = {};
   for (const r of rows) out[String(r.token_slug)] = Number(r.held ?? 0);
   return out;
@@ -126,28 +131,19 @@ export async function heldForRedemption(pool: Pool, userId: string): Promise<Rec
 
 /** How many this member has opened since a moment, for the per-cycle cap. */
 export async function redemptionsOpenedSince(pool: Pool, userId: string, since: Date): Promise<number> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT COUNT(*) AS n FROM `redemptions` WHERE `village_id` = ? AND `user_id` = ? AND `created_at` >= ?",
-    [villageId(), userId, since],
-  );
+  const rows = await openedSinceRows(pool, villageId(), userId, since);
   return Number(rows[0]?.n ?? 0);
 }
 
 /** What a member has ever asked for, newest first. */
 export async function redemptionHistory(pool: Pool, userId: string, limit = 20): Promise<RedemptionRow[]> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT * FROM `redemptions` WHERE `village_id` = ? AND `user_id` = ? ORDER BY `created_at` DESC LIMIT ?",
-    [villageId(), userId, Math.min(100, Math.max(1, limit))],
-  );
+  const rows = await historyRows(pool, villageId(), userId, Math.min(100, Math.max(1, limit)));
   return rows.map(rowToRedemption);
 }
 
 /** What is waiting on somebody with the key. Oldest first, so nothing rots. */
 export async function redemptionQueue(pool: Pool, limit = 100): Promise<RedemptionRow[]> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT * FROM `redemptions` WHERE `village_id` = ? AND `state` = 'requested' ORDER BY `created_at` LIMIT ?",
-    [villageId(), Math.min(500, Math.max(1, limit))],
-  );
+  const rows = await queueRows(pool, villageId(), Math.min(500, Math.max(1, limit)));
   return rows.map(rowToRedemption);
 }
 
@@ -224,12 +220,12 @@ export async function requestRedemption(pool: Pool, input: RedeemInput): Promise
   const id = newId();
   const conn = await pool.getConnection();
   try {
-    await conn.query("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+    await conn.query("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"); // module-review-ok: a session isolation setting, not a table read. It has no rows and no repo it could live in, and it must run on THIS connection immediately before this transaction opens (the economy.ts precedent).
     await conn.beginTransaction();
 
-    const [who] = await conn.query<RowDataPacket[]>("SELECT `id` FROM `users` WHERE `id` = ? FOR UPDATE", [
-      input.userId,
-    ]);
+    // THE SAME CONNECTION, so this lock is taken inside the transaction opened
+    // on the line above and held until the commit or rollback below.
+    const who = await lockUserRowForUpdate(conn, input.userId);
     if (!who.length) {
       await conn.rollback();
       return { ok: false, status: 404, error: "no such member" };
@@ -242,10 +238,7 @@ export async function requestRedemption(pool: Pool, input: RedeemInput): Promise
      * the member has, and the second hold posting would then be refused by the
      * ledger, leaving a row with nothing behind it.
      */
-    const [bal] = await conn.query<RowDataPacket[]>(
-      "SELECT `balance` FROM `token_balances` WHERE `account_id` = ? AND `token_type` = ? FOR UPDATE",
-      [memberAccount(input.userId), slug],
-    );
+    const bal = await lockedBalanceRows(conn, memberAccount(input.userId), slug);
     const lockedUnits = Number(bal[0]?.balance ?? 0);
     if (ask.amountUnits > lockedUnits) {
       await conn.rollback();
@@ -256,24 +249,19 @@ export async function requestRedemption(pool: Pool, input: RedeemInput): Promise
     }
 
     const expires = expiresAfter();
-    await conn.query(
-      "INSERT INTO `redemptions` (`id`, `village_id`, `user_id`, `token_slug`, `amount`, `asked_for`, " +
-        "`state`, `confirmed_by_mode`, `held_account`, `hold_key`, `burn_key`, `expires_at`) " +
-        "VALUES (?,?,?,?,?,?,'requested',?,?,?,?,?)",
-      [
-        id,
-        villageId(),
-        input.userId,
-        slug,
-        ask.amountUnits,
-        askedFor,
-        ask.confirmedBy,
-        hold ? REDEMPTION_HOLD : null,
-        hold ? keys.redemptionHold(villageId(), id) : null,
-        keys.redemptionBurn(villageId(), id),
-        expires,
-      ],
-    );
+    await insertRedemptionRow(conn, {
+      id,
+      villageId: villageId(),
+      userId: input.userId,
+      tokenSlug: slug,
+      amountUnits: ask.amountUnits,
+      askedFor,
+      confirmedByMode: ask.confirmedBy,
+      heldAccount: hold ? REDEMPTION_HOLD : null,
+      holdKey: hold ? keys.redemptionHold(villageId(), id) : null,
+      burnKey: keys.redemptionBurn(villageId(), id),
+      expiresAt: expires,
+    });
     await conn.commit();
   } catch (err: any) {
     try {
@@ -320,11 +308,7 @@ export async function requestRedemption(pool: Pool, input: RedeemInput): Promise
        * is not even findable. `refused` releases, and reversing a hold that
        * never posted is a no-op, so this cannot hand back tokens.
        */
-      await pool.query(
-        "UPDATE `redemptions` SET `state` = 'refused', `decided_at` = CURRENT_TIMESTAMP, " +
-          "`decision_note` = ? WHERE `id` = ? AND `state` = 'requested'",
-        ["the ledger refused the hold", id],
-      );
+      await markHoldRefused(pool, "the ledger refused the hold", id);
       return { ok: false, status: 500, error: res.error ?? "the ledger refused the hold" };
     }
   }
@@ -416,11 +400,14 @@ export async function settleRedemption(
     return { ok: false, reason: "terminal", error: verdict.error ?? "that redemption cannot move" };
   }
 
-  const [upd] = await pool.query<ResultSetHeader>(
-    "UPDATE `redemptions` SET `state` = ?, `decided_by` = ?, `decided_at` = CURRENT_TIMESTAMP, " +
-      "`decision_note` = ? WHERE `id` = ? AND `village_id` = ? AND `state` = ?",
-    [input.to, input.actorUserId, input.note.slice(0, 500), input.id, villageId(), row.state],
-  );
+  const upd = await claimRedemptionState(pool, {
+    to: input.to,
+    decidedBy: input.actorUserId,
+    note: input.note.slice(0, 500),
+    id: input.id,
+    villageId: villageId(),
+    fromState: row.state,
+  });
   if (upd.affectedRows !== 1) {
     return {
       ok: false,
@@ -463,11 +450,7 @@ export async function settleRedemption(
      * later.
      */
     if (row.heldAccount && row.holdKey && !(await ledgerEntryExists(pool, row.holdKey))) {
-      await pool.query(
-        "UPDATE `redemptions` SET `state` = 'requested', `decided_by` = NULL, `decided_at` = NULL, " +
-          "`decision_note` = NULL WHERE `id` = ? AND `village_id` = ? AND `state` = 'confirmed'",
-        [input.id, villageId()],
-      );
+      await unclaimConfirmation(pool, input.id, villageId());
       return {
         ok: false,
         reason: "burn-failed",
@@ -483,11 +466,7 @@ export async function settleRedemption(
       burn = { ok: false, duplicate: false, error: String(err?.message ?? err) };
     }
     if (!burn.ok && !burn.duplicate) {
-      await pool.query(
-        "UPDATE `redemptions` SET `state` = 'requested', `decided_by` = NULL, `decided_at` = NULL, " +
-          "`decision_note` = NULL WHERE `id` = ? AND `village_id` = ? AND `state` = 'confirmed'",
-        [input.id, villageId()],
-      );
+      await unclaimConfirmation(pool, input.id, villageId());
       return { ok: false, reason: "burn-failed", error: `nothing was destroyed: ${burn.error}` };
     }
     const after = await redemptionById(pool, input.id);
@@ -585,11 +564,7 @@ export async function retryRelease(
  * forever, and a NULL is never past.
  */
 export async function expireRedemptions(pool: Pool, now: Date = new Date()): Promise<number> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT `id` FROM `redemptions` WHERE `village_id` = ? AND `state` = 'requested' " +
-      "AND `expires_at` IS NOT NULL AND `expires_at` <= ? ORDER BY `created_at` LIMIT 200",
-    [villageId(), now],
-  );
+  const rows = await expiredIdRows(pool, villageId(), now);
   let closed = 0;
   for (const r of rows) {
     const res = await settleRedemption(pool, {
@@ -627,15 +602,8 @@ export async function expireRedemptions(pool: Pool, now: Date = new Date()): Pro
 export async function holdReconciliation(
   pool: Pool,
 ): Promise<Array<{ token: string; heldUnits: number; owedUnits: number; driftUnits: number; openCount: number }>> {
-  const [balances] = await pool.query<RowDataPacket[]>(
-    "SELECT `token_type`, `balance` FROM `token_balances` WHERE `account_id` = ?",
-    [REDEMPTION_HOLD],
-  );
-  const [owed] = await pool.query<RowDataPacket[]>(
-    "SELECT `token_slug`, COUNT(*) AS n, COALESCE(SUM(`amount`),0) AS total FROM `redemptions` " +
-      "WHERE `village_id` = ? AND `state` = 'requested' AND `held_account` IS NOT NULL GROUP BY `token_slug`",
-    [villageId()],
-  );
+  const balances = await accountBalanceRows(pool, REDEMPTION_HOLD);
+  const owed = await owedRowsByToken(pool, villageId());
   const owedBySlug = new Map(owed.map((r) => [String(r.token_slug), { n: Number(r.n), total: Number(r.total) }]));
   const slugs = new Set<string>([
     ...balances.map((r) => String(r.token_type)),
@@ -667,10 +635,7 @@ export async function holdReconciliation(
  * record of it.
  */
 export async function retiredSupply(pool: Pool): Promise<Record<string, number>> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT `token_type`, `balance` FROM `token_balances` WHERE `account_id` = ?",
-    [REDEEMED],
-  );
+  const rows = await accountBalanceRows(pool, REDEEMED);
   const out: Record<string, number> = {};
   for (const r of rows) out[String(r.token_type)] = Number(r.balance ?? 0);
   return out;
@@ -689,9 +654,6 @@ export async function retiredSupply(pool: Pool): Promise<Record<string, number>>
  * exit lane and is live. This is the whole of the work on this side.
  */
 export async function openRedemptionCount(pool: Pool, userId: string): Promise<number> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT COUNT(*) AS n FROM `redemptions` WHERE `village_id` = ? AND `user_id` = ? AND `state` = 'requested'",
-    [villageId(), userId],
-  );
+  const rows = await openCountRows(pool, villageId(), userId);
   return Number(rows[0]?.n ?? 0);
 }
