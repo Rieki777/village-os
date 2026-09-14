@@ -76,7 +76,7 @@ import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader
 import { applyChangeSet, applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
 import { landingRow } from "./lib/applyDue";
 import { notifyRollRows, type RollNotice } from "./lib/ballotNotices";
-import { forgetStewardActs, holdingHasLapsed, runTermWatch, setVetoWindowCheck, stewardMailRefusal } from "./lib/stewardship";
+import { forgetStewardActs, holdingHasLapsed, runTermWatch, setVetoWindowCheck, stewardMailRefusal, termWatchLookaheadDays } from "./lib/stewardship";
 import { decideRoleCapabilities, stewardSeatRefusal } from "./lib/roleGrants";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
 import { type ConsentActor, register as registerQuestClaimRoutes } from "./routes/questClaims";
@@ -5517,7 +5517,7 @@ async function startServer() {
       pool: getPool(),
       notify,
       notifyAdmins,
-      seatings: await expiringSeatings(getPool(), lapseContext(), 14),
+      seatings: await expiringSeatings(getPool(), lapseContext(), termWatchLookaheadDays()),
       season: seasonState(),
     });
     if (r.holdersTold > 0) console.log(`[org] ${r.holdersTold} holder(s) told their term is ending or has ended`);
