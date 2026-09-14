@@ -18,6 +18,13 @@
  * A count assembled out of undefined would tell somebody a stranger had two
  * vouches when nobody had asked.
  *
+ * ── AND NOTHING IN A VILLAGE THAT HAS TURNED VOUCHING OFF ───────────────────
+ *
+ * `membership.vouches_required` at 0 puts admission in the stewards' hands,
+ * and the server refuses an ordinary vouch there by name. A button that can
+ * only ever be refused teaches nobody anything, so the panel steps aside. An
+ * older server sends no `off` at all, which reads as on, which is what it is.
+ *
  * ── A REFUSAL IS TEACHING, NOT AN ERROR ─────────────────────────────────────
  *
  * Vouching opens at Contributor, so most people who press this early cannot do
@@ -36,6 +43,8 @@ interface VouchState {
   needed: number;
   met: boolean;
   bySuper: boolean;
+  /** The village has turned vouching off. Absent from an older server. */
+  off?: boolean;
   vouchers: string[];
 }
 
@@ -76,7 +85,7 @@ export default function VouchPanel({
     };
   }, [handle, alreadyMember]);
 
-  if (alreadyMember || !state || state.met) return null;
+  if (alreadyMember || !state || state.met || state.off) return null;
 
   const vouch = async () => {
     if (busy) return;

@@ -3,6 +3,7 @@
  *
  *   POST /api/members/:id/vouch        say you know this person
  *   POST /api/members/:id/super-vouch  a steward admits them outright
+ *   POST /api/members/:id/contributor  a steward names a contributor
  *   GET  /api/members/:id/vouches      who has vouched for them
  *   GET  /api/me/vouches               your own standing at the membrane
  *
@@ -27,22 +28,32 @@
  * cannot be withdrawn (Rye, 2026-09-08) and so the fact can never move. The
  * flag and the rows agree forever, and `membershipGranted` keeps meaning
  * exactly what it meant before: somebody decided this person is in.
+ *
+ * ── WHEN A VILLAGE HAS TURNED VOUCHING OFF ──────────────────────────────────
+ *
+ * `membership.vouches_required` at 0. No count admits anybody, an ordinary
+ * vouch is refused by name, and the super vouch is the door left open, which
+ * is what a village putting admission in its stewards' hands is asking for.
+ * Both reads carry `off` in the state, so a page can stop offering a button the
+ * write would refuse.
+ *
+ * Zero used to mean two different things in this one feature. This file mapped
+ * it to the default of three and the lib floored it to one, so the dial's own
+ * description ("0 turns vouching off") was true of neither. `vouchBar` is now
+ * the only reading of the dial and everything here goes through it.
  */
 import type { Express } from "express";
 
 import type { AppDeps } from "../lib/appDeps";
 import { GAME_CONFIG } from "../../shared/gameConfig";
 import { numberVar } from "../lib/variables";
-import { DEFAULT_VOUCHES_FOR_MEMBERSHIP, refuseVouch, vouchSentence, vouchState } from "../lib/vouches";
+import { refuseVouch, vouchBar, vouchingOffRefusal, vouchSentence, vouchState } from "../lib/vouches";
 import { recordVouch, vouchesBy, vouchesFor } from "../repos/vouches";
 
 type Deps = Pick<AppDeps, "authedUser" | "getPool" | "members" | "guardCapability" | "stageOf" | "recordStageEvent">;
 
-/** The bar this village sets, floored at one by `vouchState`. */
-const neededHere = (): number => {
-  const n = numberVar("membership.vouches_required");
-  return Number.isFinite(n) && n > 0 ? n : DEFAULT_VOUCHES_FOR_MEMBERSHIP;
-};
+/** The bar this village sets, through the one reading of the dial. 0 is off. */
+const neededHere = (): number => vouchBar(numberVar("membership.vouches_required"));
 
 /** Where the rung this route names sits, resolved once. */
 const CONTRIBUTOR_INDEX = GAME_CONFIG.stages.findIndex((s) => s.id === "contributor");
@@ -55,13 +66,23 @@ export function register(app: Express, deps: Deps): void {
   /**
    * Give one, and it may be the one that admits them.
    *
-   * `member.vouch` opens at the Contributor rung, so a voucher has finished a
-   * quest for this village before speaking for somebody else. The gate is the
-   * ONE gate and it answers the request itself when the answer is no.
+   * `member.vouch` opens at the Contributor rung, so a voucher has been paid by
+   * this village for something they brought it before speaking for somebody
+   * else. A steward carries it regardless, because `member.superVouch` carries
+   * `member.vouch` in the gate. The gate is the ONE gate and it answers the
+   * request itself when the answer is no.
    */
   app.post("/api/members/:id/vouch", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
+    /*
+     * BEFORE THE GATE. In a village that has turned vouching off, the gate's
+     * refusal ("this opens at Contributor") would send somebody up the ladder
+     * toward a door that stays shut when they get there. The village's state
+     * is the truer answer, so it is the first one.
+     */
+    const closed = vouchingOffRefusal("member", neededHere());
+    if (closed) return res.status(409).json(closed);
     /*
      * A WRITTEN SENTENCE, not a bare 401. `guardCapability` falls back to
      * `auth_required` when a route supplies nothing, and its own header names
@@ -75,7 +96,7 @@ export function register(app: Express, deps: Deps): void {
         status: 403,
         body: {
           error:
-            "Vouching for somebody opens at Contributor. Finish a quest for the village, and you can speak for the next person who arrives.",
+            "Vouching for somebody opens at Contributor, once the village has paid you for something you brought it. Then you can speak for the next person who arrives.",
         },
       }))
     ) {
@@ -88,7 +109,8 @@ export function register(app: Express, deps: Deps): void {
    * A steward admits somebody outright.
    *
    * For the village that has lost one of its three before a fourth reached
-   * Contributor and cannot otherwise admit anybody at all.
+   * Contributor and cannot otherwise admit anybody at all, and for the village
+   * that has turned vouching off, where this is how people are admitted.
    *
    * ITS OWN KEY, and the first version of this used `steward.veto` instead.
    * The governance engine ruled against that and was right: `roleGrants.ts`
@@ -112,7 +134,7 @@ export function register(app: Express, deps: Deps): void {
         status: 403,
         body: {
           error:
-            "A super vouch is a steward's, and it exists for a village that has lost one of its three and cannot otherwise admit anybody.",
+            "Admitting somebody outright is a steward's. It is how a village with vouching off admits people, and how a village that lost one of its three keeps growing.",
         },
       }))
     ) {
@@ -151,6 +173,8 @@ export function register(app: Express, deps: Deps): void {
       vouchedUserId: targetId,
       existing,
       vouchedIsMember: !!target.membershipGranted,
+      kind,
+      needed: neededHere(),
     });
     if (refusal) return res.status(409).json(refusal);
 

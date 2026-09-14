@@ -10,6 +10,8 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_VOUCHES_FOR_MEMBERSHIP,
   refuseVouch,
+  vouchBar,
+  vouchingOffRefusal,
   vouchSentence,
   vouchState,
   type Vouch,
@@ -51,13 +53,43 @@ describe("vouchState", () => {
     expect(vouchState([v("a"), v("b")], 5).met).toBe(false);
   });
 
-  it("never lets the bar fall below one, whatever a village sets", () => {
-    // A bar of zero would admit everybody the moment they signed up. Somebody
-    // always has to say they know you.
-    for (const bad of [0, -3, Number.NaN]) {
-      expect(vouchState([], bad).needed).toBeGreaterThanOrEqual(1);
-      expect(vouchState([], bad).met).toBe(false);
+  it("ZERO TURNS VOUCHING OFF: no number of vouches admits anybody", () => {
+    // The dial's documented contract, and the reason a village sets it: it has
+    // put admission in its stewards' hands. This used to be a floor that read 0
+    // as 1, so ONE vouch admitted somebody in exactly the village that had said
+    // vouches should admit nobody, and the test that stood here defended the
+    // floor as a safety rule.
+    const state = vouchState([v("a"), v("b"), v("c"), v("d")], 0);
+    expect(state.off).toBe(true);
+    expect(state.needed).toBe(0);
+    expect(state.met).toBe(false);
+  });
+
+  it("still lets a steward admit somebody while vouching is off", () => {
+    // Off closes the ordinary door. The super vouch is the one it leaves open.
+    const state = vouchState([v("a"), v("steward", "super")], 0);
+    expect(state.met).toBe(true);
+    expect(state.bySuper).toBe(true);
+    expect(state.off).toBe(true);
+  });
+
+  it("reads a bar that is not a bar as off, which is the closed direction", () => {
+    // A negative or a non-number is not a number anybody set. Read as off it
+    // admits nobody by count and leaves the steward's door working; read as
+    // one, which the old floor did, a single vouch let somebody in. It is also
+    // what the variables layer already does with an integer it cannot parse.
+    for (const bad of [-3, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const state = vouchState([v("a"), v("b"), v("c")], bad);
+      expect(state.off).toBe(true);
+      expect(state.needed).toBe(0);
+      expect(state.met).toBe(false);
     }
+  });
+
+  it("is on at every bar above zero, one included", () => {
+    const state = vouchState([v("a")], 1);
+    expect(state.off).toBe(false);
+    expect(state.met).toBe(true);
   });
 
   it("names the vouchers in the order they spoke", () => {
@@ -67,10 +99,25 @@ describe("vouchState", () => {
   it("defaults to three, which is what the launch rule assumes", () => {
     expect(DEFAULT_VOUCHES_FOR_MEMBERSHIP).toBe(3);
     expect(vouchState([v("a"), v("b")]).needed).toBe(3);
+    expect(vouchState([v("a"), v("b")]).off).toBe(false);
   });
 
   it("ignores a row with no voucher on it", () => {
     expect(vouchState([{ voucherUserId: "", vouchedUserId: "u", kind: "member" }]).count).toBe(0);
+  });
+});
+
+describe("vouchBar", () => {
+  it("is the one reading of the dial, and the state reads through it", () => {
+    expect(vouchBar(0)).toBe(0);
+    expect(vouchBar(2)).toBe(2);
+    expect(vouchBar(4.9)).toBe(4);
+    expect(vouchBar(0.5)).toBe(0);
+    expect(vouchBar(-1)).toBe(0);
+    expect(vouchBar(Number.NaN)).toBe(0);
+    for (const raw of [0, 1, 2, 5, -1, Number.NaN]) {
+      expect(vouchState([], raw).needed).toBe(vouchBar(raw));
+    }
   });
 });
 
@@ -100,9 +147,52 @@ describe("refuseVouch", () => {
     expect(refuseVouch({ ...base, voucherUserId: "b", existing: [v("a")] })).toBeNull();
   });
 
+  it("LETS A STEWARD WHO ALREADY VOUCHED RAISE IT TO A SUPER VOUCH", () => {
+    // The stuck village the super vouch exists for is exactly the one where
+    // the steward was among the people who had already vouched. Refusing the
+    // raise as "already vouched" would leave that village stuck by its own
+    // steward's earlier vouch.
+    expect(refuseVouch({ ...base, kind: "super", existing: [v("a")] })).toBeNull();
+    expect(refuseVouch({ ...base, kind: "super", needed: 0, existing: [v("a")] })).toBeNull();
+  });
+
+  it("never lets an ordinary vouch follow the same person's super vouch, nor a super follow a super", () => {
+    expect(refuseVouch({ ...base, kind: "member", existing: [v("a", "super")] })?.error).toMatch(/already vouched/i);
+    expect(refuseVouch({ ...base, kind: "super", existing: [v("a", "super")] })?.error).toMatch(/already vouched/i);
+  });
+
   it("refuses a vouch with nobody on one end of it", () => {
     expect(refuseVouch({ ...base, vouchedUserId: "" })).not.toBeNull();
     expect(refuseVouch({ ...base, voucherUserId: "" })).not.toBeNull();
+  });
+
+  it("REFUSES AN ORDINARY VOUCH IN A VILLAGE THAT HAS TURNED VOUCHING OFF", () => {
+    // Recording it would tell somebody they had helped when no count can admit
+    // anybody here.
+    const r = refuseVouch({ ...base, kind: "member", needed: 0 });
+    expect(r?.error).toMatch(/turned vouching off/i);
+  });
+
+  it("lets a steward's super vouch through while vouching is off", () => {
+    expect(refuseVouch({ ...base, kind: "super", needed: 0 })).toBeNull();
+  });
+
+  it("reads no bar at all as the launch bar, so a caller that passes none stays on", () => {
+    expect(refuseVouch({ ...base, kind: "member" })).toBeNull();
+  });
+});
+
+describe("vouchingOffRefusal", () => {
+  it("answers only for an ordinary vouch, and only when the bar reads as off", () => {
+    expect(vouchingOffRefusal("member", 0)?.error).toMatch(/turned vouching off/i);
+    expect(vouchingOffRefusal("member", Number.NaN)?.error).toMatch(/turned vouching off/i);
+    expect(vouchingOffRefusal("super", 0)).toBeNull();
+    expect(vouchingOffRefusal("member", 3)).toBeNull();
+  });
+
+  it("says the same sentence a member reads about their own standing", () => {
+    // One home for the words, so the refusal and the profile cannot drift.
+    expect(vouchingOffRefusal("member", 0)?.error).toBe(vouchSentence(vouchState([], 0)));
   });
 });
 
@@ -118,5 +208,15 @@ describe("vouchSentence", () => {
 
   it("says a steward did it, because that is a different fact", () => {
     expect(vouchSentence(vouchState([v("s", "super")]))).toMatch(/steward/i);
+  });
+
+  it("says vouching is off when the village has turned it off, and never counts to zero", () => {
+    const sentence = vouchSentence(vouchState([v("a")], 0));
+    expect(sentence).toMatch(/turned vouching off/i);
+    expect(sentence).not.toMatch(/of 0/);
+  });
+
+  it("still says a steward did it while vouching is off", () => {
+    expect(vouchSentence(vouchState([v("s", "super")], 0))).toMatch(/steward vouched you in/i);
   });
 });

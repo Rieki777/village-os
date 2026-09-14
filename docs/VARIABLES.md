@@ -262,7 +262,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 
 ### Vouches that admit a member
 
-How many people have to say they know somebody before that person becomes a member. The default matches how a village starts: it launches when a founder brings two more and all three carry the launch, which leaves exactly the vouchers the fourth member needs, so this number is read from the launch bar itself. The person who invited them counts as the first. A vouch cannot be taken back, so this bar is only ever crossed forwards. 0 turns vouching off and admission stays whatever your current process is. Raise it and a young village may not be able to admit anybody at all, which is what the steward override exists for.
+How many people have to say they know somebody before that person becomes a member. The default matches how a village starts: it launches when a founder brings two more and all three carry the launch, which leaves exactly the vouchers the fourth member needs, so this number is read from the launch bar itself. A vouch cannot be taken back, so this bar is only ever crossed forwards. 0 turns vouching off: no number of vouches admits anybody, and a steward's super vouch is how people are admitted. Raise it and a young village may not be able to admit anybody at all, which is what the steward override exists for.
 
 | Fact | Value |
 | --- | --- |
@@ -270,9 +270,10 @@ How many people have to say they know somebody before that person becomes a memb
 | Type | integer, a whole number |
 | Default | `3` |
 | Range | 0 to 20 |
+| Counted in | vouches |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
+| What it costs to change | a structural vote, at a higher bar |
 
 ### The seat that greets a new arrival
 

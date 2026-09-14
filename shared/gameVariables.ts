@@ -114,9 +114,17 @@ export const VARIABLES: VariableDef[] = [
     key: "membership.vouches_required",
     category: "Membership",
     label: "Vouches that admit a member",
+    /*
+     * STRUCTURAL, which is what main's own `membership.vouch_threshold` carried
+     * before this dial replaced it, and the merge that retired that dial left
+     * this one routine. It prices a proposal to move the bar: who gets in is
+     * not a routine change.
+     */
+    criticality: "structural",
     description:
-      "How many people have to say they know somebody before that person becomes a member. The default matches how a village starts: it launches when a founder brings two more and all three carry the launch, which leaves exactly the vouchers the fourth member needs, so this number is read from the launch bar itself. The person who invited them counts as the first. A vouch cannot be taken back, so this bar is only ever crossed forwards. 0 turns vouching off and admission stays whatever your current process is. Raise it and a young village may not be able to admit anybody at all, which is what the steward override exists for.",
+      "How many people have to say they know somebody before that person becomes a member. The default matches how a village starts: it launches when a founder brings two more and all three carry the launch, which leaves exactly the vouchers the fourth member needs, so this number is read from the launch bar itself. A vouch cannot be taken back, so this bar is only ever crossed forwards. 0 turns vouching off: no number of vouches admits anybody, and a steward's super vouch is how people are admitted. Raise it and a young village may not be able to admit anybody at all, which is what the steward override exists for.",
     type: "integer",
+    unit: "vouches",
     /*
      * DERIVED. A village launches with `minElectorate` founders precisely so
      * that the next arrival has that many vouchers available, so the two

@@ -5,10 +5,12 @@
  * stay ENUMERABLE: findable by looking in one known directory rather than by
  * knowing which lib happened to own the subject.
  *
- * THERE IS NO DELETE AND NO UPDATE IN THIS FILE, and that is the point rather
- * than an omission. A vouch, once given, stands (Rye, 2026-09-08). Withdrawal
- * would drop somebody out of a membership they already hold and hand every
- * member a demotion button over a neighbour.
+ * THERE IS NO DELETE IN THIS FILE, AND THE ONE UPDATE ONLY RAISES. A vouch,
+ * once given, stands (Rye, 2026-09-08). Withdrawal would drop somebody out of
+ * a membership they already hold and hand every member a demotion button over
+ * a neighbour. The single write that touches an existing row turns the same
+ * person's ordinary vouch into a super vouch, which strengthens a vouch and
+ * can never weaken or remove one.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
 
@@ -75,10 +77,16 @@ export async function vouchesForMany(
 /**
  * Record one vouch. Idempotent on the person, never on the row.
  *
- * `ON DUPLICATE KEY UPDATE voucher_user_id = voucher_user_id` makes a repeated
- * press a no-op rather than an error, and the unique key is what makes "three
- * vouches" mean three people. The caller has already refused the cases that
- * deserve a sentence (`refuseVouch`); this refuses the race.
+ * The unique key is what makes "three vouches" mean three people, so a second
+ * vouch from the same person lands on the same row. On that row the ONE change
+ * allowed is a raise: a super vouch over the same person's ordinary vouch makes
+ * it super, and anything else leaves the row exactly as it was. The caller has
+ * already refused the cases that deserve a sentence (`refuseVouch`); this
+ * refuses the race, and whatever the race, it can only ever raise.
+ *
+ * The kind is passed a second time instead of read through `VALUES(kind)`,
+ * which MySQL 8 deprecates and MariaDB spells differently. A bound parameter
+ * reads the same on both.
  */
 export async function recordVouch(
   pool: Pool,
@@ -86,7 +94,7 @@ export async function recordVouch(
 ): Promise<void> {
   await pool.query( // module-review-ok: one table, one row, no cache above it
     "INSERT INTO member_vouches (id, village_id, voucher_user_id, vouched_user_id, kind, note) VALUES (?,?,?,?,?,?) " +
-      "ON DUPLICATE KEY UPDATE voucher_user_id = voucher_user_id",
-    [input.id, VILLAGE, input.voucherUserId, input.vouchedUserId, input.kind, input.note ?? null],
+      "ON DUPLICATE KEY UPDATE kind = IF(? = 'super', 'super', kind)",
+    [input.id, VILLAGE, input.voucherUserId, input.vouchedUserId, input.kind, input.note ?? null, input.kind],
   );
 }
