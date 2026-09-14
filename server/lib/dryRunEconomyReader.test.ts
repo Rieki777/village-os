@@ -281,7 +281,7 @@ describe.skipIf(!configured)("the economy snapshot of a live village", () => {
       "gratitude.base_budget",
       "gratitude.pool_per_cycle",
       "gratitude.pool_token",
-      "gratitude.max_share_per_recipient",
+      "gratitude.full_sends_per_cycle",
       "governance.weight_mode",
       "governance.weight_token",
       "ledger.admin_mint_cycle_cap",

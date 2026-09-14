@@ -819,11 +819,13 @@ function allowanceFor(state: SimState, member: MemberSpec, recognition: TokenSpe
 /**
  * The most one member may put on ONE other member this cycle.
  *
- * Mirrors `shareCapFor` (server/lib/economy.ts:683):
- * `max(1, floor(total * gratitude.max_share_per_recipient / 100))`, and zero
- * when the allowance itself is zero. The floor of 1 is the engine's, and it is
- * a bound and never a guess: one percent of an allowance of 50 rounds to zero,
- * and a zero there would refuse every send in the village.
+ * Mirrors `shareCapFor` in server/lib/economy.ts: the allowance divided by
+ * `gratitude.full_sends_per_cycle`, floored, never below 1, and zero when the
+ * allowance itself is zero. #217 replaced the percentage this used to read,
+ * `gratitude.max_share_per_recipient`, with that count and removed the key, so a
+ * model still reading it got null from the registry and previewed a cap the
+ * product no longer has. The floor of 1 is the engine's and it is a bound, never
+ * a guess: a small allowance and a large count would otherwise refuse every send.
  *
  * HUMAN IN, HUMAN OUT, and the floor is ONE WHOLE RECOGNITION TOKEN. Handing
  * this a scaled allowance would make that floor 0.0001 of a token at four
@@ -831,9 +833,9 @@ function allowanceFor(state: SimState, member: MemberSpec, recognition: TokenSpe
  */
 function shareCapFor(state: SimState, allowanceTotal: bigint): bigint {
   if (allowanceTotal <= BigInt(0)) return BigInt(0);
-  const share = numberVariable(state, "gratitude.max_share_per_recipient");
-  if (share === null) return BigInt(0);
-  const capped = (allowanceTotal * BigInt(Math.trunc(share))) / BigInt(100);
+  const sends = numberVariable(state, "gratitude.full_sends_per_cycle");
+  if (sends === null) return BigInt(0);
+  const capped = allowanceTotal / BigInt(Math.max(1, Math.floor(sends)));
   return capped < BigInt(1) ? BigInt(1) : capped;
 }
 

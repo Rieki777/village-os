@@ -1602,7 +1602,7 @@ export interface GiveInput {
  * they replaced did.
  *
  * HUMAN UNITS IN AND OUT. `allowanceTotal` is `Allowance.total`, and
- * `gratitude.max_share_per_recipient` is a percentage of it, so what this
+ * `gratitude.full_sends_per_cycle` divides it, so what this
  * returns is compared against a `gratitude_log` sum and printed to a member in
  * the unit they typed. The floor of 1 is ONE GRATITUDE and not one minor unit,
  * which is the distinction any mirror of this function has to keep: floored in

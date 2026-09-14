@@ -387,7 +387,7 @@ async function liveMintRules(conn: PoolConnection, tokens: readonly TokenSpec[])
  * EVERY registry key, not only the ones the economics model reads. The keys
  * the model touches today are `gratitude.base_budget`,
  * `gratitude.pool_per_cycle`, `gratitude.pool_token`,
- * `gratitude.max_share_per_recipient`, `governance.weight_mode`,
+ * `gratitude.full_sends_per_cycle`, `governance.weight_mode`,
  * `governance.weight_token` and `progression.multiplier.<stage>` for every
  * stage on the roll. That list is a fact about today's model, and a hand-kept
  * copy of it here would go stale the first time the model read a sixth dial.

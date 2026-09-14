@@ -691,40 +691,40 @@ describe("the gratitude allowance, mirrored as the engine posts it", () => {
      * THE SWEEP MEASURED THE SHIPPED PATH AND IT IS HUMAN UNTIL THE LEDGER.
      * `allowanceFor` (server/lib/economy.ts:851) returns
      * `Math.round(numberVar("gratitude.base_budget") * stageMultiplier)`, which
-     * is 100 * 2 = 200 a member, and its `spent` and `remaining` are human.
-     * `shareCapFor` (economy.ts:956) takes its quarter of that human total, so
-     * the cap is 50 whole recognition tokens. `gratitude_log.amount` stores the
+     * is 105 * 2 = 210 a member, and its `spent` and `remaining` are human.
+     * `shareCapFor` divides that human total by `gratitude.full_sends_per_cycle`,
+     * 7 by default, so the cap is 30 whole recognition tokens. `gratitude_log.amount` stores the
      * human number. The ONE conversion is `toLedgerUnits(HEARTS, amount)` at
      * the `postTransferOn` inside `give` (economy.ts:1425).
      *
-     * So at four decimal places a gift of 50 posts 500000 minor units, and the
-     * allowance, the cap and the expired figure all stay at their human 400,
-     * 50 and 300. Every one of those three is a number a member reads.
+     * So at four decimal places a gift of 30 posts 300000 minor units, and the
+     * allowance, the cap and the expired figure all stay at their human 420,
+     * 30 and 360. Every one of those three is a number a member reads.
      */
     const model = economicsModel({ ...ONE_QUEST, gratitudeAllowanceGivenShare: 1 });
     const stepped = model.step(initialState(scaled(4)), 1, makeRng(SEED));
     const memo = readEconomicsMemo(stepped)!;
     // HUMAN, all three.
-    expect(memo.allowanceTotal).toBe(BigInt(400));
-    expect(memo.gratitudeGiven).toBe(BigInt(100));
-    expect(memo.gratitudeExpired).toBe(BigInt(300));
+    expect(memo.allowanceTotal).toBe(BigInt(420));
+    expect(memo.gratitudeGiven).toBe(BigInt(60));
+    expect(memo.gratitudeExpired).toBe(BigInt(360));
     // MINOR, at the ledger, and only there.
-    expect(stepped.balances["mem:u1"].gratitude).toBe(BigInt(500000));
-    expect(stepped.balances["mem:u2"].gratitude).toBe(BigInt(500000));
-    expect(stepped.balances["sys:gratitude-pool"].gratitude).toBe(BigInt(-1000000));
-    // Which is 50 whole tokens each, the number `checkGive` weighed.
-    expect(Number(stepped.balances["mem:u1"].gratitude) / 10000).toBe(50);
+    expect(stepped.balances["mem:u1"].gratitude).toBe(BigInt(300000));
+    expect(stepped.balances["mem:u2"].gratitude).toBe(BigInt(300000));
+    expect(stepped.balances["sys:gratitude-pool"].gratitude).toBe(BigInt(-600000));
+    // Which is 30 whole tokens each, the number `checkGive` weighed.
+    expect(Number(stepped.balances["mem:u1"].gratitude) / 10000).toBe(30);
 
     /*
      * AT ZERO DECIMALS THE CONVERSION IS THE IDENTITY, which is why no village
-     * running the shipped default has ever seen a difference: the same 50 is
+     * running the shipped default has ever seen a difference: the same 30 is
      * both the human gift and the posting.
      */
     const flat = model.step(initialState(scaled(0)), 1, makeRng(SEED));
     const flatMemo = readEconomicsMemo(flat)!;
-    expect(flatMemo.allowanceTotal).toBe(BigInt(400));
-    expect(flatMemo.gratitudeExpired).toBe(BigInt(300));
-    expect(flat.balances["mem:u1"].gratitude).toBe(BigInt(50));
+    expect(flatMemo.allowanceTotal).toBe(BigInt(420));
+    expect(flatMemo.gratitudeExpired).toBe(BigInt(360));
+    expect(flat.balances["mem:u1"].gratitude).toBe(BigInt(30));
 
     // THE THREE THINGS THAT BREAK IF THE SCALE MOVES EARLIER. The cap's floor
     // is one WHOLE token, the expired figure is what a member reads as
@@ -762,14 +762,14 @@ describe("the gratitude allowance, mirrored as the engine posts it", () => {
 
   it("holds the per-person cap at one whole token, never at one minor unit", () => {
     /*
-     * `shareCapFor` (server/lib/economy.ts:956) is
-     * `max(1, floor(total * gratitude.max_share_per_recipient / 100))` over the
+     * `shareCapFor` in server/lib/economy.ts is
+     * `max(1, floor(total / gratitude.full_sends_per_cycle))` over the
      * HUMAN total, so its floor is one whole recognition token. Scaling the
      * allowance before this line would make the floor 0.0001 of a token at four
      * places, a cap the engine has never allowed.
      *
      * Measured at a base budget of 1, where the floor is the only thing holding
-     * the cap up: 1 * 2 = 2 allowance, and 25% of 2 floors to 0, so the cap is
+     * the cap up: 1 * 2 = 2 allowance, and 2 divided by 7 floors to 0, so the cap is
      * the floor of 1. The gift is therefore 1 whole token, which posts as 10000
      * at four places.
      */
@@ -811,8 +811,8 @@ describe("the gratitude allowance, mirrored as the engine posts it", () => {
      */
     const model = economicsModel(ONE_QUEST);
     const stepped = model.step(initialState(scaled(4)), 1, makeRng(SEED));
-    // 400 of allowance against a pool of 1000 (shared/gameVariables.ts:117).
-    expect(readEconomicsMemo(stepped)!.allowanceTotal).toBe(BigInt(400));
+    // 420 of allowance against a pool of 1000.
+    expect(readEconomicsMemo(stepped)!.allowanceTotal).toBe(BigInt(420));
     expect(readEconomicsMemo(stepped)!.poolSize).toBe(BigInt(1000));
     const exhausts = model.flags(stepped, 1).filter((f) => f.code === "econ_pool_exhausts");
     expect(exhausts.map((f) => f.sentence).join(" ")).not.toContain("worth less than one minor unit");
@@ -850,15 +850,15 @@ describe("economics model, flags", () => {
     /*
      * The allowance is `Math.round(numberVar("gratitude.base_budget") *
      * stageMultiplier)` (`allowanceFor`, server/lib/economy.ts:628). The base
-     * budget defaults to 100 (shared/gameVariables.ts:105) and the multiplier
+     * budget defaults to 105 and the multiplier
      * for `member` is `progression.multiplier.member`, generated from
      * GAME_CONFIG.stages with the stage's own `gratitudeMultiplier` of 2
-     * (shared/gameVariables.ts:1707, shared/gameConfig.ts:429). So 200, and
-     * recognition has no decimals, so 200 minor units.
+     * (shared/gameVariables.ts:1707, shared/gameConfig.ts:429). So 210, and
+     * recognition has no decimals, so 210 minor units.
      */
-    expect(readEconomicsMemo(stepped)!.allowanceTotal).toBe(BigInt(200));
-    expect(readEconomicsMemo(stepped)!.gratitudeExpired).toBe(BigInt(200));
-    expect(expired[0].sentence).toContain("200");
+    expect(readEconomicsMemo(stepped)!.allowanceTotal).toBe(BigInt(210));
+    expect(readEconomicsMemo(stepped)!.gratitudeExpired).toBe(BigInt(210));
+    expect(expired[0].sentence).toContain("210");
     // `checkGive` refuses a gift to yourself (economy.ts:706), so one member
     // can never spend a point of it.
     expect(expired[0].actionable).toContain("themselves");
@@ -1492,20 +1492,20 @@ describe("economics assumptions", () => {
     const stepped = model.step(initialState(snap), 1, makeRng(SEED));
     const memo = readEconomicsMemo(stepped)!;
     /*
-     * Two members, each with an allowance of 200 (see above), each giving all
-     * of it. `shareCapFor` (economy.ts:683) is
-     * `max(1, floor(total * gratitude.max_share_per_recipient / 100))`, and the
-     * share defaults to 25 (shared/gameVariables.ts:239), so 50 to any one
-     * person. There is exactly one other person, so each giver places 50 and
-     * 150 of each allowance expires. `give` (economy.ts:981) mints the
+     * Two members, each with an allowance of 210 (see above), each giving all
+     * of it. `shareCapFor` is the allowance divided by
+     * `gratitude.full_sends_per_cycle`, floored and never below 1, and that
+     * count defaults to 7, so 30 to any one
+     * person. There is exactly one other person, so each giver places 30 and
+     * 180 of each allowance expires. `give` (economy.ts:981) mints the
      * recognition fresh from the recognition faucet to the RECEIVER.
      */
-    expect(memo.allowanceTotal).toBe(BigInt(400));
-    expect(memo.gratitudeGiven).toBe(BigInt(100));
-    expect(memo.gratitudeExpired).toBe(BigInt(300));
-    expect(stepped.balances["mem:u1"].gratitude).toBe(BigInt(50));
-    expect(stepped.balances["mem:u2"].gratitude).toBe(BigInt(50));
-    expect(stepped.balances["sys:gratitude-pool"].gratitude).toBe(BigInt(-100));
+    expect(memo.allowanceTotal).toBe(BigInt(420));
+    expect(memo.gratitudeGiven).toBe(BigInt(60));
+    expect(memo.gratitudeExpired).toBe(BigInt(360));
+    expect(stepped.balances["mem:u1"].gratitude).toBe(BigInt(30));
+    expect(stepped.balances["mem:u2"].gratitude).toBe(BigInt(30));
+    expect(stepped.balances["sys:gratitude-pool"].gratitude).toBe(BigInt(-60));
     // And the value pool follows the recognition, split by it and floored
     // (server/index.ts:21417). 1000 credits, halved.
     expect(memo.poolDistributed).toBe(BigInt(1000));
@@ -1536,8 +1536,8 @@ describe("economics model, more than one cycle", () => {
      * recognition into cycle 2's denominator and pay the same gift twice.
      * Two cycles, 1000 credits released in each: 500 each per cycle.
      */
-    expect(first.balances["mem:u1"].gratitude).toBe(BigInt(50));
-    expect(second.balances["mem:u1"].gratitude).toBe(BigInt(100));
+    expect(first.balances["mem:u1"].gratitude).toBe(BigInt(30));
+    expect(second.balances["mem:u1"].gratitude).toBe(BigInt(60));
     expect(first.balances["mem:u1"].credits).toBe(BigInt(525));
     expect(second.balances["mem:u1"].credits).toBe(BigInt(1050));
     expect(second.balances["sys:cycle-pool"].credits).toBe(BigInt(-2100));

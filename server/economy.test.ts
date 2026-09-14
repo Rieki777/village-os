@@ -3907,7 +3907,7 @@ function gratitudeAtScale(decimals: number): void {
     /*
      * THE SHARE CAP, WHICH IS THE OTHER FIGURE A REVERSAL HAS TO UNWIND.
      *
-     * `gratitude.max_share_per_recipient` is weighed against what this giver
+     * The per-recipient share cap, `shareCapFor`, is weighed against what this giver
      * has put on THIS recipient, and that sum was never village-wide, so D30
      * did not reach it: it was already keyed on `from_id` AND `to_id`. What it
      * did not do was subtract reversals at all, so a member got their allowance

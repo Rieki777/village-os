@@ -221,8 +221,7 @@ export const VARIABLES: VariableDef[] = [
     /*
      * CYCLE-CLOSE, because the share is a promise a circle spent a whole
      * period against. Moving it mid-period would change what restraint was
-     * worth after the restraint had already been shown, which is the same
-     * reason `gratitude.max_share_per_recipient` is in that set. Declared on
+     * worth after the restraint had already been shown. Declared on
      * the def rather than added to CYCLE_APPLY_KEYS, so this lane touches no
      * line another lane is holding.
      */
@@ -391,8 +390,7 @@ export const VARIABLES: VariableDef[] = [
   //
   // `applyTiming` sits on the def rather than in CYCLE_APPLY_KEYS because that
   // set is edited by two sessions at once and a def-level override cannot be
-  // lost in a merge. It needs the timing for the reason
-  // `gratitude.max_share_per_recipient` needs it: a mid-cycle change moves a
+  // lost in a merge. It needs the timing because a mid-cycle change moves a
   // rule under somebody who has already held a balance through most of the
   // moon, and this rule takes.
   {
@@ -405,7 +403,7 @@ export const VARIABLES: VariableDef[] = [
     default: "1",
     min: 0,
     max: 100,
-    // Short, for the reason `gratitude.max_share_per_recipient` gives: Game
+    // Short, because Game
     // Mechanics renders a value as `${raw} ${unit}` in a chip and three of
     // those share one line.
     unit: "% a cycle",
