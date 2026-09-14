@@ -691,10 +691,20 @@ const SEAT_FIELDS: Record<string, string> = {
 async function applyChange(conn: PoolConnection, c: DraftChange): Promise<void> {
   const p = c.payload ?? {};
   if (c.op === "create_seat") {
+    // Every field a proposal may carry (PROPOSABLE_SEAT_FIELDS in
+    // server/routes/review.ts), not only the first six. This INSERT used to
+    // stop at `seats`, so a proposed seat marked recruiting, or carrying why it
+    // matters or a criticality, published clean with all three gone. Both enum
+    // and flag are NOT NULL with a DEFAULT, and an explicit NULL is not an
+    // absent column, so an unnamed field writes the default value itself.
+    // `previewDraft` has already blocked any criticality other than these two.
     await conn.query(
-      "INSERT INTO org_roles (id, name, circle_id, aim, domain, accountabilities, seats) VALUES (?,?,?,?,?,?,?)",
+      "INSERT INTO org_roles (id, name, circle_id, aim, domain, accountabilities, seats, why_it_matters, criticality, recruiting) " +
+        "VALUES (?,?,?,?,?,?,?,?,?,?)",
       [c.orgRoleId, String(p.name ?? c.orgRoleId), p.circleId ?? null, p.aim ?? null, p.domain ?? null,
-        JSON.stringify(Array.isArray(p.accountabilities) ? p.accountabilities : []), Number(p.seats ?? 1)],
+        JSON.stringify(Array.isArray(p.accountabilities) ? p.accountabilities : []), Number(p.seats ?? 1),
+        p.whyItMatters ?? null, p.criticality === "high" ? "high" : "normal",
+        p.recruiting === true || Number(p.recruiting) === 1 ? 1 : 0],
     );
     return;
   }
