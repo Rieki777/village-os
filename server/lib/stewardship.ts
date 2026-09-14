@@ -1790,6 +1790,19 @@ export interface TermWatchReport {
  *
  * "No season is running" and "this sweep could not read the calendar" are
  * different sentences, and both are said out loud.
+ *
+ * ONE NOTIFICATION PER ROW PER EVENT, through stable dedupe keys, because a
+ * mandate nobody has acted on is a governance problem a weekly ping does not
+ * solve. The two planes stay separate sweeps: org-chart seatings carry no
+ * permissions and revoke nothing, while a permission holding's term genuinely
+ * ends the powers (0171).
+ *
+ * MEMBER HOLDERS ONLY, AND AGENTS ARE EXCLUDED, inherited (0142). An agent is
+ * a documented holder, so the `holderKind !== "member"` filter below already
+ * drops it, and that is the behaviour to keep: a term end is a date the
+ * village agreed to revisit an arrangement with a person, and an agent's
+ * seating has nobody to have that conversation with.
+ * server/lib/calendarProviders.ts filters its twin for the same reason.
  */
 export async function runTermWatch(deps: TermWatchDeps): Promise<TermWatchReport> {
   const now = deps.now ?? new Date();

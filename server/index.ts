@@ -76,6 +76,7 @@ import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader
 import { applyChangeSet, applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
 import { landingRow } from "./lib/applyDue";
 import { notifyRollRows, type RollNotice } from "./lib/ballotNotices";
+import { runSeasonReminders } from "./lib/seasonReminders";
 import { forgetStewardActs, holdingHasLapsed, runTermWatch, setVetoWindowCheck, stewardMailRefusal, termWatchLookaheadDays } from "./lib/stewardship";
 import { decideRoleCapabilities, stewardSeatRefusal } from "./lib/roleGrants";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
@@ -5495,22 +5496,9 @@ async function startServer() {
   });
 
   /**
-   * Terms: tell the HOLDER once, and make an empty seat loud where a carried
-   * decision is actually waiting on it.
-   *
-   * The body is `runTermWatch` in server/lib/stewardship.ts, which sweeps both
-   * planes: org-chart seatings, which carry no permissions and revoke nothing,
-   * and permission holdings, where a term genuinely ends the powers (0171).
-   * One notification per row per event, through stable dedupe keys, because a
-   * mandate nobody has acted on is a governance problem a weekly ping does not
-   * solve. Member holders only; a documented holder is a name on a card.
-   *
-   * AGENTS ARE EXCLUDED, inherited (0142). An agent is a documented holder, so
-   * the `holderKind !== "member"` filter inside `runTermWatch` already drops
-   * it, and that is the behaviour to keep: a term end is a date the village
-   * agreed to revisit an arrangement with a person, and an agent's seating has
-   * nobody to have that conversation with. server/lib/calendarProviders.ts
-   * filters its twin for the same reason.
+   * Terms: tell the HOLDER once, one cycle before the term ends, and make a
+   * stopped calendar loud. The body and its reasoning, agents included, are
+   * `runTermWatch` in server/lib/stewardship.ts.
    */
   registerJob("term-watch", 24 * 60 * 60 * 1000, async () => {
     const r = await runTermWatch({
@@ -5534,6 +5522,12 @@ async function startServer() {
       allEnded: !!ss.needsNextSeason && ss.seasons.length > 0,
     });
     if (gap) console.warn(`[org] ${gap}`);
+  });
+
+  // Season-end reminders to the whole village: `runSeasonReminders` in server/lib/seasonReminders.ts.
+  registerJob("season-reminders", 12 * 60 * 60 * 1000, async () => {
+    const r = await runSeasonReminders({ season: seasonState(), members: await members.all(), isAdmin: (u) => adminReaches(u?.role), notify });
+    return r.due ? `${r.told} of ${r.recipients} told, ${r.due.daysLeft} day(s) before ${r.due.seasonId} turns` : undefined;
   });
 
   /**
