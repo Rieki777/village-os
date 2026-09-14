@@ -266,9 +266,16 @@ transaction at REPEATABLE READ, holding `SELECT id FROM users WHERE id = ? FOR U
 giver**, in `writeGratitudeRow` in `server/lib/economy.ts`. Three properties follow, and one
 thing sits outside them:
 
-- A giver is serialised against themselves, so the allowance is exactly enforced. Twelve different
-  members sending at once do not block each other; the transaction was SERIALIZABLE once and the
-  gap locks its plain SELECTs took made 10 of 12 concurrent givers fail.
+- A giver is serialised against themselves, so the allowance is exactly enforced. Different
+  members sending at once queue on the recognition faucet's ledger row rather than failing; the
+  transaction was SERIALIZABLE once and the gap locks its plain SELECTs took made 10 of 12
+  concurrent givers fail.
+- The ledger rows the credit will write (the faucet and the recipient) are locked right after the
+  giver and **before the first plain read**. On MariaDB 11.8 and later the first plain read fixes
+  the transaction's read view, and a later write to a row somebody committed after that view fails
+  with `ER_CHECKREAD`. Read first and lock second, and every giver behind the head of the queue
+  failed: 21 of 24 at once on MariaDB 12.3.2, still 12 of 24 with a retry, 0 with the lock taken
+  first. The hook is `lockFirst` on `writeGratitudeRow`, and both doors pass it.
 - The credit posts on that same connection **before** the note commits. A ledger refusal or a
   throw rolls the note back, so there is never a record saying gratitude was given with no
   gratitude. A retry cannot double-charge because a rolled-back attempt wrote nothing at all.
