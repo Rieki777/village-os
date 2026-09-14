@@ -3583,7 +3583,7 @@ function daysBetween(fromISO: string, toISO: string): number {
  *  season object, so existing data/season.json keeps working after deploy. */
 function normalizeSeasonConfig(raw: any): { seasons: any[]; cadence: string; timezone: string } {
   const def = GAME_CONFIG.season;
-  if (raw && Array.isArray(raw.seasons)) {
+  if (raw && Array.isArray(raw.seasons) && raw.seasons.length > 0) { // an EMPTY list is the platform default's sentinel for "derive", handled at the bottom; every seat's term (0199) needs a season to end with
     return {
       seasons: raw.seasons.map((s: any, i: number) => ({
         id: s.id || `season-${i + 1}`,
