@@ -19589,7 +19589,7 @@ ${inner}
    * /api/game/quests/:id/claim reads them. A promise route that invented its
    * own permission check would be a second gate.
    */
-  app.post("/api/map/promise", async (req, res) => {
+  app.post("/api/map/promise", async (req, res) => { // limit-ok: a signed-out caller is answered reason "anonymous" before any work (a 200 the map reads, so no 401 for the gate to see); it read as guarded only because an unrelated `reply` helper's span in this file borrowed a 401
     const kind = req.body?.kind;
     const mapKey = sanitiseMapKey(req.body?.id);
     const on = req.body?.on === true;
