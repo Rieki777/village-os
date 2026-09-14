@@ -83,6 +83,7 @@ import {
 // repo because that is where queries live, and it is imported rather than
 // restated because the settlement reads it too: see its header.
 import { givenInWindow, reversedInWindow } from "../repos/gratitude";
+import { accountBalanceRowsBySlug } from "../repos/tokenBalances";
 
 /** Seeded by 0024. Named here rather than imported so this module does not
  *  depend on the library module being present. */
@@ -3261,10 +3262,7 @@ export async function publicSupply(pool: Pool): Promise<{
 
   // The sink, per token. One row today and the query does not assume it: a
   // second waning token later needs no change here.
-  const [waned] = await pool.query<RowDataPacket[]>(
-    "SELECT `token_type` AS slug, `balance` FROM `token_balances` WHERE `account_id` = ?",
-    [VOICE_DECAY],
-  );
+  const waned = await accountBalanceRowsBySlug(pool, VOICE_DECAY);
   const wanedBySlug = new Map(waned.map((r) => [String(r.slug), Number(r.balance ?? 0)]));
 
   return {

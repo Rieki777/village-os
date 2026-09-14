@@ -62,6 +62,7 @@ import { fromLedgerUnits, toLedgerUnits } from "./economy";
 import { currentCycle } from "./gratitude-cycles";
 import { MINT_FAUCET, type TransferGuard } from "./ledger";
 import { numberVar } from "./variables";
+import { cycleIssuanceRows } from "../repos/tokenLedger";
 
 /** The dial. Named once so the refusals and the guard cannot drift apart. */
 export const MINT_CAP_KEY = "ledger.admin_mint_cycle_cap";
@@ -138,27 +139,11 @@ export async function readCycleIssuance(
   slug: string,
   since: Date,
 ): Promise<CycleIssuance> {
-  const hand = HAND_MINT_SOURCES.map(() => "?").join(",");
-  const [[row]] = await conn.query<any[]>(
-    "SELECT " +
-      "COALESCE(SUM(CASE WHEN from_account = ? THEN amount ELSE 0 END), 0) AS issued, " +
-      "COALESCE(SUM(CASE WHEN to_account = ? THEN amount ELSE 0 END), 0) AS came_back, " +
-      `COALESCE(SUM(CASE WHEN from_account = ? AND source NOT IN (${hand}) THEN amount ELSE 0 END), 0) AS other_doors, ` +
-      `GROUP_CONCAT(DISTINCT CASE WHEN from_account = ? AND source NOT IN (${hand}) THEN source END SEPARATOR ',') AS other_sources ` +
-      "FROM token_ledger WHERE token_type = ? AND at >= ? AND (from_account = ? OR to_account = ?)",
-    [
-      MINT_FAUCET,
-      MINT_FAUCET,
-      MINT_FAUCET,
-      ...HAND_MINT_SOURCES,
-      MINT_FAUCET,
-      ...HAND_MINT_SOURCES,
-      slug,
-      since,
-      MINT_FAUCET,
-      MINT_FAUCET,
-    ],
-  );
+  // `conn` is handed through unchanged. From `mintCapGuard` it is the posting
+  // transaction's own connection, so the read runs inside that transaction,
+  // under the `sys:mint` lock it already holds. The statement itself lives in
+  // server/repos/tokenLedger.ts and takes no lock of its own.
+  const [row] = await cycleIssuanceRows(conn, MINT_FAUCET, HAND_MINT_SOURCES, slug, since);
   const issued = Number(row?.issued ?? 0);
   const returned = Number(row?.came_back ?? 0);
   return {

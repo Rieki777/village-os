@@ -21,8 +21,33 @@
  *
  * THE POOL IS PASSED IN, never imported, so every function here is testable
  * against a scratch schema and none of them owns a connection.
+ *
+ * The statements themselves live in server/repos/villageNeeds.ts, one function
+ * each, moved verbatim. The mapping, the minting and every rule stay here.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
+import {
+  aggregateTallyRows,
+  coverageCountRows,
+  deleteLinkRow,
+  deleteLinksForSubject,
+  deleteMemberNeedRow,
+  deleteMemberNeedsForUser,
+  linkRowFor,
+  linkRowsForNeed,
+  linkRowsForSubject,
+  memberNeedRow,
+  memberNeedRowsAllCycles,
+  memberNeedRowsForCycle,
+  needRowByKey,
+  retireNeedRow,
+  reviveNeedRow,
+  scopeRows,
+  seatingRows,
+  upsertLinkRow,
+  upsertMemberNeedRow,
+  upsertNeedRow,
+} from "../repos/villageNeeds";
 /**
  * THE ONE CYCLE ID, and this import is the whole of why it is spelled right.
  *
@@ -247,22 +272,13 @@ export async function readScope(
   pool: Pool,
   opts: { includeRetired?: boolean } = {},
 ): Promise<NeedScopeRow[]> {
-  const where = opts.includeRetired ? "" : "WHERE `retired_at` IS NULL ";
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT `id`, `need_key`, `label`, `is_custom`, `depth_target`, `breadth_target_pct`, `note`, " +
-      "`sort_order`, `adopted_at`, `retired_at` FROM `village_needs` " +
-      `${where}ORDER BY \`sort_order\`, \`adopted_at\`, \`id\``,
-  );
+  const rows = await scopeRows(pool, Boolean(opts.includeRetired));
   return rows.map(toScopeRow);
 }
 
 /** One scope row by its key, retired or not, or null. */
 export async function readNeed(pool: Pool, needKey: string): Promise<NeedScopeRow | null> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT `id`, `need_key`, `label`, `is_custom`, `depth_target`, `breadth_target_pct`, `note`, " +
-      "`sort_order`, `adopted_at`, `retired_at` FROM `village_needs` WHERE `need_key` = ? LIMIT 1",
-    [needKey],
-  );
+  const rows = await needRowByKey(pool, needKey);
   return rows[0] ? toScopeRow(rows[0]) : null;
 }
 
@@ -306,15 +322,16 @@ export async function upsertScopeNeed(
         : Object.keys(HUMAN_NEEDS_BY_ID).indexOf(needKey)
       : Number(input.sortOrder);
 
-  await pool.query(
-    "INSERT INTO `village_needs` " +
-      "(`id`, `need_key`, `label`, `is_custom`, `depth_target`, `breadth_target_pct`, `note`, `sort_order`) " +
-      "VALUES (?,?,?,?,?,?,?,?) " +
-      "ON DUPLICATE KEY UPDATE `label` = VALUES(`label`), `depth_target` = VALUES(`depth_target`), " +
-      "`breadth_target_pct` = VALUES(`breadth_target_pct`), `note` = VALUES(`note`), " +
-      "`sort_order` = VALUES(`sort_order`), `retired_at` = NULL",
-    [newId(NEED_ID_PREFIX), needKey, label, isCustom ? 1 : 0, depth, breadth, note, sortOrder],
-  );
+  await upsertNeedRow(pool, {
+    id: newId(NEED_ID_PREFIX),
+    needKey,
+    label,
+    isCustom: isCustom ? 1 : 0,
+    depthTarget: depth,
+    breadthTargetPct: breadth,
+    note,
+    sortOrder,
+  });
   const row = await readNeed(pool, needKey);
   if (!row) return { ok: false, problem: "That need did not save." };
   return { ok: true, row };
@@ -339,15 +356,13 @@ export async function retireNeed(
   const before = await readNeed(pool, needKey);
   if (!before) return { found: false, changed: false, row: null };
   if (!before.active) return { found: true, changed: false, row: before };
-  await pool.query("UPDATE `village_needs` SET `retired_at` = NOW() WHERE `need_key` = ? AND `retired_at` IS NULL", [
-    needKey,
-  ]);
+  await retireNeedRow(pool, needKey);
   return { found: true, changed: true, row: await readNeed(pool, needKey) };
 }
 
 /** Put a retired need back in scope, keeping its links and its history. */
 export async function reviveNeed(pool: Pool, needKey: string): Promise<NeedScopeRow | null> {
-  await pool.query("UPDATE `village_needs` SET `retired_at` = NULL WHERE `need_key` = ?", [needKey]);
+  await reviveNeedRow(pool, needKey);
   return readNeed(pool, needKey);
 }
 
@@ -370,23 +385,22 @@ export async function linkNeed(
   const subjectRef = String(input.subjectRef).trim();
   const weight: NeedWeight = input.weight ?? "primary";
   const createdBy = input.createdBy ? String(input.createdBy).slice(0, 64) : null;
-  await pool.query(
-    "INSERT INTO `need_links` (`id`, `need_id`, `subject_type`, `subject_ref`, `weight`, `created_by`) " +
-      "VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE `weight` = VALUES(`weight`)",
-    [newId(LINK_ID_PREFIX), need.id, input.subjectType, subjectRef, weight, createdBy],
-  );
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT `id`, `need_id`, `subject_type`, `subject_ref`, `weight`, `created_by`, `created_at` " +
-      "FROM `need_links` WHERE `need_id` = ? AND `subject_type` = ? AND `subject_ref` = ? LIMIT 1",
-    [need.id, input.subjectType, subjectRef],
-  );
+  await upsertLinkRow(pool, {
+    id: newId(LINK_ID_PREFIX),
+    needId: need.id,
+    subjectType: input.subjectType,
+    subjectRef,
+    weight,
+    createdBy,
+  });
+  const rows = await linkRowFor(pool, need.id, input.subjectType, subjectRef);
   if (!rows[0]) return { ok: false, problem: "That link did not save." };
   return { ok: true, row: toLinkRow(rows[0]) };
 }
 
 /** Take one tag off. Returns false when there was nothing there. */
 export async function unlinkNeed(pool: Pool, linkId: string): Promise<boolean> {
-  const [r] = await pool.query<any>("DELETE FROM `need_links` WHERE `id` = ?", [linkId]);
+  const r = await deleteLinkRow(pool, linkId);
   return Number(r?.affectedRows ?? 0) > 0;
 }
 
@@ -397,10 +411,7 @@ export async function unlinkNeed(pool: Pool, linkId: string): Promise<boolean> {
  * schedule: the domain that owns the subject calls it when the subject goes.
  */
 export async function unlinkSubject(pool: Pool, subjectType: NeedSubject, subjectRef: string): Promise<number> {
-  const [r] = await pool.query<any>("DELETE FROM `need_links` WHERE `subject_type` = ? AND `subject_ref` = ?", [
-    subjectType,
-    subjectRef,
-  ]);
+  const r = await deleteLinksForSubject(pool, subjectType, subjectRef);
   return Number(r?.affectedRows ?? 0);
 }
 
@@ -410,12 +421,7 @@ export async function unlinkSubject(pool: Pool, subjectType: NeedSubject, subjec
 
 /** Every tag on one need, retired or not. */
 export async function linksForNeed(pool: Pool, needKey: string): Promise<NeedLinkRow[]> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT l.`id`, l.`need_id`, l.`subject_type`, l.`subject_ref`, l.`weight`, l.`created_by`, l.`created_at` " +
-      "FROM `need_links` l JOIN `village_needs` n ON n.`id` = l.`need_id` " +
-      "WHERE n.`need_key` = ? ORDER BY l.`subject_type`, l.`subject_ref`",
-    [needKey],
-  );
+  const rows = await linkRowsForNeed(pool, needKey);
   return rows.map(toLinkRow);
 }
 
@@ -425,13 +431,7 @@ export async function linksForSubject(
   subjectType: NeedSubject,
   subjectRef: string,
 ): Promise<Array<NeedLinkRow & { needKey: string; needLabel: string; needActive: boolean }>> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT l.`id`, l.`need_id`, l.`subject_type`, l.`subject_ref`, l.`weight`, l.`created_by`, l.`created_at`, " +
-      "n.`need_key`, n.`label`, n.`retired_at` " +
-      "FROM `need_links` l JOIN `village_needs` n ON n.`id` = l.`need_id` " +
-      "WHERE l.`subject_type` = ? AND l.`subject_ref` = ? ORDER BY n.`sort_order`, n.`need_key`",
-    [subjectType, subjectRef],
-  );
+  const rows = await linkRowsForSubject(pool, subjectType, subjectRef);
   return rows.map((r) => ({
     ...toLinkRow(r),
     needKey: String(r.need_key),
@@ -473,11 +473,7 @@ export interface NeedCoverageRow {
 export async function needsCoverage(pool: Pool): Promise<NeedCoverageRow[]> {
   const scope = await readScope(pool);
   if (scope.length === 0) return [];
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT n.`need_key` AS need_key, l.`subject_type` AS subject_type, l.`weight` AS weight, " +
-      "COUNT(*) AS n FROM `village_needs` n JOIN `need_links` l ON l.`need_id` = n.`id` " +
-      "WHERE n.`retired_at` IS NULL GROUP BY n.`need_key`, l.`subject_type`, l.`weight`",
-  );
+  const rows = await coverageCountRows(pool);
   const blank = (): Record<NeedSubject, number> => ({
     quest: 0,
     role: 0,
@@ -548,14 +544,7 @@ export interface NeedSeatingRow {
 export async function needSeatings(pool: Pool): Promise<NeedSeatingRow[]> {
   const scope = await readScope(pool);
   if (scope.length === 0) return [];
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT n.`need_key` AS need_key, r.`id` AS role_id, r.`name` AS role_name, r.`seats` AS seats, " +
-      "(SELECT COUNT(*) FROM `org_role_assignments` a WHERE a.`org_role_id` = r.`id` AND a.`ended_at` IS NULL) AS held " +
-      "FROM `village_needs` n " +
-      "JOIN `need_links` l ON l.`need_id` = n.`id` AND l.`subject_type` = 'role' " +
-      "JOIN `org_roles` r ON r.`id` = l.`subject_ref` AND r.`active` = 1 " +
-      "WHERE n.`retired_at` IS NULL ORDER BY n.`sort_order`, r.`sort_order`, r.`id`",
-  );
+  const rows = await seatingRows(pool);
   const byNeed = new Map<string, NeedSeatingRow>();
   for (const need of scope) {
     byNeed.set(need.needKey, {
@@ -759,9 +748,6 @@ function toMemberNeedRow(r: RowDataPacket): MemberNeedRow {
   };
 }
 
-const MEMBER_NEED_COLUMNS =
-  "`id`, `need_key`, `depth`, `feeling`, `note`, `visibility`, `cycle_id`, `recorded_at`, `updated_at`";
-
 /**
  * Trim and clip one free-text field, or null.
  *
@@ -779,9 +765,10 @@ function clipOrNull(value: string | null | undefined, max: number): string | nul
 /**
  * Save one member's answer about one need, for one moon.
  *
- * `visibility` IS SET HERE AND NEVER READ FROM THE INPUT. The column takes the
- * literal, so no code path exists that could write another value even if the
- * refusal above were removed. The ON DUPLICATE clause does not name it either,
+ * `visibility` IS SET IN THE STATEMENT AND NEVER READ FROM THE INPUT. The column
+ * takes the literal (`upsertMemberNeedRow` in server/repos/villageNeeds.ts takes
+ * no visibility argument), so no code path exists that could write another
+ * value even if the refusal above were removed. The ON DUPLICATE clause does not name it either,
  * so a second save cannot raise a row that was already saved.
  *
  * The cycle stamp comes from `cycleIdFor`, which server/lib/gratitude-cycles.ts
@@ -803,19 +790,16 @@ export async function saveMemberNeed(
   const cycleId = cycleIdFor(at);
   const feeling = clipOrNull(input.feeling, MEMBER_NEED_FEELING_MAX);
   const note = clipOrNull(input.note, MEMBER_NEED_NOTE_MAX);
-  await pool.query(
-    "INSERT INTO `member_needs` " +
-      "(`id`, `user_id`, `need_key`, `depth`, `feeling`, `note`, `visibility`, `cycle_id`) " +
-      "VALUES (?,?,?,?,?,?,'private',?) " +
-      "ON DUPLICATE KEY UPDATE `depth` = VALUES(`depth`), `feeling` = VALUES(`feeling`), " +
-      "`note` = VALUES(`note`)",
-    [newId(MEMBER_NEED_ID_PREFIX), uid, needKey, input.depth, feeling, note, cycleId],
-  );
-  const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT ${MEMBER_NEED_COLUMNS} FROM \`member_needs\` ` +
-      "WHERE `user_id` = ? AND `need_key` = ? AND `cycle_id` = ? LIMIT 1",
-    [uid, needKey, cycleId],
-  );
+  await upsertMemberNeedRow(pool, {
+    id: newId(MEMBER_NEED_ID_PREFIX),
+    userId: uid,
+    needKey,
+    depth: input.depth,
+    feeling,
+    note,
+    cycleId,
+  });
+  const rows = await memberNeedRow(pool, uid, needKey, cycleId);
   if (!rows[0]) return { ok: false, problem: "That answer did not save." };
   return { ok: true, row: toMemberNeedRow(rows[0]) };
 }
@@ -835,18 +819,10 @@ export async function readMemberNeeds(
   const uid = String(userId ?? "").trim();
   if (!uid) return [];
   if (opts.allCycles) {
-    const [all] = await pool.query<RowDataPacket[]>(
-      `SELECT ${MEMBER_NEED_COLUMNS} FROM \`member_needs\` WHERE \`user_id\` = ? ` +
-        "ORDER BY `cycle_id` DESC, `need_key`",
-      [uid],
-    );
+    const all = await memberNeedRowsAllCycles(pool, uid);
     return all.map(toMemberNeedRow);
   }
-  const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT ${MEMBER_NEED_COLUMNS} FROM \`member_needs\` WHERE \`user_id\` = ? AND \`cycle_id\` = ? ` +
-      "ORDER BY `need_key`",
-    [uid, cycleIdFor(opts.at ?? new Date())],
-  );
+  const rows = await memberNeedRowsForCycle(pool, uid, cycleIdFor(opts.at ?? new Date()));
   return rows.map(toMemberNeedRow);
 }
 
@@ -859,10 +835,7 @@ export async function deleteMemberNeed(
 ): Promise<boolean> {
   const uid = String(userId ?? "").trim();
   if (!uid || !needKey) return false;
-  const [r] = await pool.query<any>(
-    "DELETE FROM `member_needs` WHERE `user_id` = ? AND `need_key` = ? AND `cycle_id` = ?",
-    [uid, String(needKey).trim(), cycleIdFor(at)],
-  );
+  const r = await deleteMemberNeedRow(pool, uid, String(needKey).trim(), cycleIdFor(at));
   return Number(r?.affectedRows ?? 0) > 0;
 }
 
@@ -884,7 +857,7 @@ export async function deleteMemberNeed(
 export async function forgetMemberNeeds(pool: Pool, userId: string): Promise<number> {
   const uid = String(userId ?? "").trim();
   if (!uid) return 0;
-  const [r] = await pool.query<any>("DELETE FROM `member_needs` WHERE `user_id` = ?", [uid]);
+  const r = await deleteMemberNeedsForUser(pool, uid);
   return Number(r?.affectedRows ?? 0);
 }
 
@@ -942,11 +915,7 @@ export async function needsAggregate(
   // against the same rung even when a write lands mid-loop.
   const fallbackTarget = defaultDepthTarget();
   const scope = await readScope(pool);
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT `need_key` AS need_key, `depth` AS depth, COUNT(*) AS n FROM `member_needs` " +
-      "WHERE `cycle_id` = ? GROUP BY `need_key`, `depth`",
-    [cycleId],
-  );
+  const rows = await aggregateTallyRows(pool, cycleId);
   const tallies = new Map<string, Map<string, number>>();
   for (const r of rows) {
     const key = String(r.need_key);

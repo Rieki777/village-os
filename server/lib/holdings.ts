@@ -58,9 +58,12 @@
  * the way `server/lib/spending.ts` and `server/lib/redemption.ts` open with the
  * same sentence.
  */
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool } from "mysql2/promise";
 import { fromLedgerUnits, toLedgerUnits, villageId } from "./economy";
 import { balancesFor, memberAccount, tokenDef } from "./ledger";
+import { heldSeatChargeRows } from "../repos/eventSeatCharges";
+import { liveLoanLockRows } from "../repos/libraryLoans";
+import { heldLockRows } from "../repos/redemptions";
 
 /** Which mechanism is holding the tokens. */
 export type LockSource = "library-loan" | "redemption" | "event-seat";
@@ -161,13 +164,7 @@ const LIVE_LOAN_STATUSES = ["reserved", "pickup_pending", "active", "return_pend
  * that function converts it.
  */
 export async function libraryLocksFor(pool: Pool, userId: string): Promise<TokenLock[]> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT l.`id`, l.`escrow_credits`, i.`name` FROM `library_loans` l " +
-      "JOIN `library_items` i ON i.`id` = l.`item_id` " +
-      `WHERE l.\`user_id\` = ? AND l.\`settled_at\` IS NULL AND l.\`escrow_credits\` > 0 ` +
-      `AND l.\`status\` IN (${LIVE_LOAN_STATUSES.map(() => "?").join(",")}) ORDER BY l.\`created_at\``,
-    [userId, ...LIVE_LOAN_STATUSES],
-  );
+  const rows = await liveLoanLockRows(pool, userId, LIVE_LOAN_STATUSES);
   return rows.map((r) => {
     const heldUnits = toLedgerUnits("library-credit", Number(r.escrow_credits ?? 0));
     const itemName = String(r.name ?? "");
@@ -191,11 +188,7 @@ export async function libraryLocksFor(pool: Pool, userId: string): Promise<Token
  * nothing.
  */
 export async function redemptionLocksFor(pool: Pool, userId: string): Promise<TokenLock[]> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT `id`, `token_slug`, `amount` FROM `redemptions` WHERE `village_id` = ? AND `user_id` = ? " +
-      "AND `state` = 'requested' AND `held_account` IS NOT NULL ORDER BY `created_at`",
-    [villageId(), userId],
-  );
+  const rows = await heldLockRows(pool, villageId(), userId);
   return rows.map((r) => {
     const slug = String(r.token_slug);
     const heldUnits = Number(r.amount ?? 0);
@@ -218,12 +211,7 @@ export async function redemptionLocksFor(pool: Pool, userId: string): Promise<To
  * here: `chargeForPlace` posts the column straight to `postTransfer`.
  */
 export async function seatLocksFor(pool: Pool, userId: string): Promise<TokenLock[]> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT c.`id`, c.`token_type`, c.`amount`, e.`title` FROM `event_seat_charges` c " +
-      "LEFT JOIN `events` e ON e.`id` = c.`event_id` " +
-      "WHERE c.`user_id` = ? AND c.`status` = 'held' ORDER BY c.`created_at`",
-    [userId],
-  );
+  const rows = await heldSeatChargeRows(pool, userId);
   return rows.map((r) => {
     const slug = String(r.token_type);
     const heldUnits = Number(r.amount ?? 0);

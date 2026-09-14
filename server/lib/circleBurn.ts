@@ -62,6 +62,7 @@
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { MAX_SOURCE_REF } from "./economy";
+import { circleSpendRows } from "../repos/tokenLedger";
 import { clockFor, type ClockMode, type CycleClock } from "../../shared/cycleClock";
 import { civilDate, zonedTimeToUtc } from "../../shared/lunar";
 import {
@@ -237,20 +238,7 @@ export async function circleSpendIn(
   if (problem) throw new Error(problem);
   const ref = circleSpendRef(circleId);
 
-  const [rows] = await conn.query<RowDataPacket[]>(
-    `SELECT
-       COALESCE(SUM(CASE WHEN fa.faucet = 1 THEN t.amount ELSE 0 END), 0) AS issued,
-       COALESCE(SUM(CASE WHEN ta.faucet = 1 THEN t.amount ELSE 0 END), 0) AS returned,
-       COUNT(*) AS n
-     FROM token_ledger t
-     LEFT JOIN ledger_accounts fa ON fa.id = t.from_account
-     LEFT JOIN ledger_accounts ta ON ta.id = t.to_account
-     WHERE t.source_ref = ?
-       AND t.token_type = ?
-       AND t.at >= ?
-       AND t.at < ?`,
-    [ref, tokenType, from, to],
-  );
+  const rows = await circleSpendRows(conn, ref, tokenType, from, to);
   const r = (rows as any[])[0] ?? {};
   const issued = Number(r.issued ?? 0);
   const returned = Number(r.returned ?? 0);

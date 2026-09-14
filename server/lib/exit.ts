@@ -37,6 +37,7 @@ import {
   TREASURY,
 } from "./ledger";
 import { numberVar, stringVar } from "./variables";
+import { tokenTypesPostedTo } from "../repos/tokenLedger";
 
 /*
  * UNITS IN THIS FILE, stated once so no future sweep has to guess.
@@ -511,10 +512,7 @@ export async function sweepBalances(
 
   const account = memberAccount(input.userId);
   const balances = await balancesFor(pool, account);
-  const [back] = await pool.query<RowDataPacket[]>(
-    "SELECT DISTINCT token_type FROM token_ledger WHERE source_ref = ? AND to_account = ?",
-    [input.exitId, account],
-  );
+  const back = await tokenTypesPostedTo(pool, input.exitId, account);
   const paidOut = back.map((r) => String(r.token_type));
 
   const swept: Record<string, number> = {};

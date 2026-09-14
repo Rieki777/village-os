@@ -36,6 +36,7 @@ import {
   type IssuanceCapDecision,
 } from "../../shared/issuanceCap";
 import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
+import { storedVariableValue } from "../repos/gameVariableRows";
 
 export type CheckState = "ok" | "missing" | "partial";
 
@@ -327,12 +328,9 @@ export async function confirmManual(
  * admin, so a round trip costs nothing worth saving.
  */
 async function overrideFor(pool: Pool, key: string): Promise<string | null> {
-  const [rows] = await pool.query<any[]>(
-    "SELECT value FROM game_variables WHERE config_key = ?",
-    [key],
-  );
-  const row = rows[0];
-  return row ? String(row.value) : null;
+  // The identical statement and the identical null-for-no-row answer, in the
+  // table's repo (server/repos/gameVariableRows.ts).
+  return storedVariableValue(pool, key);
 }
 
 /**
