@@ -394,6 +394,23 @@ export async function fetchObjectionLineage(objectionIds: string[]): Promise<Ans
 }
 export const fetchWizardFacts = () => call<WizardFacts>("/api/governance/wizard");
 
+/**
+ * A carried decision's countdown, as `GET /api/governance/ballots/:id/landing`
+ * answers it. `landsAt` and the steward's window are one instant (Rye,
+ * 2026-09-14: the village and the stewards share the countdown), and
+ * `countdownSentence` is written by the server from the lock frozen at close.
+ */
+export interface Landing {
+  landsAt: string | null;
+  landingStatus: string;
+  vetoedAt: string | null;
+  vetoLocked: boolean;
+  lockedByConsent: boolean;
+  countdownSentence: string;
+}
+
+export const fetchLanding = (id: string) => call<Landing>(`/api/governance/ballots/${encodeURIComponent(id)}/landing`);
+
 export const castVote = (id: string, choice: VoteChoice, reason?: string) =>
   call<{ success: true; choice: VoteChoice; ballot: Ballot | null }>(
     `/api/governance/ballots/${encodeURIComponent(id)}/vote`,
