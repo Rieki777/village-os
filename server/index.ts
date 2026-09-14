@@ -323,6 +323,7 @@ import { seedEconomy, suggestClassTags } from "./lib/economySeed";
 import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requestVoiceClaim, settleVoiceClaim } from "./lib/voiceClaim";
 import { defaultSeasonsFor, seasonRunningProblem, suggestNextSeasonDates } from "./lib/seasonCalendar";
 import { completionsFor, completionsForMany, gatingModuleIds, trainingIsComplete, trainingProgress } from "./lib/trainingRecord";
+import { starterTrainingModules } from "./lib/trainingStarter";
 import { respondToTerminalError, installCrashHandlers, installShutdownHandlers, reachedSomebody, reportError, reportErrorWithin, wireErrorReporting } from "./lib/errors";
 import {
   STAY_CREDIT,
@@ -1058,62 +1059,8 @@ const DEFAULT_SETTINGS = {
   },
 };
 
-/**
- * The starter training list a fresh deployment gets, once, when the table is
- * empty. Two of these descriptions named Amora outright, so every village that
- * installed this platform opened its training page and read another village's
- * name back at itself on day one. A FUNCTION rather than a const because the
- * name is read at seed time from the merged config (brand overlay over the
- * gameConfig default), which is not known at module load.
- *
- * Only the identity moved. The practices are the platform's opinion about what
- * a village should learn first and they stay exactly as written.
- */
-function defaultTrainingModules() {
-  const village = mergedConfig().project.name;
-  return [
-  {
-    id: "nvc-intro",
-    title: "Introduction to Nonviolent Communication",
-    description:
-      `The foundation of how we talk to each other at ${village}. Learn the four components of NVC and why they matter.`,
-    type: "Video",
-    url: "",
-    mandatory: true,
-    order: 1,
-  },
-  {
-    id: "authentic-relating",
-    title: "Authentic Relating Practices",
-    description:
-      "Games and practices for deeper, more honest connection with the people around you.",
-    type: "Practice",
-    url: "",
-    mandatory: true,
-    order: 2,
-  },
-  {
-    id: "consent-decisions",
-    title: "Consent-Based Decision Making",
-    description:
-      `How ${village} makes decisions together: the difference between consensus and consent, and why it matters.`,
-    type: "Article",
-    url: "",
-    mandatory: true,
-    order: 3,
-  },
-  {
-    id: "circle-facilitation",
-    title: "Circle Facilitation Basics",
-    description:
-      "How to hold and participate in a circle meeting. The roles, the rhythms, and the practices.",
-    type: "Workshop",
-    url: "",
-    mandatory: true,
-    order: 4,
-  },
-  ];
-}
+/** The starter training list, read with this village's name. See server/lib/trainingStarter.ts. */
+const defaultTrainingModules = () => starterTrainingModules(mergedConfig().project.name);
 
 const FORM_TYPE_TO_PATHWAY: Record<string, "investor" | "steward" | "resident" | "prosperity"> = {
   investor: "investor",
