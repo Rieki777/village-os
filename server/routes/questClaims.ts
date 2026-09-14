@@ -387,7 +387,7 @@ export function register(app: Express, deps: Deps): void {
       effectiveLifecycle("badges") === "off"
         ? 1
         : await rewardMultiplierFor(getPool(), claim.userId, await dormantBadgeIds());
-    const payout = payoutFor({ granted, multiplier, cap: verdict.cap });
+    const payout = payoutFor({ granted, multiplier, liftTop: verdict.liftTop });
     // The recomputed balance, set by the post below and read after it commits.
     // At payout 0 (allow_zero_consent) nothing posts and this stays null, so
     // the cache write is skipped: the old code wrote the failed post's 0.

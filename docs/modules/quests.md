@@ -568,7 +568,12 @@ the upper range/ all the way to a cap - Never past the cap."). After the range c
 `payoutFor` in `server/lib/questConsent.ts` lifts the grant by every standing badge the member holds,
 compounding and clamped to `MAX_REWARD_MULTIPLIER = 3` in `server/lib/seasonPatterns.ts`, and stops
 it at the cap: `range.max` under `posted`, the ceiling under `capped`. A badge helps a consent reach
-the top and adds nothing at the top. `unlimited` has no cap, so there only the 3x clamp applies.
+the top and adds nothing at the top. Under `unlimited` the grant has no ceiling, and the lift still
+stops at the top the quest advertises: a grant already at or above it gets none, and a quest naming
+no readable top gets none. That is the economics lane's reading of the ruling, for a reason worth
+keeping: quest recognition posts from a faucet the issuance cap does not count, and recognition is
+the default voting-weight token, so a lift bounded only by the 3x clamp could triple the voting
+weight a steward granted.
 Before the ruling the multiplier ran after the cap with nothing else bounding it, so a village on the
 shipped `posted` mode could pay 300 for a quest advertising 100. `quest_claims.amount` is still what
 the witness decided, which can be less than what moved: `GET /api/game/me` joins the ledger through

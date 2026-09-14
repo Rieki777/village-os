@@ -108,45 +108,58 @@ describe("zero is an acknowledgement, with two doors (ruling 6)", () => {
 });
 
 describe("a badge lifts a consent toward the cap, never past it (ruling 8)", () => {
-  const cap = (over: Parameters<typeof input>[0]) => {
+  const grant = (over: Parameters<typeof input>[0]) => {
     const v = checkConsentAmount(input(over));
     if (!v.ok) throw new Error(`expected a grant, got ${v.status}`);
     return v;
   };
 
   it("posted: the lift stops at the top of the advertised range", () => {
-    const v = cap({ requested: 60 });
-    expect(v.cap).toBe(100);
-    expect(payoutFor({ granted: 60, multiplier: 1.5, cap: v.cap })).toBe(90);
+    const v = grant({ requested: 60 });
+    expect(v.liftTop).toBe(100);
+    expect(payoutFor({ granted: 60, multiplier: 1.5, liftTop: v.liftTop })).toBe(90);
     // The case that used to post 120 on a quest advertising 50 to 100.
-    expect(payoutFor({ granted: 60, multiplier: 2, cap: v.cap })).toBe(100);
-    expect(payoutFor({ granted: 100, multiplier: 3, cap: v.cap })).toBe(100);
+    expect(payoutFor({ granted: 60, multiplier: 2, liftTop: v.liftTop })).toBe(100);
+    expect(payoutFor({ granted: 100, multiplier: 3, liftTop: v.liftTop })).toBe(100);
   });
 
   it("capped: the lift stops at the bonus ceiling", () => {
-    const v = cap({ capMode: "capped", requested: 150 });
-    expect(v.cap).toBe(200);
-    expect(payoutFor({ granted: 150, multiplier: 2, cap: v.cap })).toBe(200);
-    expect(payoutFor({ granted: 90, multiplier: 2, cap: v.cap })).toBe(180);
+    const v = grant({ capMode: "capped", requested: 150 });
+    expect(v.liftTop).toBe(200);
+    expect(payoutFor({ granted: 150, multiplier: 2, liftTop: v.liftTop })).toBe(200);
+    expect(payoutFor({ granted: 90, multiplier: 2, liftTop: v.liftTop })).toBe(180);
   });
 
-  it("unlimited has no cap, so the lift is the multiplier alone", () => {
-    const v = cap({ capMode: "unlimited", requested: 60 });
-    expect(v.cap).toBeNull();
-    expect(payoutFor({ granted: 60, multiplier: 2, cap: v.cap })).toBe(120);
+  it("unlimited: no ceiling on the grant, and the lift still stops at the advertised top", () => {
+    const v = grant({ capMode: "unlimited", requested: 60 });
+    expect(v.liftTop).toBe(100);
+    // The case that used to post 120 with only the 3x clamp above it.
+    expect(payoutFor({ granted: 60, multiplier: 2, liftTop: v.liftTop })).toBe(100);
+  });
+
+  it("unlimited: a grant already above the advertised top gets no lift", () => {
+    const v = grant({ capMode: "unlimited", requested: 150 });
+    expect(v.granted).toBe(150);
+    expect(payoutFor({ granted: 150, multiplier: 2, liftTop: v.liftTop })).toBe(150);
+  });
+
+  it("unlimited: a quest with no readable top gets no lift at all", () => {
+    const v = grant({ capMode: "unlimited", requested: 5, label: "a few hearts" });
+    expect(v.liftTop).toBeNull();
+    expect(payoutFor({ granted: 5, multiplier: 3, liftTop: v.liftTop })).toBe(5);
   });
 
   it("no badge, or a multiplier below 1, pays exactly the grant", () => {
-    expect(payoutFor({ granted: 60, multiplier: 1, cap: 100 })).toBe(60);
-    expect(payoutFor({ granted: 60, multiplier: 0.5, cap: 100 })).toBe(60);
-    expect(payoutFor({ granted: 60, multiplier: Number.NaN, cap: 100 })).toBe(60);
+    expect(payoutFor({ granted: 60, multiplier: 1, liftTop: 100 })).toBe(60);
+    expect(payoutFor({ granted: 60, multiplier: 0.5, liftTop: 100 })).toBe(60);
+    expect(payoutFor({ granted: 60, multiplier: Number.NaN, liftTop: 100 })).toBe(60);
   });
 
   it("whole tokens: a fractional lift rounds down", () => {
-    expect(payoutFor({ granted: 51, multiplier: 1.5, cap: 100 })).toBe(76);
+    expect(payoutFor({ granted: 51, multiplier: 1.5, liftTop: 100 })).toBe(76);
   });
 
   it("a zero grant pays zero whatever the badge", () => {
-    expect(payoutFor({ granted: 0, multiplier: 3, cap: 100 })).toBe(0);
+    expect(payoutFor({ granted: 0, multiplier: 3, liftTop: 100 })).toBe(0);
   });
 });

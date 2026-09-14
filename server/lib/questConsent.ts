@@ -30,8 +30,13 @@
  *    dials it could not be consented at any amount, since 0 was refused as "at
  *    least 1" and 1 as outside 0 to 0.
  *
- * `unlimited` has no cap, so there the multiplier keeps only the clamp inside
- * `rewardMultiplierFor` (server/lib/seasonPatterns.ts).
+ * `unlimited` puts no ceiling on the grant, and a badge lift there still stops at
+ * the top the quest advertises (the economics lane's reading of ruling 8,
+ * 2026-09-14). Quest recognition posts from a faucet the issuance cap does not
+ * count, and recognition is the default voting-weight token, so a lift bounded
+ * only by the 3x clamp could triple the voting weight a steward granted. A grant
+ * already at or above the advertised top gets no lift, and a quest naming no
+ * readable top gets none.
  */
 import { describeRange, type RewardRange } from "../../shared/questRewards";
 
@@ -67,8 +72,12 @@ export type ConsentAmountVerdict =
       ok: true;
       /** What the witness decided, in whole tokens. The claim stores this as `amount`. */
       granted: number;
-      /** The most this consent may pay after a badge lift. Null under `unlimited`. */
-      cap: number | null;
+      /**
+       * The most a badge may lift this consent to: the ceiling under `posted` and
+       * `capped`, the advertised top under `unlimited`. Null means no lift at all,
+       * which is `unlimited` on a quest naming no readable top.
+       */
+      liftTop: number | null;
     }
   | { ok: false; status: 400 | 409; body: { error: string } & Record<string, unknown> };
 
@@ -114,12 +123,15 @@ export function checkConsentAmount(input: ConsentAmountInput): ConsentAmountVerd
   // bonus ceiling fails closed to the top of the advertised range.
   const ceilingMultiplier =
     Number.isFinite(input.capMultiplier) && input.capMultiplier >= 1 ? input.capMultiplier : 1;
-  const cap =
+  const ceiling =
     mode === "posted" ? range.max : mode === "capped" ? Math.round(range.max * ceilingMultiplier) : null;
+  // Where a badge lift stops. Under a cap it is the ceiling; under `unlimited`
+  // it is the advertised top, and a quest naming no readable top gets no lift.
+  const liftTop = ceiling !== null ? ceiling : range.valid ? range.max : null;
 
   // A zero that got this far was allowed on purpose: it moves no recognition,
   // so it cannot break a ceiling, and the village or the quest chose it.
-  if (requested <= 0) return { ok: true, granted: 0, cap };
+  if (requested <= 0) return { ok: true, granted: 0, liftTop };
 
   if (mode === "posted" && (requested < range.min || requested > range.max)) {
     return {
@@ -132,15 +144,15 @@ export function checkConsentAmount(input: ConsentAmountInput): ConsentAmountVerd
       },
     };
   }
-  if (mode === "capped" && cap !== null) {
-    if (requested > cap) {
+  if (mode === "capped" && ceiling !== null) {
+    if (requested > ceiling) {
       return {
         ok: false,
         status: 409,
         body: {
-          error: `${requested} is above the ceiling for this quest. It advertises ${describeRange(range)} and the bonus ceiling is ${cap}.`,
+          error: `${requested} is above the ceiling for this quest. It advertises ${describeRange(range)} and the bonus ceiling is ${ceiling}.`,
           max: range.max,
-          ceiling: cap,
+          ceiling,
         },
       };
     }
@@ -149,29 +161,29 @@ export function checkConsentAmount(input: ConsentAmountInput): ConsentAmountVerd
         ok: false,
         status: 409,
         body: {
-          error: `${requested} is below what this quest advertises (${describeRange(range)}). A bonus can reach ${cap}, and the floor still holds.`,
+          error: `${requested} is below what this quest advertises (${describeRange(range)}). A bonus can reach ${ceiling}, and the floor still holds.`,
           min: range.min,
-          ceiling: cap,
+          ceiling,
         },
       };
     }
   }
-  return { ok: true, granted: requested, cap };
+  return { ok: true, granted: requested, liftTop };
 }
 
 /**
  * What the ledger moves for a grant: the grant lifted by a standing badge, and
- * never past the cap.
+ * never past `liftTop` (see `ConsentAmountVerdict`).
  *
- * A badge at the top of the range therefore adds nothing. A multiplier below 1
- * never cuts the grant: badge validation refuses one, and this holds the line
- * for a row that predates that validation.
+ * A badge at or above the top therefore adds nothing, and a null top means no
+ * lift at all. A multiplier below 1 never cuts the grant: badge validation
+ * refuses one, and this holds the line for a row that predates that validation.
  */
-export function payoutFor(input: { granted: number; multiplier: number; cap: number | null }): number {
-  const { granted, cap } = input;
+export function payoutFor(input: { granted: number; multiplier: number; liftTop: number | null }): number {
+  const { granted, liftTop } = input;
   if (!(granted > 0)) return 0;
+  if (liftTop === null) return granted;
   const multiplier = Number.isFinite(input.multiplier) && input.multiplier > 1 ? input.multiplier : 1;
   const lifted = multiplier === 1 ? granted : Math.floor(granted * multiplier);
-  const bounded = cap === null ? lifted : Math.min(lifted, cap);
-  return Math.max(granted, bounded);
+  return Math.max(granted, Math.min(lifted, liftTop));
 }

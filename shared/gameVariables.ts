@@ -683,7 +683,7 @@ export const VARIABLES: VariableDef[] = [
     category: "Quests",
     label: "Allow consenting at zero",
     description:
-      "When on, a steward may consent any claim at 0, meaning 'acknowledged, no recognition', whatever the quest advertises. The claim completes and any stay-credit reward still releases, but no recognition moves. When off, 0 is possible only on a quest that advertises 0, such as one that pays in stay credits alone.",
+      "When on, a steward may consent any claim at 0, meaning 'acknowledged, no recognition', whatever the quest advertises. The claim completes and no recognition moves. The village's quest-completion rewards and any stay-credit reward still release. When off, 0 is possible only on a quest that advertises 0, such as one that pays in stay credits alone.",
     type: "boolean",
     default: "false",
   },

@@ -251,4 +251,22 @@ describe.skipIf(!configured)("what a quest consent moves (MySQL, real ledger)", 
     expect((await consent(id, 60)).status).toBe(200);
     expect(await posted(id)).toEqual([60]);
   });
+
+  it("unlimited: a badge lifts the grant to the advertised top, and not past it", async () => {
+    ctl.vars = { "quest.consent_cap_mode": "unlimited" };
+    const id = await submittedOn("unlimited-lift", "50-100");
+    ctl.multiplier = 2;
+    expect((await consent(id, 60)).status).toBe(200);
+    expect(await claimRow(id)).toEqual({ status: "consented", amount: 60 });
+    expect(await posted(id)).toEqual([100]);
+  });
+
+  it("unlimited: a grant above the advertised top gets no lift, and no bonus is announced", async () => {
+    ctl.vars = { "quest.consent_cap_mode": "unlimited" };
+    const id = await submittedOn("unlimited-above", "50-100");
+    ctl.multiplier = 2;
+    expect((await consent(id, 150)).status).toBe(200);
+    expect(await posted(id)).toEqual([150]);
+    expect(consentedTitle()).not.toContain("badge");
+  });
 });
