@@ -300,7 +300,11 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   12:58 PDT on the local MariaDB at 127.0.0.1:3307: 25 schemas hold `_migrations_applied` and
   exactly one holds any of the seven old filenames, `village_tpl_e86746be575f_default`, a test
   template. No persistent schema holds any of them, and none of the seven appears anywhere in the
-  history of `origin/main` or of any tag.
+  history of `origin/main` or of any tag. **Re-measured at 13:03 PDT, immediately before the
+  rename, and the channels had already moved:** `0199` was COMMITTED and pushed on
+  `origin/wt/seat-terms` and on a second local branch `wt/seat-terms-ui`, and `0197` and `0198`
+  were committed and pushed on `origin/wt/first-hour` with that lane's claim now on a ref. The
+  ceiling was still **0199** on all four channels and nothing anywhere held `0200` or above.
 - **quest-consent integrity lane, 2026-09-10: holds 0196** for
   `drizzle/0196_one_live_claim_per_member.sql`. The number was ASSIGNED by the coordinator, not
   measured by this lane, and `check-migration-numbers.mjs` reported next-free 0190 in this

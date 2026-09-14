@@ -295,7 +295,7 @@ describe("four facts, four sentences, and no two the same", () => {
         case "metered":
           return r.cycle.state;
         /*
-         * THE GATE FIRED HERE, AND THIS CASE IS WHAT IT COST (0181).
+         * THE GATE FIRED HERE, AND THIS CASE IS WHAT IT COST (0200).
          *
          * Adding `TreasuryReading` to the union failed `tsc` on the line below
          * with "Type 'TreasuryReading' is not assignable to type 'never'",

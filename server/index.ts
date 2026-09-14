@@ -10338,7 +10338,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     }
     // isExample is pinned exactly like id: a request body may not forge the
     // flag onto a real row, nor strip it off an example to launder it.
-    const wasStatus = String((all[idx] as any).status ?? "active"), merged = { ...all[idx], ...req.body, id: all[idx].id, isExample: all[idx].isExample }; // 0181: the status is read BEFORE the merge overwrites it
+    const wasStatus = String((all[idx] as any).status ?? "active"), merged = { ...all[idx], ...req.body, id: all[idx].id, isExample: all[idx].isExample }; // 0200: the status is read BEFORE the merge overwrites it
     // An alias maps to exactly ONE circle: reject collisions with any other
     // circle's name or aliases — a quest resolving two ways is a data bug.
     const aliases: string[] = Array.isArray(merged.aliases) ? merged.aliases.map((a: any) => String(a)) : [];
@@ -17117,7 +17117,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
      * released to date. Printing both is the honest form, and netting them
      * silently is the change of meaning `spendSinkFor` refuses in writing.
      */
-    const [retired, t] = await Promise.all([retiredSupply(getPool()), treasuryFacts(getPool(), await listBudgets(getPool()), allTokens().map((x) => x.slug), effectiveLifecycle("resources") !== "off")]); // 0181: treasuryHeld is a THIRD fact, netted into neither
+    const [retired, t] = await Promise.all([retiredSupply(getPool()), treasuryFacts(getPool(), await listBudgets(getPool()), allTokens().map((x) => x.slug), effectiveLifecycle("resources") !== "off")]); // 0200: treasuryHeld is a THIRD fact, netted into neither
     res.json({
       tokens: allTokens().map((x) => ({ ...x, issuedBy: byToken[x.slug] ?? {}, retired: retired[x.slug] ?? 0, treasuryHeld: t.byToken[x.slug] })),
       mintCapPerCycle: numberVar("ledger.admin_mint_cycle_cap"),

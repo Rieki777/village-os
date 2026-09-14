@@ -70,7 +70,7 @@ export const MINT_CAP_KEY = "ledger.admin_mint_cycle_cap";
  * The `token_ledger.source` values the three doors that MEET the guard write.
  *
  * `exchange_stock` is treasury stocking, `admin_mint` is both the hand-mint
- * and its co-signed approval, and `circle_treasury_fund` (0181) is a steward
+ * and its co-signed approval, and `circle_treasury_fund` (0200) is a steward
  * minting a circle its treasury. Everything else out of this faucet is a door
  * that issues without passing the guard: the Stripe stay-purchase settle, the
  * member-triggered quest work-exchange release, the three stays routes, and
