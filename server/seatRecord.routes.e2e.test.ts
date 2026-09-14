@@ -12,7 +12,9 @@
  *     drives each of the four rather than asserting that they exist: the term
  *     on the map payload, the seat's own lapse, the calendar's `seat-term`
  *     entries, and the row `term-watch` reads. A test that only checked the
- *     column would have passed against a fix that lit nothing up.
+ *     column would have passed against a fix that lit nothing up. Since 0199
+ *     (Rye, 2026-09-14) the route never seats anybody without a term: no date
+ *     asked means the season's end, and a date already past is refused.
  *
  *  2. THE SEAT'S HISTORY IS FOR MEMBERS. `GET /api/org/roles/:id/history` sits
  *     behind `map.viewPeople`, which unlocks at `guest`, so an ordinary
@@ -40,6 +42,7 @@ import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, type TestDb, E2E_BOOT_DEADLINE_MS, waitForPortFree } from "./db/testDb";
+import { civilDateInstant } from "../shared/seatTerms";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -199,14 +202,30 @@ describe.skipIf(!DB_CONFIGURED)("the term a seating never carried", () => {
   let pastSeating = "";
   let soonSeating = "";
 
-  it("still seats somebody with no term, which is every seating that exists today", async () => {
+  it("seats somebody with no date asked until the season ends, because no seat enters without a term (Rye, 2026-09-14)", async () => {
     expect((await call("POST", "/api/admin/org/roles", { body: { id: PAST_SEAT, name: "Water keeper", seats: 2 } })).status).toBe(200);
     const seated = await call("POST", `/api/admin/org/roles/${PAST_SEAT}/holders`, {
       body: { displayName: "Ada Brook", focus: "the spring line" },
     });
     expect(seated.status, JSON.stringify(seated.json)).toBe(200);
-    // The route's old behaviour, unbroken: leaving it out leaves it null.
-    expect(await termOnRow(await newestSeating(PAST_SEAT))).toBeNull();
+    // This case used to assert a null, which was every seating then. The ruling
+    // reversed it: the season's end IS the term when nobody names another.
+    const season = await call("GET", "/api/season", { token: null });
+    const seasonEnd = civilDateInstant(season.json?.current?.endsOn, String(season.json?.timezone ?? "UTC"));
+    expect(seasonEnd, "a fresh village derives a season with an end, so there is one to end with").not.toBeNull();
+    const seating = await newestSeating(PAST_SEAT);
+    // UNIX_TIMESTAMP, because `term_ends_at` is a TIMESTAMP and this pool never
+    // sets its session zone: read back as a Date it comes out shifted by the
+    // database host's offset on a local MySQL (seven hours, measured), and exact
+    // only on CI's UTC container. The server's own pool sets +00:00, so what it
+    // wrote is right; only a naive read here would be wrong.
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT UNIX_TIMESTAMP(term_ends_at) AS ends, term_follows_season FROM org_role_assignments WHERE id = ?",
+      [seating],
+    );
+    expect(rows[0]?.ends, "the term is on the row").not.toBeNull();
+    expect(Number(rows[0].ends) * 1000).toBe(seasonEnd!.getTime());
+    expect(Number(rows[0]?.term_follows_season), "and it moves when the season does").toBe(1);
   });
 
   it("refuses a date it cannot read, rather than writing a quiet null", async () => {
@@ -227,11 +246,23 @@ describe.skipIf(!DB_CONFIGURED)("the term a seating never carried", () => {
     // assertion that can throw is a seat the later cases cannot find, and the
     // cascade then reports a missing seat where the real answer is a missing
     // term. A falsification that names the wrong thing is worth very little.
-    const seated = await call("POST", `/api/admin/org/roles/${PAST_SEAT}/holders`, {
+    // A date already past is refused since 0199, so a term that has run out is
+    // made the way it happens for real: seated with a future date, then time
+    // passes. The passing is the one fixture statement below.
+    const pastRefused = await call("POST", `/api/admin/org/roles/${PAST_SEAT}/holders`, {
       body: { userId: memberId, focus: "the well", termEndsAt: isoIn(-2) },
+    });
+    expect(pastRefused.status, JSON.stringify(pastRefused.json)).toBe(409);
+    expect(pastRefused.json?.code).toBe("already_over");
+    const seated = await call("POST", `/api/admin/org/roles/${PAST_SEAT}/holders`, {
+      body: { userId: memberId, focus: "the well", termEndsAt: isoIn(3) },
     });
     expect(seated.status, JSON.stringify(seated.json)).toBe(200);
     pastSeating = await newestSeating(PAST_SEAT);
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "UPDATE org_role_assignments SET term_ends_at = ? WHERE id = ?",
+      [new Date(Date.now() - 2 * 86400000), pastSeating],
+    );
 
     expect((await call("POST", "/api/admin/org/roles", { body: { id: SOON_SEAT, name: "Hearth keeper", seats: 1 } })).status).toBe(200);
     expect((await call("POST", `/api/admin/org/roles/${SOON_SEAT}/holders`, {
