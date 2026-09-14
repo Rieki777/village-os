@@ -158,14 +158,23 @@ describe.skipIf(!configured)("a reversed gift refunds its giver", () => {
     const deps = depsOver(pool);
     const fromUser = await deps.members.byId(from);
 
+    // The cap is READ, never typed. It is the allowance divided by
+    // `gratitude.full_sends_per_cycle`, and #217 changed that dial's default
+    // after this case was first written with a literal 20, which then sent
+    // more than one person may receive and failed for a reason unrelated to
+    // what it tests.
     const total = (await allowanceFor(pool, from, 1)).total;
-    const capped = await sendGratitude(deps, { fromUser, toId: to, amount: 20, message: "most of it" });
+    expect(total).toBeGreaterThan(0);
+    const cap = shareCapFor(total);
+    expect(cap).toBeGreaterThan(0);
+
+    const capped = await sendGratitude(deps, { fromUser, toId: to, amount: cap, message: "all of it" });
     expect(capped.ok, capped.ok === false ? capped.error : "").toBe(true);
     if (!capped.ok) throw new Error("the acknowledgement door refused a valid send");
 
     // The share cap refuses a second gift to the same person, which is the
     // limit the reversal below has to lift.
-    const refused = await sendGratitude(deps, { fromUser, toId: to, amount: 20, message: "and more" });
+    const refused = await sendGratitude(deps, { fromUser, toId: to, amount: 1, message: "and more" });
     expect(refused.ok).toBe(false);
     expect(refused.ok === false && refused.error).toMatch(/most you can give one person/);
 
@@ -173,14 +182,13 @@ describe.skipIf(!configured)("a reversed gift refunds its giver", () => {
       from: memberAccount(to),
       to: RECOGNITION_FAUCET,
       tokenSlug: HEARTS,
-      amount: 20 * ONE,
+      amount: cap * ONE,
     });
     expect(back.ok, back.ok === false ? back.error : "").toBe(true);
 
-    const again = await sendGratitude(deps, { fromUser, toId: to, amount: 20, message: "again" });
+    const again = await sendGratitude(deps, { fromUser, toId: to, amount: cap, message: "again" });
     expect(again.ok, again.ok === false ? again.error : "").toBe(true);
-    expect((await allowanceFor(pool, from, 1)).spent).toBe(20);
-    expect(total).toBeGreaterThan(0);
+    expect((await allowanceFor(pool, from, 1)).spent).toBe(cap);
   });
 
   it("keeps one village's reversed gift out of a member's allowance in another", async () => {
