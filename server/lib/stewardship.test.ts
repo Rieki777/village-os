@@ -29,8 +29,9 @@ import { describe, expect, it } from "vitest";
 import {
   ADVISORY,
   AUTO_EXECUTE_SUBJECTS_KEY,
-
   HIGHEST_TIER_KEY,
+  beingVotedOutAt,
+  votedOutSentence,
   REASON_MAX,
   REASON_NOTICE,
   VETO_TEXT_COLUMNS,
@@ -56,6 +57,7 @@ import {
   VETO_HOURS_KEY,
 } from "./stewardship";
 import { emailCadenceFor, resolveNotifyPrefs } from "./notify";
+import type { CarriedUnseating } from "../repos/stewardshipBallots";
 import { capabilityDecision } from "../../shared/capabilities";
 import { NOTIFICATION_KINDS } from "../../shared/notificationKinds";
 import { badgeProblem } from "./badges";
@@ -665,5 +667,34 @@ describe("where this lane's free text lives", () => {
       "ballots.veto_reason",
       "mechanics_proposals.veto_reason",
     ]);
+  });
+});
+
+describe("a veto cast while its steward was being voted out says so (Rye, 2026-09-14)", () => {
+  const ROLES = new Set(["steward"]);
+  const unseat = (over: Partial<CarriedUnseating> = {}): CarriedUnseating => ({
+    ballotId: "bal-out",
+    roleId: "steward",
+    closedAt: new Date("2026-09-10T00:00:00Z"),
+    landsAt: new Date("2026-09-13T00:00:00Z"),
+    ...over,
+  });
+
+  it("marks a veto between the unseat carrying and it landing, and names when it lands", () => {
+    const m = beingVotedOutAt([unseat()], ROLES, new Date("2026-09-11T12:00:00Z"));
+    expect(m).toEqual({ unseatBallotId: "bal-out", landsAt: "2026-09-13T00:00:00.000Z" });
+    expect(votedOutSentence("Wren", m!.landsAt)).toContain("lands on 2026-09-13");
+  });
+
+  it("does not mark a veto before the unseat carried, or from the moment it lands", () => {
+    expect(beingVotedOutAt([unseat()], ROLES, new Date("2026-09-09T23:59:59Z"))).toBeNull();
+    // The landing instant is the seat ending, so a veto then is no longer the seat's to mark.
+    expect(beingVotedOutAt([unseat()], ROLES, new Date("2026-09-13T00:00:00Z"))).toBeNull();
+  });
+
+  it("counts only a seat that carries the veto, and only an unseat that waits a window", () => {
+    expect(beingVotedOutAt([unseat({ roleId: "gardener" })], ROLES, new Date("2026-09-11T00:00:00Z"))).toBeNull();
+    expect(beingVotedOutAt([unseat({ landsAt: null })], ROLES, new Date("2026-09-11T00:00:00Z"))).toBeNull();
+    expect(beingVotedOutAt([unseat({ closedAt: null })], ROLES, new Date("2026-09-11T00:00:00Z"))).toBeNull();
   });
 });

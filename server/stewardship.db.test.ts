@@ -38,6 +38,8 @@ import mysql from "mysql2/promise";
 import type { Pool } from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 import { loadVariables, setVariable } from "./lib/variables";
+import { carriedUnseatingsOf } from "./repos/stewardshipBallots";
+import { beingVotedOut } from "./lib/stewardship";
 import {
   actFor,
   expiringHoldings,
@@ -302,6 +304,29 @@ describe.skipIf(!configured)("the veto on a carried decision", () => {
   afterAll(async () => {
     await pool?.end();
     await db?.drop();
+  });
+
+  it("finds a steward's carried unseating, and marks a veto cast inside its window (Rye, 2026-09-14)", async () => {
+    // The instants a real close writes: carried a day ago, landing in two days.
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema
+      "UPDATE ballots SET closed_at = ?, lands_at = ? WHERE id = 'bal-unseat'",
+      [new Date(Date.now() - 86400000), new Date(Date.now() + 2 * 86400000)],
+    );
+    try {
+      const found = await carriedUnseatingsOf(pool, "st-1");
+      expect(found.map((u) => [u.ballotId, u.roleId])).toEqual([["bal-unseat", STEWARD_ROLE_ID]]);
+      // Exact on the member half: a prefix of the id, or another steward, finds nothing.
+      expect(await carriedUnseatingsOf(pool, "st")).toEqual([]);
+      expect(await carriedUnseatingsOf(pool, "st-2")).toEqual([]);
+      // A role_seat ballot is not a removal, whoever it names.
+      expect(await carriedUnseatingsOf(pool, "pr-1")).toEqual([]);
+
+      expect((await beingVotedOut(pool, "st-1", new Date()))?.unseatBallotId).toBe("bal-unseat");
+      expect(await beingVotedOut(pool, "st-1", new Date(Date.now() + 3 * 86400000)), "after it lands").toBeNull();
+      expect(await beingVotedOut(pool, "st-2", new Date())).toBeNull();
+    } finally {
+      await pool.query("UPDATE ballots SET closed_at = NULL, lands_at = NULL WHERE id = 'bal-unseat'"); // module-review-ok: fixture SQL against the S5 scratch schema
+    }
   });
 
   it("has no act on a carried decision until somebody makes one, and that is not a queue", async () => {

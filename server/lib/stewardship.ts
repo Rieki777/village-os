@@ -165,7 +165,9 @@ import {
 import {
   blankBallotVetoReason,
   blankBallotVetoReasonsBy,
+  carriedUnseatingsOf,
   subjectTypesOnBallots,
+  type CarriedUnseating,
 } from "../repos/stewardshipBallots";
 import { catalystUserIds } from "../repos/users";
 import { moveCapabilityToVillage } from "./capabilityHolding";
@@ -971,6 +973,51 @@ export async function rolesCarryingVeto(pool: Pool): Promise<Map<string, string>
     if (roleCapabilityList(r.capabilities).includes(STEWARD_VETO)) out.set(r.id, String(r.name ?? r.id));
   }
   return out;
+}
+
+/**
+ * WAS THIS STEWARD BEING VOTED OUT WHEN THEY ACTED?
+ *
+ * Rye, 2026-09-14: a steward the village has voted out keeps the veto through
+ * the unseat vote's window. A vote-out that switched the veto off at once would
+ * be the way around the veto: take the steward's seat first, then pass what
+ * they would have stopped. What the village gets instead is the mark. A veto
+ * cast between the unseat vote carrying and it landing says so, beside the
+ * steward's name and the reason they had to give.
+ *
+ * Derived, never stored, and still true a year later: an unseat vote's close
+ * and landing instants do not move once it has carried, so asking after it
+ * landed gives the same answer about the moment of the veto. The one input that
+ * can move is which roles carry the veto, which is read as it stands now.
+ */
+export interface BeingVotedOut {
+  unseatBallotId: string;
+  /** When the unseat lands, as an ISO instant. */
+  landsAt: string;
+}
+
+export function beingVotedOutAt(
+  unseatings: readonly CarriedUnseating[],
+  vetoRoleIds: ReadonlySet<string>,
+  at: Date,
+): BeingVotedOut | null {
+  for (const u of unseatings) {
+    if (!vetoRoleIds.has(u.roleId) || !u.closedAt || !u.landsAt) continue;
+    if (u.closedAt.getTime() <= at.getTime() && at.getTime() < u.landsAt.getTime()) {
+      return { unseatBallotId: u.ballotId, landsAt: u.landsAt.toISOString() };
+    }
+  }
+  return null;
+}
+
+export async function beingVotedOut(pool: Pool, userId: string, at: Date): Promise<BeingVotedOut | null> {
+  const [unseatings, roles] = await Promise.all([carriedUnseatingsOf(pool, userId), rolesCarryingVeto(pool)]);
+  return beingVotedOutAt(unseatings, new Set(roles.keys()), at);
+}
+
+/** The sentence a veto carries when its steward was being voted out. */
+export function votedOutSentence(firstName: string, landsAtIso: string): string {
+  return `${firstName} was being voted out when they cast this: the village had carried the vote to take their seat back, and it lands on ${landsAtIso.slice(0, 10)}.`;
 }
 
 /**
