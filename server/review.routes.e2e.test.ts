@@ -363,4 +363,91 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
     expect(r.status).not.toBe(200);
     expect([401, 403, 409]).toContain(r.status);
   });
+
+  it("reads a vendor's own field names, places each seat by circle name, and names what it did not read", async () => {
+    // THE DEFECT. A real first batch spelled a seat's name `role_name`, its
+    // holder count `seat_count`, gave its circle by NAME, and sent its
+    // accountabilities as one string. The accept path copied canonical keys
+    // only and dropped the rest in silence, so every seat blocked as nameless.
+    const water = await call("POST", "/api/admin/circles", { name: "Springs & Wells", aliases: ["Water Care"] });
+    expect(water.status, water.text).toBe(200);
+    const waterId = String(water.json.id);
+
+    const SHAPED = "batch-vendor-shape";
+    const records: Record<string, unknown>[] = [
+      {
+        role_name: "Spring Keeper", aim: "The spring runs clean all year.", domain: null,
+        accountabilities: "Test the spring monthly; Keep the log.", circle: "springs & wells ", seat_count: 1, recruiting: true,
+      },
+      {
+        role_name: "Pipe Mender", aim: "No line stays broken for a week.", domain: "The water lines.",
+        accountabilities: "Walk the lines after rain\nCarry the repair kit", circle: "Water Care", seat_count: 2,
+        recruiting: false, vendor_rank: 3,
+      },
+      {
+        role_name: "Mill Warden", aim: "The mill turns when the grain is in.", domain: "The mill.",
+        accountabilities: "Run the mill", circle: "Milling Circle", seat_count: 1, recruiting: false,
+      },
+    ];
+    const ids: string[] = [];
+    for (const [i, payload] of records.entries()) {
+      const r = await landProposal(pool, {
+        villageId: "v1",
+        moduleId: "saberra",
+        batchId: SHAPED,
+        kind: "role.proposed",
+        sourceRef: `record-${i + 1}`,
+        quote: `The record describes the seat ${String(payload.role_name)}.`,
+        payload,
+      });
+      expect(r.ok, `record ${i + 1} must land`).toBe(true);
+      if (r.ok) ids.push(r.id);
+    }
+
+    const payloadsByName = async (draftId: string): Promise<Record<string, Record<string, unknown>>> => {
+      const [rows] = await pool.query<any[]>( // module-review-ok: reading back the scratch schema this suite provisioned
+        "SELECT payload FROM org_draft_changes WHERE draft_id = ?", [draftId],
+      );
+      const out: Record<string, Record<string, unknown>> = {};
+      for (const row of rows) {
+        const p = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;
+        out[String(p.name)] = p;
+      }
+      return out;
+    };
+
+    const first = await call("POST", `/api/review/batches/${SHAPED}/accept`, {}, kiraToken);
+    expect(first.status, first.text).toBe(200);
+    expect(first.json.seats).toBe(3);
+    // One blocked, and only the one whose circle does not exist yet.
+    expect(first.json.blocked).toBe(1);
+    // Named, never dropped in silence.
+    expect(first.json.ignored).toEqual([{ proposalId: ids[1], keys: ["vendor_rank"] }]);
+
+    const one = await payloadsByName(first.json.draftId);
+    expect(one["Spring Keeper"]).toMatchObject({
+      circleId: waterId, seats: 1, recruiting: true, accountabilities: ["Test the spring monthly", "Keep the log"],
+    });
+    expect(one["Pipe Mender"]).toMatchObject({
+      circleId: waterId, seats: 2, accountabilities: ["Walk the lines after rain", "Carry the repair kit"],
+    });
+    expect(one["Pipe Mender"]).not.toHaveProperty("vendor_rank");
+    expect(one["Mill Warden"]).not.toHaveProperty("circleId");
+    expect(one["Mill Warden"].circleName).toBe("Milling Circle");
+
+    // THE RECOVERY the blocked line asks for: an admin makes the circle, the
+    // steward withdraws, accepts again, and the reopened proposal is placed.
+    const mill = await call("POST", "/api/admin/circles", { name: "Milling Circle" });
+    expect(mill.status, mill.text).toBe(200);
+    const withdrawn = await call("POST", `/api/review/drafts/${first.json.draftId}/withdraw`, {}, kiraToken);
+    expect(withdrawn.status, withdrawn.text).toBe(200);
+    expect(withdrawn.json.reopened).toBe(3);
+
+    const again = await call("POST", `/api/review/batches/${SHAPED}/accept`, {}, kiraToken);
+    expect(again.status, again.text).toBe(200);
+    expect(again.json.blocked).toBe(0);
+    const two = await payloadsByName(again.json.draftId);
+    expect(two["Mill Warden"]).toMatchObject({ circleId: String(mill.json.id) });
+    expect(two["Mill Warden"]).not.toHaveProperty("circleName");
+  });
 });

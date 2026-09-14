@@ -89,6 +89,7 @@ import {
   previewDraft,
   withdrawDraft,
 } from "../lib/orgDrafts";
+import { readProposedSeats, type LiveCircle } from "../lib/proposedSeats";
 import {
   acceptQuestProposal,
   questProposalQueue,
@@ -98,64 +99,37 @@ import {
 
 type Deps = Pick<
   AppDeps,
-  "isAdmin" | "authedUser" | "guardCapability" | "mayAct" | "adminActor" | "getPool" | "members" | "questsRepo"
+  | "isAdmin"
+  | "authedUser"
+  | "guardCapability"
+  | "mayAct"
+  | "adminActor"
+  | "getPool"
+  | "members"
+  | "questsRepo"
+  | "circlesRepo"
 >;
 
 /** The kinds whose accept builds an org draft. Everything else is a record. */
 const ORG_KINDS = new Set(["org.proposed", "role.proposed", "circle.proposed"]);
 
-/** A seat as a proposal may describe it. Nothing here names a holder. */
-interface ProposedSeat {
-  id?: string;
-  name?: string;
-  circleId?: string | null;
-  aim?: string | null;
-  domain?: string | null;
-  accountabilities?: string[];
-  whyItMatters?: string | null;
-  seats?: number;
-  criticality?: string;
-  recruiting?: boolean;
+/** Keys one proposal carried that nothing read. Only proposals with at least one are listed. */
+interface IgnoredKeys {
+  proposalId: string;
+  keys: string[];
 }
 
-/**
- * The seats a payload describes, whether it carries one or a list.
+/*
+ * WHAT A PROPOSAL MAY SAY ABOUT A SEAT lives in server/lib/proposedSeats.ts:
+ * the allowlist, the vendor spellings it accepts, how a circle given by NAME
+ * is placed against this village's circles, and the keys it did not read.
  *
- * `org.proposed` is a whole structure and `role.proposed` is one seat, and
- * both arrive through the same table. Reading them here rather than in two
- * branches means the field allowlist below is applied once.
+ * It used to live here as a bare allowlist that carried canonical keys across
+ * and dropped every other key without a word. A first vendor batch spelled
+ * its seat name `role_name` and gave its circle by name, so all nineteen of
+ * its seats previewed as "A seat needs a name", and a seat that did carry a
+ * name would have published into no circle at all.
  */
-function seatsIn(payload: Record<string, unknown>): ProposedSeat[] {
-  const raw = Array.isArray(payload.seats) ? payload.seats : [payload];
-  return raw.filter((s): s is Record<string, unknown> => !!s && typeof s === "object" && !Array.isArray(s));
-}
-
-/**
- * What a proposal is allowed to say about a seat.
- *
- * A SECOND ALLOWLIST, and it is narrower than `SEAT_FIELDS` on purpose. That
- * one governs what a DRAFT may change and is already correct, excluding
- * `represents_circle`, `how_chosen`, `status_override` and
- * `compensation_reality` by construction. This one governs what a PROPOSAL may
- * put into a draft, and the difference is that a founder writing a draft by
- * hand is a person deciding, while everything arriving here was written by
- * something that read a transcript.
- *
- * Nothing is renamed and nothing is coerced: a key not on this list is simply
- * not carried across, and `previewDraft` refuses a change that ends up naming
- * nothing.
- */
-const PROPOSABLE_SEAT_FIELDS = [
-  "name",
-  "circleId",
-  "aim",
-  "domain",
-  "accountabilities",
-  "whyItMatters",
-  "seats",
-  "criticality",
-  "recruiting",
-] as const;
 
 /**
  * The id a proposed seat gets, which is never the vendor's string as sent.
@@ -185,15 +159,6 @@ function seatIdFor(vendorId: unknown, fallback: string): string {
   return /^[a-z0-9][a-z0-9-]{0,63}$/.test(slug) ? slug : fallback;
 }
 
-function seatPayload(seat: ProposedSeat): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const k of PROPOSABLE_SEAT_FIELDS) {
-    const v = (seat as Record<string, unknown>)[k];
-    if (v !== undefined) out[k] = v;
-  }
-  return out;
-}
-
 /** The shape the review page reads. Evidence forward, machinery behind. */
 function toCard(p: ExternalProposalRow) {
   return {
@@ -221,7 +186,7 @@ function toCard(p: ExternalProposalRow) {
 }
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, guardCapability, getPool, members, questsRepo, adminActor } = deps;
+  const { authedUser, guardCapability, getPool, members, questsRepo, adminActor, circlesRepo } = deps;
 
   const actorId = async (req: any): Promise<string | null> =>
     (await authedUser(req))?.id ?? adminActor(req)?.id ?? null;
@@ -333,7 +298,7 @@ export function register(app: Express, deps: Deps): void {
     edits: Record<string, Record<string, unknown> | null>,
     actor: string,
   ): Promise<
-    | { ok: true; draftId: string | null; seats: number; blocked: number; noted: number }
+    | { ok: true; draftId: string | null; seats: number; blocked: number; noted: number; ignored: IgnoredKeys[] }
     | { ok: false; error: string }
   > => {
     const roster = await activeMembers();
@@ -348,7 +313,7 @@ export function register(app: Express, deps: Deps): void {
         editedPayload: edits[p.id] ?? null,
       });
     }
-    if (!org.length) return { ok: true, draftId: null, seats: 0, blocked: 0, noted: notes.length };
+    if (!org.length) return { ok: true, draftId: null, seats: 0, blocked: 0, noted: notes.length, ignored: [] };
 
     const first = org[0];
     const firstPayload = edits[first.id] ?? first.payload;
@@ -387,16 +352,24 @@ export function register(app: Express, deps: Deps): void {
      * cost of being wrong about "cannot happen" is a queue nobody can reason
      * about.
      */
+    // ONE read of the circles for the whole accept, so every seat in it is
+    // placed against the same list. See `circlesRepo` in appDeps.ts for why a
+    // circle an admin made a moment ago is in it.
+    const circles = circlesRepo.all() as LiveCircle[];
     let seats = 0;
+    const ignored: IgnoredKeys[] = [];
     for (const p of org) {
-      const payload = edits[p.id] ?? p.payload;
-      for (const seat of seatsIn(payload)) {
+      // An edited payload goes through the same reading as the vendor's own,
+      // so a steward's correction is placed and reported the same way.
+      const read = readProposedSeats(edits[p.id] ?? p.payload, circles);
+      if (read.ignored.length) ignored.push({ proposalId: p.id, keys: read.ignored });
+      for (const seat of read.seats) {
         seats += 1;
-        const seatId = seatIdFor(seat.id, `orgrole-${p.id.toLowerCase()}-${seats}`);
+        const seatId = seatIdFor(seat.vendorId, `orgrole-${p.id.toLowerCase()}-${seats}`);
         const r = await addChange(getPool(), made.id, {
           op: "create_seat",
           orgRoleId: seatId,
-          payload: seatPayload(seat),
+          payload: seat.payload,
         });
         if (!r.ok) return { ok: false, error: r.error };
       }
@@ -420,7 +393,10 @@ export function register(app: Express, deps: Deps): void {
       kind: "org",
       text:
         `${org.length} proposal(s) accepted into draft ${made.id}: ${seats} seat(s)` +
-        (preview.blocked ? `, ${preview.blocked} blocked` : ""),
+        (preview.blocked ? `, ${preview.blocked} blocked` : "") +
+        (ignored.length
+          ? `, ${ignored.reduce((n, i) => n + i.keys.length, 0)} key(s) not read in ${ignored.length} proposal(s)`
+          : ""),
       actorUserId: actor,
       // The ACCEPT is a human act even though a machine wrote the proposal.
       // The row records both: origin_module_id says where it came from, and
@@ -432,7 +408,7 @@ export function register(app: Express, deps: Deps): void {
       audience: "admin",
     });
 
-    return { ok: true, draftId: made.id, seats, blocked: preview.blocked, noted: notes.length };
+    return { ok: true, draftId: made.id, seats, blocked: preview.blocked, noted: notes.length, ignored };
   };
 
   app.post("/api/review/proposals/:id/accept", async (req, res) => {
@@ -450,7 +426,7 @@ export function register(app: Express, deps: Deps): void {
         : null;
     const r = await acceptInto([proposal], { [proposal.id]: edited }, actor);
     if (!r.ok) return res.status(409).json({ error: r.error });
-    res.json({ success: true, createdRef: r.draftId, seats: r.seats, blocked: r.blocked });
+    res.json({ success: true, createdRef: r.draftId, seats: r.seats, blocked: r.blocked, ignored: r.ignored });
   });
 
   app.post("/api/review/proposals/:id/reject", async (req, res) => {
@@ -572,6 +548,10 @@ export function register(app: Express, deps: Deps): void {
       // finds out at the publish button with no idea why.
       blocked: r.blocked,
       noted: r.noted,
+      // Every key a proposal carried that nothing read, per proposal. Named
+      // for the same reason `blocked` is: a vendor's field the draft left out
+      // is otherwise lost in silence.
+      ignored: r.ignored,
     });
   });
 

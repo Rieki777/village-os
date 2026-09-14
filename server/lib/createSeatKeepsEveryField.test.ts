@@ -2,7 +2,7 @@
  * A proposed seat arrives on the chart carrying every field the proposal was
  * allowed to carry.
  *
- * THE DEFECT THIS GUARDS. `PROPOSABLE_SEAT_FIELDS` in server/routes/review.ts
+ * THE DEFECT THIS GUARDS. `PROPOSABLE_SEAT_FIELDS` in server/lib/proposedSeats.ts
  * lets a proposal carry `recruiting`, `whyItMatters` and `criticality`, and
  * `previewDraft` even validates `criticality`. The `create_seat` branch of
  * `applyChange` then wrote only name, circle, aim, domain, accountabilities and

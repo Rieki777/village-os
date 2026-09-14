@@ -446,6 +446,35 @@ export async function addChange(
   return { ok: true, id };
 }
 
+/**
+ * A seat that named its circle in words this village could not place.
+ *
+ * THE SILENT CASE THIS CLOSES. The check above refuses a `circleId` that does
+ * not exist, and nothing refused a MISSING one. So a proposed seat whose
+ * circle arrived as a name that matched nothing published cleanly into no
+ * circle at all, and the chart showed a seat floating free of the structure
+ * the vendor described. `normaliseProposedSeat` (server/lib/proposedSeats.ts)
+ * keeps such a name as `circleName` with the number of circles it matched,
+ * and this turns that into a block whose sentence says what to do.
+ *
+ * Accepting again after the fix works because the reopened proposal goes back
+ * through the same normaliser, which finds the circle an admin just created.
+ */
+function circleNameBlock(payload: Record<string, any> | null | undefined): string | null {
+  const circleName = typeof payload?.circleName === "string" ? payload.circleName.trim() : "";
+  if (circleName === "" || payload?.circleId) return null;
+  if (Number(payload?.circleMatches) > 1) {
+    return (
+      `More than one circle answers to "${circleName}". Ask an admin to give those circles distinct names ` +
+      `and aliases, then withdraw this draft and accept the batch again`
+    );
+  }
+  return (
+    `There is no circle called "${circleName}" yet. Ask an admin to create it, ` +
+    `then withdraw this draft and accept the batch again`
+  );
+}
+
 export interface PreviewLine {
   changeId: string;
   op: DraftOp;
@@ -541,6 +570,7 @@ export async function previewDraft(
       if (c.payload?.circleId && !circleIds.has(String(c.payload.circleId))) {
         blocked = "That circle does not exist. A draft cannot create circles";
       }
+      if (!blocked) blocked = circleNameBlock(c.payload);
       /*
        * ── THE SHAPE RULES, which the old block list did not have ──────────
        *
@@ -581,6 +611,7 @@ export async function previewDraft(
 
       if (c.op === "update_seat") {
         reads = `Edit ${name}`;
+        if (!blocked) blocked = circleNameBlock(c.payload);
         // A change naming nothing this village can apply is not a change. It
         // previewed as "Edit <seat>", applied as an UPDATE with an empty SET
         // list, and left a reader believing something happened.
@@ -692,7 +723,7 @@ async function applyChange(conn: PoolConnection, c: DraftChange): Promise<void> 
   const p = c.payload ?? {};
   if (c.op === "create_seat") {
     // Every field a proposal may carry (PROPOSABLE_SEAT_FIELDS in
-    // server/routes/review.ts), not only the first six. This INSERT used to
+    // server/lib/proposedSeats.ts), not only the first six. This INSERT used to
     // stop at `seats`, so a proposed seat marked recruiting, or carrying why it
     // matters or a criticality, published clean with all three gone. Both enum
     // and flag are NOT NULL with a DEFAULT, and an explicit NULL is not an

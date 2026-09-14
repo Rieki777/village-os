@@ -169,6 +169,44 @@ function agedFor(oldestSince: string | null): string {
   return days === 1 ? ", asked one day ago" : `, the oldest ${days} days ago`;
 }
 
+/** One line per proposal whose accept left keys out of the draft. */
+interface NotReadLine {
+  label: string;
+  keys: string[];
+}
+
+/**
+ * The server's `ignored` list, as lines a steward can read.
+ *
+ * Each proposal is named by its seat where the payload gives one, under the
+ * same spellings the server reads, so a vendor record that says `role_name`
+ * is still called by its name. An absent or malformed list is no lines, which
+ * is what an older server that never sent one should produce.
+ */
+function notReadLines(
+  ignored: unknown,
+  payloadOf: (proposalId: string) => Record<string, unknown> | undefined,
+): NotReadLine[] {
+  if (!Array.isArray(ignored)) return [];
+  const lines: NotReadLine[] = [];
+  for (const entry of ignored as { proposalId?: unknown; keys?: unknown }[]) {
+    const keys = Array.isArray(entry?.keys) ? entry.keys.map(String) : [];
+    if (!entry?.proposalId || keys.length === 0) continue;
+    const id = String(entry.proposalId);
+    const payload = payloadOf(id);
+    let label = id;
+    for (const k of ["name", "role_name", "roleName", "title"]) {
+      const v = payload?.[k];
+      if (typeof v === "string" && v.trim() !== "") {
+        label = v.trim();
+        break;
+      }
+    }
+    lines.push({ label, keys });
+  }
+  return lines;
+}
+
 export default function Review() {
   const { user } = useAuth();
   const [queue, setQueue] = useState<Queue | null>(null);
@@ -187,6 +225,10 @@ export default function Review() {
   // a way out of it without leaving the page, because until they withdraw it
   // the draft occupies one of the village's open-draft slots.
   const [stuck, setStuck] = useState<{ draftId: string; blocked: number } | null>(null);
+  // What the last accept left out of its draft, one line per proposal. The
+  // server names every key it did not read, and a steward who is not told has
+  // no way to know a vendor said more than the draft shows.
+  const [notRead, setNotRead] = useState<NotReadLine[]>([]);
 
   /**
    * Members whose erasure this village could not finish, because a connected
@@ -316,16 +358,17 @@ export default function Review() {
     }
   };
 
-  const post = async (path: string, body: unknown): Promise<boolean> => {
+  /** The response body when the server said yes, and null after a refusal it has already reported. */
+  const post = async (path: string, body: unknown): Promise<Record<string, unknown> | null> => {
     // The Response is held before anything says a change landed, which is what
     // `check-save-honesty.mjs` asks of every control that reports success.
     const res = await fetch(path, { method: "POST", headers: headers(), body: JSON.stringify(body) }).catch(() => null);
     const d = res ? await res.json().catch(() => ({})) : {};
     if (!res || !res.ok) {
       toast.error((d as { error?: string })?.error ?? "That did not go through");
-      return false;
+      return null;
     }
-    return true;
+    return (d ?? {}) as Record<string, unknown>;
   };
 
   const acceptOne = async (card: ProposalCard) => {
@@ -336,7 +379,9 @@ export default function Review() {
     }
     setBusy(card.id);
     try {
-      if (await post(`/api/review/proposals/${card.id}/accept`, { payload })) {
+      const d = await post(`/api/review/proposals/${card.id}/accept`, { payload });
+      if (d) {
+        setNotRead(notReadLines(d.ignored, (id) => (id === card.id ? payload : undefined)));
         toast.success("Accepted");
         await load();
       }
@@ -416,7 +461,14 @@ export default function Review() {
       // the failure that comment was written to prevent: a steward told forty
       // seats were accepted, finding out at the publish button that none of
       // them can apply.
-      const body = d as { accepted?: number; blocked?: number; noted?: number; draftId?: string };
+      const body = d as { accepted?: number; blocked?: number; noted?: number; draftId?: string; ignored?: unknown };
+      setNotRead(
+        notReadLines(
+          body.ignored,
+          (id) =>
+            (payloads[id] as Record<string, unknown> | undefined) ?? batch.items.find((i) => i.id === id)?.payload,
+        ),
+      );
       const blocked = body.blocked ?? 0;
       if (blocked > 0 && body.draftId) setStuck({ draftId: body.draftId, blocked });
       if (blocked > 0) {
@@ -584,6 +636,24 @@ export default function Review() {
                 <li key={`${d.moduleId}:${d.reason}`}>
                   {d.dropped} from {d.moduleId} {DROP_WORDS[d.reason] ?? `were refused as ${d.reason}`}.
                   None of it was stored.
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* What the last accept left out of its draft, one line per proposal.
+            Outside the batch cards on purpose: an accepted batch leaves the
+            queue, and a line inside its card would leave with it. */}
+        {notRead.length > 0 && (
+          <div className={card}>
+            <h2 className="text-sm font-semibold text-foreground">
+              The last accept left some fields out of the draft
+            </h2>
+            <ul className="text-sm text-muted-foreground mt-2 space-y-1">
+              {notRead.map((n, i) => (
+                <li key={`${i}:${n.label}`}>
+                  Not read from &ldquo;{n.label}&rdquo;: {n.keys.join(", ")}
                 </li>
               ))}
             </ul>
