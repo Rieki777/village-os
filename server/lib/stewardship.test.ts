@@ -54,6 +54,8 @@ import {
   STEWARD_SUBJECTS_KEY,
   STEWARD_VETO,
   VETO_HOURS_KEY,
+  CONSENT_NOTICE_HOURS_KEY,
+  everyStewardSaidYes,
 } from "./stewardship";
 import { emailCadenceFor, resolveNotifyPrefs } from "./notify";
 import { capabilityDecision } from "../../shared/capabilities";
@@ -121,6 +123,7 @@ describe("what a steward may NEVER stop, however the list is set", () => {
     expect(keyIsVetoLocked(STEWARD_COUNCIL_KEY)).toBe(true);
     expect(keyIsVetoLocked(VETO_HOURS_KEY)).toBe(true);
     expect(keyIsVetoLocked(HIGHEST_TIER_KEY)).toBe(true);
+    expect(keyIsVetoLocked(CONSENT_NOTICE_HOURS_KEY), "a limit on the window is a limit on the seat").toBe(true);
   });
 
   it("leaves every other setting exactly where it was", () => {
@@ -668,5 +671,21 @@ describe("where this lane's free text lives", () => {
       "ballots.veto_reason",
       "mechanics_proposals.veto_reason",
     ]);
+  });
+});
+
+describe("every steward said yes (Rye, 2026-09-14)", () => {
+  const yes = (userId: string) => ({ userId, choice: "yes" });
+
+  it("is never true over zero stewards, which is the dangerous case", () => {
+    expect(everyStewardSaidYes([], [])).toBe(false);
+    expect(everyStewardSaidYes([], [yes("u-a"), yes("u-b")])).toBe(false);
+  });
+
+  it("needs an explicit yes from every seat, and nothing else counts", () => {
+    expect(everyStewardSaidYes(["s1", "s2"], [yes("s1"), yes("s2"), yes("u-a")])).toBe(true);
+    expect(everyStewardSaidYes(["s1", "s2"], [yes("s1")]), "a missing vote").toBe(false);
+    expect(everyStewardSaidYes(["s1", "s2"], [yes("s1"), { userId: "s2", choice: "abstain" }]), "an abstention").toBe(false);
+    expect(everyStewardSaidYes(["s1", "s2"], [yes("s1"), { userId: "s2", choice: "no" }]), "a no").toBe(false);
   });
 });
