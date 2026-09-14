@@ -1238,7 +1238,7 @@ const trainingRepo = dbCollection(getPool(), {
     { js: "description", db: "description" },
     { js: "type", db: "type" },
     { js: "url", db: "url" },
-    { js: "mandatory", db: "mandatory", kind: "bool" }, // 0191, see gatingModuleIds
+    { js: "mandatory", db: "mandatory", kind: "bool" }, // 0197, see gatingModuleIds
     { js: "order", db: "sort_order", kind: "int" },
   ],
 });
