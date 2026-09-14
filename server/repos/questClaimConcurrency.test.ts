@@ -27,6 +27,16 @@
  * `submitted` and `remove` only deletes a `claimed` one. The rollback case
  * below is that one, and it needs only one actor.
  *
+ * RACE 3, THE DOORS BESIDE CONSENT. The decline branch and the submit route
+ * kept writing through a generic `update` that locked the row and then wrote
+ * over whatever it found, so a decline or a resubmit arriving while a consent
+ * held the claim waited for the lock and then overwrote a consented, paid
+ * claim. And the quest delete counted in-flight claims outside any lock, so a
+ * claim could land between the count and the delete. Each case below starts
+ * the second actor while the first is demonstrably holding the lock. The same
+ * doors driven through their real handlers are in
+ * `server/routes/questClaimTransitions.test.ts`.
+ *
  * The post callback is a stub rather than the real ledger on purpose. What is
  * under test is whether the flip and the movement are ONE commit and whether
  * the movement is asked for exactly once; the ledger's own idempotency and
@@ -161,10 +171,7 @@ describe.skipIf(!configured)("quest claims under concurrent actors (MySQL)", () 
     for (const n of [1, 2]) {
       const taken = await claims.openClaim(claimOn(`claim-cycle-${n}`, "q-swale", "u-ada"));
       expect(taken.ok).toBe(true);
-      await claims.update(`claim-cycle-${n}`, (c) => {
-        c.status = "declined";
-        c.resolvedAt = new Date().toISOString();
-      });
+      expect((await claims.declineOnce(`claim-cycle-${n}`, new Date().toISOString())).ok).toBe(true);
     }
     const again = await claims.openClaim(claimOn("claim-cycle-3", "q-swale", "u-ada"));
     expect(again.ok).toBe(true);
@@ -258,10 +265,7 @@ describe.skipIf(!configured)("quest claims under concurrent actors (MySQL)", () 
 
   it("refuses a claim whose status is not one the caller named", async () => {
     await submitted("claim-resolved");
-    await claims.update("claim-resolved", (c) => {
-      c.status = "declined";
-      c.resolvedAt = new Date().toISOString();
-    });
+    expect((await claims.declineOnce("claim-resolved", new Date().toISOString())).ok).toBe(true);
     let posted = 0;
     const outcome = await claims.consentOnce(
       "claim-resolved",
@@ -278,5 +282,85 @@ describe.skipIf(!configured)("quest claims under concurrent actors (MySQL)", () 
   it("answers missing for a claim id that is not there", async () => {
     const outcome = await claims.consentOnce("claim-nowhere", ["submitted"], () => {}, null);
     expect(outcome).toEqual({ ok: false, reason: "missing" });
+  });
+
+  // ── Race 3: the doors beside consent ───────────────────────────────────────
+
+  /** A consent that holds the claim's row lock for a moment, and says when it is inside. */
+  const consentHolding = (id: string) => {
+    let inside!: () => void;
+    const holding = new Promise<void>((r) => (inside = r));
+    const done = claims.consentOnce(
+      id,
+      ["submitted"],
+      (c) => {
+        c.status = "consented";
+        c.amount = 60;
+        c.resolvedAt = new Date().toISOString();
+        c.consentedBy = "u-mara";
+      },
+      async () => {
+        inside();
+        // Long enough that the second actor is queued on the row lock, not
+        // arriving politely after the commit.
+        await new Promise((r) => setTimeout(r, 60));
+        return { ok: true };
+      },
+    );
+    return { holding, done };
+  };
+
+  it("a decline arriving while a consent holds the claim does not undo it", async () => {
+    await submitted("claim-contested");
+    const consent = consentHolding("claim-contested");
+    await consent.holding;
+    const decline = await claims.declineOnce("claim-contested", new Date().toISOString());
+    expect((await consent.done).ok).toBe(true);
+    // The old write waited for the lock and then declined a consented claim.
+    expect(decline).toMatchObject({ ok: false, reason: "status", status: "consented" });
+    const rows = await rowsFor("u-ada");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe("consented");
+    expect(rows[0].consented_by).toBe("u-mara");
+  });
+
+  it("a submit arriving while a consent holds the claim does not reopen it", async () => {
+    await submitted("claim-late-evidence");
+    const consent = consentHolding("claim-late-evidence");
+    await consent.holding;
+    const evidence = await claims.submitOnce("claim-late-evidence", {
+      artifactUrl: "",
+      note: "A corrected link.",
+      at: new Date().toISOString(),
+    });
+    expect((await consent.done).ok).toBe(true);
+    expect(evidence).toMatchObject({ ok: false, reason: "status", status: "consented" });
+    const rows = await rowsFor("u-ada");
+    expect(rows[0].status).toBe("consented");
+    expect(Number(rows[0].amount)).toBe(60);
+  });
+
+  it("a delete waits for a claim that holds the quest, then counts it", async () => {
+    await quests.add({ id: "q-held", title: "Tend the swale", gratitude: "50-100", status: "Open", tags: [], order: 2 });
+    // A claim mid-flight: the lock `openClaim` takes and the row it inserts,
+    // not yet committed. `openClaim` itself cannot be paused inside.
+    const holder = await pool.getConnection();
+    try {
+      await holder.beginTransaction();
+      await holder.query("SELECT id FROM quests WHERE id = ? FOR UPDATE", ["q-held"]); // module-review-ok: fixture SQL taking the row lock openClaim takes, on the S5 scratch schema
+      await holder.query( // module-review-ok: fixture SQL making the insert openClaim makes, on the S5 scratch schema
+        "INSERT INTO quest_claims (id, quest_id, quest_title, user_id, user_name, status) VALUES (?,?,?,?,?,'claimed')",
+        ["claim-held", "q-held", "Tend the swale", "u-ada", "Ada Wren"],
+      );
+      const removal = quests.remove("q-held");
+      // The delete is now queued on the quest row. A delete that counted
+      // outside the lock has already counted zero by the time this commits.
+      await new Promise((r) => setTimeout(r, 60));
+      await holder.commit();
+      expect(await removal).toMatchObject({ ok: false, reason: "in_flight", count: 1 });
+    } finally {
+      holder.release();
+    }
+    expect(await quests.byId("q-held")).not.toBeNull();
   });
 });
