@@ -35,7 +35,7 @@
  */
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
-import { allowanceFor, HEARTS, reverse, toLedgerUnits } from "./lib/economy";
+import { allowanceFor, HEARTS, reverse, shareCapFor, toLedgerUnits } from "./lib/economy";
 import {
   checkLedgerInvariants,
   loadTokenRegistry,
