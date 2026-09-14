@@ -31,6 +31,7 @@
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { balanceRowsFor } from "../repos/tokenBalances";
+import { accountsReceivedFromVillage, receivedFromVillage } from "../repos/tokenLedger";
 import { issuanceRefusal } from "./gameStart";
 
 export type TokenType = string;
@@ -1150,14 +1151,9 @@ export async function hasBeenPaidByVillage(
   userId: string,
   tokenSlugs: readonly string[],
 ): Promise<boolean> {
-  if (tokenSlugs.length === 0) return false;
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT 1 FROM token_ledger WHERE to_account = ? AND amount > 0 " +
-      `AND token_type IN (${tokenSlugs.map(() => "?").join(",")}) ` +
-      "AND from_account NOT LIKE 'mem:%' LIMIT 1",
-    [memberAccount(userId), ...tokenSlugs],
-  );
-  return rows.length > 0;
+  // The query lives in server/repos/tokenLedger.ts. What makes an account a
+  // member's is this file's to say, so the prefix travels with the call.
+  return receivedFromVillage(pool, memberAccount(userId), tokenSlugs, memberAccount(""));
 }
 
 /**
@@ -1192,15 +1188,13 @@ export async function paidByVillageMany(
 ): Promise<Set<string>> {
   const paid = new Set<string>();
   if (userIds.length === 0 || tokenSlugs.length === 0) return paid;
-  const accounts = userIds.map((id) => memberAccount(id));
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT DISTINCT to_account FROM token_ledger " +
-      `WHERE to_account IN (${accounts.map(() => "?").join(",")}) AND amount > 0 ` +
-      `AND token_type IN (${tokenSlugs.map(() => "?").join(",")}) ` +
-      "AND from_account NOT LIKE 'mem:%'",
-    [...accounts, ...tokenSlugs],
-  );
-  // Back from `mem:<id>` to the id the caller asked about.
-  for (const r of rows) paid.add(String(r.to_account).replace(/^mem:/, ""));
+  // Back from each account to the exact id the caller asked about, by lookup
+  // rather than by stripping a prefix off whatever the database returned.
+  const idByAccount = new Map(userIds.map((id) => [memberAccount(id), id] as const));
+  const accounts = await accountsReceivedFromVillage(pool, Array.from(idByAccount.keys()), tokenSlugs, memberAccount(""));
+  accounts.forEach((account) => {
+    const id = idByAccount.get(account);
+    if (id !== undefined) paid.add(id);
+  });
   return paid;
 }
