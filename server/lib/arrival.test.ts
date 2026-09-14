@@ -8,7 +8,15 @@
  */
 import { describe, expect, it, vi } from "vitest";
 
-import { arrivalDedupeKey, arrivalNotice, greetArrival, greetersFor, type SeatRow } from "./arrival";
+import {
+  arrivalDedupeKey,
+  arrivalNotice,
+  greetArrival,
+  greetersFor,
+  memberJoined,
+  type JoinHost,
+  type SeatRow,
+} from "./arrival";
 
 const seat = (over: Partial<SeatRow> = {}): SeatRow => ({
   orgRoleId: "role-greeter",
@@ -131,5 +139,66 @@ describe("greetArrival", () => {
   it("still points somewhere when a member has no handle yet", () => {
     expect(arrivalNotice("Wren Alder", "").link).toBe("/members");
     expect(arrivalNotice("", "").title).toContain("Someone new");
+  });
+});
+
+describe("memberJoined", () => {
+  const newcomer = { id: "u-new", name: "Wren Alder", handle: "wren" };
+
+  const hostWith = (over: Partial<JoinHost> = {}) => {
+    const events: Array<{ kind: string; text: string; extra: unknown }> = [];
+    const sent: string[] = [];
+    const host: JoinHost = {
+      addActivity: vi.fn(async (kind: string, text: string, extra?: unknown) => void events.push({ kind, text, extra })),
+      firstName: (n: string) => n.split(" ")[0],
+      greeterRoleId: () => "",
+      seats: () => [],
+      everyone: async () => [{ id: "u-founder", role: "founder" }],
+      notify: vi.fn(async (i: any) => void sent.push(i.userId)),
+      ...over,
+    };
+    return { host, events, sent };
+  };
+
+  it("RECORDS THE ARRIVAL AND GREETS, so every door in does both", async () => {
+    // Google sign-up used to record the join and greet nobody, because the
+    // greeting was written into the email route alone.
+    const { host, events, sent } = hostWith();
+    await expect(memberJoined(newcomer, host)).resolves.toEqual(["u-founder"]);
+    expect(events).toEqual([
+      {
+        kind: "join",
+        text: "Wren stepped into the village as a Guest",
+        extra: { actorUserId: "u-new", entityType: "user", entityRef: "u-new" },
+      },
+    ]);
+    expect(sent).toEqual(["u-founder"]);
+  });
+
+  it("reads the seat at the moment somebody arrives", async () => {
+    const { host, sent } = hostWith({ greeterRoleId: () => "role-greeter", seats: async () => [seat()] });
+    await memberJoined(newcomer, host);
+    expect(sent).toEqual(["u-greeter"]);
+  });
+
+  it("still greets when the activity row fails, and never throws into sign-up", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { host, sent } = hostWith({
+      addActivity: vi.fn(async () => {
+        throw new Error("events are down");
+      }),
+    });
+    await expect(memberJoined(newcomer, host)).resolves.toEqual(["u-founder"]);
+    expect(sent).toEqual(["u-founder"]);
+    warn.mockRestore();
+  });
+
+  it("never throws even when the roll cannot be read", async () => {
+    const { host } = hostWith({
+      everyone: async () => {
+        throw new Error("members are down");
+      },
+    });
+    await expect(memberJoined(newcomer, host)).resolves.toEqual([]);
   });
 });

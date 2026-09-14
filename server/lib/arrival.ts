@@ -152,3 +152,58 @@ export async function greetArrival(
     return [];
   }
 }
+
+/** What `memberJoined` needs from the host. Read at arrival, never cached. */
+export interface JoinHost {
+  addActivity: (
+    kind: string,
+    text: string,
+    extra?: { actorUserId?: string | null; entityType?: string | null; entityRef?: string | null },
+  ) => Promise<unknown>;
+  firstName: (name: string) => string;
+  /** `arrival.greeter_role`, through the variables registry. */
+  greeterRoleId: () => string;
+  seats: () => readonly SeatRow[] | Promise<readonly SeatRow[]>;
+  everyone: () => Promise<readonly { id?: unknown; role?: unknown }[]>;
+  notify: GreetDeps["notify"];
+}
+
+/**
+ * EVERY DOOR IN GOES THROUGH HERE: the join is recorded and the greeter is told.
+ *
+ * Email sign-up and Google sign-up both create members, and until this existed
+ * only the email route greeted anybody. The greeting had been written into that
+ * one route, and the Google route's own hook recorded the join and stopped, so a
+ * person who arrived by Google arrived in exactly the silence `greetArrival`
+ * was written to end. One function for every door means a third door cannot be
+ * added with half of the arrival.
+ *
+ * NEVER REJECTS. It runs after the account already exists, and the Google route
+ * calls it without waiting, so a rejection would go unhandled. A failed activity
+ * row must not cost anybody their greeting, and neither may cost anybody their
+ * account.
+ */
+export async function memberJoined(
+  member: { id: string; name: string; handle: string },
+  host: JoinHost,
+): Promise<string[]> {
+  try {
+    await host.addActivity("join", `${host.firstName(member.name)} stepped into the village as a Guest`, {
+      actorUserId: member.id,
+      entityType: "user",
+      entityRef: member.id,
+    });
+  } catch (err) {
+    console.warn(`[arrival] the join for ${member.id} was not recorded: ${String((err as Error)?.message ?? err)}`);
+  }
+  try {
+    return await greetArrival(member, {
+      greeterRoleId: host.greeterRoleId(),
+      seats: await host.seats(),
+      everyone: await host.everyone(),
+      notify: host.notify,
+    });
+  } catch {
+    return [];
+  }
+}

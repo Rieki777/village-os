@@ -49,7 +49,7 @@ import {
   type PowerHolder,
 } from "./lib/capabilityRegistry";
 import { allVariables, boolVar, loadVariables, numberVar, rawValue, setVariable, stringVar } from "./lib/variables";
-import { greetArrival } from "./lib/arrival";
+import { memberJoined } from "./lib/arrival";
 import { adminGateWasConsulted, markAdminGate } from "./lib/adminGate";
 import { type FaqPathway, register as registerFaqRoutes } from "./routes/faqs";
 import { register as registerGratitudeVoiceRoutes } from "./routes/gratitudeVoices";
@@ -8094,8 +8094,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       avatar: null,
     };
     await members.add(user);
-    await addActivity("join", `${firstName(name)} stepped into the village as a Guest`, { actorUserId: userId, entityType: "user", entityRef: userId });
-    await greetArrival({ id: userId, name, handle: user.handle }, { greeterRoleId: stringVar("arrival.greeter_role"), seats: await loadRoleHolders(), everyone: await members.all(), notify });
+    await joined({ id: userId, name, handle: user.handle });
     const token = encodeToken(AUTH_TOKEN_SECRET, userId, email);
     res.json({ success: true, token, user: publicUser(user) });
   });
@@ -8331,6 +8330,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     projectName: () => mergedConfig().project.name,
     recordAudit: recordAuthAudit,
   });
+  const joined = (u: { id: string; name: string; handle: string }) => memberJoined(u, { addActivity, firstName, greeterRoleId: () => stringVar("arrival.greeter_role"), seats: loadRoleHolders, everyone: () => members.all(), notify });
   registerGoogleAuthRoutes(app, {
     authSecret: AUTH_TOKEN_SECRET,
     availability: googleSignInAvailability,
@@ -8341,11 +8341,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     overLimit,
     clientIp,
     recordAudit: recordAuthAudit,
-    onMemberJoined: (user) => {
-      void addActivity("join", `${firstName(user.name)} stepped into the village as a Guest`, {
-        actorUserId: user.id, entityType: "user", entityRef: user.id,
-      });
-    },
+    onMemberJoined: (user) => void joined(user), // every door in records the join and greets: register calls joined too
   });
 
   /**
