@@ -46,6 +46,7 @@
  * the other, and no surface should let a member read one number as the other.
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
+import { lostConcurrencyRace } from "../db/concurrency";
 import {
   mintRuleNumberProblem,
   mintRuleValueNumber,
@@ -1788,18 +1789,22 @@ export type GratitudeRowResult =
  * one written sentence, and the real error goes to the log where it is useful.
  */
 function unwritableGratitude(err: unknown): string {
-  const code = String((err as any)?.code ?? "");
   console.error("[gratitude] the write failed:", err);
-  if (code === "ER_LOCK_DEADLOCK" || code === "ER_LOCK_WAIT_TIMEOUT") {
+  if (isLockContention(err)) {
     return "The village was busy for a moment, so your thanks did not go through. Nothing was charged. Send it again.";
   }
   return "Your thanks could not be recorded, and nothing was charged. Try again in a moment.";
 }
 
-/** Deadlocks and lock-wait timeouts: the two an identical retry can heal. */
+/**
+ * A lost race that an identical retry can heal: a deadlock, a lock-wait
+ * timeout, or MariaDB's snapshot-isolation conflict. The list lives in
+ * `lostConcurrencyRace` (server/db/concurrency.ts). It was two codes spelled
+ * out here, and on MariaDB 12.3.2 that left 21 of 24 concurrent gives refused
+ * with the sentence for a failure nobody could fix by waiting.
+ */
 function isLockContention(err: unknown): boolean {
-  const code = String((err as any)?.code ?? "");
-  return code === "ER_LOCK_DEADLOCK" || code === "ER_LOCK_WAIT_TIMEOUT";
+  return lostConcurrencyRace(err);
 }
 
 /**

@@ -272,10 +272,12 @@ thing sits outside them:
 - The credit posts on that same connection **before** the note commits. A ledger refusal or a
   throw rolls the note back, so there is never a record saying gratitude was given with no
   gratitude. A retry cannot double-charge because a rolled-back attempt wrote nothing at all.
-- Deadlocks and lock-wait timeouts are tried **three times in all** with backoff (the loop gives
-  up at `attempt >= 3`, so the original plus two retries), and anything the engine did not decide
-  is translated into one written sentence by `unwritableGratitude`. Members used to be shown
-  `ER_LOCK_DEADLOCK` verbatim.
+- A transaction that lost a concurrency race is tried **three times in all** with backoff (the
+  loop gives up at `attempt >= 3`, so the original plus two retries). "Lost a race" means a
+  deadlock, a lock-wait timeout, or MariaDB's snapshot-isolation conflict (`ER_CHECKREAD`, on by
+  default since MariaDB 11.8), and the list is `lostConcurrencyRace` in
+  `server/db/concurrency.ts`. Anything the engine did not decide is translated into one written
+  sentence by `unwritableGratitude`. Members used to be shown `ER_LOCK_DEADLOCK` verbatim.
 - **Three effects run after the commit and are outside that guarantee.** The
   `POST /api/game/gratitude/send` handler in `server/index.ts`, once `sendGratitude` has
   returned, calls `addActivity` (a village activity line naming both first names), `notify`

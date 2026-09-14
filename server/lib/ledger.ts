@@ -30,6 +30,7 @@
  * never be. Boot invariants enforce that with a loud failure, not a comment.
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
+import { lostConcurrencyRace } from "../db/concurrency";
 import { balanceRowsFor } from "../repos/tokenBalances";
 import { accountEntryRows, idempotencyKeyRows, keysCollatingWith, questConsentCreditRows } from "../repos/tokenLedger";
 import { issuanceRefusal } from "./gameStart";
@@ -1156,6 +1157,9 @@ export function refusalForMember(
  *
  * A rolled-back transaction moved nothing, so retrying is safe and honest;
  * giving up after three keeps a pathological case from hiding as latency.
+ * Which errors count as a lost race is `lostConcurrencyRace`'s decision
+ * (server/db/concurrency.ts). It was two codes spelled out here until MariaDB
+ * 11.8's snapshot isolation added a third that nothing retried.
  */
 export async function postTransfer(
   pool: Pool,
@@ -1178,8 +1182,7 @@ export async function postTransfer(
       return result;
     } catch (e: any) {
       try { await conn.rollback(); } catch { /* already rolled back */ }
-      const retryable = e?.code === "ER_LOCK_DEADLOCK" || e?.code === "ER_LOCK_WAIT_TIMEOUT";
-      if (!retryable || attempt >= 3) throw e;
+      if (!lostConcurrencyRace(e) || attempt >= 3) throw e;
       await new Promise((r) => setTimeout(r, 25 * attempt + Math.floor(Math.random() * 25)));
     } finally {
       conn.release();
@@ -1236,8 +1239,8 @@ export async function postTransferPair(
     try {
       return await postTransferPairOnce(pool, legs, guard);
     } catch (e: any) {
-      const retryable = e?.code === "ER_LOCK_DEADLOCK" || e?.code === "ER_LOCK_WAIT_TIMEOUT";
-      if (!retryable || attempt >= 3) throw e;
+      // postTransferPairOnce has already rolled back on every throw path.
+      if (!lostConcurrencyRace(e) || attempt >= 3) throw e;
       await new Promise((r) => setTimeout(r, 25 * attempt + Math.floor(Math.random() * 25)));
     }
   }

@@ -14,11 +14,17 @@
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { parseRewardRange } from "../../shared/questRewards";
+import { lostConcurrencyRace } from "../db/concurrency";
 import { calendarRemove, calendarUpsert } from "../lib/calendar";
 import { questCalendarInput } from "../lib/calendarProviders";
 
 /**
- * Retry a whole transaction that InnoDB killed as a deadlock victim.
+ * Retry a whole transaction that lost a concurrency race: a deadlock victim, a
+ * lock-wait timeout, or MariaDB's snapshot-isolation conflict. Which codes
+ * count is `lostConcurrencyRace`'s decision (server/db/concurrency.ts), so an
+ * engine difference is one edit there. Both callers below roll the
+ * transaction back themselves before rethrowing, which is what makes a retry
+ * safe after a timeout that only rolled back its statement.
  *
  * The same three attempts `postTransfer` takes, for the same reason written
  * over it: perfect lock ordering does not stop InnoDB picking a victim under
@@ -36,8 +42,7 @@ async function withDeadlockRetry<T>(run: () => Promise<T>): Promise<T> {
     try {
       return await run();
     } catch (e: any) {
-      const retryable = e?.code === "ER_LOCK_DEADLOCK" || e?.code === "ER_LOCK_WAIT_TIMEOUT";
-      if (!retryable || attempt >= 3) throw e;
+      if (!lostConcurrencyRace(e) || attempt >= 3) throw e;
       await new Promise((r) => setTimeout(r, 25 * attempt + Math.floor(Math.random() * 25)));
     }
   }

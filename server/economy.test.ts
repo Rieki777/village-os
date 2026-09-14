@@ -65,6 +65,7 @@ import { VOICE_SETTLED } from "./lib/voiceClaim";
 import { loadVariables, numberVar, setVariable } from "./lib/variables";
 import { cycleBoundsFor } from "../shared/lunar";
 import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { lostConcurrencyRace } from "./db/concurrency";
 import { sendGratitude, type GratitudeDeps } from "./lib/gratitude";
 import { gratitudeLogRepo } from "./repos/gratitude";
 import type { UsersRepo } from "./repos/users";
@@ -1554,8 +1555,11 @@ describe.skipIf(!configured)("the village economy engine", () => {
       for (const s of settled) {
         // Narrow, so a NEW kind of failure still turns this red rather than
         // being absorbed by a tolerant assertion.
+        // A lost race that outlasted three attempts, and nothing else. The
+        // class is `lostConcurrencyRace`'s, so MariaDB's snapshot conflict
+        // (ER_CHECKREAD) is accepted here exactly where a deadlock is.
         if (s.status === "rejected") {
-          expect(["ER_LOCK_DEADLOCK", "ER_LOCK_WAIT_TIMEOUT"]).toContain(s.reason?.code);
+          expect(lostConcurrencyRace(s.reason), `rejected with ${s.reason?.code}: ${s.reason?.message}`).toBe(true);
         }
       }
       // The rule holds whatever the ledger did. A call that came back paid
@@ -3383,7 +3387,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
       ]);
       for (const s of settled) {
         if (s.status === "rejected") {
-          expect(["ER_LOCK_DEADLOCK", "ER_LOCK_WAIT_TIMEOUT"]).toContain(s.reason?.code);
+          expect(lostConcurrencyRace(s.reason), `rejected with ${s.reason?.code}: ${s.reason?.message}`).toBe(true);
         }
       }
       // One row each at most, at the ceiling, whatever the ledger did. Read
