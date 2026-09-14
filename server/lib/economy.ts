@@ -66,6 +66,7 @@ import { moonOneCycle, villageMoonFor } from "./villageMoon";
 import { numberVar, stringVar } from "./variables";
 import {
   CLAWBACK_SOURCES,
+  lockLedgerAccounts,
   memberAccount,
   pairSiblingKey,
   postClawbackMirror,
@@ -1768,6 +1769,14 @@ export type GratitudeRowPost = (
   noteId: string,
 ) => Promise<{ ok: true; duplicate?: boolean; balance?: number } | { ok: false; error: string; status?: number }>;
 
+/**
+ * Locks the `post` will need, taken right after the giver's row and BEFORE the
+ * first plain read. Pass the ledger accounts the post writes (see
+ * `lockLedgerAccounts` in server/lib/ledger.ts for why the order matters on
+ * MariaDB 11.8 and later). Optional, like `post`.
+ */
+export type GratitudeRowLock = (conn: PoolConnection) => Promise<void>;
+
 export type GratitudeRowResult =
   | {
       ok: true;
@@ -1837,6 +1846,7 @@ export async function writeGratitudeRow(
   stageMultiplier: number,
   guard: GratitudeRowGuard,
   post?: GratitudeRowPost,
+  lockFirst?: GratitudeRowLock,
 ): Promise<GratitudeRowResult> {
   /*
    * THE RETRY. A rolled-back transaction wrote nothing at all — no note, no
@@ -1847,7 +1857,7 @@ export async function writeGratitudeRow(
    */
   for (let attempt = 1; ; attempt++) {
     try {
-      return await writeGratitudeRowOnce(pool, input, stageMultiplier, guard, post);
+      return await writeGratitudeRowOnce(pool, input, stageMultiplier, guard, post, lockFirst);
     } catch (err) {
       if (!isLockContention(err) || attempt >= 3) {
         return { ok: false, error: unwritableGratitude(err) };
@@ -1863,6 +1873,7 @@ async function writeGratitudeRowOnce(
   stageMultiplier: number,
   guard: GratitudeRowGuard,
   post?: GratitudeRowPost,
+  lockFirst?: GratitudeRowLock,
 ): Promise<GratitudeRowResult> {
   const conn = await pool.getConnection();
   try {
@@ -1906,6 +1917,26 @@ async function writeGratitudeRowOnce(
       await conn.rollback();
       return { ok: false, error: "no such member" };
     }
+
+    /*
+     * THE LEDGER ROWS, BEFORE ANY PLAIN READ.
+     *
+     * The SUM below is this transaction's first plain read, and on MariaDB
+     * 11.8 and later that is the moment its read view is fixed. The post then
+     * locks the recognition faucet's row, which every giver in the village
+     * shares, and writes its balance. Taken in that order, every giver fixed
+     * its view first and queued second, so everyone behind the head of the
+     * queue found the faucet's balance moved since their view and failed with
+     * ER_CHECKREAD. A retry repeats the same order. Measured on MariaDB 12.3.2
+     * on 2026-09-14: 21 of 24 concurrent givers failed with no retry for that
+     * code, and still 12 of 24 with it.
+     *
+     * Locking the post's rows here, after the giver and before the SUM, fixes
+     * the view only once nobody else can move them. The lock order is the one
+     * the post already took (giver, then ledger accounts), only earlier, and
+     * MySQL 8 behaves identically either way.
+     */
+    if (lockFirst) await lockFirst(conn);
 
     /*
      * ONE READ OF THIS GIVER'S CYCLE, TWO LIMITS WEIGHED OFF IT.
@@ -2147,6 +2178,10 @@ export async function give(
       });
       if (!res.ok) return { ok: false, error: res.error ?? "the ledger refused the credit" };
       return { ok: true, duplicate: res.duplicate, balance: res.toBalance };
+    },
+    // The two rows the post above writes, locked before the first plain read.
+    async (conn) => {
+      await lockLedgerAccounts(conn, RECOGNITION_FAUCET, memberAccount(input.toUserId));
     },
   );
 

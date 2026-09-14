@@ -956,13 +956,7 @@ export async function postTransferOn(
    * and the single-leg poster is the one every recognition credit in the
    * village goes through.
    */
-  const lockAccounts = async () => {
-    const [rows] = await conn.query<RowDataPacket[]>(
-      "SELECT id, faucet FROM ledger_accounts WHERE id IN (?, ?) ORDER BY id FOR UPDATE",
-      [input.from, input.to].sort(),
-    );
-    return new Map(rows.map((r) => [String(r.id), { faucet: !!r.faucet }]));
-  };
+  const lockAccounts = () => lockLedgerAccounts(conn, input.from, input.to);
   let accounts = await lockAccounts();
   const absent = [input.from, input.to].filter((a) => a.startsWith("mem:") && !accounts.has(a));
   if (absent.length) {
@@ -1188,6 +1182,34 @@ export async function postTransfer(
       conn.release();
     }
   }
+}
+
+/**
+ * The two account rows a single-leg post locks, in `id` order, on the
+ * caller's connection. `postTransferOn` takes exactly this lock first.
+ *
+ * EXPORTED FOR A CALLER THAT MUST READ BEFORE IT POSTS. On MariaDB 11.8 and
+ * later (`innodb_snapshot_isolation` ON) a transaction's first PLAIN read
+ * fixes a read view, and a later lock or write on a row somebody committed
+ * after that view fails with ER_CHECKREAD. A locking read does not fix the
+ * view. So a transaction that reads first and then queues here for a shared
+ * faucet row loses whenever anyone committed ahead of it, and a retry repeats
+ * the same order. Taking this lock BEFORE the first plain read means the view
+ * is fixed only once nobody else can move these rows. Re-taking it inside
+ * `postTransferOn` afterwards is free: the rows are already this
+ * transaction's. A row that does not exist yet takes no lock, which is safe
+ * here because creating it cannot trip the snapshot check.
+ */
+export async function lockLedgerAccounts(
+  conn: PoolConnection,
+  a: string,
+  b: string,
+): Promise<Map<string, { faucet: boolean }>> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    "SELECT id, faucet FROM ledger_accounts WHERE id IN (?, ?) ORDER BY id FOR UPDATE",
+    [a, b].sort(),
+  );
+  return new Map(rows.map((r) => [String(r.id), { faucet: !!r.faucet }]));
 }
 
 // ── The pair: two legs, one transaction (S57) ────────────────────────────────
