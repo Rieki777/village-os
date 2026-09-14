@@ -117,6 +117,8 @@ export interface SeasonState {
   timezone: string;
   cadence: string;
   today: string;
+  /** The whole dated calendar, in order. A seat's term is decided against it. */
+  seasons?: SeasonEntry[];
 }
 
 // One shared, cached fetch of the public config so many components don't each hit it.

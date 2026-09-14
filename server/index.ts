@@ -80,6 +80,7 @@ import { notifyRollRows, type RollNotice } from "./lib/ballotNotices";
 import { forgetStewardActs, holdingHasLapsed, recordTermStarted, runTermWatch, setVetoWindowCheck, STEWARD_VETO, stewardMailRefusal } from "./lib/stewardship";
 import { freezeSeatTerm } from "./repos/ballotSeatTerms";
 import { termForCarriedSeat } from "./lib/seatTermLanding";
+import { raisedHandTerm } from "./lib/raisedHandTerm";
 import { resolveSeatTerm, type SeatCalendar } from "../shared/seatTerms";
 import { decideRoleCapabilities, stewardSeatRefusal } from "./lib/roleGrants";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
@@ -10485,12 +10486,14 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // stewards' inbox for a role that will be deleted on retirement, leaving
     // the member's application pointing at nothing.
     if (role.isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
+    const term = raisedHandTerm(req.body?.termEndsOn, seatCalendar()); // 0199: the end date the hand asks for, shown in the submissions inbox
+    if (!term.ok) return res.status(term.status).json(term.body);
     const entry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       type: "role-application",
       status: "new",
       rewarded: false,
-      data: { roleId: role.id, roleName: role.name, note: String(req.body?.note ?? "").slice(0, 2000), email: user.email, name: user.name },
+      data: { roleId: role.id, roleName: role.name, note: String(req.body?.note ?? "").slice(0, 2000), email: user.email, name: user.name, ...term.data },
       userId: user.id,
       userName: user.name,
       submittedAt: new Date().toISOString(),
