@@ -19,7 +19,7 @@
  * three states, not the site shell around them.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
 
@@ -165,5 +165,219 @@ describe("the review queue tells three states apart", () => {
     expect(screen.getByText(/confidence not stated/i)).toBeTruthy();
     // One decision for the batch, beside the per-item ones.
     expect(screen.getByText(/Accept all 1, with my edits/i)).toBeTruthy();
+  });
+});
+
+/**
+ * WHAT AN ACCEPT SAYS AFTERWARDS, and when it stops saying it.
+ *
+ * Three defects, each a sentence that reached nobody or outlived its subject:
+ * a single accept of a seat that could never publish said a flat "Accepted"
+ * with no reason and no way to withdraw; the fields-left-out card kept
+ * describing a draft after it was withdrawn; and that card never said whether
+ * anything needed doing.
+ */
+describe("what the review page says after an accept", () => {
+  const ITEM = {
+    id: "p1",
+    batchId: "b1",
+    moduleId: "vendor",
+    kind: "role.proposed",
+    payload: { role_name: "Mill Warden", circle: "Milling Circle", vendor_rank: 3 },
+    quote: null,
+    sourceRef: null,
+    sourceOccurredAt: null,
+    evidence: "absent",
+    audience: "steward",
+    trustTier: "extracted_unreviewed",
+    confidence: null,
+    significance: null,
+    subjectRef: null,
+    receivedAt: "2026-08-14T10:00:00.000Z",
+    correlationId: null,
+  };
+  const QUEUE = {
+    ...EMPTY,
+    counts: { proposals: 1, quests: 0 },
+    batches: [{ batchId: "b1", moduleId: "vendor", receivedAt: "2026-08-14T10:00:00.000Z", items: [ITEM] }],
+  };
+  const REASON =
+    'There is no circle called "Milling Circle" yet. Ask an admin to create it, then withdraw this draft. ' +
+    "Its proposals go back in the review queue, ready to accept again";
+
+  /** Answers by method and path; anything unlisted gets the queue, which is what a reload reads. */
+  function routes(table: Record<string, unknown>) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: { method?: string }) => {
+        const key = `${init?.method ?? "GET"} ${url}`;
+        return { ok: true, status: 200, json: async () => (key in table ? table[key] : QUEUE) };
+      }),
+    );
+  }
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("shows why a single accepted seat cannot apply, beside a way to withdraw it", async () => {
+    routes({
+      "POST /api/review/proposals/p1/accept": {
+        success: true,
+        createdRef: "d1",
+        seats: 1,
+        blocked: 1,
+        blockedLines: [{ reads: 'Create the seat "Mill Warden"', blocked: REASON }],
+        ignored: [],
+      },
+    });
+    renderReview();
+    fireEvent.click(await screen.findByText("Accept this one"));
+    expect(await screen.findByText(/There is no circle called "Milling Circle" yet/)).toBeTruthy();
+    expect(screen.getByText("A draft from this queue cannot publish")).toBeTruthy();
+    expect(screen.getByText("Withdraw that draft")).toBeTruthy();
+  });
+
+  it("keeps a card for every stuck draft, so a second blocked accept cannot hide the first one's withdraw", async () => {
+    // One page-wide slot: a blocked batch, then a blocked single accept, and
+    // the batch's draft lost the only withdraw button any screen offered.
+    const OTHER = { ...ITEM, id: "p2", batchId: "b2", payload: { role_name: "Kiln Tender", circle: "Kiln Circle" } };
+    const KILN = 'There is no circle called "Kiln Circle" yet. Ask an admin to create it';
+    const TWO = {
+      ...QUEUE,
+      counts: { proposals: 2, quests: 0 },
+      batches: [...QUEUE.batches, { batchId: "b2", moduleId: "vendor", receivedAt: "2026-08-14T10:00:00.000Z", items: [OTHER] }],
+    };
+    const table: Record<string, unknown> = {
+      "POST /api/review/batches/b1/accept": {
+        success: true, accepted: 1, draftId: "d1", seats: 1, blocked: 1, noted: 0, ignored: [],
+        blockedLines: [{ reads: 'Create the seat "Mill Warden"', blocked: REASON }],
+      },
+      "POST /api/review/proposals/p2/accept": {
+        success: true, createdRef: "d2", seats: 1, blocked: 1, ignored: [],
+        blockedLines: [{ reads: 'Create the seat "Kiln Tender"', blocked: KILN }],
+      },
+      "POST /api/review/drafts/d2/withdraw": { success: true, reopened: 1 },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: { method?: string }) => {
+        const key = `${init?.method ?? "GET"} ${url}`;
+        return { ok: true, status: 200, json: async () => (key in table ? table[key] : TWO) };
+      }),
+    );
+    renderReview();
+    // Two batches of one each, so two batch buttons: b1's is first.
+    fireEvent.click((await screen.findAllByText(/Accept all 1, with my edits/i))[0]);
+    expect(await screen.findByText(/"Milling Circle" yet/)).toBeTruthy();
+    fireEvent.click(screen.getAllByText("Accept this one")[1]);
+    expect(await screen.findByText(/"Kiln Circle" yet/)).toBeTruthy();
+    // Both drafts, each with its own way out.
+    expect(screen.getByText(/"Milling Circle" yet/)).toBeTruthy();
+    expect(screen.getAllByText("Withdraw that draft")).toHaveLength(2);
+    // Withdrawing one takes only its own card.
+    fireEvent.click(screen.getAllByText("Withdraw that draft")[1]);
+    await waitFor(() => expect(screen.queryByText(/"Kiln Circle" yet/)).toBeNull());
+    expect(screen.getByText(/"Milling Circle" yet/)).toBeTruthy();
+    expect(screen.getAllByText("Withdraw that draft")).toHaveLength(1);
+  });
+
+  it("shows every stuck draft the queue read lists, so a reload keeps each withdraw", async () => {
+    let withdrawn = false;
+    const d7 = { draftId: "d7", blocked: 1, blockedLines: [{ reads: 'Create the seat "Mill Warden"', blocked: REASON }] };
+    const d8 = { draftId: "d8", blocked: 2, blockedLines: [] };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: { method?: string }) => {
+        if (init?.method === "POST" && url === "/api/review/drafts/d7/withdraw") {
+          withdrawn = true;
+          return { ok: true, status: 200, json: async () => ({ success: true, reopened: 1 }) };
+        }
+        return { ok: true, status: 200, json: async () => ({ ...QUEUE, stuckDrafts: withdrawn ? [d8] : [d7, d8] }) };
+      }),
+    );
+    renderReview();
+    // No accept on this page at all: the cards come from the server.
+    expect(await screen.findByText(/"Milling Circle" yet/)).toBeTruthy();
+    expect(screen.getByText(/2 of its seats are blocked/)).toBeTruthy();
+    expect(screen.getAllByText("Withdraw that draft")).toHaveLength(2);
+    fireEvent.click(screen.getAllByText("Withdraw that draft")[0]);
+    await waitFor(() => expect(screen.queryByText(/"Milling Circle" yet/)).toBeNull());
+    expect(screen.getByText(/2 of its seats are blocked/)).toBeTruthy();
+    expect(screen.getAllByText("Withdraw that draft")).toHaveLength(1);
+  });
+
+  it("reads the queue again when a withdraw is refused, so a draft somebody else withdrew loses its card", async () => {
+    // Two stewards, one stuck draft. The other steward withdrew it first, so
+    // this click is refused, and the card used to stay with a button that
+    // could never work until the page was reloaded by hand.
+    let refused = false;
+    const d9 = { draftId: "d9", blocked: 1, blockedLines: [{ reads: 'Create the seat "Mill Warden"', blocked: REASON }] };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: { method?: string }) => {
+        if (init?.method === "POST" && url === "/api/review/drafts/d9/withdraw") {
+          refused = true;
+          return {
+            ok: false,
+            status: 409,
+            json: async () => ({ error: "This draft is withdrawn, and only an open draft can be withdrawn" }),
+          };
+        }
+        return { ok: true, status: 200, json: async () => ({ ...QUEUE, stuckDrafts: refused ? [] : [d9] }) };
+      }),
+    );
+    renderReview();
+    expect(await screen.findByText(/"Milling Circle" yet/)).toBeTruthy();
+    fireEvent.click(screen.getByText("Withdraw that draft"));
+    await waitFor(() => expect(screen.queryByText(/"Milling Circle" yet/)).toBeNull());
+    expect(screen.queryByText("Withdraw that draft")).toBeNull();
+  });
+
+  it("says what to do about fields left out, and offers the withdraw when nothing blocked", async () => {
+    routes({
+      "POST /api/review/proposals/p1/accept": {
+        success: true,
+        createdRef: "d1",
+        seats: 1,
+        blocked: 0,
+        blockedLines: [],
+        ignored: [{ proposalId: "p1", keys: ["vendor_rank"] }],
+      },
+    });
+    renderReview();
+    fireEvent.click(await screen.findByText("Accept this one"));
+    expect(await screen.findByText(/Not read from/)).toBeTruthy();
+    expect(screen.getByText(/The draft publishes without them/)).toBeTruthy();
+    expect(screen.getByText(/there is nothing to do/)).toBeTruthy();
+    expect(screen.getByText("Withdraw that draft")).toBeTruthy();
+    expect(screen.queryByText("A draft from this queue cannot publish")).toBeNull();
+  });
+
+  it("clears both cards once the draft they describe is withdrawn", async () => {
+    routes({
+      "POST /api/review/batches/b1/accept": {
+        success: true,
+        accepted: 1,
+        draftId: "d1",
+        seats: 1,
+        blocked: 1,
+        blockedLines: [{ reads: 'Create the seat "Mill Warden"', blocked: REASON }],
+        noted: 0,
+        ignored: [{ proposalId: "p1", keys: ["vendor_rank"] }],
+      },
+      "POST /api/review/drafts/d1/withdraw": { success: true, reopened: 1 },
+    });
+    renderReview();
+    fireEvent.click(await screen.findByText(/Accept all 1, with my edits/i));
+    expect(await screen.findByText(/Not read from/)).toBeTruthy();
+    // One way out, even though both cards describe the same draft.
+    expect(screen.getAllByText("Withdraw that draft")).toHaveLength(1);
+    fireEvent.click(screen.getByText("Withdraw that draft"));
+    await waitFor(() => expect(screen.queryByText(/Not read from/)).toBeNull());
+    expect(screen.queryByText("A draft from this queue cannot publish")).toBeNull();
   });
 });
