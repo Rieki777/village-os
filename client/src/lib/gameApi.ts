@@ -531,6 +531,18 @@ export interface ProgressionCapability {
   label: string;
   held: boolean;
   opens: { via: "stage"; stage: string } | { via: "appointment" };
+  /**
+   * The classes this power suits, named the way this village names them
+   * (shared/powerAffinity.ts). Set on powers the village entrusts and empty on
+   * the rest. `yours` marks a class this member plays, and only on a power
+   * that is `recommended`. Absent from a server that predates the map.
+   */
+  suits?: Array<{ key: string; name: string; yours?: boolean }>;
+  /**
+   * The power is put to this member as one that suits them: they reached
+   * Contributor, they play a class it suits, and they do not hold it yet.
+   */
+  recommended?: boolean;
 }
 
 export interface QuestClaim {
