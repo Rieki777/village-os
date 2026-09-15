@@ -116,17 +116,17 @@ export default function VillageMap() {
     [data, arranging, arrange.moves],
   );
 
-  /** Answers whether a fresh picture arrived, which is what the "Published" toast waits on. */
-  const refetchMap = (): Promise<boolean> =>
+  /** The fresh picture, or null when it did not arrive. Arrange checks its moves against it before writing anything. */
+  const refetchMap = (): Promise<PowerData | null> =>
     fetch("/api/map", { headers: headers() })
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-      .then((d) => {
+      .then((d: PowerData) => {
         setData(d);
-        return true;
+        return d;
       })
       .catch((status) => {
         if (status === 401) setDenied(true);
-        return false;
+        return null;
       });
 
   useEffect(() => {
@@ -432,8 +432,8 @@ export default function VillageMap() {
                         setArranging((v) => !v);
                       }}
                       data-arrange-toggle
-                      // A mouse, pen or trackpad, on a screen wide enough for the standing canvas.
-                      className={`hidden sm:any-pointer-fine:inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border ${
+                      // A mouse, pen or trackpad, on a screen wide enough for the card beside the canvas, which holds the bar.
+                      className={`hidden md:any-pointer-fine:inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border ${
                         arranging ? "bg-teal-deep text-white border-teal-deep" : "bg-card text-muted-foreground border-border"
                       }`}
                     >
@@ -542,18 +542,6 @@ export default function VillageMap() {
                 </div>
               )}
 
-              {arranging && !listMode && (
-                <div className="hidden sm:block mb-3">
-                  <ArrangeBar
-                    live={data.circles}
-                    moves={arrange.moves}
-                    status={arrange.status}
-                    reload={refetchMap}
-                    onPublished={arrange.settle}
-                    onDiscard={arrange.clear}
-                  />
-                </div>
-              )}
               {/* Desktop and tablet: the canvas, the legend riding its corner,
                   the card standing beside it. Below sm (spec 12's 480): the
                   accordion IS the page, with the card as a bottom sheet. */}
@@ -589,6 +577,17 @@ export default function VillageMap() {
                     />
                   </div>
                   <aside data-scroll-contain className="w-80 shrink-0 bg-card border border-border rounded-2xl p-5 sticky top-24 max-h-[80vh] overflow-y-auto hidden md:block">
+                    {/* Arranging rides the top of this card, so the canvas never moves when it turns on. */}
+                    {arranging && (
+                      <ArrangeBar
+                        live={data.circles}
+                        moves={arrange.moves}
+                        status={arrange.status}
+                        reload={refetchMap}
+                        onSettled={arrange.settle}
+                        onDiscard={arrange.clear}
+                      />
+                    )}
                     {selectedSeat ? (
                       <div>
                         <div className="flex justify-end">

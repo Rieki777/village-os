@@ -28,9 +28,12 @@
  * swallows the one click the browser sends after it, wherever that click lands,
  * so landing a circle never also moves the camera.
  *
- * THE LISTENERS SIT ON THE DOCUMENT and find the map through `svgRef` at the
- * moment of each event. The map unmounts in list mode and mounts again after,
- * and a listener bound to the first SVG would be deaf on the second.
+ * THE LISTENERS SIT ON THE DOCUMENT AND THE WINDOW, IN THE CAPTURE PHASE, and
+ * find the map through `svgRef` at the moment of each event. Capture, because a
+ * React handler anywhere under the map that calls `stopPropagation` stops the
+ * native event at React's root, before a bubbling document listener hears it.
+ * Late-bound, because the map unmounts in list mode and mounts again after, and
+ * a listener bound to the first SVG would be deaf on the second.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { addMove, dropRefusal, withMoves, type PendingMove } from "./arrange";
@@ -141,22 +144,16 @@ export function useArrange({
     let swallowClick = false;
 
     const endPress = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onCancel);
+      window.removeEventListener("pointermove", onMove, true);
+      window.removeEventListener("pointerup", onUp, true);
+      window.removeEventListener("pointercancel", onAbandon, true);
+      window.removeEventListener("blur", onAbandon);
       if (press?.dragging) document.body.style.userSelect = "";
       press = null;
     };
 
     const onMove = (e: PointerEvent) => {
       if (!press) return;
-      // The button came up outside the window, where no pointerup reaches the page.
-      if ((e.buttons & 1) === 0) {
-        const wasDragging = press.dragging;
-        endPress();
-        if (wasDragging) putDown();
-        return;
-      }
       if (!press.dragging) {
         if (Math.hypot(e.clientX - press.x, e.clientY - press.y) < DRAG_PX) return;
         press.dragging = true;
@@ -185,7 +182,8 @@ export function useArrange({
       land(p.id, where);
     };
 
-    const onCancel = () => {
+    /** The press ended somewhere no pointerup reaches: a cancelled pointer, or the window losing focus. */
+    const onAbandon = () => {
       const wasDragging = press?.dragging;
       endPress();
       if (wasDragging) putDown();
@@ -197,9 +195,10 @@ export function useArrange({
       const id = circleOf(e.target as Element);
       if (!id) return;
       press = { id, x: e.clientX, y: e.clientY, dragging: false };
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onUp);
-      window.addEventListener("pointercancel", onCancel);
+      window.addEventListener("pointermove", onMove, true);
+      window.addEventListener("pointerup", onUp, true);
+      window.addEventListener("pointercancel", onAbandon, true);
+      window.addEventListener("blur", onAbandon);
     };
 
     const onClick = (e: MouseEvent) => {
@@ -258,15 +257,15 @@ export function useArrange({
       setTarget(id && id !== carrying ? id : null);
     };
 
-    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("pointerdown", onDown, true);
     window.addEventListener("click", onClick, true);
     document.addEventListener("keydown", onKey, true);
-    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("focusin", onFocusIn, true);
     return () => {
-      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("pointerdown", onDown, true);
       window.removeEventListener("click", onClick, true);
       document.removeEventListener("keydown", onKey, true);
-      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("focusin", onFocusIn, true);
       endPress();
     };
   }, [on, svgRef, land, putDown]);
