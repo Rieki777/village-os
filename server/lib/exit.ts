@@ -38,6 +38,7 @@ import {
 } from "./ledger";
 import { numberVar, stringVar } from "./variables";
 import { tokenTypesPostedTo } from "../repos/tokenLedger";
+import { openRedemptionCount } from "./redemptionStore";
 
 /*
  * UNITS IN THIS FILE, stated once so no future sweep has to guess.
@@ -187,6 +188,17 @@ export async function exitOpenState(pool: Pool, userId: string, roleIds: string[
     domain: "exchange",
     count: Number(orders.n),
     description: `${orders.n} pending/disputed exchange order(s)`,
+    blocking: true,
+  });
+
+  // Tokens held against an open redemption sit outside the member's account,
+  // so a refusal or an expiry after the sweep would hand them back to an
+  // account nothing settles again, and resolve would tombstone it with them in.
+  const redemptions = await openRedemptionCount(pool, userId);
+  states.push({
+    domain: "redemptions",
+    count: redemptions,
+    description: `${redemptions} open redemption(s). Each is withdrawn by the member, or confirmed or refused by whoever holds the key, before leaving`,
     blocking: true,
   });
 
@@ -525,6 +537,14 @@ export async function sweepBalances(
   if (!exit) return nothing("This exit no longer exists, so there is nothing to settle.");
   const waiting = coolingRefusal(exit, policy, now);
   if (waiting) return nothing(waiting);
+  // The settle waits for open redemptions, for the reason `exitOpenState` gives:
+  // tokens handed back after this sweep would replay its keys and never move.
+  const openRedemptions = await openRedemptionCount(pool, input.userId);
+  if (openRedemptions > 0) {
+    return nothing(
+      `This member has ${openRedemptions} open redemption(s). Each is withdrawn, confirmed or refused before their balances settle.`,
+    );
+  }
 
   const account = memberAccount(input.userId);
   const balances = await balancesFor(pool, account);

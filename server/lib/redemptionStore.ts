@@ -480,6 +480,20 @@ export async function settleRedemption(
       burn = { ok: false, duplicate: false, error: String(err?.message ?? err) };
     }
     if (!burn.ok && !burn.duplicate) {
+      /*
+       * A THROW IS NOT PROOF NOTHING POSTED. `postTransfer` commits and then
+       * rethrows whatever the driver says, so a connection lost after the
+       * COMMIT reached the server reports a burn that happened as a failure.
+       * Un-claiming that row would let a withdrawal reverse a hold that is
+       * already destroyed, out of a hold account every member's redemption
+       * shares. So the ledger is asked first, on the row's own key, and a burn
+       * that is there completes the confirmation. If this read itself throws,
+       * the row stays confirmed, the direction `holdReconciliation` can see.
+       */
+      if (await ledgerEntryExists(pool, row.burnKey)) {
+        const posted = await redemptionById(pool, input.id);
+        return { ok: true, released: false, row: posted ?? row };
+      }
       await unclaimConfirmation(pool, input.id, villageId());
       return { ok: false, reason: "burn-failed", error: `nothing was destroyed: ${burn.error}` };
     }
@@ -664,8 +678,9 @@ export async function retiredSupply(pool: Pool): Promise<Record<string, number>>
  * has answered: resolution anonymises them and vacates their seats, and the
  * hold would be left pointing at somebody who is gone.
  *
- * NOT WIRED INTO `exitOpenState` BY THIS LANE. That function belongs to the
- * exit lane and is live. This is the whole of the work on this side.
+ * WIRED: `exitOpenState` (server/lib/exit.ts) enumerates it as the blocking
+ * `redemptions` domain, and `sweepBalances` refuses to settle while it is above
+ * zero, so tokens handed back after a sweep cannot land where nothing sweeps.
  */
 export async function openRedemptionCount(pool: Pool, userId: string): Promise<number> {
   const rows = await openCountRows(pool, villageId(), userId);
