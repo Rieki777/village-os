@@ -31,6 +31,7 @@
  * one is ignored there, because refusing an account the village would have let
  * in without any link would be a refusal with no reason behind it.
  */
+import { randomBytes } from "node:crypto";
 import type { Express, Request } from "express";
 
 import { claimPaths } from "../../shared/gameConfig";
@@ -85,7 +86,9 @@ export function register(app: Express, deps: RegisterDeps): void {
     if (await deps.members.existsByEmail(email)) {
       return res.status(409).json({ error: "Email already exists" });
     }
-    const userId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    // The suffix comes from crypto. This id is signed into the member's session token, and code
+    // scanning holds every value that reaches a token to that standard (js/insecure-randomness).
+    const userId = `user-${Date.now()}-${randomBytes(4).toString("hex")}`;
     const inviter = inviteId ? await deps.invites.claim(inviteId, userId) : null;
     if (inviteId && !inviter) {
       // Taken by somebody else between the check above and now.

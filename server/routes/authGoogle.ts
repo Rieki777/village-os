@@ -17,6 +17,7 @@
  * server/lib/oauthAccounts.ts (which account a sign-in becomes). Read the
  * account-linking argument there before changing anything here.
  */
+import { randomBytes } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import {
   OAUTH_HANDOFF_COOKIE,
@@ -334,7 +335,8 @@ export function register(app: Express, deps: GoogleAuthDeps): void {
       if (!member) return failTo(res, "account_unavailable");
       deps.recordAudit("auth:google-linked", member.id);
     } else {
-      const userId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      // From crypto, like the email door's (server/routes/register.ts): the id is signed into a session.
+      const userId = `user-${Date.now()}-${randomBytes(4).toString("hex")}`;
       /*
        * A NEW ACCOUNT, which in a village that joins by invitation needs the
        * invitation `start` signed into the state. Taken before the account is

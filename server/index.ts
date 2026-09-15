@@ -8206,7 +8206,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
         }
       }
     } else {
-      const userId = `usr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const userId = `usr-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
       user = {
         id: userId,
         name: String(name || "Founder").slice(0, 120),
