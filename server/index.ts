@@ -5883,7 +5883,7 @@ async function startServer() {
       return decodeToken(AUTH_TOKEN_SECRET, header.slice(7))?.userId ?? null;
     },
   });
-  wireVariableGuard((key, value) => exitLeverRefusal(key, value, exitPolicyRepo.get(), rawValue));
+  wireVariableGuard((key, value, alongside) => exitLeverRefusal(key, value, exitPolicyRepo.get(), rawValue, alongside));
   initModuleUsage(getPool());
 
   // S30/S33/S37: open-state lives on the server (it needs the pool); the
@@ -22027,7 +22027,7 @@ ${inner}
     }
     if (result.failed.length > 0) {
       return res.status(409).json({
-        error: "Nothing could be applied. The registry has moved since the vote",
+        error: "Some of these changes could not be applied, so the proposal is not recorded as applied. The registry has moved since the vote",
         applied: result.applied, failed: result.failed,
       });
     }
@@ -22423,9 +22423,8 @@ ${inner}
         const applyResult = await applyMechanicsProposal(fresh, actorId);
         out.applied = applyResult.applied;
         if (applyResult.refusal) {
-          out.held = applyResult.refusal.sentence;
           await notifyAdmins("governance", `A carried proposal could not land: ${fresh.title}`, `gmp:${fresh.id}:apply-failed`);
-          return out;
+          throw new Error(applyResult.refusal.sentence);
         }
         /*
          * A CARRIED MINTING CHANGE IS QUEUED, AND THE CARD HAS TO SAY SO.
@@ -22447,6 +22446,7 @@ ${inner}
             `A ballot-passed proposal could not fully apply: ${fresh.title} (${applyResult.failed.length} change(s) refused)`,
             `gmp:${fresh.id}:apply-failed`,
           );
+          throw new Error(applyResult.failed.map((f) => `${f.key}: ${f.problem}`).join("; "));
         }
         return out;
       },

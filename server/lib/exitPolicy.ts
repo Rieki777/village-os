@@ -547,13 +547,17 @@ export function exitLeverRefusal(
   proposed: string,
   policy: ExitPolicy,
   rawValue: (key: string) => string,
+  alongside?: Readonly<Record<string, string>>,
 ): string | null {
   if (!key.startsWith("exit.")) return null;
   const value = String(proposed).trim();
-  return exitLeverProblem(
-    exitLeverReading((k) => (k === key ? value : rawValue(k)), policy),
-    key,
-  );
+  // Inside a change set, the set's other dials read at their FINAL values, so
+  // this judges the state the set produces. `exitSetRefusals` is the complete
+  // answer about that reading; narrowing it to refusals naming this key is the
+  // same no-deadlock rule `exitLeverProblem` states.
+  const resulting = (k: string): string =>
+    k === key ? value : alongside && k in alongside ? String(alongside[k]).trim() : rawValue(k);
+  return exitSetRefusals(exitLeverReading(resulting, policy)).find((r) => r.keys.includes(key))?.sentence ?? null;
 }
 
 /**
