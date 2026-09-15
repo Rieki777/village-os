@@ -26,7 +26,7 @@
  * a pointer (agreement_ref) and a status — never the content.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
-import { CREDITS, faucetFor, fromLedgerUnits } from "./economy";
+import { CREDITS, faucetFor, fromLedgerUnits, toLedgerUnits } from "./economy";
 import {
   balancesFor,
   CYCLE_POOL_FAUCET,
@@ -425,6 +425,22 @@ export function coolingRefusal(exit: ExitRow, policy: ExitSplitPolicy, now: Date
   return `Balances on this exit settle from ${day(from)}. Today is ${day(now)}.`;
 }
 
+/**
+ * The dials a sweep splits by: the exit's captured policy once one exists,
+ * else the live reading. Cooling is always live, because it was already judged
+ * before any split. A capture missing a field falls back to the live value.
+ */
+function policyOfRecord(earlier: ExitCapturedSplit | null, live: ExitSplitPolicy): ExitSplitPolicy {
+  if (!earlier) return live;
+  return {
+    keepPct: earlier.keep ?? live.keepPct,
+    remainderAccount: earlier.to ?? live.remainderAccount,
+    coolingDays: live.coolingDays,
+    voiceOnExit: earlier.voice ?? live.voiceOnExit,
+    voiceConvertRate: earlier.rate ?? live.voiceConvertRate,
+  };
+}
+
 /** The account a remainder goes to. Null means burn with nowhere to burn to. */
 function destinationFor(where: ExitRemainderAccount, token: string): string | null {
   if (where === "treasury") return TREASURY;
@@ -515,6 +531,23 @@ export async function sweepBalances(
   const back = await tokenTypesPostedTo(pool, input.exitId, account);
   const paidOut = back.map((r) => String(r.token_type));
 
+  /*
+   * A RETRY FINISHES THE SPLIT THE FIRST SETTLE DECIDED, AND NEVER SPLITS WHAT
+   * IS LEFT. Measured: Voice kept at 50 on convert, 1000 held, a treasury short
+   * of credits. The first settle posted the 500 remainder and the conversion
+   * pair was refused, so the member held 500. A retry that split those 500
+   * again kept 250, found the remainder key already used, converted 250 and
+   * stranded 250 Voice for the tombstone.
+   *
+   * So once an exit carries a capture, the capture decides: its dials, and
+   * each captured token's `held`, which is what the first split was taken
+   * from. The postings keep their keys, so what already moved replays as a
+   * duplicate and only the missing half posts, at its original size. `policy`
+   * in the result stays the live reading, which is what the run READ.
+   */
+  const earlier = capturedSplit(exit.resolution);
+  const applied = policyOfRecord(earlier, policy);
+
   const swept: Record<string, number> = {};
   const errors: string[] = [];
   const lines: ExitSplitLine[] = [];
@@ -528,7 +561,11 @@ export async function sweepBalances(
     const def = tokenDef(token);
     const kind = def?.kind ?? "";
     const name = def?.name ?? token;
-    const share = Math.floor((amount * keepPctFor(policy, kind)) / 100);
+    // HUMAN in the capture, MINOR here: the captured figure was divided from
+    // a whole number of minor units, so multiplying it back is exact.
+    const frozen = earlier?.lines?.find((l) => l.token === token);
+    const held = frozen ? toLedgerUnits(token, frozen.held) : amount;
+    const share = Math.floor((held * keepPctFor(applied, kind)) / 100);
 
     // Voice is the one holding that is also standing in the village, so the
     // share it keeps has a second dial deciding its fate. `forfeit` is today:
@@ -538,12 +575,12 @@ export async function sweepBalances(
     // is still what the village holds. `convert` pays the share out as
     // credits below, so it leaves this account either way.
     const voice = kind === "voice";
-    const forfeits = voice && policy.voiceOnExit === "forfeit";
-    const converts = voice && policy.voiceOnExit === "convert" && share > 0;
+    const forfeits = voice && applied.voiceOnExit === "forfeit";
+    const converts = voice && applied.voiceOnExit === "convert" && share > 0;
     const kept = forfeits || converts ? 0 : share;
-    const moved = amount - kept;
+    const moved = held - kept;
 
-    const to = destinationFor(policy.remainderAccount, token);
+    const to = destinationFor(applied.remainderAccount, token);
     if (!to) {
       // The same sentence `ruleCannotPay` and the save-time guard already use
       // for this fact, because it is the same fact.
@@ -554,7 +591,7 @@ export async function sweepBalances(
     const line: ExitSplitLine = {
       token,
       kind,
-      held: fromLedgerUnits(token, amount),
+      held: fromLedgerUnits(token, held),
       kept: fromLedgerUnits(token, kept),
       moved: fromLedgerUnits(token, moved),
       to,
@@ -606,7 +643,7 @@ export async function sweepBalances(
       if (!credit) {
         errors.push(`${token}: this village has no ${CREDITS} token to convert into.`);
       } else {
-        const paid = convertedMinor(share, policy.voiceConvertRate, def?.decimals ?? 0, credit.decimals);
+        const paid = convertedMinor(share, applied.voiceConvertRate, def?.decimals ?? 0, credit.decimals);
         if (paid <= 0) {
           errors.push(`${token}: this rate pays nothing on that share, so no Voice was converted.`);
         } else {
@@ -676,14 +713,13 @@ export async function sweepBalances(
    * was already settled, and no earlier capture exists, so this run IS the
    * first application of a policy and says so.
    */
-  const earlier = capturedSplit(exit.resolution);
   const record = posted || (!earlier && alreadySettled.length === 0 && lines.length > 0);
   const capture: ExitCapturedSplit = {
-    keep: policy.keepPct,
-    to: policy.remainderAccount,
-    voice: policy.voiceOnExit,
-    rate: policy.voiceConvertRate,
-    cooling: policy.coolingDays,
+    keep: applied.keepPct,
+    to: applied.remainderAccount,
+    voice: applied.voiceOnExit,
+    rate: applied.voiceConvertRate,
+    cooling: applied.coolingDays,
     // Bounded on purpose: `exits.resolution` is TEXT and every sweep appends.
     // A village holding more tokens than this reads the rest off the ledger.
     lines: lines.slice(0, 40),
