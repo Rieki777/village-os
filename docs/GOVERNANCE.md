@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `cdd4847ebda76c2b`, which regenerating reproduces.
+It describes the sources at fingerprint `416a8e4216583759`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -207,7 +207,7 @@ What each kind of decision asks. A subject declares MINIMUMS and the village's o
 
 Every other subject type keeps the village's own dials: `80% unity` and `20% quorum` on a fresh village, with no floor of its own.
 
-A member drafts through the wizard, which knows 8 types: `role_application`, `mechanics`, `agreement`, `badge_grant`, `quest_payout`, `power_transfer`, `power_grant`, `power_return`. 4 of them can be taken to a binding vote today (`mechanics`, `power_transfer`, `power_grant`, `power_return`); the other 4 open as practice votes (`role_application`, `agreement`, `badge_grant`, `quest_payout`).
+A member drafts through the wizard, which knows 9 types: `role_application`, `mechanics`, `agreement`, `badge_grant`, `quest_payout`, `power_transfer`, `power_grant`, `power_return`, `role_seat`. 5 of them can be taken to a binding vote today (`mechanics`, `power_transfer`, `power_grant`, `power_return`, `role_seat`); the other 4 open as practice votes (`role_application`, `agreement`, `badge_grant`, `quest_payout`).
 
 <!-- written by a person: practiceVotes -->
 The wizard offers types the executors have not reached. Those open as practice votes: the village holds a real decision, reads the real answer, and nothing moves. It is a ladder and never a scorecard.
@@ -1031,7 +1031,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "cdd4847ebda76c2b",
+  "commit": "416a8e4216583759",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -1666,13 +1666,15 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "quest_payout",
       "power_transfer",
       "power_grant",
-      "power_return"
+      "power_return",
+      "role_seat"
     ],
     "conductable": [
       "mechanics",
       "power_transfer",
       "power_grant",
-      "power_return"
+      "power_return",
+      "role_seat"
     ],
     "advisory": [
       "role_application",
