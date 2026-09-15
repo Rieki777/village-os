@@ -34,7 +34,10 @@
  * HOW THE GAPS ARE HIT, AND WHY IT IS NOT A RACE TEST. A race test fires two
  * requests and hopes they interleave. These put the second actor inside the gap
  * on purpose: each route's one repository call between deciding and writing is
- * wrapped, and the other actor's REAL transaction commits there. Everything the
+ * wrapped, and the other actor's REAL transaction commits there. The delete
+ * decides and writes inside that one call, under the quest's lock, so there the
+ * other actor's transaction opens first and commits once the delete is waiting
+ * on it. Everything the
  * handler does next runs against the real repository and the real row, so what
  * is asserted is the code under test and never the wrapper. The same doors
  * fired concurrently, with no wrapper, are in
@@ -51,7 +54,7 @@ import os from "node:os";
 import express from "express";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { provisionTestDb, testDbConfigured, untilALockIsAwaited, type TestDb } from "../db/testDb";
 import { claimsRepo, questsRepo, type ClaimsRepo, type QuestsRepo } from "../repos/quests";
 import { register as registerQuestRoutes } from "./quests";
 import { register as registerQuestClaimRoutes } from "./questClaims";
@@ -308,23 +311,36 @@ describe.skipIf(!configured)("the doors that move a quest claim (MySQL)", () => 
 
   it("a claim taken while the delete was deciding stops the delete", async () => {
     await addQuest("q-delete-race");
-    // Nothing is in flight when the admin presses Delete. Ada's claim lands
-    // after the route has looked and before the row is gone.
+    // Nothing is committed when the admin presses Delete. Ada's claim is in
+    // flight as the delete reaches the quest: it holds the lock `openClaim` takes
+    // and has made the insert `openClaim` makes, and it commits only once the
+    // delete is waiting on that lock. (`openClaim` cannot be paused inside, so the
+    // fixture takes the same lock and makes the same insert.) A claim committed
+    // before the delete began would pass against a delete with no lock at all,
+    // which is what this case used to do.
+    let claimCommitted: Promise<void> = Promise.resolve();
     insideTheGap = async () => {
-      const taken = await claims.openClaim({
-        id: "claim-delete-race",
-        questId: "q-delete-race",
-        questTitle: "Tend the swale",
-        userId: ADA.id,
-        userName: ADA.name,
-        status: "claimed",
-        claimedAt: new Date().toISOString(),
-        artifactUrl: "",
-        note: "",
-      });
-      expect(taken.ok).toBe(true);
+      const holder = await pool.getConnection();
+      await holder.beginTransaction();
+      await holder.query("SELECT id FROM quests WHERE id = ? FOR UPDATE", ["q-delete-race"]); // module-review-ok: fixture SQL taking the row lock openClaim takes, on the S5 scratch schema
+      await holder.query( // module-review-ok: fixture SQL making the insert openClaim makes, on the S5 scratch schema
+        "INSERT INTO quest_claims (id, quest_id, quest_title, user_id, user_name, status) VALUES (?,?,?,?,?,'claimed')",
+        ["claim-delete-race", "q-delete-race", "Tend the swale", ADA.id, ADA.name],
+      );
+      claimCommitted = (async () => {
+        try {
+          await untilALockIsAwaited(pool);
+          await holder.commit();
+        } catch (e) {
+          await holder.rollback();
+          throw e;
+        } finally {
+          holder.release();
+        }
+      })();
     };
     const removed = await call("DELETE", "/api/admin/quests/q-delete-race");
+    await claimCommitted;
     expect(removed.status).toBe(409);
     expect(removed.body.openClaims).toBe(1);
 
@@ -342,6 +358,16 @@ describe.skipIf(!configured)("the doors that move a quest claim (MySQL)", () => 
     expect(removed.status).toBe(409);
     expect(removed.body.openClaims).toBe(1);
     expect(await quests.byId("q-delete-busy")).not.toBeNull();
+  });
+
+  it("work already handed in stops the delete too, and is counted", async () => {
+    await addQuest("q-delete-submitted");
+    await claimAndSubmit("q-delete-submitted");
+
+    const removed = await call("DELETE", "/api/admin/quests/q-delete-submitted");
+    expect(removed.status).toBe(409);
+    expect(removed.body.openClaims).toBe(1);
+    expect(await quests.byId("q-delete-submitted")).not.toBeNull();
   });
 
   it("a quest whose claims are all settled still deletes, and the settled claims survive", async () => {
