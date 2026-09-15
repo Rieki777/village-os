@@ -44,6 +44,7 @@ import {
   type PowerAffinity,
   type PowerAffinityOverrides,
 } from "../../shared/powerAffinity";
+import { standingHands, type InboxRow, type StandingHandStatus } from "../../shared/powerHands";
 import { charactersForMember } from "../repos/playerCharacters";
 import { dbDocument, type DbDocument } from "../repos/store-db";
 import { listArchetypes } from "./characters";
@@ -132,6 +133,11 @@ export type AffinityCatalogueRow = CapabilityCatalogueRow & {
   suits: ClassName[];
   /** True when the power is put to this member as one that suits them. */
   recommended: boolean;
+  /**
+   * This member's hand for the power while it is up (shared/powerHands.ts).
+   * Absent when there is none, and on a power the member already holds.
+   */
+  hand?: { status: StandingHandStatus; submittedAt: string };
 };
 
 /**
@@ -141,11 +147,36 @@ export type AffinityCatalogueRow = CapabilityCatalogueRow & {
  * ladder opens needs nobody to suggest it. A member's party is read for THIS
  * village only: a character chosen in another village on the same deployment
  * says nothing about who they are here.
+ *
+ * `inbox` is the submissions inbox as the server holds it, and a hand the
+ * member raised rides on its power's row. It rides there on an unreadable map
+ * too: the hand is the member's own act, and a map that failed to load says
+ * nothing about it.
  */
 export async function withPowerAffinity(
   rows: CapabilityCatalogueRow[],
-  who: { pool: Pool; villageId: string; userId: string; stageId: string },
+  who: { pool: Pool; villageId: string; userId: string; stageId: string; inbox?: readonly InboxRow[] },
 ): Promise<AffinityCatalogueRow[]> {
+  return (await readPowerAffinity(rows, who)).rows;
+}
+
+/**
+ * The same catalogue, saying whether the village's map could be read.
+ *
+ * A caller that DECIDES something on `recommended` needs to know. An unreadable
+ * map degrades to rows that suggest nothing, and on the rows alone "not put to
+ * you" and "could not tell" look the same. The raise-hand route answers the
+ * second with a retry, never with a refusal.
+ */
+export async function readPowerAffinity(
+  rows: CapabilityCatalogueRow[],
+  who: { pool: Pool; villageId: string; userId: string; stageId: string; inbox?: readonly InboxRow[] },
+): Promise<{ rows: AffinityCatalogueRow[]; degraded: boolean }> {
+  const hands = standingHands(who.inbox ?? [], who.userId);
+  const handOn = (row: CapabilityCatalogueRow): Pick<AffinityCatalogueRow, "hand"> => {
+    const hand = row.held ? undefined : hands.get(row.key);
+    return hand ? { hand: { status: hand.status, submittedAt: hand.submittedAt } } : {};
+  };
   try {
     const [{ map, classes }, characters] = await Promise.all([
       villageAffinity(who.pool, who.villageId),
@@ -154,7 +185,7 @@ export async function withPowerAffinity(
     const party = characters.filter((c) => c.villageId === who.villageId).map((c) => c.archetypeKey);
     const from = stageIndex(RECOMMENDS_FROM);
     const reached = from >= 0 && stageIndex(who.stageId) >= from;
-    return rows.map((row) => {
+    const read = rows.map((row): AffinityCatalogueRow => {
       const keys = row.opens.via === "appointment" ? (map[row.key] ?? []).slice() : [];
       const recommended = isRecommended(row, keys, party, reached);
       return {
@@ -167,11 +198,13 @@ export async function withPowerAffinity(
           return recommended && party.indexOf(key) >= 0 ? { key, name, yours: true } : { key, name };
         }),
         recommended,
+        ...handOn(row),
       };
     });
+    return { rows: read, degraded: false };
   } catch (err) {
     console.warn(`[powerAffinity] the catalogue went out with no suggestions: ${(err as Error)?.message ?? String(err)}`);
-    return rows.map((row) => ({ ...row, suits: [], recommended: false }));
+    return { rows: rows.map((row) => ({ ...row, suits: [], recommended: false, ...handOn(row) })), degraded: true };
   }
 }
 

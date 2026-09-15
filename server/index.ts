@@ -115,6 +115,7 @@ import { register as registerFeedbackRoutes } from "./routes/feedback";
 import { register as registerCharacterPortraitRoutes } from "./routes/characterPortraits";
 import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
 import { register as registerPowerAffinityRoutes, powersForClass, withPowerAffinity } from "./routes/powerAffinity";
+import { register as registerPowerHandRoutes } from "./routes/powerHands";
 import { resolveGoogleConfig } from "./lib/oauthGoogle";
 import {
   decodeToken,
@@ -1123,11 +1124,11 @@ const FORM_TYPE_TO_PATHWAY: Record<string, "investor" | "steward" | "resident" |
  *     inbox: `investor`, `investor-pack`, `resident`, `prosperity`, `contact`;
  *   - what `Admin.tsx` lists in its own filter, which is the same set again.
  *
- * TWO REAL TYPES ARE DELIBERATELY ABSENT, and their absence is the point.
- * `role-application` is written by `POST /api/map/roles/:id/raise-hand` and
- * `investor-doc-request` by `POST /api/investor-docs/request`. Both are
- * genuine rows in this table and both land in the queue a founder works, and
- * NEITHER has ever arrived through this route. Each of those routes still
+ * THREE REAL TYPES ARE DELIBERATELY ABSENT, and their absence is the point.
+ * `role-application` is written by `POST /api/map/roles/:id/raise-hand`,
+ * `power-application` by `POST /api/powers/:key/raise-hand` and `investor-doc-request` by
+ * `POST /api/investor-docs/request`. All three are genuine rows in this table, all land in the queue a founder
+ * works, and NONE has ever arrived through this route. Each of those routes still
  * writes its own type directly, which no allowlist here touches; what stops
  * now is a stranger typing one into the public form.
  *
@@ -20043,6 +20044,7 @@ ${inner}
   registerCharacterPortraitRoutes(app, { authedUser, getPool, uploadsDir: UPLOADS_DIR });
   registerArchetypeAdminRoutes(app, { isAdmin, guardCapability, getPool });
   registerPowerAffinityRoutes(app, { isAdmin, guardCapability, getPool });
+  registerPowerHandRoutes(app, { authedUser, capabilityCtx, stageOf, firstName, notifyAdmins, getPool, overLimit, submissionsRepo });
 
   /** The five classes, as this village names them. Public: it is the front door. */
   app.get("/api/archetypes", async (_req, res) => {
@@ -20477,7 +20479,7 @@ ${inner}
       // The same keys with the closed ones included, and the rung that opens
       // each. `capabilities` above is exactly the rows here whose `held` is
       // true, by construction rather than by agreement.
-      capabilityCatalogue: await withPowerAffinity(capabilityCatalogue(ctx), { pool: getPool(), villageId: villageId(), userId: user.id, stageId }),
+      capabilityCatalogue: await withPowerAffinity(capabilityCatalogue(ctx), { pool: getPool(), villageId: villageId(), userId: user.id, stageId, inbox: submissionsRepo.all() }),
       roles: rolesFor(user.id),
       history: events
         .filter((e) => e.userId === user.id)

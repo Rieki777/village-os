@@ -534,6 +534,13 @@ export interface ProgressionCapability {
    * Contributor, they play a class it suits, and they do not hold it yet.
    */
   recommended?: boolean;
+  /**
+   * This member's hand for the power while it is up (shared/powerHands.ts):
+   * filed, and not yet answered. Absent when there is no hand, once the hand is
+   * answered, on a power the member holds, and from a server that predates
+   * hands.
+   */
+  hand?: { status: "new" | "reviewing" | "in-conversation"; submittedAt: string };
 }
 
 export interface QuestClaim {

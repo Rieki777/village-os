@@ -217,8 +217,8 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   },
   submission: {
     group: "decisions",
-    blurb: "Somebody raised a hand for a seat, and the village owes them an answer.",
-    many: "{n} people raised a hand for a seat.",
+    blurb: "Somebody raised a hand for a seat or a power, and the village owes them an answer.",
+    many: "{n} people raised a hand for a seat or a power.",
     celebrate: false,
   },
   submission_status: {
