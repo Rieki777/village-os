@@ -390,6 +390,27 @@ describe.skipIf(!configured)("the economy snapshot of a live village", () => {
     // No faucet was reported missing: every account the ledger holds is in the
     // snapshot, empty rows and all.
     expect(result.flags.filter((f) => f.code === "econ_faucet_account_missing")).toEqual([]);
+
+    // The invitation door is a variable this preview carries and never a number
+    // it reads. The same village with `membership.invite_only` flipped runs the
+    // same cycle to the same balances and the same memo. Proven by running it,
+    // because a search of the model's source for the key proves nothing.
+    expect(economy.variables["membership.invite_only"], "the reader carries the flag at all").toBeDefined();
+    const flippedVariables = {
+      ...economy.variables,
+      "membership.invite_only": economy.variables["membership.invite_only"] === "true" ? "false" : "true",
+    };
+    const flipped = simulate(
+      {
+        snapshot: snapshotAround({ ...economy, variables: flippedVariables }, MEMBER),
+        changes: [],
+        cycles: 1,
+        seed: 20260903,
+      },
+      [economicsModel()],
+    );
+    expect(flipped.proposed[0].state.balances).toEqual(final.balances);
+    expect(readEconomicsMemo(flipped.proposed[0].state)).toEqual(memo);
   });
 });
 
