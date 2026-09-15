@@ -213,6 +213,39 @@ describe.skipIf(!configured)("what a consent is owed, and posting it", () => {
       expect(zero.unpayable).toEqual([]);
     });
 
+    /**
+     * THE STAY IS NOT A RULE, SO THE RULES' READINESS DOES NOT GATE IT. With every
+     * mint rule disabled the engine is not ready, no rule prices, and `skipped` says
+     * why; the quest's own stay credits are still owed, as the consent route released
+     * them before this pricing existed.
+     */
+    it("prices the stay when no mint rule is enabled, and says why no rule priced", async () => {
+      const u = await seatAMember("owed-no-rules");
+      const [enabled] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "SELECT `id` FROM `mint_rules` WHERE `village_id` = ? AND `enabled` = 1",
+        [VILLAGE],
+      );
+      expect(enabled.length, "the seed enables rules, which this case turns off").toBeGreaterThan(0);
+      await pool.query("UPDATE `mint_rules` SET `enabled` = 0 WHERE `village_id` = ?", [VILLAGE]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      try {
+        const priced = await owedForClaim(pool, {
+          id: "claim-owed-no-rules",
+          questId: "quest-owed-no-rules",
+          userId: u,
+          granted: 60,
+          stay: { reward: 3, questTitle: "Fixing the fence" },
+        });
+        expect(priced.skipped).toMatch(/no enabled mint rules/);
+        expect(priced.owed.map((o) => o.tokenSlug)).toEqual([STAY]);
+        expect(priced.owed[0]?.units).toBe(toLedgerUnits(STAY, 3));
+      } finally {
+        await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+          "UPDATE `mint_rules` SET `enabled` = 1 WHERE `id` IN (?)",
+          [enabled.map((r) => r.id)],
+        );
+      }
+    });
+
     it("postOwedOn leaves the transaction to its caller: a rollback takes the posting with it", async () => {
       const u = await seatAMember("owed-rollback");
       const row = await stayRowFor("claim-owed-rollback", u);

@@ -2321,7 +2321,10 @@ export interface OwedForClaim {
    * engine, so a caller that ignores the field still cannot make it silent.
    */
   unpayable: Array<{ token: string; reason: string }>;
-  /** Why nothing was priced, when the engine is not ready. Both lists are then empty. */
+  /**
+   * Why no rule was priced: the engine is not ready. The rules' half of both lists
+   * is then empty, and a stay the claim carries still prices.
+   */
   skipped?: string;
 }
 
@@ -2351,13 +2354,19 @@ const QUEST_STAY_TOKEN = "stay-credit";
  *
  * Recognition is not priced here. The consent route posts it itself, with the
  * range, the cap and the standing multiplier, and has since S7.
+ *
+ * THE STAY IS PRICED WHETHER OR NOT THE RULES ARE READY. `economyReady` asks
+ * whether this village has an enabled mint rule and a registered recognition
+ * token, which is a question about the rules. A quest's stay credits are the
+ * quest's own payment, and the consent route released them whatever the rules
+ * table held before this pricing existed, so a village with no enabled rule
+ * still owes them.
  */
 export async function owedForClaim(db: Pool | PoolConnection, claim: OwedClaim): Promise<OwedForClaim> {
   const ready = await economyReady(db);
-  if (!ready.ready) return { owed: [], unpayable: [], skipped: ready.reason };
-  const priced = await priceClaim(db, claim);
+  const priced = await priceClaim(db, claim, { rules: ready.ready });
   reportUnpayable(`claim ${claim.id}`, priced.unpayable);
-  return priced;
+  return ready.ready ? priced : { ...priced, skipped: ready.reason };
 }
 
 /**
@@ -2370,9 +2379,11 @@ export async function owedForClaim(db: Pool | PoolConnection, claim: OwedClaim):
 async function priceClaim(
   db: Pool | PoolConnection,
   claim: Omit<OwedClaim, "granted"> & { granted?: number },
+  opts: { rules: boolean } = { rules: true },
 ): Promise<{ owed: OwedPosting[]; unpayable: Array<{ token: string; reason: string }> }> {
-  // No rule prices for a grant of 0 (`OwedClaim.granted` says why). The stay below still does.
-  const noRules = claim.granted !== undefined && !(claim.granted > 0);
+  // No rule prices for a grant of 0 (`OwedClaim.granted` says why), nor while the
+  // rules are not ready (`owedForClaim` says why). The stay below prices either way.
+  const noRules = !opts.rules || (claim.granted !== undefined && !(claim.granted > 0));
   const rules = noRules ? [] : await rulesFor(db, "quest.completed");
   const owed: OwedPosting[] = [];
   const unpayable: Array<{ token: string; reason: string }> = [];
@@ -2592,6 +2603,17 @@ export async function postOwedOn(conn: PoolConnection, row: OwedPosting): Promis
 }
 
 /**
+ * KEPT FOR THE ECONOMY TESTS ONLY, AND IT MUST NOT GAIN A CALLER (economics lane,
+ * 2026-09-15). The consent route prices what a consent owes with `owedForClaim`,
+ * records it in its own commit, and pays it with `settleOwedPosting` in
+ * server/repos/questOwedPostings.ts. This is the same pricing and the same keys,
+ * taken back to back on the pool behind the epoch guard, and
+ * server/economy.test.ts and server/lib/economyEpoch.test.ts still hold the
+ * pricing through it. A second caller would be a second path that pays, free to
+ * drift from the one that does. Deleting it means those tests stand on
+ * `owedForClaim` and `postOwed`, and deciding what becomes of the per-claim
+ * epoch guard, which has no other home.
+ *
  * Everything a confirmed quest claim mints BEYOND the recognition the consent
  * route has always posted.
  *
