@@ -755,6 +755,12 @@ export async function waitForPortFree(port: number, host = "127.0.0.1"): Promise
  * nothing ever waits, so a case whose second actor never met the lock fails
  * instead of passing. The schema filter keeps another suite's lock on a shared
  * server from answering for this one.
+ *
+ * It polls every 150 ms and never faster. InnoDB refills the buffer behind
+ * `information_schema.innodb_trx` only when more than 0.1 seconds have passed
+ * since the buffer was last read, so a faster poll keeps reading its first
+ * answer. A 5 ms poll on CI's MySQL 8 never saw a delete queue behind the lock
+ * it was waiting for, and gave up after ten seconds.
  */
 export async function untilALockIsAwaited(
   pool: { query(sql: string): Promise<unknown> },
@@ -771,7 +777,7 @@ export async function untilALockIsAwaited(
     if (Date.now() > deadline) {
       throw new Error(`Nothing on this schema waited on a lock within ${timeoutMs} ms, so the second actor never met it.`);
     }
-    await new Promise((r) => setTimeout(r, 5));
+    await new Promise((r) => setTimeout(r, 150));
   }
 }
 
