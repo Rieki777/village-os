@@ -13,7 +13,7 @@
  * tabs are not filtered by module lifecycle; the off state is handled
  * here, in words.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { exponentOf, formatMoney } from "@shared/money";
 import { finerThanScale } from "@shared/tokenScale";
 import { formatTokenAmount } from "@/lib/tokenAmount";
@@ -182,6 +182,8 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
   const [source, setSource] = useState({ ...EMPTY_SOURCE });
   const [budget, setBudget] = useState({ ...EMPTY_BUDGET });
   const [move, setMove] = useState<Record<string, typeof EMPTY_MOVE>>({});
+  /** A row's request id before anybody has typed in it. See `idFor`. */
+  const untouchedIds = useRef<Record<string, string>>({});
   /**
    * What each treasury holds, keyed by BUDGET id.
    *
@@ -340,6 +342,20 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
    */
   const setDraft = (id: string, patch: Partial<Omit<typeof EMPTY_MOVE, "requestId">>) =>
     setMove((m) => ({ ...m, [id]: { ...(m[id] ?? EMPTY_MOVE), ...patch, requestId: newRequestId() } }));
+  /**
+   * THE REQUEST ID A ROW'S BUTTON SENDS. The draft's, once anybody has typed.
+   *
+   * "Hand it back" works with every box blank, so a row nobody has touched
+   * still needs one id per submission. It lives in a ref and not in state
+   * because a ref is written at once: two clicks landing before a re-render
+   * read the same id and the ledger dedupes the second.
+   */
+  const idFor = (id: string): string => {
+    const drafted = move[id]?.requestId;
+    if (drafted) return drafted;
+    if (!untouchedIds.current[id]) untouchedIds.current[id] = newRequestId();
+    return untouchedIds.current[id]!;
+  };
 
   /**
    * SCHEDULE A MODE CHANGE. It lands at the period boundary and never now, so
@@ -369,7 +385,7 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
     const answer = await act(`/api/admin/resources/budgets/${b.id}/fund`, "POST", {
       amountMinor,
       note: d.note.trim() || "Funding the circle's treasury",
-      requestId: d.requestId || undefined,
+      requestId: idFor(b.id),
     });
     if (answer) {
       setDraft(b.id, { amount: "" });
@@ -388,7 +404,7 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
       toUserId: d.toUserId.trim(),
       amountMinor,
       note: d.note.trim() || "Paid from the circle's treasury",
-      requestId: d.requestId || undefined,
+      requestId: idFor(b.id),
     });
     if (answer) {
       setDraft(b.id, { amount: "", toUserId: "" });
@@ -409,6 +425,10 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
       body: JSON.stringify({
         amountMinor: asked,
         note: d.note.trim() || "Handed back to the village",
+        // The same one-request-per-submission id as fund and spend. It sent
+        // none, so the server keyed each press on the clock and a double click
+        // handed back twice.
+        requestId: idFor(b.id),
       }),
     });
     const json = await res.json().catch(() => null);
@@ -417,7 +437,7 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
       return;
     }
     setDraft(b.id, { amount: "" });
-    setNote(String(json?.message ?? "Handed back."));
+    setNote(json?.duplicate ? ALREADY_RECORDED : String(json?.message ?? "Handed back."));
     await load();
   };
 
@@ -851,7 +871,9 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
               .filter((t) => t.direction === "in")
               .map((t) => (
                 <p key={`${t.account}-${t.tokenType}`}>
-                  {t.account.replace(/^sys:/, "")}: {t.total} {t.tokenType} across {t.count} move{t.count === 1 ? "" : "s"}
+                  {/* `total` is SUM(token_ledger.amount), MINOR units, so it
+                      reads at the token's scale like every other amount here. */}
+                  {t.account.replace(/^sys:/, "")}: {money(t.total, `token:${t.tokenType}`)} across {t.count} move{t.count === 1 ? "" : "s"}
                 </p>
               ))}
           </div>

@@ -38,7 +38,7 @@ const budget = (over: Record<string, unknown>) => ({
   ...over,
 });
 
-const payload = (budgets: unknown[]) => ({
+const payload = (budgets: unknown[], measured: unknown = null) => ({
   rules: [],
   sources: [],
   budgets,
@@ -50,18 +50,20 @@ const payload = (budgets: unknown[]) => ({
   tokens: [{ slug: "credits", name: "Village Credits", decimals: 2 }],
   circles: [{ id: "cir-kitchen", name: "Kitchen" }],
   seats: [],
-  measured: null,
+  measured,
 });
 
 type Reply = { status: number; body: Record<string, unknown> };
 let posted: Array<{ url: string; body: any }>;
 let replies: Reply[];
 let budgets: unknown[];
+let measured: unknown;
 
 beforeEach(() => {
   posted = [];
   replies = [];
   budgets = [budget({})];
+  measured = null;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: any) => {
@@ -73,7 +75,7 @@ beforeEach(() => {
       if (String(url).endsWith("/api/admin/resources/treasuries")) {
         return { ok: true, status: 200, json: async () => ({ treasuries: { "bud-kitchen": { account: "circle:cir-kitchen", balanceMinor: 12_550, slug: "credits" } } }) };
       }
-      return { ok: true, status: 200, json: async () => payload(budgets) };
+      return { ok: true, status: 200, json: async () => payload(budgets, measured) };
     }),
   );
 });
@@ -125,6 +127,15 @@ describe("the treasury desk moves and shows tokens at the token's real scale", (
     expect(posted[0].body.amountMinor).toBe(2500);
   });
 
+  it("prints measured token inflows at the token's scale", async () => {
+    // `measuredInflows` sums `token_ledger.amount`, which is MINOR units.
+    measured = { fiat: [], tokens: [{ account: "sys:treasury", tokenType: "credits", direction: "in", count: 2, total: 12_550 }] };
+    await renderPanel();
+    const line = await screen.findByText(/across 2 moves/);
+    expect(line.textContent).toContain("treasury: 125.5 credits across 2 moves");
+    expect(line.textContent).not.toContain("12550");
+  });
+
   it("refuses to send an amount for a token whose scale it cannot read", async () => {
     budgets = [budget({ unit: "token:mystery" })];
     const user = userEvent.setup();
@@ -167,6 +178,42 @@ describe("one submission is one request id", () => {
     await user.click(screen.getByRole("button", { name: "Mint into it" }));
     await waitFor(() => expect(posted).toHaveLength(2));
     expect(posted[1].body.requestId).toBe(posted[0].body.requestId);
+  });
+
+  it("retries a failed hand-back under the same request id, with every box untouched", async () => {
+    // "Hand it back" needs no amount, so this is the row nobody typed in.
+    replies = [{ status: 500, body: { error: "The ledger did not answer" } }];
+    const user = userEvent.setup();
+    await renderPanel();
+    await user.click(screen.getByRole("button", { name: "Hand it back" }));
+    await screen.findByRole("alert");
+    await user.click(screen.getByRole("button", { name: "Hand it back" }));
+    await waitFor(() => expect(posted).toHaveLength(2));
+    expect(posted[0].url).toContain("/budgets/bud-kitchen/return");
+    // The broken panel sent no requestId at all, so the server keyed each
+    // press on the clock and a double click handed back twice.
+    expect(posted[0].body.requestId).toBeTruthy();
+    expect(posted[1].body.requestId).toBe(posted[0].body.requestId);
+  });
+
+  it("hands back twice as two requests when the first one went through", async () => {
+    const user = userEvent.setup();
+    await renderPanel();
+    await user.click(screen.getByRole("button", { name: "Hand it back" }));
+    await waitFor(() => expect(posted).toHaveLength(1));
+    await screen.findByRole("status");
+    await user.click(screen.getByRole("button", { name: "Hand it back" }));
+    await waitFor(() => expect(posted).toHaveLength(2));
+    expect(posted[1].body.requestId).toBeTruthy();
+    expect(posted[1].body.requestId).not.toBe(posted[0].body.requestId);
+  });
+
+  it("says plainly when a hand-back was already recorded", async () => {
+    replies = [{ status: 200, body: { success: true, duplicate: true, message: "125.5 credits went back to the village faucet." } }];
+    const user = userEvent.setup();
+    await renderPanel();
+    await user.click(screen.getByRole("button", { name: "Hand it back" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("This exact request was already recorded, so nothing new moved.");
   });
 
   it("says plainly when the server already had this exact request", async () => {
