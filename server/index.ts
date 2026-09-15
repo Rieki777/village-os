@@ -319,7 +319,7 @@ import {
   spendSurfacesFor,
 } from "./lib/spending";
 import { seatChargeFor, seatEscrowDrift, seatPriceFor, settleFinishedSeats } from "./lib/eventSeats";
-import { allowanceFor, applyMintRuleChanges, canConfirm, checkIn, cycleWindow, economyReady, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, runSettlement, startEconomyEpoch, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
+import { allowanceFor, applyMintRuleChanges, canConfirm, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, runSettlement, startEconomyEpoch, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
 import { addCharacter, avatarFor, listArchetypes, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
 import { loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
@@ -17259,7 +17259,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const slug = String(req.params.slug);
     const { toUserId, amount, reason } = req.body ?? {};
-    const amt = Math.trunc(Number(amount) || 0);
+    const amt = Number(amount) || 0; // HUMAN, as typed. Finer than the token holds is refused below, never truncated: 2.5 once minted 2 and said "Minted"
     const def = tokenDef(slug);
     if (!def) return res.status(404).json({ error: `unknown token "${slug}"` });
     // Same rule as stocking: a hand-mint is a real ledger row against a slug
@@ -17268,7 +17268,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (def.governance !== "platform") {
       return res.status(400).json({ error: `${slug} is issued on Hypha and cannot be minted here` });
     }
-    if (!toUserId || amt <= 0) return res.status(400).json({ error: "toUserId and a positive amount are required" });
+    if (!toUserId || !Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: "toUserId and a positive amount are required" });
+    if (finerThanScale(amt, def.decimals)) return res.status(400).json({ error: `${def.name} ${def.decimals > 0 ? `goes to ${def.decimals} decimal places` : "is minted in whole amounts"}, so ${amt} cannot be minted exactly. Nothing was minted` });
     if (!String(reason ?? "").trim()) {
       return res.status(400).json({ error: "A reason is required. Every hand-mint must explain itself" });
     }
@@ -17351,6 +17352,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     // governance weakening wearing a units fix.
     const threshold = cosignOver();
     if (threshold > 0 && amt > threshold) {
+      if (!Number.isInteger(amt)) return res.status(400).json({ error: `${amt} ${def.name} is over the ${threshold} a steward may grant alone, and a grant that waits for a second steward is recorded in whole ${def.name}. Ask for a whole amount. Nothing was recorded` }); // admin_mint_requests.amount is BIGINT
       const requestId = `amr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       await getPool().query(
         "INSERT INTO admin_mint_requests (id, token_slug, to_user_id, amount, reason, requested_by, status) " +
