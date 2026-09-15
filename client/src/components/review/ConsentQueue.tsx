@@ -164,6 +164,10 @@ export default function ConsentQueue({ claims, refused, error, headers, onChange
         // The server's own sentence. These refusals name the rule a steward just
         // met, and a generic failure teaches them nothing about which one.
         toast.error((d as { error?: string })?.error ?? "That did not go through");
+        // Then the list is read again, whenever the server answered at all. The
+        // likeliest refusal is a claim another steward decided first, and it has
+        // to leave this list instead of keeping buttons that can never work.
+        if (res) await onChanged();
         return;
       }
       toast.success(

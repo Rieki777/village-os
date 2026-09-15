@@ -154,13 +154,29 @@ describe("the consent section refuses what the route would refuse, before anybod
     expect(consentButton().disabled).toBe(false);
   });
 
-  it("a refusal it could not foresee comes back in the server's words, and nothing says it landed", async () => {
-    const refusal = "You cannot consent to your own claim. Someone else has to witness the work.";
-    answer(403, { error: refusal });
+  it("a refusal it could not foresee comes back in the server's words, nothing says it landed, and the list is read again", async () => {
+    // The likeliest refusal is a claim another steward decided first. Reading
+    // the list again is what takes it off this screen.
+    const refusal =
+      'Cannot consent a claim with status "declined". It has already been resolved, so there is nothing left to witness.';
+    answer(409, { error: refusal });
     show(claim());
     fireEvent.click(consentButton());
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(refusal));
     expect(toast.success).not.toHaveBeenCalled();
+    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+  });
+
+  it("a request that never reached the server says so, and reads no list it could not reach either", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("offline");
+      }),
+    );
+    show(claim());
+    fireEvent.click(consentButton());
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("That did not go through"));
     expect(onChanged).not.toHaveBeenCalled();
   });
 
