@@ -844,7 +844,7 @@ describe.skipIf(!configured)("the MySQL token ledger", () => {
       let thrown: { code?: string } | undefined;
       let heldUnderLock: number | undefined;
       try {
-        await conn.query("SET SESSION innodb_snapshot_isolation = OFF").catch(() => undefined);
+        await conn.query("SET SESSION innodb_snapshot_isolation = OFF").catch(() => undefined); // module-review-ok: a session setting on the test's own connection, no table read; MariaDB only, and it gives MySQL 8's locking-read behaviour
         await conn.beginTransaction();
         await conn.query("SELECT COUNT(*) FROM `token_ledger`"); // module-review-ok: opens this transaction's read view, which is the condition under test
         const first = await postTransfer(pool, {
@@ -864,7 +864,7 @@ describe.skipIf(!configured)("the MySQL token ledger", () => {
         }
       } finally {
         await conn.rollback().catch(() => undefined);
-        await conn.query("SET SESSION innodb_snapshot_isolation = DEFAULT").catch(() => undefined);
+        await conn.query("SET SESSION innodb_snapshot_isolation = DEFAULT").catch(() => undefined); // module-review-ok: puts the pooled connection's session setting back before it is released
         conn.release();
       }
       return { second, thrown, heldUnderLock, after: await balanceOf(pool, u, PLATFORM_TOKEN) };
