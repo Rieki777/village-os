@@ -33,7 +33,13 @@ import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { balanceRowsFor } from "../repos/tokenBalances";
 import { accountEntryRows, idempotencyKeyRows, keysCollatingWith, questConsentCreditRows } from "../repos/tokenLedger";
 import { issuanceRefusal } from "./gameStart";
-import { keyClashRows, keyRowsWithSource, postingRowForKey, reversalMirrorRows } from "../repos/tokenLedger";
+import {
+  keyClashRows,
+  keyRowsWithSource,
+  lockedReversalMirrorRows,
+  postingRowForKey,
+  reversalMirrorRows,
+} from "../repos/tokenLedger";
 
 export type TokenType = string;
 
@@ -729,6 +735,19 @@ export async function pairSiblingKey(
 }
 
 /**
+ * Who opened the transaction a posting runs in, which decides whether its
+ * REPEATABLE READ snapshot can be older than its account locks.
+ *
+ *   "after-account-locks"  this file opened it and locked the accounts before
+ *                          any plain read, so the snapshot is taken after
+ *                          every posting that needed those locks committed
+ *   "caller"               somebody else opened it and may already have read
+ *
+ * See `clawbackRefusal` for the one read this changes.
+ */
+type SnapshotOrigin = "after-account-locks" | "caller";
+
+/**
  * THE CLAWBACK LAW, WHERE THE CLAWBACK IS WRITTEN.
  *
  * `reverse()` derived its mirror from a row, checked that the row was not
@@ -764,13 +783,49 @@ export async function pairSiblingKey(
  * the locks this function runs under, and the loser reads the winner's
  * committed row instead of the same stale answer.
  *
- * The reads are plain rather than `FOR UPDATE` ON PURPOSE. An exact-match
- * locking read on a UNIQUE index takes a GAP lock when the row is absent,
- * which would put a reversal in the way of unrelated postings whose keys
- * happen to sort nearby. What a stale snapshot can cost here is bounded and
- * one-directional: a just-committed original that this transaction cannot
- * yet see refuses a lawful reversal, which fails closed. A second mirror
- * cannot slip past, because it collides on the mirror key's own UNIQUE index.
+ * WHICH READ LOCKS, AND ONLY WHERE A SNAPSHOT CAN BE STALE.
+ *
+ * In a transaction this file opened (`postTransfer`, `postTransferPair`) the
+ * account locks are the first statement, and InnoDB takes the REPEATABLE READ
+ * snapshot at the first plain read, which comes after them (mysql2 sends a
+ * bare START TRANSACTION). A concurrent mirror of the same original needs
+ * the same two account locks, so it has committed before this snapshot exists
+ * and a plain read sees it. Measured on MariaDB 12.3.2: of two such
+ * transactions, the second saw the first one's mirror with a plain read.
+ *
+ * A transaction the CALLER opened (`postTransferOn`) may have read long before
+ * it got here. This paragraph used to end "A second mirror cannot slip past,
+ * because it collides on the mirror key's own UNIQUE index", which is true
+ * only of the same key: a second mirror under a different village segment is
+ * a different key, question 4 is the only thing that stops it, and a plain
+ * read answered from the older snapshot saw no mirror. Measured through
+ * `postTransferOn`: the same 12 clawed back twice, 38 left of 50. So on that
+ * path the mirror read locks (`lockedReversalMirrorRows`, LOCK IN SHARE MODE).
+ *
+ * IT DOES NOT LOCK EVERYWHERE, and that was measured too. Two concurrent
+ * reversals into accounts whose `token_ledger_to_idx` ranges are empty and
+ * adjacent each take a shared lock on the same gap, each then inserts into
+ * it, and one dies ER_LOCK_DEADLOCK; with plain reads both commit. That would
+ * be a new deadlock on every production clawback, bought against a staleness
+ * those paths cannot have. The lock order against the account locks does not
+ * change on the path that does lock: the range it scans belongs to `leg.to`,
+ * whose ledger_accounts row this transaction already holds, and every posting
+ * to that account takes that row before it touches `token_ledger`. The gap
+ * after the range is the one new thing it can block, which is the deadlock
+ * above, and a caller who owns the transaction owns that retry.
+ *
+ * On MariaDB with `innodb_snapshot_isolation` on (its default) that locking
+ * read raises ER_CHECKREAD for a mirror committed after the caller's snapshot
+ * instead of returning it. It throws out to the caller, who rolls back: loud,
+ * and nothing moved.
+ *
+ * The other two reads stay plain on both paths. A stale `postingRowForKey` can
+ * only miss a just-committed original, which refuses a lawful reversal and
+ * fails closed; ledger rows are never updated, so a row it does see is the
+ * row. A pair's two legs commit in one transaction, so a snapshot that sees
+ * the original sees its sibling, and `pairSiblingKey` cannot be stale in the
+ * direction that matters. An exact-match locking read on the UNIQUE index
+ * would also take a gap lock whenever the key is absent.
  *
  * `siblingMirroredHere` is the original key of the OTHER leg of the same
  * `postTransferPair` call, when that leg is also a mirror. Null everywhere
@@ -782,6 +837,7 @@ async function clawbackRefusal(
   tokenType: string,
   amount: number,
   siblingMirroredHere: string | null,
+  snapshot: SnapshotOrigin,
 ): Promise<string | null> {
   const original = originalKeyOf(leg.idempotencyKey);
   // `validateLeg` refuses a key that names no original before any of this
@@ -840,7 +896,10 @@ async function clawbackRefusal(
    * original key can contain `%` (every builder percent-encodes) and a LIKE
    * over it would need escaping that a collation would then fold anyway.
    */
-  const mirrors = await reversalMirrorRows(conn, leg.to, tokenType, leg.from, amount);
+  const mirrors =
+    snapshot === "caller"
+      ? await lockedReversalMirrorRows(conn, leg.to, tokenType, leg.from, amount)
+      : await reversalMirrorRows(conn, leg.to, tokenType, leg.from, amount);
   const already = mirrors
     .map((r) => String(r.idempotency_key))
     .find((k) => k !== leg.idempotencyKey && originalKeyOf(k) === original);
@@ -911,6 +970,22 @@ export async function postTransferOn(
   conn: PoolConnection,
   input: TransferInput,
   guard?: TransferGuard,
+): Promise<TransferResult> {
+  // The caller opened this transaction and may have read before this call, so
+  // the clawback law cannot trust the snapshot. See `SnapshotOrigin`.
+  return postTransferInside(conn, input, guard, "caller");
+}
+
+/**
+ * `postTransferOn`'s body, told who opened the transaction. `postTransfer`
+ * passes "after-account-locks" because it opened the transaction itself and
+ * the account locks below are the first statement it runs.
+ */
+async function postTransferInside(
+  conn: PoolConnection,
+  input: TransferInput,
+  guard: TransferGuard | undefined,
+  snapshot: SnapshotOrigin,
 ): Promise<TransferResult> {
   const checked = validateLeg(input);
   if ("error" in checked) return { ok: false, duplicate: false, toBalance: 0, error: checked.error };
@@ -996,7 +1071,7 @@ export async function postTransferOn(
   // The law, under the same lock, and NOT optional the way the veto above is.
   // A single leg mirrors nothing that has a sibling: that is question 5.
   if (input.source === "reversal") {
-    const refusal = await clawbackRefusal(conn, input, tokenType, amount, null);
+    const refusal = await clawbackRefusal(conn, input, tokenType, amount, null, snapshot);
     if (refusal) return { ok: false, duplicate: false, toBalance: 0, error: refusal };
   }
 
@@ -1162,7 +1237,7 @@ export async function postTransfer(
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
-      const result = await postTransferOn(conn, input, guard);
+      const result = await postTransferInside(conn, input, guard, "after-account-locks");
       if (!result.ok) {
         await conn.rollback();
         return result;
@@ -1336,7 +1411,14 @@ async function postTransferPairOnce(
       if (legs[i].source !== "reversal") continue;
       const other = legs[1 - i];
       const neighbour = other.source === "reversal" ? originalKeyOf(other.idempotencyKey) : null;
-      const refusal = await clawbackRefusal(conn, legs[i], meta[i].tokenType, meta[i].amount, neighbour);
+      const refusal = await clawbackRefusal(
+        conn,
+        legs[i],
+        meta[i].tokenType,
+        meta[i].amount,
+        neighbour,
+        "after-account-locks",
+      );
       if (refusal) {
         await conn.rollback();
         return fail(refusal);
