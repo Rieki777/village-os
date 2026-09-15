@@ -167,12 +167,15 @@ describe("gatingModuleIds", () => {
     expect(gatingModuleIds([{ id: "a", mandatory: true }, { id: "b", mandatory: false }])).toEqual(["a"]);
   });
 
-  it("answers empty when everything is optional, which trainingIsComplete refuses", () => {
-    // "This village gates nothing" is a decision somebody makes in Admin, never
-    // one a deploy makes by promoting every member at once.
+  it("answers empty when everything is optional, and an empty required set lets everyone past (Rye, 2026-09-14)", () => {
+    // Rye, 2026-09-14: "if there's no required modules in training, then everyone
+    // skips past them." "This village gates nothing" is still a decision somebody
+    // makes in Admin and never one a deploy makes: 0197 defaults every existing
+    // module to mandatory, so no member is promoted by the migration landing.
     const ids = gatingModuleIds([{ id: "a", mandatory: false }]);
     expect(ids).toEqual([]);
-    expect(trainingIsComplete(ids, ["a"])).toBe(false);
+    expect(trainingIsComplete(ids, [])).toBe(true);
+    expect(gatingModuleIds([{ id: "a" }]), "a module with no flag stays required").toEqual(["a"]);
   });
 
   it("lets a member cross once the required ones are done, optional ones untouched", () => {
