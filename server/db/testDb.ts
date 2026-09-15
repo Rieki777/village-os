@@ -504,6 +504,11 @@ export interface ProvisionOptions {
    * closed door. The invitation's own suite (`server/invites.routes.e2e.test.ts`)
    * provisions with `inviteOnly: true` and proves both sides against the built
    * server.
+   *
+   * THE OPEN DOOR IS A STORED ROW. It writes `membership.invite_only` into
+   * `game_variables`, so a suite that counts that table's rows reads one it did
+   * not write. Such a suite provisions with `inviteOnly: true` as well, the way
+   * `server/lib/dryRunEconomyReader.test.ts` does, which CI caught on 2026-09-15.
    */
   inviteOnly?: boolean;
 }
