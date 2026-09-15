@@ -115,6 +115,41 @@ export const CIRCLE_NAME_KEYS = ["circleName", "circle_name", "circle"] as const
  */
 const CIRCLE_LIKE = /circle/i;
 
+/**
+ * Keys this platform's own shapes use that mention a circle and never place a
+ * seat in one. `representsCircle` (and its column spelling) is the flag for a
+ * seat that speaks for its circle, and `parentCircleId` is where a CIRCLE sits,
+ * which the intake resolves on a circle proposal. A sender copying either shape
+ * is reported as not read and never blocked, because "write the circle's name
+ * under circle" is the wrong recovery for a seat that belongs to no circle.
+ */
+const NOT_A_PLACEMENT = new Set(["representsCircle", "represents_circle", "parentCircleId"]);
+
+/**
+ * An unread key that gives a circle: a circle-like name, not one of the keys
+ * above, carrying text or an object. A flag, a number or a list is never a
+ * circle here: `hasCircle: false` would block a seat meant to have none, and a
+ * structure's list of `circles` beside its seats belongs to no one seat.
+ */
+const givesACircle = (key: string, v: unknown): boolean =>
+  CIRCLE_LIKE.test(key) &&
+  !NOT_A_PLACEMENT.has(key) &&
+  ((typeof v === "string" && v.trim() !== "") || (typeof v === "object" && v !== null && !Array.isArray(v)));
+
+/**
+ * One or more leading list markers: "1. ", "2) ", "- ", "* ", a bullet. The
+ * whitespace after each is required, so "5 business days" keeps its number,
+ * and every marker comes off so a second pass over the list changes nothing.
+ */
+const LIST_MARKER = /^(?:(?:\d{1,3}[.)]|[-*•])\s+)+/;
+
+/**
+ * Where one sentence ends and the next starts: a period, whitespace, a capital.
+ * Not after a lone capital ("J. Ames", "U.S. Army"), a number of up to three
+ * digits ("1. Show up"), or a short title ("Dr. Ames").
+ */
+const SENTENCE_BREAK = /(?<!\b(?:[A-Z]|\d{1,3}|Dr|Mr|Mrs|Ms|St|Jr|Sr|Mt|No|vs|etc|e\.g|i\.e))\.\s+(?=[A-Z])/;
+
 export interface CircleProblem {
   /**
    * `unknown` matched no live circle; `ambiguous` matched more than one;
@@ -159,12 +194,21 @@ const namesACircle = (v: unknown): boolean =>
 /**
  * A list of accountabilities out of whatever the vendor sent.
  *
- * A string is split on ";" and on newlines, each part trimmed, one trailing
- * period dropped, and empty parts dropped. A period in the middle of a string
- * is NOT a separator: sentences inside one accountability are common, and
- * splitting on them would turn one duty into three fragments.
+ * A string is split on ";" and on newlines, each part trimmed, its leading list
+ * markers ("1. ", "- ") dropped, one trailing period dropped, and empty parts
+ * dropped. A string that holds a ";" or a newline is split on those ONLY, so a
+ * duty written as two sentences inside such a list stays one duty.
  *
- * An array passes through with items trimmed, and null or blank items dropped.
+ * A string with neither is split at sentence ends. The first real batch sent
+ * three seats that way, each a run of separate duties ("Send the one-pager.
+ * Track the replies. Book the call."), and every one published as a single
+ * paragraph under "Answerable for". No ";"-separated item in that batch held a
+ * second sentence, so the duty-with-two-sentences case this used to protect did
+ * not occur where the list shape was known. See SENTENCE_BREAK for what it will
+ * not split after.
+ *
+ * An array passes through with items trimmed, leading list markers dropped, and
+ * null or blank items dropped.
  * An array holding an object or a nested list is `undefined` as a whole, since
  * keeping the text items would publish a list with duties quietly missing.
  * `null` passes through as `null`. Anything else is `undefined`, which the
@@ -174,9 +218,8 @@ const namesACircle = (v: unknown): boolean =>
 export function normaliseAccountabilities(v: unknown): string[] | null | undefined {
   if (v === null) return null;
   if (typeof v === "string") {
-    return v
-      .split(/[;\r\n]+/)
-      .map((s) => s.trim().replace(/\.$/, "").trim())
+    return (/[;\r\n]/.test(v) ? v.split(/[;\r\n]+/) : v.split(SENTENCE_BREAK))
+      .map((s) => s.trim().replace(LIST_MARKER, "").replace(/\.$/, "").trim())
       .filter((s) => s !== "");
   }
   if (Array.isArray(v)) {
@@ -185,7 +228,7 @@ export function normaliseAccountabilities(v: unknown): string[] | null | undefin
     }
     return v
       .filter(carries)
-      .map((s) => String(s).trim())
+      .map((s) => String(s).trim().replace(LIST_MARKER, "").trim())
       .filter((s) => s !== "");
   }
   return undefined;
@@ -306,7 +349,8 @@ export function normaliseProposedSeat(
       if (sentName === null && v.trim() !== "") sentName = v;
     } else if (v !== null) {
       unusable.add(k);
-      circleUnread.push(k);
+      // A flag says nothing about which circle. `circle: false` is a seat in none.
+      if (typeof v !== "boolean") circleUnread.push(k);
     }
   }
   // Derived on every pass and never trusted from the input.
@@ -338,7 +382,7 @@ export function normaliseProposedSeat(
 
   const structural = new Set<string>(["id", ...(reading.readByCaller ?? [])]);
   const unread = Object.keys(raw).filter((k) => !read.has(k) && !structural.has(k));
-  for (const k of unread) if (CIRCLE_LIKE.test(k) && !blank(raw[k])) circleUnread.push(k);
+  for (const k of unread) if (givesACircle(k, raw[k])) circleUnread.push(k);
   circleUnread.push(...(reading.unreadCircleKeys ?? []));
 
   // A circle that arrived in a shape nothing reads, on a seat that placed no
@@ -383,7 +427,7 @@ export function readProposedSeats(
   const raw = list ? (payload.seats as unknown[]) : [payload];
   const envelope = list ? Object.keys(payload).filter((k) => k !== "seats" && !callerKeys.includes(k)) : [];
   const seatReading: SeatReading = list
-    ? { unreadCircleKeys: envelope.filter((k) => CIRCLE_LIKE.test(k) && !blank(payload[k])) }
+    ? { unreadCircleKeys: envelope.filter((k) => givesACircle(k, payload[k])) }
     : { readByCaller: callerKeys };
   const seats = raw
     .filter((s): s is Record<string, unknown> => !!s && typeof s === "object" && !Array.isArray(s))

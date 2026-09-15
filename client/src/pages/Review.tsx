@@ -97,7 +97,15 @@ interface Queue {
   batches: Batch[];
   quests: QuestCard[];
   drops: Drop[];
+  /** Open drafts this queue made that cannot publish. Absent from an older server. */
+  stuckDrafts?: { draftId: string; blocked: number; blockedLines: unknown }[];
   counts: { proposals: number; quests: number };
+}
+
+/** A draft that cannot publish: how many seats are blocked, and why each one is. */
+interface StuckDraft {
+  blocked: number;
+  lines: string[];
 }
 
 /**
@@ -240,12 +248,15 @@ export default function Review() {
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [rewards, setRewards] = useState<Record<string, { gratitude: string; stayCreditReward: string }>>({});
   const [busy, setBusy] = useState<string | null>(null);
-  // A draft this queue just made that cannot publish, with the reason for each
-  // blocked seat. Held so the steward has a way out of it without leaving the
-  // page, because until they withdraw it the draft occupies one of the
-  // village's open-draft slots. The reasons ride along because no other screen
-  // shows them: the draft preview is an admin route nothing on the client calls.
-  const [stuck, setStuck] = useState<{ draftId: string; blocked: number; lines: string[] } | null>(null);
+  // Every draft this queue made that cannot publish, by draft id, with the
+  // reason for each blocked seat. Held so the steward has a way out of each
+  // without leaving the page, because until they withdraw one it occupies one
+  // of the village's open-draft slots. The reasons ride along because no other
+  // screen shows them: the draft preview is an admin route nothing calls.
+  // ONE ENTRY PER DRAFT. This was a single slot, so a second blocked accept
+  // replaced the first draft's card and left that draft with no withdraw on
+  // any screen. The queue read refills it, so a reload keeps every card too.
+  const [stuck, setStuck] = useState<Record<string, StuckDraft>>({});
   // What the last accept left out of its draft, one line per proposal. The
   // server names every key it did not read, and a steward who is not told has
   // no way to know a vendor said more than the draft shows.
@@ -340,7 +351,20 @@ export default function Review() {
       }
       setForbidden(false);
       setLoadError(null);
-      setQueue(await r.json());
+      const q = (await r.json()) as Queue;
+      setQueue(q);
+      // The server's list is the whole truth when it sends one. An older server
+      // sends none, and what the accepts on this page remembered stays.
+      if (Array.isArray(q?.stuckDrafts)) {
+        setStuck(
+          Object.fromEntries(
+            q.stuckDrafts.map((d) => [
+              String(d.draftId),
+              { blocked: Number(d.blocked ?? 0), lines: blockedReasons(d.blockedLines) },
+            ]),
+          ),
+        );
+      }
       // A separate read, so a failure here can never empty the queue above it.
       try {
         const e = await fetch("/api/review/erasure", { headers: headers() });
@@ -410,7 +434,7 @@ export default function Review() {
         // a seat that could never publish, and offered no way to withdraw it.
         const blocked = Number(d.blocked ?? 0);
         if (blocked > 0 && draftId) {
-          setStuck({ draftId, blocked, lines: blockedReasons(d.blockedLines) });
+          setStuck((s) => ({ ...s, [draftId]: { blocked, lines: blockedReasons(d.blockedLines) } }));
           toast.error("Accepted, and this seat cannot apply yet. The reason is on this page, beside a way to withdraw it.");
         } else {
           toast.success("Accepted");
@@ -455,8 +479,13 @@ export default function Review() {
       }
       const n = (d as { reopened?: number }).reopened ?? 0;
       toast.success(n > 0 ? `Withdrawn, and ${n} proposal(s) are back in the queue` : "Withdrawn");
-      // Both cards described that draft, which no longer exists.
-      setStuck((s) => (s?.draftId === draftId ? null : s));
+      // Both cards described that draft, which no longer exists. Every other
+      // stuck draft keeps its own card.
+      setStuck((s) => {
+        const rest = { ...s };
+        delete rest[draftId];
+        return rest;
+      });
       setNotRead((r) => (r.draftId === draftId ? NOTHING_LEFT_OUT : r));
       await load();
     } finally {
@@ -513,7 +542,8 @@ export default function Review() {
       });
       const blocked = body.blocked ?? 0;
       if (blocked > 0 && body.draftId) {
-        setStuck({ draftId: body.draftId, blocked, lines: blockedReasons(body.blockedLines) });
+        const id = body.draftId;
+        setStuck((s) => ({ ...s, [id]: { blocked, lines: blockedReasons(body.blockedLines) } }));
       }
       if (blocked > 0) {
         toast.error(
@@ -694,29 +724,29 @@ export default function Review() {
         {/* A draft that cannot publish, with each reason, beside the way out.
             Outside the batch cards for the same reason: a batch accepted whole
             leaves the queue, and this card used to leave with it. */}
-        {stuck && (
-          <div className={card}>
-            <h2 className="text-sm font-semibold text-foreground">The draft this made cannot publish</h2>
+        {Object.entries(stuck).map(([draftId, s]) => (
+          <div key={draftId} className={card}>
+            <h2 className="text-sm font-semibold text-foreground">A draft from this queue cannot publish</h2>
             <p className="text-sm text-muted-foreground mt-2">
-              {stuck.blocked} of its seats are blocked. Withdrawing puts its proposals back in the queue, so
+              {s.blocked} of its seats are blocked. Withdrawing puts its proposals back in the queue, so
               you can accept fewer at a time or deal with the reasons below first.
             </p>
-            {stuck.lines.length > 0 && (
+            {s.lines.length > 0 && (
               <ul className="text-sm text-muted-foreground mt-2 space-y-1">
-                {stuck.lines.map((line, i) => (
+                {s.lines.map((line, i) => (
                   <li key={`${i}:${line}`}>{line}</li>
                 ))}
               </ul>
             )}
             <button
-              disabled={busy === stuck.draftId}
-              onClick={() => void withdraw(stuck.draftId)}
+              disabled={busy === draftId}
+              onClick={() => void withdraw(draftId)}
               className="text-sm border border-border rounded-lg px-4 py-2 mt-3 min-h-[44px] font-medium"
             >
               Withdraw that draft
             </button>
           </div>
-        )}
+        ))}
 
         {notRead.lines.length > 0 && (
           <div className={card}>
@@ -735,7 +765,7 @@ export default function Review() {
                 </li>
               ))}
             </ul>
-            {notRead.draftId && notRead.draftId !== stuck?.draftId && (
+            {notRead.draftId && !stuck[notRead.draftId] && (
               <button
                 disabled={busy === notRead.draftId}
                 onClick={() => void withdraw(String(notRead.draftId))}

@@ -90,14 +90,17 @@ describe("a vendor's real role record", () => {
     expect(r.circleProblem).toBeNull();
   });
 
-  it("keeps a null domain, and keeps sentences inside one accountability together", () => {
+  it("keeps a null domain, and splits a run of sentences with no ';' into its separate duties", () => {
     const r = normaliseProposedSeat(REAL_TWO, CIRCLES);
     expect(r.payload.name).toBe("Lot Sales Steward");
     expect(r.payload.domain).toBeNull();
     expect(r.payload.recruiting).toBe(true);
-    // Only ";" and newlines separate. Periods inside stay; the one at the end goes.
+    // Three duties the vendor wrote as three sentences. This published as ONE
+    // bullet holding the paragraph, and the rehearsal's "; " count called it right.
     expect(r.payload.accountabilities).toEqual([
-      "Own the buyer pipeline end to end: every lead in the tracker, every conversation logged. Coordinate the outside agents. Drive one lot to the first closing",
+      "Own the buyer pipeline end to end: every lead in the tracker, every conversation logged",
+      "Coordinate the outside agents",
+      "Drive one lot to the first closing",
     ]);
     // The example circle with the same name does not make this ambiguous.
     expect(r.payload.circleId).toBe("trade");
@@ -255,6 +258,35 @@ describe("a circle given in a shape nothing reads blocks the seat", () => {
     expect(fixed.payload).toEqual({ name: "S", circleId: "trade" });
   });
 
+  it("never blocks on a flag, a number or a list under a circle-like key, or on the platform's own circle fields", () => {
+    // Each of these blocked the whole draft with "write the circle's name under
+    // circle", which is the wrong recovery for a seat that belongs to no circle.
+    for (const extra of [
+      { representsCircle: false },
+      { representsCircle: true },
+      { represents_circle: "yes" },
+      { parentCircleId: "trade" },
+      { hasCircle: false },
+      { circle_count: 3 },
+      { circles: ["Money & Trade", "Stewards"] },
+    ] as Record<string, unknown>[]) {
+      const key = Object.keys(extra)[0];
+      const r = normaliseProposedSeat({ name: "Night Watch", ...extra }, CIRCLES);
+      expect(r.payload, key).toEqual({ name: "Night Watch" });
+      expect(r.circleProblem, key).toBeNull();
+      // Still named as not read, so nothing vanishes in silence.
+      expect(r.ignored, key).toEqual([key]);
+    }
+    // `circle: false` is a seat in no circle: reported, never blocked.
+    const none = normaliseProposedSeat({ name: "Night Watch", circle: false }, CIRCLES);
+    expect(none.payload).toEqual({ name: "Night Watch" });
+    expect(none.ignored).toEqual(["circle"]);
+    // A structure's list of circles beside its seats belongs to no one seat.
+    const s = readProposedSeats({ circles: ["Money & Trade"], seats: [{ name: "A" }] }, CIRCLES);
+    expect(s.seats[0].payload).toEqual({ name: "A" });
+    expect(s.ignored).toEqual(["circles"]);
+  });
+
   it("marks every seat of a structure that gave its circle once, beside the list", () => {
     const r = readProposedSeats(
       { title: "Structure", circle: "Money & Trade", seats: [{ name: "A" }, { name: "B", circle: "Stewards" }] },
@@ -275,6 +307,58 @@ describe("accountabilities", () => {
 
   it("passes an array through with items trimmed and empties dropped", () => {
     expect(normaliseAccountabilities(["  x ", "", "y.", null, 3])).toEqual(["x", "y.", "3"]);
+  });
+
+  it("drops leading list markers, from a numbered string and from list items, and nothing a second pass would change", () => {
+    // A numbered list published as "1. Show up..." under a bulleted heading,
+    // and went stale (1, 2, 4, 5) the first time an admin removed an item.
+    const numbered =
+      "1. Show up for co-working sessions twice a week.\n2. Serve as a second pair of eyes on filings.\n" +
+      "3) Keep the tracker current\n- Flag a blocker the day it appears\n* Bring what you learned to the circle.";
+    const once = normaliseAccountabilities(numbered);
+    expect(once).toEqual([
+      "Show up for co-working sessions twice a week",
+      "Serve as a second pair of eyes on filings",
+      "Keep the tracker current",
+      "Flag a blocker the day it appears",
+      "Bring what you learned to the circle",
+    ]);
+    expect(normaliseAccountabilities(once)).toEqual(once);
+    expect(normaliseAccountabilities(["1. Run the mill", "2) Keep the log", "• Sweep the floor", "- - Oil the gears"])).toEqual([
+      "Run the mill",
+      "Keep the log",
+      "Sweep the floor",
+      "Oil the gears",
+    ]);
+    // A duty that starts with a number has no marker to lose.
+    expect(normaliseAccountabilities("5 business days to answer a buyer; 3 visits a season")).toEqual([
+      "5 business days to answer a buyer",
+      "3 visits a season",
+    ]);
+  });
+
+  it("splits a string with no ';' or newline at sentence ends, and not after an initial, a title or a small number", () => {
+    expect(
+      normaliseAccountabilities(
+        "Track every parcel's title status. Keep the segregation plan current. Book the surveyor. " +
+          "Assemble the closing binder. Chase the county for the recorded plat.",
+      ),
+    ).toEqual([
+      "Track every parcel's title status",
+      "Keep the segregation plan current",
+      "Book the surveyor",
+      "Assemble the closing binder",
+      "Chase the county for the recorded plat",
+    ]);
+    expect(normaliseAccountabilities("Brief J. Ames and Dr. Okafor weekly. Report to the U.S. Forest office by May 5. Then close the file")).toEqual([
+      "Brief J. Ames and Dr. Okafor weekly",
+      "Report to the U.S. Forest office by May 5. Then close the file",
+    ]);
+    // Inside a ";" list, a duty written as two sentences stays one duty.
+    expect(normaliseAccountabilities("Keep the books. Receipts included; File the returns")).toEqual([
+      "Keep the books. Receipts included",
+      "File the returns",
+    ]);
   });
 
   it("carries null, and reports a value it cannot use instead of losing it at publish", () => {

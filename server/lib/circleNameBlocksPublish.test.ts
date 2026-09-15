@@ -216,6 +216,43 @@ describe.skipIf(!configured)("a circle given by a name this village cannot place
     expect(acc).toEqual(["Test the spring", "Keep the log"]);
   });
 
+  it("lists a live-name collision beside a missing circle in one preview, the collision first", async () => {
+    // One reason per line used to let the circle hide the collision: an admin
+    // made the circle, the steward accepted again, and only then heard the
+    // name was taken. A live circle for a seat that was never going to publish.
+    await pool.query( // module-review-ok: a fixture on the scratch schema this suite provisioned
+      "INSERT INTO org_roles (id, name, seats, active, is_example) VALUES ('cnb-live', 'Operations Keeper', 1, 1, 0)",
+    );
+    const seat = normaliseProposedSeat({ role_name: "Operations Keeper", circle: "Nowhere Circle" }, await liveCircles());
+    const id = await draftWith([{ op: "create_seat", orgRoleId: "cnb-dup", payload: seat.payload }]);
+    const preview = await previewDraft(pool, id, 99);
+    expect(preview.blocked).toBe(1);
+    const reason = String(preview.lines[0].blocked);
+    const collision = reason.indexOf('This village already has a live seat called "Operations Keeper"');
+    expect(collision, reason).toBeGreaterThanOrEqual(0);
+    expect(reason.indexOf('There is no circle called "Nowhere Circle" yet'), reason).toBeGreaterThan(collision);
+    expect(reason).toContain("reject this one or give it a name of its own");
+
+    // An unknown circle id no longer overwrites an id collision.
+    const both = await draftWith([
+      { op: "create_seat", orgRoleId: "cnb-live", payload: { name: "Fresh Name", circleId: "cnb-missing" } },
+    ]);
+    const bothReason = String((await previewDraft(pool, both, 99)).lines[0].blocked);
+    expect(bothReason).toContain("A seat with that id already exists");
+    expect(bothReason).toContain("That circle does not exist");
+  });
+
+  it("publishes a seat that copied the platform's representsCircle flag, which blocked on a circle it never had", async () => {
+    const seat = normaliseProposedSeat({ name: "Night Watch", representsCircle: false }, await liveCircles());
+    expect(seat.ignored).toEqual(["representsCircle"]);
+    const id = await draftWith([{ op: "create_seat", orgRoleId: "cnb-watch", payload: seat.payload }]);
+    const preview = await previewDraft(pool, id, 99);
+    expect(preview.blocked, JSON.stringify(preview.lines)).toBe(0);
+    const r = await publishDraft(pool, id, "u-steward", 99);
+    expect(r.ok, !r.ok ? r.error : "").toBe(true);
+    expect((await seatRow("cnb-watch")).circle_id).toBeNull();
+  });
+
   it("lets an explicit circleId through even beside a stale circle name", async () => {
     await pool.query( // module-review-ok: a fixture on the scratch schema this suite provisioned
       "INSERT INTO circles (id, name, aliases, is_example) VALUES ('cnb-springs', 'Springs & Wells', ?, 0)",

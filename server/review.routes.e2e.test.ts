@@ -434,6 +434,17 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
     ]);
     expect(first.json.blockedLines[0].blocked).toContain("withdraw this draft. Its proposals go back in the review queue");
 
+    // The queue read lists that draft with its reasons, so a reload or a second
+    // blocked accept cannot leave it with no withdraw on any screen.
+    const stuckOn = async () => {
+      const q = await call("GET", "/api/review/queue", undefined, kiraToken);
+      expect(q.status, q.text).toBe(200);
+      return (q.json.stuckDrafts ?? []) as { draftId: string; blocked: number; blockedLines: unknown }[];
+    };
+    expect((await stuckOn()).find((d) => d.draftId === first.json.draftId)).toEqual({
+      draftId: first.json.draftId, blocked: 1, blockedLines: first.json.blockedLines,
+    });
+
     const one = await payloadsByName(first.json.draftId);
     expect(one["Spring Keeper"]).toMatchObject({
       circleId: waterId, seats: 1, recruiting: true, accountabilities: ["Test the spring monthly", "Keep the log"],
@@ -452,10 +463,13 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
     const withdrawn = await call("POST", `/api/review/drafts/${first.json.draftId}/withdraw`, {}, kiraToken);
     expect(withdrawn.status, withdrawn.text).toBe(200);
     expect(withdrawn.json.reopened).toBe(3);
+    expect((await stuckOn()).map((d) => d.draftId)).not.toContain(first.json.draftId);
 
     const again = await call("POST", `/api/review/batches/${SHAPED}/accept`, {}, kiraToken);
     expect(again.status, again.text).toBe(200);
     expect(again.json.blocked).toBe(0);
+    // A draft that can publish is not stuck.
+    expect((await stuckOn()).map((d) => d.draftId)).not.toContain(again.json.draftId);
     const two = await payloadsByName(again.json.draftId);
     expect(two["Mill Warden"]).toMatchObject({ circleId: String(mill.json.id) });
     expect(two["Mill Warden"]).not.toHaveProperty("circleName");
@@ -480,5 +494,6 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
     expect(lone.json.blocked).toBe(1);
     expect(lone.json.blockedLines[0].blocked).toContain('There is no circle called "Kiln Circle" yet');
     expect(lone.json.ignored).toEqual([]);
+    expect((await stuckOn()).map((d) => d.draftId)).toContain(lone.json.createdRef);
   });
 });

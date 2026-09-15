@@ -624,12 +624,22 @@ export async function previewDraft(
 
     if (c.op === "create_seat") {
       reads = `Create the seat "${c.payload?.name ?? c.orgRoleId}"`;
-      if (existing) blocked = "A seat with that id already exists";
-      if (hasCircleId(c.payload?.circleId) && !circleIds.has(String(c.payload.circleId))) {
-        blocked = "That circle does not exist. A draft cannot create circles";
-      }
-      if (!blocked) blocked = circleNameBlock(c.payload, fromQueue);
-      if (!blocked) blocked = seatShapeBlock(c.payload);
+      /*
+       * ── EVERY REASON, AND THE CIRCLE LAST ───────────────────────────────
+       *
+       * This line used to carry one reason, and a missing circle hid the rest.
+       * A seat named the same as a live seat, with a circle not made yet,
+       * showed only "Ask an admin to create it". The admin made the circle,
+       * the steward withdrew and accepted again, and only then heard the name
+       * was taken: a whole cycle, and a live circle made for a seat that was
+       * never going to publish. An unknown circle id also overwrote "a seat
+       * with that id already exists". Now each reason is listed, the ones that
+       * need no circle first, joined into the one sentence a line carries.
+       */
+      const reasons: string[] = [];
+      if (existing) reasons.push("A seat with that id already exists");
+      const shape = seatShapeBlock(c.payload);
+      if (shape) reasons.push(shape);
       /*
        * ── THE SHAPE RULES, which the old block list did not have ──────────
        *
@@ -647,21 +657,38 @@ export async function previewDraft(
        * renamed, because renaming somebody's proposal to make it fit is the
        * one thing a preview must never do quietly.
        */
-      const proposed = String(c.payload?.name ?? "").trim();
-      if (!blocked && proposed === "") blocked = "A seat needs a name";
-      if (!blocked && proposed.length > 120) blocked = "That seat name is longer than a seat name can be";
-      if (!blocked && liveNames.has(proposed.toLowerCase())) {
-        blocked = `This village already has a live seat called "${proposed}"`;
+      const rawName = c.payload?.name;
+      // A name that is not text already has its reason above, and has no name to check.
+      const nameIsText = rawName === undefined || rawName === null || typeof rawName === "string" || typeof rawName === "number";
+      const proposed = String(rawName ?? "").trim();
+      if (nameIsText && proposed === "") reasons.push("A seat needs a name");
+      else if (nameIsText && proposed.length > 120) reasons.push("That seat name is longer than a seat name can be");
+      else if (nameIsText && liveNames.has(proposed.toLowerCase())) {
+        reasons.push(
+          `This village already has a live seat called "${proposed}". ` +
+            (fromQueue
+              ? "Withdraw this draft. Its proposals go back in the review queue, where you can reject this one or give it a name of its own"
+              : "Withdraw this draft and make it again with a name of its own"),
+        );
       }
       const seats = c.payload?.seats;
-      if (!blocked && seats !== undefined && seats !== null) {
+      if (seats !== undefined && seats !== null) {
         const n = Number(seats);
-        if (!Number.isInteger(n) || n < 1 || n > 50) blocked = "A seat holds between 1 and 50 people";
+        if (!Number.isInteger(n) || n < 1 || n > 50) reasons.push("A seat holds between 1 and 50 people");
       }
       const crit = c.payload?.criticality;
-      if (!blocked && crit !== undefined && crit !== null && !["normal", "high"].includes(String(crit))) {
-        blocked = "Criticality is normal or high";
+      if (crit !== undefined && crit !== null && !["normal", "high"].includes(String(crit))) {
+        reasons.push("Criticality is normal or high");
       }
+      // The circle last, so whoever reads this line learns first whether the
+      // seat could publish at all before anybody is asked to make a circle.
+      if (hasCircleId(c.payload?.circleId) && !circleIds.has(String(c.payload.circleId))) {
+        reasons.push("That circle does not exist. A draft cannot create circles");
+      } else {
+        const circle = circleNameBlock(c.payload, fromQueue);
+        if (circle) reasons.push(circle);
+      }
+      blocked = reasons.length ? reasons.join(". ") : null;
     } else {
       if (!existing && !willExist.has(c.orgRoleId)) blocked = "That seat no longer exists";
       // Standing examples are inert everywhere else and must be here too, or a

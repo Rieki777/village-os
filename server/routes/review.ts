@@ -85,9 +85,11 @@ import {
   addChange,
   createDraft,
   draftChangeCap,
+  listDrafts,
   openDraftCap,
   previewDraft,
   withdrawDraft,
+  type PreviewLine,
 } from "../lib/orgDrafts";
 import { readProposedSeats, type LiveCircle } from "../lib/proposedSeats";
 import {
@@ -123,6 +125,11 @@ interface IgnoredKeys {
 interface BlockedLine {
   reads: string;
   blocked: string;
+}
+
+/** The blocked lines of a preview, in the shape the review page reads. */
+function blockedLinesOf(lines: PreviewLine[]): BlockedLine[] {
+  return lines.filter((l) => l.blocked).map((l) => ({ reads: l.reads, blocked: String(l.blocked) }));
 }
 
 /*
@@ -215,19 +222,39 @@ export function register(app: Express, deps: Deps): void {
    * `drops` rides along and is the reason an empty queue can be read honestly:
    * without it, "nothing arrived today" and "everything arrived and all of it
    * was refused for carrying an email address" look identical.
+   *
+   * `stuckDrafts` rides along for the same kind of reason. A draft this queue
+   * made that cannot publish holds one of the village's open-draft slots until
+   * somebody withdraws it, and this page is the only place that can. The page
+   * used to remember one such draft, from the last accept only, so a second
+   * blocked accept or a reload left the first with no way out on any screen.
+   * Listed here, every one of them has its card and its withdraw button.
    */
   app.get("/api/review/queue", async (req, res) => {
     if (!(await guardCapability(req, res, "intake.moderate"))) return;
     const pool = getPool();
-    const [proposals, quests, drops] = await Promise.all([
+    const [proposals, quests, drops, drafts] = await Promise.all([
       proposalQueue(pool, "proposed"),
       questProposalQueue(pool, "proposed"),
       recentDrops(pool, 30),
+      listDrafts(pool),
     ]);
 
     const batches = new Map<string, ReturnType<typeof toCard>[]>();
     for (const p of proposals) {
       batches.set(p.batchId, [...(batches.get(p.batchId) ?? []), toCard(p)]);
+    }
+
+    // Open, made by this queue (only its accept sets a source proposal), and
+    // blocked. Bounded by openDraftCap, so the previews stay few.
+    const cap = draftChangeCap(await activeMembers());
+    const stuckDrafts: { draftId: string; blocked: number; blockedLines: BlockedLine[] }[] = [];
+    for (const d of drafts) {
+      if (d.status !== "open" || !d.sourceProposalId) continue;
+      const preview = await previewDraft(pool, d.id, cap);
+      if (preview.blocked > 0) {
+        stuckDrafts.push({ draftId: d.id, blocked: preview.blocked, blockedLines: blockedLinesOf(preview.lines) });
+      }
     }
 
     res.json({
@@ -249,6 +276,7 @@ export function register(app: Express, deps: Deps): void {
         receivedAt: q.receivedAt,
       })),
       drops,
+      stuckDrafts,
       counts: { proposals: proposals.length, quests: quests.length },
     });
   });
@@ -434,9 +462,7 @@ export function register(app: Express, deps: Deps): void {
     // The reasons themselves, and not only their count. The preview route that
     // also serves them is admin-only and no screen calls it, so without these
     // the sentence saying what to do next reached nobody.
-    const blockedLines: BlockedLine[] = preview.lines
-      .filter((l) => l.blocked)
-      .map((l) => ({ reads: l.reads, blocked: String(l.blocked) }));
+    const blockedLines = blockedLinesOf(preview.lines);
 
     return { ok: true, draftId: made.id, seats, blocked: preview.blocked, blockedLines, noted: notes.length, ignored };
   };
