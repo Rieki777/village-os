@@ -162,7 +162,7 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `proposal_accepted:<id>` | `server/index.ts` |
 | `quest_consent:<id>` | `server/routes/questClaims.ts` |
 | `quest.completed:<esc(v)>:<esc(questId)>:<esc(claimId)>:<esc(userId)>:<esc(tokenSlug)>` | `server/lib/economy.ts` |
-| `queststay:<id>` | `server/routes/questClaims.ts` |
+| `queststay:<id>` | `server/lib/economy.ts`, `server/routes/questClaims.ts` |
 | `redemption:<esc(v)>:<esc(redemptionId)>:hold` | `server/lib/redemptionStore.ts` |
 | `reversal:<esc(v)>:<eventKey>` | `server/lib/economy.ts` |
 | `role.cycle:<esc(v)>:<esc(cycleKey)>:<esc(seatId)>:<esc(userId)>:<esc(tokenSlug)>` | `server/lib/economy.ts` |
@@ -177,7 +177,7 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `xstock-<Date.now()>-<Math.random().toString(36).slice(2, 8)>` | `server/index.ts` |
 | `xstock:<slug>:<body>` | `server/index.ts` |
 
-51 distinct shapes across 57 posting site(s), plus 6 site(s) that forward a key their caller decided (`mint()` and `mintStayCredits` hand on what they were given, and every caller of those is read above). A shape ending in a timestamp and a random suffix is a key the caller did not make idempotent: the admin mint and the exchange stocking route both fall back to one when no client nonce is sent, so a retried request there is a second posting rather than a no-op.
+51 distinct shapes across 58 posting site(s), plus 7 site(s) that forward a key their caller decided (`mint()` and `mintStayCredits` hand on what they were given, and every caller of those is read above). A shape ending in a timestamp and a random suffix is a key the caller did not make idempotent: the admin mint and the exchange stocking route both fall back to one when no client nonce is sent, so a retried request there is a second posting rather than a no-op.
 <!-- generated:triggers end -->
 
 ---

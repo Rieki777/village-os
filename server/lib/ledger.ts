@@ -467,6 +467,13 @@ export interface TransferResult {
   ok: boolean;
   duplicate: boolean;
   error?: string;
+  /**
+   * Set on exactly one refusal: the key collided with a DIFFERENT stored key
+   * under the ledger's case-insensitive collation. That is a key-shape bug and
+   * never transient, so a caller deciding whether to retry needs it as a fact
+   * rather than as a sentence to match (`postOwed` reports it as `key_clash`).
+   */
+  clash?: true;
   /** The recomputed balance of the RECEIVING account after this post. */
   toBalance: number;
 }
@@ -1054,6 +1061,7 @@ export async function postTransferOn(
           ok: false,
           duplicate: false,
           toBalance: 0,
+          clash: true,
           error:
             `idempotency key ${JSON.stringify(input.idempotencyKey)} collides with the already-posted ` +
             `key ${JSON.stringify(stored)}: the ledger's unique index cannot tell them apart. This is ` +

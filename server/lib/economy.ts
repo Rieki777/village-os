@@ -545,7 +545,7 @@ export function forgetEpoch(): void {
  * failure only surfaces as an absence, which is the hardest kind to notice.
  * So the write paths ask for BOTH: the flag, and the seeds it needs.
  */
-export async function economyReady(pool: Pool): Promise<{ ready: boolean; reason?: string }> {
+export async function economyReady(pool: Pool | PoolConnection): Promise<{ ready: boolean; reason?: string }> {
   const [rules] = await pool.query<RowDataPacket[]>(
     "SELECT COUNT(*) AS n FROM `mint_rules` WHERE `village_id` = ? AND `enabled` = 1",
     [villageId()],
@@ -594,7 +594,7 @@ function rowToRule(r: RowDataPacket): MintRule {
  * rules that were already in force at N, so an edit made during N applies to
  * N+1 and the closing cycle settles under the rules it ran under.
  */
-export async function rulesFor(pool: Pool, trigger: string, atCycle?: number): Promise<MintRule[]> {
+export async function rulesFor(pool: Pool | PoolConnection, trigger: string, atCycle?: number): Promise<MintRule[]> {
   const cycle = atCycle ?? currentCycleNumber(new Date());
   const [rows] = await pool.query<RowDataPacket[]>(
     "SELECT * FROM `mint_rules` WHERE `village_id` = ? AND `trigger` = ? AND `enabled` = 1 " +
@@ -2252,6 +2252,324 @@ function reportUnpayable(context: string, unpayable: Array<{ token: string; reas
   }
 }
 
+// ── What a consent is owed, and posting it ─────────────────────────────────
+
+/**
+ * ONE POSTING A CONSENT IS OWED: priced, keyed, and not yet posted.
+ *
+ * WHY THE SPLIT. `mintForConfirmedClaim` priced and posted in one breath, on
+ * the pool, after the consent had already committed, and a failure there was
+ * logged and lost: the claim read consented and the member was never paid, with
+ * nothing anywhere recording that they were owed. The quests lane records these
+ * rows in the consent's OWN commit and posts them afterwards, so an obligation
+ * survives a crash between the status flip and the payment. `mintForConfirmedClaim`
+ * is kept as the same two steps back to back on the pool, so every caller it
+ * already had behaves exactly as before.
+ *
+ * `units` is MINOR units, converted exactly once, in `owedForClaim`. Nothing
+ * that reads a row converts again, and neither does the table that stores it.
+ */
+export interface OwedPosting {
+  toUserId: string;
+  tokenSlug: string;
+  /** Minor units. Always greater than zero: a zero is omitted, never owed. */
+  units: number;
+  /** The token's scale the units are in, so a reader can show a human figure. */
+  decimals: number;
+  /** The faucet it issues from. Every owed posting is issuance. */
+  from: string;
+  source: string;
+  sourceRef: string;
+  description: string;
+  /**
+   * The key the direct path has always posted, unchanged, so a posting that
+   * landed before a crash comes back as a duplicate on the retry.
+   */
+  idempotencyKey: string;
+}
+
+export interface OwedClaim {
+  id: string;
+  questId: string;
+  userId: string;
+  /**
+   * The quest's stay-credit reward in WHOLE credits, and the title its posting
+   * is described by. Absent, or a reward of zero, owes no stay credits.
+   */
+  stay?: { reward: number; questTitle: string };
+}
+
+export interface OwedForClaim {
+  owed: OwedPosting[];
+  /**
+   * Rules that are enabled and can NEVER pay: a from_source rule, a token with
+   * no faucet, a ceiling that rounds to nothing, an amount below the token's
+   * resolution. Not owed, because a retry cannot succeed. Logged here, from the
+   * engine, so a caller that ignores the field still cannot make it silent.
+   */
+  unpayable: Array<{ token: string; reason: string }>;
+  /** Why nothing was priced, when the engine is not ready. Both lists are then empty. */
+  skipped?: string;
+}
+
+/**
+ * The stay token's slug. `STAY_CREDIT` in server/lib/stays.ts is the home of
+ * this name, and stays.ts imports this file, so importing it back would be a
+ * cycle. `faucetFor` spells it the same way for the same reason.
+ */
+const QUEST_STAY_TOKEN = "stay-credit";
+
+/**
+ * WHAT A CONSENT IS OWED, WORKED OUT. NOTHING POSTS.
+ *
+ * `db` is the pool or the consent's own connection. Every read here is a plain
+ * read on whichever it is handed, so a caller holding the claim's row lock does
+ * not reach for a second connection while it waits.
+ *
+ * NO EPOCH GUARD HERE, on purpose, and it is not a gap. The guard stops an OLD
+ * confirmation becoming a payable backlog, which is a question about work
+ * priced after the fact. This prices a consent at the moment it happens, and
+ * the epoch is never later than now (`startEconomyEpoch` refuses to stamp the
+ * future), so the guard could not refuse it. Nor could it run here safely:
+ * stamping writes `app_config` and fills a process-level cache, and doing that
+ * inside a transaction that then rolls back would leave the process believing in
+ * an epoch no row records. A caller pricing past work runs the guard first, the
+ * way `mintForConfirmedClaim` does.
+ *
+ * Recognition is not priced here. The consent route posts it itself, with the
+ * range, the cap and the standing multiplier, and has since S7.
+ */
+export async function owedForClaim(db: Pool | PoolConnection, claim: OwedClaim): Promise<OwedForClaim> {
+  const ready = await economyReady(db);
+  if (!ready.ready) return { owed: [], unpayable: [], skipped: ready.reason };
+  const priced = await priceClaim(db, claim);
+  reportUnpayable(`claim ${claim.id}`, priced.unpayable);
+  return priced;
+}
+
+/** The pricing both entry points share. Reports nothing; each caller reports once. */
+async function priceClaim(
+  db: Pool | PoolConnection,
+  claim: OwedClaim,
+): Promise<{ owed: OwedPosting[]; unpayable: Array<{ token: string; reason: string }> }> {
+  const rules = await rulesFor(db, "quest.completed");
+  const owed: OwedPosting[] = [];
+  const unpayable: Array<{ token: string; reason: string }> = [];
+  for (const r of rules) {
+    // Recognition is the consent route's job. See above.
+    if (r.tokenSlug === HEARTS) continue;
+    if (r.amount === null) {
+      // "Read the amount from whatever posted the work" has nothing to read
+      // here. The only amount a quest posts is its Gratitude range, which the
+      // consent route already spends, and reading it for a second token would
+      // pay a credit figure somebody wrote meaning recognition. So a
+      // from_source rule on any other token can never pay, on any quest, ever.
+      // An admin can set one (`queueRuleChange` accepts a null amount), so it
+      // has to be answerable rather than merely impossible.
+      unpayable.push({
+        token: r.tokenSlug,
+        reason: "this rule reads its amount from the work, and a quest posts no amount in this token",
+      });
+      continue;
+    }
+    const asked = r.amount;
+    // Zero is a decision and stays quiet. A village that sets a rule to 0 has
+    // said "not this one, not now", and shouting about it every consent would
+    // bury the rules that are genuinely broken.
+    if (asked <= 0) continue;
+    // A rule the engine cannot honour is REPORTED, not skipped. This used to
+    // be `if (!faucet) continue`, which is how a village could enable a
+    // credits rule, watch the Mint panel say it pays, and find out a moon
+    // later that nobody had ever been paid by it.
+    const problem = ruleCannotPay(r.tokenSlug);
+    if (problem) {
+      unpayable.push({ token: r.tokenSlug, reason: problem });
+      continue;
+    }
+    // THE CEILING BINDS HERE, and until this line it bound nowhere at all:
+    // `clampToCeiling` had no caller in the shipped server, so a rule left at
+    // `amount 25, ceiling 5` by a ballot that lowered only the ceiling went on
+    // paying 25 for ever.
+    //
+    // IT BINDS IN MINOR UNITS, and this line used to hand a human number to
+    // `toLedgerUnits` on the next one. `mint_rules.ceiling` is `decimal(18,4)`
+    // and this token may carry 0 decimals, so the comparison was exact and the
+    // rounding after it was not bounded by anything: a ceiling of 0.5 paid one
+    // whole unit. The scale is passed in rather than looked up inside, per R31.
+    const decimals = decimalsFor(r.tokenSlug);
+    const capped = ceilingOutcome(r, asked, decimals, tokenDef(r.tokenSlug)?.name ?? r.tokenSlug);
+    if (capped.refusal) {
+      unpayable.push({ token: r.tokenSlug, reason: capped.refusal });
+      continue;
+    }
+    // Already the ledger's own integer. Nothing below this line converts.
+    const amount = capped.units;
+    // KEPT, NOT DELETED, and the sweep asked the question explicitly.
+    // `mint_rules.amount` is `decimal(18,4)`, so the smallest non-zero human
+    // figure a rule can carry is 0.0001, which at four decimals converts to 1
+    // and never to 0. On a token at 4 or more decimals this branch is
+    // therefore unreachable, and it goes quiet rather than red, which is the
+    // dangerous way for a guard to die. It stays because it is a function of
+    // the TOKEN's decimals and not of the ruling: `tokens.decimals` is an int
+    // a village writes, `registerToken` takes whatever it is given, and any
+    // token registered below four decimals re-arms this immediately. Deleting
+    // a guard because today's data cannot reach it is how the `faucetFor`
+    // credits defect shipped. It costs one comparison. (sweep lane F)
+    //
+    // IT NOW MEANS ONLY THE AMOUNT. A ceiling that falls to nothing at this
+    // scale is refused above, by name, so reaching here with a zero means the
+    // rule's own amount rounded away and `asked` is the number to quote.
+    if (amount <= 0) {
+      // Below the token's own resolution. Also a promise that cannot be kept,
+      // and the founder can only fix it if somebody says so.
+      unpayable.push({
+        token: r.tokenSlug,
+        reason: `${asked} is smaller than the smallest amount this token can hold`,
+      });
+      continue;
+    }
+    owed.push({
+      toUserId: claim.userId,
+      tokenSlug: r.tokenSlug,
+      units: amount,
+      decimals,
+      from: faucetFor(r.tokenSlug)!,
+      source: "quest_consent",
+      sourceRef: claim.id,
+      description: `Confirmed contribution: ${claim.questId}`,
+      // The token belongs in the key. One occurrence can mint more than one
+      // token, and each is its own ledger row: without this segment the second
+      // rule collides with the first, reads as a duplicate, and the member is
+      // quietly paid in one token instead of two.
+      idempotencyKey: keys.questCompleted(villageId(), claim.questId, claim.id, claim.userId, r.tokenSlug),
+    });
+  }
+
+  // S31 work-exchange: a quest may also carry stay credits, released by the
+  // same consent. Its own token, its own source, and the claim-keyed key the
+  // consent route has always posted. The reward is whole credits and becomes
+  // minor units here, once.
+  //
+  // ASKED THE SAME QUESTION A RULE IS ASKED, before any conversion. Boot
+  // registers this token at two decimals (`ensureStayToken`), and a village
+  // that has not yet run that registration has no token for `toLedgerUnits`
+  // to find, which answers at whole units. Owing that figure would owe a
+  // hundredth of the reward and look paid. A reward the engine cannot pay is
+  // unpayable, never owed, the same as a rule.
+  const reward = Math.max(0, Math.floor(Number(claim.stay?.reward ?? 0)));
+  const stayProblem = claim.stay && reward > 0 ? ruleCannotPay(QUEST_STAY_TOKEN) : null;
+  if (stayProblem) unpayable.push({ token: QUEST_STAY_TOKEN, reason: stayProblem });
+  if (claim.stay && reward > 0 && !stayProblem) {
+    owed.push({
+      toUserId: claim.userId,
+      tokenSlug: QUEST_STAY_TOKEN,
+      units: toLedgerUnits(QUEST_STAY_TOKEN, reward),
+      decimals: decimalsFor(QUEST_STAY_TOKEN),
+      from: faucetFor(QUEST_STAY_TOKEN)!,
+      source: "quest_stay_reward",
+      sourceRef: claim.id,
+      description: `Work exchange: ${claim.stay.questTitle}`,
+      idempotencyKey: `queststay:${claim.id}`,
+    });
+  }
+  return { owed, unpayable };
+}
+
+/**
+ * Why an owed posting was not posted.
+ *
+ *   not_launched  the village has not started its Game, so nothing may issue.
+ *                 Asked directly of `issuanceRefusal`, never read off a sentence.
+ *   issuance_cap  RESERVED, and nothing produces it today. The village-wide cap
+ *                 (`mintCapGuard`, server/lib/mintCap.ts) guards hand mints, the
+ *                 circle bonus and circle treasury revival, and no quest posting
+ *                 passes through it. Putting quest issuance under that cap is a
+ *                 ruling, and the reason is here for the day it is made.
+ *   key_clash     the key collides with a DIFFERENT stored key under the ledger's
+ *                 case-insensitive collation. A key-shape bug, never transient,
+ *                 so a retry can never succeed and it is not a rule either.
+ *   rule          everything else the ledger or the leg refuses: an unknown or
+ *                 Hypha-governed token, a missing account, a bad amount, a key
+ *                 too long to store.
+ *
+ * INFRASTRUCTURE FAILURES THROW and never come back as a refusal: a lost
+ * connection, a deadlock, an exhausted pool. A transient failure must stay owed
+ * and retryable, and recording it as refused would stop anybody retrying it.
+ */
+export type OwedRefusalReason = "not_launched" | "issuance_cap" | "key_clash" | "rule";
+
+/** `balance` is the recipient's balance in the token's MINOR units after the post. */
+export type PostOwedOutcome =
+  | { outcome: "posted"; balance: number }
+  | { outcome: "duplicate"; balance: number }
+  | { outcome: "refused"; reason: OwedRefusalReason; message: string };
+
+/** The refusals `mint` has always made before touching the ledger, for one owed row. */
+async function owedPreflight(db: Pool | PoolConnection, row: OwedPosting): Promise<PostOwedOutcome | null> {
+  const refuse = (message: string): PostOwedOutcome => ({ outcome: "refused", reason: "rule", message });
+  if (!Number.isFinite(row.units) || row.units <= 0) return refuse("amount must be greater than zero");
+  const def = tokenDef(row.tokenSlug);
+  if (!def) return refuse(`unknown token "${row.tokenSlug}"`);
+  if (def.governance !== "platform") {
+    return refuse(`${row.tokenSlug} is governed on Hypha and is only mirrored here`);
+  }
+  if (!row.idempotencyKey) return refuse("an occurrence key is required");
+  const tooLong = keyTooLong(row.idempotencyKey);
+  if (tooLong) return refuse(tooLong);
+  const closed = await issuanceRefusal(db);
+  if (closed) return { outcome: "refused", reason: "not_launched", message: closed };
+  return null;
+}
+
+function owedTransfer(row: OwedPosting): Parameters<typeof postTransfer>[1] {
+  return {
+    from: row.from,
+    to: memberAccount(row.toUserId),
+    tokenType: row.tokenSlug,
+    amount: row.units,
+    source: row.source,
+    sourceRef: row.sourceRef,
+    description: row.description,
+    idempotencyKey: row.idempotencyKey,
+  };
+}
+
+function owedOutcome(res: TransferResult): PostOwedOutcome {
+  if (res.ok) return { outcome: res.duplicate ? "duplicate" : "posted", balance: res.toBalance };
+  return {
+    outcome: "refused",
+    reason: res.clash ? "key_clash" : "rule",
+    message: res.error ?? "the ledger refused the post",
+  };
+}
+
+/**
+ * POST ONE OWED ROW, IN ITS OWN TRANSACTION, on the pool.
+ *
+ * `postTransfer` retries a deadlock or a lock-wait timeout three times and then
+ * throws, and this does not catch it: a posting that could not be made stays owed.
+ */
+export async function postOwed(pool: Pool, row: OwedPosting): Promise<PostOwedOutcome> {
+  const refused = await owedPreflight(pool, row);
+  if (refused) return refused;
+  return owedOutcome(await postTransfer(pool, owedTransfer(row)));
+}
+
+/**
+ * POST ONE OWED ROW ON A TRANSACTION THE CALLER OPENED.
+ *
+ * No begin, no commit, no rollback, no release: the caller owns all four, which
+ * is `postTransferOn`'s contract, so the row that marks the obligation delivered
+ * can commit with the posting. A refusal comes back for the caller to roll back.
+ * A deadlock throws to the caller, whose whole transaction rolls back, and the
+ * retry is theirs.
+ */
+export async function postOwedOn(conn: PoolConnection, row: OwedPosting): Promise<PostOwedOutcome> {
+  const refused = await owedPreflight(conn, row);
+  if (refused) return refused;
+  return owedOutcome(await postTransferOn(conn, owedTransfer(row)));
+}
+
 /**
  * Everything a confirmed quest claim mints BEYOND the recognition the consent
  * route has always posted.
@@ -2334,107 +2652,19 @@ export async function mintForConfirmedClaim(
     return { minted: [], unpayable: [], skipped: "confirmed before the economy epoch" };
   }
 
-  const rules = await rulesFor(pool, "quest.completed");
+  // THE SAME TWO STEPS the quests lane takes across a commit, taken back to
+  // back on the pool: price what the claim is owed, then post each row. A
+  // refusal from posting is the same class of news as a rule that cannot pay,
+  // so it joins `unpayable` and is reported with it, as it always was.
+  const priced = await priceClaim(pool, { id: claim.id, questId: claim.questId, userId: claim.userId });
   const minted: Array<{ token: string; units: number; decimals: number }> = [];
-  const unpayable: Array<{ token: string; reason: string }> = [];
-  for (const r of rules) {
-    // Recognition is the consent route's job. See above.
-    if (r.tokenSlug === HEARTS) continue;
-    if (r.amount === null) {
-      // "Read the amount from whatever posted the work" has nothing to read
-      // here. The only amount a quest posts is its Gratitude range, which the
-      // consent route already spends, and reading it for a second token would
-      // pay a credit figure somebody wrote meaning recognition. So a
-      // from_source rule on any other token can never pay, on any quest, ever.
-      // An admin can set one (`queueRuleChange` accepts a null amount), so it
-      // has to be answerable rather than merely impossible.
-      unpayable.push({
-        token: r.tokenSlug,
-        reason: "this rule reads its amount from the work, and a quest posts no amount in this token",
-      });
-      continue;
-    }
-    const asked = r.amount;
-    // Zero is a decision and stays quiet. A village that sets a rule to 0 has
-    // said "not this one, not now", and shouting about it every consent would
-    // bury the rules that are genuinely broken.
-    if (asked <= 0) continue;
-    // A rule the engine cannot honour is REPORTED, not skipped. This used to
-    // be `if (!faucet) continue`, which is how a village could enable a
-    // credits rule, watch the Mint panel say it pays, and find out a moon
-    // later that nobody had ever been paid by it.
-    const problem = ruleCannotPay(r.tokenSlug);
-    if (problem) {
-      unpayable.push({ token: r.tokenSlug, reason: problem });
-      continue;
-    }
-    // THE CEILING BINDS HERE, and until this line it bound nowhere at all:
-    // `clampToCeiling` had no caller in the shipped server, so a rule left at
-    // `amount 25, ceiling 5` by a ballot that lowered only the ceiling went on
-    // paying 25 for ever.
-    //
-    // IT BINDS IN MINOR UNITS, and this line used to hand a human number to
-    // `toLedgerUnits` on the next one. `mint_rules.ceiling` is `decimal(18,4)`
-    // and this token may carry 0 decimals, so the comparison was exact and the
-    // rounding after it was not bounded by anything: a ceiling of 0.5 paid one
-    // whole unit. The scale is passed in rather than looked up inside, per R31.
-    const decimals = decimalsFor(r.tokenSlug);
-    const capped = ceilingOutcome(r, asked, decimals, tokenDef(r.tokenSlug)?.name ?? r.tokenSlug);
-    if (capped.refusal) {
-      unpayable.push({ token: r.tokenSlug, reason: capped.refusal });
-      continue;
-    }
-    // Already the ledger's own integer. Nothing below this line converts.
-    const amount = capped.units;
-    // KEPT, NOT DELETED, and the sweep asked the question explicitly.
-    // `mint_rules.amount` is `decimal(18,4)`, so the smallest non-zero human
-    // figure a rule can carry is 0.0001, which at four decimals converts to 1
-    // and never to 0. On a token at 4 or more decimals this branch is
-    // therefore unreachable, and it goes quiet rather than red, which is the
-    // dangerous way for a guard to die. It stays because it is a function of
-    // the TOKEN's decimals and not of the ruling: `tokens.decimals` is an int
-    // a village writes, `registerToken` takes whatever it is given, and any
-    // token registered below four decimals re-arms this immediately. Deleting
-    // a guard because today's data cannot reach it is how the `faucetFor`
-    // credits defect shipped. It costs one comparison. (sweep lane F)
-    //
-    // IT NOW MEANS ONLY THE AMOUNT. A ceiling that falls to nothing at this
-    // scale is refused above, by name, so reaching here with a zero means the
-    // rule's own amount rounded away and `asked` is the number to quote.
-    if (amount <= 0) {
-      // Below the token's own resolution. Also a promise that cannot be kept,
-      // and the founder can only fix it if somebody says so.
-      unpayable.push({
-        token: r.tokenSlug,
-        reason: `${asked} is smaller than the smallest amount this token can hold`,
-      });
-      continue;
-    }
-    const faucet = faucetFor(r.tokenSlug)!;
-    const res = await mint(pool, {
-      toUserId: claim.userId,
-      tokenSlug: r.tokenSlug,
-      amount,
-      from: faucet,
-      source: "quest_consent",
-      sourceRef: claim.id,
-      description: `Confirmed contribution: ${claim.questId}`,
-      // The token belongs in the key. One occurrence can mint more than one
-      // token, and each is its own ledger row: without this segment the second
-      // rule collides with the first, reads as a duplicate, and the member is
-      // quietly paid in one token instead of two.
-      idempotencyKey: keys.questCompleted(villageId(), claim.questId, claim.id, claim.userId, r.tokenSlug),
-    });
-    // THE ROW, not the number before it was rounded. This used to report the
-    // human figure the clamp had answered, so a rule at 0.0015 on a token at
-    // three decimals returned 0.0015 while the row held one thousandth: a
-    // route logging the return value told the member a number no row in this
-    // database holds. `units` plus `decimals` plus the slug is R31's shape.
-    if (res.ok && !res.duplicate) minted.push({ token: r.tokenSlug, units: amount, decimals });
-    // A refusal from the ledger itself is the same class of news as a rule the
-    // engine cannot honour, and it was equally silent before: the ledger's own
-    // sentence went into a variable nobody read.
-    if (!res.ok) unpayable.push({ token: r.tokenSlug, reason: res.error });
+  const unpayable: Array<{ token: string; reason: string }> = [...priced.unpayable];
+  for (const row of priced.owed) {
+    const res = await postOwed(pool, row);
+    // THE ROW, not the number before it was rounded: `units` plus `decimals`
+    // plus the slug is R31's shape, and a duplicate paid nothing this time.
+    if (res.outcome === "posted") minted.push({ token: row.tokenSlug, units: row.units, decimals: row.decimals });
+    if (res.outcome === "refused") unpayable.push({ token: row.tokenSlug, reason: res.message });
   }
   reportUnpayable(`claim ${claim.id}`, unpayable);
   return { minted, unpayable };
