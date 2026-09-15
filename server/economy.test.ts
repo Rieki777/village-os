@@ -11,7 +11,7 @@
  * applied, unique per provision. No TEST_DATABASE_URL and the suite skips
  * loudly rather than passing hollowly.
  */
-import { describe, expect, it, beforeAll, beforeEach, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, beforeEach, afterAll, vi } from "vitest";
 import mysql from "mysql2/promise";
 import {
   allowanceFor,
@@ -2630,8 +2630,8 @@ describe.skipIf(!configured)("the village economy engine", () => {
       expect(r.ok, `seeding ${id}`).toBe(true);
       if (!opts.duringMoon) {
         const carriedIn = Math.floor(cycleWindow(new Date()).startsAt.getTime() / 1000) - 24 * 60 * 60;
-        await dpool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-          "UPDATE `token_ledger` SET `at` = FROM_UNIXTIME(?) WHERE `idempotency_key` = ?",
+        await dpool.query(
+          "UPDATE `token_ledger` SET `at` = FROM_UNIXTIME(?) WHERE `idempotency_key` = ?", // module-review-ok: test fixture in the S5 scratch schema, backdating a seed row so it was held going into the moon
           [carriedIn, key],
         );
       }
@@ -3397,6 +3397,30 @@ describe.skipIf(!configured)("the village economy engine", () => {
       // stop putting a green badge over a rule that pays nobody.
       expect(card?.problem).toMatch(/ceiling is 0/);
       expect(card?.pays).toEqual({ units: 0, ceilingUnits: 0, decimals: 0 });
+    });
+
+    it("logs a seat rule its ceiling refuses, the way every other unpayable seat rule is logged", async () => {
+      // THE GAP. The settlement filter put a ceiling refusal straight onto
+      // `out.unpayable` and never into the list `reportUnpayable` prints, so a
+      // seat rule at a ceiling of zero paid nobody every moon and no log line
+      // anywhere said so. Observed on the console, where that report goes.
+      await atScale(0);
+      await setSeatRule(25, 0);
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const out = await runSettlement(pool);
+        // Carried home once, not twice, now that it travels with the others.
+        const said = out.unpayable.filter((x) => x.token === TOKEN);
+        expect(said).toHaveLength(1);
+        expect(said[0].reason).toMatch(/ceiling is 0/);
+        const lines = errors.mock.calls.map((call) => call.map(String).join(" "));
+        const logged = lines.filter(
+          (line) => line.includes(`the rule on "${TOKEN}" paid nobody`) && /ceiling is 0/.test(line),
+        );
+        expect(logged).toHaveLength(1);
+      } finally {
+        errors.mockRestore();
+      }
     });
 
     it("carries the scale for the one shipped token that has one, which is live today", async () => {

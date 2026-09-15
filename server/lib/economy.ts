@@ -2997,7 +2997,11 @@ export async function runSettlement(pool: Pool, at: Date = new Date()): Promise<
     const decimals = decimalsFor(r.tokenSlug);
     const capped = ceilingOutcome(r, r.amount, decimals, tokenDef(r.tokenSlug)?.name ?? r.tokenSlug);
     if (r.amount > 0 && capped.refusal) {
-      out.unpayable.push({ token: r.tokenSlug, reason: capped.refusal });
+      // Into `ruleProblems` like the two reasons above, and not straight onto
+      // `out.unpayable`: only `ruleProblems` reaches `reportUnpayable`, so a
+      // seat rule its own ceiling refused used to pay nobody every moon with
+      // no line in any log. It still lands on `out.unpayable` once, below.
+      ruleProblems.push({ token: r.tokenSlug, reason: capped.refusal });
       return false;
     }
     // An amount that rounds to nothing in this token's minor units is the
