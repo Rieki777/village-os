@@ -483,13 +483,17 @@ export async function addChange(
  * got a live circle made for a seat they then rejected. So the circle's own
  * recovery waits until it is the only thing left in the way, which the next
  * preview after the other fix will say.
+ *
+ * ONLY A RECOVERY THAT ASKS AN ADMIN TO CHANGE LIVE CIRCLES WAITS. A circle in
+ * a form nothing reads is fixed by writing its name under "circle" in the same
+ * withdraw that fixes the other reason, so that recovery is always given.
  */
 function circleNameBlock(
   payload: Record<string, any> | null | undefined,
   fromQueue: boolean,
   withRecovery = true,
 ): string | null {
-  if (hasCircleId(payload?.circleId)) return null;
+  if (hasCircleId(circleIdOf(payload))) return null;
   const circleName = typeof payload?.circleName === "string" ? payload.circleName.trim() : "";
   const unread: string[] = Array.isArray(payload?.circleUnread)
     ? payload.circleUnread.filter((k: unknown): k is string => typeof k === "string" && k !== "")
@@ -500,7 +504,6 @@ function circleNameBlock(
   if (circleName === "" && unread.length) {
     const keys = unread.map((k) => `"${k}"`).join(", ");
     const fact = `This seat gave its circle under ${keys} in a form this village cannot read`;
-    if (!withRecovery) return fact;
     return fromQueue
       ? `${fact}. Withdraw this draft. ` +
           `Its proposals go back in the review queue, where you can write the circle's name under "circle" and accept again`
@@ -522,6 +525,18 @@ function circleNameBlock(
  */
 function hasCircleId(v: unknown): boolean {
   return v !== undefined && v !== null && v !== "";
+}
+
+/**
+ * A payload's circle id, with a one-item list of a string or a number read as
+ * its item. `["c1"]`, from a draft written before the proposal normaliser or
+ * built by hand, read as no text and blocked with "That circle does not exist"
+ * beside a circle that does. The INSERT and UPDATE bind such a list as its one
+ * value, so the preview now checks the circle the publish writes.
+ */
+function circleIdOf(payload: Record<string, any> | null | undefined): unknown {
+  const v = payload?.circleId;
+  return Array.isArray(v) && v.length === 1 && (typeof v[0] === "string" || typeof v[0] === "number") ? v[0] : v;
 }
 
 /**
@@ -755,7 +770,7 @@ export function previewLoadedDraft(
       // seat could publish at all before anybody is asked to make a circle.
       // For the same reason, a line that already has a reason states the
       // circle's problem without asking anybody to make one (circleNameBlock).
-      if (hasCircleId(c.payload?.circleId) && !circleIds.has(primitiveText(c.payload.circleId) ?? "")) {
+      if (hasCircleId(circleIdOf(c.payload)) && !circleIds.has(primitiveText(circleIdOf(c.payload)) ?? "")) {
         reasons.push("That circle does not exist. A draft cannot create circles");
       } else {
         const circle = circleNameBlock(c.payload, fromQueue, reasons.length === 0);
@@ -784,7 +799,7 @@ export function previewLoadedDraft(
           const v = primitiveNumber(n2);
           if (!Number.isInteger(v) || v < 1 || v > 50) blocked = "A seat holds between 1 and 50 people";
         }
-        if (!blocked && hasCircleId(c.payload?.circleId) && !circleIds.has(primitiveText(c.payload.circleId) ?? "")) {
+        if (!blocked && hasCircleId(circleIdOf(c.payload)) && !circleIds.has(primitiveText(circleIdOf(c.payload)) ?? "")) {
           blocked = "That circle does not exist. A draft cannot create circles";
         }
       }
@@ -812,6 +827,8 @@ export interface StuckDraft {
   draftId: string;
   blocked: number;
   blockedLines: BlockedLine[];
+  /** Set when the preview threw, so the page says it could not be checked and counts no seats. */
+  unpreviewable?: true;
 }
 
 /**
@@ -835,13 +852,17 @@ export function stuckQueueDrafts(
     let preview: { lines: PreviewLine[]; blocked: number };
     try {
       preview = previewLoadedDraft(d, context, changeCap);
-    } catch {
+    } catch (err) {
+      // Listed so its withdraw renders, and logged so somebody can find out why.
+      console.error(`[orgDrafts] could not preview draft ${d.id}`, err);
       out.push({
         draftId: d.id,
         blocked: 1,
+        unpreviewable: true,
         blockedLines: [
           {
-            reads: "This draft",
+            // Empty, because the sentence already names the draft.
+            reads: "",
             blocked:
               "This draft could not be previewed, so it cannot publish. Withdraw it, and its proposals go back in the review queue",
           },
