@@ -42,7 +42,8 @@ import EventsAdminPanel from "@/components/EventsAdminPanel";
 import ResourcesAdminPanel from "@/components/power/ResourcesAdminPanel";
 import { CrowdpoolAdminTab, ForumCategoriesEditor, ToolsCategoriesEditor } from "@/components/admin/ModuleConfigPanels";
 import { CONTENT_SECTIONS, emptyContentFor } from "@/components/admin/contentSections";
-import { displayCurrencyProblem } from "@shared/money";
+import { displayCurrencyProblem } from "@shared/money";
+import { parentChoicesFor } from "@shared/circleView";
 import InvoluntaryExitDialog from "@/components/admin/InvoluntaryExitDialog";
 import ContentEditorTab from "@/components/admin/ContentEditorTab";
 import WorkWithUsTab from "@/components/admin/WorkWithUsTab";
@@ -4847,11 +4848,11 @@ function OrgChartTab({ password }: { password: string }) {
               */}
               {(() => {
                 const cd = circleDraft[c.id] ?? c;
-                const cDirty = ["name", "purpose", "status"].some((k) => (cd[k] ?? "") !== (c[k] ?? ""));
+                const cDirty = ["name", "purpose", "status", "parentCircleId"].some((k) => (cd[k] ?? "") !== (c[k] ?? ""));
                 const setCircle = (patch: any) => setCircleDraft({ ...circleDraft, [c.id]: { ...cd, ...patch } });
                 return (
                   <div className="mb-4">
-                    <div className="grid sm:grid-cols-3 gap-2 items-end">
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 items-end">
                       <label className="text-xs text-gray-500">Circle name
                         <input value={cd.name ?? ""} className={`${inputCls} w-full mt-1 min-h-[44px]`} disabled={!!c.isExample}
                           onChange={(e) => setCircle({ name: e.target.value })} />
@@ -4860,6 +4861,18 @@ function OrgChartTab({ password }: { password: string }) {
                         <select value={cd.status ?? "active"} className={`${inputCls} w-full mt-1 min-h-[44px]`} disabled={!!c.isExample}
                           onChange={(e) => setCircle({ status: e.target.value })}>
                           {CIRCLE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </label>
+                      {/* WHERE THIS CIRCLE SITS. Offered from `parentChoicesFor`,
+                          the rules the server refuses with, so nothing on this
+                          list is a choice the save turns down: not the circle
+                          itself, nothing already inside it, and no standing
+                          example. Empty is the top of the village. */}
+                      <label className="text-xs text-gray-500">Sits inside
+                        <select value={cd.parentCircleId ?? ""} className={`${inputCls} w-full mt-1 min-h-[44px]`} disabled={!!c.isExample}
+                          onChange={(e) => setCircle({ parentCircleId: e.target.value || null })}>
+                          <option value="">The village, at the top</option>
+                          {parentChoicesFor(circles, c.id).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
                       </label>
                       <div className="text-xs text-gray-400 pb-2">
@@ -4884,7 +4897,7 @@ function OrgChartTab({ password }: { password: string }) {
                       disabled={!cDirty || !!c.isExample}
                       className="mt-2 text-sm border border-gray-200 rounded-lg px-3 py-2 min-h-[44px] disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-teal-deep"
                       onClick={async () => {
-                        const ok = await call(`/admin/circles/${c.id}`, { name: cd.name, purpose: cd.purpose, status: cd.status }, "PUT");
+                        const ok = await call(`/admin/circles/${c.id}`, { name: cd.name, purpose: cd.purpose, status: cd.status, parentCircleId: cd.parentCircleId || null }, "PUT");
                         if (ok) { toast.success("Circle saved"); setCircleDraft({ ...circleDraft, [c.id]: undefined }); void load(); }
                       }}
                     >Save circle</button>

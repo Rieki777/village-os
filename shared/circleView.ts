@@ -350,6 +350,63 @@ export function circlesOnCycles(circles: CircleLink[]): string[] {
 }
 
 /**
+ * Every refusal a parenting write can meet, as the body a route sends.
+ *
+ * Three reasons, in the order a person would want to hear them: the parent
+ * does not exist, the parent is a standing example, or the move closes a loop.
+ * Null means the write may go ahead, and that includes a move to the top
+ * level, which is a null parent and can never be refused.
+ *
+ * AN EXAMPLE PARENT IS REFUSED because examples are removed the moment a
+ * village publishes its own circles (`retireExamples`, raw SQL), and a real
+ * circle left pointing at a deleted parent draws at the top level with
+ * nothing to say why. Refusing at the write says it while somebody is looking.
+ */
+export function parentingRefusal(
+  circles: Array<CircleLink & { name?: string; isExample?: boolean }>,
+  childId: string,
+  parentId: string | null | undefined,
+): { error: string; message: string; circles?: string[] } | null {
+  if (!parentId) return null;
+  const parent = circles.find((c) => c.id === parentId);
+  if (!parent) {
+    return { error: "circle_parent_unknown", message: `There is no circle "${parentId}" to put this inside.` };
+  }
+  if (parent.isExample) {
+    return {
+      error: "circle_parent_example",
+      message: `${parent.name ?? parentId} is a standing example. Examples are removed when the village publishes its own circles, so a real circle cannot sit inside one.`,
+    };
+  }
+  return parentCycleRefusal(circles, childId, parentId);
+}
+
+/**
+ * The circles this one may move inside: what a picker offers, and what a drag
+ * may drop onto.
+ *
+ * The same rules as `parentingRefusal`, so the choices a person sees and the
+ * writes the server accepts cannot disagree, and a test holds them to that.
+ * One exception, kept on purpose: the CURRENT parent is always offered, even
+ * an example, so a picker shows what is true today instead of quietly showing
+ * something else.
+ */
+export function parentChoicesFor<T extends CircleLink & { isExample?: boolean }>(
+  circles: T[],
+  circleId: string,
+): T[] {
+  const current = circles.find((c) => c.id === circleId)?.parentCircleId ?? null;
+  return circles.filter((c) => {
+    if (c.id === circleId) return false;
+    // `c` already sits somewhere inside this circle, so putting this circle
+    // inside `c` would close a loop.
+    if (ancestorIds(circles, c.id).includes(circleId)) return false;
+    if (c.isExample && c.id !== current) return false;
+    return true;
+  });
+}
+
+/**
  * The map lens's own ground, ring and ink.
  *
  * The circles surface is the map's world (dark ground, parchment ink) the

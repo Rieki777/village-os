@@ -12,7 +12,7 @@
  * still route through here at all.
  */
 import { describe, expect, it } from "vitest";
-import { circleView, circleViews, toneForCircle, ancestorIds, cycleFromParenting, parentCycleRefusal, circlesOnCycles, CIRCLE_TONES, CIRCLE_TONE_HEX } from "./circleView";
+import { circleView, circleViews, toneForCircle, ancestorIds, cycleFromParenting, parentCycleRefusal, parentingRefusal, parentChoicesFor, circlesOnCycles, CIRCLE_TONES, CIRCLE_TONE_HEX } from "./circleView";
 
 /** A row shaped like `circlesRepo.all()` returns one. */
 const row = (over: Record<string, unknown> = {}) => ({
@@ -250,5 +250,64 @@ describe("circle containment", () => {
 
   it("says nothing is wrong with a healthy tree", () => {
     expect(circlesOnCycles([c("gcc"), c("dev", "gcc"), c("web", "dev")])).toEqual([]);
+  });
+});
+
+/*
+ * THE PICKER AND THE ROUTE MUST NEVER DISAGREE.
+ *
+ * The admin tab offers parents from `parentChoicesFor`; the server refuses
+ * writes with `parentingRefusal`. If those drift, a person picks a parent the
+ * page offered and is told no, which reads as a broken form rather than as a
+ * rule. The property test at the bottom walks every circle and every choice.
+ */
+describe("where a circle may sit", () => {
+  const c = (id: string, parentCircleId: string | null = null, extra: Record<string, unknown> = {}) =>
+    ({ id, name: id.toUpperCase(), parentCircleId, ...extra });
+  const tree = [c("gcc"), c("dev", "gcc"), c("web", "dev"), c("care", "gcc"), c("demo", null, { isExample: true })];
+  const ids = (xs: Array<{ id: string }>) => xs.map((x) => x.id).sort();
+
+  it("lets any circle go to the top level", () => {
+    expect(parentingRefusal(tree, "web", null)).toBeNull();
+  });
+
+  it("allows an ordinary move", () => {
+    expect(parentingRefusal(tree, "care", "dev")).toBeNull();
+  });
+
+  it("refuses a parent that does not exist", () => {
+    expect(parentingRefusal(tree, "care", "ghost")?.error).toBe("circle_parent_unknown");
+  });
+
+  it("refuses an example parent, and says examples are removed", () => {
+    const r = parentingRefusal(tree, "care", "demo")!;
+    expect(r.error).toBe("circle_parent_example");
+    expect(r.message).toContain("Examples are removed");
+  });
+
+  it("still refuses a loop, in the loop's own words", () => {
+    expect(parentingRefusal(tree, "gcc", "web")?.error).toBe("circle_parent_cycle");
+  });
+
+  it("offers neither the circle itself nor anything inside it, nor an example", () => {
+    expect(ids(parentChoicesFor(tree, "dev"))).toEqual(["care", "gcc"]);
+  });
+
+  it("offers the current parent even when it is an example", () => {
+    const t = [...tree, c("lost", "demo")];
+    expect(ids(parentChoicesFor(t, "lost"))).toContain("demo");
+  });
+
+  it("terminates on data that already loops", () => {
+    const looped = [c("a", "b"), c("b", "a"), c("x")];
+    expect(ids(parentChoicesFor(looped, "a"))).toEqual(["x"]);
+  });
+
+  it("never offers a choice the route would refuse", () => {
+    for (const circle of tree) {
+      for (const choice of parentChoicesFor(tree, circle.id)) {
+        expect(parentingRefusal(tree, circle.id, choice.id), `${circle.id} inside ${choice.id}`).toBeNull();
+      }
+    }
   });
 });
