@@ -16,6 +16,12 @@
  * the migrations create, the token registry, and the launch fact that opens
  * issuance.
  *
+ * THE MINT RULES ARE SEEDED FOR THE LAST BLOCK ONLY. With no enabled rule,
+ * `mintForConfirmedClaim` mints nothing for any consent, so "a consent at 0 mints
+ * no rule token" would pass on a village that mints none at all. That block
+ * seeds the defaults a fresh village boots with, and shows a consent above 0
+ * minting them before it asserts that a consent at 0 does not.
+ *
  * Runs against the S5 harness. No TEST_DATABASE_URL and the suite skips loudly.
  */
 import http from "node:http";
@@ -23,8 +29,11 @@ import express from "express";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { villageId } from "../lib/economy";
+import { seedEconomy } from "../lib/economySeed";
 import { recordGameStart } from "../lib/gameStart";
 import { loadTokenRegistry } from "../lib/ledger";
+import { ensureStayToken } from "../lib/stays";
 import { claimsRepo, questsRepo, type ClaimsRepo, type QuestsRepo } from "../repos/quests";
 import { register } from "./questClaims";
 
@@ -85,10 +94,10 @@ const consent = async (claimId: string, amount: number) => {
 };
 
 /** A real quest and a real submitted claim on it, ready for a steward. */
-const submittedOn = async (key: string, label: string) => {
+const submittedOn = async (key: string, label: string, extra: { stayCreditReward?: number } = {}) => {
   const questId = `q-${key}`;
   const claimId = `claim-${key}`;
-  await quests.add({ id: questId, title: `Quest ${key}`, gratitude: label, status: "Open", tags: [], order: 1 });
+  await quests.add({ id: questId, title: `Quest ${key}`, gratitude: label, status: "Open", tags: [], order: 1, ...extra });
   await claims.add({
     id: claimId,
     questId,
@@ -268,5 +277,69 @@ describe.skipIf(!configured)("what a quest consent moves (MySQL, real ledger)", 
     expect((await consent(id, 150)).status).toBe(200);
     expect(await posted(id)).toEqual([150]);
     expect(consentedTitle()).not.toContain("badge");
+  });
+
+  describe("a consent at 0 mints no quest.completed rule token (economics and governance, 2026-09-14)", () => {
+    /** The rule tokens minted for this claim, read off the token segment of each occurrence key. */
+    const ruleMints = async (claimId: string) => {
+      const [rows]: any = await pool.query( // module-review-ok: reading back what the route minted, on the S5 scratch schema this suite provisioned
+        "SELECT idempotency_key FROM token_ledger WHERE idempotency_key LIKE ?",
+        [`quest.completed:%:${claimId}:%`],
+      );
+      return (rows as any[]).map((r) => String(r.idempotency_key).split(":").pop()).sort();
+    };
+
+    /** How many stay-credit postings this claim released. */
+    const stayReleases = async (claimId: string) => {
+      const [rows]: any = await pool.query( // module-review-ok: reading back what the route posted, on the S5 scratch schema this suite provisioned
+        "SELECT amount FROM token_ledger WHERE idempotency_key = ?",
+        [`queststay:${claimId}`],
+      );
+      return (rows as any[]).length;
+    };
+
+    /** What the seed says a confirmed contribution mints, recognition aside, because the route posts that itself. */
+    const seededRuleTokens = async () => {
+      const [rows]: any = await pool.query( // module-review-ok: reading the rules the seed wrote, on the S5 scratch schema this suite provisioned
+        "SELECT token_slug FROM mint_rules WHERE village_id = ? AND `trigger` = 'quest.completed' AND enabled = 1 AND token_slug <> 'gratitude'",
+        [villageId()],
+      );
+      return (rows as any[]).map((r) => String(r.token_slug)).sort();
+    };
+
+    beforeAll(async () => {
+      // The rules a fresh village boots with: voice and credits on quest.completed.
+      await seedEconomy(pool, villageId());
+      // Boot registers the stay-credit token (`ensureStayToken`), and this harness does not boot.
+      await ensureStayToken(pool);
+      // The seed registers the voice token, and the mint reads the registry from memory.
+      await loadTokenRegistry(pool);
+    });
+
+    it("above 0 the seeded rules mint and the stay credits release, which is what gives the zero tests a meaning", async () => {
+      const expected = await seededRuleTokens();
+      expect(expected.length).toBeGreaterThan(0);
+      const id = await submittedOn("rules-sixty", "50-100", { stayCreditReward: 2 });
+      expect((await consent(id, 60)).status).toBe(200);
+      expect(await ruleMints(id)).toEqual(expected);
+      expect(await stayReleases(id)).toBe(1);
+    });
+
+    it("at 0 with the dial on, no rule token mints, voice and credits included, and the stay credits still release", async () => {
+      ctl.vars = { "quest.allow_zero_consent": "true" };
+      const id = await submittedOn("rules-zero", "50-100", { stayCreditReward: 2 });
+      expect((await consent(id, 0)).status).toBe(200);
+      expect(await claimRow(id)).toEqual({ status: "consented", amount: 0 });
+      expect(await posted(id)).toEqual([]);
+      expect(await ruleMints(id)).toEqual([]);
+      expect(await stayReleases(id)).toBe(1);
+    });
+
+    it("a work-exchange quest that advertises 0 releases its stay credits at 0, and mints nothing else", async () => {
+      const id = await submittedOn("rules-exchange", "0", { stayCreditReward: 3 });
+      expect((await consent(id, 0)).status).toBe(200);
+      expect(await ruleMints(id)).toEqual([]);
+      expect(await stayReleases(id)).toBe(1);
+    });
   });
 });

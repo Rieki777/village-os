@@ -460,27 +460,41 @@ export function register(app: Express, deps: Deps): void {
         after = await members.update(claimant.id, (u: any) => { u.recognitionBalance = credited; });
       }
       // Whatever else the village's rules say a confirmed contribution mints,
-      // which today is its voice token. Hearts are NOT re-minted here: the
-      // block above has posted them since S7 with the range, the cap and the
-      // standing multiplier, and a rule minting them again would pay twice for
-      // one piece of work.
+      // which today is its voice token and its credits. Hearts are NOT re-minted
+      // here: the block above has posted them since S7 with the range, the cap
+      // and the standing multiplier, and a rule minting them again would pay
+      // twice for one piece of work.
+      //
+      // NONE OF IT ON A CONSENT AT 0 (economics and governance, 2026-09-14). A
+      // zero is the witness saying the work earned no recognition, and these
+      // rules are recognition paid in tokens at a flat rate. Carving out voice
+      // alone was not enough: a village can weight its ballots by any token
+      // (`governance.weight_token`), so any rule token minted here would be
+      // weight farmed through `quest.allow_zero_consent`. The stay credits below
+      // still release, because they are the quest's own payment, typed onto it
+      // by a person. When `owedForClaim` lands in server/lib/economy.ts this
+      // test moves inside it, so the rule lives in one place.
       //
       // Deliberately not awaited into the response contract and never allowed
       // to throw: a quest that was witnessed and credited must not fail because
       // a secondary mint had a bad afternoon. The occurrence key makes a later
       // repair-post safe.
-      try {
-        const extra = await mintForConfirmedClaim(getPool(), {
-          id: consented.id,
-          questId: consented.questId,
-          userId: consented.userId,
-          confirmedAt: consented.resolvedAt,
-        });
-        if (extra.skipped) {
-          console.log(`[economy] claim ${consented.id}: no rule mint (${extra.skipped})`);
+      if (granted === 0) {
+        console.log(`[economy] claim ${consented.id}: no rule mint (consented at 0)`);
+      } else {
+        try {
+          const extra = await mintForConfirmedClaim(getPool(), {
+            id: consented.id,
+            questId: consented.questId,
+            userId: consented.userId,
+            confirmedAt: consented.resolvedAt,
+          });
+          if (extra.skipped) {
+            console.log(`[economy] claim ${consented.id}: no rule mint (${extra.skipped})`);
+          }
+        } catch (err) {
+          console.error(`[economy] rule mint failed for claim ${consented.id}:`, err);
         }
-      } catch (err) {
-        console.error(`[economy] rule mint failed for claim ${consented.id}:`, err);
       }
       // S31 work-exchange (F2 firewall): a quest may ALSO carry stay credits,
       // released by the same human consent — a separate column, a separate

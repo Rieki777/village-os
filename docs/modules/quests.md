@@ -373,8 +373,12 @@ mode, meaning acknowledged with no recognition. With the dial off, a quest that 
 (`0`, `0-50`) can still be consented at 0. That second door is new: under the default dials a quest
 paying in stay credits alone could not be consented at any amount, since 0 was refused as "at least
 1" and 1 as outside 0 to 0. Every amount above 0 still sits inside the range. A zero consent still
-releases any stay credits and still runs `mintForConfirmedClaim`, which reads no amount, so the
-`quest.completed` rules mint exactly as they do for any consent.
+releases any stay credits, and mints no `quest.completed` rule token: the route skips
+`mintForConfirmedClaim` at a grant of 0. Economics and governance agreed that on 2026-09-14. A zero
+is the witness saying the work earned no recognition, and any rule token, voice or credits, can be
+weight on a ballot through `governance.weight_token`. Stay credits still release because a person
+set that payment on the quest, so in a village that weights votes by stay credits a zero-consent
+work-exchange quest still moves weight.
 
 Both sides of every one of those comparisons are whole tokens. `gratitude` is seeded with
 `decimals` at the column default of 0 in `drizzle/0006_token_registry.sql`, and `registerToken` in
@@ -390,7 +394,7 @@ the cache write is skipped entirely; an earlier version assigned the failed post
 0 and wiped the member.
 
 **On top of the ledger post**, in order: `mintForConfirmedClaim` for any `quest.completed` rule on a
-token that is not recognition (it reads no amount, so a zero consent mints these rules too), and
+token that is not recognition (skipped entirely on a consent at 0), and
 `mintStayCredits` for `stay_credit_reward` under its own key `queststay:<claimId>`. The last two
 are best-effort. A rule mint that throws is logged and the response is unaffected; a stay-credit
 failure is logged and the recognition still stands. `drizzle/0021_stays_and_payments.sql` describes
@@ -469,7 +473,7 @@ generated tables; what follows is what each one **does** in the code.
 | `quest.consent_cap_mode` | `posted` | Selects one of the three comparison branches above, and so the cap a badge lift stops at. |
 | `quest.consent_cap_multiplier` | `2` | Read only under `capped`, as `Math.round(range.max * value)`: the ceiling for the grant and for a badge lift. Inert under the other two modes. |
 | `quest.require_submission_before_consent` | `true` | Blocks the approve branch when the claim is not `submitted`. Never blocks a decline. |
-| `quest.allow_zero_consent` | `false` | On, allows a consent of 0 on any quest in any mode. Off, 0 is allowed only on a quest that advertises 0. |
+| `quest.allow_zero_consent` | `false` | On, allows a consent of 0 on any quest in any mode. Off, 0 is allowed only on a quest that advertises 0. Either way, a consent at 0 mints no `quest.completed` rule token and still releases stay credits. |
 | `quest.self_consent_until_members` | `6` | The living-member count below which an admin may witness their own claim. `0` means never. |
 
 The registry entry in `shared/modules.ts` declares only the first three under `variableKeys`, and
