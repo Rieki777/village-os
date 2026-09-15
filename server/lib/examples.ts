@@ -34,6 +34,7 @@ import { HERO_SLOTS } from "../../shared/gratitudeVoices";
 import { realVoiceCount } from "./gratitudeVoices";
 import { stringVar } from "./variables";
 import { loadTokenRegistry } from "./ledger";
+import { documentedKey } from "./orgChart";
 import { badgeProblem } from "./badges";
 import { priceToStored, USD } from "./stays";
 import { CURRENCY_DECIMALS, WHOLE_UNITS } from "../../shared/tokenScale";
@@ -524,7 +525,7 @@ export async function seedExamples(
           n += await ins(p, "org_role_assignments", {
             id: `ex-seat-${r.id}-${String(h.name).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
             org_role_id: r.id, holder_kind: "documented", display_name: h.name,
-            holder_key: `doc:${String(h.name).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+            holder_key: documentedKey(String(h.name)),
             focus: h.focus ?? null, is_example: 1,
           });
         }

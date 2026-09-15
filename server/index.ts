@@ -64,12 +64,13 @@ import { register as registerPlayersRoutes } from "./routes/players";
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerOrgRoutes } from "./routes/org";
 import { register as registerSeasonRoutes } from "./routes/seasons";
+import { register as registerCircleRoutes } from "./routes/circles";
 import { register as registerReviewRoutes } from "./routes/review";
 import { register as registerHoldersRoutes } from "./routes/holders";
 import { register as registerErasureQueueRoutes } from "./routes/erasureQueue";
 import { register as registerCircleBurnRoutes } from "./routes/circleBurn";
 import { register as registerCircleBonusGateRoutes } from "./routes/circleBonusGate";
-import { budgetDeleteProblem, circleDeleteProblem, onCircleStatusChange, treasuryFacts, register as registerCircleTreasuryRoutes } from "./routes/circleTreasury";
+import { budgetDeleteProblem, treasuryFacts, register as registerCircleTreasuryRoutes } from "./routes/circleTreasury";
 import { register as registerGovernanceWeightRoutes } from "./routes/governanceWeights";
 import { register as registerGovernanceWizardRoutes } from "./routes/governanceWizard";
 import { register as registerDelegationRoutes } from "./routes/delegation";
@@ -495,7 +496,7 @@ import {
   type Candidate,
 } from "./lib/map";
 import { ensureInstanceIdentity, instanceIdentity, PLATFORM_VERSION } from "./lib/identity";
-import { listDrafts, measureVisionMetrics, visionProgress } from "./lib/orgDrafts";
+import { listDrafts, measureVisionMetrics, tierDraftWords, visionProgress } from "./lib/orgDrafts";
 import { DECIDES_BY, DOMAINS, HOW_CHOSEN, SHAPES } from "../shared/power";
 import { noteSeen, readSeen } from "./lib/sheetSeen"; import { displayCurrencyProblem } from "../shared/money";
 import { latestRates, refreshDailyRates } from "./lib/fxRates";
@@ -1261,6 +1262,13 @@ const rolesRepo = dbCollection<RoleDef>(getPool(), {
     // so an omitted flag comes back as DEFAULT 0 and retirement can never find
     // them again.
     { js: "isExample", db: "is_example", kind: "bool" },
+    // The twin of the `circles.created_at` bug, one table over. That one was
+    // found, fixed and commented, and this one sat here through the whole
+    // round: every admin ROLE edit was resetting EVERY role's birth date to
+    // the moment of that edit. A comment naming a trap does not find the next
+    // instance of it, so `check-repo-payloads.mjs` now reports any column the
+    // schema has and a spec omits, and that rule is what found this line.
+    { js: "createdAt", db: "created_at", kind: "time", defaultNow: true },
   ],
 });
 const roleHoldersRepo = dbCollection<RoleHolderRow>(getPool(), {
@@ -1402,6 +1410,19 @@ const circlesRepo = dbCollection(getPool(), {
     { js: "decidesBy", db: "decides_by" },
     { js: "decidesByGloss", db: "decides_by_gloss" },
     { js: "decidesByDomains", db: "decides_by_domains", kind: "json" },
+    /*
+     * 0060, and the THIRD column to need this note, which is the tell that a
+     * missing one is the default outcome rather than an oversight.
+     *
+     * Where this circle lives on the land, read by
+     * `GET /api/admin/map/structures` (server/routes/mapScene.ts). Left out
+     * of this spec it was reset to NULL for EVERY circle, village-wide, by
+     * one steward renaming one circle. Nothing writes it yet, which is why
+     * this was quiet rather than harmless: the org editor is about to be the
+     * thing that sets it, and the wipe would have arrived looking like a drag
+     * that did not save.
+     */
+    { js: "homeStructureKey", db: "home_structure_key" },
     /*
      * `replaceAll` is DELETE-all plus a re-INSERT of exactly the columns in
      * this spec, so a column left out is not preserved: it is re-defaulted.
@@ -1912,7 +1933,10 @@ async function applyOrgRolesBackfill(): Promise<void> {
   await circlesRepo.load();
   console.log(
     `[MIGRATION] org chart as rows: ${report.seatsWritten} seat(s), ${report.circlesWritten} circle(s), ` +
-      `${report.councilsToForming} council(s) moved to forming, ${report.holdersWritten} documented holder(s)`,
+      `${report.councilsToForming} council(s) moved to forming, ${report.holdersWritten} documented holder(s)` +
+      // Never silent: a looping parent in the seed would otherwise draw a
+      // flat map nobody could tell from a village that IS flat.
+      (report.circlesUnparented ? `, ${report.circlesUnparented} circle(s) unparented (parent loop in the seed)` : ""),
   );
 }
 
@@ -10114,11 +10138,11 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
           id: r.id,
           name: r.name,
           description: r.aim ?? "",
-          // A role is its AIM (above, as `description`) and its DOMAIN. These
-          // were read every request and dropped here, so the seat card showed
-          // what a seat was for and never what it decides on.
+          // A seat is its AIM (above, as `description`), what it DECIDES on,
+          // and WHY IT MATTERS. Each was read every request and dropped here.
           domain: r.domain ?? null,
           accountabilities: r.accountabilities ?? [],
+          whyItMatters: r.whyItMatters ?? null,
           circleId: r.circleId ?? null,
           seats: r.seats,
           minStage: null,
@@ -10212,119 +10236,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     });
   });
 
-  app.post("/api/admin/circles", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const { id, name } = req.body ?? {};
-    // A name in any non-Latin script slugifies to "" — so a village writing
-    // Russian, Japanese or Arabic could not create a circle AT ALL, and the
-    // admin form offers no slug field to work around it. Fall back to a
-    // generated id, and cap at the varchar(64) the PK actually is (names
-    // allow 120, so a long ASCII name overflowed it too).
-    const slug =
-      String(id ?? name ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64) ||
-      `circle-${Date.now().toString(36)}`;
-    if (!String(name ?? "").trim()) return res.status(400).json({ error: "A name is required" });
-    if (circlesRepo.all().some((c: any) => c.id === slug)) return res.status(409).json({ error: "That circle already exists" });
-    const circle = {
-      id: slug,
-      name: String(name).trim().slice(0, 120),
-      purpose: req.body.purpose ?? null,
-      aliases: Array.isArray(req.body.aliases) ? req.body.aliases : [],
-      parentCircleId: null,
-      leadRoleId: req.body.leadRoleId ?? null,
-      icon: req.body.icon ?? null,
-      color: req.body.color ?? null,
-      status: (CIRCLE_STATUSES as readonly string[]).includes(req.body.status) ? req.body.status : "active",
-      order: circlesRepo.all().length + 1,
-    };
-    await circlesRepo.insert(circle);
-    onRealItemPublished(getPool(), "map", adminActor(req)?.id ?? null);
-    res.json(circle);
-  });
-
-  app.put("/api/admin/circles/:id", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const all = circlesRepo.all();
-    const idx = all.findIndex((c: any) => c.id === req.params.id);
-    if (idx === -1) return res.status(404).json({ error: "Not found" });
-    // Pinning the flag stops laundering but not the edit itself: the row stays
-    // an example, so retirement deletes the founder's own words the moment
-    // they publish a real circle. Refuse, like every sibling module.
-    if (await isExampleRow(getPool(), "circles", req.params.id)) {
-      return res.status(409).json(EXAMPLE_REFUSAL_BODY);
-    }
-    /*
-     * Validate what the editor now sends, because `replaceAll` is a DELETE-all
-     * plus a re-INSERT of every circle inside one transaction: a `status` that
-     * misses the MySQL enum rolls back the WHOLE circles table, so one bad
-     * dropdown value would look like "nothing saved" across every row. The
-     * create route already whitelists status and caps the name at the
-     * varchar(120); the edit route accepted anything.
-     */
-    if (req.body?.name !== undefined) {
-      const name = String(req.body.name).trim();
-      if (!name) return res.status(400).json({ error: "blank_name", message: "A circle needs a name. It is the heading /circles, /roles and /team print." });
-      if (name.length > 120) return res.status(400).json({ error: "name_too_long", message: "A circle name is at most 120 characters." });
-      req.body.name = name;
-    }
-    if (req.body?.status !== undefined && !(CIRCLE_STATUSES as readonly string[]).includes(String(req.body.status))) {
-      return res.status(400).json({
-        error: "unknown_status",
-        message: `A circle is ${CIRCLE_STATUSES.join(", ")}. "${String(req.body.status)}" is none of those.`,
-      });
-    }
-    if (req.body?.purpose !== undefined) {
-      const purpose = String(req.body.purpose ?? "").trim();
-      if (purpose.length > 2000) return res.status(400).json({ error: "purpose_too_long", message: "A circle purpose is at most 2000 characters." });
-      req.body.purpose = purpose || null;
-    }
-    // isExample is pinned exactly like id: a request body may not forge the
-    // flag onto a real row, nor strip it off an example to launder it.
-    const wasStatus = String((all[idx] as any).status ?? "active"), merged = { ...all[idx], ...req.body, id: all[idx].id, isExample: all[idx].isExample }; // 0200: the status is read BEFORE the merge overwrites it
-    // An alias maps to exactly ONE circle: reject collisions with any other
-    // circle's name or aliases — a quest resolving two ways is a data bug.
-    const aliases: string[] = Array.isArray(merged.aliases) ? merged.aliases.map((a: any) => String(a)) : [];
-    for (const alias of aliases) {
-      const lower = alias.toLowerCase();
-      const clash = all.some(
-        (c: any, j: number) =>
-          j !== idx &&
-          (String(c.name).toLowerCase() === lower ||
-            (c.aliases ?? []).some((x: string) => String(x).toLowerCase() === lower)),
-      );
-      if (clash) return res.status(409).json({ error: `Alias "${alias}" already resolves to another circle` });
-    }
-    if (merged.parentCircleId === merged.id) return res.status(400).json({ error: "A circle cannot parent itself" });
-    all[idx] = { ...merged, aliases };
-    await circlesRepo.replaceAll(all);
-    res.json({ ...all[idx], ...(await onCircleStatusChange(getPool(), all[idx], wasStatus, adminActor(req)?.id ?? null, listBudgets)) });
-  });
-
-  app.delete("/api/admin/circles/:id", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    // Deleting examples one by one empties the map with no tombstone stamped,
-    // so modulesWithExamples still names the module and the banner keeps
-    // promising circles that are gone. The clear endpoint is the way out.
-    if (await isExampleRow(getPool(), "circles", req.params.id)) {
-      return res.status(409).json(EXAMPLE_REFUSAL_BODY);
-    }
-    // Both planes can point at a circle: permission groups carry a circleId
-    // from 0018, and org seats carry one from 0049. Deleting a circle out
-    // from under either one orphans a reference the database cannot catch,
-    // because nothing in drizzle/ has a foreign key.
-    const referencing = loadRoles().filter((r: any) => r.circleId === req.params.id);
-    const seatsHere = (await listOrgRoles(getPool())).filter((r) => r.circleId === req.params.id);
-    const stillHere = referencing.length + seatsHere.length;
-    if (stillHere) {
-      return res.status(409).json({ error: `${stillHere} seat(s) still orbit this circle, reassign them first` });
-    }
-    const stranded = await circleDeleteProblem(getPool(), String(req.params.id), await listBudgets(getPool()), circlesRepo);
-    if (stranded) return res.status(409).json({ error: stranded });
-    const remaining = circlesRepo.all().filter((c: any) => c.id !== req.params.id);
-    if (remaining.length === circlesRepo.all().length) return res.status(404).json({ error: "Not found" });
-    await circlesRepo.replaceAll(remaining);
-    res.json({ success: true });
-  });
+  // The circle admin routes, and the rules for where a circle may sit, live in
+  // server/routes/circles.ts.
+  registerCircleRoutes(app, { isAdmin, adminActor, circlesRepo, getPool, loadRoles });
 
   /** Assign a role to a circle and size its seats. */
   app.put("/api/admin/roles/:id", async (req, res) => {
@@ -26029,8 +25943,8 @@ ${inner}
   /**
    * The Vision layer (0083, P1, N2): open drafts as ghosts, each with its
    * vision block re-measured on read. Rides the same tier the org chart
-   * does: structure for anyone the map admits, PEOPLE only behind
-   * map.viewPeople, so a ghost says "a member" to everyone else.
+   * does: structure for anyone the map admits, PEOPLE and every word a
+   * member TYPED behind map.viewPeople. See `tierDraftWords`.
    *
    * Nothing here applies anything. The panel's prompt links to the existing
    * admin publish button, and `publishDraft`'s only caller stays that route.
@@ -26071,12 +25985,14 @@ ${inner}
     res.json({
       drafts: drafts.map((d) => {
         const progress = d.vision ? visionProgress(d.vision, measure) : null;
+        // Words a MEMBER typed, and this route answers the street.
+        const words = tierDraftWords(maySeePeople, d, progress?.objectives ?? []);
         return {
           id: d.id,
-          title: d.title,
-          rationale: d.rationale,
+          title: words.title,
+          rationale: words.rationale,
           vision: progress
-            ? { objectives: progress.objectives, trigger: d.vision!.trigger }
+            ? { objectives: words.objectives, trigger: d.vision!.trigger }
             : null,
           progress: progress
             ? { done: progress.done, total: progress.total, allDone: progress.allDone }

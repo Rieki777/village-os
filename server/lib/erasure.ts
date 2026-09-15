@@ -110,6 +110,7 @@ import { forgetMemberInProposals } from "./externalProposals";
 import { forgetMemberEverywhere, type ErasureOutcome } from "./memberDrivers";
 import { recordEvent } from "./events";
 import { releaseSeatingsForUser } from "./orgChart";
+import { forgetMemberInDrafts } from "./orgDrafts";
 import { forgetPortraitsForMember } from "../repos/characterPortraits";
 import { forgetCharactersForMember } from "../repos/playerCharacters";
 import { forgetAgentForMember } from "../repos/memberAgent";
@@ -309,6 +310,18 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "org-seatings",
       run: async () => {
         await releaseSeatingsForUser(pool, target.id, "member left the village");
+      },
+    },
+    {
+      // The seatings that have not happened YET. An open draft restates a
+      // person inside JSON rather than in a column, so every column-shaped
+      // trace could go while their name sat in a draft that /api/org/vision
+      // publishes. The shape of that JSON is decided in orgDrafts.ts, so the
+      // emptying is too. A sweep resumed after this step was added still runs
+      // it, because progress is kept by step NAME in `steps_done`.
+      name: "org-drafts",
+      run: async () => {
+        await forgetMemberInDrafts(pool, target.id, ANON);
       },
     },
     /*
