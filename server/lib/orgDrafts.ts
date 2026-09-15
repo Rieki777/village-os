@@ -39,8 +39,9 @@ import type { Pool, PoolConnection } from "mysql2/promise";
 import { draftChangesNamingPeople, draftStatus, rewriteDraftChangePeople, withdrawDraftRow } from "../repos/orgDrafts";
 import { stageIndex } from "../../shared/gameConfig";
 import { documentedKey, listOrgAssignments, listOrgRoles, peopleOnly, seatHolder, seatState, type LapseContext, type OrgAssignment } from "./orgChart";
+import { parentingRefusal } from "../../shared/circleView";
 
-export type DraftOp = "create_seat" | "update_seat" | "rest_seat" | "seat_holder" | "end_holding";
+export type DraftOp = "create_seat" | "update_seat" | "rest_seat" | "seat_holder" | "end_holding" | "move_circle";
 export type DraftStatus = "open" | "published" | "reverted" | "withdrawn";
 
 export interface DraftChange {
@@ -733,12 +734,20 @@ export async function previewDraft(
 export interface PreviewContext {
   roles: any[];
   circleIds: Set<string>;
+  /** Every circle and where it sits, for a move_circle line (0208). */
+  circles: Array<{ id: string; name: string; parentCircleId: string | null; isExample: boolean }>;
 }
 
 export async function loadPreviewContext(pool: Pool | PoolConnection): Promise<PreviewContext> {
   const [roles]: any = await pool.query("SELECT id, name, is_example, active FROM org_roles");
-  const [circles]: any = await pool.query("SELECT id FROM circles WHERE is_example = 0");
-  return { roles: roles as any[], circleIds: new Set((circles as any[]).map((c) => String(c.id))) };
+  const [circles]: any = await pool.query("SELECT id, name, parent_circle_id, is_example FROM circles");
+  const all = (circles as any[]).map((c) => ({
+    id: String(c.id),
+    name: String(c.name ?? c.id),
+    parentCircleId: c.parent_circle_id ? String(c.parent_circle_id) : null,
+    isExample: !!c.is_example,
+  }));
+  return { roles: roles as any[], circleIds: new Set(all.filter((c) => !c.isExample).map((c) => c.id)), circles: all };
 }
 
 /**
@@ -772,6 +781,8 @@ export function previewLoadedDraft(
   // a draft can create a seat and then put somebody in it.
   const willExist = new Set(draft.changes.filter((c) => c.op === "create_seat").map((c) => c.orgRoleId));
 
+  // The circles as this draft moves them, for the move_circle lines below.
+  const working = context.circles.map((x) => ({ ...x }));
   const lines: PreviewLine[] = [];
   let index = 0;
   for (const c of draft.changes) {
@@ -810,6 +821,31 @@ export function previewLoadedDraft(
 
     if (blocked) {
       lines.push({ changeId: c.id, op: c.op, orgRoleId: c.orgRoleId, reads: `${c.op} on ${name}`, blocked });
+      continue;
+    }
+
+    /*
+     * A CIRCLE MOVE (0208), checked against the village AS THIS DRAFT WILL HAVE
+     * LEFT IT so far, and not against the village as it stands. Two moves in
+     * one draft can close a loop that neither closes alone, and a loop drew an
+     * empty map. Each accepted move updates the working copy for those after it.
+     */
+    if (c.op === "move_circle") {
+      const circleId = c.orgRoleId.startsWith("circle:") ? c.orgRoleId.slice("circle:".length) : "";
+      const parentId =
+        typeof c.payload?.parentCircleId === "string" && c.payload.parentCircleId ? String(c.payload.parentCircleId) : null;
+      const moving = working.find((x) => x.id === circleId);
+      const parentName = parentId ? (working.find((x) => x.id === parentId)?.name ?? parentId) : null;
+      reads = !moving
+        ? `Move the circle "${circleId || c.orgRoleId}"`
+        : parentId
+          ? `Move "${moving.name}" inside "${parentName}"`
+          : `Move "${moving.name}" to the top of the village`;
+      if (!moving) blocked = "That circle does not exist";
+      else if (moving.isExample) blocked = "A standing example is not moved. Publish your own circles and it is removed";
+      else blocked = parentingRefusal(working, circleId, parentId)?.message ?? null;
+      if (!blocked && moving) moving.parentCircleId = parentId;
+      lines.push({ changeId: c.id, op: c.op, orgRoleId: c.orgRoleId, reads, blocked });
       continue;
     }
 
@@ -1064,6 +1100,10 @@ export async function publishDraft(
 }
 
 async function captureBefore(conn: PoolConnection, c: DraftChange): Promise<any> {
+  if (c.op === "move_circle") {
+    const [[row]] = await conn.query<any[]>("SELECT id, parent_circle_id FROM circles WHERE id = ?", [c.orgRoleId.slice("circle:".length)]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    return row ?? null;
+  }
   if (c.op === "create_seat") return null;
   if (c.op === "seat_holder") return null;
   if (c.op === "end_holding") {
@@ -1099,6 +1139,21 @@ export interface DraftSeating {
 
 async function applyChange(conn: PoolConnection, c: DraftChange): Promise<DraftSeating | null> {
   const p = c.payload ?? {};
+  if (c.op === "move_circle") {
+    /*
+     * RAW SQL INSIDE THE TRANSACTION, then a cache reload after commit.
+     * `circles` is served from `circlesRepo`, whose `all()` never re-reads the
+     * table, so this write stays invisible until the publish route calls
+     * `circlesRepo.load()`. The version bump in the SAME transaction stops a
+     * writer holding an older snapshot from putting the old parent back in that
+     * gap: store-db.ts rebases a stale snapshot instead of writing over it.
+     */
+    const circleId = c.orgRoleId.slice("circle:".length);
+    const parentId = typeof p.parentCircleId === "string" && p.parentCircleId ? p.parentCircleId : null;
+    await conn.query("UPDATE circles SET parent_circle_id = ? WHERE id = ? AND is_example = 0", [parentId, circleId]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    await conn.query("UPDATE collection_versions SET version = version + 1 WHERE collection = 'circles'"); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    return null;
+  }
   if (c.op === "create_seat") {
     // Every field a proposal may carry (PROPOSABLE_SEAT_FIELDS in
     // server/lib/proposedSeats.ts), not only the first six. This INSERT used to
@@ -1206,8 +1261,28 @@ export async function revertDraft(
   const conn: PoolConnection = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    // Where every circle sits NOW, and its name for a refusal. Undoing a move is
+    // itself a move, and the village may have changed since the publish: if the
+    // old parent now sits inside the moved circle, putting it back closes a loop.
+    const [circleRows]: any = await conn.query("SELECT id, name, parent_circle_id FROM circles"); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    const nowCircles = (circleRows as any[]).map((x) => ({
+      id: String(x.id),
+      name: String(x.name ?? x.id),
+      parentCircleId: x.parent_circle_id ? String(x.parent_circle_id) : null,
+    }));
     for (const c of [...draft.changes].reverse()) {
-      if (c.op === "create_seat") {
+      if (c.op === "move_circle") {
+        if (c.beforeJson) {
+          const circleId = c.orgRoleId.slice("circle:".length);
+          const back = c.beforeJson.parent_circle_id ? String(c.beforeJson.parent_circle_id) : null;
+          const refused = parentingRefusal(nowCircles, circleId, back);
+          if (refused) throw new Error(`This move cannot be undone as things stand. ${refused.message}`);
+          await conn.query("UPDATE circles SET parent_circle_id = ? WHERE id = ?", [back, circleId]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+          await conn.query("UPDATE collection_versions SET version = version + 1 WHERE collection = 'circles'"); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+          const moved = nowCircles.find((x) => x.id === circleId);
+          if (moved) moved.parentCircleId = back;
+        }
+      } else if (c.op === "create_seat") {
         await conn.query("UPDATE org_roles SET active = 0 WHERE id = ?", [c.orgRoleId]);
       } else if (c.op === "seat_holder") {
         await conn.query(

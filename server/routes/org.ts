@@ -97,6 +97,7 @@ type Deps = Pick<
   | "currentPatternId"
   | "seasonState"
   | "notify"
+  | "circlesRepo"
 >;
 
 export function register(app: Express, deps: Deps): void {
@@ -112,6 +113,7 @@ export function register(app: Express, deps: Deps): void {
     currentPatternId,
     seasonState,
     notify,
+    circlesRepo,
   } = deps;
 
   /*
@@ -176,9 +178,21 @@ export function register(app: Express, deps: Deps): void {
 
   app.post("/api/admin/org/drafts/:id/changes", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const ops = ["create_seat", "update_seat", "rest_seat", "seat_holder", "end_holding"];
+    const ops = ["create_seat", "update_seat", "rest_seat", "seat_holder", "end_holding", "move_circle"];
     const op = String(req.body?.op ?? "");
     if (!ops.includes(op)) return res.status(400).json({ error: `op must be one of: ${ops.join(", ")}` });
+    // A circle move names its CIRCLE in the seat column, as circle:<id>, so an
+    // older release reading the row finds no seat to apply it to (0208).
+    if (op === "move_circle") {
+      const target = String(req.body?.orgRoleId ?? "");
+      const parent = req.body?.payload?.parentCircleId;
+      if (!target.startsWith("circle:") || target.length <= "circle:".length) {
+        return res.status(400).json({ error: "A circle move names its circle as circle:<id>" });
+      }
+      if (parent !== null && parent !== undefined && typeof parent !== "string") {
+        return res.status(400).json({ error: "parentCircleId must be a circle id or null" });
+      }
+    }
     const r = await addChange(getPool(), req.params.id, {
       op: op as any,
       orgRoleId: String(req.body?.orgRoleId ?? ""),
@@ -230,6 +244,11 @@ export function register(app: Express, deps: Deps): void {
     const roster = ((await members.all()) as any[]).length;
     const r = await publishDraft(getPool(), req.params.id, actor?.id ?? null, draftChangeCap(roster));
     if (!r.ok) return res.status(409).json({ error: r.error });
+    // A draft can move circles (0208), written by raw SQL inside the transaction.
+    // `circlesRepo.all()` never re-reads the table, so the map would keep drawing
+    // the old shape until a restart. Reloading after EVERY publish is one small
+    // SELECT, and load() adopts rows written around it rather than refusing them.
+    await circlesRepo.load();
     /*
      * TELL THE PEOPLE THE DRAFT SEATED.
      *
@@ -264,7 +283,9 @@ export function register(app: Express, deps: Deps): void {
       void recordEvent(getPool(), {
         kind: "org", text: `reorganised: ${draft?.title ?? "a draft"}`,
         actorUserId: actor?.id ?? null,
-        entityType: "org_role", entityRef: seatId, audience: "admin",
+        entityType: seatId.startsWith("circle:") ? "circle" : "org_role",
+        entityRef: seatId.startsWith("circle:") ? seatId.slice("circle:".length) : seatId,
+        audience: "admin",
       });
     }
     res.json({ success: true, applied: r.applied });
@@ -274,6 +295,8 @@ export function register(app: Express, deps: Deps): void {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const r = await revertDraft(getPool(), req.params.id);
     if (!r.ok) return res.status(409).json({ error: r.error });
+    // The same reason as publish: a reverted circle move is raw SQL too.
+    await circlesRepo.load();
     res.json({ success: true, reverted: r.reverted });
   });
 

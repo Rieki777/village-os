@@ -10259,6 +10259,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       viewer: {
         viewPeople,
         canContact: false,
+        mayArrange: admin, // the drag publishes an org draft: admin until the decide gate lands
         // Where this viewer may declare (P10): "village" and/or circle ids.
         // The pencil shows where this says; the server re-checks on write.
         // 0103: a LOOK, and the admin door stays OPEN here. The pencil this
@@ -26578,7 +26579,7 @@ ${inner}
   // answer each other's requests if the order moved.
   registerOrgRoutes(app, {
     isAdmin, authedUser, guardCapability, getPool, members, firstName,
-    capabilityCtx, lapseContext, currentPatternId, seasonState, notify,
+    capabilityCtx, lapseContext, currentPatternId, seasonState, notify, circlesRepo,
   });
 
   // The steward review surface (0140-0141). Mounted here beside the org

@@ -256,6 +256,7 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   Recorded here by the bridge lane rather than by its author, because it was created on a worktree
   and pushed hours after the surrounding numbers were measured, which is exactly the case this
   section exists to catch.
+- **Org Map lane (`amora-d2`), 2026-09-14: holds 0208** for `drizzle/0208_a_draft_can_move_a_circle.sql` (widens `org_draft_changes.op` by one enum value, `move_circle`; expand only). Measured four ways immediately before creating the file: origin/main 0196; every remote ref 0207 (`wt/failed-actions`); every local branch 0207; untracked files in sibling worktrees, none. Governance reports #249 takes 0197-0199, #243 holds 0200-0206 and #247 holds 0207. Branch `wt/org-drag`, stacked on #252. Re-measured again before landing.
 - **governance build, 2026-09-02: RESERVES 0132 to 0139.** A reservation that lives only in one
   session's head is not a reservation, so it is written down here.
 - **bridge-primitives lane, 2026-09-02: claims 0140, 0141, 0142 and 0143** for the platform
