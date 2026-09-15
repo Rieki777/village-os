@@ -45,7 +45,7 @@ import { EXAMPLE_REFUSAL_BODY, isExampleRow } from "../lib/examples";
 import { issuanceRefusal } from "../lib/gameStart";
 import { memberAccount, PLATFORM_TOKEN, postTransferOn, RECOGNITION_FAUCET } from "../lib/ledger";
 import { effectiveLifecycle } from "../lib/modules";
-import { checkConsentAmount, payoutFor } from "../lib/questConsent";
+import { checkConsentAmount, consentBounds, payoutFor } from "../lib/questConsent";
 import { rewardMultiplierFor } from "../lib/seasonPatterns";
 import { mintStayCredits, STAY_CREDIT } from "../lib/stays";
 import { boolVar, numberVar, stringVar } from "../lib/variables";
@@ -143,9 +143,30 @@ export function register(app: Express, deps: Deps): void {
   app.get("/api/admin/quest-claims", async (req, res) => {
     const viewer = await consentQueueViewer(req);
     if (!viewer.ok) return res.status(viewer.status).json({ error: viewer.error });
-    const claims = await claimsRepo.all();
+    const [claims, quests] = await Promise.all([claimsRepo.all(), questsRepo.all()]);
     claims.sort((a, b) => new Date(b.claimedAt ?? 0).getTime() - new Date(a.claimedAt ?? 0).getTime());
-    res.json(claims);
+    /*
+     * WHAT EACH CLAIM'S QUEST LETS A STEWARD GRANT, beside the claim.
+     *
+     * The amount box opened at a hardcoded 50 and knew nothing about the quest,
+     * so under the shipped `posted` mode the first press on a quest paying 100
+     * to 200 was a guaranteed 409, and the number the steward needed was on
+     * another page. `consentBounds` reads the same definition the consent route
+     * below enforces, so the queue and the refusal are one reading of the dials.
+     * A claim whose quest was deleted carries no bounds: nothing is advertised.
+     */
+    const dials = {
+      capMode: stringVar("quest.consent_cap_mode"),
+      capMultiplier: numberVar("quest.consent_cap_multiplier"),
+      allowZero: boolVar("quest.allow_zero_consent"),
+    };
+    const questsById = new Map(quests.map((q) => [q.id, q]));
+    res.json(
+      claims.map((c) => {
+        const quest = questsById.get(c.questId);
+        return { ...c, bounds: quest ? consentBounds({ range: parseRewardRange(quest.gratitude), ...dials }) : null };
+      }),
+    );
   });
 
   /**
@@ -204,7 +225,7 @@ export function register(app: Express, deps: Deps): void {
           ? `${firstName(user.name)} is stuck on ${questTitle}`
           : `${firstName(user.name)} flagged a wobble on ${questTitle}`,
         `quest-confidence:${req.params.id}:${value}`,
-        "/admin?tab=quest-claims",
+        "/review",
       );
     }
     res.json({ success: true });

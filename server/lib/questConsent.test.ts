@@ -8,8 +8,9 @@
  * rows is driven end to end in `server/routes/questConsentPayout.test.ts`.
  */
 import { describe, expect, it } from "vitest";
+import { canGrant } from "../../shared/questConsentBounds";
 import { parseRewardRange } from "../../shared/questRewards";
-import { checkConsentAmount, consentCapMode, payoutFor, type ConsentAmountInput } from "./questConsent";
+import { checkConsentAmount, consentBounds, consentCapMode, payoutFor, type ConsentAmountInput } from "./questConsent";
 
 const input = (over: Partial<Omit<ConsentAmountInput, "range">> & { label?: string } = {}): ConsentAmountInput => {
   const { label = "50-100", ...rest } = over;
@@ -161,5 +162,62 @@ describe("a badge lifts a consent toward the cap, never past it (ruling 8)", () 
 
   it("a zero grant pays zero whatever the badge", () => {
     expect(payoutFor({ granted: 0, multiplier: 3, liftTop: 100 })).toBe(0);
+  });
+});
+
+describe("the queue's bounds, and the screen's check against them, are exactly what consent enforces (finding 10)", () => {
+  it("agrees with the refusal for every mode, label, zero dial and amount", () => {
+    const labels = ["50-100", "0", "0-50", "200", "tbd", ""];
+    const amounts = [0, 1, 49, 50, 75, 100, 101, 150, 199, 200, 201, 400, 401];
+    let compared = 0;
+    for (const capMode of ["posted", "capped", "unlimited", "typo"]) {
+      for (const label of labels) {
+        for (const allowZero of [false, true]) {
+          const base = { range: parseRewardRange(label), capMode, capMultiplier: 2, allowZero };
+          const b = consentBounds(base);
+          for (const requested of amounts) {
+            const enforced = checkConsentAmount({ ...base, requested }).ok;
+            // `canGrant` is the check a steward's screen runs before it lets them press.
+            expect(canGrant(requested, b), `${capMode} "${label}" zero=${allowZero} amount=${requested}`).toBe(enforced);
+            compared += 1;
+          }
+        }
+      }
+    }
+    // Printed denominator: a grid that silently shrank would still be green.
+    expect(compared).toBe(4 * 6 * 2 * 13);
+  });
+
+  it("the screen never offers a fraction or a negative, which the ledger could not post", () => {
+    const b = consentBounds({ range: parseRewardRange("50-100"), capMode: "posted", capMultiplier: 2, allowZero: true });
+    expect(canGrant(60, b)).toBe(true);
+    expect(canGrant(0, b)).toBe(true);
+    expect(canGrant(60.5, b)).toBe(false);
+    expect(canGrant(-1, b)).toBe(false);
+    expect(canGrant(Number.NaN, b)).toBe(false);
+  });
+
+  it("names the numbers a steward needs", () => {
+    const dials = { capMultiplier: 2, allowZero: false };
+    expect(consentBounds({ range: parseRewardRange("100-200"), capMode: "capped", ...dials })).toEqual({
+      label: "100-200",
+      readable: true,
+      floor: 100,
+      ceiling: 400,
+      zeroAllowed: false,
+      mode: "capped",
+    });
+    expect(consentBounds({ range: parseRewardRange("100-200"), capMode: "posted", ...dials })).toMatchObject({
+      floor: 100,
+      ceiling: 200,
+    });
+    expect(consentBounds({ range: parseRewardRange("100-200"), capMode: "unlimited", ...dials })).toMatchObject({
+      floor: null,
+      ceiling: null,
+    });
+    // An unreadable label under a cap refuses everything, zero included, and says no numbers.
+    expect(
+      consentBounds({ range: parseRewardRange("tbd"), capMode: "posted", capMultiplier: 2, allowZero: true }),
+    ).toMatchObject({ readable: false, floor: null, ceiling: null, zeroAllowed: false });
   });
 });

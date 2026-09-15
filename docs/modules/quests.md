@@ -181,10 +181,10 @@ that file alphabetically would make `field` a quest id that does not exist.
 | `POST /api/game/quests/:id/claim` | signed-in member | Enforces `min_stage` and `requires_role`, refuses an example, refuses a closed quest, refuses a second non-declined claim (under the quest's row lock, via `claimsRepo.openClaim`). |
 | `POST /api/game/quests/:id/submit` | signed-in member | Needs a link or a note. Accepts a second submit on an already-submitted claim, and refuses with 409 a claim a steward resolved first (`claimsRepo.submitOnce`, under the claim's row lock). Notifies everyone who may consent, and nobody on a refusal. |
 | `PUT /api/game/quest-claims/:id/confidence` | the claim's holder | Only while the claim is `claimed` or `submitted`. Only `at_risk` and `stuck` ring a bell. |
-| `GET /api/admin/quest-claims` | `mayStillSee("quest.consent")` | A read, so it asks the see-path and never `mayAct`. There is no break-glass on a GET. |
+| `GET /api/admin/quest-claims` | `mayStillSee("quest.consent")` | A read, so it asks the see-path and never `mayAct`. There is no break-glass on a GET. Each claim carries `bounds` from `consentBounds` (`server/lib/questConsent.ts`): the floor, the ceiling, whether 0 passes and whether the label is readable, as the consent route will enforce them under the dials in force, or `null` when the claim's quest is gone. |
 | `POST /api/admin/quest-claims/:id/consent` | `mayAct("quest.consent")` | The whole of Mechanics below. |
 | `GET /api/admin/quest-claims/attention` | `isAdmin` | The flagged-claims queue. Note the gate: this one is `isAdmin` and not the capability, unlike the two rows above it. |
-| `GET /api/review/queue` | `guardCapability("intake.moderate")` | Served from `server/routes/review.ts`. Returns the full prose, rationale, quote and source ref of every `proposed` quest, through `questProposalQueue(pool, "proposed")`. A different key from the `quest.approve` on the accept and reject routes below. |
+| `GET /api/review/queue` | `mayStillSee("intake.moderate")` or `mayStillSee("quest.approve")` | Served from `server/routes/review.ts`. Returns the full prose, rationale, quote and source ref of every `proposed` quest, through `questProposalQueue(pool, "proposed")`. `intake.moderate` reads both halves of the queue. `quest.approve` alone reads this quest half, and the proposal half and the dropped-batch summary are never queried for it. `scope` in the response names the halves that were read, so a page can tell an empty half from a hidden one. Neither key: `401 {"error":"auth_required"}`, as before. |
 
 ### Writes to this module's tables from outside
 
@@ -228,10 +228,14 @@ And two more, on tables this module owns:
 - `client/src/pages/ProposeQuest.tsx` is the suggestion form. It is not an authoring surface: a
   quest is created by an admin, or by a holder of `quest.approve` accepting a proposal. Its
   submission lands in `submissions`, not in `quest_proposals`.
-- `client/src/pages/Admin.tsx` holds both admin surfaces, `QuestsTab` (the CRUD) and
-  `QuestClaimsTab` (the consent queue).
-- `client/src/pages/Review.tsx` is the steward surface for `quest.approve`. It does not carry the
-  consent queue.
+- `client/src/pages/Admin.tsx` holds `QuestsTab` (the CRUD) and `QuestClaimsTab`, which since
+  2026-09-14 is only a door to `/review`.
+- `client/src/pages/Review.tsx` is the steward surface, one section per key. `intake.moderate` or
+  `quest.approve` reads the proposed quests, and the queue's `scope` names the halves it answered.
+  `quest.consent` reads the consent queue, rendered by `client/src/components/review/ConsentQueue.tsx`:
+  each amount box opens on the quest's floor from the claim's `bounds`, and the button asks
+  `canGrant` (`shared/questConsentBounds.ts`) before anybody presses. Both bells, the submit sweep's
+  and the confidence flag's, link to `/review`.
 
 **What `QuestsTab` cannot set.** The edit form renders title, description, reward, circle, status,
 difficulty, duration, subtitle, first step, why it matters, what changes, steps, tips, deliverable
@@ -507,10 +511,11 @@ A refusal has three shapes, and they differ on purpose:
 
 `quest.approve`, "Put a proposed quest on the board and set what it pays", is a real key enforced
 by `guardCapability` on the two `/api/review/quests/:id/*` routes, and **no module declares it**.
-The read and the write on a proposed quest are different keys: `GET /api/review/queue`, the only
-route that lists them, asks `intake.moderate`. A holder of `intake.moderate` alone can read every
-proposed quest and put none on the board; a holder of `quest.approve` alone can accept a proposal
-they are not allowed to see.
+It also opens the read: `GET /api/review/queue`, the only route that lists proposed quests, answers
+`quest.approve` with the quest half of the queue. Until 2026-09-14 that route asked
+`intake.moderate` alone, so a holder of `quest.approve` alone could accept a proposal they were not
+allowed to see. A holder of `intake.moderate` alone still reads every proposed quest and puts none
+on the board, which is exactly what that key grants: reading a proposal creates no obligation.
 `docs/CAPABILITIES.md` lists it among eleven such keys and states the rule: a key reaches the gate
 from any route that asks for it, and the admin surfaces these cover sit outside every module. So
 the absence is not a hole in the gate. It does mean that auditing "what powers does the quests
@@ -591,27 +596,6 @@ times its top under `capped`; the range as a suggestion under `unlimited`. Until
 setting it knows, it promises nothing mode-specific.
 `server/routes/questConsentPayout.test.ts` drives each of these through the real handler into the
 real ledger.
-
-**The consent queue's amount box does not know what the quest advertises.** `QuestClaimsTab` in
-`client/src/pages/Admin.tsx` renders `value={amounts[c.id] ?? 50}` and posts `amount: amounts[id] ?? 50`.
-The claim row it draws carries the member's name, the quest title, the note and the artifact link,
-and nothing at all from `quest.gratitude`. Under the shipped `posted` mode, pressing "Consent +
-credit" on an untouched box consents at 50, which is refused for every quest whose advertised range
-does not contain 50. The refusal is at least legible: the panel surfaces the server's own sentence
-rather than "Action failed", and that sentence names the range. But a steward on a village whose
-quests pay 100 to 200 meets a 409 on every first click, and the number they have to type is on a
-different page.
-
-**A steward who holds `quest.consent` has no browser.** The server has accepted a non-admin holder
-on the consent routes since the 0103 capability round. (That number is a release label, not a
-migration: there is no `drizzle/0103_*.sql`, the numbering runs 0102 then 0104, and every other
-bare four-digit number in this document is a file you can open.) The only client surface is `QuestClaimsTab` inside
-`client/src/pages/Admin.tsx`, and `AdminGate` in that same file refuses any signed-in account whose
-role is not `admin` or `founder` with a "Not an admin" screen before any tab renders. The submit
-sweep notifies every capability holder with `link: "/admin?tab=quest-claims"`, so a steward is rung
-to a page that will refuse them. `client/src/pages/Review.tsx` states this dead end in its own
-header and then solves it for `quest.approve` rather than for `quest.consent`. The capability is
-exercisable today only with curl.
 
 **The only way to put a claim back needs three things, and a village is unlikely to have any of
 them.** `claimsRepo.remove` has exactly one caller, the `POST /api/map/promise` handler.

@@ -715,6 +715,10 @@ export function register(app: Express, deps: Deps): void {
      * already read in the queue, and nothing the member wrote. The note and
      * the artifact link are the member's own account of their work and belong
      * behind the gate, not on a lock screen.
+     *
+     * WHERE IT POINTS: /review, which opens for anybody holding `quest.consent`.
+     * It pointed at the admin panel's claims tab, which opens only for an admin,
+     * so a steward who was not one was rung for work they could not reach.
      */
     const questTitle = String(active.questTitle ?? "a quest");
     for (const recipientId of await questConsentRecipients()) {
@@ -724,7 +728,7 @@ export function register(app: Express, deps: Deps): void {
         type: "quest_submitted",
         title: `${firstName(user.name)} submitted work on ${questTitle}`,
         body: "Read what they did and consent when you are ready. Value moves when a steward says so.",
-        link: "/admin?tab=quest-claims",
+        link: "/review",
         dedupeKey: `quest-submission:${active.id}:${recipientId}`,
       });
     }
