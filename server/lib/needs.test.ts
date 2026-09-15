@@ -930,6 +930,52 @@ describe.skipIf(!configured)("the member's own needs card", () => {
       expect(play?.label).toBe("Play");
     });
 
+    it("gives a need the village never took on NO ROW while its answers are under the floor", async () => {
+      // The review's case. One member names a need of their own and another
+      // answers on a platform need nobody adopted. Each used to come back as a
+      // suppressed ROW, and the custom one carried the member's own words as
+      // its label to every signed-in member, with only the numbers nulled.
+      await upsertScopeNeed(pool, { needKey: "love" });
+      const custom = await saveMemberNeed(pool, ANA, { needKey: "custom:leaving-my-husband", depth: "deprived" });
+      const platform = await saveMemberNeed(pool, BEN, { needKey: "play", depth: "deprived" });
+      expect(custom.ok && platform.ok, "both answers have to land, or the absence below proves nothing").toBe(true);
+      await saveMemberNeed(pool, CAI, { needKey: "love", depth: "unmet" });
+
+      const report = await needsAggregate(pool);
+      expect(report.needs.map((n) => n.needKey)).toEqual(["love"]);
+      const wire = JSON.stringify(report);
+      expect(wire).not.toContain("leaving");
+      expect(wire).not.toContain("custom:");
+      expect(wire).not.toContain("play");
+
+      // A need the village DID take on keeps its row under the floor, with the
+      // counts withheld, because its label is the village's and names nobody.
+      expect(report.needs[0].inScope).toBe(true);
+      expect(report.needs[0].suppressed).toBe(true);
+      expect(report.needs[0].answers).toBeNull();
+    });
+
+    it("names an out-of-scope need, custom or platform, at the floor and not one answer before", async () => {
+      for (const who of [ANA, BEN]) {
+        await saveMemberNeed(pool, who, { needKey: "custom:caring-for-a-parent", depth: "unmet" });
+        await saveMemberNeed(pool, who, { needKey: "play", depth: "unmet" });
+      }
+      const two = await needsAggregate(pool);
+      expect(two.needs).toEqual([]);
+
+      await saveMemberNeed(pool, CAI, { needKey: "custom:caring-for-a-parent", depth: "thriving" });
+      await saveMemberNeed(pool, CAI, { needKey: "play", depth: "thriving" });
+      const three = await needsAggregate(pool);
+      const custom = three.needs.find((n) => n.needKey === "custom:caring-for-a-parent");
+      expect(custom?.inScope).toBe(false);
+      expect(custom?.suppressed).toBe(false);
+      expect(custom?.label).toBe("caring for a parent");
+      expect(custom?.answers).toBe(3);
+      const play = three.needs.find((n) => n.needKey === "play");
+      expect(play?.suppressed).toBe(false);
+      expect(play?.answers).toBe(3);
+    });
+
     it("reads the target the village set, so Thriving and Satisfied count differently", async () => {
       await upsertScopeNeed(pool, { needKey: "love", depthTarget: "thriving" });
       await saveMemberNeed(pool, ANA, { needKey: "love", depth: "satisfied" });

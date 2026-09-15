@@ -612,6 +612,46 @@ describe.skipIf(!configured)("the member's card round trips through the routes",
     expect(play.below).toBeNull();
   });
 
+  /**
+   * ONE MEMBER'S OWN WORDS NEVER REACH ANOTHER MEMBER'S PAYLOAD.
+   *
+   * A custom key is the member's phrase, and the aggregate labels a row with
+   * it. So a need nobody adopted may not have a row at all until enough people
+   * answered on it, and this reads that off the wire a second member receives.
+   */
+  it("sends no row for a need nobody adopted until its answers reach the floor", async () => {
+    await call(handlers, "PUT /api/admin/needs/scope", { body: { needs: [{ needKey: "play" }] } });
+    whoami = SOMEBODY_ELSE;
+    const own = await call(handlers, "PUT /api/needs/mine", {
+      body: { needKey: "custom:leaving-my-husband", depth: "deprived" },
+    });
+    expect(own.status, "the answer has to land, or the absence below proves nothing").toBe(200);
+    await call(handlers, "PUT /api/needs/mine", { body: { needKey: "love", depth: "unmet" } });
+
+    whoami = "member-ben";
+    const one = await call(handlers, "GET /api/needs/aggregate");
+    expect(one.status).toBe(200);
+    expect(one.body.needs.map((n: any) => n.needKey)).toEqual(["play"]);
+    expect(one.body.needs[0].suppressed).toBe(true);
+    const wire = JSON.stringify(one.body);
+    expect(wire).not.toContain("leaving");
+    expect(wire).not.toContain("love");
+
+    for (const who of ["member-ben", "member-cai"]) {
+      whoami = who;
+      await call(handlers, "PUT /api/needs/mine", { body: { needKey: "custom:leaving-my-husband", depth: "unmet" } });
+      await call(handlers, "PUT /api/needs/mine", { body: { needKey: "love", depth: "thriving" } });
+    }
+    whoami = "member-dee";
+    const three = await call(handlers, "GET /api/needs/aggregate");
+    const custom = three.body.needs.find((n: any) => n.needKey === "custom:leaving-my-husband");
+    expect(custom?.inScope).toBe(false);
+    expect(custom?.suppressed).toBe(false);
+    expect(custom?.answers).toBe(3);
+    expect(three.body.needs.find((n: any) => n.needKey === "love")?.answers).toBe(3);
+    expect(three.body.needs.find((n: any) => n.needKey === "play")?.suppressed).toBe(true);
+  });
+
   it("names what meets a need, and says plainly when nothing does", async () => {
     await call(handlers, "PUT /api/admin/needs/scope", {
       body: { needs: [{ needKey: "vitality" }, { needKey: "play" }] },

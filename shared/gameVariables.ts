@@ -2571,19 +2571,24 @@ export const VARIABLES: VariableDef[] = [
   // are ten to thirty of those and this surface is a flat searchable list.
   // Ring derives to `open` for the reason the Exit block gives above.
   //
-  // TWO OF THE FIVE DEFAULTS ARE LIFTED FROM THE STORE, not from the design.
-  // `upsertScopeNeed` (server/lib/needs.ts) hardcodes `depthTarget ??
+  // TWO OF THE FIVE DEFAULTS WERE LIFTED FROM THE STORE, not from the design.
+  // `upsertScopeNeed` (server/lib/needs.ts) used to hardcode `depthTarget ??
   // "satisfied"` and `breadthTargetPct === undefined ? 100`, so those two
-  // literals are what a village adopting a need gets today and those two
-  // literals are the defaults here. Breadth is an INTEGER and not a
+  // literals became the defaults here, and a village that never votes still
+  // adopts needs at them. Breadth is an INTEGER and not a
   // `percentage`, because `scopeProblem` refuses a fractional percent by name
   // and a dial accepting 50.5 would hand the store a number it will not take.
   //
-  // NOTHING READS THESE FIVE YET. Measured at this ref by grepping every key
-  // across the tree: no file names any of them. The scope editor writes the
-  // two literals above, the member card reads the floor when that lane lands,
-  // and the launch checklist reads the last one when it lands. Every
-  // description below says what is true today.
+  // THREE OF THE FIVE ARE READ, all by server/lib/needs.ts at the point of
+  // use: `needs.aggregate_floor` through `aggregateFloor` (the aggregate's
+  // suppression and the floor the member card prints), and
+  // `needs.default_depth_target` and `needs.default_breadth_pct` through
+  // `defaultDepthTarget` and `defaultBreadthPct` (the rung and share a need
+  // is adopted at when the scope editor names none). The other two,
+  // `needs.totality_target_pct` and `needs.launch_requirement`, are named by
+  // no server, client or shared file outside this registry and its tests,
+  // measured by grepping both keys at this ref. Every description below says
+  // what is true today.
   {
     key: "needs.totality_target_pct",
     category: "Needs",
@@ -2623,7 +2628,7 @@ export const VARIABLES: VariableDef[] = [
     category: "Needs",
     label: "Smallest count of members that may be shown",
     description:
-      "The smallest number of members whose answers may appear as a count anywhere in the village. Under it the village sees nothing at all, because in a small place a count of one is a name and a count of two is a name and a guess. 3 is the floor the aggregate keeps and the number the member's own needs card prints into the sentence that says when a count appears. Raise it in a village where people know each other well enough for four to be identifiable.",
+      "The smallest number of answers on one need that may appear as a count anywhere in the village. Below it the counts are withheld, and a need the village never adopted is left off the list entirely, so one member's answer cannot put a need only they named in front of everybody. 3 is where the platform starts, and the member's own needs card prints this number into the sentence that says when a count appears. What the floor does is keep a small count out of casual reading. It cannot stop inference: anyone who already knows how the other members answered on a need can subtract those answers from the total and learn the rest, so at a floor of 3, knowing two answers is enough to learn the third. Raise it where members know enough of each other's answers for that to matter.",
     type: "integer",
     default: "3",
     min: 1,

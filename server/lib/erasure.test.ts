@@ -46,7 +46,8 @@ import { agentRowsRemaining } from "../repos/memberAgent";
 import { anonymizeMember, resumeErasure, type ErasureDeps } from "./erasure";
 import { clearMemberDrivers } from "./memberDrivers";
 import { usersRepo } from "../repos/users";
-import { erasureRecord, unfinishedErasures } from "../repos/memberErasure";
+import { erasureRecord, noteStepDone, unfinishedErasures } from "../repos/memberErasure";
+import { saveMemberNeed } from "./needs";
 import * as portraits from "../repos/characterPortraits";
 import { charactersForMember } from "../repos/playerCharacters";
 
@@ -66,13 +67,16 @@ let submissions: any[] = [];
  * `usersRepo` is the real one, because the tombstone is a write this suite
  * asserts on and a fake would let the assertion pass over nothing.
  */
-function deps(broken?: "role-holdings" | "tombstone"): ErasureDeps {
+function deps(broken?: "role-holdings" | "tombstone", beforeTombstone?: () => Promise<void>): ErasureDeps {
   const real = usersRepo(pool);
   return {
     members: {
       byId: (id: string) => real.byId(id),
       update: async (id: string, fn: (u: any) => void) => {
         if (broken === "tombstone") throw new Error("the member row would not take the tombstone");
+        // The last instant the member's sessions still live. A write here is
+        // one a signed-in request could make.
+        await beforeTombstone?.();
         return real.update(id, fn);
       },
     },
@@ -318,8 +322,81 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
 
     const out = await resumeErasure(pool, id, deps());
     expect(out.finished).toBe(true);
-    expect(out.ran).toEqual(["tombstone", "audit", "external-stores"]);
+    // The needs deletion sits after the tombstone, so a break AT the tombstone
+    // leaves it undone and the resume runs it.
+    expect(out.ran).toEqual(["tombstone", "needs-after-tombstone", "audit", "external-stores"]);
     expect((await usersRepo(pool).byId(id))!.name).toBe("A departed member");
+  });
+
+  /*
+   * A NEEDS ANSWER SAVED WHILE THE SWEEP RUNS.
+   *
+   * The member's sessions die at the tombstone, so until then
+   * `PUT /api/needs/mine` still takes their answers. When the needs deletion
+   * ran BEFORE the tombstone, a sweep that stopped at the tombstone had already
+   * marked it done, the member answered again, and the resume skipped the
+   * deletion and left the answer standing for good. `member_needs` tells its
+   * member "Only you can read this", and the village would have kept it.
+   */
+  describe("a needs answer written before the member's sessions die", () => {
+    const needsRowsFor = async (id: string) =>
+      Number((await q("SELECT COUNT(*) AS n FROM `member_needs` WHERE `user_id` = ?", [id]))[0].n);
+
+    it("is gone after a resume, when it landed after the sweep began and before the tombstone", async () => {
+      const id = "er-needs-window-1";
+      const target = await seedMember(id);
+      await expect(anonymizeMember(pool, target, null, deps("tombstone"))).rejects.toThrow(
+        /would not take the tombstone/,
+      );
+
+      // Still signed in, so this is a write the real route would take.
+      const saved = await saveMemberNeed(pool, id, {
+        needKey: "love",
+        depth: "deprived",
+        note: "written after the sweep began",
+      });
+      expect(saved.ok, "the fixture must put a row there, or the zero below proves nothing").toBe(true);
+      expect(await needsRowsFor(id)).toBe(1);
+
+      await resumeErasure(pool, id, deps());
+
+      expect(await needsRowsFor(id)).toBe(0);
+    });
+
+    it("is gone after one uninterrupted sweep, when it landed at the last instant a session lived", async () => {
+      const id = "er-needs-window-2";
+      const target = await seedMember(id);
+      let wrote = false;
+
+      await anonymizeMember(
+        pool,
+        target,
+        null,
+        deps(undefined, async () => {
+          const saved = await saveMemberNeed(pool, id, { needKey: "play", depth: "unmet" });
+          wrote = saved.ok;
+        }),
+      );
+
+      expect(wrote, "the fixture must put a row there, or the zero below proves nothing").toBe(true);
+      expect(await needsRowsFor(id)).toBe(0);
+    });
+
+    it("re-runs the deletion on a record written while the step was still called needs", async () => {
+      const id = "er-needs-old-record-1";
+      const target = await seedMember(id);
+      await expect(anonymizeMember(pool, target, null, deps("tombstone"))).rejects.toThrow();
+      // What a record from the old order holds: the step under its old name,
+      // marked done while the member could still write.
+      await noteStepDone(pool, id, "needs");
+      await saveMemberNeed(pool, id, { needKey: "growth", depth: "alive" });
+      expect(await needsRowsFor(id)).toBe(1);
+
+      const out = await resumeErasure(pool, id, deps());
+
+      expect(out.ran).toContain("needs-after-tombstone");
+      expect(await needsRowsFor(id)).toBe(0);
+    });
   });
 
   it("says so rather than pretending, when there is no member left to resume", async () => {
