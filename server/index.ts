@@ -19012,7 +19012,7 @@ ${inner}
   registerBrandPreviewRoutes(app, { isAdmin, getPool, brandRepo });
   registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
   registerDryRunRoutes(app, { authedUser, isAdmin, overLimit, getPool });
-  registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify });
+  registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit });
 
   // â”€â”€ Project Settings (village dues + other editable numbers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
