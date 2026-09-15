@@ -37,6 +37,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { prefersReducedMotion } from "@/components/natural/useReducedMotion";
 import { haptic, setHapticsEnabled, type HapticIntensity } from "./haptics";
+import { storedText, writeStored } from "./safeStorage";
 
 /** The five moments the product makes a sound for. */
 export const SOUND_MOMENTS = [
@@ -210,19 +211,12 @@ function storageKey(): string {
 }
 
 function read(key: string): string | null {
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
+  return storedText("local", key);
 }
 
 function write(key: string, value: string): void {
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    /* private browsing: the preference simply never sticks */
-  }
+  /* private browsing: the preference simply never sticks */
+  writeStored("local", key, value);
 }
 
 /** Scope the mute to a member. Call at sign-in and again at sign-out with "". */

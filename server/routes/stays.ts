@@ -46,6 +46,7 @@
 import type { Express } from "express";
 import { hasCapability } from "../../shared/capabilities";
 import type { AppDeps } from "../lib/appDeps";
+import { fromLedgerUnits, toLedgerUnits } from "../lib/economy";
 import { EXAMPLE_REFUSAL_BODY, isExampleRow, onRealItemPublished } from "../lib/examples";
 import {
   MINT_FAUCET,
@@ -73,6 +74,8 @@ import {
   mintStayCredits,
   nightsRemaining,
   priceFor,
+  priceScaleRefusal,
+  priceToStored,
   runNightlyPosting,
   stayById,
   staysForUser,
@@ -154,6 +157,11 @@ export function register(app: Express, deps: Deps): void {
         ),
         stays: stays.map((s) => ({
           ...s,
+          // `rateSnapshotCredits` rides along in the spread and is MINOR, so it
+          // travels with its own scale for the same reason `balance` does.
+          rateSnapshotDecimals: tokenDef(s.rateSnapshotToken || STAY_CREDIT)?.decimals ?? 0,
+          // Both arguments are minor units of the snapshot token, so the count
+          // is right at any decimals.
           nightsRemaining:
             s.status === "active"
               ? nightsRemaining(held[s.rateSnapshotToken] ?? 0, s.rateSnapshotCredits)
@@ -176,9 +184,12 @@ export function register(app: Express, deps: Deps): void {
      *
      * `accommodation_prices.amount_minor` is the ledger's MINOR units, so a
      * room at three Village Credits stores 300 once credits is at its ruled
-     * two decimals (docs/ECONOMICS.md section 11). The page
-     * printed that raw fifty-eight lines under a balance line that divides,
-     * which is one page answering the same question two ways.
+     * two decimals (docs/ECONOMICS.md section 11). `accommodations` above does
+     * NOT carry that column: `listAccommodations` sends `priceFromStored`, so
+     * every rate here is HUMAN (3), and so is each `earnQuests` reward. The
+     * scale below is for printing those at the token's precision and for the
+     * MINOR fields in `mine`. It is never a divisor for a rate: Stay.tsx once
+     * divided a human rate by it and printed a ten-credit night as 0.1.
      *
      * Derived from the ROOMS' own price keys rather than from `mine.balances`,
      * which is where the token's name used to come from and could never have
@@ -213,8 +224,18 @@ export function register(app: Express, deps: Deps): void {
     if (audience === "guest" && !boolVar("stay.guest_booking_enabled")) {
       return res.status(403).json({ error: "Stay requests are open to members right now. Write to the village instead" });
     }
-    if (await overLimit(`stay-request:${user.id}`, Math.max(1, numberVar("stay.request_daily_cap")), 24 * 60 * 60 * 1000)) {
-      return res.status(429).json({ error: "Five stay requests in a day is plenty. The stewards will reply" });
+    /*
+     * THE REFUSAL STATES THE LIMIT IT ENFORCED, which is the shape
+     * server/lib/economy.ts already uses for the give cap: "{cap} is the most
+     * you can give one person this moon". This sentence used to say "Five"
+     * while `stay.request_daily_cap` is an open-ring dial any member may put
+     * on a ballot, so a village that voted the cap to 2 refused at 2 and told
+     * the member five. One read, used for both.
+     */
+    const requestCap = Math.max(1, numberVar("stay.request_daily_cap"));
+    if (await overLimit(`stay-request:${user.id}`, requestCap, 24 * 60 * 60 * 1000)) {
+      const requests = requestCap === 1 ? "stay request" : "stay requests";
+      return res.status(429).json({ error: `${requestCap} ${requests} in a day is plenty. The stewards will reply` });
     }
     const { accommodationId, arriveOn, notes } = req.body ?? {};
     const acc = (await listAccommodations(getPool())).find((a) => a.id === String(accommodationId ?? ""));
@@ -254,6 +275,10 @@ export function register(app: Express, deps: Deps): void {
     if (!creditRate || creditRate <= 0) return res.status(409).json({ error: "That room has no posted credit rate yet" });
     if (!usdRate || usdRate <= 0) return res.status(409).json({ error: "That room has no posted USD price. Use the manual payment path" });
     const amountMinor = ceilMinor(n * usdRate);
+    // MINOR, because `priceFor` is minor. `stay_purchases.credits_granted` is
+    // therefore minor too, and that is the contract the settle mint, the
+    // chargeback clawback and the refund debit all read it under. See the
+    // refund route below.
     const creditsGranted = floorTokens(n * creditRate);
     // Limits and suspensions rule BEFORE the provider question: "you are over
     // your 30-day limit" is the truthful refusal even where Stripe isn't set up.
@@ -301,6 +326,9 @@ export function register(app: Express, deps: Deps): void {
         ...s,
         userName: u?.name ?? "(anonymized)",
         balance,
+        // ONE scale for this row: `balance` and `rateSnapshotCredits` are both
+        // minor units of the snapshot token, so the desk formats both with it.
+        rateSnapshotDecimals: tokenDef(s.rateSnapshotToken || STAY_CREDIT)?.decimals ?? 0,
         rateTokenName: tokenDef(s.rateSnapshotToken)?.name ?? s.rateSnapshotToken,
         nightsRemaining: s.status === "active" ? nightsRemaining(balance, s.rateSnapshotCredits) : null,
       });
@@ -394,13 +422,22 @@ export function register(app: Express, deps: Deps): void {
       }
       if (!["guest", "member"].includes(String(p?.audience))) return res.status(400).json({ error: "Audience is guest or member" });
       if (!(Number(p?.amountMinor) > 0)) return res.status(400).json({ error: "Amounts must be positive" });
+      // Every price is checked before any is written, so a refusal here posts nothing.
+      const scaleRefusal = priceScaleRefusal(String(p.tokenType), Number(p.amountMinor));
+      if (scaleRefusal) return res.status(400).json({ error: scaleRefusal });
     }
     await getPool().query("UPDATE accommodation_prices SET active = 0 WHERE accommodation_id = ?", [req.params.id]);
     for (const p of prices) {
       await getPool().query(
         "INSERT INTO accommodation_prices (id, accommodation_id, token_type, audience, amount_minor, active) VALUES (?,?,?,?,?,1) " +
           "ON DUPLICATE KEY UPDATE amount_minor = VALUES(amount_minor), active = 1",
-        [`ap-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, req.params.id, String(p.tokenType), String(p.audience), Math.floor(Number(p.amountMinor))],
+        // THE ONE WRITE. A token price arrives here as the human number an
+        // admin typed, fractions included and already held to the token's
+        // scale above, and is stored in that token's minor units, so `priceFor`,
+        // the activation snapshot, the nightly burn, the grace floor and
+        // `nightsRemaining` all speak the ledger's unit from here on. usd
+        // arrives as cents already and is left alone. See `priceToStored`.
+        [`ap-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, req.params.id, String(p.tokenType), String(p.audience), priceToStored(String(p.tokenType), Number(p.amountMinor))],
       );
     }
     res.json({ success: true });
@@ -451,11 +488,21 @@ export function register(app: Express, deps: Deps): void {
     await notify({
       userId: stay.userId,
       type: "stays",
-      title: `Your stay is active, ${rate} ${tokenDef(wantedToken)?.name ?? wantedToken} per night`,
+      // The stored rate is minor; the sentence a guest reads is whole units.
+      title: `Your stay is active, ${fromLedgerUnits(wantedToken, rate)} ${tokenDef(wantedToken)?.name ?? wantedToken} per night`,
       link: "/stay",
       dedupeKey: `stay:${stay.id}:activated`,
     });
-    res.json({ success: true, rateSnapshotCredits: rate, rateSnapshotToken: wantedToken, audienceSnapshot: audience });
+    // rateSnapshotCredits mirrors the column, so it is MINOR, and it ships with
+    // the scale that turns it into the number a member reads. Same shape as
+    // `mine.balance` / `mine.balanceDecimals` above.
+    res.json({
+      success: true,
+      rateSnapshotCredits: rate,
+      rateSnapshotDecimals: tokenDef(wantedToken)?.decimals ?? 0,
+      rateSnapshotToken: wantedToken,
+      audienceSnapshot: audience,
+    });
   });
 
   /** End or cancel. NEVER automatic — ending a stay is a human act. */
@@ -515,11 +562,13 @@ export function register(app: Express, deps: Deps): void {
     if (!(await members.byId(String(userId ?? "")))) return res.status(404).json({ error: "No such member" });
     const id = `comp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const r = await mintStayCredits(getPool(), {
-      userId: String(userId), amount, source: "stay_comp", sourceRef: id,
+      // A HUMAN boundary: `credits` is the number an admin typed, and the guard
+      // above reads it human. `mintStayCredits` takes minor, so it converts here.
+      userId: String(userId), amount: toLedgerUnits(STAY_CREDIT, amount), source: "stay_comp", sourceRef: id,
       description: String(note ?? "Comped stay credits").slice(0, 255), idempotencyKey: id,
     });
     if (!r.ok) return res.status(409).json({ error: r.error });
-    res.json({ success: true, balance: r.toBalance });
+    res.json({ success: true, balance: r.toBalance, balanceDecimals: tokenDef(STAY_CREDIT)?.decimals ?? 0 });
   });
 
   /** Manual override: either direction, admin-audited, refuses overdraft. */
@@ -531,10 +580,15 @@ export function register(app: Express, deps: Deps): void {
     if (!(await members.byId(String(userId ?? "")))) return res.status(404).json({ error: "No such member" });
     const id = `adj-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const r = await postTransfer(getPool(), {
+      // The SIGN is read off the human number; only the magnitude converts.
       from: amount > 0 ? MINT_FAUCET : memberAccount(String(userId)),
       to: amount > 0 ? memberAccount(String(userId)) : MINT_FAUCET,
       tokenType: STAY_CREDIT,
-      amount: Math.abs(amount),
+      // A HUMAN boundary: `credits` off the request body, whole units by the
+      // route's own refusal above. Without this the correction tool claws back
+      // a ten-thousandth of what a steward typed and answers `{ success: true }`
+      // with no amount in it.
+      amount: toLedgerUnits(STAY_CREDIT, Math.abs(amount)),
       source: "stay_manual_override",
       sourceRef: id,
       description: String(note ?? "Manual adjustment").slice(0, 255),
@@ -565,7 +619,10 @@ export function register(app: Express, deps: Deps): void {
     }
     const creditRate = await priceFor(getPool(), String(accommodationId ?? ""), STAY_CREDIT, audience);
     if (!creditRate || creditRate <= 0) return res.status(409).json({ error: "That room has no posted credit rate yet" });
+    // MINOR, derived from a minor `priceFor`, and stored minor in
+    // `credits_granted`. The guest-facing figures below divide it back down.
     const creditsGranted = floorTokens(n * creditRate);
+    const grantedHuman = fromLedgerUnits(STAY_CREDIT, creditsGranted);
     const paid = Math.max(0, Math.floor(Number(amountMinor) || 0));
     const id = `sp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     await getPool().query(
@@ -577,15 +634,28 @@ export function register(app: Express, deps: Deps): void {
       await recordFiatCharge(getPool(), { userId: guest.id, module: "stays", orderId: id, amountMinor: paid });
     }
     const r = await mintStayCredits(getPool(), {
+      // ALREADY MINOR. `creditsGranted` is nights x a minor `priceFor`, and it
+      // is the same number the refund below and the webhook's clawback read
+      // back out of `credits_granted`. Converting here would over-mint a token
+      // that was sold for money, and the two clawbacks would then reverse a
+      // ten-thousandth of it under a key that can never be retried.
       userId: guest.id, amount: creditsGranted, source: "stay_purchase", sourceRef: id,
       description: `Manual purchase: ${n} night(s)`, idempotencyKey: `ord:${id}:leg1`,
     });
     if (!r.ok) return res.status(500).json({ error: r.error });
     await notify({
-      userId: guest.id, type: "stays", title: `${creditsGranted} stay credit(s) added to your balance`,
+      userId: guest.id, type: "stays", title: `${grantedHuman} stay credit(s) added to your balance`,
       link: "/stay", dedupeKey: `ord:${id}:notify`,
     });
-    res.json({ success: true, id, creditsGranted, balance: r.toBalance });
+    // `creditsGranted` is the RECEIPT number, so it leaves in whole credits;
+    // the column behind it stays minor. `balance` keeps the house shape.
+    res.json({
+      success: true,
+      id,
+      creditsGranted: grantedHuman,
+      balance: r.toBalance,
+      balanceDecimals: tokenDef(STAY_CREDIT)?.decimals ?? 0,
+    });
   });
 
   /**
@@ -602,7 +672,18 @@ export function register(app: Express, deps: Deps): void {
     const debit = await postTransfer(getPool(), {
       from: memberAccount(String(p.user_id)),
       to: MINT_FAUCET,
+      // STAY_CREDIT is hardcoded on purpose, and stays hardcoded. Both minters
+      // hardcode it too, so the reversal has to burn what they minted;
+      // `rate_snapshot_token` governs the NIGHTLY burn, which is a different
+      // flow this purchase never minted into.
       tokenType: STAY_CREDIT,
+      // ALREADY MINOR, and posted unconverted. `credits_granted` is written by
+      // this file's two minters from a minor `priceFor`, and it is read back
+      // here and by the webhook's clawback under the SAME key. All three read
+      // one column with no conversion on any of them, which is what makes an
+      // asymmetric reversal structurally impossible rather than merely tested.
+      // `payment_reversal` is on ALLOW_NEGATIVE_SOURCES, so nothing downstream
+      // would refuse a wrong number here.
       amount: Number(p.credits_granted),
       source: "payment_reversal",
       sourceRef: String(p.id),

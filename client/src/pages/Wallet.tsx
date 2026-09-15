@@ -13,10 +13,12 @@
 import Layout from "@/components/Layout";
 import ModuleGate from "@/components/modules/ModuleGate";
 import SwapCard from "@/components/SwapCard";
+import RedemptionPanel from "@/components/RedemptionPanel";
+import RedemptionQueue from "@/components/RedemptionQueue";
 import { useEffect, useState } from "react";
 import { useModule, useModules, useHypha } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
-import { authToken } from "@/lib/gameApi";
+import { authToken, useGameConfig } from "@/lib/gameApi";
 import { useTokenName } from "@/hooks/useTokenNames";
 import { Coins, CreditCard, ExternalLink, ReceiptText, Wallet as WalletIcon } from "lucide-react";
 import { ExamplesBanner } from "@/components/ExamplesBanner";
@@ -70,6 +72,23 @@ export default function Wallet() {
   // render as "Nothing yet" — telling a member who holds tokens that they
   // hold none, in the one place they come to check.
   const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
+  /*
+   * WHICH RUNG OPENS BUYING, FROM THE VILLAGE AND NEVER FROM THIS FILE.
+   *
+   * `progression.unlock.exchange.buy` is an open-ring dial: any member may put
+   * it on a ballot, and moving it to Co-Creator or to "none" is a decision the
+   * village makes. This caption used to read "Buying opens at the member
+   * stage" as a literal, so a village that moved the rung published a rule it
+   * had voted against. `GET /api/game/rules` is the whitelist that exists for
+   * exactly this ("so the UI can render the game's actual rules"), it is
+   * anonymous, and it already carried the quest cap mode.
+   *
+   * NULL UNTIL IT ARRIVES, and the caption says less while it is null. An
+   * absent payload is not the same fact as a rung of "none", and a page that
+   * printed a stage name it had not yet been told would be back to guessing.
+   */
+  const [rules, setRules] = useState<{ exchange?: { buyOpensAt?: string } } | null>(null);
+  const cfg = useGameConfig();
 
   const load = () => {
     setStatus("loading");
@@ -84,6 +103,14 @@ export default function Wallet() {
       })
       .catch(() => setStatus("failed"));
   };
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/game/rules")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && d) setRules(d); })
+      .catch(() => { /* the caption falls back to saying less, never to a literal */ });
+    return () => { alive = false; };
+  }, []);
   useEffect(() => {
     if (exchangeModule) load();
     const q = new URLSearchParams(window.location.search).get("purchase");
@@ -125,11 +152,25 @@ export default function Wallet() {
    * number while the Standing chip on their own profile, off the same ledger
    * through `loadStanding`, said 10. The wallet is the one they believe.
    *
-   * Absent map means every token is whole, which is what every token was
-   * before Voice. See client/src/lib/tokenAmount.ts for why this landed before
-   * the move to 4 decimals rather than inside it.
+   * Absent map means every token is whole, which is the safe reading and not
+   * the true one since the 2026-09-04 scale ruling: four of the seven tokens
+   * carry two decimals now. See client/src/lib/tokenAmount.ts.
    */
   const tokenDecimals: Record<string, number> = data?.mine?.tokenDecimals ?? {};
+  /*
+   * The caption under a listing a member cannot buy yet. Three facts, three
+   * sentences: the rung has not arrived, the village opened buying by role
+   * alone, or buying opens at a named rung. `gateLabel` in lib/questBoard.ts
+   * words a quest's own stage gate the same way, down to the capitalised
+   * stage name off the live config.
+   */
+  const buyRung = rules?.exchange?.buyOpensAt ?? null;
+  const buyOpensCaption =
+    buyRung === null
+      ? "Buying is not open to you yet"
+      : buyRung === "none"
+        ? "Buying opens by role here, never by stage"
+        : `Buying opens at the ${(cfg?.stages ?? []).find((s) => s.id === buyRung)?.name ?? buyRung} stage`;
 
   /**
    * ONE QUANTITY ON A RECEIPT, in the village's own word for the token.
@@ -229,6 +270,23 @@ export default function Wallet() {
             </div>
           )}
 
+          {/*
+            * REDEEMING SITS UNDER THE BALANCES AND ABOVE BUYING, and the order
+            * is the point: a member whose balance reads short because tokens
+            * are held against a redemption meets the sentence that explains it
+            * in the next card down.
+            *
+            * WHAT THIS PAGE COSTS THE FEATURE, said rather than hidden: the
+            * whole page is behind `ModuleGate moduleId="exchange"`, so a
+            * village running with the exchange module off has no member-facing
+            * door onto redemption even though the routes and the ledger work.
+            * The fix is one line in whichever page a fork puts balances on, and
+            * the profile's own Wallet section is the natural second home. It
+            * was left alone here because another lane is in that file.
+            */}
+          {user && <RedemptionPanel />}
+          <RedemptionQueue />
+
           <div className="bg-card border border-border rounded-xl p-5">
             <div className="flex items-center gap-2 mb-3">
               <Coins className="w-4 h-4 text-teal-deep" />
@@ -279,7 +337,7 @@ export default function Wallet() {
                     <span className="text-xs text-muted-foreground">Card payments aren't connected yet</span>
                   )}
                   {user && !l.isExample && l.priceMinor != null && l.inStock && data?.stripeConfigured && !data?.mine?.canBuy && (
-                    <span className="text-xs text-muted-foreground">Buying opens at the member stage</span>
+                    <span className="text-xs text-muted-foreground">{buyOpensCaption}</span>
                   )}
                   </div>
                   {refusedSlug && refusedSlug.slug === l.slug && (

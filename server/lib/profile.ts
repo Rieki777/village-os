@@ -156,7 +156,7 @@ export async function loadProfile(
  * the land rather than empty-handed.
  *
  * `decimals` travels with each chip because the ledger stores minor units. The
- * caller divides; nothing here pretends 100 thousandths of voice is 100.
+ * caller divides; nothing here pretends 100 hundredths of voice is 100.
  */
 export async function loadStanding(
   pool: Pool,

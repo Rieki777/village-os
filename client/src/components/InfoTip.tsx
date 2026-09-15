@@ -23,6 +23,7 @@
  * The plaque wears the map's parchment look (the cp-plaque palette from the
  * crowdpool pieces), so the two tooltip families read as one voice.
  */
+import { decayReachSentence } from "@shared/tokenScale";
 import { useEffect, useId, useRef, useState } from "react";
 
 const PLAQUE_MAX_W = 264;
@@ -169,4 +170,47 @@ export default function InfoTip({ tip, children, label, className = "" }: InfoTi
       </span>
     </span>
   );
+}
+
+/**
+ * THE SMALLEST BALANCE A WANING RATE ACTUALLY REACHES, said beside the dial.
+ *
+ * Here beside `InfoTip` because both are the same kind of thing: the extra
+ * sentence a control carries so a person can act on it. The difference is that
+ * a plaque explains what a dial MEANS and this one states what the value in
+ * front of you WOULD DO, computed rather than written.
+ *
+ * `decayVoice` floors each member's share and skips the member when the answer
+ * is zero, so every percentage has a line below which it silently does nothing.
+ * At one percent and two decimals that line is one whole Voice, and at half a
+ * percent it is two. A number that quietly stops applying below a line is a
+ * promise the village cannot see it is not keeping, and a village voting a
+ * small percentage to be gentle may be voting one that reaches almost nobody
+ * while the panel shows it working.
+ *
+ * A STATEMENT OF FACT AND NEVER A REFUSAL. The standing ruling is that a
+ * warning never blocks, and this sits one step below a warning.
+ *
+ * The sentence comes from `shared/tokenScale.ts`, which derives it from
+ * `decayUnits`, the SAME floor the engine uses. A displayed number and an
+ * actual behaviour that are different quantities is the mint cap's lesson.
+ *
+ * It reads the STAGED value when there is one, so it moves as the dial moves.
+ * A `span` and not a `p`, because it renders inside the description paragraph.
+ *
+ * PROPOSED BY THE GOVERNANCE SESSION on 2026-09-04 and NOT a founder ruling.
+ * Rye ruled the scale and this follows from the same measurement, and he has
+ * not been asked for it.
+ */
+export function DialFact({
+  v,
+  staged,
+}: {
+  v: { key: string; value?: string; default?: string };
+  staged?: string;
+}) {
+  if (v.key !== "economy.voice_decay_pct") return null;
+  const pct = Number(staged ?? v.value ?? v.default);
+  if (!Number.isFinite(pct)) return null;
+  return <span className="block text-teal-deep mt-1">{decayReachSentence(pct, "Voice")}</span>;
 }

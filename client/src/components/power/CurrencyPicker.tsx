@@ -14,6 +14,7 @@
  */
 import { useEffect, useState } from "react";
 import { authToken } from "@/lib/gameApi";
+import { removeStored, storedText, writeStored } from "@/lib/safeStorage";
 import { defaultDisplayCurrency } from "@shared/money";
 
 const STORAGE_KEY = "power-display-currency";
@@ -32,11 +33,7 @@ export interface FxTable {
 /** The stored choice, or "" meaning "the project's own". Shared so any
  *  money-rendering surface reads the same one. */
 export function storedDisplayCurrency(): string {
-  try {
-    return localStorage.getItem(STORAGE_KEY) ?? "";
-  } catch {
-    return "";
-  }
+  return storedText("local", STORAGE_KEY) ?? "";
 }
 
 export default function CurrencyPicker({
@@ -86,12 +83,9 @@ export default function CurrencyPicker({
 
   const save = (code: string) => {
     setChoice(code);
-    try {
-      if (code) localStorage.setItem(STORAGE_KEY, code);
-      else localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // A blocked localStorage still leaves the in-memory choice working.
-    }
+    // A blocked store still leaves the in-memory choice working.
+    if (code) writeStored("local", STORAGE_KEY, code);
+    else removeStored("local", STORAGE_KEY);
     if (authToken()) {
       fetch("/api/profile/prefs", {
         // save-ok: local-first. localStorage above is the source this picker

@@ -23,8 +23,9 @@ import { ExampleChip } from "@/components/ExamplesBanner";
 import { ArrowLeft, ExternalLink, HandHeart, Package, Sparkles, Users } from "lucide-react";
 import InfoTip from "@/components/InfoTip";
 import {
-  CrowdpoolStyles, GoldRing, GrowthStrip, KIND_LABELS, SlotMeter, StarLantern,
-  capitalTint, kindGlyph, money, phaseLabel, timeAgo,
+  CrowdpoolStyles, GoldRing, GrowthStrip, KIND_LABELS, PLEDGED_FLOOR_PARAGRAPH, RING_TIP,
+  SlotMeter, StarLantern,
+  capitalTint, isOverDelivered, kindGlyph, money, phaseLabel, pooledLine, timeAgo,
 } from "@/components/crowdpool/PoolPieces";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 
@@ -153,6 +154,18 @@ export default function CrowdpoolCampaign() {
   const c = campaign;
   const openNeeds = (c?.needs ?? []).filter((n) => n.quantityDelivered < n.quantityWanted);
   const metNeeds = (c?.needs ?? []).filter((n) => n.quantityDelivered >= n.quantityWanted);
+  /**
+   * WHERE AN IMPOSSIBLE NEED WAS GOING BEFORE ANYBODY LOOKED.
+   *
+   * Measured on 2026-09-04: a need arriving with one wanted and two delivered
+   * (the hub's non-idempotent fulfil) never reached the meter at all. It failed
+   * the `openNeeds` test, so its card left the shelf, and it passed the
+   * `metNeeds` test, so it became one silent tick in "1 need already fully
+   * delivered". The double count was invisible on this page and the shelf
+   * showed one card fewer with nothing to say why. It stays classed as met,
+   * because delivered at or above wanted IS met, and it is now NAMED.
+   */
+  const overDelivered = (c?.needs ?? []).filter(isOverDelivered);
 
   return (
     <Layout>
@@ -237,8 +250,8 @@ export default function CrowdpoolCampaign() {
                     <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-4 text-sm" style={{ color: "#e4d3ae" }}>
                       <span className="inline-flex items-center gap-1.5">
                         <HandHeart className="w-4 h-4" style={{ color: "#c9a25e" }} />
-                        {money(c.pledgedTotal, c.currency)} of {money(c.totalValue, c.currency)}{" "}
-                        <InfoTip tip="The gold ring is everything pledged so far; the quieter green arc inside it is what has actually arrived.">pooled</InfoTip>
+                        {pooledLine(c.pledgedTotal, c.totalValue, c.currency)}{" "}
+                        <InfoTip tip={RING_TIP}>pooled</InfoTip>
                       </span>
                       <span className="inline-flex items-center gap-1.5">
                         <Users className="w-4 h-4" style={{ color: "#c9a25e" }} />
@@ -268,6 +281,7 @@ export default function CrowdpoolCampaign() {
                   hands, know-how and funds. No money moves through this page. Crypto pledges are tracked on the
                   hub, and gifts or loans of ordinary money go through the partner funders below. Claim a need
                   here and you finish the claim on the hub's own page.
+                  {PLEDGED_FLOOR_PARAGRAPH ? ` ${PLEDGED_FLOOR_PARAGRAPH}` : ""}
                 </div>
               </div>
 
@@ -350,6 +364,15 @@ export default function CrowdpoolCampaign() {
                 <p className="text-xs text-muted-foreground mt-3 inline-flex items-center gap-1.5">
                   <Package className="w-3.5 h-3.5" />
                   {metNeeds.length === 1 ? "1 need already fully delivered" : `${metNeeds.length} needs already fully delivered`}
+                </p>
+              )}
+              {overDelivered.length > 0 && (
+                <p className="text-xs mt-2 text-amber-800 dark:text-amber-200" role="status">
+                  {overDelivered.length === 1
+                    ? `More arrived than were wanted on 1 of them: ${overDelivered[0].name}.`
+                    : `More arrived than were wanted on ${overDelivered.length} of them: ${overDelivered.map((n) => n.name).join(", ")}.`}
+                  {" "}The hub counts a delivery twice when two stewards confirm it at once, and it is fixing
+                  that. Nothing here changes what the hub recorded.
                 </p>
               )}
             </div>

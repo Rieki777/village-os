@@ -29,6 +29,33 @@
  * treasury is NOT a faucet, so selling more than was stocked FAILS the
  * settlement — out of stock is a fact the webhook retries surface to
  * admins, not a mint opportunity.
+ *
+ * ── UNITS, STATED ONCE FOR THE WHOLE FILE ──────────────────────────────────
+ *
+ * The exchange engine runs in WHOLE TOKENS. Quotes, `exchange_orders.quantity`
+ * and `pay_quantity`, the per-cycle swap caps, the stock a steward reads and
+ * every number this file returns to a caller are human figures. The ledger
+ * runs in MINOR units and always has. The two meet at exactly three postings,
+ * `settleExchangeOrder` and both legs of `executeSwap`, each of which converts
+ * with `toLedgerUnits` at the call site, and at the three reads that come back
+ * off the ledger, `treasuryStock`, `swapCycleUsage` and `swappableBalance`,
+ * each of which converts with `fromLedgerUnits` before returning.
+ *
+ * Two consequences worth holding onto:
+ *
+ *   - Nothing converts inside `postTransfer`. Two callers elsewhere post
+ *     balances they read straight out of `token_balances`, and a conversion
+ *     underneath the primitive would multiply a settled balance by 10^decimals.
+ *   - `swappableBalance` is where a second conversion is easiest to add by
+ *     accident. Its `held` is a sum of two sources in two units: the fiat hold
+ *     comes from `exchange_orders.quantity`, which is already human, and the
+ *     commerce hold comes from `token_ledger.amount`, which is minor. Only the
+ *     second half is converted. Dividing the whole sum takes the human half
+ *     down twice and quietly under-counts the chargeback hold.
+ *
+ * At `decimals = 0` every conversion in this file is the identity, so none of
+ * this is visible in a fixture built on today's registry. That is why the unit
+ * tests register a token with decimals of their own.
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import {
@@ -42,6 +69,10 @@ import {
   tokenDef,
 } from "./ledger";
 import type { PairGuard } from "./ledger";
+// The two boundary converters, and the only ones this file may use. A literal
+// factor written here would be right for exactly as long as the registry
+// agreed with it, and the registry is the thing that changes.
+import { fromLedgerUnits, toLedgerUnits } from "./economy";
 import { numberVar, stringVar } from "./variables";
 import { moduleConfig } from "./modules";
 import { MODULES } from "../../shared/modules";
@@ -553,13 +584,20 @@ export async function exchangeOrderById(pool: Pool, id: string): Promise<any | n
  * The settle leg: treasury -> buyer, keyed on the order. The treasury is not
  * a faucet — an under-stocked treasury makes this THROW, the webhook answer
  * 500, Stripe retry, and the trio alert admins. Fail loud, never mint.
+ *
+ * UNITS. `order.quantity` is the whole-token count the buy route took from the
+ * request body and `createExchangeOrder` wrote verbatim, and the fiat charge
+ * was `quantity * priceMinor`, a price per WHOLE token. So the human number is
+ * the one the member paid for and the one this converts, here at the boundary
+ * and nowhere deeper. The RETURN is `r.toBalance`, which is the ledger's own
+ * post-transfer figure and therefore MINOR: convert it before printing it.
  */
 export async function settleExchangeOrder(pool: Pool, orderId: string, order: any): Promise<number> {
   const r = await postTransfer(pool, {
     from: TREASURY,
     to: memberAccount(String(order.user_id)),
     tokenType: String(order.token_slug),
-    amount: Number(order.quantity),
+    amount: toLedgerUnits(String(order.token_slug), Number(order.quantity)),
     source: "exchange_purchase",
     sourceRef: orderId,
     description: `Exchange receipt #${order.receipt_no}`,
@@ -571,14 +609,27 @@ export async function settleExchangeOrder(pool: Pool, orderId: string, order: an
   return r.toBalance;
 }
 
-/** Treasury stock on hand, per LISTED token (cached balances, one query). */
+/**
+ * Treasury stock on hand, per LISTED token (cached balances, one query).
+ *
+ * Returns WHOLE TOKENS. `token_balances.balance` is minor, and all five
+ * consumers want a human figure: the commerce stock guard compares it against
+ * a product's `token_amount`, the buy guard against the request's `quantity`,
+ * the swap guard against `quote.receiveQuantity`, and the market lens and the
+ * admin desk print it to a person. Converting once here is one edit against
+ * five, and it leaves no consumer holding a number in a unit it did not ask
+ * for.
+ */
 export async function treasuryStock(pool: Pool): Promise<Record<string, number>> {
   const [rows] = await pool.query<RowDataPacket[]>(
     "SELECT token_type, balance FROM token_balances WHERE account_id = ?",
     [TREASURY],
   );
   const out: Record<string, number> = {};
-  for (const r of rows) out[String(r.token_type)] = Number(r.balance);
+  for (const r of rows) {
+    const slug = String(r.token_type);
+    out[slug] = fromLedgerUnits(slug, Number(r.balance));
+  }
   return out;
 }
 
@@ -750,6 +801,13 @@ export async function createSwapOrder(
 /**
  * The two legs, in one transaction. Both or neither — a member is never
  * debited without being credited.
+ *
+ * UNITS. `order.pay_quantity` and `order.quantity` are the quote's whole-token
+ * counts, written to `exchange_orders` by `createSwapOrder` and handed here by
+ * the swap route without a round trip through the row. Each leg converts with
+ * its OWN token's decimals, because a swap is the one posting where the two
+ * sides can be at different scales. `quoteSwap` stays in whole tokens: its
+ * prices are cents per whole token and its ceil proof is stated over integers.
  */
 export async function executeSwap(
   pool: Pool,
@@ -759,12 +817,14 @@ export async function executeSwap(
   const member = memberAccount(String(order.user_id));
   const r = await postTransferPair(pool, [
     {
-      from: member, to: TREASURY, tokenType: String(order.pay_token_slug), amount: Number(order.pay_quantity),
+      from: member, to: TREASURY, tokenType: String(order.pay_token_slug),
+      amount: toLedgerUnits(String(order.pay_token_slug), Number(order.pay_quantity)),
       source: "exchange_swap", sourceRef: order.id,
       description: `Swap receipt #${order.receipt_no}`, idempotencyKey: `ord:${order.id}:leg1`,
     },
     {
-      from: TREASURY, to: member, tokenType: String(order.token_slug), amount: Number(order.quantity),
+      from: TREASURY, to: member, tokenType: String(order.token_slug),
+      amount: toLedgerUnits(String(order.token_slug), Number(order.quantity)),
       source: "exchange_swap", sourceRef: order.id,
       description: `Swap receipt #${order.receipt_no}`, idempotencyKey: `ord:${order.id}:leg2`,
     },
@@ -779,6 +839,12 @@ export async function executeSwap(
  * advisory read for the quote surface, and called on the transaction's own
  * connection (from a PairGuard) it is the enforcing read, serialized behind
  * the same treasury row lock as every competing swap.
+ *
+ * Returns WHOLE TOKENS. Every consumer adds it to `quote.receiveQuantity` and
+ * compares the sum against `maxSwapOutPerCycle`, a dial a steward types in
+ * whole tokens. Leaving the sum minor would loosen that cap by 10^decimals
+ * while the member is still debited correctly, which is a cap that reports a
+ * remaining figure and binds on nothing.
  */
 export async function swapCycleUsage(
   pool: Pool | PoolConnection,
@@ -792,13 +858,28 @@ export async function swapCycleUsage(
     "WHERE from_account = ? AND token_type = ? AND source = 'exchange_swap' AND at >= ?";
   if (userId) { sql += " AND to_account = ?"; params.push(memberAccount(userId)); }
   const [[row]] = await pool.query<any[]>(sql, params);
-  return Number(row.s);
+  return fromLedgerUnits(slug, Number(row.s));
 }
 
 /**
  * Tokens bought with a card are frozen from swapping for a while: long
  * enough that a chargeback still finds them in the wallet rather than
  * converted into something the village cannot claw back.
+ *
+ * ALL FOUR FIELDS ARE WHOLE TOKENS, and the arithmetic below is the reason
+ * this function is the riskiest one in the file. `held` adds two sums that
+ * arrive in DIFFERENT units:
+ *
+ *   - the fiat hold is `SUM(exchange_orders.quantity)`, the human count the
+ *     buy route stored, already in the unit this returns;
+ *   - the commerce hold is `SUM(token_ledger.amount)`, minor, and the only
+ *     half that needs converting.
+ *
+ * So exactly two conversions happen here: `balance`, and `grants.held`.
+ * Converting `row.held` as well would divide the human half a second time,
+ * under-count the chargeback hold by 10^decimals, and reopen the side door the
+ * `product_grant` leg was added to close. The subtraction at the end is then
+ * human minus human, computed once.
  */
 export async function swappableBalance(
   pool: Pool | PoolConnection,
@@ -806,7 +887,7 @@ export async function swappableBalance(
   slug: string,
   holdDays: number,
 ): Promise<{ balance: number; held: number; swappable: number; clearsAt: string | null }> {
-  const balance = await balanceOf(pool, memberAccount(userId), slug);
+  const balance = fromLedgerUnits(slug, await balanceOf(pool, memberAccount(userId), slug));
   if (holdDays <= 0) return { balance, held: 0, swappable: balance, clearsAt: null };
   const [[row]] = await pool.query<any[]>(
     "SELECT COALESCE(SUM(quantity),0) AS held, MAX(paid_at) AS latest FROM exchange_orders " +
@@ -826,7 +907,9 @@ export async function swappableBalance(
       "AND at > (NOW() - INTERVAL ? DAY)",
     [memberAccount(userId), slug, holdDays],
   );
-  const held = Number(row.held) + Number(grants.held);
+  // `row.held` is human already; only the ledger half is converted. See the
+  // note above this function for why the whole sum must never be divided.
+  const held = Number(row.held) + fromLedgerUnits(slug, Number(grants.held));
   const latestTimes = [row.latest, grants.latest]
     .filter(Boolean)
     .map((d: any) => new Date(d).getTime());

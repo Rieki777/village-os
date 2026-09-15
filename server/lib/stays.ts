@@ -42,11 +42,16 @@
  * same reason a member in grace on stay credits is.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
-import { ledgerEntryExists, MINT_FAUCET, memberAccount, postTransfer, registerToken, tokenDef } from "./ledger";
+import { decimalsFor, finerThanScale, fromLedgerUnits, toLedgerUnits } from "./economy";
+import { CURRENCY_DECIMALS } from "../../shared/tokenScale";
+import { ledgerEntryExists, MINT_FAUCET, memberAccount, postGraceNightBurn, postTransfer, registerToken, tokenDef } from "./ledger";
 import { spendSinkFor } from "./spending";
 import { numberVar } from "./variables";
 
 export const STAY_CREDIT = "stay-credit";
+
+/** The one non-token row `accommodation_prices` accepts. Its amounts are cents. */
+export const USD = "usd";
 
 /**
  * Boot registration, unconditional (like the accounts the ledger is born
@@ -63,6 +68,16 @@ export async function ensureStayToken(pool: Pool): Promise<void> {
     kind: "credit",
     governance: "platform",
     transferable: false,
+    /*
+     * A CREDIT TOKEN IS CURRENCY-LIKE, so it carries the currency scale from
+     * the day it is created. This is stated here and not left to
+     * `registerToken`'s whole-unit default because a FRESH village would
+     * otherwise create this token at 0 while a migrated one holds 2, and
+     * `registerToken` leaves `decimals` out of its upsert on purpose, so
+     * nothing would ever reconcile the two. The migration that rescaled the
+     * existing rows is the other half of this line.
+     */
+    decimals: CURRENCY_DECIMALS,
   });
 }
 
@@ -82,7 +97,12 @@ export interface AccommodationRow {
    * should learn that from the row rather than from a 409 after typing rates.
    */
   isExample: boolean;
-  /** Posted prices: { "stay-credit": {guest, member}, usd: {guest, member} } (minor units / whole credits). */
+  /**
+   * Posted prices: { "stay-credit": {guest, member}, usd: {guest, member} }.
+   * usd is CENTS and every token is HUMAN units, fractions included (2.5 is two
+   * and a half credits), which is what the two screens that read this expect. The stored column is minor on both sides;
+   * `priceFromStored` is the one place that difference lives.
+   */
   prices: Record<string, { guest?: number; member?: number }>;
 }
 
@@ -131,6 +151,74 @@ function rowToStay(r: RowDataPacket): StayRow {
 
 // ── Catalog ──────────────────────────────────────────────────────────────────
 
+/*
+ * THE POSTED-PRICE BOUNDARY.
+ *
+ * `accommodation_prices.amount_minor` carries two units in one column, decided
+ * by `token_type`: a usd row holds cents, and a token row holds that token's
+ * MINOR units. The column was honest for usd and misnamed for tokens, because
+ * the admin form posts cents for usd (client/src/pages/Admin.tsx scales by 100)
+ * and the raw typed number for every token.
+ *
+ * These two functions are that boundary, and they are the whole of lane E's
+ * write-side fix. Storing a token price in MINOR units is what makes `priceFor`,
+ * `stays.rate_snapshot_credits`, the grace floor in `postNightsForStay` and
+ * `nightsRemaining` read the same unit as the balance they are measured
+ * against. Converting at the nightly post instead would fix the debit and leave
+ * the stop condition and the nights-left figure comparing a minor balance to a
+ * human rate.
+ *
+ * `toLedgerUnits` and `fromLedgerUnits` read the registry at call time, and
+ * both are load-bearing now. Since 0202 every platform credit token, stay
+ * credits included, carries 2 decimals, so a token row here is scaled by 100
+ * on the way in and divided by 100 on the way out. Only a token still at
+ * `decimals: 0` passes through unchanged.
+ *
+ * 0202 needed no backfill of this column or of `stays.rate_snapshot_credits`,
+ * and that is a fact about 0202, not a rule: its guard refused to move any token
+ * that already stored an amount in either table (`accommodation_prices` and
+ * `stays` are both in its list), so every row it could have corrupted was
+ * proven absent first. A LATER change to a token's decimals rescales both
+ * columns, and needs that backfill or the same guard.
+ */
+
+/**
+ * A posted price on its way IN: human for a token, cents for usd. EXACT.
+ *
+ * It floored, so 2.5 credits posted as 2 and a room could not ask for a
+ * fraction its token holds. It converts at the token's own scale now, and the
+ * route asks `priceScaleRefusal` first, so a price finer than the token holds is
+ * refused in words and never rounded here.
+ */
+export function priceToStored(tokenType: string, amount: number): number {
+  const n = Number(amount) || 0;
+  return tokenType === USD ? Math.round(n) : toLedgerUnits(tokenType, n);
+}
+
+/**
+ * Why a posted price cannot be stored exactly, or null when it can.
+ *
+ * `finerThanScale` is the same check the hand-mint and the redemption ask use.
+ * usd arrives as cents, so a usd amount must be a whole number of cents.
+ */
+export function priceScaleRefusal(tokenType: string, amount: number): string | null {
+  const n = Number(amount);
+  if (tokenType === USD) {
+    return finerThanScale(n, 0) ? `A dollar price is posted in whole cents, so ${n} cents cannot be posted exactly. Nothing was posted` : null;
+  }
+  const decimals = decimalsFor(tokenType);
+  if (!finerThanScale(n, decimals)) return null;
+  const name = tokenDef(tokenType)?.name ?? tokenType;
+  return decimals > 0
+    ? `${name} goes to ${decimals} decimal places, so a price of ${n} cannot be posted exactly. Nothing was posted`
+    : `${name} is priced in whole amounts, so a price of ${n} cannot be posted exactly. Nothing was posted`;
+}
+
+/** A stored price on its way OUT to a screen: the inverse of `priceToStored`. */
+export function priceFromStored(tokenType: string, stored: number): number {
+  return tokenType === USD ? Number(stored) : fromLedgerUnits(tokenType, Number(stored));
+}
+
 export async function listAccommodations(pool: Pool, opts?: { includeInactive?: boolean }): Promise<AccommodationRow[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT id, name, description, capacity, photo_url, active, sort_order, is_example FROM accommodations ${opts?.includeInactive ? "" : "WHERE active = 1 "}ORDER BY sort_order, name`,
@@ -142,7 +230,11 @@ export async function listAccommodations(pool: Pool, opts?: { includeInactive?: 
   for (const p of prices) {
     const acc = byAcc.get(String(p.accommodation_id)) ?? {};
     const tok = acc[String(p.token_type)] ?? {};
-    tok[p.audience as "guest" | "member"] = Number(p.amount_minor);
+    // The catalog is a READING surface: Stay.tsx and the admin price form both
+    // treat a token price as the human number of credits and only divide usd
+    // by 100. Handing them the stored minor number would also break the admin
+    // form's round trip, which reads this map and posts it straight back.
+    tok[p.audience as "guest" | "member"] = priceFromStored(String(p.token_type), Number(p.amount_minor));
     acc[String(p.token_type)] = tok;
     byAcc.set(String(p.accommodation_id), acc);
   }
@@ -162,6 +254,11 @@ export async function listAccommodations(pool: Pool, opts?: { includeInactive?: 
 /**
  * The posted price for one audience, with the member→guest fallback: a room
  * that posts no member row simply has one price for everyone.
+ *
+ * Returns MINOR units: cents for `usd`, ledger units for a token. Every
+ * consumer of this number is arithmetic against a balance or a ledger post
+ * (checkout, the activation snapshot, the manual purchase), so it is the
+ * stored column and not the screen figure. Use `priceFromStored` for a screen.
  */
 export async function priceFor(
   pool: Pool,
@@ -202,7 +299,15 @@ export async function allStays(pool: Pool): Promise<StayRow[]> {
   return rows.map(rowToStay);
 }
 
-/** floor(balance / snapshot rate); the ONLY derived "nights left" there is. */
+/**
+ * floor(balance / snapshot rate); the ONLY derived "nights left" there is.
+ *
+ * BOTH arguments are MINOR units of the same token. `balance` comes from
+ * `balanceOf`/`balancesFor`, and `rateCredits` from `stays.rate_snapshot_credits`,
+ * which `priceToStored` now writes in minor. Feeding it a human rate against a
+ * minor balance reports 10,000x too many nights at four decimals, which is the
+ * number a steward acts on.
+ */
 export function nightsRemaining(balance: number, rateCredits: number | null): number {
   if (!rateCredits || rateCredits <= 0) return 0;
   return Math.floor(balance / rateCredits);
@@ -248,6 +353,11 @@ export interface PostNightsResult {
  * act) and the caller alerts humans.
  */
 export async function postNightsForStay(pool: Pool, stay: StayRow, todayUtc: string): Promise<PostNightsResult> {
+  // ALREADY MINOR, and posted unconverted on purpose. `rate_snapshot_credits`
+  // is snapshot from `priceFor`, which reads the column `priceToStored` writes,
+  // so the rate, the grace floor below, the balance read and `nightsRemaining`
+  // are all in this token's ledger units. Wrapping this in `toLedgerUnits`
+  // would charge a night ten thousand nights' worth.
   const rate = stay.rateSnapshotCredits ?? 0;
   // The token this stay was activated in, and the account a spend of it lands
   // in. One snapshot read, so a night cannot be charged in one token and
@@ -269,16 +379,20 @@ export async function postNightsForStay(pool: Pool, stay: StayRow, todayUtc: str
     // Grace is checked BEFORE the post: a night may land the balance anywhere
     // down to -(grace_nights × rate), never past it.
     if (balance - rate < graceFloor) return { posted, stopped: true, balance };
-    const result = await postTransfer(pool, {
+    // The source and the debt capability belong to the operation now, not to
+    // this call: `GRACE_NIGHT_DEBT` was an exported value any module could
+    // import and spend on any posting at all, so the ledger stopped exporting
+    // it and exports this narrow door instead. The grace FLOOR stays here,
+    // checked one line above: how far a member may go is a village dial and
+    // the ledger knows nothing about nights.
+    const result = await postGraceNightBurn(pool, {
       from: memberAccount(stay.userId),
       to: sink,
       tokenType: token,
       amount: rate,
-      source: "stay_night",
       sourceRef: stay.id,
       description: `Night of ${night}`,
       idempotencyKey: `stay:${stay.id}:night:${night}`,
-      allowNegative: true,
     });
     if (!result.ok) return { posted, stopped: true, balance };
     // toBalance is the RECEIVING side (the faucet); re-read the payer.
@@ -330,6 +444,21 @@ export async function runNightlyPosting(
 
 // ── Credit movements (all through the ledger, all keyed) ────────────────────
 
+/**
+ * Mint stay credits to a member.
+ *
+ * `amount` is MINOR units, the same contract `postTransfer` states, and this
+ * function converts nothing. That is a decision and not an oversight: two of
+ * its four callers already hand it a minor number derived from `priceFor`
+ * (`server/routes/stays.ts` manual purchase, and the Stripe settle handler at
+ * `server/index.ts`, both by way of `stay_purchases.credits_granted`). A
+ * `toLedgerUnits` in here would multiply those a second time, which on a token
+ * sold for money is a ten-thousand-fold over-mint.
+ *
+ * The two callers that hold a HUMAN number convert at their own boundary: the
+ * comp route and the adjust route in `server/routes/stays.ts`, and the quest
+ * work-exchange release in `server/index.ts`.
+ */
 export async function mintStayCredits(
   pool: Pool,
   input: { userId: string; amount: number; source: string; sourceRef?: string; description?: string; idempotencyKey: string },

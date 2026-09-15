@@ -78,6 +78,11 @@ export const SOURCES = [
   // which is what made this an error message instead of a silent omission.
   "shared/governanceEngine.ts",
   "shared/ballotSubjects.ts",
+  // Added with the needs dials: the registry takes its depth choices from
+  // NEED_DEPTHS here, and this generator refuses an unlisted source rather than
+  // walking it quietly, which is what turned a silent omission into a message
+  // naming the file.
+  "shared/needs.ts",
 ];
 
 /** The one file the walk starts from. Everything else is discovered. */

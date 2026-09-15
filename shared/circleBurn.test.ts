@@ -1,0 +1,494 @@
+/**
+ * THE RATE, THE CAP THAT BINDS, AND THE SENTENCES THAT MUST NEVER MATCH.
+ *
+ * Everything here is pure, so it needs no database and no clock. What needs
+ * both is in server/lib/circleBurn.test.ts, which drives real postings through
+ * `postTransfer` and reads every figure back out of `token_ledger`.
+ *
+ * The four sentences are asserted APART and asserted DIFFERENT, because the
+ * defect this guards against is not a wrong sentence. It is four facts sharing
+ * one, which a test that only checks each string in isolation would pass.
+ */
+import { describe, expect, it } from "vitest";
+import {
+  isTreasury,
+  bindingCap,
+  burnSentence,
+  isUngoverned,
+  readCap,
+  type BurnWords,
+  type CapReading,
+  type CircleBurnReading,
+  type MeteredReading,
+  type TreasuryReading,
+  type UngovernedReading,
+  type WindowRef,
+} from "./circleBurn";
+
+const DAY = 86_400_000;
+const START = Date.UTC(2026, 8, 1);
+
+const WINDOW: WindowRef = {
+  id: "lunar-000332",
+  startsAt: new Date(START).toISOString(),
+  endsAt: new Date(START + 30 * DAY).toISOString(),
+};
+
+const SEASON: WindowRef = {
+  id: "rooting-2026",
+  startsAt: new Date(START - 30 * DAY).toISOString(),
+  endsAt: new Date(START + 60 * DAY).toISOString(),
+};
+
+const WORDS: BurnWords = {
+  circleName: (id) => (id === "kitchen" ? "The Kitchen Circle" : id),
+  amount: (minor) => `${minor / 100} credits`,
+};
+
+function cap(over: Partial<Parameters<typeof readCap>[0]> = {}): CapReading {
+  return readCap({
+    scope: "cycle",
+    window: WINDOW,
+    capMinor: 100_000,
+    spentMinor: 0,
+    atMs: START + 10 * DAY,
+    askMinor: 0,
+    ...over,
+  });
+}
+
+function metered(over: Partial<MeteredReading> = {}): MeteredReading {
+  return {
+    kind: "metered",
+    circleId: "kitchen",
+    unit: "token:credits",
+    takenAt: new Date(START + 10 * DAY).toISOString(),
+    askMinor: 0,
+    cycle: cap(),
+    season: readCap({
+      scope: "season", window: SEASON, capMinor: 400_000,
+      spentMinor: 0, atMs: START + 10 * DAY, askMinor: 0,
+    }),
+    binds: "cycle",
+    fits: true,
+    ...over,
+  };
+}
+
+// ── The rate, and what it says when there is nothing to say ─────────────────
+
+describe("the burn rate", () => {
+  it("runs the elapsed time to the instant when the window's end is a DERIVED horizon already passed", () => {
+    /*
+     * B4 on #243. An open-ended season's `endsAt` is a stand-in one year after
+     * it began. For a season older than that, the stand-in is behind `at`, and
+     * the rate used to divide spend summed up to `at` by time elapsed only up to
+     * the stand-in: here 20000 over 10 days read as 2000 a day when 20 days had
+     * passed, which is double the real rate.
+     */
+    const derived: WindowRef = {
+      id: "founding",
+      startsAt: new Date(START).toISOString(),
+      endsAt: new Date(START + 10 * DAY).toISOString(),
+      endsDeclared: false,
+    };
+    const c = cap({ scope: "season", window: derived, spentMinor: 20_000, atMs: START + 20 * DAY });
+    expect(c.perDayMinor).toBeCloseTo(1000, 6);
+    // The projection runs to the instant too, so it never reads below what is already spent.
+    expect(c.projectedMinor).toBe(20_000);
+    expect(c.exhaustsAt).toBeNull();
+    // An exhausted season with no declared end names no date for its room coming back.
+    const spentOut = readCap({
+      scope: "season", window: derived, capMinor: 20_000, spentMinor: 20_000, atMs: START + 20 * DAY, askMinor: 0,
+    });
+    const said = burnSentence(metered({ season: spentOut, binds: "season" }), WORDS);
+    expect(said).toContain("until the next season begins");
+    expect(said).not.toContain(derived.endsAt.slice(0, 10));
+    // A declared end still bounds the clock exactly as it always did.
+    const declared = cap({ scope: "season", window: { ...derived, endsDeclared: true }, spentMinor: 20_000, atMs: START + 20 * DAY });
+    expect(declared.perDayMinor).toBeCloseTo(2000, 6);
+  });
+
+  it("is taken over the window's own elapsed time, so it shares the cap's denominator", () => {
+    // 20000 minor over ten elapsed days of a thirty-day window.
+    const c = cap({ spentMinor: 20_000, atMs: START + 10 * DAY });
+    expect(c.state).toBe("burning");
+    expect(c.perDayMinor).toBeCloseTo(2000, 6);
+    // The projection carries that rate to the window's end, not to some
+    // trailing seven days: 2000 a day across thirty days.
+    expect(c.projectedMinor).toBe(60_000);
+  });
+
+  it("names the day the room runs out, when that day falls inside the window", () => {
+    const c = cap({ spentMinor: 20_000, atMs: START + 10 * DAY });
+    // 100000 at 2000 a day is fifty days from the window's start, which is
+    // past the thirty-day window, so there is no exhaustion date to give.
+    expect(c.exhaustsAt).toBeNull();
+
+    const faster = cap({ spentMinor: 60_000, atMs: START + 10 * DAY });
+    expect(faster.perDayMinor).toBeCloseTo(6000, 6);
+    // 100000 at 6000 a day is day 16.67, inside the window.
+    expect(faster.exhaustsAt).not.toBeNull();
+    const hit = Date.parse(faster.exhaustsAt as string) - START;
+    expect(hit / DAY).toBeCloseTo(100_000 / 6000, 4);
+  });
+
+  it("NO SPEND IS NOT ZERO BURN. It is no information, and the two are different facts", () => {
+    const c = cap({ spentMinor: 0, atMs: START + 10 * DAY });
+    expect(c.state).toBe("unspent");
+    // The defect this guards: a surface rendering 0.0 a day would be claiming
+    // this circle is not spending, which nobody measured.
+    expect(c.perDayMinor).toBeNull();
+    expect(c.projectedMinor).toBeNull();
+    expect(c.exhaustsAt).toBeNull();
+    // The room, though, is exact and known.
+    expect(c.remainingMinor).toBe(100_000);
+  });
+
+  it("has no rate at the very instant a window opens, even with spend in it", () => {
+    // The denominator is zero here, and this is the instant a next_moon
+    // landing is most likely to be asked about.
+    const c = cap({ spentMinor: 5_000, atMs: START });
+    expect(c.perDayMinor).toBeNull();
+    expect(c.spentMinor).toBe(5_000);
+  });
+});
+
+// ── The states, each one its own fact ───────────────────────────────────────
+
+describe("a cap's five states", () => {
+  it("reports no_window without inventing a zero, and still says what the cap was", () => {
+    const c = readCap({ scope: "season", window: null, capMinor: 400_000, spentMinor: 0, atMs: START, askMinor: 0 });
+    expect(c.state).toBe("no_window");
+    /*
+     * THE SAME STANDARD `unmeasurable` IS HELD TO BELOW: the ceiling is real
+     * and the rest is unknown, so neither is faked. This case used to expect a
+     * null cap, which made the file argue both sides. What that cost is a
+     * village whose admin sets a season cap before declaring any seasons: the
+     * number is stored, nothing measures it, and every reading reported that
+     * there was no season cap at all.
+     *
+     * The state is what carries the warning, and it still does. Nothing treats
+     * this as a bound, because every consumer that picks the binding cap gates
+     * on a window as well.
+     */
+    expect(c.capMinor).toBe(400_000);
+    // The invented zero the title is about. There is no window to sum over.
+    expect(c.spentMinor).toBeNull();
+    expect(c.remainingMinor).toBeNull();
+    expect(c.askFits).toBeNull();
+    expect(c.window).toBeNull();
+  });
+
+  it("reports no_cap when the village set none, and constrains nothing", () => {
+    const c = cap({ capMinor: null });
+    expect(c.state).toBe("no_cap");
+    expect(c.askFits).toBeNull();
+  });
+
+  it("reports unmeasurable for a unit whose spend lives somewhere else", () => {
+    const c = cap({ capMinor: 100_000, measurable: false });
+    expect(c.state).toBe("unmeasurable");
+    expect(c.capMinor).toBe(100_000);
+    // The ceiling is real and the spend is unknown, so neither is faked.
+    expect(c.spentMinor).toBeNull();
+    expect(c.perDayMinor).toBeNull();
+  });
+
+  it("A CAP OF ZERO IS EXHAUSTED AT ONCE, because caps fail closed here", () => {
+    const c = cap({ capMinor: 0, spentMinor: 0 });
+    expect(c.state).toBe("exhausted");
+    expect(c.remainingMinor).toBe(0);
+    expect(c.askFits).toBe(true); // an ask of nothing still fits nothing
+    expect(cap({ capMinor: 0, spentMinor: 0, askMinor: 1 }).askFits).toBe(false);
+  });
+
+  it("is exhausted once spend reaches the cap, and remaining never goes negative", () => {
+    const c = cap({ spentMinor: 140_000 });
+    expect(c.state).toBe("exhausted");
+    expect(c.remainingMinor).toBe(0);
+  });
+});
+
+// ── Which cap binds ─────────────────────────────────────────────────────────
+
+describe("the cap that binds first", () => {
+  const at = START + 10 * DAY;
+  const cycleAt = (spent: number, ask: number, capMinor = 100_000) =>
+    readCap({ scope: "cycle", window: WINDOW, capMinor, spentMinor: spent, atMs: at, askMinor: ask });
+  const seasonAt = (spent: number, ask: number, capMinor = 400_000) =>
+    readCap({ scope: "season", window: SEASON, capMinor, spentMinor: spent, atMs: at, askMinor: ask });
+
+  it("picks the one with the least proportional room left once the ask is counted", () => {
+    // 30% of the cycle, 95% of the season. The season is what stops this circle.
+    expect(bindingCap(cycleAt(20_000, 10_000), seasonAt(370_000, 10_000))).toBe("season");
+    // And the other way, on the same envelopes with a different history.
+    expect(bindingCap(cycleAt(95_000, 10_000), seasonAt(100_000, 10_000))).toBe("cycle");
+  });
+
+  it("names the single cap when only one exists", () => {
+    const none = readCap({ scope: "season", window: SEASON, capMinor: null, spentMinor: 0, atMs: at, askMinor: 0 });
+    expect(bindingCap(cycleAt(0, 0), none)).toBe("cycle");
+  });
+
+  it("names nothing when neither cap exists", () => {
+    const a = readCap({ scope: "cycle", window: WINDOW, capMinor: null, spentMinor: 0, atMs: at, askMinor: 0 });
+    const b = readCap({ scope: "season", window: null, capMinor: 400_000, spentMinor: 0, atMs: at, askMinor: 0 });
+    expect(bindingCap(a, b)).toBeNull();
+  });
+
+  it("never lets a cap it cannot measure win the comparison on an invented figure", () => {
+    const unmeasured = readCap({
+      scope: "season", window: SEASON, capMinor: 400_000,
+      spentMinor: 0, atMs: at, askMinor: 0, measurable: false,
+    });
+    expect(bindingCap(cycleAt(20_000, 0), unmeasured)).toBe("cycle");
+  });
+});
+
+// ── The four sentences ──────────────────────────────────────────────────────
+
+describe("four facts, four sentences, and no two the same", () => {
+  const off: CircleBurnReading = { kind: "module_off" };
+  const ungoverned: CircleBurnReading = {
+    kind: "ungoverned", circleId: "kitchen", unit: "token:credits",
+    takenAt: new Date(START).toISOString(),
+  };
+  const unspent = metered();
+  const spentOut = metered({
+    cycle: cap({ spentMinor: 100_000 }),
+    binds: "cycle",
+  });
+
+  it("says the module is off without saying anything about a circle", () => {
+    const s = burnSentence(off, WORDS);
+    expect(s).toContain("not keeping circle budgets");
+    expect(s).not.toContain("The Kitchen Circle");
+  });
+
+  it("SAYS UNGOVERNED, which is the opposite of the zero it would otherwise render", () => {
+    const s = burnSentence(ungoverned, WORDS);
+    expect(s).toContain("ungoverned");
+    expect(s).toContain("Nothing caps what this circle may issue");
+    // The trap this exists for: reading as reassuring when it is the reverse.
+    expect(s).not.toContain("has issued nothing");
+  });
+
+  it("says a real envelope has had nothing spent against it, and no rate yet", () => {
+    const s = burnSentence(unspent, WORDS);
+    expect(s).toContain("has issued nothing this cycle");
+    expect(s).toContain("no burn rate yet");
+    expect(s).not.toContain("ungoverned");
+  });
+
+  it("says the room is used up and when it comes back", () => {
+    const s = burnSentence(spentOut, WORDS);
+    expect(s).toContain("has used all");
+    expect(s).toContain("can issue nothing more until");
+  });
+
+  it("THE PROPERTY: no two of the four share a sentence", () => {
+    const all = [off, ungoverned, unspent, spentOut].map((r) => burnSentence(r, WORDS));
+    expect(new Set(all).size).toBe(4);
+  });
+
+  it("COMPILE TIME: the ballot card cannot reach a metered field off an ungoverned reading", () => {
+    /*
+     * The strongest form of the promise, and the one a runtime assertion
+     * cannot make. `tsconfig.tests.json` typechecks this file in CI, so if
+     * `CircleBurnReading` ever grows a shared `cycle` field, or the ungoverned
+     * case is folded back into the metered one, these two lines stop being
+     * errors and `@ts-expect-error` turns the gate red.
+     */
+    /*
+     * ON THE UNGOVERNED TYPE ITSELF, and this is the version that bites.
+     * Written against the whole union it proved nothing: `module_off` carries
+     * no `cycle` either, so the directive stayed satisfied even with `cycle`
+     * folded onto `UngovernedReading`. A mutation run caught that.
+     */
+    const noFigures = (r: UngovernedReading): string => {
+      // @ts-expect-error an ungoverned reading has no cycle figure to render
+      void r.cycle;
+      // @ts-expect-error and no season figure either
+      void r.season;
+      return r.circleId;
+    };
+    expect(noFigures(ungoverned as UngovernedReading)).toBe("kitchen");
+
+    /* And every kind has to be answered by name, so a new one cannot inherit
+     * whichever branch happens to be last. */
+    const branch = (r: CircleBurnReading): string => {
+      switch (r.kind) {
+        case "module_off":
+          return "module_off";
+        case "ungoverned":
+          return "ungoverned";
+        case "metered":
+          return r.cycle.state;
+        /*
+         * THE GATE FIRED HERE, AND THIS CASE IS WHAT IT COST (0200).
+         *
+         * Adding `TreasuryReading` to the union failed `tsc` on the line below
+         * with "Type 'TreasuryReading' is not assignable to type 'never'",
+         * BEFORE this case existed. That is the whole point of the exhaustive
+         * switch: a new model of circle money cannot reach a surface through
+         * the branch written for a cap, so nothing can render a persisting
+         * balance as a percentage of a resetting ceiling.
+         */
+        case "treasury":
+          return r.circleStatus;
+        default: {
+          const impossible: never = r;
+          return impossible;
+        }
+      }
+    };
+    expect(branch(ungoverned)).toBe("ungoverned");
+    expect(branch(unspent)).toBe("unspent");
+  });
+
+  it("keeps a treasury apart BY TYPE, so no cap field is reachable on it", () => {
+    const treasury: TreasuryReading = {
+      kind: "treasury",
+      circleId: "kitchen",
+      unit: "token:credits",
+      takenAt: new Date(START).toISOString(),
+      askMinor: 0,
+      account: "sys:circle:kitchen",
+      balanceMinor: 4_000,
+      fundedMinor: 5_000,
+      spentMinor: 1_000,
+      returnedMinor: 0,
+      fits: true,
+      circleStatus: "active",
+      pending: null,
+      sweptOnDormancy: null,
+      period: SEASON,
+    };
+    const noCaps = (r: TreasuryReading): number | null => {
+      // @ts-expect-error a treasury has no cycle cap: it holds tokens
+      void r.cycle;
+      // @ts-expect-error and no season cap either
+      void r.season;
+      // @ts-expect-error and there is no share of a ceiling to take
+      void r.askShare;
+      return r.balanceMinor;
+    };
+    expect(noCaps(treasury)).toBe(4_000);
+    expect(isTreasury(treasury)).toBe(true);
+    expect(isTreasury(unspent)).toBe(false);
+    expect(isUngoverned(treasury)).toBe(false);
+  });
+
+  it("says a treasury persists and never prints it as a share of a cap", () => {
+    const held: TreasuryReading = {
+      kind: "treasury",
+      circleId: "kitchen",
+      unit: "token:credits",
+      takenAt: new Date(START).toISOString(),
+      askMinor: 0,
+      account: "sys:circle:kitchen",
+      balanceMinor: 4_000,
+      fundedMinor: 5_000,
+      spentMinor: 1_000,
+      returnedMinor: 0,
+      fits: true,
+      circleStatus: "active",
+      pending: null,
+      sweptOnDormancy: null,
+      period: SEASON,
+    };
+    const s = burnSentence(held, WORDS);
+    expect(s).toContain("carries over");
+    expect(s).not.toContain("%");
+    expect(s).not.toContain("room");
+    expect(s).not.toContain("cap");
+
+    /*
+     * THREE ZEROS, THREE SENTENCES. Rye ruled that a dormant circle's treasury
+     * goes to the master treasury or is destroyed, so a balance of zero can
+     * mean never funded, swept on dormancy, or spent. A surface printing one
+     * sentence over all three would be the conflation this module exists to
+     * prevent, one level down from the union itself.
+     */
+    const neverFunded = burnSentence(
+      { ...held, balanceMinor: 0, fundedMinor: 0, spentMinor: 0 },
+      WORDS,
+    );
+    const sweptAway = burnSentence(
+      {
+        ...held,
+        balanceMinor: 0,
+        spentMinor: 0,
+        circleStatus: "dormant",
+        sweptOnDormancy: { heldMinor: 5_000, at: "2026-09-01T00:00:00.000Z", destination: "master_treasury" },
+      },
+      WORDS,
+    );
+    const allSpent = burnSentence(
+      { ...held, balanceMinor: 0, spentMinor: 5_000 },
+      WORDS,
+    );
+    expect(new Set([neverFunded, sweptAway, allSpent]).size).toBe(3);
+
+    expect(neverFunded).toContain("nothing has been minted into it yet");
+    expect(neverFunded).toContain("never a spent one");
+
+    expect(sweptAway).toContain("its treasury was swept");
+    expect(sweptAway).toContain("returned to the village treasury");
+    // The consequence with teeth: reviving costs a mint against the cap.
+    expect(sweptAway).toContain("meets this village's issuance cap");
+
+    expect(allSpent).toContain("spent its whole treasury");
+    expect(allSpent).toContain("never an empty one");
+
+    // Destroyed says destroyed, and it is a different sentence again.
+    const destroyed = burnSentence(
+      {
+        ...held,
+        balanceMinor: 0,
+        spentMinor: 0,
+        circleStatus: "dormant",
+        sweptOnDormancy: { heldMinor: 5_000, at: "2026-09-01T00:00:00.000Z", destination: "retired" },
+      },
+      WORDS,
+    );
+    expect(destroyed).toContain("no longer exist");
+    expect(destroyed).not.toBe(sweptAway);
+
+    // A unit this meter cannot read says so instead of reporting zero.
+    const unknown = burnSentence(
+      { ...held, balanceMinor: null, fundedMinor: null, spentMinor: null, returnedMinor: null, fits: null },
+      WORDS,
+    );
+    expect(unknown).toContain("Treat the balance as unknown");
+    expect(unknown).not.toContain("0");
+  });
+
+  it("keeps the ungoverned case apart BY TYPE, so a caller cannot render it as an absence", () => {
+    expect(isUngoverned(ungoverned)).toBe(true);
+    expect(isUngoverned(off)).toBe(false);
+    expect(isUngoverned(unspent)).toBe(false);
+    // The kinds themselves are what a renderer branches on.
+    expect(new Set([off.kind, ungoverned.kind, unspent.kind]).size).toBe(3);
+  });
+});
+
+describe("the sentence for an ask names the cap that binds", () => {
+  const at = START + 10 * DAY;
+
+  it("gives one cap and says it runs out before the other", () => {
+    const reading = metered({
+      askMinor: 10_000,
+      cycle: readCap({ scope: "cycle", window: WINDOW, capMinor: 100_000, spentMinor: 20_000, atMs: at, askMinor: 10_000 }),
+      season: readCap({ scope: "season", window: SEASON, capMinor: 400_000, spentMinor: 370_000, atMs: at, askMinor: 10_000 }),
+      binds: "season",
+      fits: false,
+    });
+    const s = burnSentence(reading, WORDS);
+    expect(s).toContain("95% of the season's room");
+    expect(s).toContain("runs out before the cycle's");
+    // Two percentages side by side is exactly what this replaces.
+    expect(s).not.toContain("30%");
+  });
+});
