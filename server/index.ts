@@ -18154,14 +18154,14 @@ Send an empty drafts array when you are still listening. A role payload is {name
     },
   };
 
-  app.post("/api/assistant/proposal", async (req, res) => {
+  app.post("/api/assistant/proposal", async (req, res) => { // limit-ok: bounded two calls down, in callAssistant (server/lib/assistant.ts), 30 an hour per IP then this mode's day budget, before any provider call; a refusal that bought nothing writes no usage row
     const kind = String(req.body?.kind ?? "work-with-us");
     if (!PROPOSAL_KINDS[kind]) return res.status(400).json({ error: "unknown proposal kind" });
     return handleProposalAssistant(req, res, kind);
   });
 
   // Kept so the existing Work With Us page keeps working unchanged.
-  app.post("/api/assistant/work-with-us", async (req, res) => handleProposalAssistant(req, res, "work-with-us"));
+  app.post("/api/assistant/work-with-us", async (req, res) => handleProposalAssistant(req, res, "work-with-us")); // limit-ok: same engine as /api/assistant/proposal, bounded in callAssistant (30 an hour per IP, then the mode's day budget)
 
   async function handleProposalAssistant(req: express.Request, res: express.Response, kind: string) {
     // Every guard (key, per-IP burst, this mode's day) lives in callAssistant
@@ -18466,7 +18466,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     next();
   };
 
-  app.post("/api/admin/investor-docs/upload", adminOnly, upload.single("file"), async (req, res) => {
+  app.post("/api/admin/investor-docs/upload", adminOnly, upload.single("file"), async (req, res) => { // limit-ok: adminOnly is mounted as middleware (a reference, not a call the gate can see) and answers 401 before multer writes a byte
     if (!req.file) {
       return res.status(400).json({ error: "Missing file" });
     }
