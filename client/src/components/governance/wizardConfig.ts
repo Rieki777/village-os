@@ -41,6 +41,8 @@ import {
   UserPlus,
   type LucideIcon,
 } from "lucide-react";
+import { ROLE_SEAT_TYPE } from "./roleSeatType";
+import { atLeast, changesPresent, pct, positive, required } from "./wizardValidators";
 
 /**
  * The proposal types (GOV_DESIGN section 4).
@@ -58,6 +60,7 @@ export const WIZARD_TYPES = [
   "power_transfer",
   "power_grant",
   "power_return",
+  "role_seat",
 ] as const;
 export type WizardType = (typeof WIZARD_TYPES)[number];
 
@@ -88,7 +91,14 @@ export type FieldKind =
   | "date"
   | "choice"
   | "pick"
-  | "changeSet";
+  | "changeSet"
+  /*
+   * A seat's end date (0199). A date input that also says, live, when the seat
+   * will end: the season's end when it is left empty, and any caution. It
+   * runs the server's own rule (shared/seatTerms.ts), so a steward's cap and
+   * the no-season refusal arrive in the route's words before publishing.
+   */
+  | "seatTerm";
 
 /** Where a `pick` field's options come from, fetched by the renderer. */
 export type PickSource =
@@ -142,6 +152,11 @@ export interface FieldSpec {
   maxLength?: number;
   options?: ReadonlyArray<{ value: string; label: string }>;
   source?: PickSource;
+  /**
+   * For a `seatTerm` field: the answer key holding the permission role's id,
+   * so a role carrying the steward veto is held to the season's end.
+   */
+  roleKey?: string;
   /** A sentence naming what is wrong, or null. Runs on every keystroke. */
   problem?: (value: unknown, answers: Record<string, unknown>) => string | null;
 }
@@ -165,6 +180,12 @@ export interface WizardTypeConfig {
   description: string;
   /** The sentence the review step ends on: what publishing actually does. */
   consequence: string;
+  /**
+   * True when the publish route opens the ballot itself. The review step and
+   * the published card then leave out the sensing sentences, which describe
+   * the road a proposal travels before somebody takes it to a vote.
+   */
+  opensVote?: boolean;
   /** Where a finished proposal goes, and in what shape. */
   publish: {
     path: string;
@@ -173,31 +194,8 @@ export interface WizardTypeConfig {
   steps: Partial<Record<StepKey, TypeStepOverride>>;
 }
 
-// ── Shared validators ────────────────────────────────────────────────────────
-
-const required = (what: string) => (v: unknown) =>
-  String(v ?? "").trim() ? null : `${what} is the part only you can write. It cannot be blank`;
-
-const atLeast = (n: number, what: string) => (v: unknown) =>
-  String(v ?? "").trim().length >= n ? null : `${what} needs at least ${n} characters so the village can weigh it`;
-
-const pct = (v: unknown) => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "That needs to be a number between 0 and 100";
-  if (n < 0 || n > 100) return "A percentage runs from 0 to 100";
-  return null;
-};
-
-const positive = (what: string) => (v: unknown) => {
-  const n = Number(v);
-  if (!Number.isFinite(n) || n <= 0) return `${what} has to be more than zero`;
-  return null;
-};
-
-const changesPresent = (v: unknown) =>
-  Array.isArray(v) && v.length > 0 ? null : "Pick at least one dial to change, and say what it becomes";
-
 // ── The types ────────────────────────────────────────────────────────────────
+// The shared validators live in wizardValidators.ts.
 
 export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
   {
@@ -503,6 +501,8 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
       },
     },
   },
+  // Seat somebody in a role by the village's vote, with the term they would sit for.
+  ROLE_SEAT_TYPE,
   {
     id: "quest_payout",
     group: "One-time",

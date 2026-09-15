@@ -38,6 +38,8 @@ import mysql from "mysql2/promise";
 import type { Pool } from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 import { loadVariables, setVariable } from "./lib/variables";
+import { carriedUnseatingsOf } from "./repos/stewardshipBallots";
+import { beingVotedOut } from "./lib/stewardship";
 import {
   actFor,
   expiringHoldings,
@@ -73,7 +75,11 @@ let db: TestDb;
 let pool: Pool;
 
 const LAUNCH_BALLOT = "bal-birthing";
-const SEASON = { currentSeasonId: "rooting-2026" };
+/** A running season that ends forty days out, in whole seconds like the column. */
+const SEASON = {
+  currentSeasonId: "rooting-2026",
+  seasonEndsAt: new Date(Math.floor((Date.now() + 40 * 86400000) / 1000) * 1000),
+};
 
 async function member(id: string, name: string, role: string): Promise<void> {
   await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema
@@ -151,6 +157,22 @@ describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
     expect(Number(count[0].n), "and it wrote nothing on its way out").toBe(0);
   });
 
+  it("REFUSES to seat anybody when no season end is known at all", async () => {
+    // Every seat has a term, so a launch that cannot name the season's end
+    // seats nobody and says why, the same way an open-ended season does.
+    const r = await seatCatalystsAsStewards(pool, LAUNCH_BALLOT, { currentSeasonId: null });
+    expect(r.ok).toBe(false);
+    expect(r.termEndsAt).toBeNull();
+    expect(String(r.error)).toContain("end date");
+    const past = await seatCatalystsAsStewards(pool, LAUNCH_BALLOT, {
+      ...SEASON,
+      seasonEndsAt: new Date(Date.now() - 86400000),
+    });
+    expect(past.ok, "a season that has already ended cannot hold a term either").toBe(false);
+    const [count]: any = await pool.query("SELECT COUNT(*) AS n FROM role_holders");
+    expect(Number(count[0].n)).toBe(0);
+  });
+
   it("seats every catalyst, creates the role, and grants the one power", async () => {
     const r = await seatCatalystsAsStewards(pool, LAUNCH_BALLOT, SEASON);
     expect(r.ok).toBe(true);
@@ -187,10 +209,9 @@ describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
     expect(rows[0].term_ends_at, "the seat ends on an instant").toBeTruthy();
     const ends = new Date(rows[0].term_ends_at);
     expect(ends.getTime()).toBeGreaterThan(Date.now());
-    // Within a minute of the clock's own answer, which is the point: the
-    // season is recorded beside it and does not decide it.
-    const expected = termEndsAtFromCycles(3);
-    expect(Math.abs(ends.getTime() - expected.getTime())).toBeLessThan(60_000);
+    // The season's end, which is the ruling of 2026-09-14: a steward's seat
+    // resets each season at the latest, and the launch seats it that long.
+    expect(Math.abs(ends.getTime() - SEASON.seasonEndsAt.getTime())).toBeLessThan(1_000);
     expect(rows[0].season_id).toBe("rooting-2026");
     expect(rows[0].granted_by, "the village put them here, not an administrator").toBe(LAUNCH_BALLOT);
   });
@@ -283,6 +304,29 @@ describe.skipIf(!configured)("the veto on a carried decision", () => {
   afterAll(async () => {
     await pool?.end();
     await db?.drop();
+  });
+
+  it("finds a steward's carried unseating, and marks a veto cast inside its window (Rye, 2026-09-14)", async () => {
+    // The instants a real close writes: carried a day ago, landing in two days.
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema
+      "UPDATE ballots SET closed_at = ?, lands_at = ? WHERE id = 'bal-unseat'",
+      [new Date(Date.now() - 86400000), new Date(Date.now() + 2 * 86400000)],
+    );
+    try {
+      const found = await carriedUnseatingsOf(pool, "st-1");
+      expect(found.map((u) => [u.ballotId, u.roleId])).toEqual([["bal-unseat", STEWARD_ROLE_ID]]);
+      // Exact on the member half: a prefix of the id, or another steward, finds nothing.
+      expect(await carriedUnseatingsOf(pool, "st")).toEqual([]);
+      expect(await carriedUnseatingsOf(pool, "st-2")).toEqual([]);
+      // A role_seat ballot is not a removal, whoever it names.
+      expect(await carriedUnseatingsOf(pool, "pr-1")).toEqual([]);
+
+      expect((await beingVotedOut(pool, "st-1", new Date()))?.unseatBallotId).toBe("bal-unseat");
+      expect(await beingVotedOut(pool, "st-1", new Date(Date.now() + 3 * 86400000)), "after it lands").toBeNull();
+      expect(await beingVotedOut(pool, "st-2", new Date())).toBeNull();
+    } finally {
+      await pool.query("UPDATE ballots SET closed_at = NULL, lands_at = NULL WHERE id = 'bal-unseat'"); // module-review-ok: fixture SQL against the S5 scratch schema
+    }
   });
 
   it("has no act on a carried decision until somebody makes one, and that is not a queue", async () => {

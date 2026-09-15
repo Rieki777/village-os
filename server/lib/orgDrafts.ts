@@ -39,6 +39,7 @@ import type { Pool, PoolConnection } from "mysql2/promise";
 import { draftStatus, withdrawDraftRow } from "../repos/orgDrafts";
 import { stageIndex } from "../../shared/gameConfig";
 import { listOrgAssignments, listOrgRoles, peopleOnly, seatState, type LapseContext, type OrgAssignment } from "./orgChart";
+import { resolveSeatTerm, type SeatCalendar } from "../../shared/seatTerms";
 
 export type DraftOp = "create_seat" | "update_seat" | "rest_seat" | "seat_holder" | "end_holding";
 export type DraftStatus = "open" | "published" | "reverted" | "withdrawn";
@@ -867,6 +868,11 @@ export async function publishDraft(
    * cap, which is the right answer for a draft a founder typed.
    */
   changeCap?: number | null,
+  /**
+   * The village's calendar, which every seating a draft makes needs for its
+   * term (0199). A draft with no seating in it publishes without one.
+   */
+  calendar?: SeatCalendar | null,
 ): Promise<{ ok: true; applied: number } | { ok: false; error: string }> {
   const preview = await previewDraft(pool, draftId, changeCap);
   if (!preview.lines.length) return { ok: false, error: "This draft has no changes in it" };
@@ -886,7 +892,7 @@ export async function publishDraft(
     for (const c of draft.changes) {
       const before = await captureBefore(conn, c);
       await conn.query("UPDATE org_draft_changes SET before_json = ? WHERE id = ?", [JSON.stringify(before), c.id]);
-      await applyChange(conn, c);
+      await applyChange(conn, c, calendar ?? null);
     }
     await conn.query(
       "UPDATE org_drafts SET status = 'published', published_by = ?, published_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'open'",
@@ -907,7 +913,7 @@ async function captureBefore(conn: PoolConnection, c: DraftChange): Promise<any>
   if (c.op === "seat_holder") return null;
   if (c.op === "end_holding") {
     const [[row]] = await conn.query<any[]>(
-      "SELECT id, org_role_id, holder_kind, user_id, display_name, holder_key, focus, note, season_id, term_ends_at FROM org_role_assignments WHERE id = ?",
+      "SELECT id, org_role_id, holder_kind, user_id, display_name, holder_key, focus, note, season_id, term_ends_at, term_follows_season FROM org_role_assignments WHERE id = ?",
       [String(c.payload?.assignmentId ?? "")],
     );
     return row ?? null;
@@ -926,7 +932,7 @@ const SEAT_FIELDS: Record<string, string> = {
   recruiting: "recruiting",
 };
 
-async function applyChange(conn: PoolConnection, c: DraftChange): Promise<void> {
+async function applyChange(conn: PoolConnection, c: DraftChange, calendar: SeatCalendar | null): Promise<void> {
   const p = c.payload ?? {};
   if (c.op === "create_seat") {
     // Every field a proposal may carry (PROPOSABLE_SEAT_FIELDS in
@@ -952,11 +958,20 @@ async function applyChange(conn: PoolConnection, c: DraftChange): Promise<void> 
   }
   if (c.op === "seat_holder") {
     const holderKey = p.userId ? String(p.userId) : `doc:${String(p.displayName ?? "unnamed").toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+    /*
+     * 0199: a seating a draft makes carries a term like every other seating,
+     * decided at publish against the calendar as it stands then. A term the
+     * draft cannot give refuses the whole publish, and the reason is the error
+     * the publish returns.
+     */
+    if (!calendar) throw new Error("Publishing a seating needs the village's calendar to set its term. Nothing was published.");
+    const term = resolveSeatTerm({ requestedEndsOn: p.termEndsOn, calendar, capAtSeasonEnd: false, now: new Date() });
+    if (!term.ok) throw new Error(term.error);
     await conn.query(
-      `INSERT INTO org_role_assignments (id, org_role_id, holder_kind, user_id, display_name, holder_key, focus, season_id)
-       VALUES (?,?,?,?,?,?,?,?)`,
+      `INSERT INTO org_role_assignments (id, org_role_id, holder_kind, user_id, display_name, holder_key, focus, season_id, term_ends_at, term_follows_season)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
       [newId("orgasg"), c.orgRoleId, p.userId ? "member" : "documented", p.userId ?? null,
-        p.displayName ?? null, holderKey, p.focus ?? null, p.seasonId ?? null],
+        p.displayName ?? null, holderKey, p.focus ?? null, p.seasonId ?? term.seasonId, term.endsAt, term.followsSeason ? 1 : 0],
     );
     return;
   }
@@ -1025,10 +1040,10 @@ export async function revertDraft(
         // holds the seat's history; clearing its ended_at would rewrite the
         // past to look as though the person never left.
         await conn.query(
-          `INSERT INTO org_role_assignments (id, org_role_id, holder_kind, user_id, display_name, holder_key, focus, note, season_id, term_ends_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?)`,
+          `INSERT INTO org_role_assignments (id, org_role_id, holder_kind, user_id, display_name, holder_key, focus, note, season_id, term_ends_at, term_follows_season)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
           [newId("orgasg"), b.org_role_id, b.holder_kind, b.user_id, b.display_name, b.holder_key,
-            b.focus, b.note ?? null, b.season_id, b.term_ends_at],
+            b.focus, b.note ?? null, b.season_id, b.term_ends_at, Number(b.term_follows_season ?? 0) ? 1 : 0],
         );
       } else if (c.beforeJson) {
         const b = c.beforeJson;
