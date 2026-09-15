@@ -81,7 +81,7 @@ describe.skipIf(!configured)("waning reaches a small balance at two decimals", (
     // on every connection.
     const carriedIn = Math.floor(cycleWindow(new Date()).startsAt.getTime() / 1000) - 24 * 60 * 60;
     await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-      "UPDATE `token_ledger` SET `at` = FROM_UNIXTIME(?) WHERE `idempotency_key` = ?",
+      "UPDATE `token_ledger` SET `at` = FROM_UNIXTIME(?) WHERE `idempotency_key` = ?", // module-review-ok: test fixture in the S5 scratch schema, backdating a seed row so it was held going into the moon
       [carriedIn, key],
     );
     return id;

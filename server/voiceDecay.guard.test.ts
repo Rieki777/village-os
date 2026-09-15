@@ -82,7 +82,7 @@ describe.skipIf(!configured)("a waning is decided again under the account lock",
     expect(r.ok, `seeding ${id}`).toBe(true);
     const before = Math.floor(cycleWindow(new Date()).startsAt.getTime() / 1000) - 24 * 60 * 60;
     await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-      "UPDATE `token_ledger` SET `at` = FROM_UNIXTIME(?) WHERE `idempotency_key` = ?",
+      "UPDATE `token_ledger` SET `at` = FROM_UNIXTIME(?) WHERE `idempotency_key` = ?", // module-review-ok: test fixture in the S5 scratch schema, backdating a seed row so it was held going into the moon
       [before, key],
     );
     return id;
