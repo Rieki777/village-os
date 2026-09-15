@@ -206,13 +206,15 @@ permission model. An id the array does not contain returns `-1`, and every calle
 rung" rather than "rung zero", which is what keeps an unknown value from reading as the bottom of the
 ladder.
 
-**Six rule types, one of which is countable.** `default` and `account` are always true for anyone with a
+**Seven rule types, one of which is countable.** `default` and `account` are always true for anyone with a
 user record. `training-complete` reads `trainingRepo.all()` and requires EVERY training module row to be in
 `user.journeys.training`, returning false when the village has no modules at all. There is no draft state:
 `training_modules` carries `id`, `title`, `description`, `type`, `url` and `sort_order` and nothing else, so
 a POST to `/api/admin/training-modules` is live the moment it lands. `membership`
 reads `membershipGranted`. `quests` compares the consented-claim count against
-`progression.quests_for.<id>`. `granted` compares against `stage_granted`. `MaturityLadder` prints a
+`progression.quests_for.<id>`. `tokens` asks whether the village has ever paid the member for something they
+brought it (`hasBeenPaidByVillage`, over the sources `server/lib/contributionPay.ts` counts). `granted`
+compares against `stage_granted`. `MaturityLadder` prints a
 distance only for the `quests` rung, because that is the only one with a countable distance, and inventing
 "60% of the way to Member" for a rung that turns on a signature is the fabrication the path progress bars
 were deleted for.
@@ -221,6 +223,15 @@ were deleted for.
 answer to the grant if the grant is higher. A grant BELOW the earned stage does nothing. A grant naming a
 stage id the ladder does not contain resolves to `-1` and is silently ignored, with no error and no
 warning.
+
+**Nothing above Member without an admission.** A rung above `member` is reached only by somebody the village
+admitted: `membershipGranted`, or a `stage_granted` at `member` or above. `climbLadder` in
+`server/lib/admission.ts` holds that for every caller of `computeStage`, and
+`POST /api/members/:id/contributor` refuses somebody who has not been admitted. Before it, a guest the village
+paid stood at Contributor, on every ballot roll and able to vouch. The release that added it first ran
+`freezeStandingAboveTheDoor` once, keeping as an admission the standing the old ladder had given (one consented
+quest reached Contributor there), so nobody was demoted by it. A guest who had only been paid is not kept:
+pay was not a rung on that ladder.
 
 **Appointment beats the ladder, and `minStage` is checked at appointment time only.**
 `roleCapabilitiesFor` unions the `capabilities` arrays of every role the member holds, and hands that list
@@ -241,11 +252,13 @@ Participant rung is asserted by one POST. **No capability may ever be hung on `p
 `progression.unlock.*` dial.** Today it costs nothing, because `participant` carries multiplier 1 and opens
 no key; the warning is for the fork that moves a rung.
 
-**Two rungs are crossed with no record at all.** `recordStageEvent` has exactly two callers: the admin
-grant in `server/routes/players.ts`, and quest consent in `server/index.ts`. The `membership` rung is
-crossed by `PUT /api/admin/submissions/:id/status` when an accepted Love Letter sets `membershipGranted`,
-which is gated on `intake.moderate` and is the only writer of that flag; the `training-complete` rung is
-crossed by `POST /api/game/journey/sync`. Neither calls `recordStageEvent`. So the crossing into `member`,
+**Two rungs are crossed with no record at all.** `recordStageEvent` has three callers: the admin grant in
+`server/routes/players.ts`, quest consent in `server/routes/questClaims.ts`, and a steward naming a
+contributor in `server/routes/vouches.ts`. The `membership` rung is crossed whenever `membershipGranted` is
+set: by `PUT /api/admin/submissions/:id/status` when an accepted Love Letter names its signer (gated on
+`intake.moderate`), by the vouch routes in `server/routes/vouches.ts` when the bar is met or a steward vouches,
+and once each, at boot, by `freezeEmailMatchedMemberships` and `freezeStandingAboveTheDoor`. The
+`training-complete` rung is crossed by `POST /api/game/journey/sync`. None of those calls `recordStageEvent`. So the crossing into `member`,
 which opens nine of the thirteen stage unlocks, writes no `stage_events` row, no pulse line and no
 notification. The member is never told, and their profile history skips the rung entirely.
 

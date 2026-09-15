@@ -48,8 +48,9 @@ import {
   WIRED_BUT_HELD_BACK,
   type PowerHolder,
 } from "./lib/capabilityRegistry";
-import { allVariables, boolVar, loadVariables, numberVar, rawValue, setVariable, stringVar } from "./lib/variables";
+import { allVariables, boolVar, loadVariables, numberVar, rawValue, setVariable, storedOverride, stringVar } from "./lib/variables";
 import { memberJoined } from "./lib/arrival";
+import { climbLadder, freezeStandingAboveTheDoor, questsThatCarriedPastTheDoor, type LadderStage } from "./lib/admission";
 import { adminGateWasConsulted, markAdminGate } from "./lib/adminGate";
 import { type FaqPathway, register as registerFaqRoutes } from "./routes/faqs";
 import { register as registerGratitudeVoiceRoutes } from "./routes/gratitudeVoices";
@@ -1836,6 +1837,11 @@ async function ensureDataFiles() {
   await runOnce("founding-team-in-progress", markFoundingTeamInProgress);
   await runOnce("backfill-member-handles", backfillMemberHandles);
   await runOnce("membership-grants-from-email-match", freezeEmailMatchedMemberships);
+  await runOnce("standing-above-the-door-2026-09-14", () => freezeStandingAboveTheDoor({
+    stages: GAME_CONFIG.stages, everyone: () => members.all(), consentedCounts: () => claimsRepo.consentedCounts(), log: (line) => console.log(line),
+    questBar: questsThatCarriedPastTheDoor(storedOverride("progression.quests_for.contributor"), numberVar("progression.quests_for.quest-seeker")),
+    admit: (id) => members.update(id, (m: any) => { m.membershipGranted = true; }),
+  }));
   await runOnce("org-chart-2026-08", applyOrgChartRefresh);
   await runOnce("voice-sweep-2026-08-01", applyVoiceSweepToSeededRows);
   await runOnce("voice-sweep-2026-08-01-part-2", applyVoiceSweepToSeededDocuments);
@@ -3752,26 +3758,20 @@ function hasMembership(user: any): boolean {
 const trainingDoneHere = (done: readonly string[]): boolean =>
   trainingIsComplete(gatingModuleIds(trainingRepo.all()), done);
 
-function computeStage(user: any, consentedQuests: number, trainingDone: readonly string[], paidByVillage = false): string {
-  let earned = GAME_CONFIG.stages[0].id;
-  const grantedIdx = user.stageGranted ? stageIndex(user.stageGranted) : -1;
-  for (const stage of GAME_CONFIG.stages) {
-    const idx = stageIndex(stage.id);
-    let ok = false;
-    switch (stage.rule.type) {
-      case "default": ok = true; break;
-      case "account": ok = true; break; // having a user record implies an account
-      case "training-complete": ok = trainingDoneHere(trainingDone); break;
-      case "membership": ok = hasMembership(user); break;
-      // Threshold from the registry (progression.quests_for.<stage>), so speed is tunable.
-      case "quests": ok = consentedQuests >= Math.max(1, numberVar(`progression.quests_for.${stage.id}`)); break;
-      case "tokens": ok = paidByVillage; break; // ever paid BY THE VILLAGE; see hasBeenPaidByVillage
-      case "granted": ok = grantedIdx >= idx; break;
-    }
-    if (ok && idx > stageIndex(earned)) earned = stage.id;
+/** Each rung's own rule, from one member's counts. The door above Member and every grant are `climbLadder`'s (lib/admission.ts). */
+const rungRule = (user: any, consentedQuests: number, trainingDone: readonly string[], paidByVillage: boolean) => (stage: LadderStage): boolean => {
+  switch (stage.rule.type) {
+    case "default": case "account": return true; // having a user record implies an account
+    case "training-complete": return trainingDoneHere(trainingDone);
+    case "membership": return hasMembership(user);
+    case "quests": return consentedQuests >= Math.max(1, numberVar(`progression.quests_for.${stage.id}`)); // the registry's, so speed is tunable
+    case "tokens": return paidByVillage; // ever paid BY THE VILLAGE; see hasBeenPaidByVillage
+    default: return false;
   }
-  if (grantedIdx > stageIndex(earned)) earned = user.stageGranted;
-  return earned;
+};
+
+function computeStage(user: any, consentedQuests: number, trainingDone: readonly string[], paidByVillage = false): string {
+  return climbLadder(GAME_CONFIG.stages, user, rungRule(user, consentedQuests, trainingDone, paidByVillage));
 }
 
 /** The one-member form: fetch the consented count, then compute. */

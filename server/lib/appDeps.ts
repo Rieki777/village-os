@@ -238,7 +238,7 @@ export interface AppDeps {
   // work exists to shrink, and would leave server/index.ts and the route
   // module importing each other. Passing keeps the arrow pointing one way.
 
-  /** The stage a member has actually reached, given their consented quests. */
+  /** The stage a member has actually reached, given their counts. Nothing above Member without an admission: lib/admission.ts. */
   /**
    * PURE and synchronous, so a caller that already holds its values pays
    * nothing. `trainingDone` is the SERVER's record of completed modules and
