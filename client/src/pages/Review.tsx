@@ -54,6 +54,7 @@
  */
 import Layout from "@/components/Layout";
 import ConsentQueue, { useConsentClaims } from "@/components/review/ConsentQueue";
+import { blockedReasons, NOTHING_LEFT_OUT, notReadLines, type NotRead } from "@/components/review/draftNotes";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
@@ -221,63 +222,6 @@ function agedFor(oldestSince: string | null): string {
   const days = Math.floor((Date.now() - new Date(oldestSince).getTime()) / 86400000);
   if (!Number.isFinite(days) || days < 1) return ", asked today";
   return days === 1 ? ", asked one day ago" : `, the oldest ${days} days ago`;
-}
-
-/** One line per proposal whose accept left keys out of the draft. */
-interface NotReadLine {
-  label: string;
-  keys: string[];
-}
-
-/**
- * The server's `ignored` list, as lines a steward can read.
- *
- * Each proposal is named by its seat where the payload gives one, under the
- * same spellings the server reads, so a vendor record that says `role_name`
- * is still called by its name. An absent or malformed list is no lines, which
- * is what an older server that never sent one should produce.
- */
-function notReadLines(
-  ignored: unknown,
-  payloadOf: (proposalId: string) => Record<string, unknown> | undefined,
-): NotReadLine[] {
-  if (!Array.isArray(ignored)) return [];
-  const lines: NotReadLine[] = [];
-  for (const entry of ignored as { proposalId?: unknown; keys?: unknown }[]) {
-    const keys = Array.isArray(entry?.keys) ? entry.keys.map(String) : [];
-    if (!entry?.proposalId || keys.length === 0) continue;
-    const id = String(entry.proposalId);
-    const payload = payloadOf(id);
-    let label = id;
-    for (const k of ["name", "role_name", "roleName", "title"]) {
-      const v = payload?.[k];
-      if (typeof v === "string" && v.trim() !== "") {
-        label = v.trim();
-        break;
-      }
-    }
-    lines.push({ label, keys });
-  }
-  return lines;
-}
-
-/** What the last accept left out, and the draft it made, so a withdraw of that draft clears it. */
-interface NotRead {
-  draftId: string | null;
-  lines: NotReadLine[];
-}
-
-const NOTHING_LEFT_OUT: NotRead = { draftId: null, lines: [] };
-
-/**
- * The server's `blockedLines`, one sentence per seat that cannot apply. An
- * older server sends none, which is no lines and the count alone.
- */
-function blockedReasons(v: unknown): string[] {
-  if (!Array.isArray(v)) return [];
-  return (v as { reads?: unknown; blocked?: unknown }[])
-    .filter((l) => typeof l?.blocked === "string" && l.blocked !== "")
-    .map((l) => (typeof l.reads === "string" && l.reads !== "" ? `${l.reads}: ${l.blocked}` : String(l.blocked)));
 }
 
 export default function Review() {
