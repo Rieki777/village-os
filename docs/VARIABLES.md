@@ -36,16 +36,17 @@ Each dial also says WHEN a change lands. 156 of them as soon as it is saved, and
 
 ## At a glance
 
-179 dials in 29 categories. 105 carry a minimum and a maximum. By type: 83 integer, 13 decimal, 10 percentage, 21 boolean, 22 choice, 30 text.
+179 dials in 30 categories. 104 carry a minimum and a maximum. By type: 82 integer, 13 decimal, 10 percentage, 21 boolean, 22 choice, 31 text.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
+| Membership | 2 | 2 | 0 |
 | Gratitude | 9 | 9 | 0 |
 | Ledger | 2 | 2 | 0 |
 | The Mint | 4 | 3 | 1 |
-| Progression | 28 | 28 | 0 |
+| Progression | 27 | 27 | 0 |
 | Quests | 5 | 5 | 0 |
-| Governance | 44 | 40 | 4 |
+| Governance | 43 | 39 | 4 |
 | Tokens | 4 | 1 | 3 |
 | Hypha | 8 | 0 | 8 |
 | Tools | 2 | 2 | 0 |
@@ -76,6 +77,8 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 
 | Dial | Key | Category | Type | Default | Who may change it |
 | --- | --- | --- | --- | --- | --- |
+| Vouches that admit a member | `membership.vouches_required` | Membership | integer | `3` | the whole village |
+| The seat that greets a new arrival | `arrival.greeter_role` | Membership | text | blank | the whole village |
 | Base sending allowance per cycle | `gratitude.base_budget` | Gratitude | integer | `105` | the whole village |
 | Value pool distributed at each cycle close | `gratitude.pool_per_cycle` | Gratitude | integer | `1000` | the whole village |
 | Which token the pool pays | `gratitude.pool_token` | Gratitude | text | `credits` | the whole village |
@@ -104,7 +107,6 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Sending-budget multiplier: Role Holder | `progression.multiplier.role-holder` | Progression | decimal | `3` | the whole village |
 | Sending-budget multiplier: Guide | `progression.multiplier.guide` | Progression | decimal | `4` | the whole village |
 | Sending-budget multiplier: Sage | `progression.multiplier.sage` | Progression | decimal | `5` | the whole village |
-| Consented quests to reach Contributor | `progression.quests_for.contributor` | Progression | integer | `1` | the whole village |
 | Consented quests to reach Quest Seeker | `progression.quests_for.quest-seeker` | Progression | integer | `3` | the whole village |
 | Stage that unlocks: forum.post | `progression.unlock.forum.post` | Progression | choice | `member` | the whole village |
 | Stage that unlocks: proposal.open | `progression.unlock.proposal.open` | Progression | choice | `co-creator` | the whole village |
@@ -167,7 +169,6 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Minting rule changes: unity floor | `governance.subject_mint_rule_unity_pct` | Governance | percentage | `0` | the whole village |
 | Seats speaking for other beings count toward quorum | `governance.nonhuman_in_quorum` | Governance | boolean | `false` | the whole village |
 | Cycles of silence before a seat leaves the count | `governance.absent_cycles` | Governance | integer | `3` | the whole village |
-| Vouches to admit a member | `membership.vouch_threshold` | Governance | integer | `0` | the whole village |
 | Equity token contract address on Base | `tokens.equity_address` | Tokens | text | blank | the founder or an admin |
 | Governance token contract address on Base | `tokens.voice_address` | Tokens | text | blank | the founder or an admin |
 | Show the economics section | `tokens.show_economics_section` | Tokens | boolean | `false` | the whole village |
@@ -255,6 +256,39 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Match score floor | `introductions.match_floor` | Introductions | integer | `3` | the whole village |
 | Days an introduction stays open | `introductions.opportunity_days` | Introductions | integer | `10` | the whole village |
 | Keep match reasoning for | `introductions.retention_days` | Introductions | integer | `90` | the whole village |
+
+## Membership
+
+2 dials. 2 for the whole village.
+
+### Vouches that admit a member
+
+How many people have to say they know somebody before that person becomes a member. The default matches how a village starts: it launches when a founder brings two more and all three carry the launch, which leaves exactly the vouchers the fourth member needs, so this number is read from the launch bar itself. A vouch cannot be taken back, so this bar is only ever crossed forwards. 0 turns vouching off: no number of vouches admits anybody, and a steward's super vouch is how people are admitted. Raise it and a young village may not be able to admit anybody at all, which is what the steward override exists for.
+
+| Fact | Value |
+| --- | --- |
+| Key | `membership.vouches_required` |
+| Type | integer, a whole number |
+| Default | `3` |
+| Range | 0 to 20 |
+| Counted in | vouches |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
+
+### The seat that greets a new arrival
+
+The role whose holders are told the moment somebody joins. Greeting belongs to a seat, so the village re-seats it each season and the message follows with nobody editing a setting. Leave it empty and the founders hear it, which is also what happens when the seat is named and nobody is sitting in it: a village that has not built its org chart yet, and one whose greeter stepped down last week, both still find out that a person arrived. Paste the role id from the org chart.
+
+| Fact | Value |
+| --- | --- |
+| Key | `arrival.greeter_role` |
+| Type | text, free text |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Gratitude
 
@@ -495,7 +529,7 @@ The DHO slug that voice claims are raised into, from app.hypha.earth. Until this
 
 ## Progression
 
-28 dials. 28 for the whole village.
+27 dials. 27 for the whole village.
 
 ### How often every seat reopens
 
@@ -696,21 +730,6 @@ Multiplies the base Gratitude sending allowance for members at the Sage stage, s
 | Counted in | x base budget |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
-| What it costs to change | a routine vote |
-
-### Consented quests to reach Contributor
-
-How many consented quests advance a member to the Contributor stage. Raising it never demotes anyone retroactively on its own: stages are recomputed from live counts.
-
-| Fact | Value |
-| --- | --- |
-| Key | `progression.quests_for.contributor` |
-| Type | integer, a whole number |
-| Default | `1` |
-| Range | 1 to 1000 |
-| Counted in | consented quests |
-| Who may change it | the whole village |
-| A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
 ### Consented quests to reach Quest Seeker
@@ -1202,7 +1221,7 @@ Consent normally needs a second person to witness the work: nobody may consent t
 
 ## Governance
 
-44 dials. 40 for the whole village, 4 for the founder or an admin.
+43 dials. 39 for the whole village, 4 for the founder or an admin.
 
 ### How sensing is weighted
 
@@ -1852,21 +1871,6 @@ When seats speaking for other beings do count toward quorum, this is how many cy
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a constitutional vote, at the highest bar the village has set |
-
-### Vouches to admit a member
-
-How many standing members must vouch for an applicant before membership completes on its own. 0 keeps vouching off and admission stays whatever your current process is. Vouching comes from contributors and up, a member may never vouch for themself, and every vouch is on the record.
-
-| Fact | Value |
-| --- | --- |
-| Key | `membership.vouch_threshold` |
-| Type | integer, a whole number |
-| Default | `0` |
-| Range | 0 to 20 |
-| Counted in | vouches |
-| Who may change it | the whole village |
-| A change takes effect | as soon as it is saved |
-| What it costs to change | a structural vote, at a higher bar |
 
 ## Tokens
 
