@@ -282,6 +282,15 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   found no deployed schema holding the economics filenames, only `village_tpl_` templates and
   `village_test_` scratch schemas. **Never refill `0182`**: a template or scratch schema may still
   record the filename, and the applied ledger keys on it.
+- **quests lane (ADMIN, owed-postings repair), 2026-09-15: holds 0210** for
+  `drizzle/0210_a_consent_remembers_what_it_owes.sql` on `wt/quest-owed-repair`: one new table,
+  `quest_owed_postings`, created `IF NOT EXISTS`, with no foreign key and no `ALTER`. Measured two
+  ways at 10:05 UTC, after `git fetch origin`. The trees of all 794 refs (every origin and local
+  ref) reach **0209**: `0207` on `wt/failed-actions`, `0208` on `wt/org-drag` and `0209` on
+  `wt/invite-links`. The `drizzle/` directories of all 381 worktrees reach **0209**, the same
+  three files. `origin/main` reaches `0206`. The number is confirmed again at landing, and
+  renumbering this file is safe until it runs anywhere but a scratch schema, because its one
+  statement is a `CREATE TABLE IF NOT EXISTS`.
 - **econ renumber lane 2, 2026-09-14: holds 0200 to 0206** on `wt/econ-renumber-2`, for the seven
   economics migrations that `wt/econ` still carried at or below main's ceiling after the merge at
   `fb2d94b`, kept in the same relative order: `0181`->`0200`, `0183`->`0201`, `0184`->`0202`,

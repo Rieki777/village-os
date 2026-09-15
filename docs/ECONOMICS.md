@@ -162,7 +162,7 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `proposal_accepted:<id>` | `server/index.ts` |
 | `quest_consent:<id>` | `server/routes/questClaims.ts` |
 | `quest.completed:<esc(v)>:<esc(questId)>:<esc(claimId)>:<esc(userId)>:<esc(tokenSlug)>` | `server/lib/economy.ts` |
-| `queststay:<id>` | `server/lib/economy.ts`, `server/routes/questClaims.ts` |
+| `queststay:<id>` | `server/lib/economy.ts` |
 | `redemption:<esc(v)>:<esc(redemptionId)>:hold` | `server/lib/redemptionStore.ts` |
 | `reversal:<esc(v)>:<eventKey>` | `server/lib/economy.ts` |
 | `role.cycle:<esc(v)>:<esc(cycleKey)>:<esc(seatId)>:<esc(userId)>:<esc(tokenSlug)>` | `server/lib/economy.ts` |
@@ -177,7 +177,7 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `xstock-<Date.now()>-<Math.random().toString(36).slice(2, 8)>` | `server/index.ts` |
 | `xstock:<slug>:<body>` | `server/index.ts` |
 
-51 distinct shapes across 58 posting site(s), plus 7 site(s) that forward a key their caller decided (`mint()` and `mintStayCredits` hand on what they were given, and every caller of those is read above). A shape ending in a timestamp and a random suffix is a key the caller did not make idempotent: the admin mint and the exchange stocking route both fall back to one when no client nonce is sent, so a retried request there is a second posting rather than a no-op.
+51 distinct shapes across 57 posting site(s), plus 8 site(s) that forward a key their caller decided (`mint()` and `mintStayCredits` hand on what they were given, and every caller of those is read above). A shape ending in a timestamp and a random suffix is a key the caller did not make idempotent: the admin mint and the exchange stocking route both fall back to one when no client nonce is sent, so a retried request there is a second posting rather than a no-op.
 <!-- generated:triggers end -->
 
 ---
@@ -2967,13 +2967,13 @@ changes with it.
 | # | Posted by | From | To | Token | Amount | Source | Idempotency key |
 |---|---|---|---|---|---|---|---|
 | 1 | the consent route | `sys:gratitude-pool` | `mem:<wren>` | `gratitude` | the consented amount, lifted by any standing badge multiplier (1 by default) and never past a top: the range's top under `posted`, the bonus ceiling under `capped`, the advertised top under `unlimited` | `quest_consent` | `quest_consent:<claimId>` |
-| 2 | `mintForConfirmedClaim` | `sys:voice-mint` | `mem:<wren>` | `village-voice` | **1000** (10) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:village-voice` |
-| 3 | `mintForConfirmedClaim` | `sys:cycle-pool` | `mem:<wren>` | `credits` | **2500** (25) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:credits` |
+| 2 | `settleOwedPosting` | `sys:voice-mint` | `mem:<wren>` | `village-voice` | **1000** (10) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:village-voice` |
+| 3 | `settleOwedPosting` | `sys:cycle-pool` | `mem:<wren>` | `credits` | **2500** (25) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:credits` |
 
 Five things this table is showing:
 
 - **Row 1 is not a mint rule.** The consent route has posted recognition since S7
-  from the range the quest advertises. `mintForConfirmedClaim` explicitly skips
+  from the range the quest advertises. The pricing behind `owedForClaim` explicitly skips
   the gratitude slug (`if (r.tokenSlug === HEARTS) continue`) so one piece of work
   cannot pay twice. There is deliberately no seeded `quest.completed` gratitude
   rule: a disabled one would look like the obvious thing to switch on.
@@ -2983,16 +2983,25 @@ Five things this table is showing:
   instead of two.
 - **10 becomes 1000 and 25 becomes 2500.** `toLedgerUnits` reads the token's own
   `decimals`, which is 2 for both Village Voice and credits since `0202`.
-- **Row 1 is awaited and rows 2 and 3 are not.** The consent route wraps
-  `mintForConfirmedClaim` in a try/catch and does not fail the response on it. A
-  quest that was witnessed and credited must not fail because a secondary mint had
-  a bad afternoon, and the occurrence key makes a later repair-post safe.
+- **Row 1 posts in the consent's commit, and rows 2 and 3 are recorded there.**
+  Recognition posts inside `consentOnce`'s transaction, as it always has. Rows 2
+  and 3, and any stay-credit reward the quest carries, are priced by `owedForClaim`
+  on the same connection and written to `quest_owed_postings` (0210) before that
+  commit. `settleOwedPosting` pays each one straight after it, in a transaction
+  that marks the row posted in the same commit. A payment that does not go through
+  stays owed, with the ledger's reason, and a steward pays it from /review
+  (`POST /api/admin/quest-claims/:id/owed/pay`); a refusal no retry can change
+  (`key_clash`, `rule`) is marked refused instead. Rye asked for this repair path
+  on 2026-09-14, on one condition: nothing pays twice. The owed row's key is the
+  ledger's occurrence key, so a second press finds the row posted, and a posting
+  that already landed answers duplicate and moves nothing. The consent's own
+  response never fails on any of it.
 - **A consent at 0 posts none of the three.** A zero is the witness saying the work
-  earned no recognition, so row 1 posts nothing, and rows 2 and 3 are not minted
-  either (economics and governance, 2026-09-14): a village can weight its ballots by
+  earned no recognition, so row 1 posts nothing, and `owedForClaim` prices no rule
+  for a grant of 0 either (economics and governance, 2026-09-14): a village can weight its ballots by
   any token (`governance.weight_token`), so a rule token minted at 0 would be voting
   weight farmed through `quest.allow_zero_consent`. A stay-credit reward the quest
-  itself carries still releases, keyed `queststay:<claimId>`.
+  itself carries is still owed and paid, keyed `queststay:<claimId>`.
 
 Wren's balances after: 25 credits, 10 voice, and whatever recognition the
 quest advertised.
