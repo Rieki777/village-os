@@ -8,8 +8,16 @@
  * unclosable, and it held one of the `openDraftCap` slots forever.
  *
  * It is reached by the ordinary path, not an exotic one: a machine batch larger
- * than `draftChangeCap`, or a seat naming a circle that does not exist yet,
- * which is what a vendor's first org import looks like.
+ * than the village's `org.proposal_change_limit`, or a seat naming a circle
+ * that does not exist yet, which is what a vendor's first org import looks like.
+ *
+ * THE LIMIT IS TUNED DOWN TO SIX FOR THIS FILE. It used to be
+ * `draftChangeCap()`, the per-member formula at two accounts, which was six.
+ * The limit is a village setting now and ships at 500, so the suite does what
+ * a village would do to get a small limit: it sets one. Every test below reads
+ * the tuned value through `draftChangeCap()`, and the first asserts it is six,
+ * so a limit that stopped reading the setting fails here by name instead of
+ * quietly writing five hundred rows per test.
  *
  * The tests below are written against the BEHAVIOUR, so they still mean
  * something if the implementation moves: a blocked draft refuses to publish, it
@@ -32,6 +40,11 @@ import {
   withdrawDraft,
 } from "./orgDrafts";
 import { landProposal, markProposalDecided, proposalQueue, reopenProposalsFor } from "./externalProposals";
+import { loadVariables, setVariable } from "./variables";
+import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
+
+const LIMIT_KEY = "org.proposal_change_limit";
+const TUNED_LIMIT = "6";
 
 const configured = testDbConfigured();
 let db: TestDb;
@@ -62,9 +75,13 @@ describe.skipIf(!configured)("a draft that cannot publish can still be closed", 
   beforeAll(async () => {
     db = await provisionTestDb();
     pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    await loadVariables(pool);
+    const tuned = await setVariable(pool, LIMIT_KEY, TUNED_LIMIT);
+    expect(tuned.ok, tuned.error).toBe(true);
   });
 
   afterAll(async () => {
+    if (pool) await setVariable(pool, LIMIT_KEY, VARIABLES_BY_KEY[LIMIT_KEY].default);
     await pool?.end();
     await db?.drop();
   });
@@ -79,7 +96,8 @@ describe.skipIf(!configured)("a draft that cannot publish can still be closed", 
     // Documenting the shape rather than approving of it. The cap lives in
     // previewDraft, so the rows are already written by the time anything
     // objects, which is exactly why a way out is needed.
-    const cap = draftChangeCap(2);
+    const cap = draftChangeCap();
+    expect(cap, "the limit every test here reads is the village's tuned one").toBe(Number(TUNED_LIMIT));
     const id = await overCapDraft(cap);
     const [[n]] = await pool.query<any[]>(
       "SELECT COUNT(*) AS n FROM org_draft_changes WHERE draft_id = ?", [id],
@@ -88,7 +106,7 @@ describe.skipIf(!configured)("a draft that cannot publish can still be closed", 
   });
 
   it("blocks the lines past the cap and refuses to publish", async () => {
-    const cap = draftChangeCap(2);
+    const cap = draftChangeCap();
     const id = await overCapDraft(cap);
     const preview = await previewDraft(pool, id, cap);
     expect(preview.blocked).toBeGreaterThan(0);
@@ -97,7 +115,7 @@ describe.skipIf(!configured)("a draft that cannot publish can still be closed", 
   });
 
   it("withdraws it, which is the transition that did not exist", async () => {
-    const cap = draftChangeCap(2);
+    const cap = draftChangeCap();
     const id = await overCapDraft(cap);
     const w = await withdrawDraft(pool, id);
     expect(w.ok, !w.ok ? w.error : "").toBe(true);
@@ -106,7 +124,7 @@ describe.skipIf(!configured)("a draft that cannot publish can still be closed", 
   });
 
   it("frees the open-draft slot, which is the harm that compounds", async () => {
-    const cap = draftChangeCap(2);
+    const cap = draftChangeCap();
     const id = await overCapDraft(cap);
     const openNow = async () => {
       const [[r]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM org_drafts WHERE status = 'open'");
@@ -118,13 +136,13 @@ describe.skipIf(!configured)("a draft that cannot publish can still be closed", 
   });
 
   it("keeps the withdrawn draft rather than deleting it", async () => {
-    const id = await overCapDraft(draftChangeCap(2));
+    const id = await overCapDraft(draftChangeCap());
     await withdrawDraft(pool, id);
     expect((await listDrafts(pool)).some((d) => d.id === id)).toBe(true);
   });
 
   it("refuses to withdraw anything that is not open, and says which", async () => {
-    const id = await overCapDraft(draftChangeCap(2));
+    const id = await overCapDraft(draftChangeCap());
     await withdrawDraft(pool, id);
     const again = await withdrawDraft(pool, id);
     expect(again.ok).toBe(false);
@@ -148,7 +166,7 @@ describe.skipIf(!configured)("a draft that cannot publish can still be closed", 
     });
     expect(landed.ok, !landed.ok ? landed.message : "").toBe(true);
 
-    const id = await overCapDraft(draftChangeCap(2));
+    const id = await overCapDraft(draftChangeCap());
     const [row] = await proposalQueue(pool);
     await markProposalDecided(pool, {
       id: row.id, status: "accepted", decidedBy: "u-steward", createdRef: id,
@@ -172,7 +190,7 @@ describe.skipIf(!configured)("a draft that cannot publish can still be closed", 
       payload: { name: "Orchard Keeper" }, quote: "Somebody has to prune.", sourceRef: "m#7",
     });
     const [row] = await proposalQueue(pool);
-    const id = await overCapDraft(draftChangeCap(2));
+    const id = await overCapDraft(draftChangeCap());
     await markProposalDecided(pool, { id: row.id, status: "rejected", decidedBy: "u-steward", createdRef: id });
     await withdrawDraft(pool, id);
     expect(await reopenProposalsFor(pool, id)).toBe(0);

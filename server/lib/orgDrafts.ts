@@ -38,6 +38,7 @@
 import type { Pool, PoolConnection } from "mysql2/promise";
 import { draftStatus, withdrawDraftRow } from "../repos/orgDrafts";
 import { stageIndex } from "../../shared/gameConfig";
+import { numberVar } from "./variables";
 import { listOrgAssignments, listOrgRoles, peopleOnly, seatState, type LapseContext, type OrgAssignment } from "./orgChart";
 import { resolveSeatTerm, type SeatCalendar } from "../../shared/seatTerms";
 
@@ -370,13 +371,21 @@ export async function listDrafts(pool: Pool): Promise<Draft[]> {
  * that machine, running weekly. Twenty-four seats over eight people is a chart
  * nobody maintains, and forty open drafts is a review queue nobody opens.
  *
- * The floor of 3 exists so a village of one founder can still be given
- * somewhere to start. A HUMAN IS NOT CAPPED: a founder reorganising their own
- * village is doing the thing this table was built for, and the cap answers a
- * machine proposing structure faster than a village can read it.
+ * THE CHANGE LIMIT IS THE VILLAGE'S OWN SETTING, `org.proposal_change_limit`,
+ * read through the registry so a tuned value beats the default. It was
+ * `max(3, activeMembers * 3)`, which gave a village of two accounts a limit of
+ * six while its first import carried eighteen seats. Rye ruled on 2026-09-14
+ * that this was a broken limit: a village's beginning is one large structural
+ * import, so the default is 500, and a steward still reads and accepts every
+ * line before anything publishes. The open-draft cap keeps its per-member
+ * shape, because a queue of open drafts is what outgrows a small village.
+ *
+ * A HUMAN IS NOT CAPPED: a founder reorganising their own village is doing
+ * the thing this table was built for, and the cap answers a machine
+ * proposing structure faster than a village can read it.
  */
-export function draftChangeCap(activeMembers: number): number {
-  return Math.max(3, activeMembers * 3);
+export function draftChangeCap(): number {
+  return Math.max(1, numberVar("org.proposal_change_limit"));
 }
 
 export function openDraftCap(activeMembers: number): number {
@@ -668,8 +677,8 @@ export function previewLoadedDraft(
      * THE VOLUME CAP is the other one worth reading twice. Seeding
      * aspirational structure is on the platform's never-build list and a
      * weekly meeting extractor is that machine. The cap is on the DRAFT rather
-     * than on the table, so a village can still accept many drafts over time
-     * and cannot be handed one carrying forty seats at once.
+     * than on the table, so a village can still accept many drafts over time,
+     * and how many changes one of them may carry is the village's own setting.
      */
     if (machine && (c.op === "seat_holder" || c.op === "end_holding")) {
       blocked = "A proposal never names who holds a seat. Structure can be proposed; occupancy is a human act";
@@ -863,8 +872,8 @@ export async function publishDraft(
    * those lines are derived from the draft's own `source_kind` inside
    * `previewDraft`, so the one that matters most (a proposal never names who
    * holds a seat) already holds here whether or not a caller passes this. The
-   * numeric cap is the one thing the preview cannot work out on its own,
-   * because it depends on how many people the village has. Omitted means no
+   * numeric cap is the one thing the preview takes from its caller, because
+   * it is the village's own setting and a founder's draft has none. Omitted means no
    * cap, which is the right answer for a draft a founder typed.
    */
   changeCap?: number | null,

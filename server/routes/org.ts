@@ -228,9 +228,8 @@ export function register(app: Express, deps: Deps): void {
   app.post("/api/admin/org/drafts/:id/publish", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const actor = await authedUser(req);
-    const roster = ((await members.all()) as any[]).length;
     const season = seasonState();
-    const r = await publishDraft(getPool(), req.params.id, actor?.id ?? null, draftChangeCap(roster), {
+    const r = await publishDraft(getPool(), req.params.id, actor?.id ?? null, draftChangeCap(), {
       seasons: season.seasons,
       currentSeasonId: season.current?.id ?? null,
       timezone: season.timezone,

@@ -9,27 +9,29 @@
  * had been exercised with was ten, in a test written to prove withdrawal
  * rather than volume. So the number in the invitation was a hope.
  *
- * It is now measured, and the answer has a boundary in it that a steward can
- * hit by accident:
+ * ── WHERE THE BOUNDARY USED TO BE, AND WHERE IT IS NOW ───────────────────
  *
- *   a batch of N seats needs a counted roster of at least ceil(N / 3)
- *   forty seats therefore needs FOURTEEN, because draftChangeCap is
- *   max(3, activeMembers * 3) and 13 * 3 is 39
+ * This file first measured a boundary that sat in the ROSTER:
+ * `draftChangeCap` was max(3, activeMembers * 3), so forty seats needed a
+ * counted roster of fourteen, and a village of two accounts could take six.
+ * Rye ruled on 2026-09-14 that a limit per account was broken, because a
+ * village's beginning is exactly one of these large imports. The limit is now
+ * the village's own setting, `org.proposal_change_limit`, shipping at 500.
  *
- * At thirteen the fortieth line is blocked, publish refuses the whole draft,
- * and the batch has to be withdrawn. At fourteen it publishes and forty seats
- * go live. One member either side of that line is the difference between a
- * demo and a debugging session.
+ * So the boundary moved to a place a village can see and change:
+ *
+ *   forty seats publish in a village of two accounts under the shipped limit
+ *   a village that tunes its limit to 39 has the fortieth line blocked
  *
  * ── WHAT THIS PINS, AND WHY IT IS WORTH THE SECONDS ──────────────────────
  *
- * Anybody tuning `draftChangeCap` is tuning the largest import this platform
- * can accept, and that relationship is invisible from the function. This test
- * is where it becomes visible: change the cap and the boundary case fails by
- * name, with the roster figure in the message.
+ * Anybody lowering the shipped default is lowering the largest import this
+ * platform accepts out of the box, and the first case fails by name. Anybody
+ * who puts a roster back into the limit fails it too, because the roster here
+ * is two.
  *
  * Every seat carries a distinct name, no circle, and no seats or criticality
- * field, so the only thing that can block a line is the volume cap. A seat
+ * field, so the only thing that can block a line is the change limit. A seat
  * blocked for a shape reason would be answering a different question.
  *
  * No TEST_DATABASE_URL and the suite skips loudly (harness rule).
@@ -46,6 +48,8 @@ import {
   publishDraft,
   withdrawDraft,
 } from "./orgDrafts";
+import { loadVariables, setVariable } from "./variables";
+import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
 
 const configured = testDbConfigured();
 let db: TestDb;
@@ -53,13 +57,21 @@ let pool: mysql.Pool;
 
 /** The size named in the invitation. */
 const SEATS = 40;
+/** The live village the old limit was found on. */
+const ROSTER = 2;
+const LIMIT_KEY = "org.proposal_change_limit";
 
-async function acceptBatchOf(seats: number, roster: number) {
+async function tuneLimit(value: string) {
+  const r = await setVariable(pool, LIMIT_KEY, value);
+  expect(r.ok, r.error).toBe(true);
+}
+
+async function acceptBatchOf(seats: number) {
   const made = await createDraft(pool, {
     title: `A batch of ${seats}`,
     sourceKind: "agent",
     sourceModuleId: "saberra",
-    openCap: openDraftCap(roster),
+    openCap: openDraftCap(ROSTER),
   });
   expect(made.ok, "the draft was created").toBe(true);
   const draftId = (made as { ok: true; id: string }).id;
@@ -73,8 +85,8 @@ async function acceptBatchOf(seats: number, roster: number) {
     expect(r.ok, `seat ${i} was added`).toBe(true);
   }
 
-  const preview = await previewDraft(pool, draftId, draftChangeCap(roster));
-  const published = await publishDraft(pool, draftId, "steward", draftChangeCap(roster));
+  const preview = await previewDraft(pool, draftId, draftChangeCap());
+  const published = await publishDraft(pool, draftId, "steward", draftChangeCap());
   return { draftId, blocked: preview.blocked, published };
 }
 
@@ -82,8 +94,10 @@ describe.skipIf(!configured)("the batch size we invited", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
     pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    await loadVariables(pool);
   });
   afterAll(async () => {
+    if (pool) await setVariable(pool, LIMIT_KEY, VARIABLES_BY_KEY[LIMIT_KEY].default);
     await pool?.end();
     await db?.drop();
   });
@@ -91,10 +105,11 @@ describe.skipIf(!configured)("the batch size we invited", () => {
     await pool.query("DELETE FROM org_draft_changes"); // module-review-ok: resetting the scratch schema this suite provisioned
     await pool.query("DELETE FROM org_drafts"); // module-review-ok: same
     await pool.query("DELETE FROM org_roles"); // module-review-ok: same
+    await tuneLimit(VARIABLES_BY_KEY[LIMIT_KEY].default);
   });
 
-  it("forty seats publish at a roster of fourteen, and all forty go live", async () => {
-    const { blocked, published } = await acceptBatchOf(SEATS, 14);
+  it("forty seats publish in a village of two accounts under the shipped limit, and all forty go live", async () => {
+    const { blocked, published } = await acceptBatchOf(SEATS);
 
     expect(blocked).toBe(0);
     expect(published.ok).toBe(true);
@@ -103,12 +118,13 @@ describe.skipIf(!configured)("the batch size we invited", () => {
     expect(Number(n.n)).toBe(SEATS);
   });
 
-  it("at THIRTEEN the same batch is refused whole, and the refusal names the limit", async () => {
-    // One member fewer. draftChangeCap(13) is 39, so the fortieth line blocks
-    // and publishDraft refuses the draft entire rather than applying 39 of it.
-    // Partial application would be the worse failure: a village holding most
-    // of a reorganisation nobody decided to make.
-    const { blocked, published } = await acceptBatchOf(SEATS, 13);
+  it("at a tuned limit of THIRTY-NINE the same batch is refused whole, and the refusal names the limit", async () => {
+    // One below the batch. The fortieth line blocks and publishDraft refuses
+    // the draft entire instead of applying 39 of it. Partial application
+    // would be the worse failure: a village holding most of a reorganisation
+    // nobody decided to make.
+    await tuneLimit("39");
+    const { blocked, published } = await acceptBatchOf(SEATS);
 
     expect(blocked).toBe(1);
     expect(published.ok).toBe(false);
@@ -119,9 +135,10 @@ describe.skipIf(!configured)("the batch size we invited", () => {
   });
 
   it("and the jammed batch can be withdrawn, which frees the slot it holds", async () => {
-    // Without this, an over-cap batch is a draft that can neither publish nor
-    // close, holding one of openDraftCap(roster) machine-draft slots forever.
-    const { draftId, published } = await acceptBatchOf(SEATS, 13);
+    // Without this, an over-limit batch is a draft that can neither publish
+    // nor close, holding one of openDraftCap(roster) machine-draft slots forever.
+    await tuneLimit("39");
+    const { draftId, published } = await acceptBatchOf(SEATS);
     expect(published.ok).toBe(false);
 
     expect(await withdrawDraft(pool, draftId)).toEqual({ ok: true });
@@ -130,11 +147,17 @@ describe.skipIf(!configured)("the batch size we invited", () => {
     expect(d.status).toBe("withdrawn");
   });
 
-  it("states the general rule, so the next size does not need a new test", () => {
-    // A batch of N needs a roster of at least ceil(N / 3).
-    for (const [n, roster] of [[12, 4], [20, 7], [30, 10], [40, 14], [60, 20]]) {
-      expect(draftChangeCap(roster), `${n} seats at roster ${roster}`).toBeGreaterThanOrEqual(n);
-      expect(draftChangeCap(roster - 1), `${n} seats at roster ${roster - 1}`).toBeLessThan(n);
+  it("states the general rule, so the next size does not need a new test", async () => {
+    // Every size in the invitation, and past it, fits the shipped limit with
+    // no roster in the sum. A batch of N fits a limit of N and not of N - 1.
+    for (const n of [12, 20, 30, 40, 60]) {
+      expect(draftChangeCap(), `${n} seats under the shipped limit`).toBeGreaterThanOrEqual(n);
+    }
+    for (const n of [12, 40]) {
+      await tuneLimit(String(n));
+      expect(draftChangeCap(), `${n} seats at a limit of ${n}`).toBeGreaterThanOrEqual(n);
+      await tuneLimit(String(n - 1));
+      expect(draftChangeCap(), `${n} seats at a limit of ${n - 1}`).toBeLessThan(n);
     }
   });
 });
