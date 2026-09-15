@@ -288,6 +288,7 @@ import {
   VILLAGE_LAUNCH,
 } from "../shared/ballotSubjects";
 import { timingOf } from "../shared/governanceKinds";
+import { CURRENCY_DECIMALS, WHOLE_UNITS } from "../shared/tokenScale";
 /** The two dials a started Game answers for itself, through a governance_mode ballot. */
 const WEIGHT_KEYS_AFTER_START = new Set(["governance.weight_mode", "governance.weight_token"]);
 import { isMintRuleKey, parseMintRuleKey } from "../shared/mintRuleKeys";
@@ -17167,6 +17168,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
       kind: cleanKind,
       governance: "platform",
       transferable: wantsSending,
+      // Credit is currency-like from birth (stays.ts, library.ts). Voice kind stays whole: only Village Voice wanes.
+      decimals: cleanKind === "credit" ? CURRENCY_DECIMALS : WHOLE_UNITS,
     });
     // The village minting its own token is the moment the example market has
     // done its job: real tokens replace the demonstration.
