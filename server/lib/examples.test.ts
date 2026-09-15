@@ -473,12 +473,12 @@ describe.skipIf(!configured)("standing examples", () => {
   it("seeds an example room at the price the seed states, on a village born at two decimals", async () => {
     await ensureStayToken(pool);
     await loadTokenRegistry(pool);
-    const [[tok]] = await pool.query<any[]>("SELECT decimals FROM tokens WHERE slug = 'stay-credit'");
+    const [[tok]] = await pool.query<any[]>("SELECT decimals FROM tokens WHERE slug = 'stay-credit'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(Number(tok.decimals), "the fixture is a fresh village, so stay-credit is born at two").toBe(2);
 
     expect(await seedExamples(pool, "stays", seed, { force: true })).toBeGreaterThan(0);
 
-    const [stored] = await pool.query<any[]>(
+    const [stored] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT id, amount_minor FROM accommodation_prices WHERE id IN ('ex-stay-cabin-price-1','ex-stay-cabin-price-3')",
     );
     const byId = Object.fromEntries(stored.map((r: any) => [String(r.id), Number(r.amount_minor)]));
@@ -496,7 +496,7 @@ describe.skipIf(!configured)("standing examples", () => {
 
     // The example credit tokens carry the currency scale from birth too.
     expect(await seedExamples(pool, "exchange", seed, { force: true })).toBeGreaterThan(0);
-    const [scales] = await pool.query<any[]>("SELECT slug, decimals FROM tokens WHERE is_example = 1 ORDER BY slug");
+    const [scales] = await pool.query<any[]>("SELECT slug, decimals FROM tokens WHERE is_example = 1 ORDER BY slug"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(scales.map((r: any) => `${r.slug}=${r.decimals}`)).toEqual(["ex-credits=2", "ex-workshop=2"]);
   });
 });
