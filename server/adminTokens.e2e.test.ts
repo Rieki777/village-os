@@ -84,6 +84,23 @@ async function call(method: string, route: string, body?: unknown, token?: strin
   return { status: res.status, json, text };
 }
 
+/**
+ * A balance in WHOLE tokens, divided by the scale the SAME payload ships.
+ *
+ * `/api/wallet` sends `ledger` and the Exchange sends `mine.balances` as the
+ * INT column verbatim, which is minor units, with `tokenDecimals` beside them,
+ * and every client card divides at the render site. These cases used to compare
+ * the raw field to a whole number, which only agreed while a credit token made
+ * here was born at 0 decimals. Reading through the payload's own scale keeps the
+ * promise each case makes, and still fails if a payload stops shipping it.
+ */
+const wholeOf = (payload: any, slug: string, key: "ledger" | "balances" = "ledger"): number =>
+  Number(payload?.[key]?.[slug] ?? 0) / 10 ** Number(payload?.tokenDecimals?.[slug] ?? 0);
+
+/** What Ora holds of the suite's own token, in whole units. */
+const oraHolds = async (): Promise<number> =>
+  wholeOf((await call("GET", "/api/wallet", undefined, oraToken)).json, SLUG);
+
 describe.skipIf(!DB_CONFIGURED)("the tokens tab, and what a member sees afterwards", () => {
   beforeAll(async () => {
     if (!fs.existsSync(DIST)) {
@@ -204,7 +221,7 @@ describe.skipIf(!DB_CONFIGURED)("the tokens tab, and what a member sees afterwar
     // hard-coded string.
     const walletBefore = await call("GET", "/api/wallet", undefined, oraToken);
     expect(walletBefore.status).toBe(200);
-    expect(walletBefore.json?.ledger?.[SLUG]).toBe(25);
+    expect(wholeOf(walletBefore.json, SLUG)).toBe(25);
     expect(walletBefore.json?.tokenNames?.[SLUG]).toBe("Needle");
 
     const renamed = await call("PUT", `/api/admin/tokens/${SLUG}`, { name: "Seeds" }, founderToken);
@@ -214,18 +231,47 @@ describe.skipIf(!DB_CONFIGURED)("the tokens tab, and what a member sees afterwar
     // The wallet section on the member's own profile.
     const wallet = await call("GET", "/api/wallet", undefined, oraToken);
     expect(wallet.status).toBe(200);
-    expect(wallet.json?.ledger?.[SLUG], "the balance is untouched by a rename").toBe(25);
+    expect(wholeOf(wallet.json, SLUG), "the balance is untouched by a rename").toBe(25);
     expect(wallet.json?.tokenNames?.[SLUG], "and the village's word for it follows").toBe("Seeds");
 
     // The Exchange page, which is the one the operator was looking at.
     const exchange = await call("GET", "/api/exchange", undefined, oraToken);
     expect(exchange.status).toBe(200);
-    expect(exchange.json?.mine?.balances?.[SLUG]).toBe(25);
+    expect(wholeOf(exchange.json?.mine, SLUG, "balances")).toBe(25);
     expect(exchange.json?.mine?.tokenNames?.[SLUG], "the Exchange follows too").toBe("Seeds");
 
     // The slug is history's identity and a rename must never move it. If this
     // ever fails, every ledger row written before the rename has been orphaned.
     expect(Object.keys(wallet.json?.ledger ?? {})).toContain(SLUG);
+  });
+
+  /**
+   * A CREDIT TOKEN CREATED HERE IS BORN AT THE CURRENCY SCALE.
+   *
+   * 0202 moves every platform credit token that already exists to two
+   * decimals, and `registerToken` leaves `decimals` out of its upsert on
+   * purpose, so a token this route creates AFTER 0202 used to take the whole
+   * unit default and sit at 0 forever beside credits at 2. A voice-kind token
+   * stays whole: the ruling puts Voice at two only because Village Voice
+   * wanes, and `decayVoice` wanes that one slug.
+   *
+   * Read twice, off the create answer and off the registry list, so a payload
+   * that echoed the request could not pass for a stored scale.
+   */
+  it("creates a credit token at two decimals and a voice token at whole units", async () => {
+    const credit = await call("POST", "/api/admin/tokens", { slug: "qa-currency", name: "Currency Probe", kind: "credit" }, founderToken);
+    expect(credit.status, `create credit: ${credit.text.slice(0, 200)}`).toBe(200);
+    expect(credit.json?.token?.decimals).toBe(2);
+
+    const voice = await call("POST", "/api/admin/tokens", { slug: "qa-assembly", name: "Assembly Probe", kind: "voice" }, founderToken);
+    expect(voice.status, `create voice: ${voice.text.slice(0, 200)}`).toBe(200);
+    expect(voice.json?.token?.decimals).toBe(0);
+
+    const list = await call("GET", "/api/admin/tokens", undefined, founderToken);
+    expect(list.status).toBe(200);
+    const bySlug = Object.fromEntries((list.json?.tokens ?? []).map((t: any) => [t.slug, t]));
+    expect(`qa-currency=${bySlug["qa-currency"]?.decimals}`).toBe("qa-currency=2");
+    expect(`qa-assembly=${bySlug["qa-assembly"]?.decimals}`).toBe("qa-assembly=0");
   });
 
   /**
@@ -243,7 +289,7 @@ describe.skipIf(!DB_CONFIGURED)("the tokens tab, and what a member sees afterwar
    */
   it("refuses to move a slug, and says why, while the balance stays readable", async () => {
     const held = await call("GET", "/api/wallet", undefined, oraToken);
-    expect(held.json?.ledger?.[SLUG], "the fixture from the rename test is still here").toBe(25);
+    expect(wholeOf(held.json, SLUG), "the fixture from the rename test is still here").toBe(25);
 
     const moved = await call("PUT", `/api/admin/tokens/${SLUG}`, { slug: "qa-moved", name: "Seeds" }, founderToken);
     expect(moved.status, `expected a refusal, got: ${moved.text.slice(0, 200)}`).toBe(409);
@@ -258,7 +304,7 @@ describe.skipIf(!DB_CONFIGURED)("the tokens tab, and what a member sees afterwar
     expect(slugs).toContain(SLUG);
     expect(slugs).not.toContain("qa-moved");
     const wallet = await call("GET", "/api/wallet", undefined, oraToken);
-    expect(wallet.json?.ledger?.[SLUG], "the balance is still keyed where it was written").toBe(25);
+    expect(wholeOf(wallet.json, SLUG), "the balance is still keyed where it was written").toBe(25);
 
     // And the door the freeze leaves open is still open: a plain rename with
     // no slug in the body works, so this guard costs the founder nothing.
@@ -323,7 +369,7 @@ describe.skipIf(!DB_CONFIGURED)("the tokens tab, and what a member sees afterwar
    * payload.
    */
   it("holds a grant over the threshold until a second steward signs it", async () => {
-    const before = Number((await call("GET", "/api/wallet", undefined, oraToken)).json?.ledger?.[SLUG] ?? 0);
+    const before = (await oraHolds());
 
     const raised = await call("POST", `/api/admin/tokens/${SLUG}/mint`, {
       toUserId: oraId, amount: 101, reason: "over the stated threshold",
@@ -336,7 +382,7 @@ describe.skipIf(!DB_CONFIGURED)("the tokens tab, and what a member sees afterwar
     // NOTHING MOVED. A pending grant that quietly credited would be worse
     // than no rule at all.
     expect(
-      Number((await call("GET", "/api/wallet", undefined, oraToken)).json?.ledger?.[SLUG] ?? 0),
+      (await oraHolds()),
       "a raised grant credits nobody",
     ).toBe(before);
 
@@ -344,7 +390,7 @@ describe.skipIf(!DB_CONFIGURED)("the tokens tab, and what a member sees afterwar
     const selfSign = await call("POST", `/api/admin/mint-requests/${requestId}/approve`, {}, founderToken);
     expect(selfSign.status, `self sign-off: ${selfSign.text.slice(0, 200)}`).toBe(409);
     expect(
-      Number((await call("GET", "/api/wallet", undefined, oraToken)).json?.ledger?.[SLUG] ?? 0),
+      (await oraHolds()),
       "and a refused sign-off credits nobody either",
     ).toBe(before);
 
@@ -365,7 +411,7 @@ describe.skipIf(!DB_CONFIGURED)("the tokens tab, and what a member sees afterwar
     const signed = await call("POST", `/api/admin/mint-requests/${requestId}/approve`, {}, boToken);
     expect(signed.status, `sign-off: ${signed.text.slice(0, 200)}`).toBe(200);
     expect(
-      Number((await call("GET", "/api/wallet", undefined, oraToken)).json?.ledger?.[SLUG] ?? 0),
+      (await oraHolds()),
       "and exactly the amount that was approved is credited",
     ).toBe(before + 101);
 
@@ -385,7 +431,7 @@ describe.skipIf(!DB_CONFIGURED)("the tokens tab, and what a member sees afterwar
     const twice = await call("POST", `/api/admin/mint-requests/${requestId}/approve`, {}, boToken);
     expect(twice.status, `second sign-off: ${twice.text.slice(0, 200)}`).toBe(409);
     expect(
-      Number((await call("GET", "/api/wallet", undefined, oraToken)).json?.ledger?.[SLUG] ?? 0),
+      (await oraHolds()),
       "and the balance does not move twice",
     ).toBe(before + 101);
   });

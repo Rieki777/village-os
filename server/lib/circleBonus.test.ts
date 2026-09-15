@@ -436,18 +436,22 @@ describe.skipIf(!configured)("the rollover, and the bonus that follows from it",
     expect(outcome.reasons[0]).toContain("Nothing records");
   }, 60_000);
 
-  // 6. The veto, which the completion gate cannot see
+  // 6. The veto, which the completion gate now reads as a decision that failed
 
-  it("REFUSES ON A VETO, WHICH THE COMPLETION GATE DOES NOT REPORT", async () => {
+  it("REFUSES ON A VETO, AND THE COMPLETION GATE READS THE VETOED VOTE AS FAILED", async () => {
     const recordId = "rec-vetoed";
     const ballotId = await completionBallot("bal-vetoed", recordId, "passed");
     await veto(ballotId);
 
     /*
-     * THE GAP, MEASURED. The gate reads `ballots.status`, which a veto never
-     * changes, so its vote component still says the village said yes and its
-     * refusal list is empty. Paying on that reading would pay a decision a
-     * steward set aside.
+     * THE GAP, CLOSED. This fixture is the pre-ruling veto: `vetoed_at` stamped
+     * and `status` still `passed`. The gate used to read that status raw, so its
+     * vote component said the village said yes and its refusal list was empty.
+     * Rye's ruling (2026-09-08) is that every vetoed decision reads as failed,
+     * and `outcomeStatusOf` in server/lib/ballots.ts applies it wherever a
+     * ballot row is read, so the gate now answers no and names why. The bonus
+     * still refuses on the veto itself, below, which is the promise this case
+     * keeps.
      */
     const gate = await bonusGateFor(
       { circleId: "capside", periodId: "rooting", at: AT_PERIOD_END },
@@ -459,8 +463,8 @@ describe.skipIf(!configured)("the rollover, and the bonus that follows from it",
         electorate: "village",
       },
     );
-    expect(gate.vote.state, "the gate cannot see the veto").toBe("said_yes");
-    expect(gate.blocking, "and it raises no objection of its own").toEqual([]);
+    expect(gate.vote.state, "the gate reads the vetoed vote as failed").toBe("said_no");
+    expect(gate.blocking.join(" "), "and raises the objection in its own words").toContain("did not complete");
 
     expect(await vetoVerdictFor(pool, ballotId)).toBe("vetoed");
     const outcome = await standing("capside", "cap", record({ id: recordId, circleId: "capside" }));

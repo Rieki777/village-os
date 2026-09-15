@@ -259,10 +259,20 @@ if (want("stays")) {
       active: a.active ? 1 : 0, sort_order: a.sortOrder, is_example: 1,
     });
     for (const [i, p] of a.prices.entries()) {
+      // The twin of server/lib/examples.ts: a token price is seeded in WHOLE
+      // credits and scaled by that token's decimals in THIS database, and a
+      // usd price is already cents. An unregistered token reads as zero
+      // decimals, the registry's own default.
+      let stored = Math.floor(Number(p.amountMinor) || 0);
+      if (p.tokenType !== "usd") {
+        const [[tok]] = await conn.query("SELECT decimals FROM tokens WHERE slug = ?", [p.tokenType]);
+        const whole = Math.floor(Number(p.amount ?? p.amountMinor) || 0);
+        stored = whole * 10 ** Math.max(0, Math.trunc(Number(tok?.decimals ?? 0)));
+      }
       await ins("accommodation_prices", {
         id: `${a.id}-price-${i + 1}`, accommodation_id: a.id,
         token_type: p.tokenType, audience: p.audience,
-        amount_minor: p.amountMinor, active: 1, is_example: 1,
+        amount_minor: stored, active: 1, is_example: 1,
       });
     }
   }

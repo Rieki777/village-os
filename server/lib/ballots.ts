@@ -122,6 +122,37 @@ export interface BallotRow {
 
 const iso = (v: unknown): string => (v instanceof Date ? v.toISOString() : String(v));
 
+/**
+ * THE OUTCOME A BALLOT IS SERVED WITH: A STOPPED DECISION READS AS FAILED.
+ *
+ * Rye's ruling, 2026-09-08: every vetoed proposal clearly shows that it did not
+ * pass and failed. `recordVetoOnBallot` (server/repos/ballotLandings.ts) now
+ * writes `status = 'failed'` with the veto, but a row stopped BEFORE that change
+ * still holds `status = 'passed'` beside `landing_status = 'vetoed'`, and the
+ * decision page maps passed to "Carried". So a stored `passed` carrying EITHER
+ * half of the veto record reads failed, here, at read time.
+ *
+ * ONE RULE IN ONE PLACE, AND NO MIGRATION. `rowToBallot` applies it, and every
+ * `SELECT *` of a ballot passes through `rowToBallot`: `ballotById` (the
+ * decision page), `ballotsFor` (prior attempts, the launch record, the
+ * completion gate) and GET /api/governance/ballots all serve the same answer.
+ * The stored column is left as the vote wrote it.
+ *
+ * WHAT READS IT AND WHAT DOES NOT. The landing path's claims (`claimDueRow`,
+ * `dueBallotIds`) are SQL predicates over the stored column and already exclude
+ * a vetoed row by `vetoed_at IS NULL`, so none of them sees this. The veto
+ * route's gate does read `status`, so a pre-ruling vetoed row is now refused as
+ * "did not carry" before it reaches "already stopped". Both are refusals.
+ *
+ * Only `passed` moves. A veto is never recorded on any other status.
+ */
+export function outcomeStatusOf(r: RowDataPacket): BallotRow["status"] {
+  const status = r.status as BallotRow["status"];
+  if (status !== "passed") return status;
+  const stopped = r.landing_status === "vetoed" || (r.vetoed_at !== null && r.vetoed_at !== undefined);
+  return stopped ? "failed" : status;
+}
+
 export function rowToBallot(r: RowDataPacket): BallotRow {
   return {
     id: String(r.id),
@@ -140,7 +171,7 @@ export function rowToBallot(r: RowDataPacket): BallotRow {
     openedBy: String(r.opened_by),
     opensAt: iso(r.opens_at),
     closesAt: iso(r.closes_at),
-    status: r.status,
+    status: outcomeStatusOf(r),
     timing: timingOf(r.timing),
     outcomeNote: r.outcome_note ?? null,
     closedBy: r.closed_by ?? null,
