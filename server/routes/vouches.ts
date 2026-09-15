@@ -44,6 +44,7 @@
  */
 import type { Express } from "express";
 
+import { isAdmitted } from "../lib/admission";
 import type { AppDeps } from "../lib/appDeps";
 import { GAME_CONFIG } from "../../shared/gameConfig";
 import { numberVar } from "../lib/variables";
@@ -96,7 +97,7 @@ export function register(app: Express, deps: Deps): void {
         status: 403,
         body: {
           error:
-            "Vouching for somebody opens at Contributor, once the village has paid you for something you brought it. Then you can speak for the next person who arrives.",
+            "Vouching for somebody opens at Contributor: once you are a member and the village has paid you for something you brought it. Then you can speak for the next person who arrives.",
         },
       }))
     ) {
@@ -240,6 +241,19 @@ export function register(app: Express, deps: Deps): void {
     }
     const target = await findMember(String(req.params.id ?? ""));
     if (!target) return res.status(404).json({ error: "There is nobody here by that name." });
+
+    /*
+     * ONLY SOMEBODY ALREADY LET IN. Contributor sits above Member, so naming a
+     * guest a contributor admitted them by a side door: onto every ballot roll
+     * and able to vouch, with no vouch on their record and `isMember` still
+     * false wherever the membrane is read. Admitting somebody is the super
+     * vouch, and whoever holds this key already holds that one.
+     */
+    if (!isAdmitted(target, GAME_CONFIG.stages)) {
+      return res.status(409).json({
+        error: "They are not a member of this village yet. Vouch them in first, and then you can name them a contributor.",
+      });
+    }
 
     /*
      * ONLY EVER RAISES. `stageGranted` holds one rung, so writing "contributor"
