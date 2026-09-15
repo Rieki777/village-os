@@ -428,6 +428,69 @@ describe("what the review page says after an accept", () => {
     expect(screen.queryByText("Withdraw that draft")).toBeNull();
   });
 
+  it("clears the fields-left-out card when a withdraw is refused, so its button does not move there and refuse forever", async () => {
+    // Another steward withdrew d1 first. The reload cleared the stuck card and
+    // its button moved onto the fields-left-out card, which 409'd on every press.
+    let refused = false;
+    const d1 = { draftId: "d1", blocked: 1, blockedLines: [{ reads: 'Create the seat "Mill Warden"', blocked: REASON }] };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: { method?: string }) => {
+        if (init?.method === "POST" && url === "/api/review/batches/b1/accept") {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              success: true, accepted: 1, draftId: "d1", seats: 1, blocked: 1, noted: 0,
+              blockedLines: d1.blockedLines,
+              ignored: [{ proposalId: "p1", keys: ["vendor_rank"] }],
+            }),
+          };
+        }
+        if (init?.method === "POST" && url === "/api/review/drafts/d1/withdraw") {
+          refused = true;
+          return {
+            ok: false,
+            status: 409,
+            json: async () => ({ error: "This draft is withdrawn, and only an open draft can be withdrawn" }),
+          };
+        }
+        return { ok: true, status: 200, json: async () => ({ ...QUEUE, stuckDrafts: refused ? [] : [d1] }) };
+      }),
+    );
+    renderReview();
+    fireEvent.click(await screen.findByText(/Accept all 1, with my edits/i));
+    expect(await screen.findByText(/Not read from/)).toBeTruthy();
+    expect(screen.getAllByText("Withdraw that draft")).toHaveLength(1);
+    fireEvent.click(screen.getByText("Withdraw that draft"));
+    await waitFor(() => expect(screen.queryByText(/"Milling Circle" yet/)).toBeNull());
+    expect(screen.queryByText(/Not read from/)).toBeNull();
+    expect(screen.queryByText("Withdraw that draft")).toBeNull();
+  });
+
+  it("says a draft the server could not preview could not be checked, and counts no blocked seats", async () => {
+    answerWith(200, {
+      ...QUEUE,
+      stuckDrafts: [
+        {
+          draftId: "d5",
+          blocked: 1,
+          unpreviewable: true,
+          blockedLines: [
+            {
+              reads: "",
+              blocked: "This draft could not be previewed, so it cannot publish. Withdraw it, and its proposals go back in the review queue",
+            },
+          ],
+        },
+      ],
+    });
+    renderReview();
+    expect(await screen.findByText(/This draft could not be checked/)).toBeTruthy();
+    expect(screen.queryByText(/of its seats are blocked/)).toBeNull();
+    expect(screen.getByText("Withdraw that draft")).toBeTruthy();
+  });
+
   it("says what to do about fields left out, and offers the withdraw when nothing blocked", async () => {
     routes({
       "POST /api/review/proposals/p1/accept": {
