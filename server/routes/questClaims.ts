@@ -45,11 +45,12 @@ import { EXAMPLE_REFUSAL_BODY, isExampleRow } from "../lib/examples";
 import { issuanceRefusal } from "../lib/gameStart";
 import { memberAccount, PLATFORM_TOKEN, postTransferOn, RECOGNITION_FAUCET } from "../lib/ledger";
 import { effectiveLifecycle } from "../lib/modules";
+import { checkConsentAmount, payoutFor } from "../lib/questConsent";
 import { rewardMultiplierFor } from "../lib/seasonPatterns";
 import { mintStayCredits, STAY_CREDIT } from "../lib/stays";
 import { boolVar, numberVar, stringVar } from "../lib/variables";
 import type { ClaimRecord } from "../repos/quests";
-import { describeRange, parseRewardRange } from "../../shared/questRewards";
+import { parseRewardRange } from "../../shared/questRewards";
 
 /**
  * What the consent gate answers.
@@ -336,46 +337,24 @@ export function register(app: Express, deps: Deps): void {
     // so the quest board was not a contract. The ceiling is a village choice.
     const requested = Math.max(0, Number(amount) || 0);
     // Quests advertise a RANGE ("50-100"), not a number: the same work done
-    // thoroughly is worth more than done adequately, and the consenting admin
+    // thoroughly is worth more than done adequately, and the consenting steward
     // decides where in the range it landed. parseRewardRange is the one place
     // that knows the format.
     const consentedQuest = await questsRepo.byId(claim.questId);
     const range = parseRewardRange(consentedQuest?.gratitude);
-    const capMode = stringVar("quest.consent_cap_mode");
-    const granted = requested;
-    // Consent at 0 used to "succeed" while the failed ledger post zeroed the
-    // member's CACHED balance — the worst of both worlds. Now it is refused
-    // unless the village has explicitly opted into "acknowledged, no
-    // recognition" (quest.allow_zero_consent), in which case the claim
-    // completes with no ledger movement and the balance is left alone.
-    if (granted <= 0 && !boolVar("quest.allow_zero_consent")) {
-      return res.status(400).json({
-        error:
-          "Consent releases value: the amount must be at least 1. To allow consenting at zero (acknowledged, no recognition), enable 'Allow consenting at zero' in Admin → Variables → Quests.",
-      });
-    }
-    // A cap needs a number to cap, so BOTH capping modes have to refuse a label naming none. This used to sit inside the posted branch, which left "capped" to compute a multiple of the 0 an unreadable label parses to and answer with a ceiling-shaped error for a label-shaped problem. Only "unlimited" is exempt, because that village asked for no ceiling at all.
-    if (capMode !== "unlimited" && !range.valid) {
-      return res.status(409).json({ error: "This quest does not advertise a readable amount, so it cannot be consented while a cap is set. Give the quest a number on the board first." });
-    }
-    if (capMode === "posted") {
-      if (requested < range.min || requested > range.max) {
-        return res.status(409).json({
-          error: `${requested} is outside what this quest advertises (${describeRange(range)}). The board is the contract.`,
-          min: range.min,
-          max: range.max,
-        });
-      }
-    } else if (capMode === "capped") {
-      const ceiling = Math.round(range.max * numberVar("quest.consent_cap_multiplier"));
-      if (requested > ceiling) {
-        return res.status(409).json({
-          error: `${requested} is above the ceiling for this quest. It advertises ${describeRange(range)} and the bonus ceiling is ${ceiling}.`,
-          max: range.max,
-          ceiling,
-        });
-      }
-    }
+    // The zero rule, the readable-label rule and the range are decided in
+    // server/lib/questConsent.ts, as a pure function of the range and the three
+    // consent dials, so every combination is a row in a table test. The rulings
+    // they hold are in that file's header; read them before moving a comparison.
+    const verdict = checkConsentAmount({
+      requested,
+      range,
+      capMode: stringVar("quest.consent_cap_mode"),
+      capMultiplier: numberVar("quest.consent_cap_multiplier"),
+      allowZero: boolVar("quest.allow_zero_consent"),
+    });
+    if (!verdict.ok) return res.status(verdict.status).json(verdict.body);
+    const granted = verdict.granted;
     /*
      * ISSUANCE WAITS FOR THE VILLAGE (R67), ASKED BEFORE ANY WORK IS DONE.
      *
@@ -401,13 +380,14 @@ export function register(app: Express, deps: Deps): void {
     const claimant = await members.byId(claim.userId);
     const stageBefore = claimant ? await stageOf(claimant) : null;
 
-    // Applied AFTER the consent cap, on purpose; why, and why multiplied
-    // rather than added, is in `rewardMultiplierFor` (server/lib/seasonPatterns.ts).
+    // A standing badge lifts the grant toward the cap and never past it (Rye,
+    // 2026-09-14). Why multiplied rather than added is in `rewardMultiplierFor`
+    // (server/lib/seasonPatterns.ts); the bound is `payoutFor`.
     const multiplier =
       effectiveLifecycle("badges") === "off"
         ? 1
         : await rewardMultiplierFor(getPool(), claim.userId, await dormantBadgeIds());
-    const payout = multiplier === 1 ? granted : Math.floor(granted * multiplier);
+    const payout = payoutFor({ granted, multiplier, liftTop: verdict.liftTop });
     // The recomputed balance, set by the post below and read after it commits.
     // At payout 0 (allow_zero_consent) nothing posts and this stays null, so
     // the cache write is skipped: the old code wrote the failed post's 0.
@@ -442,10 +422,12 @@ export function register(app: Express, deps: Deps): void {
           amount: toLedgerUnits(PLATFORM_TOKEN, payout),
           source: "quest_consent",
           sourceRef: claim.id,
+          // Keyed on what moved, not on whether a badge exists: a badge at the
+          // top of the range lifts nothing, and saying otherwise misstates it.
           description:
-            multiplier === 1
+            payout === granted
               ? `Quest consented: ${claim.questTitle}`
-              : `Quest consented: ${claim.questTitle} (${granted} x${multiplier} for a standing badge)`,
+              : `Quest consented: ${claim.questTitle} (${granted}, lifted to ${payout} by a standing badge)`,
           idempotencyKey: `quest_consent:${claim.id}`,
         });
         if (!credit.ok) return { ok: false as const, error: credit.error ?? "the ledger refused the credit" };
@@ -478,27 +460,41 @@ export function register(app: Express, deps: Deps): void {
         after = await members.update(claimant.id, (u: any) => { u.recognitionBalance = credited; });
       }
       // Whatever else the village's rules say a confirmed contribution mints,
-      // which today is its voice token. Hearts are NOT re-minted here: the
-      // block above has posted them since S7 with the range, the cap and the
-      // standing multiplier, and a rule minting them again would pay twice for
-      // one piece of work.
+      // which today is its voice token and its credits. Hearts are NOT re-minted
+      // here: the block above has posted them since S7 with the range, the cap
+      // and the standing multiplier, and a rule minting them again would pay
+      // twice for one piece of work.
+      //
+      // NONE OF IT ON A CONSENT AT 0 (economics and governance, 2026-09-14). A
+      // zero is the witness saying the work earned no recognition, and these
+      // rules are recognition paid in tokens at a flat rate. Carving out voice
+      // alone was not enough: a village can weight its ballots by any token
+      // (`governance.weight_token`), so any rule token minted here would be
+      // weight farmed through `quest.allow_zero_consent`. The stay credits below
+      // still release, because they are the quest's own payment, typed onto it
+      // by a person. When `owedForClaim` lands in server/lib/economy.ts this
+      // test moves inside it, so the rule lives in one place.
       //
       // Deliberately not awaited into the response contract and never allowed
       // to throw: a quest that was witnessed and credited must not fail because
       // a secondary mint had a bad afternoon. The occurrence key makes a later
       // repair-post safe.
-      try {
-        const extra = await mintForConfirmedClaim(getPool(), {
-          id: consented.id,
-          questId: consented.questId,
-          userId: consented.userId,
-          confirmedAt: consented.resolvedAt,
-        });
-        if (extra.skipped) {
-          console.log(`[economy] claim ${consented.id}: no rule mint (${extra.skipped})`);
+      if (granted === 0) {
+        console.log(`[economy] claim ${consented.id}: no rule mint (consented at 0)`);
+      } else {
+        try {
+          const extra = await mintForConfirmedClaim(getPool(), {
+            id: consented.id,
+            questId: consented.questId,
+            userId: consented.userId,
+            confirmedAt: consented.resolvedAt,
+          });
+          if (extra.skipped) {
+            console.log(`[economy] claim ${consented.id}: no rule mint (${extra.skipped})`);
+          }
+        } catch (err) {
+          console.error(`[economy] rule mint failed for claim ${consented.id}:`, err);
         }
-      } catch (err) {
-        console.error(`[economy] rule mint failed for claim ${consented.id}:`, err);
       }
       // S31 work-exchange (F2 firewall): a quest may ALSO carry stay credits,
       // released by the same human consent — a separate column, a separate
@@ -535,7 +531,7 @@ export function register(app: Express, deps: Deps): void {
         // badge can multiply the two apart, and telling a member a number
         // their balance does not match is the fastest way to lose their
         // trust in the ledger.
-        title: multiplier === 1
+        title: payout === granted
           ? `Your quest was consented: ${consented.questTitle} (+${payout})`
           : `Your quest was consented: ${consented.questTitle} (+${payout}, including your badge bonus)`,
         link: `/quests/${consented.questId}`,
@@ -552,7 +548,7 @@ export function register(app: Express, deps: Deps): void {
           // moved. An audit row carrying only the first would misstate the
           // release it exists to attribute.
           kind: "audit",
-          text: multiplier === 1
+          text: payout === granted
             ? `quest:consented:${consented.id}:${payout}`
             : `quest:consented:${consented.id}:granted=${granted}:paid=${payout}:x${multiplier}`,
           actorUserId: actor.userId, entityType: "quest_claim", entityRef: consented.id, audience: "admin",

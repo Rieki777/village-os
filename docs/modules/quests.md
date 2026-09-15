@@ -2,7 +2,7 @@
 
 Provenance: platform
 
-<!-- describes: server/routes/quests.ts server/routes/questClaims.ts server/repos/quests.ts server/index.ts shared/modules.ts shared/gameVariables.ts shared/questRewards.ts client/src/pages/Admin.tsx client/src/pages/QuestDetail.tsx client/src/components/QuestActions.tsx server/lib/capabilityRegistry.ts server/lib/crews.ts server/lib/questProposals.ts server/lib/calendarProviders.ts -->
+<!-- describes: server/routes/quests.ts server/routes/questClaims.ts server/lib/questConsent.ts server/repos/quests.ts server/index.ts shared/modules.ts shared/gameVariables.ts shared/questRewards.ts client/src/pages/Admin.tsx client/src/pages/QuestDetail.tsx client/src/components/QuestActions.tsx server/lib/capabilityRegistry.ts server/lib/crews.ts server/lib/questProposals.ts server/lib/calendarProviders.ts -->
 
 > The contribution board. A quest is posted by an admin or by a `quest.approve` holder, claimed by
 > a member, submitted with evidence, and consented to by somebody who is not the claimant. Consent
@@ -293,14 +293,17 @@ what runs first:
 4. Self-consent, unless the solo-founder window is open.
 5. The decline branch returns here, through `claimsRepo.declineOnce`: from `claimed` or
    `submitted` only, under the claim's row lock, and a resolved claim is refused with 409.
-6. `granted <= 0` is refused unless `quest.allow_zero_consent` is on.
+6. A consent of 0 is refused unless `quest.allow_zero_consent` is on or the quest itself
+   advertises 0.
 7. If the cap mode is not `unlimited` and the label is unreadable, 409.
-8. The cap comparison itself.
+8. The range comparison: a floor and a ceiling under both capping modes, skipped for a zero that
+   step 6 allowed. Steps 6 to 8 are `checkConsentAmount` in `server/lib/questConsent.ts`.
 9. `issuanceRefusal`: the launch vote must have carried before any token issues. Asked here as a
    cheap first ask that hands back the ledger's own sentence before a multiplier lookup and a
    transaction are spent finding out. It is no longer the thing standing between a member and a
    lost consent, because `postTransferOn` asks the same question inside the transaction below.
-10. The badge reward multiplier and the payout.
+10. The badge reward multiplier, and `payoutFor`, which lifts the grant toward the cap and never
+    past it.
 11. `claimsRepo.consentOnce`: one transaction that locks the claim row, re-checks the status,
     flips the row and posts the credit on the same connection.
 12. After it commits: the balance cache, the rule mint, the stay credits, the activity line, the
@@ -351,28 +354,47 @@ an unwarmed fan-out is serialised by the driver and every one of these races is 
 five taps left one row unwarmed and five rows warmed, on identical code.
 
 **The cap.** `quest.consent_cap_mode` reads the quest's advertised label through
-`parseRewardRange` and compares it to the amount in the request body:
+`parseRewardRange` and compares it to the amount in the request body. The comparisons are
+`checkConsentAmount` in `server/lib/questConsent.ts`, and every combination of the three dials is a
+row in `server/lib/questConsent.test.ts`:
 
-- `posted` (the shipped default) refuses `requested < range.min || requested > range.max`. Note
-  the floor. This mode is not only a cap.
-- `capped` computes `Math.round(range.max * quest.consent_cap_multiplier)` and refuses only
-  `requested > ceiling`. There is no floor in this branch.
+- `posted` (the shipped default) refuses `requested < range.min || requested > range.max`.
+- `capped` computes a ceiling of `Math.round(range.max * quest.consent_cap_multiplier)` and refuses
+  `requested < range.min || requested > ceiling`. The floor holds here too (Rye, 2026-09-14). It
+  used to test only the ceiling, so a village raising the ceiling to allow a bonus also allowed a
+  consent of 1 on a quest advertising 200. A multiplier that is not a number, or is below 1, reads
+  as 1.
 - `unlimited` compares nothing, and is the only mode exempt from the unreadable-label refusal.
+- Any other stored value reads as `posted`, so the cap fails closed. The route used to compare the
+  raw string, and an unrecognised value applied no cap at all.
+
+**Zero has two doors.** `quest.allow_zero_consent` on allows a consent of 0 on any quest, in any
+mode, meaning acknowledged with no recognition. With the dial off, a quest that itself advertises 0
+(`0`, `0-50`) can still be consented at 0. That second door is new: under the default dials a quest
+paying in stay credits alone could not be consented at any amount, since 0 was refused as "at least
+1" and 1 as outside 0 to 0. Every amount above 0 still sits inside the range. A zero consent still
+releases any stay credits, and mints no `quest.completed` rule token: the route skips
+`mintForConfirmedClaim` at a grant of 0. Economics and governance agreed that on 2026-09-14. A zero
+is the witness saying the work earned no recognition, and any rule token, voice or credits, can be
+weight on a ballot through `governance.weight_token`. Stay credits still release because a person
+set that payment on the quest, so in a village that weights votes by stay credits a zero-consent
+work-exchange quest still moves weight.
 
 Both sides of every one of those comparisons are whole tokens. `gratitude` is seeded with
 `decimals` at the column default of 0 in `drizzle/0006_token_registry.sql`, and `registerToken` in
 `server/lib/ledger.ts` deliberately omits `decimals` from its upsert's update list, so neither a
 boot nor an admin write can re-denominate it. See Sharp edges for why that matters.
 
-**What the ledger records.** A single `postTransfer` from `RECOGNITION_FAUCET` to the member's
+**What the ledger records.** A single posting of the payout, through `postTransferOn` inside
+`consentOnce`, from `RECOGNITION_FAUCET` to the member's
 account, `source = "quest_consent"`, `sourceRef` the claim id, `idempotencyKey`
 `quest_consent:<claimId>`. The member's `recognitionBalance` column is **recomputed** from the
 post's returned balance rather than incremented. At `granted === 0` there is nothing to post and
 the cache write is skipped entirely; an earlier version assigned the failed post's `toBalance` of
 0 and wiped the member.
 
-**On top of the ledger post**, in order: a standing badge's reward multiplier (see Sharp edges),
-`mintForConfirmedClaim` for any `quest.completed` rule on a token that is not recognition, and
+**On top of the ledger post**, in order: `mintForConfirmedClaim` for any `quest.completed` rule on a
+token that is not recognition (skipped entirely on a consent at 0), and
 `mintStayCredits` for `stay_credit_reward` under its own key `queststay:<claimId>`. The last two
 are best-effort. A rule mint that throws is logged and the response is unaffected; a stay-credit
 failure is logged and the recognition still stands. `drizzle/0021_stays_and_payments.sql` describes
@@ -448,10 +470,10 @@ generated tables; what follows is what each one **does** in the code.
 
 | Key | Default | What the code does with it |
 | --- | --- | --- |
-| `quest.consent_cap_mode` | `posted` | Selects one of the three comparison branches above. |
-| `quest.consent_cap_multiplier` | `2` | Read only inside the `capped` branch, as `Math.round(range.max * value)`. Inert under the other two modes. |
+| `quest.consent_cap_mode` | `posted` | Selects one of the three comparison branches above, and so the cap a badge lift stops at. |
+| `quest.consent_cap_multiplier` | `2` | Read only under `capped`, as `Math.round(range.max * value)`: the ceiling for the grant and for a badge lift. Inert under the other two modes. |
 | `quest.require_submission_before_consent` | `true` | Blocks the approve branch when the claim is not `submitted`. Never blocks a decline. |
-| `quest.allow_zero_consent` | `false` | Lets `granted === 0` past the amount floor. Read Sharp edges before turning it on. |
+| `quest.allow_zero_consent` | `false` | On, allows a consent of 0 on any quest in any mode. Off, 0 is allowed only on a quest that advertises 0. Either way, a consent at 0 mints no `quest.completed` rule token and still releases stay credits. |
 | `quest.self_consent_until_members` | `6` | The living-member count below which an admin may witness their own claim. `0` means never. |
 
 The registry entry in `shared/modules.ts` declares only the first three under `variableKeys`, and
@@ -545,18 +567,30 @@ two different ways.
 
 ## Sharp edges
 
-**The cap governs the grant, not the payout.** This is the one to read first. After the cap
-comparison passes, `payout = Math.floor(granted * multiplier)`, where `multiplier` comes from every
-standing badge the member holds, compounding, clamped to `MAX_REWARD_MULTIPLIER = 3` in
-`server/lib/seasonPatterns.ts`. So a village running the shipped `posted` mode, whose dial hint
-reads "Safest. The board is the contract", can pay 300 for a quest advertising 100. The code says
-why: the cap is a question about the work, and a multiplier is a standing the person carries into
-every quest. The consequence is that `quest_claims.amount` is what the witness decided and **not**
-what moved. `GET /api/game/me` resolves the gap by joining the ledger through `questCreditsFor`
-and returning `credited` alongside `amount`, and the member's notification names the credited
-figure. Anything else reading `quest_claims.amount` as a payout is reading the wrong column for
-every badge holder. The copy on `client/src/pages/QuestDetail.tsx` says "What a quest advertises is
-what it pays", which is true of the grant and not of the credit.
+**The cap bounds the payout as well as the grant** (Rye, 2026-09-14: "Badges are what help get to
+the upper range/ all the way to a cap - Never past the cap."). After the range comparison passes,
+`payoutFor` in `server/lib/questConsent.ts` lifts the grant by every standing badge the member holds,
+compounding and clamped to `MAX_REWARD_MULTIPLIER = 3` in `server/lib/seasonPatterns.ts`, and stops
+it at the cap: `range.max` under `posted`, the ceiling under `capped`. A badge helps a consent reach
+the top and adds nothing at the top. Under `unlimited` the grant has no ceiling, and the lift still
+stops at the top the quest advertises: a grant already at or above it gets none, and a quest naming
+no readable top gets none. That is the economics lane's reading of the ruling, for a reason worth
+keeping: quest recognition posts from a faucet the issuance cap does not count, and recognition is
+the default voting-weight token, so a lift bounded only by the 3x clamp could triple the voting
+weight a steward granted.
+Before the ruling the multiplier ran after the cap with nothing else bounding it, so a village on the
+shipped `posted` mode could pay 300 for a quest advertising 100. `quest_claims.amount` is still what
+the witness decided, which can be less than what moved: `GET /api/game/me` joins the ledger through
+`questCreditsFor` and returns `credited` beside `amount`, and the member's notification names the
+credited figure, mentioning a badge only when one actually lifted it. Anything reading
+`quest_claims.amount` as a payout is reading the wrong column for a badge holder.
+`client/src/pages/QuestDetail.tsx` reads the cap mode and multiplier from `GET /api/game/rules` and
+opens its payment paragraph with one sentence per setting: inside the range, and "What a quest
+advertises is what it pays", under `posted`; at least the range's floor and up to the multiplier
+times its top under `capped`; the range as a suggestion under `unlimited`. Until the rules name a
+setting it knows, it promises nothing mode-specific.
+`server/routes/questConsentPayout.test.ts` drives each of these through the real handler into the
+real ledger.
 
 **The consent queue's amount box does not know what the quest advertises.** `QuestClaimsTab` in
 `client/src/pages/Admin.tsx` renders `value={amounts[c.id] ?? 50}` and posts `amount: amounts[id] ?? 50`.
@@ -567,20 +601,6 @@ does not contain 50. The refusal is at least legible: the panel surfaces the ser
 rather than "Action failed", and that sentence names the range. But a steward on a village whose
 quests pay 100 to 200 meets a 409 on every first click, and the number they have to type is on a
 different page.
-
-**`capped` is more permissive at both ends, not one.** `posted` enforces a floor and a ceiling;
-`capped` enforces only a ceiling. A village moving from `posted` to `capped` to allow a bonus for
-exceptional work also, in the same edit, allows a consent of 1 on a quest advertising 200. The
-label on the dial, "Up to a multiple of the posted amount", describes the ceiling it raises and
-says nothing about the floor it drops.
-
-**`quest.allow_zero_consent` does nothing under the shipped cap mode.** Turning it on lets
-`granted === 0` past the amount floor at step 7, and then step 9 runs. Under `posted`, zero fails
-`requested < range.min` for every quest advertising a nonzero amount, so the consent is refused
-with a range error. The dial's description promises "a claim can be consented with an amount of 0,
-meaning 'acknowledged, no recognition'", and that promise is kept only under `capped` or
-`unlimited`, or on a quest whose label is literally `0`. A village wanting acknowledge-only
-behaviour has to change two dials, and nothing tells them so.
 
 **A steward who holds `quest.consent` has no browser.** The server has accepted a non-admin holder
 on the consent routes since the 0103 capability round. (That number is a release label, not a
