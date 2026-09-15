@@ -466,6 +466,105 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
     if (!second.ok) expect(second.error).toContain("which is what this village allows");
   });
 
+  it(
+    "opens exactly one of six simultaneous asks under a cap of one",
+    async () => {
+      // D2-4. The cap was counted outside the transaction, so asks arriving
+      // together each read zero and each passed.
+      //
+      // WHAT THIS CASE CAN AND CANNOT SEE, measured. On local MariaDB 11.8 the
+      // five losers die at the INSERT with the engine's own snapshot check
+      // ("Record has changed since last read"), with or without the cap check,
+      // so this burst stays green on that engine even with the fix removed.
+      // MySQL 8 has no such check. The case below stages the same race in a
+      // fixed order, and that one fails without the fix on either engine.
+      const wren = await makeMember("rd-cap-race");
+      await giveCredits(wren, 500);
+      await setVariable(pool, "redemption.per_member_per_cycle", "1");
+      const outs = await Promise.all(Array.from({ length: 6 }, () => ask(wren, 10)));
+      const said = JSON.stringify(outs.map((o) => (o.ok ? "opened" : `${o.status}: ${o.error.slice(0, 80)}`)));
+      const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "SELECT COUNT(*) n FROM `redemptions` WHERE `user_id` = ?",
+        [wren],
+      );
+      expect(Number(rows[0].n), `rows written for one member under a cap of one; the asks answered ${said}`).toBe(1);
+      expect(outs.filter((o) => o.ok), said).toHaveLength(1);
+      expect(await balanceOf(pool, REDEMPTION_HOLD, CREDITS)).toBe(toLedgerUnits(CREDITS, 10));
+      expect(await balanceOf(pool, memberAccount(wren), CREDITS)).toBe(toLedgerUnits(CREDITS, 490));
+      expect(await conservation(CREDITS)).toBe(0);
+    },
+    DB_HEAVY,
+  );
+
+  it(
+    "refuses the second of two asks that both read the cap before either committed",
+    async () => {
+      /*
+       * THE RACE, IN A FIXED ORDER. Ask B reads the per-cycle count (outside
+       * any transaction) and then waits at its connection; only then does ask
+       * A take its connection, open, commit and post its hold; only after A
+       * has returned does B open its transaction. So B's outside count is
+       * stale and no engine snapshot is older than A's commit: whatever stops
+       * B's row is the cap, decided inside B's lock. Each ask gets a pool whose
+       * `getConnection` waits on a gate and is otherwise the same pool.
+       */
+      const wren = await makeMember("rd-cap-order");
+      await giveCredits(wren, 500);
+      await setVariable(pool, "redemption.per_member_per_cycle", "1");
+      let bReady!: () => void;
+      let aDone!: () => void;
+      const bAtConnection = new Promise<void>((r) => (bReady = r));
+      const aReturned = new Promise<void>((r) => (aDone = r));
+      const gated = (before: () => Promise<void>) =>
+        new Proxy(pool, {
+          get(target, prop) {
+            if (prop === "getConnection") {
+              return async () => {
+                await before();
+                return target.getConnection();
+              };
+            }
+            const v = Reflect.get(target, prop, target);
+            return typeof v === "function" ? v.bind(target) : v;
+          },
+        }) as typeof pool;
+      const input = {
+        userId: wren,
+        tokenSlug: CREDITS,
+        amountUnits: toLedgerUnits(CREDITS, 10),
+        askedFor: "a bicycle",
+        exitOpen: false,
+        cycleStart: cycleWindow().startsAt,
+      };
+      let bWaited = false;
+      const b = requestRedemption(
+        gated(async () => {
+          if (bWaited) return;
+          bWaited = true;
+          bReady();
+          await aReturned;
+        }),
+        input,
+      );
+      const a = requestRedemption(gated(() => bAtConnection), input).finally(() => aDone());
+      const [aOut, bOut] = await Promise.all([a, b]);
+      expect(aOut.ok, JSON.stringify(aOut)).toBe(true);
+      expect(bOut.ok, JSON.stringify(bOut)).toBe(false);
+      if (!bOut.ok) {
+        expect(bOut.status).toBe(409);
+        expect(bOut.error).toContain("which is what this village allows");
+      }
+      const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "SELECT COUNT(*) n FROM `redemptions` WHERE `user_id` = ?",
+        [wren],
+      );
+      expect(Number(rows[0].n)).toBe(1);
+      expect(await balanceOf(pool, REDEMPTION_HOLD, CREDITS)).toBe(toLedgerUnits(CREDITS, 10));
+      expect(await conservation(CREDITS)).toBe(0);
+    },
+    DB_HEAVY,
+  );
+
   // ── The lock, against the paths that can reach it ────────────────────────
 
   it("refuses the ledger's own overdraft test, which is where all sixteen call sites arrive", async () => {

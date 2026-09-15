@@ -232,6 +232,20 @@ export async function requestRedemption(pool: Pool, input: RedeemInput): Promise
     }
 
     /*
+     * RE-COUNT INSIDE THE LOCK, for the reason the balance is re-read below.
+     * The count in `ask` was read on the pool, outside this transaction, so N
+     * opens arriving together each read the same count and each passed a cap
+     * of one. The `users` row locked above serialises every open for this
+     * member, so this count sees every open that committed before it.
+     */
+    const openedRows = await openedSinceRows(conn, villageId(), input.userId, input.cycleStart);
+    const capRefusal = redemptionRefusal({ ...ask, openedThisCycle: Number(openedRows[0]?.n ?? 0) });
+    if (capRefusal) {
+      await conn.rollback();
+      return { ok: false, status: 409, error: capRefusal };
+    }
+
+    /*
      * RE-READ THE BALANCE INSIDE THE LOCK. The check above decides what to SAY;
      * this one decides what happens. Two redemptions opened in the same instant
      * would otherwise each pass against the same balance and hold twice what
