@@ -31,6 +31,8 @@ import { dryRunProposal } from "./proposalDryRun";
 import { loadVariables, numberVar, rawValue, wireVariableGuard } from "./variables";
 import { DEFAULT_EXIT_POLICY, exitLeverRefusal } from "./exitPolicy";
 import { loadModuleSettings } from "./modules";
+import { villageId } from "./economy";
+import { mintRuleKey } from "../../shared/mintRuleKeys";
 import { VARIABLES, applyTimingOf } from "../../shared/gameVariables";
 
 const configured = testDbConfigured();
@@ -512,6 +514,51 @@ describe.skipIf(!configured)("a set of exit dials is judged on the state it prod
     expect(result.ok).toBe(false);
     expect(await statusOf("gmp-midset")).toBe("passed_onsite");
     expect(told).toBe(0);
+  });
+});
+
+/**
+ * ── G3: A RETRIED LANDING RE-APPLIES NO ELEMENT TWICE ─────────────────────
+ *
+ * A landing that throws is tried again, and the retry walks every element of
+ * the set. A dial written twice is a no-op. These two cases ask the same of a
+ * weight allocation and a queued minting rule, on the SAME ballot, and count
+ * what the tables and the amendment ledger were given.
+ */
+describe.skipIf(!configured)("a retried landing re-applies no element twice", () => {
+  it("a weight allocation landed twice on one ballot leaves one trail row", async () => {
+    const changes = [{ kind: "weight_allocation" as const, userId: "u-g3-weight", to: "4", note: "the founding table" }];
+    const input = { ballotId: "bal-g3-weight", proposalRef: "gm:g3-weight", actor: "u-a", changes };
+    const first = await applyChangeSet(deps(), input);
+    const again = await applyChangeSet(deps(), input);
+    expect(first.ok, JSON.stringify(first)).toBe(true);
+    expect(again.ok, JSON.stringify(again)).toBe(true);
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT COUNT(*) AS n FROM governance_weight_changes WHERE user_id = ?",
+      ["u-g3-weight"],
+    );
+    expect(Number(rows[0].n), "trail rows for one allocation, after the landing ran twice").toBe(1);
+    expect(again.applied).toEqual(["weight:u-g3-weight"]);
+  });
+
+  it("a minting rule landed twice on one ballot is recorded in the amendment ledger once", async () => {
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO `mint_rules` (`id`, `village_id`, `trigger`, `token_slug`, `amount`, `ceiling`, `recipient`, `enabled`) " +
+        "VALUES ('rule-g3', ?, 'quest.completed', 'credits', 25, 250, 'claimant', 1) " +
+        "ON DUPLICATE KEY UPDATE `ceiling` = 250",
+      [villageId()],
+    );
+    const key = mintRuleKey("rule-g3", "ceiling");
+    const changes = [{ kind: "mint_rule", key, from: "250", to: "300" }];
+    const input = { ballotId: "bal-g3-mint", proposalRef: "gm:g3-mint", actor: "u-a", changes };
+    const first = await applyChangeSet(deps(), input);
+    const again = await applyChangeSet(deps(), input);
+    expect(first.ok, JSON.stringify(first)).toBe(true);
+    expect(again.ok, JSON.stringify(again)).toBe(true);
+    expect(ledgerRows.filter((k) => k === key), "amendment ledger rows for one queued change").toHaveLength(1);
+    expect(again.queued).toEqual([key]);
+    const [rule] = await pool.query<any[]>("SELECT pending_ceiling FROM mint_rules WHERE id = 'rule-g3'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(Number(rule[0].pending_ceiling)).toBe(300);
   });
 });
 

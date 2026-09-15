@@ -76,7 +76,8 @@ import { register as registerGovernanceLandingRoutes } from "./routes/governance
 import { applyDueGovernance, autoSettleExpired, digestComposerFor, itemKindsOf, markNotApplicable, overrideDials, routeOutcome, runVetoWatch, vetoWindowOn, type CloseRouting, type LandingDeps, type SubjectCloser } from "./lib/applyDue";
 import { register as registerGovernanceModeRoutes } from "./routes/governanceMode";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
-import { applyChangeSet, applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
+import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
+import { landWeightMode } from "./lib/landingRefusal";
 import { landingRow } from "./lib/applyDue";
 import { notifyRollRows, type RollNotice } from "./lib/ballotNotices";
 import { forgetStewardActs, holdingHasLapsed, runTermWatch, setVetoWindowCheck, stewardMailRefusal } from "./lib/stewardship";
@@ -23304,7 +23305,7 @@ ${inner}
      */
     [GOVERNANCE_MODE]: twoPhase(async (b, outcome, outcomeNote, actorId) => {
       const out: CloseRouting = { applied: [], held: null, proposerTold: b.openedBy };
-      const [mode, token] = String(b.subjectRef).split("@");
+      const [mode] = String(b.subjectRef).split("@");
       if (outcome !== "passed") {
         await notify({
           userId: b.openedBy, type: "governance",
@@ -23316,16 +23317,12 @@ ${inner}
         });
         return out;
       }
-      const result = await applyChangeSet(changesetDeps(), {
-        ballotId: b.id,
-        proposalRef: `bal:${b.id}`,
-        actor: actorId,
-        changes: [{ kind: "mode_switch", to: mode, ...(token ? { weightToken: token } : {}) } as any],
+      // Throws unless the whole switch landed, so applyDue records the sentence
+      // and never marks this landing applied (server/lib/landingRefusal.ts).
+      const result = await landWeightMode(changesetDeps(), b, actorId).catch(async (e) => {
+        await notifyAdmins("governance", `A carried change to how votes are weighed could not land: ${b.title}`, `bal:${b.id}:mode-apply-failed`);
+        throw e;
       });
-      if (result.refusal) {
-        out.held = result.refusal.sentence;
-        return out;
-      }
       out.applied = result.applied;
       await addActivity("governance", `The village changed how it weighs a vote: ${b.title}`, {
         actorUserId: actorId, entityType: "ballot", entityRef: b.id,
