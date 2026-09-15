@@ -114,6 +114,7 @@ import { expireRedemptions, retiredSupply } from "./lib/redemptionStore";
 import { register as registerFeedbackRoutes } from "./routes/feedback";
 import { register as registerCharacterPortraitRoutes } from "./routes/characterPortraits";
 import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
+import { register as registerPowerAffinityRoutes, powersForClass, withPowerAffinity } from "./routes/powerAffinity";
 import { resolveGoogleConfig } from "./lib/oauthGoogle";
 import {
   decodeToken,
@@ -20041,6 +20042,7 @@ ${inner}
 
   registerCharacterPortraitRoutes(app, { authedUser, getPool, uploadsDir: UPLOADS_DIR });
   registerArchetypeAdminRoutes(app, { isAdmin, guardCapability, getPool });
+  registerPowerAffinityRoutes(app, { isAdmin, guardCapability, getPool });
 
   /** The five classes, as this village names them. Public: it is the front door. */
   app.get("/api/archetypes", async (_req, res) => {
@@ -20150,7 +20152,7 @@ ${inner}
 
   /** What a class opens. A suggestion, never a restriction. */
   app.get("/api/archetypes/:key/paths", async (req, res) => {
-    res.json(await openPathsFor(getPool(), villageId(), req.params.key));
+    res.json({ ...(await openPathsFor(getPool(), villageId(), req.params.key)), powers: await powersForClass(getPool(), villageId(), req.params.key) });
   });
 
   app.get("/api/me/characters", async (req, res) => {
@@ -20475,7 +20477,7 @@ ${inner}
       // The same keys with the closed ones included, and the rung that opens
       // each. `capabilities` above is exactly the rows here whose `held` is
       // true, by construction rather than by agreement.
-      capabilityCatalogue: capabilityCatalogue(ctx),
+      capabilityCatalogue: await withPowerAffinity(capabilityCatalogue(ctx), { pool: getPool(), villageId: villageId(), userId: user.id, stageId }),
       roles: rolesFor(user.id),
       history: events
         .filter((e) => e.userId === user.id)
