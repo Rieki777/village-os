@@ -44,6 +44,7 @@ import ResourcesAdminPanel from "@/components/power/ResourcesAdminPanel";
 import { CrowdpoolAdminTab, ForumCategoriesEditor, ToolsCategoriesEditor } from "@/components/admin/ModuleConfigPanels";
 import { CONTENT_SECTIONS, emptyContentFor } from "@/components/admin/contentSections";
 import { displayCurrencyProblem } from "@shared/money";
+import { formatTokenAmount } from "@/lib/tokenAmount";
 import InvoluntaryExitDialog from "@/components/admin/InvoluntaryExitDialog";
 import ContentEditorTab from "@/components/admin/ContentEditorTab";
 import WorkWithUsTab from "@/components/admin/WorkWithUsTab";
@@ -6107,11 +6108,10 @@ function StaysAdminTab({ password, onOpenTab }: { password: string; onOpenTab: (
                   {/* 0092: the rate means nothing without the token it is in,
                       now that a night can be paid in either. */}
                   <td className="py-2 pr-3">
-                    {s.rateSnapshotCredits ?? "-"}
-                    {s.rateSnapshotCredits ? ` ${s.rateTokenName ?? s.rateSnapshotToken}` : ""}
+                    {s.rateSnapshotCredits == null ? "-" : `${formatTokenAmount(s.rateSnapshotCredits, s.rateSnapshotDecimals)}${s.rateSnapshotCredits ? ` ${s.rateTokenName ?? s.rateSnapshotToken}` : ""}`}
                     {s.audienceSnapshot ? ` (${s.audienceSnapshot})` : ""}
                   </td>
-                  <td className={`py-2 pr-3 ${s.balance < 0 ? "text-red-600 font-semibold" : ""}`}>{s.balance}</td>
+                  <td className={`py-2 pr-3 ${s.balance < 0 ? "text-red-600 font-semibold" : ""}`}>{formatTokenAmount(s.balance, s.rateSnapshotDecimals)}</td>
                   <td className="py-2 pr-3">{s.nightsRemaining ?? "-"}</td>
                   <td className="py-2 pr-3">
                     <button onClick={async () => { const d = await post(`/admin/stays/${s.id}`, { autopay: !s.autopay }, "PUT"); if (d) load(); }}
@@ -6140,7 +6140,7 @@ function StaysAdminTab({ password, onOpenTab }: { password: string; onOpenTab: (
                             </option>
                           ))}
                       </select>
-                      <button onClick={async () => { const d = await post(`/admin/stays/${s.id}/activate`, { tokenType: activateToken[s.id] ?? "stay-credit" }); if (d) { toast.success(`Active at ${d.rateSnapshotCredits}/night (${d.audienceSnapshot})`); load(); } }}
+                      <button onClick={async () => { const d = await post(`/admin/stays/${s.id}/activate`, { tokenType: activateToken[s.id] ?? "stay-credit" }); if (d) { toast.success(`Active at ${formatTokenAmount(d.rateSnapshotCredits, d.rateSnapshotDecimals)}/night (${d.audienceSnapshot})`); load(); } }}
                         className="text-xs text-teal-deep font-medium hover:underline">
                         {s.status === "active" ? "Re-rate" : "Activate"}
                       </button>
