@@ -1722,7 +1722,9 @@ export async function checkLedgerInvariants(pool: Pool): Promise<InvariantReport
    * them. Sum those debits for this account and this token, and a balance
    * below their negation is illegal however it got there. A genuine -25
    * after a reversal of a spent 25 still passes, because 25 is exactly what
-   * the clawback took.
+   * the clawback took. It is a bound and not an attribution: a debit the
+   * balance fully covered at the time still counts toward it, so an unlawful
+   * debt smaller than the account's lifetime allow-negative debits passes.
    *
    * `CAST(t.source AS BINARY)` because the column's collation folds case and
    * pads spaces: `IN ('reversal', ...)` matched a `"REVERSAL"` row that the
