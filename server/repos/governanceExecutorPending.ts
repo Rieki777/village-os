@@ -62,6 +62,27 @@ export async function attemptCount(pool: Pool, ballotId: string): Promise<number
 }
 
 /**
+ * The newest attempt on this ballot, or null when there has been none.
+ *
+ * Read for the sentence a member sees on the decision page
+ * (`server/lib/atCloseLanding.ts`): an open newest attempt carrying an error is
+ * a landing that has not happened yet. The NEWEST and never any, because an
+ * older failure stays open after a later attempt lands.
+ */
+export async function newestAttemptOf(
+  pool: Pool,
+  ballotId: string,
+): Promise<{ lastError: string | null; cleared: boolean } | null> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT last_error, cleared_at FROM governance_executor_pending WHERE ballot_id = ? ORDER BY id DESC LIMIT 1",
+    [ballotId],
+  );
+  const r = rows[0];
+  if (!r) return null;
+  return { lastError: r.last_error == null ? null : String(r.last_error), cleared: r.cleared_at != null };
+}
+
+/**
  * Open an attempt.
  *
  * `claimedAt` is a UTC instant from Node and NEVER `NOW()`. `sqlInstant` in

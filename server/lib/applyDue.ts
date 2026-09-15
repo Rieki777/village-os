@@ -129,16 +129,19 @@ import {
   newestBallotVeto,
   openBallotIdsPastClose,
   openVetoWindows,
+  queueFailedAtCloseLanding,
   recordVetoOnBallot,
   releaseClaimToPending,
   reopenStalledWindow,
   restampLateSettled,
+  stallFailedAtCloseLanding,
   stampBallotLanding,
   vetoAndLandingTally,
   vetoLockedOn,
   vetoedBallotCount,
   type LandingRow,
 } from "../repos/ballotLandings";
+import { NOT_YET_NEEDS_A_PERSON, NOT_YET_RETRYING, atCloseFailureShape } from "./atCloseLanding";
 import {
   rawChangeSet,
   returnProposalToProposer,
@@ -169,6 +172,8 @@ export interface CloseRouting {
   proposerTold: string | null;
   /** Set when the close itself changed the outcome, as a steward's no does. */
   outcome?: "passed" | "failed" | "no_quorum";
+  /** Set when a landing due at the close threw, naming the shape it waits in (`server/lib/atCloseLanding.ts`). */
+  landingFailed?: "retrying" | "stalled";
 }
 
 /**
@@ -1259,15 +1264,16 @@ export async function routeOutcome(
   }
 
   if (landing.executesAtClose) {
-    await openPending(deps.pool, b.id);
     try {
+      await openPending(deps.pool, b.id);
       const done = await closer.execute(b, actorId);
       await markApplied(deps.pool, b.id);
       await clearPending(deps.pool, b.id);
       return { ...done, proposerTold: done.proposerTold ?? routing.proposerTold, outcome: effective };
     } catch (e) {
-      await clearPending(deps.pool, b.id, e instanceof Error ? e.message : String(e));
-      throw e;
+      // The vote stands and the close answers. Why, and which of the two
+      // shapes the row is parked in, is `server/lib/atCloseLanding.ts`.
+      return parkFailedAtCloseLanding(deps, b, routing, e);
     }
   }
 
@@ -1277,6 +1283,31 @@ export async function routeOutcome(
     : landing.because;
   if (landing.landsAt) await tellStewards(deps, b, landing.landsAt, "carry");
   return routing;
+}
+
+/**
+ * AN AT-CLOSE LANDING THAT THREW. The rule, the evidence per subject and the
+ * two shapes live in `server/lib/atCloseLanding.ts`; this is where they are
+ * spent. It never throws: recording the failure is itself allowed to fail, and
+ * then the row keeps the close path's own shape with an open attempt, which the
+ * failed-actions report lists once it has sat ten minutes.
+ */
+async function parkFailedAtCloseLanding(
+  deps: LandingDeps,
+  b: BallotRow,
+  routing: CloseRouting,
+  e: unknown,
+): Promise<CloseRouting> {
+  const message = e instanceof Error ? e.message : String(e);
+  const shape = atCloseFailureShape(b.subjectType);
+  try {
+    await clearPending(deps.pool, b.id, message);
+    if (shape === "retrying") await queueFailedAtCloseLanding(deps.pool, b.id, nowOf(deps));
+    else await stallFailedAtCloseLanding(deps.pool, b.id);
+  } catch (recordError) {
+    console.error(`[applyDue] a landing failed at the close of ${b.id} and could not be recorded:`, recordError);
+  }
+  return { ...routing, held: shape === "retrying" ? NOT_YET_RETRYING : NOT_YET_NEEDS_A_PERSON, landingFailed: shape };
 }
 
 /**
@@ -1343,8 +1374,9 @@ export async function autoSettleExpired(
         notes.push(`${b.title}: ${result.error ?? "could not be closed"}`);
         continue;
       }
-      await routeOutcome(deps, result.ballot, result.outcome, AUTO_CLOSE_NOTE, "governance", itemKinds);
+      const routing = await routeOutcome(deps, result.ballot, result.outcome, AUTO_CLOSE_NOTE, "governance", itemKinds);
       closed += 1;
+      if (routing.landingFailed) notes.push(`${b.title}: ${routing.held}`);
     } catch (e) {
       failed += 1;
       notes.push(`${b.title}: closing threw. ${e instanceof Error ? e.message : String(e)}`);

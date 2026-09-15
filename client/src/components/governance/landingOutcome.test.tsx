@@ -47,6 +47,19 @@ describe("the word on a carried decision", () => {
     expect(o.law).toBe(false);
   });
 
+  it("says carried and not yet in effect when the server says its landing failed, whatever the instant", () => {
+    const sentence = "The vote carried and the decision has not taken effect yet.";
+    const stalled = outcomeFor("passed", landing({ landsAt: null, landingStatus: "stalled", notYetInEffect: sentence }), NOW);
+    expect(stalled.word).toBe("Carried, not yet in effect");
+    expect(stalled.law).toBe(false);
+    // A row the landing job is retrying carries an instant already behind it.
+    const retrying = outcomeFor("passed", landing({ landsAt: "2026-09-13T12:00:00Z", notYetInEffect: sentence }), NOW);
+    expect(retrying.word).toBe("Carried, not yet in effect");
+    expect(retrying.law).toBe(false);
+    // A vote that did not carry is untouched by it.
+    expect(outcomeFor("failed", landing({ notYetInEffect: sentence }), NOW).word).toBe("Did not carry");
+  });
+
   it("leaves every status that did not carry exactly as the card had it", () => {
     expect(outcomeFor("failed", landing(), NOW).word).toBe("Did not carry");
     expect(outcomeFor("no_quorum", landing(), NOW).word).toBe("Too few spoke");
