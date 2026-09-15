@@ -159,10 +159,39 @@ describe("dates that cannot be a term", () => {
     expect(early.ok || early.code).toBe("ends_before_it_starts");
   });
 
-  it("a season about to turn refuses a default seat that would land after it", () => {
+  it("a vote that lands after the season turns takes the NEXT season's end, default and steward cap alike", () => {
+    // Main met this on 2026-09-15: a derived season turned on the 22nd, one vote-length away.
     const late = new Date("2026-12-18T12:00:00Z");
-    const t = resolveSeatTerm({ calendar: SOLAR, capAtSeasonEnd: false, now: late, startsNoEarlierThan: new Date("2026-12-24T00:00:00Z") });
-    expect(t.ok || t.code).toBe("ends_before_it_starts");
+    const lands = new Date("2026-12-24T00:00:00Z");
+    const t = resolveSeatTerm({ calendar: SOLAR, capAtSeasonEnd: false, now: late, startsNoEarlierThan: lands });
+    expect(t.ok && t.endsOn).toBe("2027-03-20");
+    if (t.ok) {
+      expect(t.seasonId, "the season the seat sits in").toBe("winter-2026");
+      expect(t.followsSeason).toBe(true);
+    }
+    const steward = resolveSeatTerm({ calendar: SOLAR, capAtSeasonEnd: true, now: late, startsNoEarlierThan: lands });
+    expect(steward.ok && steward.endsOn, "a steward seat can be voted in during a season's last week").toBe("2027-03-20");
+    const pastIt = resolveSeatTerm({ requestedEndsOn: "2027-03-21", calendar: SOLAR, capAtSeasonEnd: true, now: late, startsNoEarlierThan: lands });
+    expect(pastIt.ok || pastIt.code, "and is capped at THAT season's end").toBe("past_season_end");
+    // Landing exactly on the day the season turns is the boundary itself.
+    const onTheTurn = resolveSeatTerm({ calendar: SOLAR, capAtSeasonEnd: false, now: late, startsNoEarlierThan: new Date("2026-12-21T00:00:00Z") });
+    expect(onTheTurn.ok && onTheTurn.endsOn).toBe("2027-03-20");
+    // A vote that lands before the season turns is unchanged.
+    const early = resolveSeatTerm({ calendar: SOLAR, capAtSeasonEnd: false, now: NOW, startsNoEarlierThan: new Date("2026-09-21T00:00:00Z") });
+    expect(early.ok && early.endsOn).toBe("2026-12-21");
+  });
+
+  it("refuses in words when the season turns before the vote lands and no next season is set", () => {
+    const lastScheduled: SeatCalendar = { ...SOLAR, seasons: SOLAR.seasons.slice(0, 2) };
+    const late = new Date("2026-12-18T12:00:00Z");
+    const lands = new Date("2026-12-24T00:00:00Z");
+    const t = resolveSeatTerm({ calendar: lastScheduled, capAtSeasonEnd: false, now: late, startsNoEarlierThan: lands });
+    expect(t.ok || t.code).toBe("no_next_season");
+    if (!t.ok) expect(t.error).toContain("Add the next season in Admin");
+    const own = resolveSeatTerm({ requestedEndsOn: "2027-02-01", calendar: lastScheduled, capAtSeasonEnd: false, now: late, startsNoEarlierThan: lands });
+    expect(own.ok, "an ordinary seat with its own end date still opens").toBe(true);
+    const steward = resolveSeatTerm({ requestedEndsOn: "2027-02-01", calendar: lastScheduled, capAtSeasonEnd: true, now: late, startsNoEarlierThan: lands });
+    expect(steward.ok || steward.code, "a steward seat needs a season to be capped by").toBe("no_next_season");
   });
 });
 
