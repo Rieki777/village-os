@@ -38,6 +38,7 @@ import { issuanceRefusal } from "./gameStart";
 import {
   keyClashRows,
   keyRowsWithSource,
+  lockedLedgerAccountRows,
   lockedReversalMirrorRows,
   postingRowForKey,
   reversalMirrorRows,
@@ -1284,10 +1285,9 @@ export async function lockLedgerAccounts(
   a: string,
   b: string,
 ): Promise<Map<string, { faucet: boolean }>> {
-  const [rows] = await conn.query<RowDataPacket[]>(
-    "SELECT id, faucet FROM ledger_accounts WHERE id IN (?, ?) ORDER BY id FOR UPDATE",
-    [a, b].sort(),
-  );
+  // The statement is `lockedLedgerAccountRows` in server/repos/tokenLedger.ts.
+  const [first, second] = [a, b].sort();
+  const rows = await lockedLedgerAccountRows(conn, first, second);
   return new Map(rows.map((r) => [String(r.id), { faucet: !!r.faucet }]));
 }
 
