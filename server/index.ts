@@ -12896,7 +12896,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
         recurring: p.recurring, provider: p.provider,
         zeffyUrl: p.provider === "zeffy" ? p.zeffy_url : undefined,
         manualInstructions: p.provider === "manual" ? p.manual_instructions : undefined,
-        grantsToken: p.token_slug ? { slug: p.token_slug, amount: p.token_amount, name: tokenDef(p.token_slug)?.name ?? p.token_slug, decimals: tokenDef(p.token_slug)?.decimals ?? 0 } : null,
+        grantsToken: p.token_slug ? { slug: p.token_slug, amount: toLedgerUnits(String(p.token_slug), Number(p.token_amount)), name: tokenDef(p.token_slug)?.name ?? p.token_slug, decimals: tokenDef(p.token_slug)?.decimals ?? 0 } : null,
       })),
       stripeConfigured: stripeConfigured(),
     });
