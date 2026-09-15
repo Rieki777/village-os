@@ -33,6 +33,19 @@ import { PATH_LADDERS, type PathParticulars } from "@shared/pathLadders";
 import { villageMoonLabel } from "@shared/villageMoon";
 import type { VillageMoon } from "@shared/villageMoon";
 
+/**
+ * A stored slug as a person would read it: "tiny-home" becomes "Tiny home".
+ *
+ * DERIVED, never a table. The home types are a varchar and not an enum exactly
+ * so a village can add a fifth without a table rebuild, so any hand-kept map
+ * here would go blank on the first village that used that freedom. This is
+ * ugly for a slug nobody thought about and correct for every one of them.
+ */
+function humanize(slug: string): string {
+  const words = slug.replace(/[-_]+/g, " ").trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : slug;
+}
+
 /** A moon, or nothing at all. Never a guess and never an empty bracket. */
 function Moon({ moon, prefix }: { moon: VillageMoon | null; prefix: string }) {
   const label = villageMoonLabel(moon);
@@ -137,13 +150,22 @@ function Reservations({ reservations }: { reservations: NonNullable<PathParticul
       {reservations.map((r) => (
         <Card key={r.id}>
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-            <span className="font-medium text-card-foreground">{r.homeType}</span>
+            <span className="font-medium text-card-foreground">{humanize(r.homeType)}</span>
+            {/* `standing`, never `status`. The stored word is the founders'
+                pipeline, and "new" on your own profile reads as a label on
+                you. The server resolves it against the union it owns. */}
             <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-              {r.status}
+              {r.standing}
             </span>
           </div>
-          {r.structureKey ? <p className="mt-0.5 text-sm text-muted-foreground">{r.structureKey}</p> : null}
-          <Moon moon={r.madeMoon} prefix="Reserved" />
+          {r.structureKey ? (
+            <p className="mt-0.5 text-sm text-muted-foreground">On the map as {r.structureKey}</p>
+          ) : null}
+          {/* "Asked", not "Reserved". The moon is `created_at`, the day they
+              made the request, and a request sitting at "new" is not a
+              reservation. Dating it "Reserved" told somebody they had a home
+              held for them when nobody had answered them yet. */}
+          <Moon moon={r.madeMoon} prefix="Asked" />
         </Card>
       ))}
     </ul>
@@ -158,7 +180,12 @@ function Seats({ seats }: { seats: NonNullable<PathParticulars["steward"]>["seat
         <Card key={s.id}>
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <span className="font-medium text-card-foreground">{s.roleName}</span>
-            <Standing live={s.live} word="Stepped down" />
+            {/* "Ended", never "Stepped down". `ended_at` says a seating stopped
+                and says nothing about who decided: a member the village
+                unseated would have read their own profile telling them they
+                stepped down. `endedReason` below carries the truth when
+                somebody recorded one. */}
+            <Standing live={s.live} word="Ended" />
           </div>
           {s.representsCircle ? (
             <p className="mt-0.5 text-sm text-muted-foreground">Speaks for a circle.</p>
@@ -185,13 +212,33 @@ export default function PathFacts({
   pathId,
   title,
   particulars,
+  unavailable = false,
 }: {
   pathId: string;
   /** The village's own label for this path, from the offer. */
   title: string;
   particulars: PathParticulars | null;
+  /** The read came back unusable. Different from "not back yet". */
+  unavailable?: boolean;
 }) {
-  if (!particulars) return null;
+  /*
+   * A READ THAT FAILED IS NOT AN EMPTY PATH. Claiming a path replaces its
+   * quiet line with this section on the same render, so drawing nothing on a
+   * refusal left a member who had just acted looking at the space where the
+   * thing they claimed used to be, with nothing ever arriving. Saying so is
+   * short, honest, and ends.
+   */
+  if (!particulars) {
+    if (!unavailable) return null;
+    return (
+      <section className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
+        <h2 className="font-display text-2xl font-bold text-card-foreground">{title}</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          This did not load just now. Reload the page to try again.
+        </p>
+      </section>
+    );
+  }
 
   let body: React.ReactNode = null;
   if (pathId === "investor" && particulars.investor) {

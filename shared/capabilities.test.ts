@@ -21,6 +21,8 @@ import {
   STAGE_UNLOCKS,
   TRANSFERABLE,
   type Capability,
+
+
 } from "./capabilities";
 
 const LADDER = ["visitor", "guest", "member", "co-creator"];
@@ -435,5 +437,77 @@ describe("a badge may never take away a voice", () => {
       expect(isDeniable("forum.post")).toBe(true);
       expect(isDeniable("ballot.vote")).toBe(false);
     });
+  });
+});
+
+/**
+ * A GREATER KEY CARRYING A LESSER ONE.
+ *
+ * Rye ruled on 2026-09-08 that founders and stewards may ALWAYS vouch, so a
+ * village always has a path to admit its next member. Stewards hold
+ * `member.superVouch`, which admits somebody OUTRIGHT, and refusing them the
+ * smaller act of adding one vouch would be an absurdity.
+ *
+ * These pin the three properties that keep it from becoming a back door.
+ */
+describe("keys that carry other keys", () => {
+  it("a super vouch carries a vouch, from a rung that grants neither", () => {
+    // stageIndex 0 is visitor, below every unlock, so nothing but the carry
+    // can be doing this.
+    expect(hasCapability("member.vouch", ctx({ stageIndex: 0 }))).toBe(false);
+    expect(
+      hasCapability("member.vouch", ctx({ stageIndex: 0, roleCapabilities: ["member.superVouch"] })),
+    ).toBe(true);
+  });
+
+  it("says WHY, rather than claiming the role held the key itself", () => {
+    const d = capabilityDecision("member.vouch", ctx({ roleCapabilities: ["member.superVouch"] }));
+    expect(d.allowed).toBe(true);
+    expect(d.source).toBe("carried by a greater key");
+  });
+
+  it("DOES NOT RUN BACKWARDS: a vouch does not carry a super vouch", () => {
+    // The whole point of the override being its own key is that it is scarcer.
+    // If the carry ran both ways it would be one key again.
+    expect(
+      hasCapability("member.superVouch", ctx({ roleCapabilities: ["member.vouch"] })),
+    ).toBe(false);
+  });
+
+  it("DOES NOT CHAIN, so nobody composes a path to a power nobody granted", () => {
+    // Holding a key carries what that key names, and not whatever those carry
+    // in turn. Asserted against the whole catalogue rather than one example, so
+    // it stays true when somebody adds a second entry to CARRIES.
+    for (const cap of ALL_CAPABILITIES) {
+      const viaSuper = hasCapability(cap, ctx({ roleCapabilities: ["member.superVouch"] }));
+      const directly = cap === "member.superVouch" || cap === "member.vouch";
+      expect(viaSuper, `member.superVouch should not reach ${cap}`).toBe(directly);
+    }
+  });
+
+  it("OPENS NO PATH AROUND A DENY: carried and direct answer alike", () => {
+    /*
+     * The first version of this asserted that a warning badge stops a carried
+     * vouch, and it failed, and the TEST was wrong rather than the gate.
+     * `member.vouch` is not deniable: it is a voice key, and 0109/R65-R66 have
+     * the gate ignore a badge naming one rather than trust it, because a voice
+     * in a decision is not a thing a badge may take away.
+     *
+     * So the property worth pinning is not "a deny stops the carry", it is that
+     * the carry ANSWERS THE SAME as holding the key outright. A carry that
+     * answered differently in the presence of a deny would be a second route
+     * through the gate, which is exactly what a single gate exists to prevent.
+     */
+    const denied = { badgeDenies: ["member.vouch"] as string[] };
+    const direct = hasCapability("member.vouch", ctx({ ...denied, roleCapabilities: ["member.vouch"] }));
+    const carried = hasCapability("member.vouch", ctx({ ...denied, roleCapabilities: ["member.superVouch"] }));
+    expect(carried).toBe(direct);
+
+    // And on a key that CAN be denied, the deny still lands, so the ordering
+    // of the deny step above the carry is doing its job.
+    expect(DENIABLE["forum.moderate"]).toBe(true);
+    expect(
+      hasCapability("forum.moderate", ctx({ roleCapabilities: ["forum.moderate"], badgeDenies: ["forum.moderate"] })),
+    ).toBe(false);
   });
 });

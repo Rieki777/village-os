@@ -55,6 +55,16 @@ export function stringVar(key: string): string {
 }
 
 /**
+ * What a village STORED under a key, whether or not the registry still knows
+ * the key. For a migration reading a dial whose variable has since left the
+ * registry, and for nothing else: every rule reads through `variable`, which
+ * refuses an unknown key so that a typo can never read as 0.
+ */
+export function storedOverride(key: string): string | undefined {
+  return overrides[key];
+}
+
+/**
  * The RAW effective value (override ?? default), as stored. This is the
  * string a mechanics proposal captures as its baseline and compares its
  * target against — same representation the write path validates, so a

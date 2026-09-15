@@ -203,6 +203,12 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "The calendar has been stopped for {n} sweeps.",
     celebrate: false,
   },
+  season_ending: {
+    group: "decisions",
+    blurb: "The season turns soon. Before it does, the village records what this season did and seats people for the next one, so the reminders start two weeks out.",
+    many: "{n} reminders that the season is turning.",
+    celebrate: false,
+  },
   term_expiring: {
     group: "decisions",
     blurb: "The agreement to keep holding your seat is running out. On a seat that carries permissions those end with the term (0171), so it is the moment to renew or hand it on.",
@@ -312,6 +318,26 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   },
 
   // ── People ────────────────────────────────────────────────────────────────
+  arrival: {
+    group: "people",
+    /*
+     * NOT CELEBRATED, and I had this wrong on the first pass.
+     *
+     * A new person joining is rare and it matters, so `celebrate: true` felt
+     * obviously right. The ration is four kinds and a test holds it there, and
+     * this file's own header says why: celebration on every action becomes
+     * wallpaper, and then the rare event has nothing left to say with. The four
+     * are things that happened TO THE READER. An arrival is somebody else's
+     * moment, and the greeter's job is to go and make it one in person.
+     *
+     * It reaches whoever holds the greeter seat (`arrival.greeter_role`), and
+     * the founders when no seat is named or the seat sits vacant, so it is
+     * never sent to everybody at once.
+     */
+    blurb: "Somebody joined the village. Greeting a new arrival is the first thing anybody here does for them.",
+    many: "{n} people joined the village.",
+    celebrate: false,
+  },
   gratitude: {
     group: "people",
     blurb: "Somebody said thank you, and put their name to it.",

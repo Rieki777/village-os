@@ -51,6 +51,7 @@ import {
   castVote,
   closeBallot,
   fetchBallot,
+  fetchLanding,
   fetchStanding,
   fetchWeightRecord,
   fileObjection,
@@ -58,6 +59,7 @@ import {
   withdrawBallot,
   type Ballot,
   type CloseResult,
+  type Landing,
   type PriorAttempt,
   type Standing,
   type WeightRecord as WeightRecordData,
@@ -149,6 +151,7 @@ export default function Decision() {
    */
   const [chronicle, setChronicle] = useState<{ appliedKeys: string[]; priorAttempts: PriorAttempt[] } | null>(null);
   const [standing, setStanding] = useState<Standing | null>(null);
+  const [landing, setLanding] = useState<Landing | null>(null);
   // The village-wide weight trail. It rides along here because this page shows
   // "Your weight" too, and that card no longer carries a trail of its own: the
   // reader's own changes live in this one list, marked as theirs. Without this
@@ -172,6 +175,8 @@ export default function Decision() {
     const answer = await fetchBallot(params.id);
     if (answer.ok) {
       setBallot(answer.data);
+      // A carried decision counts down to its landing (Rye, 2026-09-14). Nothing else has one.
+      if (answer.data.status === "passed") void fetchLanding(params.id).then((l) => setLanding(l.ok ? l.data : null));
       setChronicle({
         appliedKeys: Array.isArray(answer.data.appliedKeys) ? answer.data.appliedKeys : [],
         priorAttempts: Array.isArray(answer.data.priorAttempts) ? answer.data.priorAttempts : [],
@@ -364,6 +369,7 @@ export default function Decision() {
             {!open && (
               <DecisionOutcome
                 ballot={ballot}
+                landing={landing}
                 /* "WHAT CHANGED" IS WRITTEN IN DIALS, AND A POWER IS NOT ONE.
                    This card renders each applied key as "<key> now holds the
                    value the village voted for", which is exactly right for a
