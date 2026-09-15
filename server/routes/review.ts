@@ -191,8 +191,31 @@ function toCard(p: ExternalProposalRow) {
   };
 }
 
+/**
+ * How many changes accepting these cards whole would put into one draft, or
+ * null when none of them is an org proposal.
+ *
+ * Counted with the reader and the flags `acceptInto` uses, because one
+ * proposal can carry a list of seats and a count of cards would understate it.
+ * A payload the reader cannot take counts as one: this runs inside the queue
+ * read, and a throw here would empty the page of every batch at once.
+ */
+function proposedChangeCount(items: ReturnType<typeof toCard>[], circles: readonly LiveCircle[]): number | null {
+  const org = items.filter((p) => ORG_KINDS.has(p.kind));
+  if (!org.length) return null;
+  let n = 0;
+  org.forEach((p, i) => {
+    try {
+      n += readProposedSeats(p.payload, circles, { readsTitle: i === 0, readsRationale: org.length === 1 }).seats.length;
+    } catch {
+      n += 1;
+    }
+  });
+  return n;
+}
+
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, guardCapability, getPool, members, questsRepo, adminActor, circlesRepo } = deps;
+  const { authedUser, guardCapability, getPool, members, questsRepo, adminActor, circlesRepo, isAdmin } = deps;
 
   const actorId = async (req: any): Promise<string | null> =>
     (await authedUser(req))?.id ?? adminActor(req)?.id ?? null;
@@ -239,17 +262,30 @@ export function register(app: Express, deps: Deps): void {
       batches.set(p.batchId, [...(batches.get(p.batchId) ?? []), toCard(p)]);
     }
 
+    // The village's own limit on one outside batch (`org.proposal_change_limit`),
+    // the same number accept and publish use.
+    const proposalChangeLimit = draftChangeCap();
+
     // Every open draft this queue made that is blocked, previewed against the
     // one read above, and listed even when its preview throws (stuckQueueDrafts).
-    const stuckDrafts = stuckQueueDrafts(drafts, previewContext, draftChangeCap(await activeMembers()));
+    const stuckDrafts = stuckQueueDrafts(drafts, previewContext, proposalChangeLimit);
+    const circles = circlesRepo.all() as LiveCircle[];
 
     res.json({
       batches: Array.from(batches.entries()).map(([batchId, items]) => ({
         batchId,
         moduleId: items[0]?.moduleId ?? null,
         receivedAt: items[0]?.receivedAt ?? null,
+        // How many changes accepting this batch whole would put in its draft,
+        // counted the way `acceptInto` counts them. Null when the batch holds no
+        // org proposals, so the page says nothing about a limit it cannot meet.
+        proposedChanges: proposedChangeCount(items, circles),
         items,
       })),
+      proposalChangeLimit,
+      // The same check GET /api/admin/variables makes, so a steward is offered
+      // the admin page only when that page will open for them.
+      mayChangeProposalLimit: await isAdmin(req),
       quests: quests.map((q) => ({
         id: q.id,
         batchId: q.batchId,
@@ -424,7 +460,7 @@ export function register(app: Express, deps: Deps): void {
     // Previewed here so a steward is never handed a draft that cannot apply.
     // Nothing is written by this and nothing refuses on it: a blocked line is
     // reported back, which is where the steward will read it.
-    const preview = await previewDraft(getPool(), made.id, draftChangeCap(roster));
+    const preview = await previewDraft(getPool(), made.id, draftChangeCap());
 
     void recordEvent(getPool(), {
       kind: "org",
