@@ -11,6 +11,8 @@
  * daily cap are proved in server/seasonReminders.db.test.ts.
  */
 import { describe, expect, it } from "vitest";
+import { makeGoogleLink } from "./oauthAccounts";
+import { presenceTest } from "./memberPresence";
 import { clearsDailyEmailCap, emailCadenceFor, resolveNotifyPrefs } from "./notify";
 import {
   SEASON_REMINDER_LINKS,
@@ -56,6 +58,11 @@ const people = [
   { id: "u-gone", passwordHash: null, role: "member" },
 ];
 const isAdmin = (u: Record<string, any>) => u.role === "admin" || u.role === "founder";
+/** The host's bound presence predicate, as server/index.ts hands it in. */
+const SECRET = "season-reminders-test-secret";
+const isPresent = presenceTest(SECRET);
+/** The record server/routes/authGoogle.ts writes for a new Google member: no password, a signed link. */
+const googleOnly = { id: "u-gina", passwordHash: "", role: "member", prefs: { googleLink: makeGoogleLink(SECRET, "u-gina", "google-sub-gina") } };
 
 describe("which reminder is due", () => {
   it("sends none when no season is running", () => {
@@ -101,9 +108,9 @@ describe("CATCH-UP, when a sweep does not run on the day", () => {
     const mem = memoryNotify();
     // Every day of the fortnight except the 7-day mark itself.
     for (const today of days("2026-09-17", "2026-09-30").filter((d) => d !== "2026-09-24")) {
-      await runSeasonReminders({ season: { current: SPRING, today }, members: people, isAdmin, notify: mem.notify });
+      await runSeasonReminders({ season: { current: SPRING, today }, members: people, isPresent, isAdmin, notify: mem.notify });
       // A second sweep the same day, as the 12-hour job makes, changes nothing.
-      const again = await runSeasonReminders({ season: { current: SPRING, today }, members: people, isAdmin, notify: mem.notify });
+      const again = await runSeasonReminders({ season: { current: SPRING, today }, members: people, isPresent, isAdmin, notify: mem.notify });
       expect(again.told, today).toBe(0);
     }
     const ana = Array.from(mem.rows.entries()).filter(([, r]) => r.userId === "u-ana");
@@ -115,7 +122,7 @@ describe("CATCH-UP, when a sweep does not run on the day", () => {
   it("sends only the most recent mark when several were missed, never a stale one", async () => {
     const mem = memoryNotify();
     for (const today of days("2026-09-26", "2026-09-30")) {
-      await runSeasonReminders({ season: { current: SPRING, today }, members: people, isAdmin, notify: mem.notify });
+      await runSeasonReminders({ season: { current: SPRING, today }, members: people, isPresent, isAdmin, notify: mem.notify });
     }
     const marks = Array.from(mem.rows.keys()).filter((k) => k.endsWith(":u-ana")).map((k) => k.split(":")[3]);
     expect(marks).toEqual(["7", "3", "1"]);
@@ -176,13 +183,24 @@ describe("the words and the link", () => {
 
 describe("who hears it", () => {
   it("reaches real accounts and skips example users and departed or unclaimed accounts", () => {
-    expect(people.filter(seasonReminderRecipient).map((p) => p.id)).toEqual(["u-ana", "u-rye"]);
-    expect(seasonReminderRecipient({ passwordHash: "h" })).toBe(false);
+    expect(people.filter((p) => seasonReminderRecipient(p, isPresent)).map((p) => p.id)).toEqual(["u-ana", "u-rye"]);
+    expect(seasonReminderRecipient({ passwordHash: "h" }, isPresent)).toBe(false);
+  });
+
+  it("REACHES A MEMBER WHO SIGNS IN WITH GOOGLE AND HAS NO PASSWORD", async () => {
+    expect(seasonReminderRecipient(googleOnly, isPresent)).toBe(true);
+    // A forged link is nobody, exactly as at the sign-in door.
+    const forged = { ...googleOnly, id: "u-forged", prefs: { googleLink: { ...googleOnly.prefs.googleLink, sig: "nope" } } };
+    expect(seasonReminderRecipient(forged, isPresent)).toBe(false);
+    const mem = memoryNotify();
+    const r = await runSeasonReminders({ season: { current: SPRING, today: "2026-09-24" }, members: [...people, googleOnly, forged], isPresent, isAdmin, notify: mem.notify });
+    expect(r).toMatchObject({ recipients: 3, told: 3 });
+    expect(Array.from(mem.rows.values()).map((row) => row.userId)).toContain("u-gina");
   });
 
   it("gives admins the admin link and members the season calendar", async () => {
     const mem = memoryNotify();
-    const r = await runSeasonReminders({ season: { current: SPRING, today: "2026-09-24" }, members: people, isAdmin, notify: mem.notify });
+    const r = await runSeasonReminders({ season: { current: SPRING, today: "2026-09-24" }, members: people, isPresent, isAdmin, notify: mem.notify });
     expect(r).toMatchObject({ recipients: 2, told: 2 });
     const byUser = new Map(Array.from(mem.rows.values()).map((row) => [row.userId, row.link]));
     expect(byUser.get("u-ana")).toBe("/seasonal-festivals");
@@ -191,7 +209,7 @@ describe("who hears it", () => {
 
   it("tells nobody when the calendar could not be read", async () => {
     const mem = memoryNotify();
-    const r = await runSeasonReminders({ season: undefined, members: people, isAdmin, notify: mem.notify });
+    const r = await runSeasonReminders({ season: undefined, members: people, isPresent, isAdmin, notify: mem.notify });
     expect(r).toEqual({ due: null, recipients: 0, told: 0 });
   });
 
@@ -200,6 +218,7 @@ describe("who hears it", () => {
     const r = await runSeasonReminders({
       season: { current: SPRING, today: "2026-09-24" },
       members: people,
+      isPresent,
       isAdmin,
       notify: async () => {
         calls += 1;

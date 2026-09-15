@@ -98,6 +98,41 @@ async function rollOf(ballotId: string): Promise<string[]> {
 
 let nextClaims: Record<string, unknown> | null = null;
 
+/** Sign a brand-new person up through the real Google start, callback and exchange. */
+async function signUpWithGoogle(sub: string, email: string, name: string): Promise<{ token: string; id: string }> {
+  const start = await fetch(`${BASE}/api/auth/google/start`, { redirect: "manual" });
+  expect(start.status).toBe(302);
+  const location = new URL(start.headers.get("location")!);
+  nextClaims = {
+    iss: "https://accounts.google.com",
+    aud: CLIENT_ID,
+    exp: Math.floor(Date.now() / 1000) + 600,
+    nonce: location.searchParams.get("nonce"),
+    sub,
+    email,
+    email_verified: true,
+    name,
+  };
+  const state = location.searchParams.get("state")!;
+  const cb = await fetch(`${BASE}/api/auth/google/callback?code=a-code&state=${encodeURIComponent(state)}`, { redirect: "manual" });
+  expect(cb.status).toBe(302);
+  const cookie = (cb.headers.getSetCookie?.() ?? [])
+    .map((c) => /(?:^|;\s*)village_oauth_handoff=([^;]*)/.exec(c)?.[1])
+    .find((v) => v && v.length > 0);
+  expect(cookie, "the callback hands over a handoff cookie").toBeTruthy();
+  const ex = await fetch(`${BASE}/api/auth/google/exchange`, {
+    method: "POST",
+    headers: { cookie: `village_oauth_handoff=${cookie}` },
+  });
+  expect(ex.status).toBe(200);
+  const body = await ex.json();
+  expect(body.token).toBeTruthy();
+  return { token: String(body.token), id: String(body.user?.id ?? "") };
+}
+
+/** A Google member nobody ever admitted: no stage grant, no membership grant. */
+let halId = "";
+
 function startGoogleStandIn(): Promise<void> {
   googleServer = http.createServer((req, res) => {
     req.on("data", () => {});
@@ -222,35 +257,9 @@ describe.skipIf(!DB_CONFIGURED)("a member who joins through Google is on the rol
   });
 
   it("the Google path creates a member with an empty password hash and a link", async () => {
-    const start = await fetch(`${BASE}/api/auth/google/start`, { redirect: "manual" });
-    expect(start.status).toBe(302);
-    const location = new URL(start.headers.get("location")!);
-    const state = location.searchParams.get("state")!;
-    nextClaims = {
-      iss: "https://accounts.google.com",
-      aud: CLIENT_ID,
-      exp: Math.floor(Date.now() / 1000) + 600,
-      nonce: location.searchParams.get("nonce"),
-      sub: "google-sub-voter",
-      email: `gina-${PORT}@example.test`,
-      email_verified: true,
-      name: "Gina Hart",
-    };
-    const cb = await fetch(`${BASE}/api/auth/google/callback?code=a-code&state=${encodeURIComponent(state)}`, { redirect: "manual" });
-    expect(cb.status).toBe(302);
-    const cookie = (cb.headers.getSetCookie?.() ?? [])
-      .map((c) => /(?:^|;\s*)village_oauth_handoff=([^;]*)/.exec(c)?.[1])
-      .find((v) => v && v.length > 0);
-    expect(cookie, "the callback hands over a handoff cookie").toBeTruthy();
-    const ex = await fetch(`${BASE}/api/auth/google/exchange`, {
-      method: "POST",
-      headers: { cookie: `village_oauth_handoff=${cookie}` },
-    });
-    expect(ex.status).toBe(200);
-    const body = await ex.json();
-    googleToken = String(body.token ?? "");
-    googleId = String(body.user?.id ?? "");
-    expect(googleToken).toBeTruthy();
+    const gina = await signUpWithGoogle("google-sub-voter", `gina-${PORT}@example.test`, "Gina Hart");
+    googleToken = gina.token;
+    googleId = gina.id;
 
     // The exact shape that the old filter read as nobody.
     const [rows] = await pool.query<any[]>("SELECT password_hash, prefs FROM users WHERE id = ?", [googleId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
@@ -275,6 +284,20 @@ describe.skipIf(!DB_CONFIGURED)("a member who joins through Google is on the rol
     expect(gone.status, JSON.stringify(gone.json)).toBe(200);
   });
 
+  it("PRESENCE IS NOT ADMISSION: a Google member nobody admitted stands below Member and holds no vote", async () => {
+    // Hal is a present person to memberPresence.ts, the same as Gina. What he
+    // lacks is an admission (server/lib/admission.ts), and the ladder's door
+    // reads no credential, so signing in with Google must not lift him.
+    halId = (await signUpWithGoogle("google-sub-unadmitted", `hal-${PORT}@example.test`, "Hal Moss")).id;
+    const caps = await call("GET", `/api/admin/members/${halId}/capabilities`);
+    expect(caps.status, JSON.stringify(caps.json)).toBe(200);
+    const stages = ["visitor", "guest", "immersant", "participant", "member"];
+    expect(stages.indexOf(String(caps.json?.stage)), `Hal stands at ${caps.json?.stage}`).toBeGreaterThanOrEqual(0);
+    expect(caps.json?.stage, "the door is Member, and he was never let through it").not.toBe("member");
+    const vote = (caps.json?.capabilities ?? []).find((c: any) => c.capability === "ballot.vote");
+    expect(vote?.held, "no vote without admission").toBe(false);
+  });
+
   it("A MEMBER WHO JOINED THROUGH GOOGLE IS ON THE NEXT FROZEN ROLL, AND VOTES", async () => {
     const asked = await call("POST", "/api/governance/advisory", { body: { question: "Would we want the tool shed painted?" } });
     expect(asked.status, JSON.stringify(asked.json)).toBe(200);
@@ -284,6 +307,7 @@ describe.skipIf(!DB_CONFIGURED)("a member who joins through Google is on the rol
     expect(roll, "the Google member is on the frozen roll").toContain(googleId);
     expect(Number(asked.json?.ballot?.electorateCount)).toBe(beforeCount + 1);
     expect(roll, "the unclaimed founder is still off it").not.toContain(unclaimedId);
+    expect(roll, "the Google member nobody admitted is off it").not.toContain(halId);
 
     const seen = await call("GET", `/api/governance/ballots/${ballotId}`, { token: googleToken });
     expect(seen.json?.myWeight, "the Google member sees their own weight").not.toBeNull();

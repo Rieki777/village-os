@@ -8,6 +8,8 @@
  * server/googleMemberVote.routes.e2e.test.ts.
  */
 import { describe, expect, it } from "vitest";
+import { GAME_CONFIG } from "../../shared/gameConfig";
+import { ADMISSION_RUNG, climbLadder, isAdmitted } from "./admission";
 import { makeGoogleLink } from "./oauthAccounts";
 import { hasWorkingCredential, isPresentMember, presenceTest } from "./memberPresence";
 
@@ -91,6 +93,34 @@ describe("who is not", () => {
     expect(isPresentMember(null, SECRET)).toBe(false);
     expect(isPresentMember(undefined, SECRET)).toBe(false);
     expect(isPresentMember({ ...googleMember(), id: "" }, SECRET)).toBe(false);
+  });
+});
+
+describe("presence is not admission (server/lib/admission.ts)", () => {
+  const stages = GAME_CONFIG.stages;
+  const door = stages.findIndex((s) => s.id === ADMISSION_RUNG);
+
+  it("a present Google member who was never admitted stands no higher than Member, whatever rules they meet", () => {
+    // Present: on the candidate pool for a roll. Not admitted: no membership
+    // grant and no stage grant. Every rung's own rule answered yes, the worst
+    // case, and the door still holds, because nothing in it reads a credential.
+    // The two admission fields as a fresh Google member's row carries them.
+    const gina = { ...googleMember(), stageGranted: null, membershipGranted: false };
+    expect(door).toBeGreaterThan(0);
+    expect(isPresentMember(gina, SECRET)).toBe(true);
+    expect(isAdmitted(gina, stages)).toBe(false);
+    const rung = climbLadder(stages, gina, () => true);
+    expect(stages.findIndex((s) => s.id === rung)).toBeLessThanOrEqual(door);
+  });
+
+  it("admission is what lifts them past the door, and a credential never does", () => {
+    const admitted = { ...googleMember(), membershipGranted: true };
+    expect(isAdmitted(admitted, stages)).toBe(true);
+    const rung = climbLadder(stages, admitted, () => true);
+    expect(stages.findIndex((s) => s.id === rung)).toBeGreaterThan(door);
+    // And a password changes nothing about the door either.
+    const withPassword = { ...googleMember(), passwordHash: "bcrypt-hash", stageGranted: null, membershipGranted: false };
+    expect(stages.findIndex((s) => s.id === climbLadder(stages, withPassword, () => true))).toBeLessThanOrEqual(door);
   });
 });
 

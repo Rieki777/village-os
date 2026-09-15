@@ -5491,7 +5491,7 @@ async function startServer() {
 
   // Season-end reminders to the whole village: `runSeasonReminders` in server/lib/seasonReminders.ts.
   registerJob("season-reminders", 12 * 60 * 60 * 1000, async () => {
-    const r = await runSeasonReminders({ season: seasonState(), members: await members.all(), isAdmin: (u) => adminReaches(u?.role), notify });
+    const r = await runSeasonReminders({ season: seasonState(), members: await members.all(), isPresent: notifyDeps.isPresent, isAdmin: (u) => adminReaches(u?.role), notify });
     return r.due ? `${r.told} of ${r.recipients} told, ${r.due.daysLeft} day(s) before ${r.due.seasonId} turns` : undefined;
   });
 

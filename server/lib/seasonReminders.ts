@@ -45,10 +45,11 @@
  *
  * ── WHO ─────────────────────────────────────────────────────────────────────
  *
- * Every real account. Example users are content and never people, and an
- * account with no password hash is a departed member or a claim nobody took
- * up; that is the filter `buildElectorate` in server/index.ts uses for every
- * ballot roll. Agents hold seats as documented holders on the org chart
+ * Every present person: `isPresentMember` (server/lib/memberPresence.ts), the
+ * same predicate `buildElectorate` uses for every ballot roll, handed in bound
+ * to the session secret as `isPresent`. That skips example users, tombstones
+ * and unclaimed accounts, and it keeps a member who signs in with Google and
+ * has no password. Agents hold seats as documented holders on the org chart
  * (`is_agent`, 0142) and have no account, so no agent reaches this list.
  *
  * Admins get the same reminder pointed at the admin panel's seasons and
@@ -59,7 +60,7 @@
  * member-facing end-of-season screen exists yet.
  */
 import crypto from "node:crypto";
-import { isExampleUser } from "./examples";
+import type { PresenceTest } from "./memberPresence";
 
 export const SEASON_REMINDER_DAYS = [14, 7, 3, 1] as const;
 export type SeasonReminderMark = (typeof SEASON_REMINDER_DAYS)[number];
@@ -170,14 +171,16 @@ export function seasonReminderCopy(
 }
 
 /** A person this reminder reaches. See WHO in the header. */
-export function seasonReminderRecipient(member: Record<string, any> | null | undefined): boolean {
-  return !!member && String(member.id ?? "") !== "" && !isExampleUser(member) && !!member.passwordHash;
+export function seasonReminderRecipient(member: Record<string, any> | null | undefined, isPresent: PresenceTest): boolean {
+  return isPresent(member);
 }
 
 export interface SeasonReminderDeps {
   /** `seasonState()`, or undefined when the calendar could not be read. */
   season: { current: SeasonLike | null; today: string } | null | undefined;
   members: ReadonlyArray<Record<string, any>>;
+  /** The host's bound presence predicate (server/lib/memberPresence.ts). */
+  isPresent: PresenceTest;
   isAdmin(member: Record<string, any>): boolean;
   notify(input: {
     userId: string;
@@ -203,7 +206,7 @@ export async function runSeasonReminders(deps: SeasonReminderDeps): Promise<Seas
   const report: SeasonReminderReport = { due, recipients: 0, told: 0 };
   if (!due) return report;
   for (const member of deps.members) {
-    if (!seasonReminderRecipient(member)) continue;
+    if (!seasonReminderRecipient(member, deps.isPresent)) continue;
     report.recipients += 1;
     const userId = String(member.id);
     const copy = seasonReminderCopy(due, deps.isAdmin(member) ? "admin" : "member");
