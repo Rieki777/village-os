@@ -254,6 +254,11 @@ export async function validateElements(
       if (!choices.includes(String(item.to))) {
         return refuse(index, item.kind, `${item.to} is not one of the ways this platform assigns weight`);
       }
+      // The registry's bounds on the token the switch also writes, here and not
+      // first in phase 2, where it would refuse after the mode had been written.
+      const tokenDial = VARIABLES_BY_KEY["governance.weight_token"];
+      const badToken = item.weightToken && tokenDial ? validateVariable(tokenDial, String(item.weightToken).trim()) : null;
+      if (badToken) return refuse(index, item.kind, badToken);
       /*
        * A TOKEN MONEY CAN BUY IS NOT WHAT WEIGHS A VOTE, and this is the one
        * door that could have walked past that rule. `weightTokenProblem`
@@ -542,6 +547,18 @@ export async function applyChangeSet(deps: ChangesetDeps, input: ApplySetInput):
   // Phase 1 judged exactly these values together; each write carries them so
   // the guard never judges the half-written state between two of them.
   const finals = finalDialValues(validated.elements);
+  /*
+   * WHAT AN EARLIER ATTEMPT AT THIS LANDING ALREADY WROTE, BY ELEMENT. A
+   * landing that throws is retried whole. A dial or a module written twice is
+   * a no-op, but a weight allocation appends a trail row per write and a queued
+   * minting rule an amendment-ledger row per queue, so a retry recorded both
+   * twice (measured: two trail rows, two ledger rows). Their element-ledger row,
+   * keyed on (ballot, element index), is the record the first attempt wrote
+   * them, so a retry skips them and reports them as landed.
+   */
+  const landedBefore = new Set(
+    (await elementRowsForBallot(deps.pool, input.ballotId)).map((r) => `${r.kind}:${r.index}`),
+  );
   for (const el of validated.elements) {
     const item = el.item;
     writeSeq += 1;
@@ -618,6 +635,10 @@ export async function applyChangeSet(deps: ChangesetDeps, input: ApplySetInput):
     }
 
     if (item.kind === "weight_allocation") {
+      if (landedBefore.has(`weight_allocation:${el.index}`)) {
+        applied.push(`weight:${item.userId}`);
+        continue;
+      }
       try {
         const out = await setWeight(deps.pool, {
           userId: item.userId,
@@ -645,7 +666,11 @@ export async function applyChangeSet(deps: ChangesetDeps, input: ApplySetInput):
     }
   }
 
-  const mintItems = validated.elements.filter((e) => e.item.kind === "mint_rule");
+  const mintElements = validated.elements.filter((e) => e.item.kind === "mint_rule");
+  const mintItems = mintElements.filter((e) => !landedBefore.has(`mint_rule:${e.index}`));
+  for (const e of mintElements) {
+    if (!mintItems.includes(e)) queued.push((e.item as { key: string }).key);
+  }
   if (mintItems.length > 0) {
     const out = await applyMintRuleChanges(
       deps.pool,
