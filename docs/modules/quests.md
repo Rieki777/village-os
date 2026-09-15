@@ -584,8 +584,11 @@ the witness decided, which can be less than what moved: `GET /api/game/me` joins
 `questCreditsFor` and returns `credited` beside `amount`, and the member's notification names the
 credited figure, mentioning a badge only when one actually lifted it. Anything reading
 `quest_claims.amount` as a payout is reading the wrong column for a badge holder.
-`client/src/pages/QuestDetail.tsx` reads the cap mode from `GET /api/game/rules` and says "What a
-quest advertises is what it pays" only under `posted`, where it is now true.
+`client/src/pages/QuestDetail.tsx` reads the cap mode and multiplier from `GET /api/game/rules` and
+opens its payment paragraph with one sentence per setting: inside the range, and "What a quest
+advertises is what it pays", under `posted`; at least the range's floor and up to the multiplier
+times its top under `capped`; the range as a suggestion under `unlimited`. Until the rules name a
+setting it knows, it promises nothing mode-specific.
 `server/routes/questConsentPayout.test.ts` drives each of these through the real handler into the
 real ledger.
 

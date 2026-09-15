@@ -33,6 +33,38 @@ import {
   type BoardQuest, type FieldSigns,
 } from "@/lib/questBoard";
 
+/*
+ * WHAT THE BOARD MAY PROMISE ABOUT A QUEST'S PAYMENT: ONE LEAD SENTENCE PER SETTING.
+ *
+ * `quest.consent_cap_mode` has three settings, and each pays a different shape
+ * (`checkConsentAmount` and `payoutFor` in server/lib/questConsent.ts):
+ *   posted     inside the advertised range, and a badge lifts no higher than its top;
+ *   capped     never below the range's floor (ruling 7, 2026-09-14), and up to the
+ *              multiplier times its top;
+ *   unlimited  whatever the circle releases, so the range is a suggestion.
+ * The paragraph used to open with "the exact amount inside the range" under all
+ * three and qualify it in a second sentence, so a village on `unlimited` read a
+ * promise and its retraction together, and a village on `capped` was never told
+ * that the floor holds.
+ *
+ * NOTHING MODE-SPECIFIC until the server has named a setting this page knows, with
+ * a number for a capped village's multiplier. A payload that has not arrived is not
+ * a setting, and the neutral sentence is true under all three.
+ */
+function promiseFor(reward: string, rules?: { consentCapMode?: string; consentCapMultiplier?: number }): string {
+  const mode = rules?.consentCapMode;
+  if (mode === "posted") {
+    return `The circle sets the amount inside the ${reward} range when it consents to your work. What a quest advertises is what it pays.`;
+  }
+  if (mode === "capped" && typeof rules?.consentCapMultiplier === "number") {
+    return `The ${reward} range is where the circle starts when it consents to your work. It pays at least the bottom of that range, and may lift the amount up to ${rules.consentCapMultiplier} times what the quest advertises.`;
+  }
+  if (mode === "unlimited") {
+    return `This quest suggests ${reward}, and the circle may release any amount when it consents to your work.`;
+  }
+  return `The circle sets the amount when it consents to your work. This quest advertises ${reward}.`;
+}
+
 export default function QuestDetail() {
   const [, params] = useRoute("/quests/:id");
   const questId = params?.id ?? "";
@@ -152,22 +184,6 @@ export default function QuestDetail() {
     () => (quest && signs ? signs.recent.filter((r) => r.questId === quest.id) : []),
     [quest, signs],
   );
-  /*
-   * ONE SENTENCE PER SETTING, and NOTHING while the rules have not arrived.
-   * An absent payload and a village on "posted" are different facts: the
-   * empty string prints the range sentence alone, which is true under all
-   * three settings, and only a mode the server actually named earns a
-   * guarantee after it.
-   */
-  const capRules = rules?.quests;
-  const capSentence =
-    capRules?.consentCapMode === "posted"
-      ? "What a quest advertises is what it pays."
-      : capRules?.consentCapMode === "capped" && typeof capRules.consentCapMultiplier === "number"
-        ? `The circle may add a bonus above the posted amount, up to ${capRules.consentCapMultiplier} times what the quest advertises.`
-        : capRules?.consentCapMode === "unlimited"
-          ? "The circle may release any amount when it consents."
-          : "";
   const gate = quest ? gateLabel(quest, stages) : null;
   const gateText =
     quest?.requiresRole && !quest.roleRequired && roleName
@@ -438,8 +454,7 @@ export default function QuestDetail() {
                 </p>
                 {quest.gratitude && (
                   <p className="text-xs text-muted-foreground mt-3">
-                    The circle sets the exact amount inside the {quest.gratitude} range
-                    when it consents to your work.{capSentence ? ` ${capSentence}` : ""}
+                    {promiseFor(quest.gratitude, rules?.quests)}
                   </p>
                 )}
               </div>
