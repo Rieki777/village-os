@@ -80,6 +80,20 @@ describe("settlementIntent", () => {
     );
   });
 
+  it("warns a founder, in the confirmation, that the village said no to a moon", () => {
+    // Rye, 2026-09-14: Close may overrule the village, and never by accident.
+    const p = pending();
+    const lines = settlementIntent({
+      ...p,
+      due: [{ ...p.due[0], villageRefused: { ballotId: "bal-1", at: "2026-09-14T10:00:00.000Z", vetoed: false } }],
+    });
+    expect(lines).toContain(
+      "Lunation 328: The village voted this moon's settlement down on 14 September 2026. Closing it pays this split anyway.",
+    );
+    // A moon nobody said no to carries no such line.
+    expect(settlementIntent(p).some((l) => l.includes("settlement down"))).toBe(false);
+  });
+
   it("carries the server's own refusal into the confirmation", () => {
     const p = pending();
     const problem = "credits is hypha-governed and cannot be minted by the pool";

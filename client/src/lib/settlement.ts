@@ -14,6 +14,8 @@
  * POST /api/admin/cycles/close.
  */
 
+import { settlementRefusalWarning, type SettlementRefusal } from "@shared/moonSettlement";
+
 export interface CycleShare {
   name: string;
   received: number;
@@ -37,6 +39,12 @@ export interface DueCycle {
    * the button will honour.
    */
   fromPersistedSplit: boolean;
+  /**
+   * The moon's latest settlement vote, when it ended in a no. Close still pays
+   * this split (Rye, 2026-09-14), so the desk says so before the press.
+   * Optional so a payload from before the field existed reads as no refusal.
+   */
+  villageRefused?: SettlementRefusal | null;
   shares: CycleShare[];
 }
 
@@ -143,6 +151,11 @@ export function settlementIntent(pending: PendingSettlement | null): string[] {
     lines.push(
       `An earlier close already wrote the split for ${joinNumbers(sticky)}. This pays from that record, and anything already paid pays once.`,
     );
+  }
+  // A founder may overrule the village, and the confirmation is the last place
+  // to see it before the press.
+  for (const c of pending.due) {
+    if (c.villageRefused) lines.push(`Lunation ${c.cycleNumber}: ${settlementRefusalWarning(c.villageRefused)}`);
   }
   if (pending.pool.problem) lines.push(pending.pool.problem);
   lines.push("Settlement cannot be undone from this desk.");

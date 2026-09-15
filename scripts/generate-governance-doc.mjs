@@ -1780,6 +1780,9 @@ const SUBJECT_WORDS = {
   village_launch: "Starts the Game. Token issuance turns on and does not turn off.",
   // Added by the dispatcher lane with the executor it describes.
   governance_mode: "Changes how one vote is weighed, and which token carries the weight when it is a token.",
+  // The one subject no member opens. The moon posts it when a cycle ends,
+  // and the village decides whether that cycle's value is released.
+  cycle_settlement: "Settles a moon that has ended and releases its cycle pool, at exactly the amounts the ballot showed.",
 };
 
 /**
