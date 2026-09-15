@@ -85,7 +85,7 @@ import { freezeSeatTerm } from "./repos/ballotSeatTerms";
 import { termForCarriedSeat } from "./lib/seatTermLanding";
 import { raisedHandTerm } from "./lib/raisedHandTerm";
 import { resolveSeatTerm, type SeatCalendar } from "../shared/seatTerms";
-import { decideRoleCapabilities, stewardSeatRefusal } from "./lib/roleGrants";
+import { decideRoleCapabilities, liveHolderCount, stewardSeatRefusal } from "./lib/roleGrants";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
 import { type ConsentActor, register as registerQuestClaimRoutes } from "./routes/questClaims";
 import { register as registerHousingRoutes } from "./routes/housing";
@@ -13713,10 +13713,10 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
           heldBy: h ? { roleId: h.holderRoleId, roleName: h.holderRoleName, movedAt: h.movedAt, byBallot: !!h.movedByBallotId } : null,
         };
       }),
-      // Roles and what each already carries, so the panel can say which ones
-      // could hold a power today without a second edit first.
+      // Roles, what each carries, and how many hold each as the gate counts them (lapsed terms
+      // out), so the panel can say who could hold a power today and warn when nobody holds a role.
       roles: rolesRepo.all().map((r: any) => ({
-        id: r.id, name: r.name ?? r.id, capabilities: (r.capabilities ?? []) as string[], isExample: !!r.isExample,
+        id: r.id, name: r.name ?? r.id, capabilities: (r.capabilities ?? []) as string[], isExample: !!r.isExample, holderCount: liveHolderCount(loadRoleHolders(), r.id),
       })),
       notYetWired: NOT_YET_WIRED,
     });
