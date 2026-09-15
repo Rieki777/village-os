@@ -33,25 +33,6 @@ import {
   type BoardQuest, type FieldSigns,
 } from "@/lib/questBoard";
 
-/**
- * The sentence under a quest's reward, true to the village's consent cap mode.
- *
- * It said "What a quest advertises is what it pays" in every village. That is
- * a promise only `posted` makes, and until 2026-09-14 even `posted` broke it
- * whenever a standing badge lifted a consent past the top of the range; badges
- * now stop at the cap. An unrecognised mode reads as `posted` here, which is
- * how the server reads it too.
- */
-function consentPromise(capMode: string | null, reward: string): string {
-  if (capMode === "capped") {
-    return `The circle sets the amount when it consents to your work: never below the ${reward} range, and up to a bonus ceiling above it for exceptional work.`;
-  }
-  if (capMode === "unlimited") {
-    return `The circle sets the amount when it consents to your work. This quest suggests ${reward}.`;
-  }
-  return `The circle sets the exact amount inside the ${reward} range when it consents to your work. What a quest advertises is what it pays.`;
-}
-
 export default function QuestDetail() {
   const [, params] = useRoute("/quests/:id");
   const questId = params?.id ?? "";
@@ -146,27 +127,6 @@ export default function QuestDetail() {
     });
   };
   useEffect(refreshClaims, []);
-
-  /*
-   * The village's consent cap mode, so the sentence under the reward says what
-   * consent can actually pay here. Null until it arrives, which reads as the
-   * shipped default, the same fallback the server uses.
-   */
-  const [capMode, setCapMode] = useState<string | null>(null);
-  useEffect(() => {
-    let alive = true;
-    gameFetch("/api/game/rules")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (alive && d) setCapMode(String(d?.quests?.consentCapMode ?? ""));
-      })
-      .catch(() => {
-        /* the posted-mode sentence stands */
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   // A role gate names its role properly when the quest carries no display
   // prose of its own. Fetched only when needed; a miss falls back to the
