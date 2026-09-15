@@ -55,12 +55,34 @@ export function formatTokenAmount(units: number, decimals: number): string {
 }
 
 /**
- * The decimals for one token out of a payload's `slug -> decimals` map.
+ * A number that is ALREADY human, to the text a member reads. No division.
  *
- * Absent means zero, which is what every token in the registry carried before
- * Voice and what an unregistered slug honestly means. It never guesses at a
- * token's scale from its name.
+ * `formatTokenAmount` is for a payload that carries minor units. Some routes
+ * convert before they send (`fromLedgerUnits` in server/routes/redemption.ts,
+ * `priceFromStored` in server/lib/stays.ts), and handing their number to
+ * `formatTokenAmount` divides a second time: 50 credits held read as 0.5.
+ * Handing it over at decimals 0 truncates instead: 12.5 read as 12. Both
+ * shipped. This is the formatter for that kind of field.
+ *
+ * `decimals` only tidies. When the figure at the token's scale is the same
+ * number (0.30000000000000004 at 2 is 0.3), that is what prints. When it is
+ * not, the figure prints exactly as sent, because a human number is the truth
+ * and this function never rounds it to a coarser scale. Omit `decimals` where
+ * the payload carries none and the number still prints whole and true.
+ *
+ * Same formatting rule as `formatTokenAmount`: 10, not 10.00.
  */
+export function formatHumanAmount(human: number, decimals?: number): string {
+  const n = Number(human);
+  if (!Number.isFinite(n)) return "0";
+  const d = Math.min(20, Math.max(0, Number(decimals) || 0));
+  const atScale = Number(n.toFixed(d));
+  // Binary noise is a few ulps. A real fraction the scale cannot hold is not.
+  const sameNumber = Math.abs(atScale - n) <= Number.EPSILON * 8 * Math.max(1, Math.abs(n));
+  const shown = sameNumber ? atScale : n;
+  return String(Object.is(shown, -0) ? 0 : shown);
+}
+
 /**
  * The inverse of `formatTokenAmount`: what a member TYPED, into what the ledger
  * stores. Mirrors the server's `toLedgerUnits` in server/lib/economy.ts, and
@@ -100,6 +122,13 @@ export function smallestUnit(decimals: number): number {
   return d <= 0 ? 1 : 1 / 10 ** d;
 }
 
+/**
+ * The decimals for one token out of a payload's `slug -> decimals` map.
+ *
+ * Absent means zero, which is what every token in the registry carried before
+ * Voice and what an unregistered slug honestly means. It never guesses at a
+ * token's scale from its name.
+ */
 export function decimalsOf(map: Record<string, number> | undefined | null, slug: string): number {
   return Number(map?.[slug] ?? 0) || 0;
 }
