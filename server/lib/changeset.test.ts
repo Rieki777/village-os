@@ -28,7 +28,9 @@ import {
   type ChangesetDeps,
 } from "./changeset";
 import { dryRunProposal } from "./proposalDryRun";
-import { loadVariables, numberVar } from "./variables";
+import { loadVariables, numberVar, rawValue, wireVariableGuard } from "./variables";
+import { DEFAULT_EXIT_POLICY, exitLeverRefusal } from "./exitPolicy";
+import { loadModuleSettings } from "./modules";
 import { VARIABLES, applyTimingOf } from "../../shared/gameVariables";
 
 const configured = testDbConfigured();
@@ -406,6 +408,110 @@ describe.skipIf(!configured)("a set that moves a number the running cycle is set
     expect(changeSetSnapsToBoundary([{ kind: "mint_rule", key: "mint.anything" }])).toBe(true);
     expect(changeSetSnapsToBoundary([{ key: "governance.vote_days" }])).toBe(false);
     expect(changeSetSnapsToBoundary([{ key: "a.key.that.does.not.exist" }])).toBe(false);
+  });
+});
+
+/**
+ * ── D2-2: A SET OF EXIT DIALS IS JUDGED ON THE STATE IT PRODUCES ──────────
+ *
+ * The write guard judged each element against what stood, so a passed set of
+ * [convert, rate 2.5] refused its first element, wrote its second and was
+ * recorded as landed. The guard is wired here exactly as boot wires it, with
+ * the platform's published policy standing in for the village's document.
+ */
+describe.skipIf(!configured)("a set of exit dials is judged on the state it produces", () => {
+  const EXIT_KEYS = ["exit.voice_on_exit", "exit.voice_convert_rate", "exit.keep_pct.voice", "governance.sensing_days"];
+  const ZERO_SHARE =
+    "Convert turns the share of Voice a leaver keeps into credits, and that share is 0, so nothing would convert.";
+
+  /** What the database holds for one dial. An absent row IS the default. */
+  const stored = async (key: string): Promise<string | null> => {
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT `value` FROM `game_variables` WHERE `config_key` = ?",
+      [key],
+    );
+    return rows[0] ? String(rows[0].value) : null;
+  };
+
+  /** A carried proposal row, so "marked applied" is a column and not a belief. */
+  const proposal = async (id: string, changeSet: unknown[]) => {
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO mechanics_proposals (id, title, rationale, change_set, proposer_user_id, status) VALUES (?,?,?,?,?,?)",
+      [id, `set ${id}`, "because", JSON.stringify(changeSet), "u-a", "passed_onsite"],
+    );
+    return { id, title: `set ${id}`, changeSet: changeSet as never[], proposerUserId: "u-a", hyphaRef: null, status: "passed_onsite", ballotId: `bal-${id}` };
+  };
+  const statusOf = async (id: string): Promise<string> => {
+    const [rows] = await pool.query<any[]>("SELECT status FROM mechanics_proposals WHERE id = ?", [id]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    return String(rows[0]?.status);
+  };
+
+  beforeAll(async () => {
+    wireVariableGuard((key, value, alongside) => exitLeverRefusal(key, value, DEFAULT_EXIT_POLICY, rawValue, alongside));
+    // The lifecycle writer refuses to run on settings it never read.
+    await loadModuleSettings(pool);
+  });
+  afterAll(() => {
+    wireVariableGuard(null);
+  });
+  beforeEach(async () => {
+    await pool.query("DELETE FROM game_variables WHERE config_key IN (?)", [EXIT_KEYS]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await loadVariables(pool);
+  });
+
+  it("lands convert, its rate and its share together, with convert first in the set", async () => {
+    let told = 0;
+    const p = await proposal("gmp-voice-pair", [
+      { kind: "dial", key: "exit.voice_on_exit", to: "convert" },
+      { kind: "dial", key: "exit.voice_convert_rate", to: "2.5" },
+      { kind: "dial", key: "exit.keep_pct.voice", to: "50" },
+    ]);
+    const result = await applyMechanicsProposal(deps(), p, "u-a", { onApplied: async () => { told += 1; } });
+    expect(result.failed).toEqual([]);
+    expect(result.refusal).toBeNull();
+    expect(result.ok).toBe(true);
+    expect(await stored("exit.voice_on_exit")).toBe("convert");
+    expect(await stored("exit.voice_convert_rate")).toBe("2.5");
+    expect(await stored("exit.keep_pct.voice")).toBe("50");
+    expect((await elementsFor(pool, "bal-gmp-voice-pair")).length).toBe(3);
+    expect(await statusOf("gmp-voice-pair")).toBe("applied");
+    expect(told).toBe(1);
+  });
+
+  it("refuses the whole set when its final state is refused, writes nothing, and is not marked applied", async () => {
+    let told = 0;
+    // Rate first: judged alone against today it is coherent and used to land,
+    // then convert was refused and the set was stamped applied anyway.
+    const p = await proposal("gmp-voice-noshare", [
+      { kind: "dial", key: "exit.voice_convert_rate", to: "2.5" },
+      { kind: "dial", key: "exit.voice_on_exit", to: "convert" },
+    ]);
+    const result = await applyMechanicsProposal(deps(), p, "u-a", { onApplied: async () => { told += 1; } });
+    expect(await stored("exit.voice_convert_rate")).toBeNull();
+    expect(await stored("exit.voice_on_exit")).toBeNull();
+    expect(result.ok).toBe(false);
+    expect(result.refusal?.index).toBe(1);
+    expect(result.refusal?.sentence).toContain("Item 2 of 2 (dial) could not be applied");
+    expect(result.refusal?.sentence).toContain(ZERO_SHARE);
+    expect(result.applied).toEqual([]);
+    expect(await elementsFor(pool, "bal-gmp-voice-noshare")).toEqual([]);
+    expect(await statusOf("gmp-voice-noshare")).toBe("passed_onsite");
+    expect(told).toBe(0);
+  });
+
+  it("a set where any element fails in phase two is never recorded as applied", async () => {
+    let told = 0;
+    // A core module passes phase 1 and is refused by its own writer in phase
+    // 2, which is the one mid-set failure a validated set can still meet.
+    const p = await proposal("gmp-midset", [
+      { kind: "dial", key: "governance.sensing_days", to: "7" },
+      { kind: "module_lifecycle", moduleId: "quests", to: "off" },
+    ]);
+    const result = await applyMechanicsProposal(deps(), p, "u-a", { onApplied: async () => { told += 1; } });
+    expect(result.failed.map((f) => f.key)).toEqual(["module:quests"]);
+    expect(result.ok).toBe(false);
+    expect(await statusOf("gmp-midset")).toBe("passed_onsite");
+    expect(told).toBe(0);
   });
 });
 

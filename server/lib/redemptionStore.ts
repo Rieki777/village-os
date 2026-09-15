@@ -232,6 +232,20 @@ export async function requestRedemption(pool: Pool, input: RedeemInput): Promise
     }
 
     /*
+     * RE-COUNT INSIDE THE LOCK, for the reason the balance is re-read below.
+     * The count in `ask` was read on the pool, outside this transaction, so N
+     * opens arriving together each read the same count and each passed a cap
+     * of one. The `users` row locked above serialises every open for this
+     * member, so this count sees every open that committed before it.
+     */
+    const openedRows = await openedSinceRows(conn, villageId(), input.userId, input.cycleStart);
+    const capRefusal = redemptionRefusal({ ...ask, openedThisCycle: Number(openedRows[0]?.n ?? 0) });
+    if (capRefusal) {
+      await conn.rollback();
+      return { ok: false, status: 409, error: capRefusal };
+    }
+
+    /*
      * RE-READ THE BALANCE INSIDE THE LOCK. The check above decides what to SAY;
      * this one decides what happens. Two redemptions opened in the same instant
      * would otherwise each pass against the same balance and hold twice what
@@ -466,6 +480,20 @@ export async function settleRedemption(
       burn = { ok: false, duplicate: false, error: String(err?.message ?? err) };
     }
     if (!burn.ok && !burn.duplicate) {
+      /*
+       * A THROW IS NOT PROOF NOTHING POSTED. `postTransfer` commits and then
+       * rethrows whatever the driver says, so a connection lost after the
+       * COMMIT reached the server reports a burn that happened as a failure.
+       * Un-claiming that row would let a withdrawal reverse a hold that is
+       * already destroyed, out of a hold account every member's redemption
+       * shares. So the ledger is asked first, on the row's own key, and a burn
+       * that is there completes the confirmation. If this read itself throws,
+       * the row stays confirmed, the direction `holdReconciliation` can see.
+       */
+      if (await ledgerEntryExists(pool, row.burnKey)) {
+        const posted = await redemptionById(pool, input.id);
+        return { ok: true, released: false, row: posted ?? row };
+      }
       await unclaimConfirmation(pool, input.id, villageId());
       return { ok: false, reason: "burn-failed", error: `nothing was destroyed: ${burn.error}` };
     }
@@ -650,8 +678,9 @@ export async function retiredSupply(pool: Pool): Promise<Record<string, number>>
  * has answered: resolution anonymises them and vacates their seats, and the
  * hold would be left pointing at somebody who is gone.
  *
- * NOT WIRED INTO `exitOpenState` BY THIS LANE. That function belongs to the
- * exit lane and is live. This is the whole of the work on this side.
+ * WIRED: `exitOpenState` (server/lib/exit.ts) enumerates it as the blocking
+ * `redemptions` domain, and `sweepBalances` refuses to settle while it is above
+ * zero, so tokens handed back after a sweep cannot land where nothing sweeps.
  */
 export async function openRedemptionCount(pool: Pool, userId: string): Promise<number> {
   const rows = await openCountRows(pool, villageId(), userId);

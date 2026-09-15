@@ -59,9 +59,15 @@ export async function heldRowsByToken(pool: Pool, villageId: string, userId: str
   return rows;
 }
 
-/** A count of what one member has opened since a moment. One row. */
+/**
+ * A count of what one member has opened since a moment. One row.
+ *
+ * Takes a connection as well as a pool: `requestRedemption` runs it a second
+ * time on the connection holding the member's `users` row FOR UPDATE, so the
+ * per-cycle cap is decided inside the lock that serialises that member's opens.
+ */
 export async function openedSinceRows(
-  pool: Pool,
+  pool: Pool | PoolConnection,
   villageId: string,
   userId: string,
   since: Date,

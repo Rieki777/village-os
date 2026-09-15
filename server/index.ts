@@ -323,7 +323,7 @@ import { addCharacter, avatarFor, listArchetypes, openPathsFor, partyFor, remove
 import { loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
 import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requestVoiceClaim, settleVoiceClaim } from "./lib/voiceClaim";
-import { defaultSeasonsFor, seasonRunningProblem, suggestNextSeasonDates } from "./lib/seasonCalendar";
+import { normalizeSeasonConfig, seasonDocumentToStore, seasonRunningProblem, suggestNextSeasonDates } from "./lib/seasonCalendar";
 import { completionsFor, completionsForMany, trainingIsComplete } from "./lib/trainingRecord";
 import { respondToTerminalError, installCrashHandlers, installShutdownHandlers, reachedSomebody, reportError, reportErrorWithin, wireErrorReporting } from "./lib/errors";
 import {
@@ -3581,57 +3581,7 @@ function daysBetween(fromISO: string, toISO: string): number {
   return Math.round((b - a) / 86400000);
 }
 
-/** Accepts either the new {seasons,cadence,timezone} shape or a single legacy
- *  season object, so existing data/season.json keeps working after deploy. */
-function normalizeSeasonConfig(raw: any): { seasons: any[]; cadence: string; timezone: string } {
-  const def = GAME_CONFIG.season;
-  if (raw && Array.isArray(raw.seasons) && raw.seasons.length > 0) {
-    return {
-      seasons: raw.seasons.map((s: any, i: number) => ({
-        id: s.id || `season-${i + 1}`,
-        name: s.name ?? "",
-        theme: s.theme ?? "",
-        focus: s.focus ?? "",
-        startsOn: s.startsOn ?? "",
-        endsOn: s.endsOn ?? "",
-        // 0050. This normaliser rebuilds every season from a FIXED field list
-        // and runs on read as well as write, so a field missing from here is
-        // a field the village can never store: without this line the pattern
-        // id was silently dropped on every save AND every load, and the whole
-        // season-pattern system resolved to "no pattern running".
-        patternId: s.patternId ?? "",
-        goals: Array.isArray(s.goals)
-          ? s.goals.map((g: any) => ({ text: String(g?.text ?? ""), done: !!g?.done }))
-          : [],
-      })),
-      cadence: raw.cadence ?? def.cadence,
-      timezone: raw.timezone ?? def.timezone,
-    };
-  }
-  // Legacy single-season file: lift it into a one-item list.
-  if (raw && typeof raw === "object" && raw.name) {
-    return {
-      seasons: [{
-        id: "season-1",
-        name: raw.name, theme: raw.theme ?? "", focus: raw.focus ?? "",
-        startsOn: raw.startsOn ?? "", endsOn: raw.endsOn ?? "",
-        goals: Array.isArray(raw.goals) ? raw.goals : [],
-      }],
-      cadence: def.cadence,
-      timezone: def.timezone,
-    };
-  }
-  // Written nothing, OR WRITTEN AN EMPTY LIST, gets a list DERIVED from the
-  // cadence and timezone. The default document IS the empty list and `get()`
-  // returns it when no row exists, so the length test above is what makes this
-  // branch reachable: without it no fresh village had a season on any date.
-  return {
-    seasons: (def.seasons.length ? def.seasons : defaultSeasonsFor(raw?.cadence ?? def.cadence, raw?.timezone ?? def.timezone)) as any[],
-    cadence: raw?.cadence ?? def.cadence,
-    timezone: raw?.timezone ?? def.timezone,
-  };
-}
-
+// `normalizeSeasonConfig` lives in server/lib/seasonCalendar.ts, with the store rule.
 function getSeasonConfig() {
   return normalizeSeasonConfig(seasonRepo.get());
 }
@@ -5882,7 +5832,7 @@ async function startServer() {
       return decodeToken(AUTH_TOKEN_SECRET, header.slice(7))?.userId ?? null;
     },
   });
-  wireVariableGuard((key, value) => exitLeverRefusal(key, value, exitPolicyRepo.get(), rawValue));
+  wireVariableGuard((key, value, alongside) => exitLeverRefusal(key, value, exitPolicyRepo.get(), rawValue, alongside));
   initModuleUsage(getPool());
 
   // S30/S33/S37: open-state lives on the server (it needs the pool); the
@@ -19018,7 +18968,7 @@ ${inner}
   registerBrandPreviewRoutes(app, { isAdmin, getPool, brandRepo });
   registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
   registerDryRunRoutes(app, { authedUser, isAdmin, overLimit, getPool });
-  registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify });
+  registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit });
 
   // â”€â”€ Project Settings (village dues + other editable numbers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -19725,9 +19675,10 @@ ${inner}
   app.put("/api/admin/seasons", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     if (!req.body || typeof req.body !== "object") return res.status(400).json({ error: "Body required" });
+    const saving = seasonDocumentToStore(req.body);
+    if (!saving.ok) return res.status(400).json({ error: saving.error });
     const before = seasonState().current?.id ?? null;
-    const next = normalizeSeasonConfig(req.body);
-    await seasonRepo.put(next);
+    await seasonRepo.put(saving.doc);
     const after = seasonState();
     if (after.current && after.current.id !== before) {
       await addActivity("season", `The season has turned: ${after.current.name}`, { actorUserId: adminActor(req)?.id, entityType: "season" });
@@ -22033,7 +21984,7 @@ ${inner}
     }
     if (result.failed.length > 0) {
       return res.status(409).json({
-        error: "Nothing could be applied. The registry has moved since the vote",
+        error: "Some of these changes could not be applied, so the proposal is not recorded as applied. The registry has moved since the vote",
         applied: result.applied, failed: result.failed,
       });
     }
@@ -22429,9 +22380,8 @@ ${inner}
         const applyResult = await applyMechanicsProposal(fresh, actorId);
         out.applied = applyResult.applied;
         if (applyResult.refusal) {
-          out.held = applyResult.refusal.sentence;
           await notifyAdmins("governance", `A carried proposal could not land: ${fresh.title}`, `gmp:${fresh.id}:apply-failed`);
-          return out;
+          throw new Error(applyResult.refusal.sentence);
         }
         /*
          * A CARRIED MINTING CHANGE IS QUEUED, AND THE CARD HAS TO SAY SO.
@@ -22453,6 +22403,7 @@ ${inner}
             `A ballot-passed proposal could not fully apply: ${fresh.title} (${applyResult.failed.length} change(s) refused)`,
             `gmp:${fresh.id}:apply-failed`,
           );
+          throw new Error(applyResult.failed.map((f) => `${f.key}: ${f.problem}`).join("; "));
         }
         return out;
       },

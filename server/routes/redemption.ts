@@ -80,7 +80,7 @@ import {
 import { balanceOf, memberAccount } from "../lib/ledger";
 import { numberVar, stringVar } from "../lib/variables";
 
-type Deps = Pick<AppDeps, "authedUser" | "getPool" | "guardCapability" | "members" | "notify">;
+type Deps = Pick<AppDeps, "authedUser" | "getPool" | "guardCapability" | "members" | "notify" | "overLimit">;
 
 /** What one redemption looks like to a person, with every amount human. */
 function forReading(row: {
@@ -117,7 +117,7 @@ function forReading(row: {
 }
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, getPool, guardCapability, members, notify } = deps;
+  const { authedUser, getPool, guardCapability, members, notify, overLimit } = deps;
 
   /**
    * What this member has open, what they may ask for, and what is held.
@@ -166,6 +166,12 @@ export function register(app: Express, deps: Deps): void {
   app.post("/api/redemptions", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
+    // Bounded like the wallet send, per member per day. Every ask opens a
+    // SERIALIZABLE transaction holding the member's row, so pressing it in a
+    // loop is cost the village cannot refuse even when every ask is refused.
+    if (await overLimit(`redemption-open:${user.id}`, 30, 24 * 60 * 60 * 1000)) {
+      return res.status(429).json({ error: "You have asked to redeem many times today. Try again tomorrow." });
+    }
     const body = req.body ?? {};
     const slug = String(body.token ?? body.tokenSlug ?? "").trim().toLowerCase();
     const asked = Number(body.amount);

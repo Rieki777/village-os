@@ -3481,7 +3481,7 @@ How long after a member opens their exit before an admin may settle their balanc
 
 ### What happens to Voice at a departure
 
-Voice is the one holding that is also standing in the village, so it gets its own answer. Forfeit is what happens today. Keep is refused while a resolved exit turns the account into a tombstone, and the refusal says when it becomes available. Convert needs a rate under it, and a conversion at zero is refused as well. Works with: 'Share of Voice a leaver keeps' and 'Credits per Voice when converting'.
+Voice is the one holding that is also standing in the village, so it gets its own answer. Forfeit is what happens today. Keep is refused while a resolved exit turns the account into a tombstone, and the refusal says when it becomes available. Convert needs a rate under it and a share of Voice the leaver keeps, because only that share converts, so convert with a rate of 0 or a share of 0 is refused as well. Works with: 'Share of Voice a leaver keeps' and 'Credits per Voice when converting'.
 
 | Fact | Value |
 | --- | --- |

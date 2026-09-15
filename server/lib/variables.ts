@@ -97,7 +97,17 @@ export function allVariables(): Array<
  * exit levers are the first family that needs it, and the guard has to see the
  * whole reading to judge one dial.
  */
-export type VariableWriteGuard = (key: string, value: string) => string | null;
+export type VariableWriteGuard = (
+  key: string,
+  value: string,
+  /**
+   * The other dials a CHANGE SET writes beside this one, at their final
+   * values. A guard reads these instead of what stands today, so a write inside
+   * a set is judged against the state the set produces and never against a
+   * half-written one. Absent for a single admin write, which has no set.
+   */
+  alongside?: Readonly<Record<string, string>>,
+) => string | null;
 
 let writeGuard: VariableWriteGuard | null = null;
 
@@ -133,8 +143,30 @@ export function wireVariableGuard(guard: VariableWriteGuard | null): void {
  * everything it reads is already in memory (this file's override cache, the
  * token registry, and the exit policy document the wiring closes over).
  */
-export function variableWriteRefusal(key: string, raw: string): string | null {
-  return writeGuard ? writeGuard(key, String(raw).trim()) : null;
+export function variableWriteRefusal(
+  key: string,
+  raw: string,
+  alongside?: Readonly<Record<string, string>>,
+): string | null {
+  return writeGuard ? writeGuard(key, String(raw).trim(), alongside) : null;
+}
+
+/**
+ * THE SET PREDICATE: the first refusal a whole change set's FINAL dial values
+ * carry, or null. Every key is judged with every other key of the set at its
+ * final value, so a set turning Voice conversion on and setting its rate and
+ * share in the same breath is judged as the coherent whole it is, in whatever
+ * order its elements were written. Writes nothing.
+ */
+export function variableSetRefusal(
+  values: Readonly<Record<string, string>>,
+): { key: string; sentence: string } | null {
+  if (!writeGuard) return null;
+  for (const [key, raw] of Object.entries(values)) {
+    const sentence = writeGuard(key, String(raw).trim(), values);
+    if (sentence) return { key, sentence };
+  }
+  return null;
 }
 
 export interface SetResult {
@@ -146,7 +178,12 @@ export interface SetResult {
 }
 
 /** Write one override after validating it. Returns the previous value for audit. */
-export async function setVariable(pool: Pool, key: string, raw: string): Promise<SetResult> {
+export async function setVariable(
+  pool: Pool,
+  key: string,
+  raw: string,
+  opts: { alongside?: Readonly<Record<string, string>> } = {},
+): Promise<SetResult> {
   const def = VARIABLES_BY_KEY[key];
   if (!def) return { ok: false, key, error: `Unknown variable: ${key}` };
 
@@ -158,7 +195,7 @@ export async function setVariable(pool: Pool, key: string, raw: string): Promise
   // guard used to sit in the admin variables route, and the governance apply
   // loop writes through this function directly, so a passed proposal could
   // land a combination the product refuses to let an admin type.
-  const refusal = variableWriteRefusal(key, value);
+  const refusal = variableWriteRefusal(key, value, opts.alongside);
   if (refusal) return { ok: false, key, error: refusal };
 
   const previous = overrides[key] ?? def.default;
