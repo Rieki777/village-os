@@ -15,7 +15,7 @@ import { BedDouble, CreditCard, Hammer, Moon, Send } from "lucide-react";
 import { Image } from "@/components/Image";
 import { ExamplesBanner } from "@/components/ExamplesBanner";
 import { ExampleRefusal, readRefusal } from "@/components/ExampleRefusal";
-import { formatTokenAmount } from "@/lib/tokenAmount";
+import { formatHumanAmount, formatTokenAmount } from "@/lib/tokenAmount";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -96,11 +96,16 @@ export default function Stay() {
   /**
    * THE VILLAGE'S WORD FOR A PRICED TOKEN, AND ITS SCALE, off `priceTokens`.
    *
-   * Every number in `a.prices` is `accommodation_prices.amount_minor`, the
-   * ledger's MINOR units. This page divided its balance line and printed every
-   * RATE raw, so a member could not work out how many nights they could afford
-   * from the two numbers in front of them, which is the only arithmetic anyone
-   * does on this page.
+   * TWO UNITS ON THIS PAGE, AND EACH LINE HAS TO KNOW WHICH IT HOLDS.
+   *
+   * HUMAN: every number in `a.prices` (`listAccommodations` sends
+   * `priceFromStored`, server/lib/stays.ts) and every quest's
+   * `stayCreditReward` (stored human, sent as stored). These go through
+   * `formatHumanAmount` and are never divided. Dividing them once more is how
+   * a ten-credit night read as 0.1.
+   *
+   * MINOR: `mine.balance` and a stay's `rateSnapshotCredits`, which mirror
+   * ledger and stay columns. These go through `formatTokenAmount`.
    *
    * `priceTokens` covers every token any room posts a rate in, including stay
    * credits, and reaches a signed-out visitor. `mine.balances`, where the name
@@ -126,16 +131,17 @@ export default function Stay() {
    * "the prices that are not the two we already handle" is a rule, and a rule
    * spelled out once is a rule that stays true when a third one appears.
    */
-  const villagePrices = (a: any): Array<{ slug: string; name: string; amount: string; units: number }> =>
+  const villagePrices = (a: any): Array<{ slug: string; name: string; amount: string; value: number }> =>
     Object.entries(a.prices ?? {})
       .filter(([slug]) => slug !== "stay-credit" && slug !== "usd")
       .map(([slug, tiers]: [string, any]) => {
-        const units = Number(tiers?.[audience] ?? tiers?.guest ?? 0);
-        return { slug, name: tokenName(slug), amount: formatTokenAmount(units, tokenScale(slug)), units };
+        // HUMAN already, see above: formatted at the token's scale, never divided.
+        const value = Number(tiers?.[audience] ?? tiers?.guest ?? 0);
+        return { slug, name: tokenName(slug), amount: formatHumanAmount(value, tokenScale(slug)), value };
       })
-      // Filtered on the UNITS, not on the rendered string: "0.001" is truthy
-      // and a room posting one minor unit is still a room with a rate.
-      .filter((v) => v.units > 0);
+      // Filtered on the NUMBER, not on the rendered string: "0.01" is truthy
+      // and a room posting the smallest amount a token holds still has a rate.
+      .filter((v) => v.value > 0);
 
   return (
     <Layout>
@@ -218,12 +224,11 @@ export default function Stay() {
                     {a.description && <p className="text-sm text-muted-foreground mb-3">{a.description}</p>}
                     <div className="mt-auto space-y-2">
                       <p className="text-sm text-foreground">
-                        {/* Divides for the same reason the balance line at the
-                            top of this page divides: a rate and a balance a
-                            member is asked to compare have to be in one scale.
-                            Stay credits carry decimals 0 today, so this reads
-                            exactly as it always has. */}
-                        {credit ? <><b>{formatTokenAmount(credit, stayScale)}</b> credit(s)/night</> : <span className="text-muted-foreground">rate coming soon</span>}
+                        {/* The rate arrives HUMAN and the balance line above
+                            arrives MINOR and is divided, so the two a member
+                            compares land on one scale. Dividing the rate as
+                            well printed a ten-credit night as 0.1. */}
+                        {credit ? <><b>{formatHumanAmount(credit, stayScale)}</b> credit(s)/night</> : <span className="text-muted-foreground">rate coming soon</span>}
                         {money ? <span className="text-muted-foreground"> · {usd(money)}/night</span> : null}
                         {/* 0092: a room can also post a nightly rate in the
                             village's own credits, which is where the cycle
@@ -240,8 +245,8 @@ export default function Stay() {
                       {tiered && (
                         <p className="text-xs text-muted-foreground">
                           {audience === "member"
-                            ? <>Visitors pay {formatTokenAmount(guestCredit, stayScale)} credit(s)/night.</>
-                            : <>Members pay {formatTokenAmount(memberCredit, stayScale)} credit(s)/night.</>}
+                            ? <>Visitors pay {formatHumanAmount(guestCredit, stayScale)} credit(s)/night.</>
+                            : <>Members pay {formatHumanAmount(memberCredit, stayScale)} credit(s)/night.</>}
                         </p>
                       )}
                       {user ? (
@@ -310,7 +315,7 @@ export default function Stay() {
                 {data.earnQuests.map((q: any) => (
                   <Link key={q.id} href="/quests" className="block text-sm text-muted-foreground hover:text-foreground">
                     <span className="font-medium text-foreground">{q.title}</span>
-                    {q.stayCreditReward > 0 && <>: {formatTokenAmount(q.stayCreditReward, stayScale)} stay credit(s) on consent</>}
+                    {q.stayCreditReward > 0 && <>: {formatHumanAmount(q.stayCreditReward, stayScale)} stay credit(s) on consent</>}
                   </Link>
                 ))}
               </div>
