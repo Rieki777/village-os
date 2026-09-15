@@ -2294,6 +2294,18 @@ export interface OwedClaim {
   questId: string;
   userId: string;
   /**
+   * What the witness granted, in whole recognition, before any badge lifted it.
+   *
+   * A GRANT OF 0 PRICES NO RULE (economics and governance, 2026-09-14). A zero
+   * is the witness saying the work earned no recognition, and the
+   * `quest.completed` rules are recognition paid in other tokens. Carving out
+   * voice alone was not enough: a village can weight its ballots by any token
+   * (`governance.weight_token`), so any rule token priced at 0 would be voting
+   * weight farmed through `quest.allow_zero_consent`. The stay below is the
+   * quest's own payment, typed onto it by a person, and is owed at any grant.
+   */
+  granted: number;
+  /**
    * The quest's stay-credit reward in WHOLE credits, and the title its posting
    * is described by. Absent, or a reward of zero, owes no stay credits.
    */
@@ -2348,12 +2360,20 @@ export async function owedForClaim(db: Pool | PoolConnection, claim: OwedClaim):
   return priced;
 }
 
-/** The pricing both entry points share. Reports nothing; each caller reports once. */
+/**
+ * The pricing both entry points share. Reports nothing; each caller reports once.
+ *
+ * `granted` is required on `owedForClaim` and optional here. A consent's own
+ * pricing must say what the witness granted; `mintForConfirmedClaim`, the direct
+ * path, states no grant and prices every rule as it always has.
+ */
 async function priceClaim(
   db: Pool | PoolConnection,
-  claim: OwedClaim,
+  claim: Omit<OwedClaim, "granted"> & { granted?: number },
 ): Promise<{ owed: OwedPosting[]; unpayable: Array<{ token: string; reason: string }> }> {
-  const rules = await rulesFor(db, "quest.completed");
+  // No rule prices for a grant of 0 (`OwedClaim.granted` says why). The stay below still does.
+  const noRules = claim.granted !== undefined && !(claim.granted > 0);
+  const rules = noRules ? [] : await rulesFor(db, "quest.completed");
   const owed: OwedPosting[] = [];
   const unpayable: Array<{ token: string; reason: string }> = [];
   for (const r of rules) {
