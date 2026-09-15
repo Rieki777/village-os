@@ -79,18 +79,30 @@ function commitAll(repo, message) {
   git(repo, "commit", "-q", "-m", message);
 }
 
-/** Run the copied script from inside the fixture, exactly as `node scripts/check-migration-numbers.mjs <args>` would. */
-function run(repo, args = []) {
+/**
+ * Run the copied script from inside the fixture, exactly as `node scripts/check-migration-numbers.mjs <args>` would.
+ *
+ * GITHUB_BASE_REF reaches the fixture only when a scenario passes it in `env`. The guard picks its
+ * base ref from that variable, a pull_request run sets it to the pull request's target branch, and
+ * a fixture has nothing but `main`. Into main, the fallback candidate `main` resolved anyway and
+ * nothing showed. Into any other branch, a stacked pull request, the guard looked for
+ * `origin/<target>` and `<target>`, found neither, and 5 of these 21 assertions failed on a change
+ * that touched no migration at all. Scenario 10 holds it.
+ */
+function run(repo, args = [], env = {}) {
+  const inherited = { ...process.env };
+  delete inherited.GITHUB_BASE_REF;
   const r = spawnSync("node", [path.join(repo, "scripts", "check-migration-numbers.mjs"), ...args], {
     cwd: repo,
     encoding: "utf-8",
     shell: false,
+    env: { ...inherited, ...env },
   });
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
 }
 
-function runJson(repo, args = []) {
-  const r = run(repo, [...args, "--json"]);
+function runJson(repo, args = [], env = {}) {
+  const r = run(repo, [...args, "--json"], env);
   let parsed = null;
   try {
     parsed = JSON.parse(r.stdout);
@@ -268,6 +280,56 @@ function cleanup(repo) {
 
     const r = run(repo, []);
     checkTrue("0121 after a base ceiling of 0120 passes", r.status === 0, `status ${r.status}: ${r.stderr}`);
+  } finally {
+    cleanup(repo);
+  }
+}
+
+// ── 10. The base ref comes from the scenario, never from the runner ─────────
+{
+  const repo = makeFixture();
+  try {
+    initGitRepo(repo);
+    writeMigration(repo, "0001_a.sql");
+    commitAll(repo, "main: 0001");
+    git(repo, "checkout", "-q", "-b", "stacked-target");
+    writeMigration(repo, "0005_e.sql");
+    commitAll(repo, "the branch a pull request is stacked on reaches 0005");
+    git(repo, "checkout", "-q", "-b", "feature");
+    writeMigration(repo, "0003_c.sql");
+    commitAll(repo, "the stacked pull request adds 0003, under its target's ceiling");
+
+    // What a pull_request run into a stacked branch hands every process it starts. The fixture has
+    // no such branch, so a guard that inherited it could not resolve a base at all.
+    const before = process.env.GITHUB_BASE_REF;
+    process.env.GITHUB_BASE_REF = "a-target-no-fixture-has";
+    let inherited;
+    try {
+      inherited = runJson(repo, []);
+    } finally {
+      if (before === undefined) delete process.env.GITHUB_BASE_REF;
+      else process.env.GITHUB_BASE_REF = before;
+    }
+    checkTrue(
+      "a base ref left in the runner's environment never reaches the fixture",
+      inherited.status === 0 && /^main @ /.test(inherited.json?.history?.base ?? ""),
+      `status ${inherited.status}: ${inherited.json?.history?.base || inherited.json?.history?.reason}`,
+    );
+
+    // The control: the variable is not ignored. Passed on purpose it moves the base, and against the
+    // stacked target's ceiling of 0005 the new 0003 is a regression.
+    const asked = runJson(repo, [], { GITHUB_BASE_REF: "stacked-target" });
+    checkTrue(
+      "a base ref the scenario passes is the base the guard measures against",
+      /^stacked-target @ /.test(asked.json?.history?.base ?? ""),
+      JSON.stringify(asked.json?.history),
+    );
+    checkTrue(
+      "measured against its own target, the stacked 0003 is a regression",
+      asked.status === 1 &&
+        !!asked.json?.problems?.some((p) => p.rule === "monotonic" && p.files?.some((f) => f.file === "0003_c.sql")),
+      `status ${asked.status}: ${JSON.stringify(asked.json?.problems)}`,
+    );
   } finally {
     cleanup(repo);
   }
