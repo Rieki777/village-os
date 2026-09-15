@@ -2958,11 +2958,11 @@ refuses first if Ash and Wren are the same person.
 
 | # | Posted by | From | To | Token | Amount | Source | Idempotency key |
 |---|---|---|---|---|---|---|---|
-| 1 | the consent route | `sys:gratitude-pool` | `mem:<wren>` | `gratitude` | the consented amount, times any standing badge multiplier (1 by default) | `quest_consent` | `quest_consent:<claimId>` |
+| 1 | the consent route | `sys:gratitude-pool` | `mem:<wren>` | `gratitude` | the consented amount, lifted by any standing badge multiplier (1 by default) and never past a top: the range's top under `posted`, the bonus ceiling under `capped`, the advertised top under `unlimited` | `quest_consent` | `quest_consent:<claimId>` |
 | 2 | `mintForConfirmedClaim` | `sys:voice-mint` | `mem:<wren>` | `village-voice` | **10000** (10) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:village-voice` |
 | 3 | `mintForConfirmedClaim` | `sys:cycle-pool` | `mem:<wren>` | `credits` | **25** (25) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:credits` |
 
-Four things this table is showing:
+Five things this table is showing:
 
 - **Row 1 is not a mint rule.** The consent route has posted recognition since S7
   from the range the quest advertises. `mintForConfirmedClaim` explicitly skips
@@ -2979,6 +2979,12 @@ Four things this table is showing:
   `mintForConfirmedClaim` in a try/catch and does not fail the response on it. A
   quest that was witnessed and credited must not fail because a secondary mint had
   a bad afternoon, and the occurrence key makes a later repair-post safe.
+- **A consent at 0 posts none of the three.** A zero is the witness saying the work
+  earned no recognition, so row 1 posts nothing, and rows 2 and 3 are not minted
+  either (economics and governance, 2026-09-14): a village can weight its ballots by
+  any token (`governance.weight_token`), so a rule token minted at 0 would be voting
+  weight farmed through `quest.allow_zero_consent`. A stay-credit reward the quest
+  itself carries still releases, keyed `queststay:<claimId>`.
 
 Wren's balances after: 25 credits, 10.000 voice, and whatever recognition the
 quest advertised.
