@@ -146,7 +146,7 @@ beforeAll(async () => {
       DATA_DIR: dataDir,
       DATABASE_URL: testDb.url,
       ADMIN_PASSWORD: ADMIN,
-      AUTH_TOKEN_SECRET: "power-affinity-secret",
+      AUTH_TOKEN_SECRET: "power-affinity-secret", // module-review-ok: a fixture signing secret for a throwaway server on a scratch schema, same as every e2e suite
       RESEND_API_KEY: "",
       ANTHROPIC_API_KEY: "",
     },
