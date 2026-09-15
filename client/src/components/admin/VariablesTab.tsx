@@ -65,6 +65,16 @@ export default function VariablesTab({ password }: { password: string }) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  // A deep link to one dial: /admin?tab=variables&variable=<key>. The review
+  // queue sends an admin straight to the change limit it names, and the dial
+  // is scrolled to and marked once the list has loaded.
+  const [focusKey] = useState<string | null>(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("variable");
+    } catch {
+      return null;
+    }
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -81,6 +91,10 @@ export default function VariablesTab({ password }: { password: string }) {
   }, [password]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (loading || !focusKey) return;
+    document.getElementById(`variable-${focusKey}`)?.scrollIntoView?.({ block: "center" });
+  }, [loading, focusKey]);
 
   const save = async (key: string, value: string) => {
     setSaving(key);
@@ -192,7 +206,12 @@ export default function VariablesTab({ password }: { password: string }) {
                    */
                   const ceiling = stalemateWarningFor(v.key, draft);
                   return (
-                    <div key={v.key} className="border border-gray-200 rounded-xl px-4 py-3">
+                    <div
+                      key={v.key}
+                      id={`variable-${v.key}`}
+                      aria-current={v.key === focusKey ? "true" : undefined}
+                      className={`border rounded-xl px-4 py-3 ${v.key === focusKey ? "border-teal-deep ring-2 ring-teal-deep/30" : "border-gray-200"}`}
+                    >
                       <div className="flex flex-wrap items-center gap-3">
                         <div className="flex-1 min-w-[220px]">
                           <div className="font-medium text-gray-900 text-sm">

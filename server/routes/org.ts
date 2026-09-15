@@ -231,8 +231,7 @@ export function register(app: Express, deps: Deps): void {
   app.post("/api/admin/org/drafts/:id/publish", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const actor = await authedUser(req);
-    const roster = ((await members.all()) as any[]).length;
-    const r = await publishDraft(getPool(), req.params.id, actor?.id ?? null, draftChangeCap(roster));
+    const r = await publishDraft(getPool(), req.params.id, actor?.id ?? null, draftChangeCap());
     if (!r.ok) return res.status(409).json({ error: r.error });
     // One journal line per seat the draft touched, so a reorganisation shows up
     // in the history of every node it moved rather than only in a draft list

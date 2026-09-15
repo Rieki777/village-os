@@ -286,14 +286,15 @@ edits one. `docs/VARIABLES.md` is generated from the registry and carries all of
 descriptions; read it there rather than here, and note its own warning that a reader of the array literal
 alone would print a document missing a fifth of the registry.
 
-The **28th** row `docs/VARIABLES.md` files under the Progression category is `org.reassignment_cadence`, a
-hand-written def that belongs to the org chart's seat machinery and is read by `lapseContext`, not by
-anything in this module. Category is a display grouping, not ownership.
+Two of the rows `docs/VARIABLES.md` files under the Progression category are hand-written defs that belong
+to the org chart's machinery and are read by nothing in this module: `org.reassignment_cadence`, read by
+`lapseContext`, and `org.proposal_change_limit` (added 2026-09-14), read by `draftChangeCap` in
+`server/lib/orgDrafts.ts`. Category is a display grouping, not ownership.
 
 **Who may turn them, and this is the sharpest single fact about the module.** Every progression dial sits in
 the OPEN ring. `ringOf` returns `"open"` for all of them, because Progression is not one of the four
 `FOUNDER_CATEGORIES` and none of these keys is in `FOUNDER_KEYS`, which is why `docs/VARIABLES.md` prints
-"the whole village" on all 28 rows. The write door is `PUT /api/admin/variables/:key`, gated on `dial.set`
+"the whole village" on all 29 rows. The write door is `PUT /api/admin/variables/:key`, gated on `dial.set`
 through `mayAct`, and `dial.set` is TRANSFERABLE. So a village that takes `dial.set` can re-cut the
 permission ladder for everybody, all thirteen `progression.unlock.*` keys included, with no admin in the
 chain. The member-facing route to the same values is `POST /api/game/mechanics/proposals` plus either
@@ -533,7 +534,7 @@ paths change:
 ## Where to read next
 
 - `docs/CAPABILITIES.md` for the gate, all 31 keys and all 7 steps. Generated and checked.
-- `docs/VARIABLES.md` for the Progression category, all 28 rows with their founder-facing descriptions.
+- `docs/VARIABLES.md` for the Progression category, all 29 rows with their founder-facing descriptions.
 - `docs/MODULES.md` for this module's registry facts as the code declares them.
 - `docs/modules/module-framework.md` for what a module id, tier, lifecycle and data class mean.
 - `docs/modules/badges.md` for the grant and deny paths that sit above this ladder in the gate.

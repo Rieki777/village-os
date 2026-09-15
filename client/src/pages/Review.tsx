@@ -47,6 +47,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
 import { toast } from "sonner";
 import { Inbox } from "lucide-react";
+import { Link } from "wouter";
 
 interface ProposalCard {
   id: string;
@@ -71,6 +72,8 @@ interface Batch {
   batchId: string;
   moduleId: string | null;
   receivedAt: string | null;
+  /** Changes accepting the batch whole would propose. Null with no org proposals; absent from an older server. */
+  proposedChanges?: number | null;
   items: ProposalCard[];
 }
 
@@ -98,14 +101,40 @@ interface Queue {
   quests: QuestCard[];
   drops: Drop[];
   /** Open drafts this queue made that cannot publish. Absent from an older server. */
-  stuckDrafts?: { draftId: string; blocked: number; blockedLines: unknown }[];
+  stuckDrafts?: { draftId: string; blocked: number; blockedLines: unknown; unpreviewable?: boolean }[];
   counts: { proposals: number; quests: number };
+  /** `org.proposal_change_limit`, as the server reads it. Absent from an older server. */
+  proposalChangeLimit?: number;
+  /** Whether this reader can open the admin page where that limit is changed. */
+  mayChangeProposalLimit?: boolean;
+}
+
+/** Where an admin changes the limit: the Game Mechanics tab, opened at that one dial. */
+const CHANGE_LIMIT_HREF = "/admin?tab=variables&variable=org.proposal_change_limit";
+
+function changes(n: number): string {
+  return n === 1 ? "1 change" : `${n} changes`;
+}
+
+/**
+ * The limit a batch meets, said before anybody accepts it. Rye, 2026-09-14:
+ * "Definitely should show the batch limit with a button to go to that
+ * setting to change adjust it higher." A steward who cannot open that setting
+ * is told who can, and is offered no button that would go nowhere.
+ */
+function limitSentence(limit: number, proposed: number, mayChange: boolean): string {
+  const parts = [`This village accepts up to ${changes(limit)} from one outside batch. This batch proposes ${proposed}.`];
+  if (proposed > limit) parts.push(`Every change past the first ${limit} will be blocked.`);
+  if (!mayChange) parts.push("An admin can raise it.");
+  return parts.join(" ");
 }
 
 /** A draft that cannot publish: how many seats are blocked, and why each one is. */
 interface StuckDraft {
   blocked: number;
   lines: string[];
+  /** The server could not preview it, so there is no count of blocked seats to give. */
+  unpreviewable?: boolean;
 }
 
 /**
@@ -360,7 +389,7 @@ export default function Review() {
           Object.fromEntries(
             q.stuckDrafts.map((d) => [
               String(d.draftId),
-              { blocked: Number(d.blocked ?? 0), lines: blockedReasons(d.blockedLines) },
+              { blocked: Number(d.blocked ?? 0), lines: blockedReasons(d.blockedLines), unpreviewable: d.unpreviewable === true },
             ]),
           ),
         );
@@ -473,25 +502,28 @@ export default function Review() {
         headers: headers(),
       }).catch(() => null);
       const d = res ? await res.json().catch(() => ({})) : {};
+      // Both cards described that draft, which is no longer open. Every other
+      // stuck draft keeps its own card.
+      const forget = () => {
+        setStuck((s) => {
+          const rest = { ...s };
+          delete rest[draftId];
+          return rest;
+        });
+        setNotRead((r) => (r.draftId === draftId ? NOTHING_LEFT_OUT : r));
+      };
       if (!res || !res.ok) {
         toast.error((d as { error?: string })?.error ?? "That draft could not be withdrawn");
-        // The server answered, so read the queue again. A refusal usually means
-        // another steward withdrew or published this draft already, and the
-        // queue's list is what clears a card whose button can never work and
-        // shows the proposals that came back.
+        // The server answered, so read the queue again. A 409 means another steward
+        // withdrew or published this draft already. The queue's list clears the stuck
+        // card, and only this clears the fields-left-out card, whose button 409'd forever.
+        if (res?.status === 409) forget();
         if (res) await load();
         return;
       }
       const n = (d as { reopened?: number }).reopened ?? 0;
       toast.success(n > 0 ? `Withdrawn, and ${n} proposal(s) are back in the queue` : "Withdrawn");
-      // Both cards described that draft, which no longer exists. Every other
-      // stuck draft keeps its own card.
-      setStuck((s) => {
-        const rest = { ...s };
-        delete rest[draftId];
-        return rest;
-      });
-      setNotRead((r) => (r.draftId === draftId ? NOTHING_LEFT_OUT : r));
+      forget();
       await load();
     } finally {
       setBusy(null);
@@ -733,8 +765,8 @@ export default function Review() {
           <div key={draftId} className={card}>
             <h2 className="text-sm font-semibold text-foreground">A draft from this queue cannot publish</h2>
             <p className="text-sm text-muted-foreground mt-2">
-              {s.blocked} of its seats are blocked. Withdrawing puts its proposals back in the queue, so
-              you can accept fewer at a time or deal with the reasons below first.
+              {s.unpreviewable ? "This draft could not be checked." : `${s.blocked} of its seats are blocked.`} Withdrawing
+              puts its proposals back in the queue, so you can accept fewer at a time or deal with the reasons below first.
             </p>
             {s.lines.length > 0 && (
               <ul className="text-sm text-muted-foreground mt-2 space-y-1">
@@ -800,6 +832,22 @@ export default function Review() {
               </h2>
               <p className="text-xs text-muted-foreground">Arrived {when(batch.receivedAt)}</p>
             </div>
+
+            {typeof batch.proposedChanges === "number" && typeof queue?.proposalChangeLimit === "number" && (
+              <div className="mt-3">
+                <p className="text-sm text-muted-foreground">
+                  {limitSentence(queue.proposalChangeLimit, batch.proposedChanges, queue.mayChangeProposalLimit === true)}
+                </p>
+                {queue.mayChangeProposalLimit === true && (
+                  <Link
+                    href={CHANGE_LIMIT_HREF}
+                    className="inline-flex items-center text-sm border border-border rounded-lg px-4 py-2 mt-3 min-h-[44px] font-medium"
+                  >
+                    Change the limit
+                  </Link>
+                )}
+              </div>
+            )}
 
             <div className="mt-4 space-y-4">
               {batch.items.map((item) => (

@@ -38,6 +38,7 @@
 import type { Pool, PoolConnection } from "mysql2/promise";
 import { draftStatus, withdrawDraftRow } from "../repos/orgDrafts";
 import { stageIndex } from "../../shared/gameConfig";
+import { numberVar } from "./variables";
 import { listOrgAssignments, listOrgRoles, peopleOnly, seatState, type LapseContext, type OrgAssignment } from "./orgChart";
 
 export type DraftOp = "create_seat" | "update_seat" | "rest_seat" | "seat_holder" | "end_holding";
@@ -369,13 +370,21 @@ export async function listDrafts(pool: Pool): Promise<Draft[]> {
  * that machine, running weekly. Twenty-four seats over eight people is a chart
  * nobody maintains, and forty open drafts is a review queue nobody opens.
  *
- * The floor of 3 exists so a village of one founder can still be given
- * somewhere to start. A HUMAN IS NOT CAPPED: a founder reorganising their own
- * village is doing the thing this table was built for, and the cap answers a
- * machine proposing structure faster than a village can read it.
+ * THE CHANGE LIMIT IS THE VILLAGE'S OWN SETTING, `org.proposal_change_limit`,
+ * read through the registry so a tuned value beats the default. It was
+ * `max(3, activeMembers * 3)`, which gave a village of two accounts a limit of
+ * six while its first import carried eighteen seats. Rye ruled on 2026-09-14
+ * that this was a broken limit: a village's beginning is one large structural
+ * import, so the default is 500, and a steward still reads and accepts every
+ * line before anything publishes. The open-draft cap keeps its per-member
+ * shape, because a queue of open drafts is what outgrows a small village.
+ *
+ * A HUMAN IS NOT CAPPED: a founder reorganising their own village is doing
+ * the thing this table was built for, and the cap answers a machine
+ * proposing structure faster than a village can read it.
  */
-export function draftChangeCap(activeMembers: number): number {
-  return Math.max(3, activeMembers * 3);
+export function draftChangeCap(): number {
+  return Math.max(1, numberVar("org.proposal_change_limit"));
 }
 
 export function openDraftCap(activeMembers: number): number {
@@ -473,13 +482,17 @@ export async function addChange(
  * got a live circle made for a seat they then rejected. So the circle's own
  * recovery waits until it is the only thing left in the way, which the next
  * preview after the other fix will say.
+ *
+ * ONLY A RECOVERY THAT ASKS AN ADMIN TO CHANGE LIVE CIRCLES WAITS. A circle in
+ * a form nothing reads is fixed by writing its name under "circle" in the same
+ * withdraw that fixes the other reason, so that recovery is always given.
  */
 function circleNameBlock(
   payload: Record<string, any> | null | undefined,
   fromQueue: boolean,
   withRecovery = true,
 ): string | null {
-  if (hasCircleId(payload?.circleId)) return null;
+  if (hasCircleId(circleIdOf(payload))) return null;
   const circleName = typeof payload?.circleName === "string" ? payload.circleName.trim() : "";
   const unread: string[] = Array.isArray(payload?.circleUnread)
     ? payload.circleUnread.filter((k: unknown): k is string => typeof k === "string" && k !== "")
@@ -490,7 +503,6 @@ function circleNameBlock(
   if (circleName === "" && unread.length) {
     const keys = unread.map((k) => `"${k}"`).join(", ");
     const fact = `This seat gave its circle under ${keys} in a form this village cannot read`;
-    if (!withRecovery) return fact;
     return fromQueue
       ? `${fact}. Withdraw this draft. ` +
           `Its proposals go back in the review queue, where you can write the circle's name under "circle" and accept again`
@@ -512,6 +524,18 @@ function circleNameBlock(
  */
 function hasCircleId(v: unknown): boolean {
   return v !== undefined && v !== null && v !== "";
+}
+
+/**
+ * A payload's circle id, with a one-item list of a string or a number read as
+ * its item. `["c1"]`, from a draft written before the proposal normaliser or
+ * built by hand, read as no text and blocked with "That circle does not exist"
+ * beside a circle that does. The INSERT and UPDATE bind such a list as its one
+ * value, so the preview now checks the circle the publish writes.
+ */
+function circleIdOf(payload: Record<string, any> | null | undefined): unknown {
+  const v = payload?.circleId;
+  return Array.isArray(v) && v.length === 1 && (typeof v[0] === "string" || typeof v[0] === "number") ? v[0] : v;
 }
 
 /**
@@ -667,8 +691,8 @@ export function previewLoadedDraft(
      * THE VOLUME CAP is the other one worth reading twice. Seeding
      * aspirational structure is on the platform's never-build list and a
      * weekly meeting extractor is that machine. The cap is on the DRAFT rather
-     * than on the table, so a village can still accept many drafts over time
-     * and cannot be handed one carrying forty seats at once.
+     * than on the table, so a village can still accept many drafts over time,
+     * and how many changes one of them may carry is the village's own setting.
      */
     if (machine && (c.op === "seat_holder" || c.op === "end_holding")) {
       blocked = "A proposal never names who holds a seat. Structure can be proposed; occupancy is a human act";
@@ -745,7 +769,7 @@ export function previewLoadedDraft(
       // seat could publish at all before anybody is asked to make a circle.
       // For the same reason, a line that already has a reason states the
       // circle's problem without asking anybody to make one (circleNameBlock).
-      if (hasCircleId(c.payload?.circleId) && !circleIds.has(primitiveText(c.payload.circleId) ?? "")) {
+      if (hasCircleId(circleIdOf(c.payload)) && !circleIds.has(primitiveText(circleIdOf(c.payload)) ?? "")) {
         reasons.push("That circle does not exist. A draft cannot create circles");
       } else {
         const circle = circleNameBlock(c.payload, fromQueue, reasons.length === 0);
@@ -774,7 +798,7 @@ export function previewLoadedDraft(
           const v = primitiveNumber(n2);
           if (!Number.isInteger(v) || v < 1 || v > 50) blocked = "A seat holds between 1 and 50 people";
         }
-        if (!blocked && hasCircleId(c.payload?.circleId) && !circleIds.has(primitiveText(c.payload.circleId) ?? "")) {
+        if (!blocked && hasCircleId(circleIdOf(c.payload)) && !circleIds.has(primitiveText(circleIdOf(c.payload)) ?? "")) {
           blocked = "That circle does not exist. A draft cannot create circles";
         }
       }
@@ -802,6 +826,8 @@ export interface StuckDraft {
   draftId: string;
   blocked: number;
   blockedLines: BlockedLine[];
+  /** Set when the preview threw, so the page says it could not be checked and counts no seats. */
+  unpreviewable?: true;
 }
 
 /**
@@ -825,13 +851,17 @@ export function stuckQueueDrafts(
     let preview: { lines: PreviewLine[]; blocked: number };
     try {
       preview = previewLoadedDraft(d, context, changeCap);
-    } catch {
+    } catch (err) {
+      // Listed so its withdraw renders, and logged so somebody can find out why.
+      console.error(`[orgDrafts] could not preview draft ${d.id}`, err);
       out.push({
         draftId: d.id,
         blocked: 1,
+        unpreviewable: true,
         blockedLines: [
           {
-            reads: "This draft",
+            // Empty, because the sentence already names the draft.
+            reads: "",
             blocked:
               "This draft could not be previewed, so it cannot publish. Withdraw it, and its proposals go back in the review queue",
           },
@@ -862,8 +892,8 @@ export async function publishDraft(
    * those lines are derived from the draft's own `source_kind` inside
    * `previewDraft`, so the one that matters most (a proposal never names who
    * holds a seat) already holds here whether or not a caller passes this. The
-   * numeric cap is the one thing the preview cannot work out on its own,
-   * because it depends on how many people the village has. Omitted means no
+   * numeric cap is the one thing the preview takes from its caller, because
+   * it is the village's own setting and a founder's draft has none. Omitted means no
    * cap, which is the right answer for a draft a founder typed.
    */
   changeCap?: number | null,

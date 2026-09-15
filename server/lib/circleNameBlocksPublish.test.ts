@@ -15,7 +15,7 @@
  *
  * No TEST_DATABASE_URL and the suite skips loudly (harness rule).
  */
-import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, expect, it, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import {
@@ -229,9 +229,63 @@ describe.skipIf(!configured)("a circle given by a name this village cannot place
 
     // A draft whose preview throws is listed with its withdraw, and the rest still are.
     const broken = drafts.map((d) => (d.id === blockedA ? ({ ...d, changes: undefined } as unknown as Draft) : d));
-    const listed = stuckQueueDrafts(broken, context, 99);
-    expect(listed.find((d) => d.draftId === blockedA)?.blockedLines[0].blocked).toContain("could not be previewed");
-    expect(listed.map((d) => d.draftId)).toContain(blockedB);
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const listed = stuckQueueDrafts(broken, context, 99);
+      const fallback = listed.find((d) => d.draftId === blockedA);
+      expect(fallback?.blockedLines[0].blocked).toContain("could not be previewed");
+      expect(listed.map((d) => d.draftId)).toContain(blockedB);
+      // Marked, so the page says it could not be checked where it said "1 of its
+      // seats are blocked", and the line no longer names "This draft" twice.
+      expect(fallback?.unpreviewable).toBe(true);
+      expect(fallback?.blockedLines[0].reads).toBe("");
+      expect(listed.find((d) => d.draftId === blockedB)).not.toHaveProperty("unpreviewable");
+      // Logged with the draft's id, where the throw used to vanish.
+      expect(errors.mock.calls.some((args) => args.some((a) => String(a).includes(blockedA)))).toBe(true);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  it("reads a circle id sent as a one-item list as that circle, where it blocked as a circle that does not exist", async () => {
+    await pool.query( // module-review-ok: a fixture on the scratch schema this suite provisioned
+      "INSERT INTO circles (id, name, aliases, is_example) VALUES ('cnb-springs', 'Springs & Wells', ?, 0)",
+      [JSON.stringify([])],
+    );
+    const made = await draftWith([{ op: "create_seat", orgRoleId: "cnb-listed", payload: { name: "Listed Seat", circleId: ["cnb-springs"] } }]);
+    const preview = await previewDraft(pool, made, 99);
+    expect(preview.blocked, JSON.stringify(preview.lines)).toBe(0);
+    const r = await publishDraft(pool, made, "u-steward", 99);
+    expect(r.ok, !r.ok ? r.error : "").toBe(true);
+    expect((await seatRow("cnb-listed")).circle_id).toBe("cnb-springs");
+
+    await pool.query("INSERT INTO org_roles (id, name, seats) VALUES ('cnb-existing', 'Existing Seat', 1)"); // module-review-ok: a fixture on the scratch schema this suite provisioned
+    const edit = await draftWith([{ op: "update_seat", orgRoleId: "cnb-existing", payload: { circleId: ["cnb-springs"] } }]);
+    const editPreview = await previewDraft(pool, edit, 99);
+    expect(editPreview.blocked, JSON.stringify(editPreview.lines)).toBe(0);
+    const e = await publishDraft(pool, edit, "u-steward", 99);
+    expect(e.ok, !e.ok ? e.error : "").toBe(true);
+    expect((await seatRow("cnb-existing")).circle_id).toBe("cnb-springs");
+
+    // A list holding a circle that does not exist still says so.
+    const missing = await draftWith([{ op: "create_seat", orgRoleId: "cnb-listed-x", payload: { name: "Missing Seat", circleId: ["cnb-nowhere"] } }]);
+    expect((await previewDraft(pool, missing, 99)).lines[0].blocked).toBe("That circle does not exist. A draft cannot create circles");
+  });
+
+  it("gives the recovery for a circle in a form nothing reads beside another reason, and still asks no admin for a circle", async () => {
+    const unread = await draftWith([
+      { op: "create_seat", orgRoleId: "cnb-unread-seats", payload: { name: "Pump Keeper", seats: 400, circleUnread: ["circle"] } },
+    ]);
+    const reason = String((await previewDraft(pool, unread, 99)).lines[0].blocked);
+    expect(reason).toContain("A seat holds between 1 and 50 people");
+    expect(reason).toContain('where you can write the circle\'s name under "circle" and accept again');
+
+    const unknown = await draftWith([
+      { op: "create_seat", orgRoleId: "cnb-unknown-seats", payload: { name: "Kiln Keeper", seats: 400, circleName: "Nowhere Circle", circleMatches: 0 } },
+    ]);
+    const unknownReason = String((await previewDraft(pool, unknown, 99)).lines[0].blocked);
+    expect(unknownReason).toContain('There is no circle called "Nowhere Circle" yet');
+    expect(unknownReason).not.toContain("Ask an admin to create it");
   });
 
   it("publishes a vendor's recruiting \"yes\" as recruiting, read by the normaliser", async () => {

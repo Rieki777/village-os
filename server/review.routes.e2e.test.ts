@@ -50,6 +50,7 @@ let testDb: TestDb | undefined;
 let dataDir = "";
 let pool: mysql.Pool;
 let founderToken = "";
+let founderId = "";
 
 // Kira is a plain member who will end up keeping the review queue with no
 // admin password anywhere in her requests. Otto holds nothing; he is the
@@ -135,20 +136,20 @@ beforeAll(async () => {
   const claim = decodeURIComponent(String(boot.json?.claimUrl ?? "").match(/token=([^&]+)/)?.[1] ?? "");
   const setPw = await call("POST", "/api/auth/set-password", { token: claim, password: "ReviewTest123!" }, "");
   founderToken = String(setPw.json?.token ?? "");
+  founderId = String(setPw.json?.user?.id ?? "");
   expect(founderToken, "founder must hold a session").toBeTruthy();
 
   const kira = await register("Kira Vance", "kira");
   kiraToken = kira.token; kiraId = kira.id;
   const otto = await register("Otto Brand", "otto");
   ottoToken = otto.token;
-  // Three more, so the roster carries the volume cap for a batch of twelve.
-  // `draftChangeCap` is `max(3, members * 3)`, and the cap is a real product
-  // rule: a village of two people being handed twelve new seats at once is
-  // exactly the aspirational structure it exists to refuse. A test that dodged
-  // it by removing the cap would be testing a different product.
-  for (const [name, slug] of [["Ada Wren", "ada"], ["Bel Cross", "bel"], ["Cass Moor", "cass"]]) {
-    await register(name, slug);
-  }
+  // NO MORE ACCOUNTS THAN THESE. This file used to register three extra
+  // members so the roster carried the change limit for a batch of twelve,
+  // because `draftChangeCap` was `max(3, members * 3)`. Rye ruled that limit
+  // broken on 2026-09-14: a village's beginning is one large import. The limit
+  // is now `org.proposal_change_limit`, shipping at 500, so a village of three
+  // accounts accepts twelve seats with nothing blocked, and the accept test
+  // below asserts exactly that.
 
   // Kira becomes a steward: the Steward Circle role gains intake.moderate, and
   // she is seated in it. No admin role anywhere on her account.
@@ -212,6 +213,39 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
     expect(batch.items[0].evidence).toBe("quoted");
     // Not stated is not zero.
     expect(batch.items[0].confidence).toBeNull();
+  });
+
+  it("says the village's change limit, what the batch proposes, and who may change the limit", async () => {
+    const LIMIT = "/api/admin/variables/org.proposal_change_limit";
+    const q = await call("GET", "/api/review/queue", undefined, kiraToken);
+    expect(q.status, q.text).toBe(200);
+    expect(q.json.proposalChangeLimit).toBe(500);
+    const batch = (q.json.batches ?? []).find((b: any) => b.batchId === BATCH);
+    expect(batch.proposedChanges).toBe(12);
+    // Kira keeps the queue and is no admin, so the admin page would refuse her.
+    expect(q.json.mayChangeProposalLimit).toBe(false);
+
+    // An admin who keeps the queue is offered the setting. The village holds
+    // intake.moderate through the Steward Circle, so the founder is seated in
+    // it the way Kira was; an admin does not pass a held key by being one.
+    expect(founderId, "set-password names the founder").toBeTruthy();
+    // The same Member-stage floor Kira was given: the seat asks for it, and a
+    // granted stage is a floor over the computed one, so it lowers nobody.
+    const staged = await call("PUT", `/api/admin/players/${founderId}/stage`, { stageId: "member" });
+    expect(staged.status, staged.text).toBe(200);
+    const seated = await call("POST", "/api/admin/roles/steward-circle/holders", { userId: founderId, action: "add" });
+    expect(seated.status, seated.text).toBe(200);
+    const asAdmin = await call("GET", "/api/review/queue");
+    expect(asAdmin.status, asAdmin.text).toBe(200);
+    expect(asAdmin.json.mayChangeProposalLimit).toBe(true);
+
+    // The village's tuned value is the one the queue says, over the default.
+    const tuned = await call("PUT", LIMIT, { value: "6" });
+    expect(tuned.status, tuned.text).toBe(200);
+    expect((await call("GET", "/api/review/queue", undefined, kiraToken)).json.proposalChangeLimit).toBe(6);
+    const restored = await call("PUT", LIMIT, { value: "500" });
+    expect(restored.status, restored.text).toBe(200);
+    expect((await call("GET", "/api/review/queue", undefined, kiraToken)).json.proposalChangeLimit).toBe(500);
   });
 
   it("REFUSES somebody without the capability, and never with an empty queue", async () => {

@@ -196,6 +196,15 @@ describe("a value of a shape the chart cannot hold is reported and left out", ()
     expect(normaliseProposedSeat({ name: 7, aim: 3 }, CIRCLES).payload).toEqual({ name: "7", aim: "3" });
   });
 
+  it("stores a one-item list under seats, criticality or a circle id as its item, which the preview blocked", () => {
+    const r = normaliseProposedSeat({ name: "S", seats: [2], criticality: ["high"], circle_id: ["trade"] }, CIRCLES);
+    expect(r.payload).toEqual({ name: "S", seats: 2, criticality: "high", circleId: "trade" });
+    expect(r.ignored).toEqual([]);
+    expect(normaliseProposedSeat(r.payload, CIRCLES).payload).toEqual(r.payload);
+    // A longer list is carried as sent, and the preview blocks it by name.
+    expect(normaliseProposedSeat({ name: "S", seats: [2, 3] }, CIRCLES).payload.seats).toEqual([2, 3]);
+  });
+
   it("takes an alias of the right shape over a canonical key of the wrong one", () => {
     const r = normaliseProposedSeat({ name: { en: "Cook" }, role_name: "Cook" }, CIRCLES);
     expect(r.payload.name).toBe("Cook");
@@ -380,6 +389,19 @@ describe("accountabilities", () => {
     }
   });
 
+  it("never cuts a name off its duty after a title, an office or a weekday written in lowercase", () => {
+    // A lowercase word before a period reads as a sentence end, so each of
+    // these split "lic." from "Vargas" the way "Lic." once did.
+    for (const abbr of [
+      "lic.", "licda.", "ing.", "prof.", "profa.", "dra.", "sra.", "srta.", "arq.", "dpto.", "depto.", "admón.", "gral.",
+      "hrs.", "hr.", "dept.", "govt.", "est.", "mgr.", "asst.",
+      "lun.", "mar.", "mié.", "jue.", "vie.", "sáb.", "dom.",
+    ]) {
+      const duty = `Meet ${abbr} Vargas monthly`;
+      expect(normaliseAccountabilities(`${duty}. File the minutes.`), abbr).toEqual([duty, "File the minutes"]);
+    }
+  });
+
   it("keeps a quoted motto whole, and a time, a weekday, a company and a volume inside their duty", () => {
     expect(normaliseAccountabilities("Uphold the motto 'Land first. People always.' in every decision. Train new members.")).toEqual([
       "Uphold the motto 'Land first. People always.' in every decision. Train new members",
@@ -414,6 +436,37 @@ describe("accountabilities", () => {
         "Track the replies",
         "Book the call",
       ]);
+    }
+  });
+
+  it("keeps a numbered list whole when its first item has two sentences, where the split counted from 2", () => {
+    const once = normaliseAccountabilities("1. Maintain the site. Keep it tidy. 2. Update it. 3. Report.");
+    expect(once).toEqual(["1. Maintain the site. Keep it tidy. 2. Update it. 3. Report"]);
+    expect(normaliseAccountabilities(once)).toEqual(once);
+  });
+
+  it("strips the marker off an item that mentions a numbered lot, like every item around it", () => {
+    // "Lot 3. " read as a later marker, so this one item kept its "1." or its bullet.
+    expect(normaliseAccountabilities(["1. Survey Lot 3. Then stake the corners", "2. File the plat"])).toEqual([
+      "Survey Lot 3. Then stake the corners",
+      "File the plat",
+    ]);
+    expect(normaliseAccountabilities(["- Survey Lot 3. Then stake the corners", "- File the plat"])).toEqual([
+      "Survey Lot 3. Then stake the corners",
+      "File the plat",
+    ]);
+    expect(normaliseAccountabilities("1. Survey Lot 3. Stake the corners\n2. File the plat")).toEqual([
+      "Survey Lot 3. Stake the corners",
+      "File the plat",
+    ]);
+    // A bullet has no next number, so a later "2." never keeps it.
+    expect(normaliseAccountabilities(["- Walk lot 1. 2. Walk lot 2"])).toEqual(["Walk lot 1. 2. Walk lot 2"]);
+  });
+
+  it("gives the same items on a second pass when a leading number precedes a trailing \"2. .\"", () => {
+    for (const text of ["1. Pay 2. .", "Keep the books; 1. Pay the invoice 2. ."]) {
+      const once = normaliseAccountabilities(text);
+      expect(normaliseAccountabilities(once), text).toEqual(once);
     }
   });
 

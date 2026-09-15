@@ -169,6 +169,97 @@ describe("the review queue tells three states apart", () => {
 });
 
 /**
+ * THE LIMIT A BATCH MEETS, SAID BEFORE ANYBODY ACCEPTS IT.
+ *
+ * Rye, 2026-09-14: "Definitely should show the batch limit with a button to go
+ * to that setting to change adjust it higher." The limit used to be three per
+ * account and appeared nowhere until a steward had accepted a batch and found
+ * most of it blocked. Each case below is a sentence or a door a steward needs
+ * before pressing accept, and the last is the door a steward must NOT be shown.
+ */
+describe("the change limit on a batch card", () => {
+  const seat = (id: string, name: string) => ({
+    id,
+    batchId: "b1",
+    moduleId: "vendor",
+    kind: "role.proposed",
+    payload: { name },
+    quote: null,
+    sourceRef: null,
+    sourceOccurredAt: null,
+    evidence: "absent",
+    audience: "steward",
+    trustTier: "extracted_unreviewed",
+    confidence: null,
+    significance: null,
+    subjectRef: null,
+    receivedAt: "2026-08-14T10:00:00.000Z",
+    correlationId: null,
+  });
+  const queueWith = (over: { limit: number; proposed: number | null; may: boolean }) => ({
+    ...EMPTY,
+    counts: { proposals: 1, quests: 0 },
+    batches: [
+      {
+        batchId: "b1",
+        moduleId: "vendor",
+        receivedAt: "2026-08-14T10:00:00.000Z",
+        proposedChanges: over.proposed,
+        items: [seat("p1", "Water Steward")],
+      },
+    ],
+    proposalChangeLimit: over.limit,
+    mayChangeProposalLimit: over.may,
+  });
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("names the village's limit and what this batch proposes, with nothing blocked under it", async () => {
+    answerWith(200, queueWith({ limit: 500, proposed: 18, may: false }));
+    renderReview();
+    expect(
+      await screen.findByText(/This village accepts up to 500 changes from one outside batch\. This batch proposes 18\./),
+    ).toBeTruthy();
+    expect(screen.queryByText(/will be blocked/)).toBeNull();
+  });
+
+  it("says the changes past the limit will be blocked when the batch proposes more", async () => {
+    answerWith(200, queueWith({ limit: 6, proposed: 18, may: false }));
+    renderReview();
+    expect(await screen.findByText(/This batch proposes 18\. Every change past the first 6 will be blocked\./)).toBeTruthy();
+  });
+
+  it("offers an admin the way to the setting, opened at that one dial", async () => {
+    answerWith(200, queueWith({ limit: 6, proposed: 18, may: true }));
+    renderReview();
+    const link = await screen.findByRole("link", { name: "Change the limit" });
+    expect(link.getAttribute("href")).toBe("/admin?tab=variables&variable=org.proposal_change_limit");
+    expect(screen.queryByText(/An admin can raise it/)).toBeNull();
+  });
+
+  it("tells a steward who is not an admin who can raise it, and shows them no button that goes nowhere", async () => {
+    answerWith(200, queueWith({ limit: 6, proposed: 18, may: false }));
+    renderReview();
+    expect(await screen.findByText(/Every change past the first 6 will be blocked\. An admin can raise it\./)).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Change the limit" })).toBeNull();
+    expect(screen.queryByText("Change the limit")).toBeNull();
+  });
+
+  it("says nothing about a limit on a batch that holds no org proposals", async () => {
+    answerWith(200, queueWith({ limit: 6, proposed: null, may: true }));
+    renderReview();
+    await screen.findByText(/Accept all 1, with my edits/i);
+    expect(screen.queryByText(/This village accepts up to/)).toBeNull();
+    expect(screen.queryByText("Change the limit")).toBeNull();
+  });
+});
+
+/**
  * WHAT AN ACCEPT SAYS AFTERWARDS, and when it stops saying it.
  *
  * Three defects, each a sentence that reached nobody or outlived its subject:
@@ -335,6 +426,69 @@ describe("what the review page says after an accept", () => {
     fireEvent.click(screen.getByText("Withdraw that draft"));
     await waitFor(() => expect(screen.queryByText(/"Milling Circle" yet/)).toBeNull());
     expect(screen.queryByText("Withdraw that draft")).toBeNull();
+  });
+
+  it("clears the fields-left-out card when a withdraw is refused, so its button does not move there and refuse forever", async () => {
+    // Another steward withdrew d1 first. The reload cleared the stuck card and
+    // its button moved onto the fields-left-out card, which 409'd on every press.
+    let refused = false;
+    const d1 = { draftId: "d1", blocked: 1, blockedLines: [{ reads: 'Create the seat "Mill Warden"', blocked: REASON }] };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: { method?: string }) => {
+        if (init?.method === "POST" && url === "/api/review/batches/b1/accept") {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              success: true, accepted: 1, draftId: "d1", seats: 1, blocked: 1, noted: 0,
+              blockedLines: d1.blockedLines,
+              ignored: [{ proposalId: "p1", keys: ["vendor_rank"] }],
+            }),
+          };
+        }
+        if (init?.method === "POST" && url === "/api/review/drafts/d1/withdraw") {
+          refused = true;
+          return {
+            ok: false,
+            status: 409,
+            json: async () => ({ error: "This draft is withdrawn, and only an open draft can be withdrawn" }),
+          };
+        }
+        return { ok: true, status: 200, json: async () => ({ ...QUEUE, stuckDrafts: refused ? [] : [d1] }) };
+      }),
+    );
+    renderReview();
+    fireEvent.click(await screen.findByText(/Accept all 1, with my edits/i));
+    expect(await screen.findByText(/Not read from/)).toBeTruthy();
+    expect(screen.getAllByText("Withdraw that draft")).toHaveLength(1);
+    fireEvent.click(screen.getByText("Withdraw that draft"));
+    await waitFor(() => expect(screen.queryByText(/"Milling Circle" yet/)).toBeNull());
+    expect(screen.queryByText(/Not read from/)).toBeNull();
+    expect(screen.queryByText("Withdraw that draft")).toBeNull();
+  });
+
+  it("says a draft the server could not preview could not be checked, and counts no blocked seats", async () => {
+    answerWith(200, {
+      ...QUEUE,
+      stuckDrafts: [
+        {
+          draftId: "d5",
+          blocked: 1,
+          unpreviewable: true,
+          blockedLines: [
+            {
+              reads: "",
+              blocked: "This draft could not be previewed, so it cannot publish. Withdraw it, and its proposals go back in the review queue",
+            },
+          ],
+        },
+      ],
+    });
+    renderReview();
+    expect(await screen.findByText(/This draft could not be checked/)).toBeTruthy();
+    expect(screen.queryByText(/of its seats are blocked/)).toBeNull();
+    expect(screen.getByText("Withdraw that draft")).toBeTruthy();
   });
 
   it("says what to do about fields left out, and offers the withdraw when nothing blocked", async () => {
