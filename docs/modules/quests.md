@@ -603,16 +603,18 @@ rather than "Action failed", and that sentence names the range. But a steward on
 quests pay 100 to 200 meets a 409 on every first click, and the number they have to type is on a
 different page.
 
-**A steward who holds `quest.consent` has no browser.** The server has accepted a non-admin holder
-on the consent routes since the 0103 capability round. (That number is a release label, not a
-migration: there is no `drizzle/0103_*.sql`, the numbering runs 0102 then 0104, and every other
-bare four-digit number in this document is a file you can open.) The only client surface is `QuestClaimsTab` inside
-`client/src/pages/Admin.tsx`, and `AdminGate` in that same file refuses any signed-in account whose
-role is not `admin` or `founder` with a "Not an admin" screen before any tab renders. The submit
-sweep notifies every capability holder with `link: "/admin?tab=quest-claims"`, so a steward is rung
-to a page that will refuse them. `client/src/pages/Review.tsx` states this dead end in its own
-header and then solves it for `quest.approve` rather than for `quest.consent`. The capability is
-exercisable today only with curl.
+**A steward who holds `quest.consent` has a browser at `/review`, since 2026-09-14.** The server has
+accepted a non-admin holder on the consent routes since the 0103 capability round. (That number is a
+release label, not a migration: there is no `drizzle/0103_*.sql`, the numbering runs 0102 then 0104,
+and every other bare four-digit number in this document is a file you can open.) For all of that
+time the only client surface was `QuestClaimsTab` inside `client/src/pages/Admin.tsx`, where
+`AdminGate` refuses any signed-in account whose role is not `admin` or `founder` before any tab
+renders, and the submit sweep rang every capability holder with a link to that tab. Now
+`client/src/pages/Review.tsx` reads `GET /api/admin/quest-claims` as a section of its own, rendered by
+`client/src/components/review/ConsentQueue.tsx`: each amount box opens on the quest's floor, and the
+button asks `canGrant` (`shared/questConsentBounds.ts`) before anybody presses. Both bells, the
+submit sweep's and the confidence flag's, link to `/review`. `QuestClaimsTab` still works for an
+admin, and its box still opens at 50.
 
 **The only way to put a claim back needs three things, and a village is unlikely to have any of
 them.** `claimsRepo.remove` has exactly one caller, the `POST /api/map/promise` handler.

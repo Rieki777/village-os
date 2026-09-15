@@ -225,7 +225,7 @@ export function register(app: Express, deps: Deps): void {
           ? `${firstName(user.name)} is stuck on ${questTitle}`
           : `${firstName(user.name)} flagged a wobble on ${questTitle}`,
         `quest-confidence:${req.params.id}:${value}`,
-        "/admin?tab=quest-claims",
+        "/review",
       );
     }
     res.json({ success: true });

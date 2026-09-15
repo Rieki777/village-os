@@ -1,5 +1,6 @@
 /**
- * /review: what a machine proposed, and what a steward does about it.
+ * /review: what a machine proposed, what a member finished, and what a
+ * steward does about each.
  *
  * ── NOT /steward, AND THE REASON IS STRUCTURAL ───────────────────────────
  *
@@ -11,11 +12,20 @@
  *
  * ── GATED BY CAPABILITY AND NEVER BY ROLE ────────────────────────────────
  *
- * A steward who is not an admin is who this page is for. The dead end it is
- * careful not to repeat: the server already accepts a non-admin holding
- * `quest.consent` on three routes, and the only client surface for it sits
- * behind an `isAdmin` check, so that capability is exercisable today only with
- * curl. This page asks the server what it may do and renders that answer.
+ * A steward who is not an admin is who this page is for. The dead end it was
+ * written against: the server accepted a non-admin holding `quest.consent` on
+ * the consent routes long before any browser did, because the only client
+ * surface sat behind `AdminGate` in Admin.tsx, and the submit bell rang those
+ * stewards with a link to it. So the page asks the server what it may do and
+ * renders that answer, one section per read:
+ *
+ *   - `GET /api/review/queue` answers `intake.moderate` with both halves and
+ *     `quest.approve` alone with the quest half, and names them in `scope`.
+ *   - `GET /api/admin/quest-claims` answers `quest.consent` with the claims
+ *     waiting for a witness, rendered by `ConsentQueue`.
+ *
+ * A key somebody does not hold hides its section and never the page. The page
+ * refuses as a whole only when both reads refused.
  *
  * ── A FAILED READ IS NEVER AN EMPTY QUEUE ────────────────────────────────
  *
@@ -24,6 +34,7 @@
  * positively that there is nothing to review is a governance failure and not a
  * cosmetic one. THREE states are told apart here and never collapsed: the read
  * failed, the person may not open it, and there is genuinely nothing waiting.
+ * Each section keeps its own three.
  *
  * ── THE CARD BODY COPIES THE CALLS TAB ───────────────────────────────────
  *
@@ -42,6 +53,7 @@
  * textarea is the point of the screen.
  */
 import Layout from "@/components/Layout";
+import ConsentQueue, { useConsentClaims } from "@/components/review/ConsentQueue";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
@@ -103,6 +115,11 @@ interface Queue {
   /** Open drafts this queue made that cannot publish. Absent from an older server. */
   stuckDrafts?: { draftId: string; blocked: number; blockedLines: unknown; unpreviewable?: boolean }[];
   counts: { proposals: number; quests: number };
+  /**
+   * The halves this reader was given. An older server sends no `scope`, and it
+   * only ever answered the key that reads both, so absent reads as both.
+   */
+  scope?: { proposals: boolean; quests: boolean };
   /** `org.proposal_change_limit`, as the server reads it. Absent from an older server. */
   proposalChangeLimit?: number;
   /** Whether this reader can open the admin page where that limit is changed. */
@@ -314,6 +331,7 @@ export default function Review() {
     const t = authToken();
     return t ? { Authorization: `Bearer ${t}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
   }, []);
+  const consent = useConsentClaims(headers);
 
   /**
    * Ask every unconfirmed store again. This is the only thing that can finish
@@ -364,17 +382,22 @@ export default function Review() {
     }
   };
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  /**
+   * The proposal queue, and the erasure list behind it. Refused, failed and
+   * answered are three different states, and none of them touches the claims.
+   */
+  const loadQueue = useCallback(async () => {
     try {
       const r = await fetch("/api/review/queue", { headers: headers() });
       if (r.status === 401 || r.status === 403 || r.status === 409) {
         setForbidden(true);
         setLoadError(null);
+        setQueue(null);
         return;
       }
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
+        setForbidden(false);
         setLoadError((d as { error?: string })?.error ?? "Could not read the queue");
         return;
       }
@@ -403,10 +426,17 @@ export default function Review() {
       }
     } catch {
       setLoadError("Could not reach the server");
+    }
+  }, [headers]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      await Promise.all([loadQueue(), consent.load()]);
     } finally {
       setLoading(false);
     }
-  }, [headers]);
+  }, [loadQueue, consent.load]);
 
   useEffect(() => {
     void load();
@@ -623,8 +653,10 @@ export default function Review() {
   };
 
   const card = "bg-card border border-border rounded-xl p-5";
+  const nothingReadYet =
+    queue === null && consent.claims === null && !forbidden && !consent.refused && !loadError && !consent.error;
 
-  if (loading && !queue) {
+  if (loading && nothingReadYet) {
     return (
       <Layout>
         <div className="max-w-4xl mx-auto px-4 py-10">
@@ -634,15 +666,17 @@ export default function Review() {
     );
   }
 
-  if (forbidden) {
+  // The whole page refuses only when both reads did. Somebody refused one key
+  // and given the other is shown the section they hold.
+  if (forbidden && consent.refused) {
     return (
       <Layout>
         <div className="max-w-4xl mx-auto px-4 py-10">
           <div className={card}>
             <h1 className="text-xl font-bold text-foreground">This queue is not open to you yet</h1>
             <p className="text-sm text-muted-foreground mt-2">
-              Reviewing what an outside service proposes is a job this village hands to somebody. Ask
-              whoever looks after the village queues, and they can pass it on.
+              Reviewing what an outside service proposes, and witnessing finished quests, are jobs this
+              village hands to somebody. Ask whoever looks after the village queues, and they can pass one on.
             </p>
           </div>
         </div>
@@ -650,12 +684,45 @@ export default function Review() {
     );
   }
 
-  if (loadError) {
-    return (
-      <Layout>
-        <div className="max-w-4xl mx-auto px-4 py-10">
+  const drops = queue?.drops ?? [];
+  const totalDropped = drops.reduce((n, d) => n + d.dropped, 0);
+  const readsProposals = queue?.scope?.proposals ?? true;
+  const nothingWaiting =
+    queue !== null && (queue.counts?.proposals ?? 0) === 0 && (queue.counts?.quests ?? 0) === 0;
+
+  return (
+    <Layout>
+      <div className="max-w-4xl mx-auto px-4 py-10 space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+            <Inbox className="w-6 h-6" aria-hidden="true" />
+            Review
+          </h1>
+          {!forbidden && (
+            <p className="text-sm text-muted-foreground mt-2 max-w-2xl">
+              What an outside service has proposed about this village. Nothing here is true yet. Read it,
+              change anything you want, and accept what the village agrees with. What you accept goes into
+              a draft you can preview and undo.
+            </p>
+          )}
+        </div>
+
+        {/* Finished work first. Consent is the one step that releases value,
+            and a claim sitting here is somebody's work going unpaid. */}
+        <ConsentQueue
+          claims={consent.claims}
+          refused={consent.refused}
+          error={consent.error}
+          headers={headers}
+          onChanged={consent.load}
+          onRetry={() => void load()}
+        />
+
+        {/* The queue's own failure, in a card of its own. It used to be the
+            whole page, which was right while the queue was all the page held. */}
+        {loadError && (
           <div className={card}>
-            <h1 className="text-xl font-bold text-foreground">The queue did not load</h1>
+            <h2 className="text-xl font-bold text-foreground">The queue did not load</h2>
             <p className="text-sm text-muted-foreground mt-2">
               {loadError}. There may be proposals waiting; this is not an empty queue.
             </p>
@@ -666,29 +733,7 @@ export default function Review() {
               Try again
             </button>
           </div>
-        </div>
-      </Layout>
-    );
-  }
-
-  const drops = queue?.drops ?? [];
-  const totalDropped = drops.reduce((n, d) => n + d.dropped, 0);
-  const nothingWaiting = (queue?.counts.proposals ?? 0) === 0 && (queue?.counts.quests ?? 0) === 0;
-
-  return (
-    <Layout>
-      <div className="max-w-4xl mx-auto px-4 py-10 space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <Inbox className="w-6 h-6" aria-hidden="true" />
-            Review
-          </h1>
-          <p className="text-sm text-muted-foreground mt-2 max-w-2xl">
-            What an outside service has proposed about this village. Nothing here is true yet. Read it,
-            change anything you want, and accept what the village agrees with. What you accept goes into
-            a draft you can preview and undo.
-          </p>
-        </div>
+        )}
 
         {/* A sweep that stopped inside this database. Its own card, because it
             is a different problem from a vendor that will not answer: the work
@@ -818,8 +863,9 @@ export default function Review() {
           <div className={card}>
             <h2 className="font-semibold text-foreground">Nothing waiting</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Roles, circles and quests an outside service proposes land here for you to read before they
-              exist. Nothing creates itself.
+              {readsProposals
+                ? "Roles, circles and quests an outside service proposes land here for you to read before they exist. Nothing creates itself."
+                : "Quests proposed for this village land here for you to read before they go on the board. Nothing creates itself."}
             </p>
           </div>
         )}
