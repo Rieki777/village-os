@@ -88,9 +88,18 @@ export type CapabilitySource =
   | "admin-override"
   | "denied by warning badge"
   | "role"
+  | "carried by a greater key"
   | "badge"
   | "stage"
   | "not granted";
+
+const CARRIES: Partial<Record<Capability, readonly Capability[]>> = {
+  "garden.plan": ["garden.tend"],
+};
+
+function carriedBy(held: readonly string[], cap: Capability): boolean {
+  return held.some((k) => (CARRIES[k as Capability] ?? []).includes(cap));
+}
 
 export function capabilityDecision(cap: any, ctx: any): any {
   const villageHolds = isVillageHeld(cap, ctx.villageHeld);
@@ -106,6 +115,7 @@ export function capabilityDecision(cap: any, ctx: any): any {
     return decided(false, "denied by warning badge");
   }
   if (ctx.roleCapabilities.includes(cap)) return decided(true, "role");
+  if (carriedBy(ctx.roleCapabilities, cap)) return decided(true, "carried by a greater key");
   if ((ctx.badgeCapabilities ?? []).includes(cap)) return decided(true, "badge");
   const unlockStage = ctx.stageUnlockOverrides?.[cap] ?? STAGE_UNLOCKS[cap];
   if (unlockStage && unlockStage !== "none") {

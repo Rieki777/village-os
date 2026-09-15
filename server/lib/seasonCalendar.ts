@@ -232,7 +232,7 @@ export function timeZoneRefusal(tz: unknown): string | null {
  *  season object, so existing data/season.json keeps working after deploy. */
 export function normalizeSeasonConfig(raw: any, at: Date = new Date()): SeasonConfig {
   const def = GAME_CONFIG.season;
-  if (raw && Array.isArray(raw.seasons) && raw.seasons.length > 0) {
+  if (raw && Array.isArray(raw.seasons) && raw.seasons.length > 0) { // an EMPTY list is the platform default's sentinel for "derive", handled at the bottom; every seat's term (0199) needs a season to end with
     return {
       seasons: raw.seasons.map((s: any, i: number) => ({
         id: s.id || `season-${i + 1}`,

@@ -36,7 +36,7 @@ import { dryRunProposal } from "../lib/proposalDryRun";
 import { changeSetSnapsToBoundary, elementsFor, type ChangesetDeps } from "../lib/changeset";
 import { CHANGE_SET_CAP } from "../lib/mechanics";
 import { stewardsSeated } from "../lib/stewardship";
-import { vetoHoursFrom } from "../../shared/governanceKinds";
+import { countdownSentence, vetoHoursFrom } from "../../shared/governanceKinds";
 
 type Deps = Pick<AppDeps, "authedUser" | "mayAct" | "getPool" | "members" | "firstName" | "notify">;
 
@@ -71,6 +71,10 @@ export function register(app: Express, deps: Deps): void {
       stewardsSeated: seated.length,
       vetoHours: vetoHoursFrom(numberVar("governance.veto_hours")),
       stewardCouncil: boolVar("governance.steward_council"),
+      // Rye, 2026-09-14: one countdown, the village's and the stewards' at once.
+      vetoLocked: row.vetoLocked,
+      lockedByConsent: row.lockedByConsent,
+      countdownSentence: countdownSentence(row.lockedByConsent ? 2 : row.vetoLocked ? 1 : 0),
       elements: await elementsFor(getPool(), req.params.id),
     });
   });

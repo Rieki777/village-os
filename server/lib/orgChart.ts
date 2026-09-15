@@ -870,6 +870,8 @@ export async function seatHolder(
     note?: string | null;
     seasonId?: string | null;
     termEndsAt?: Date | null;
+    /** 0199: true when the term is the season's end and moves with it. */
+    termFollowsSeason?: boolean;
     grantedBy?: string | null;
     /** Seat a software agent. Never combined with a `userId`. */
     isAgent?: boolean;
@@ -919,8 +921,8 @@ export async function seatHolder(
   try {
     await pool.query(
       `INSERT INTO org_role_assignments
-         (id, org_role_id, holder_kind, user_id, display_name, holder_key, focus, note, season_id, term_ends_at, granted_by, is_agent)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+         (id, org_role_id, holder_kind, user_id, display_name, holder_key, focus, note, season_id, term_ends_at, granted_by, is_agent, term_follows_season)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         assignmentId,
         orgRoleId,
@@ -934,6 +936,7 @@ export async function seatHolder(
         h.termEndsAt ?? null,
         h.grantedBy ?? null,
         isAgent ? 1 : 0,
+        h.termFollowsSeason ? 1 : 0,
       ],
     );
     return { ok: true, assignmentId };

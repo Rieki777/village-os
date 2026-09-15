@@ -238,7 +238,7 @@ export interface AppDeps {
   // work exists to shrink, and would leave server/index.ts and the route
   // module importing each other. Passing keeps the arrow pointing one way.
 
-  /** The stage a member has actually reached, given their consented quests. */
+  /** The stage a member has actually reached, given their counts. Nothing above Member without an admission: lib/admission.ts. */
   /**
    * PURE and synchronous, so a caller that already holds its values pays
    * nothing. `trainingDone` is the SERVER's record of completed modules and
@@ -284,8 +284,12 @@ export interface AppDeps {
    */
   questConsentRecipients(): Promise<string[]>;
 
-  /** The season banner payload. Extracted routes read `current` from it. */
-  seasonState(): { current: any };
+  /**
+   * The season banner payload. Extracted routes read `current` from it, and
+   * since 0199 the whole dated list and the zone too, because a seat's term is
+   * decided against them (shared/seatTerms.ts).
+   */
+  seasonState(): { current: any; seasons: any[]; timezone: string };
 
   /** The pattern the running season names, or null. Most villages: null. */
   currentPatternId(): string | null;

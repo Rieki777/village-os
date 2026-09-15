@@ -27,6 +27,8 @@ import {
   kindOfSet,
   kindOfSubject,
   landingFor,
+  consentWindowHours,
+  countdownSentence,
   lateVetoRefusal,
   timingOf,
   payoutWaitsForWindow,
@@ -108,6 +110,68 @@ describe("when a carried decision lands", () => {
     const l = landingFor({ closesAt: CLOSE, kind: "token_send", timing: "next_moon", vetoHours: 72, nextBoundaryAfter: farMoon });
     expect(l.executesAtClose).toBe(false);
     expect(l.landsAt?.toISOString()).toBe(farMoon().toISOString());
+  });
+
+  describe("every steward already said yes (Rye, 2026-09-14)", () => {
+    const base = { closesAt: CLOSE, kind: "game_change" as const, timing: "at_acceptance" as const, vetoHours: 72, nextBoundaryAfter: farMoon };
+
+    it("shortens only the veto term to the notice, keeps the two instants equal, and takes the veto away", () => {
+      const agreed = landingFor({ ...base, stewardConsent: true, consentNoticeHours: 24 });
+      const abstained = landingFor({ ...base, stewardConsent: false, consentNoticeHours: 24 });
+      expect(abstained.landsAt?.toISOString(), "today's instant, untouched").toBe(new Date(CLOSE.getTime() + 72 * HOUR).toISOString());
+      expect(agreed.landsAt?.toISOString()).toBe(new Date(CLOSE.getTime() + 24 * HOUR).toISOString());
+      expect(agreed.vetoClosesAt?.toISOString()).toBe(agreed.landsAt?.toISOString());
+      expect(agreed.vetoable).toBe(false);
+      expect(agreed.lockReason).toBe("steward_consent");
+      expect(abstained.vetoable).toBe(true);
+      expect(agreed.because).toContain("Every steward already said yes");
+    });
+
+    it("never moves a boundary that is later than the window", () => {
+      const moon = { ...base, timing: "next_moon" as const };
+      expect(landingFor({ ...moon, stewardConsent: true, consentNoticeHours: 24 }).landsAt?.toISOString())
+        .toBe(landingFor(moon).landsAt?.toISOString());
+    });
+
+    it("clamps a notice above the steward window to the window, and fails closed on anything unreadable", () => {
+      expect(consentWindowHours(500, 72)).toBe(72);
+      expect(consentWindowHours(0, 72)).toBe(0);
+      expect(consentWindowHours("12", 72)).toBe(12);
+      for (const bad of [undefined, null, "", "soon", -5, Number.NaN]) {
+        expect(consentWindowHours(bad, 72), String(bad)).toBe(72);
+      }
+      expect(landingFor({ ...base, stewardConsent: true, consentNoticeHours: 500 }).landsAt?.toISOString())
+        .toBe(new Date(CLOSE.getTime() + 72 * HOUR).toISOString());
+    });
+
+    it("gives a carve-out no faster clock, even when every steward agreed", () => {
+      const l = landingFor({ ...base, notVetoable: true, notVetoableReason: "veto_map", stewardConsent: true, consentNoticeHours: 0 });
+      expect(l.landsAt?.toISOString()).toBe(new Date(CLOSE.getTime() + 72 * HOUR).toISOString());
+      expect(l.lockReason).toBe("veto_map");
+    });
+
+    it("leaves a token send chosen at_acceptance on its close, where there is no window to shorten", () => {
+      const l = landingFor({ ...base, kind: "token_send", stewardConsent: true, consentNoticeHours: 24 });
+      expect(l.executesAtClose).toBe(true);
+      expect(l.landsAt).toBeNull();
+    });
+
+    it("shortens a payout big enough to wait, because that wait is the steward window", () => {
+      const l = landingFor({ ...base, kind: "token_send", payoutWaits: true, stewardConsent: true, consentNoticeHours: 24 });
+      expect(l.landsAt?.toISOString()).toBe(new Date(CLOSE.getTime() + 24 * HOUR).toISOString());
+    });
+
+    it("tells a member which of the three they are looking at", () => {
+      expect(countdownSentence(0)).toContain("can stop");
+      expect(countdownSentence(1)).toContain("No steward can stop");
+      expect(countdownSentence(2)).toContain("Every steward already said yes");
+    });
+
+    it("defaults the notice to a day and never to zero, because the countdown is the village's too", () => {
+      const def = VARIABLES_BY_KEY["governance.consent_notice_hours"];
+      expect(def?.default).toBe("24");
+      expect(def?.criticality).toBe("constitutional");
+    });
   });
 
   it("honours a village that gives its stewards longer than the floor", () => {
