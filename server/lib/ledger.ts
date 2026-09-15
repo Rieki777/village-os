@@ -1046,6 +1046,13 @@ export async function postTransferOn(
        * key-shape bug the caller has to hear about rather than a payment to
        * skip. `keys` percent-encodes case and colons for exactly this
        * reason; this is the net under every hand-written key as well.
+       *
+       * The read back LOCKS (`keyClashRows`, LOCK IN SHARE MODE), for the
+       * reason the paragraph above gives for the balance read: it used to be
+       * a plain SELECT, and in a caller-owned transaction whose snapshot
+       * predates the colliding commit it returned nothing, so a collision was
+       * reported as `{ ok: true, duplicate: true }`. Why shared and not
+       * exclusive is measured at the function.
        */
       const clash = await keyClashRows(conn, input.idempotencyKey);
       const stored = clash[0] ? String(clash[0].idempotency_key) : null;

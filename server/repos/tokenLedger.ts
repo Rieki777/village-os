@@ -297,10 +297,34 @@ export async function heldBeforeRows(
   return rows;
 }
 
-/** Whether a key already exists, for the collation clash check. */
+/**
+ * Whether a key already exists, for the collation clash check, and the ONE
+ * read in this block that takes a lock.
+ *
+ * Its caller (`postTransferOn`, server/lib/ledger.ts) reaches it after an
+ * INSERT failed on the unique index, inside a transaction it may not own. A
+ * plain SELECT there is a consistent read: under REPEATABLE READ it answers
+ * from the snapshot the transaction took at its first plain read, so a
+ * colliding key committed after that moment is invisible, `stored` comes back
+ * null, and the member who was never paid is reported as a duplicate.
+ *
+ * `LOCK IN SHARE MODE` and not `FOR UPDATE`, measured on MariaDB 12.3.2
+ * against a key committed after the reader's snapshot:
+ *
+ *   plain SELECT          misses it, snapshot isolation on or off
+ *   LOCK IN SHARE MODE    returns it, snapshot isolation on or off
+ *   FOR UPDATE            returns it with snapshot isolation off, and raises
+ *                         ER_CHECKREAD with MariaDB's default of on
+ *
+ * and two transactions replaying the same key at once: both INSERTs already
+ * hold a shared lock on the duplicate record, so `FOR UPDATE` upgrades and
+ * deadlocks one of them, while the shared read returns both. MySQL 8 accepts
+ * `LOCK IN SHARE MODE` as its older spelling of `FOR SHARE`, and a locking
+ * read there always returns the latest committed row.
+ */
 export async function keyClashRows(conn: Pool | PoolConnection, key: string): Promise<RowDataPacket[]> {
   const [rows] = await conn.query<RowDataPacket[]>(
-    "SELECT idempotency_key FROM token_ledger WHERE idempotency_key = ? LIMIT 1",
+    "SELECT idempotency_key FROM token_ledger WHERE idempotency_key = ? LIMIT 1 LOCK IN SHARE MODE",
     [key],
   );
   return rows;
