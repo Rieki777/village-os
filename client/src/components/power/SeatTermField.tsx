@@ -20,7 +20,7 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { useSeason } from "@/lib/gameApi";
 import type { Capability } from "@shared/capabilities";
-import { pickerBounds, previewSeatTerm } from "./seatTermPreview";
+import { pickerBounds, previewSeatTerm, voteStartsAt } from "./seatTermPreview";
 
 const STEWARD_VETO: Capability = "steward.veto";
 
@@ -55,6 +55,7 @@ export default function SeatTermField({
   inputId,
   describedBy,
   now,
+  byVote = false,
 }: {
   /** A civil date, YYYY-MM-DD, or empty for "with the season". */
   value: string;
@@ -69,13 +70,20 @@ export default function SeatTermField({
   describedBy?: string;
   /** The clock, for tests. */
   now?: Date;
+  /**
+   * True on a form that OPENS A SEAT VOTE. The seat starts when the vote lands,
+   * days or weeks after it closes, so the term is measured from the landing the
+   * season payload forecasts. Every other form seats somebody now.
+   */
+  byVote?: boolean;
 }) {
   const season = useSeason();
   const autoId = useId();
   const id = inputId ?? autoId;
   const lineId = `${id}-term`;
-  const bounds = season ? pickerBounds(season, capAtSeasonEnd) : {};
-  const preview = season ? previewSeatTerm(season, { requestedEndsOn: value, capAtSeasonEnd, now }) : null;
+  const starts = season ? voteStartsAt(season, byVote) : null;
+  const bounds = season ? pickerBounds(season, capAtSeasonEnd, starts) : {};
+  const preview = season ? previewSeatTerm(season, { requestedEndsOn: value, capAtSeasonEnd, now, startsNoEarlierThan: starts }) : null;
 
   return (
     <div data-seat-term>
