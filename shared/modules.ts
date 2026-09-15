@@ -991,7 +991,6 @@ export const MODULES: ModuleDef[] = [
       "governance.vote_days",
       "governance.consent_window_days",
       "governance.default_method",
-      "membership.vouch_threshold",
     ],
     apiPrefixes: ["/api/governance", "/api/admin/governance"],
   },

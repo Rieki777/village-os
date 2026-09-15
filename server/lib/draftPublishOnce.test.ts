@@ -40,6 +40,7 @@ import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 import mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { addChange, createDraft, listDrafts, publishDraft, revertDraft } from "./orgDrafts";
+import type { SeatCalendar } from "../../shared/seatTerms";
 
 const configured = testDbConfigured();
 let db: TestDb;
@@ -167,6 +168,17 @@ describe.skipIf(!configured)("a seating written by a draft uses the same key as 
   /** A name whose slug the two implementations disagreed about. */
   const TRAILING_SPACE = "Alex ";
 
+  /**
+   * A calendar with a season running. A seating carries a term (0199), and a
+   * publish that seats anybody without the village calendar is refused. No
+   * change here asks for a date, so every seat ends with this season.
+   */
+  const CALENDAR: SeatCalendar = {
+    seasons: [{ id: "season-now", startsOn: "2020-01-01", endsOn: "2099-01-01" }],
+    currentSeasonId: "season-now",
+    timezone: "UTC",
+  };
+
   async function draftSeating(name: string) {
     await pool.query("INSERT INTO org_roles (id, name, seats, active) VALUES ('keeper', 'Water Keeper', 2, 1)"); // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
     const made = await createDraft(pool, { title: "Seat Alex", createdBy: "u-steward", sourceKind: "human", openCap: 99 });
@@ -181,7 +193,7 @@ describe.skipIf(!configured)("a seating written by a draft uses the same key as 
     // unique index on the active holder key could not see they were one
     // person, so the same human could be seated twice in one seat.
     const id = await draftSeating(TRAILING_SPACE);
-    expect((await publishDraft(pool, id, "u-steward")).ok).toBe(true);
+    expect((await publishDraft(pool, id, "u-steward", null, CALENDAR)).ok).toBe(true);
     const [[row]] = await pool.query<any[]>("SELECT holder_key FROM org_role_assignments WHERE org_role_id = 'keeper'"); // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
     expect(row.holder_key).toBe("doc:alex");
   });
@@ -193,7 +205,7 @@ describe.skipIf(!configured)("a seating written by a draft uses the same key as 
     const made = await createDraft(pool, { title: "Seat nobody", createdBy: "u-steward", sourceKind: "human", openCap: 99 });
     if (!made.ok) throw new Error(made.error);
     await addChange(pool, made.id, { op: "seat_holder", orgRoleId: "keeper", payload: {} });
-    const r = await publishDraft(pool, made.id, "u-steward");
+    const r = await publishDraft(pool, made.id, "u-steward", null, CALENDAR);
     expect(r.ok).toBe(false);
     expect(!r.ok && r.error).toContain("name");
   });
@@ -213,7 +225,7 @@ describe.skipIf(!configured)("a seating written by a draft uses the same key as 
     const made = await createDraft(pool, { title: "Seat Bo", createdBy: "u-steward", sourceKind: "human", openCap: 99 });
     if (!made.ok) throw new Error(made.error);
     await addChange(pool, made.id, { op: "seat_holder", orgRoleId: "keeper", payload: { userId: "u-bo", displayName: "Bo" } });
-    const r = await publishDraft(pool, made.id, "u-steward");
+    const r = await publishDraft(pool, made.id, "u-steward", null, CALENDAR);
     expect(r.ok, !r.ok ? r.error : "").toBe(true);
     expect(r.ok && r.seated).toHaveLength(1);
     const st = (r as any).seated[0];
@@ -228,17 +240,43 @@ describe.skipIf(!configured)("a seating written by a draft uses the same key as 
   it("reports NO seating for a documented holder, who has no account", async () => {
     // The same rule the direct route follows: only a member can be told.
     const id = await draftSeating("Bo Reyes");
-    const r = await publishDraft(pool, id, "u-steward");
+    const r = await publishDraft(pool, id, "u-steward", null, CALENDAR);
     expect(r.ok && r.seated).toHaveLength(0);
   });
 
   it("reverts that seating, which needs the key to match on the way back", async () => {
     const id = await draftSeating(TRAILING_SPACE);
-    await publishDraft(pool, id, "u-steward");
+    await publishDraft(pool, id, "u-steward", null, CALENDAR);
     expect((await revertDraft(pool, id)).ok).toBe(true);
     const [[live]] = await pool.query<any[]>( // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
       "SELECT COUNT(*) AS n FROM org_role_assignments WHERE org_role_id = 'keeper' AND ended_at IS NULL",
     );
     expect(Number(live.n)).toBe(0);
+  });
+
+  it("refuses to seat anybody without the village calendar, and says so (0199)", async () => {
+    // Every seat has a term, decided at publish against the calendar as it
+    // stands then. With no calendar there is no term to give, so the whole
+    // publish is refused in words and nobody is seated.
+    const id = await draftSeating("Bo Reyes");
+    const r = await publishDraft(pool, id, "u-steward", null, null);
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.error).toContain("calendar");
+    const [[n]] = await pool.query<any[]>( // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
+      "SELECT COUNT(*) AS n FROM org_role_assignments WHERE org_role_id = ?", ["keeper"],
+    );
+    expect(Number(n.n)).toBe(0);
+  });
+
+  it("gives a draft seating the term its season gives it, through seatHolder", async () => {
+    const id = await draftSeating("Bo Reyes");
+    const r = await publishDraft(pool, id, "u-steward", null, CALENDAR);
+    expect(r.ok, !r.ok ? r.error : "").toBe(true);
+    const [[row]] = await pool.query<any[]>( // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
+      "SELECT season_id, term_ends_at, term_follows_season FROM org_role_assignments WHERE org_role_id = ?", ["keeper"],
+    );
+    expect(row.season_id).toBe("season-now");
+    expect(Number(row.term_follows_season)).toBe(1);
+    expect(row.term_ends_at).toBeTruthy();
   });
 });

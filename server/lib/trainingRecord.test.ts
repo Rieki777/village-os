@@ -17,6 +17,7 @@ import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import {
   completionsFor,
   completionsForMany,
+  gatingModuleIds,
   recordCompletion,
   serverOwnedJourneyRefusal,
   trainingIsComplete,
@@ -56,14 +57,19 @@ describe("what completion means, with no database", () => {
     expect(trainingIsComplete(["a"], ["a", "b-retired"])).toBe(true);
   });
 
-  it("answers FALSE for a village with no modules, which is the safe direction", () => {
+  it("answers TRUE when the village requires no modules, so everybody skips the rung (Rye, 2026-09-14)", () => {
     /*
-     * "There is nothing to complete" must not read as "everybody has completed
-     * everything", or emptying the catalogue would hand the rung to the whole
-     * village at once. The old code had this shape and it is kept on purpose.
+     * Rye, 2026-09-14, overruling the earlier shape: "if there's no required
+     * modules in training, then everyone skips past them." This test used to
+     * assert the opposite. On main every module counts as required, so an
+     * empty catalogue is an empty required set, and a member with stray
+     * completions for retired modules skips it the same way.
      */
-    expect(trainingIsComplete([], [])).toBe(false);
-    expect(trainingIsComplete([], ["a"])).toBe(false);
+    expect(trainingIsComplete([], [])).toBe(true);
+    expect(trainingIsComplete([], ["a-retired"])).toBe(true);
+    // The ruling is about an EMPTY required set only. One required module
+    // still has to be done, which is what keeps the exploit test below honest.
+    expect(trainingIsComplete(["a"], [])).toBe(false);
   });
 
   it("refuses the old door for training and leaves every other journey alone", () => {
@@ -148,3 +154,32 @@ describe.skipIf(!configured)("the record the server keeps", () => {
     expect(trainingIsComplete(publiclyKnownIds, await completionsFor(pool, "u-attacker"))).toBe(true);
   });
 });
+
+describe("gatingModuleIds", () => {
+  it("counts a module with no flag as required, so nobody's rung moves on the deploy", () => {
+    // Migration 0197 defaults the column to 1, so every row that already exists
+    // is mandatory. Reading it as `=== true` would demote every member of every
+    // village on the release that shipped the column.
+    expect(gatingModuleIds([{ id: "a" }, { id: "b" }])).toEqual(["a", "b"]);
+  });
+
+  it("drops the ones a village marked optional", () => {
+    expect(gatingModuleIds([{ id: "a", mandatory: true }, { id: "b", mandatory: false }])).toEqual(["a"]);
+  });
+
+  it("answers empty when everything is optional, and an empty required set lets everyone past (Rye, 2026-09-14)", () => {
+    // Rye, 2026-09-14: "if there's no required modules in training, then everyone
+    // skips past them." "This village gates nothing" is still a decision somebody
+    // makes in Admin and never one a deploy makes: 0197 defaults every existing
+    // module to mandatory, so no member is promoted by the migration landing.
+    const ids = gatingModuleIds([{ id: "a", mandatory: false }]);
+    expect(ids).toEqual([]);
+    expect(trainingIsComplete(ids, [])).toBe(true);
+    expect(gatingModuleIds([{ id: "a" }]), "a module with no flag stays required").toEqual(["a"]);
+  });
+
+  it("lets a member cross once the required ones are done, optional ones untouched", () => {
+    const mods = [{ id: "a" }, { id: "b", mandatory: false }];
+    expect(trainingIsComplete(gatingModuleIds(mods), ["a"])).toBe(true);
+  });
+})
