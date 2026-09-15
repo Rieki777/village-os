@@ -40,9 +40,12 @@ export function register(app: Express, deps: Deps): void {
     // Russian, Japanese or Arabic could not create a circle AT ALL, and the
     // admin form offers no slug field to work around it. Fall back to a
     // generated id, and cap at the varchar(64) the PK actually is (names
-    // allow 120, so a long ASCII name overflowed it too).
+    // allow 120, so a long ASCII name overflowed it too). The ends are trimmed by
+    // split and join: `/^-+|-+$/` backtracks quadratically on a long run of
+    // hyphens (CodeQL js/polynomial-redos), and after the first replace no two
+    // hyphens touch, so dropping the empty ends gives the same id.
     const slug =
-      String(id ?? name ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64) ||
+      String(id ?? name ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").split("-").filter(Boolean).join("-").slice(0, 64) ||
       `circle-${Date.now().toString(36)}`;
     if (!String(name ?? "").trim()) return res.status(400).json({ error: "A name is required" });
     if (circlesRepo.all().some((c: any) => c.id === slug)) return res.status(409).json({ error: "That circle already exists" });
