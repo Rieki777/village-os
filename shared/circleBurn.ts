@@ -69,6 +69,17 @@ export interface WindowRef {
   id: string;
   startsAt: string;
   endsAt: string;
+  /**
+   * FALSE WHEN `endsAt` IS A HORIZON THIS CODE DERIVED, NOT A DATE ANYBODY SET.
+   *
+   * An open-ended season has no end, so `seasonWindowAt` hands the projection
+   * a stand-in one civil year after the season began. That stand-in is a
+   * denominator and never a boundary, and it can already be in the past for a
+   * season that has run longer than a year. `seasonWindowAt` always sets this;
+   * a cycle's end is always a real boundary. Absent reads as a real end, so a
+   * window built by hand keeps the meaning it always had.
+   */
+  endsDeclared?: boolean;
 }
 
 /**
@@ -368,7 +379,18 @@ export function readCap(input: RateInput): CapReading {
 
   const startMs = Date.parse(window.startsAt);
   const endMs = Date.parse(window.endsAt);
-  const elapsedMs = Math.min(atMs, endMs) - startMs;
+  /*
+   * A DERIVED HORIZON DOES NOT STOP THE CLOCK. The spent side is summed up to
+   * `at` whenever the end was not declared (`readOne` in server/lib/circleBurn.ts
+   * does the same), so the elapsed time has to run to `at` as well, or a
+   * season open longer than a year divides spend up to today by time up to a
+   * stand-in date that has already passed.
+   */
+  const stopMs = window.endsDeclared === false ? atMs : Math.min(atMs, endMs);
+  const elapsedMs = stopMs - startMs;
+  // And the span a projection runs over reaches `at` too, or a horizon already
+  // passed projects less than the circle has already spent.
+  const spanEndMs = window.endsDeclared === false ? Math.max(endMs, atMs) : endMs;
 
   /*
    * THE RATE IS UNKNOWN, AND UNKNOWN IS NOT ZERO.
@@ -381,12 +403,12 @@ export function readCap(input: RateInput): CapReading {
   const measurable = spent > 0 && elapsedMs > 0;
   const perDay = measurable ? spent / (elapsedMs / DAY_MS) : null;
   const projected =
-    perDay === null ? null : Math.round(perDay * ((endMs - startMs) / DAY_MS));
+    perDay === null ? null : Math.round(perDay * ((spanEndMs - startMs) / DAY_MS));
 
   let exhaustsAt: string | null = null;
   if (perDay !== null && perDay > 0 && spent < cap) {
     const hitMs = startMs + (cap / perDay) * DAY_MS;
-    if (hitMs < endMs) exhaustsAt = new Date(Math.round(hitMs)).toISOString();
+    if (hitMs < spanEndMs) exhaustsAt = new Date(Math.round(hitMs)).toISOString();
   }
 
   const state: CapState = spent >= cap ? "exhausted" : spent === 0 ? "unspent" : "burning";
@@ -621,7 +643,13 @@ function meteredSentence(reading: MeteredReading, words: BurnWords): string {
   const cap = words.amount(bound.capMinor ?? 0, reading.unit);
 
   if (bound.state === "exhausted") {
-    const until = bound.window ? shortInstant(bound.window.endsAt) : "the window turns";
+    // An open-ended season's end is a derived horizon, and naming it here would
+    // promise room back on a date nobody set (and that may already have passed).
+    const until = !bound.window
+      ? "the window turns"
+      : bound.window.endsDeclared === false
+        ? "the next season begins"
+        : shortInstant(bound.window.endsAt);
     return (
       `${name} has used all ${cap} of its ${scope} room. It can issue nothing more until ` +
       `${until}.`

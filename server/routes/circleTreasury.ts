@@ -31,13 +31,16 @@
  *     (action: TreasuryAction, circleId: string) => Promise<string | null> | string | null
  *
  * Null means allowed; a string is the refusal a person reads. It is built
- * today from the declare gate the budget writes beside it already use, which
- * means admin, `org.declare`, or the circle's own speaking seat, with the
- * break-glass hatch carried through. Setting a circle's caps and minting its
- * treasury are the same decision about the same circle's money, so shipping
- * them under different rights would be inventing a permission model in a lane
- * that was told not to. When the badge lands, `permitFor` is the whole change
- * and nothing in `server/lib/circleTreasury.ts` moves.
+ * from the declare gate the budget writes beside it already use, with the
+ * break-glass hatch carried through, and `permitFor` holds a CONSERVATIVE
+ * DEFAULT on top of that gate until the founder rules: minting takes the
+ * village-level right, a mint above the hand mint's co-sign dial is refused,
+ * and a spend never pays the person asking. This paragraph once said caps and
+ * minting shipped under one right on purpose; the review of #243 measured a
+ * circle's speaking seat minting to itself through exactly that, so the rules
+ * and the reasons now sit beside `permitFor`. When a badge lands or a rule is
+ * loosened, `permitFor` is the whole change and nothing in
+ * `server/lib/circleTreasury.ts` moves.
  *
  * ── SIGNED IN ONLY, AND THE READ IS TIGHTER THAN THE DECLARATION ───────────
  *
@@ -98,8 +101,20 @@ import { NO_COMMITMENT_STORE, noCommitmentOnRecord } from "./circleBonusGate";
 import { BLIND_SPOT } from "../../shared/circleBonusGate";
 import { numberVar } from "../lib/variables";
 import { BONUS_PCT_KEY } from "../../shared/circleBonus";
+import { isUnclaimable } from "../lib/oauthAccounts";
 
-type Deps = Pick<AppDeps, "getPool" | "authedUser"> & {
+/** The hand mint's co-sign dial, read here so treasury funding cannot step around it. */
+const COSIGN_OVER_KEY = "ledger.admin_mint_cosign_over";
+
+/** What a request asks a treasury door for, so the permit can weigh it. */
+interface TreasuryAsk {
+  /** Minor units of `tokenSlug`. */
+  amountMinor?: number;
+  tokenSlug?: string;
+  toUserId?: string;
+}
+
+type Deps = Pick<AppDeps, "getPool" | "authedUser" | "members"> & {
   /** The village's circles, for names and status. Read, never written here. */
   circlesRepo: { all(): unknown[] };
   /** The dated season calendar and the zone it turns in. */
@@ -125,17 +140,95 @@ export function register(app: Express, deps: Deps): void {
   const { getPool, authedUser, circlesRepo, seasonState } = deps;
 
   /**
-   * The permit for one request. `action` is unused today ON PURPOSE: setting a
-   * circle's caps and minting its treasury are the same decision about the
-   * same circle's money, so both ship under the right that already sets a cap.
-   * A ruling that separates funding from spending branches HERE.
+   * THE CONSERVATIVE DEFAULT FOR WHO MOVES A CIRCLE'S MONEY. ONE PLACE.
+   *
+   * The founder has not ruled on this and may loosen any part of it. When he
+   * does, this function is the whole change: no handler below and nothing in
+   * server/lib/circleTreasury.ts holds a copy of any rule here.
+   *
+   * `ask` is what the request wants, read by the handler before it asks, so
+   * the permit can weigh the amount and the payee as well as the action.
+   *
+   *   1. FUNDING IS ISSUANCE, so it takes the VILLAGE-level right: an
+   *      administrator (through `mayAct`, break-glass included, which is how
+   *      the declare context reports one) or `org.declare`. That is
+   *      `mayDeclare("village", ...)`, whose first two doors are exactly
+   *      those. A circle's own speaking seat may not fund. The review of #243
+   *      measured why: one person in that seat could mint into their circle
+   *      up to the village cap and then spend the new tokens to themselves,
+   *      with nobody else involved. A paid bonus mints into the same account
+   *      and asks this permit for "fund", so it takes the same right.
+   *   2. FUNDING ABOVE `ledger.admin_mint_cosign_over` IS REFUSED. A hand mint
+   *      above that dial waits for a second steward (`admin_mint_requests`,
+   *      0106). Treasury funding has no queue, so without this an admin could
+   *      fund a circle over the threshold and spend it to one member, which is
+   *      the co-sign skipped. The queue is NOT reused: its rows name a member
+   *      (`to_user_id` joins users.id) and its approval posts to
+   *      `memberAccount`, so a circle target needs a column, and a column is a
+   *      migration. The dial is WHOLE tokens and this route takes MINOR units,
+   *      so the dial is scaled up to meet the ask. The hand mint's warning
+   *      against scaling is about a route that takes whole tokens; this one
+   *      takes ledger amounts. An ask the permit cannot weigh is refused.
+   *   3. A SPEND NEVER PAYS THE PERSON ASKING, whoever they are: the flat rule
+   *      the hand mint keeps against a self-grant. An actor the context cannot
+   *      name is refused, because a check that silently does not run is worse
+   *      than none.
+   *   4. Everything else (setting a mode, spending to somebody else, returning
+   *      a balance) keeps the right that sets a cap: admin, `org.declare`, or
+   *      this circle's speaking seat.
+   *
+   * Whether a payee is a real member is deliberately NOT here. That is not a
+   * question of who may act, and `spendTreasury` refuses an unknown id for
+   * every caller.
    */
-  const permitFor = async (req: Request): Promise<TreasuryPermit> => {
+  const permitFor = async (req: Request, ask: TreasuryAsk = {}): Promise<TreasuryPermit> => {
     const ctx = await deps.declareCtxFor(req);
-    return (_action: TreasuryAction, circleId: string): string | null =>
-      deps.mayDeclare(circleId, ctx)
-        ? null
-        : "Moving a circle's money takes admin, org.declare, or this circle's speaking seat";
+    return (action: TreasuryAction, circleId: string): string | null => {
+      if (action === "fund") {
+        if (!deps.mayDeclare("village", ctx)) {
+          return (
+            "Minting into a circle's treasury takes admin or org.declare. A circle's own " +
+            "speaking seat can spend what its treasury holds and cannot mint into it"
+          );
+        }
+        const over = numberVar(COSIGN_OVER_KEY);
+        if (over > 0) {
+          const slug = String(ask.tokenSlug ?? "");
+          const asked = Math.trunc(Number(ask.amountMinor));
+          if (!slug || !Number.isFinite(asked)) {
+            return "This funding did not say how much, so it cannot be weighed against the co-sign threshold";
+          }
+          if (asked > toLedgerUnits(slug, over)) {
+            return (
+              `Above ${over} ${slug} this needs a second steward's co-sign, which treasury ` +
+              "funding does not have yet, so nothing was minted"
+            );
+          }
+        }
+        return null;
+      }
+      if (!deps.mayDeclare(circleId, ctx)) {
+        return "Moving a circle's money takes admin, org.declare, or this circle's speaking seat";
+      }
+      if (action === "spend") {
+        if (!ctx.userId) return "A spend has to name who is asking for it, and this request names nobody";
+        if (String(ask.toUserId ?? "").trim() === ctx.userId) {
+          return "A treasury spend cannot pay the person asking for it. Ask another steward to record this payment";
+        }
+      }
+      return null;
+    };
+  };
+
+  /**
+   * Whether an id names a member this village can pay. A tombstone keeps its
+   * row with an `@anonymized.invalid` address and an example row is deleted at
+   * retirement, so paying either strands the tokens as surely as a typo does.
+   * `isUnclaimable` is the one definition of both, and it is reused here.
+   */
+  const memberExists = async (userId: string): Promise<boolean> => {
+    const m = await deps.members.byId(String(userId));
+    return !!m && !isUnclaimable(m as any);
   };
 
   const circleName = (id: string): string => {
@@ -217,7 +310,7 @@ export function register(app: Express, deps: Deps): void {
     const asked = String(req.body.mode) as BudgetMode;
 
     const { cycle, season } = windowsNow(at);
-    const schedule = modeChangeSchedule(season, cycle);
+    const schedule = modeChangeSchedule(season, cycle, at);
     const landed = await queueModeChange(
       getPool(), budget.id, asked, new Date(schedule.from), user.id ?? null,
     );
@@ -272,7 +365,9 @@ export function register(app: Express, deps: Deps): void {
       return res.status(400).json({ error: "A reason is required. Minting into a treasury has to explain itself" });
     }
 
-    const permit = await permitFor(req);
+    const permit = await permitFor(req, { amountMinor, tokenSlug: token.slug });
+    const refused = await permit("fund", budget.circleId);
+    if (refused) return res.status(403).json({ error: refused });
     const result = await fundTreasury(getPool(), {
       circleId: budget.circleId,
       circleName: circleName(budget.circleId),
@@ -343,17 +438,21 @@ export function register(app: Express, deps: Deps): void {
       return res.status(400).json({ error: "amountMinor is a positive whole number of minor units" });
     }
 
-    const permit = await permitFor(req);
+    const toUserId = String(req.body?.toUserId ?? "");
+    const permit = await permitFor(req, { amountMinor, tokenSlug: token.slug, toUserId });
+    const refused = await permit("spend", budget.circleId);
+    if (refused) return res.status(403).json({ error: refused });
     const result = await spendTreasury(getPool(), {
       circleId: budget.circleId,
       circleStatus: statusOf(budget.circleId),
       tokenSlug: token.slug,
-      toUserId: String(req.body?.toUserId ?? ""),
+      toUserId,
       amountMinor,
       actorId: user.id ?? null,
       note: String(req.body?.note ?? "").trim(),
       idempotencyKey: movementKey("spend", budget.id, req),
       permit,
+      memberExists,
     });
     if (!result.ok) {
       const error = String(result.error ?? "");
@@ -570,7 +669,8 @@ export function register(app: Express, deps: Deps): void {
       return res.status(409).json({ error: NO_COMMITMENT_STORE });
     }
 
-    const permit = await permitFor(req);
+    // A bonus mints into the circle's account, so it is weighed like a funding.
+    const permit = await permitFor(req, { amountMinor: standing.outcome.award.amountMinor, tokenSlug: token.slug });
     const result = await payCircleBonus(getPool(), {
       circleId: budget.circleId,
       circleName: circleName(budget.circleId),
@@ -747,3 +847,10 @@ export { toLedgerUnits };
  * a reader of `server/index.ts` has one file to open rather than two.
  */
 export { onCircleStatusChange, treasuryFacts } from "../lib/circleTreasury";
+
+/**
+ * AND THE TWO REFUSALS THE MONOLITH'S DELETE ROUTES ASK BEFORE THEY DELETE.
+ * A budget or a circle is what a treasury hangs off, so deleting either while
+ * the account holds tokens strands them. The reasoning is beside the functions.
+ */
+export { budgetDeleteProblem, circleDeleteProblem } from "../lib/circleTreasury";

@@ -130,7 +130,7 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `admin_mint:<slug>:<body>` | `server/index.ts` |
 | `admin_mint:req:<id>` | `server/index.ts` |
 | `circle_treasury:<kind>:<budgetId.slice(0, 40)>:<tail>` | `server/routes/circleTreasury.ts` |
-| `circle_treasury:dormant:<circleId>:<tokenSlug>:<day>:<balanceMinor>` | `server/lib/circleTreasury.ts` |
+| `circle_treasury:dormant:<circleId.slice(0, 40)>:<tokenSlug>:<day>:<balanceMinor>:<accountRows>` | `server/lib/circleTreasury.ts` |
 | `circle-bonus:<recordId>:<unit>` | `server/lib/circleBonus.ts` |
 | `comp-<Date.now()>-<Math.random().toString(36).slice(2, 6)>` | `server/routes/stays.ts` |
 | `exit:<exitId>:convert-credit:<token>` | `server/lib/exit.ts` |

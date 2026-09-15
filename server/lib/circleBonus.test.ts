@@ -266,6 +266,9 @@ describe.skipIf(!configured)("the rollover, and the bonus that follows from it",
       circleId: treasuryCircle, circleStatus: "active", tokenSlug: TOKEN,
       toUserId: "usr-paid-by-treasury", amountMinor: 250, actorId: null, note: "work",
       idempotencyKey: key("tspend"), permit: ALLOW,
+      // A fixture payee with no users row: this file is about the rollover, and
+      // the real member lookup is driven in server/circleTreasury.e2e.test.ts.
+      memberExists: () => true,
     });
     expect(paidOut.ok, paidOut.error).toBe(true);
 

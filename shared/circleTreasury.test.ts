@@ -31,7 +31,11 @@ const SEASON: PeriodBounds = {
   id: "rooting-2026",
   startsAt: new Date(Date.UTC(2026, 8, 1)).toISOString(),
   endsAt: new Date(SEASON_END).toISOString(),
+  endsDeclared: true,
 };
+
+/** The instant every schedule below is asked at: inside SEASON and CYCLE. */
+const ASKED = new Date(Date.UTC(2026, 8, 25));
 
 const CYCLE: PeriodBounds = {
   id: "lunar-000332",
@@ -85,13 +89,49 @@ describe("a mode change lands at the boundary and never before it", () => {
 
 describe("which boundary a change is queued for", () => {
   it("takes the season's end when the village has one", () => {
-    const s = modeChangeSchedule(SEASON, CYCLE);
+    const s = modeChangeSchedule(SEASON, CYCLE, ASKED);
     expect(s.boundary).toBe("season");
     expect(s.from).toBe(SEASON.endsAt);
   });
 
+  /*
+   * B4 ON #243. An open-ended season carries a DERIVED horizon one civil year
+   * after it began (`seasonWindowAt`), and for a season older than a year that
+   * horizon is already behind the instant. The schedule used to take any
+   * parseable end, so the change was "queued" in the past, `modeAt` answered
+   * the new mode at once, and the sentence named a boundary that had passed.
+   */
+  it("NEVER QUEUES A CHANGE AT A DERIVED HORIZON THAT HAS ALREADY PASSED", () => {
+    const founding: PeriodBounds = {
+      id: "founding",
+      startsAt: new Date(Date.UTC(2025, 0, 1)).toISOString(),
+      endsAt: new Date(Date.UTC(2026, 0, 1)).toISOString(),
+      endsDeclared: false,
+    };
+    const s = modeChangeSchedule(founding, CYCLE, ASKED);
+    expect(s.boundary).toBe("cycle");
+    expect(s.from).toBe(CYCLE.endsAt);
+    expect(Date.parse(s.from), "a queued change lands ahead of the instant it was queued at").toBeGreaterThan(ASKED.getTime());
+    const queued: PendingModeChange = { mode: "treasury", from: s.from, by: "usr-steward", at: ASKED.toISOString() };
+    expect(modeAt("cap", queued, ASKED), "the circle finishes this period on the model it started with").toBe("cap");
+    expect(modeChangeSentence("The Kitchen Circle", "cap", "treasury", s)).toContain("next cycle boundary");
+  });
+
+  it("treats a derived horizon still ahead of the instant as no boundary either", () => {
+    const young: PeriodBounds = { ...SEASON, endsDeclared: false };
+    expect(modeChangeSchedule(young, CYCLE, ASKED).boundary).toBe("cycle");
+    // And a window that says nothing about its end is not trusted as a season boundary.
+    const unflagged: PeriodBounds = { id: SEASON.id, startsAt: SEASON.startsAt, endsAt: SEASON.endsAt };
+    expect(modeChangeSchedule(unflagged, CYCLE, ASKED).boundary).toBe("cycle");
+  });
+
+  it("uses the cycle when even a declared season end is not after the instant", () => {
+    const at = new Date(SEASON_END);
+    expect(modeChangeSchedule(SEASON, CYCLE, at).boundary).toBe("cycle");
+  });
+
   it("falls back to the cycle when no season covers the instant, and SAYS SO", () => {
-    const s = modeChangeSchedule(null, CYCLE);
+    const s = modeChangeSchedule(null, CYCLE, ASKED);
     expect(s.boundary).toBe("cycle");
     expect(s.from).toBe(CYCLE.endsAt);
     // The sentence must not promise a season it is not waiting for.
@@ -101,7 +141,7 @@ describe("which boundary a change is queued for", () => {
   });
 
   it("names the season in the sentence when that is what it waited for", () => {
-    const said = modeChangeSentence("The Kitchen Circle", "cap", "treasury", modeChangeSchedule(SEASON, CYCLE));
+    const said = modeChangeSentence("The Kitchen Circle", "cap", "treasury", modeChangeSchedule(SEASON, CYCLE, ASKED));
     expect(said).toContain("start of the next season");
     expect(said).toContain("finishes this period on its spending cap");
     expect(said).toContain("2026-12-01");
@@ -109,7 +149,7 @@ describe("which boundary a change is queued for", () => {
 
   it("ignores a season whose end is unreadable and uses the cycle", () => {
     const broken: PeriodBounds = { ...SEASON, endsAt: "whenever" };
-    expect(modeChangeSchedule(broken, CYCLE).boundary).toBe("cycle");
+    expect(modeChangeSchedule(broken, CYCLE, ASKED).boundary).toBe("cycle");
   });
 });
 

@@ -66,7 +66,7 @@ import { register as registerHoldersRoutes } from "./routes/holders";
 import { register as registerErasureQueueRoutes } from "./routes/erasureQueue";
 import { register as registerCircleBurnRoutes } from "./routes/circleBurn";
 import { register as registerCircleBonusGateRoutes } from "./routes/circleBonusGate";
-import { onCircleStatusChange, treasuryFacts, register as registerCircleTreasuryRoutes } from "./routes/circleTreasury";
+import { budgetDeleteProblem, circleDeleteProblem, onCircleStatusChange, treasuryFacts, register as registerCircleTreasuryRoutes } from "./routes/circleTreasury";
 import { register as registerGovernanceWeightRoutes } from "./routes/governanceWeights";
 import { register as registerGovernanceWizardRoutes } from "./routes/governanceWizard";
 import { register as registerDelegationRoutes } from "./routes/delegation";
@@ -10375,6 +10375,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     if (stillHere) {
       return res.status(409).json({ error: `${stillHere} seat(s) still orbit this circle, reassign them first` });
     }
+    const stranded = await circleDeleteProblem(getPool(), String(req.params.id), await listBudgets(getPool()), circlesRepo);
+    if (stranded) return res.status(409).json({ error: stranded });
     const remaining = circlesRepo.all().filter((c: any) => c.id !== req.params.id);
     if (remaining.length === circlesRepo.all().length) return res.status(404).json({ error: "Not found" });
     await circlesRepo.replaceAll(remaining);
@@ -15479,11 +15481,13 @@ Send an empty drafts array when you are still listening. A role payload is {name
     // 0103: ACT. A DELETE carries no body, so the hatch is the header.
     const { ctx: actCtx, verdict } = await resourcesDeclareAct(req, declareCtx);
     if (!mayDeclareResources(budget.circleId, actCtx)) return refuseDeclare(res, verdict);
+    const stranded = await budgetDeleteProblem(getPool(), budget, budgets, circlesRepo);
+    if (stranded) return res.status(409).json({ error: stranded });
     await deleteBudget(getPool(), budget.id, adminActor(req)?.id ?? user?.id ?? null);
     res.json({ success: true });
   });
 
-  registerCircleTreasuryRoutes(app, { getPool, authedUser, circlesRepo, seasonState, mayDeclare, declareCtxFor: async (req) => (await resourcesDeclareAct(req, (await resourcesViewerFor(req)).declareCtx)).ctx });
+  registerCircleTreasuryRoutes(app, { getPool, authedUser, members, circlesRepo, seasonState, mayDeclare, declareCtxFor: async (req) => (await resourcesDeclareAct(req, (await resourcesViewerFor(req)).declareCtx)).ctx });
   app.use("/api/health", requireModule("health"));
   app.use("/api/admin/health", requireModule("health"));
 

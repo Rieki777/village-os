@@ -27,6 +27,8 @@
  * invariant 14), and it is what makes the preview meaningful.
  */
 import type { Pool } from "mysql2/promise";
+import { onCircleStatusChange, type DormancySweep } from "./circleTreasury";
+import { listBudgets } from "./resources";
 
 export type PatternKind = "circle" | "org_role" | "badge" | "quest";
 
@@ -344,12 +346,14 @@ export async function applyRoll(
   pool: Pool,
   plan: RollPlan,
   ctx: { seasonId: string | null; byUserId: string | null },
-): Promise<{ applied: number }> {
+): Promise<{ applied: number; treasury: RollTreasuryOutcome[] }> {
   if (plan.blocked.length) throw new Error("This roll is blocked; settle what is outstanding first");
   let applied = 0;
+  const circleMoves: RollChange[] = [];
   for (const ch of plan.changes) {
     if (ch.kind === "circle") {
       await pool.query("UPDATE circles SET status = ? WHERE id = ?", [ch.to, ch.entityId]);
+      circleMoves.push(ch);
     } else if (ch.kind === "org_role") {
       await pool.query("UPDATE org_roles SET active = ? WHERE id = ?", [ch.to === "active" ? 1 : 0, ch.entityId]);
     } else if (ch.kind === "quest") {
@@ -364,7 +368,57 @@ export async function applyRoll(
     );
     applied += 1;
   }
-  return { applied };
+
+  /*
+   * EVERY CIRCLE THE ROLL MOVED GOES THROUGH THE TREASURY HOOK.
+   *
+   * `onCircleStatusChange` (server/lib/circleTreasury.ts) is Rye's dormancy
+   * ruling: a circle going dormant has its treasury swept and the sweep
+   * recorded, and a circle coming back is told what it held. It used to be
+   * called from the admin circle PUT alone. The UPDATE above is a second
+   * writer of the same column, so a circle this roll made dormant kept its
+   * treasury, no dormant record was written, and `GET /api/resources/treasuries`
+   * was left to report it as a defect after the fact. The call lives HERE, in
+   * the one function that writes the roll's statuses, so no caller of
+   * `applyRoll` can apply a status change without it.
+   *
+   * THE SAME PREVIOUS-STATUS SEMANTICS AS THE PUT. The PUT reads the status
+   * before its merge overwrites it; the plan's `from` is that same reading,
+   * taken from `circles.status` by `planRoll`, and `to` is what was written.
+   *
+   * AFTER EVERY STATUS WRITE, NEVER INTERLEAVED, and each circle's outcome is
+   * caught on its own. The status write is what makes a sweep lawful (the
+   * hook's own header says to call it after the row is committed), and a
+   * ledger failure on one circle must not leave the rest of the village
+   * half-turned, which is the one thing this function promises. A failure is
+   * returned by name on the roll's response, and the dormant circle still
+   * holding tokens is listed by the treasuries read until somebody returns them.
+   */
+  const treasury: RollTreasuryOutcome[] = [];
+  for (const ch of circleMoves) {
+    try {
+      const outcome = await onCircleStatusChange(
+        pool,
+        { id: ch.entityId, name: ch.name, status: ch.to },
+        String(ch.from ?? "active"),
+        ctx.byUserId,
+        listBudgets,
+      );
+      if (outcome.treasurySwept || outcome.treasuryNote) treasury.push({ circleId: ch.entityId, ...outcome });
+    } catch (e: any) {
+      treasury.push({ circleId: ch.entityId, error: String(e?.message ?? e) });
+    }
+  }
+  return { applied, treasury };
+}
+
+/** What the treasury hook did for one circle a roll moved. Empty outcomes are omitted. */
+export interface RollTreasuryOutcome {
+  circleId: string;
+  treasurySwept?: DormancySweep[];
+  treasuryNote?: string;
+  /** The hook threw. The status change still stands. */
+  error?: string;
 }
 
 /**

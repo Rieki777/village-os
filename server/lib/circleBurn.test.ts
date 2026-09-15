@@ -434,6 +434,28 @@ describe.skipIf(!configured)("what a circle has spent", () => {
       expect(nextCycle.binds).toBe("season");
     });
 
+    it("A DERIVED HORIZON ALREADY PASSED DOES NOT STOP THE SEASON SUM (B4 on #243)", async () => {
+      /*
+       * An open-ended season begun on 2025-01-01 has no end, so `seasonWindowAt`
+       * gives it a horizon one civil year on, 2026-01-01, which is months behind
+       * AT. The sum used to stop at min(at, endsAt), which is that horizon, so
+       * every row this circle issued in 2026 fell outside its own season and the
+       * season read nothing spent.
+       */
+      const open: SeasonSpan[] = [{ id: "founding-2025", startsOn: "2025-01-01" }];
+      const w = seasonWindowAt(AT, open, TZ)!;
+      expect(w.endsDeclared, "a horizon says it is one").toBe(false);
+      expect(Date.parse(w.endsAt)).toBeLessThan(AT.getTime());
+      expect(seasonWindowAt(AT, SEASONS, TZ)!.endsDeclared, "a dated end is declared").toBe(true);
+
+      const r = await burnFor({ circleId: CIRCLE, at: AT }, deps({ seasons: open }));
+      if (r.kind !== "metered") throw new Error("metered");
+      expect(r.season.window!.id).toBe("founding-2025");
+      expect(r.season.spentMinor, "the 600 and the 300, both inside the open season").toBe(900);
+      // The cycle figure is untouched by any of this.
+      expect(r.cycle.spentMinor).toBe(300);
+    });
+
     it("reports the module being off without touching the database", async () => {
       const r = await burnFor({ circleId: CIRCLE, at: AT }, deps({ moduleOn: false }));
       expect(r.kind).toBe("module_off");
