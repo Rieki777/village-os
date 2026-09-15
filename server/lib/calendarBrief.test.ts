@@ -19,6 +19,7 @@ import {
   villageDateKey,
 } from "./calendarBrief";
 import { runWeeklyBrief, type NotifyDeps } from "./notify";
+import { presenceTest } from "./memberPresence";
 
 const TZ = "America/Costa_Rica";
 
@@ -113,6 +114,7 @@ describe.skipIf(!configured)("the weekly brief, against a real schema", () => {
     sendEmail: async (opts) => { sent.push(opts); },
     origin: () => "https://example.test",
     projectName: () => "Alder Creek",
+    isPresent: presenceTest("calendar-brief-test-secret"),
   });
 
   const gatherFor = (userId: string, withNames: boolean) => async () => {

@@ -172,6 +172,14 @@ export interface AppDeps {
   members: UsersRepo;
 
   /**
+   * Is this member record a present person: not an example, not a tombstone,
+   * and holding a password or a verified Google link. The ONE predicate for a
+   * roll or a roster, bound to the session secret (server/lib/memberPresence.ts).
+   * Never filter on `passwordHash` for this: a Google member has none.
+   */
+  isPresent(member: any): boolean;
+
+  /**
    * The safe shape of a member record for an API response.
    *
    * Strips the password hash, the session-revocation counter and the Google
