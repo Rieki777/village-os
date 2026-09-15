@@ -293,6 +293,9 @@ describe.skipIf(!DB_CONFIGURED)("a village with no Google credentials degrades h
       password: true,
       google: false,
       missing: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
+      // Published on purpose: the sign-up page reads it. The harness opens the
+      // door for this suite (`ProvisionOptions.inviteOnly`), so it reads false.
+      inviteOnly: false,
     });
   });
 
@@ -319,7 +322,7 @@ describe.skipIf(!DB_CONFIGURED)("a village with no Google credentials degrades h
 
 describe.skipIf(!DB_CONFIGURED)("a village WITH credentials offers Google beside the password", () => {
   it("reports both methods", async () => {
-    expect(await (await fetch(`${BASE}/api/auth/methods`)).json()).toEqual({ password: true, google: true });
+    expect(await (await fetch(`${BASE}/api/auth/methods`)).json()).toEqual({ password: true, google: true, inviteOnly: false });
   });
 
   it("sends the member to Google with the right client, scope, state and nonce", async () => {
@@ -665,5 +668,117 @@ describe.skipIf(!DB_CONFIGURED)("forgot-password no longer strands an account wi
     // A log line for an unknown address would be its own enumeration oracle
     // for anyone holding the logs.
     expect(logs.join("")).not.toContain("nobody-here@example.com");
+  });
+});
+
+/*
+ * THE GOOGLE DOOR, IN A VILLAGE THAT JOINS BY INVITATION.
+ *
+ * The harness opens the door for this suite (`ProvisionOptions.inviteOnly` in
+ * server/db/testDb.ts), so the founder shuts it here, the way a village would,
+ * and every case below runs with it shut. The email door's half of the same
+ * rule is proved in server/invites.routes.e2e.test.ts. This is the half only
+ * this suite can drive, because only this suite plays Google.
+ */
+describe.skipIf(!DB_CONFIGURED)("a village that joins by invitation, at the Google door", () => {
+  let founderToken = "";
+
+  /** A sign-in that starts from an invitation link, the way the sign-up page starts one. */
+  async function beginInvitedSignIn(invite: string): Promise<{ state: string; nonce: string }> {
+    const res = await fetch(`${BASE}/api/auth/google/start?invite=${encodeURIComponent(invite)}`, { redirect: "manual" });
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get("location")!);
+    return { state: location.searchParams.get("state")!, nonce: location.searchParams.get("nonce")! };
+  }
+
+  /** What the server signed into a state, read back without trusting it. */
+  const statePayload = (state: string) => JSON.parse(Buffer.from(state.split(".")[0], "base64url").toString("utf-8"));
+
+  async function asFounder(method: string, route: string, body?: unknown) {
+    const res = await fetch(`${BASE}${route}`, {
+      method,
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${founderToken}` },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    return { status: res.status, json: await res.json().catch(() => null) };
+  }
+
+  /** Somebody Google has never sent here before, arriving on the given state. */
+  async function newcomer(state: string, nonce: string, who: string) {
+    nextResponse = {
+      status: 200,
+      claims: claimsFor({ nonce, sub: `google-sub-${who}`, email: `${who}@example.com`, email_verified: true, name: `A ${who}` }),
+    };
+    return callback(state);
+  }
+
+  beforeAll(async () => {
+    if (!DB_CONFIGURED) return;
+    // The founder from "the link path", signed back in through Google. Signing
+    // in to an account that already exists is never gated on an invitation.
+    const { state, nonce } = await beginSignIn();
+    nextResponse = {
+      status: 200,
+      claims: claimsFor({ nonce, sub: "google-sub-founder", email: "locked-out-founder@example.com", email_verified: true, name: "Locked Out Founder" }),
+    };
+    const { cookie } = await callback(state);
+    founderToken = String((await (await exchange(cookie)).json())?.token ?? "");
+    expect(founderToken, "the founder holds a session").toBeTruthy();
+    const shut = await asFounder("PUT", "/api/admin/variables/membership.invite_only", { value: "true" });
+    expect(shut.status, JSON.stringify(shut.json)).toBe(200);
+  });
+
+  afterAll(async () => {
+    if (!DB_CONFIGURED || !founderToken) return;
+    await asFounder("PUT", "/api/admin/variables/membership.invite_only", { value: "false" });
+  });
+
+  it("says so on /api/auth/methods", async () => {
+    expect((await (await fetch(`${BASE}/api/auth/methods`)).json()).inviteOnly).toBe(true);
+  });
+
+  it("makes no account for somebody with no link, and still signs a member back in", async () => {
+    const stranger = await beginSignIn();
+    const refused = await newcomer(stranger.state, stranger.nonce, "uninvited");
+    expect(refused.location).toBe("/login?oauth=error&reason=invitation_required");
+    expect(refused.cookie).toBeNull();
+
+    // THE CONTROL, in the same case: the member who joined by Google earlier
+    // signs straight back in with the door shut.
+    const again = await beginSignIn();
+    nextResponse = {
+      status: 200,
+      claims: claimsFor({ nonce: again.nonce, sub: "google-sub-newcomer", email: "Newcomer@Example.com", email_verified: true, name: "A Newcomer" }),
+    };
+    const back = await callback(again.state);
+    expect(back.location).toContain("oauth=complete");
+    expect(back.cookie).toBeTruthy();
+  });
+
+  it("makes the account for the person holding a link, records the inviter's vouch, and uses the link up", async () => {
+    const made = await asFounder("POST", "/api/invites");
+    expect(made.status, JSON.stringify(made.json)).toBe(200);
+    const invite = new URL(String(made.json.path), BASE).searchParams.get("invite")!;
+
+    // The token never travels to Google: only the invitation's id rides in the signed state.
+    const { state, nonce } = await beginInvitedSignIn(invite);
+    expect(state).not.toContain(invite);
+    expect(statePayload(state).invite).toBe(made.json.id);
+
+    const arrived = await newcomer(state, nonce, "invited");
+    expect(arrived.location).toContain("oauth=complete");
+    const session = await (await exchange(arrived.cookie)).json();
+    expect(session.user.email).toBe("invited@example.com");
+
+    const vouches = await asFounder("GET", `/api/members/${session.user.id}/vouches`);
+    expect((vouches.json?.vouches ?? []).map((v: any) => v.kind)).toEqual(["arrival"]);
+
+    // Used up: the same link now starts a sign-in carrying no invitation, and
+    // a second newcomer on it is refused.
+    const reuse = await beginInvitedSignIn(invite);
+    expect(statePayload(reuse.state).invite).toBe("");
+    const second = await newcomer(reuse.state, reuse.nonce, "second-on-one-link");
+    expect(second.location).toBe("/login?oauth=error&reason=invitation_required");
+    expect(second.cookie).toBeNull();
   });
 });

@@ -730,10 +730,17 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // Operational values are NOT exposed to the public surface.
     expect(JSON.stringify(rules.json)).not.toContain("base_rpc_url");
 
-    // Admin sees the full registry, grouped, with nothing customized yet.
+    // Admin sees the full registry, grouped, with nothing customized by the
+    // village. The one stored value is the test harness's own opinion,
+    // `membership.invite_only` off (ProvisionOptions.inviteOnly in
+    // server/db/testDb.ts), and it is named here so that a second stored value
+    // cannot hide behind a count of one.
+    const customizedKeys = (json: any): string[] =>
+      (json?.categories ?? []).flatMap((c: any) => c.variables).filter((v: any) => !v.isDefault).map((v: any) => v.key);
     const listing = await api("GET", "/api/admin/variables", undefined, founderToken);
     expect(listing.status).toBe(200);
-    expect(listing.json.customized).toBe(0);
+    expect(customizedKeys(listing.json)).toEqual(["membership.invite_only"]);
+    expect(listing.json.customized).toBe(1);
     expect(listing.json.total).toBeGreaterThanOrEqual(15);
 
     // Validation refuses garbage with a human-readable reason.
@@ -759,7 +766,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const reset = await api("PUT", "/api/admin/variables/governance.voice_weighting", { value: "equal" }, founderToken);
     expect(reset.status).toBe(200);
     const listing2 = await api("GET", "/api/admin/variables", undefined, founderToken);
-    expect(listing2.json.customized).toBe(0);
+    expect(customizedKeys(listing2.json)).toEqual(["membership.invite_only"]);
   });
 
   it("records progression history and reports gratitude flows", async () => {

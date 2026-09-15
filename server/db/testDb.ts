@@ -492,6 +492,20 @@ export interface ProvisionOptions {
    * proves both sides against a real database.
    */
   gameStarted?: boolean;
+  /**
+   * Whether this scratch village joins by invitation (`membership.invite_only`,
+   * Rye's ruling of 2026-09-09). Default FALSE here, for the reason
+   * `gameStarted` gives. The platform default is on, and some thirty-five
+   * suites make their accounts through `POST /api/auth/register` with nothing
+   * to do with invitations, so each would have to learn about them to keep
+   * signing people up.
+   *
+   * What that costs is the same too: the rest of the suite cannot see the
+   * closed door. The invitation's own suite (`server/invites.routes.e2e.test.ts`)
+   * provisions with `inviteOnly: true` and proves both sides against the built
+   * server.
+   */
+  inviteOnly?: boolean;
 }
 
 /**
@@ -604,6 +618,13 @@ export async function provisionTestDb(opts: ProvisionOptions = {}): Promise<Test
         note: "Provisioned by the S5 test harness as a village whose Game has already started.",
       }),
     ]);
+  }
+  // The fixture's second opinion. See `ProvisionOptions.inviteOnly`: the door
+  // is open here, and the invitation's own suite asks for it shut.
+  if (opts.inviteOnly !== true) {
+    await conn.query(
+      "INSERT IGNORE INTO game_variables (config_key, value, value_type) VALUES ('membership.invite_only', 'false', 'boolean')",
+    );
   }
   noteProvision({
     kind: cloned ? "clone" : "full",

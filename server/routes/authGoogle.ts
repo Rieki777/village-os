@@ -39,6 +39,8 @@ import {
   type AccountFacts,
 } from "../lib/oauthAccounts";
 import { decideFounderGrant, parseFounderEmails } from "../lib/founderGrant";
+import type { InviteDoor } from "../lib/inviteDoor";
+import { readInviteToken } from "../lib/invites";
 
 /** What this module reaches. The complete list. */
 export interface GoogleAuthDeps {
@@ -58,6 +60,8 @@ export interface GoogleAuthDeps {
   overLimit(bucket: string, max: number, windowMs: number): Promise<boolean>;
   clientIp(req: Request): string;
   recordAudit(text: string, userId: string): void;
+  /** The invitation, as both sign-up doors ask for it: server/lib/inviteDoor.ts. */
+  invites: InviteDoor;
   /**
    * A brand-new member arrived through Google. The host records the join AND
    * greets whoever greets (`memberJoined` in server/lib/arrival.ts), exactly as
@@ -178,6 +182,9 @@ export function register(app: Express, deps: GoogleAuthDeps): void {
       password: true,
       google: avail.available,
       ...(avail.available ? {} : { missing: avail.missing }),
+      // Whether making an account here needs an invitation link, so the
+      // sign-up page can say so before anybody fills in a form it would refuse.
+      inviteOnly: deps.invites.required(),
     });
   });
 
@@ -190,7 +197,17 @@ export function register(app: Express, deps: GoogleAuthDeps): void {
       return res.status(429).json({ error: "Too many attempts. Try again in a few minutes." });
     }
     const next = normalizeNext(typeof req.query.next === "string" ? req.query.next : null);
-    const state = makeOAuthState(deps.authSecret, next);
+    /*
+     * AN INVITATION RIDES AS ITS ID, INSIDE THE SIGNED STATE. The token is
+     * checked here and never leaves this server: Google sees an id it cannot
+     * use, and a caller cannot write one in, because the state is signed. A
+     * link that no longer works is no reason to refuse a sign-in, because most
+     * people pressing this button already have an account. The callback
+     * refuses only when an account would have to be made without one.
+     */
+    const token = readInviteToken(req.query.invite);
+    const found = token ? await deps.invites.resolve(token) : null;
+    const state = makeOAuthState(deps.authSecret, next, Date.now(), found && found.ok ? found.id : null);
     const parsed = readOAuthState(deps.authSecret, state);
     if (!parsed) return res.status(500).json({ error: "Could not start sign-in." });
     res.redirect(302, googleAuthUrl(avail.config, state, parsed.nonce));
@@ -318,6 +335,17 @@ export function register(app: Express, deps: GoogleAuthDeps): void {
       deps.recordAudit("auth:google-linked", member.id);
     } else {
       const userId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      /*
+       * A NEW ACCOUNT, which in a village that joins by invitation needs the
+       * invitation `start` signed into the state. Taken before the account is
+       * written, exactly as the email door takes it, so two sign-ins racing for
+       * one link leave one account. The reason tells the sign-in page which
+       * sentence to show: no link at all, or a link somebody already used.
+       */
+      const inviter = state.invite ? await deps.invites.claim(state.invite, userId) : null;
+      if (deps.invites.required() && !inviter) {
+        return failTo(res, state.invite ? "invitation_used" : "invitation_required");
+      }
       const name = identity.name || identity.email.split("@")[0];
       member = {
         id: userId,
@@ -337,8 +365,14 @@ export function register(app: Express, deps: GoogleAuthDeps): void {
         avatar: null,
         prefs: { googleLink: makeGoogleLink(deps.authSecret, userId, identity.sub) },
       };
-      await deps.members.add(member);
+      try {
+        await deps.members.add(member);
+      } catch (err) {
+        if (inviter && state.invite) await deps.invites.release(state.invite, userId).catch(() => undefined);
+        throw err;
+      }
       deps.onMemberJoined(member);
+      if (inviter) await deps.invites.welcome(inviter, userId);
       deps.recordAudit("auth:google-joined", member.id);
     }
 

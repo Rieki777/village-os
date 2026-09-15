@@ -58,6 +58,9 @@ import { register as registerLandRoutes } from "./routes/land";
 import { register as registerMilestonesRoutes } from "./routes/milestones";
 import { register as registerTrainingRoutes } from "./routes/training";
 import { register as registerGoogleAuthRoutes } from "./routes/authGoogle";
+import { register as registerSignUpRoutes } from "./routes/register";
+import { register as registerInviteRoutes } from "./routes/invites";
+import { makeInviteDoor } from "./lib/inviteDoor";
 import { register as registerRecoveryRoutes } from "./routes/authRecovery";
 import { register as registerPulseRoutes } from "./routes/pulse";
 import { register as registerPlayersRoutes } from "./routes/players";
@@ -8057,47 +8060,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     res.json({ success: true });
   });
 
-  // Auth: Register
-  app.post("/api/auth/register", async (req, res) => {
-    // FIRST statement, before the exists-by-email check, so the throttle also
-    // bounds the account-enumeration oracle (409 vs 200 answers "is this
-    // address a member?"). Per-IP and admin-tunable: a village onboarding
-    // gathering behind one NAT shares a bucket, so the default is above
-    // login's. overLimit fails open on DB trouble — an outage never blocks
-    // registration.
-    if (await overLimit(`register:${clientIp(req)}`, Math.max(1, numberVar("abuse.register_per_ip_hourly")), 60 * 60 * 1000)) {
-      return res.status(429).json({ error: "Too many attempts. Try again in a few minutes." });
-    }
-    const { name, email, password, paths } = req.body;
-    if (!name || !email || !password || !paths || !Array.isArray(paths)) {
-      return res.status(400).json({ error: "Missing required fields" });
-    }
-    // The other door onto a member's paths, and the one a stranger can open.
-    const chosen = claimPaths(paths);
-    if (!chosen.ok) return res.status(400).json({ error: chosen.error });
-    if (await members.existsByEmail(email)) {
-      return res.status(409).json({ error: "Email already exists" });
-    }
-    const userId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const user = {
-      id: userId,
-      name,
-      email,
-      passwordHash: await hashPassword(password),
-      handle: await uniqueHandle(slugifyHandle(name)),
-      paths: chosen.paths ?? [],
-      contributions: [],
-      quests: [],
-      recognitionBalance: 0,
-      joinedAt: new Date().toISOString(),
-      bio: "",
-      avatar: null,
-    };
-    await members.add(user);
-    await joined({ id: userId, name, handle: user.handle });
-    const token = encodeToken(AUTH_TOKEN_SECRET, userId, email);
-    res.json({ success: true, token, user: publicUser(user) });
-  });
+  // Auth: Register lives in server/routes/register.ts, beside the Google door and the invitation both share.
 
   // Auth: Login
   app.post("/api/auth/login", async (req, res) => {
@@ -8331,6 +8294,13 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     recordAudit: recordAuthAudit,
   });
   const joined = (u: { id: string; name: string; handle: string }) => memberJoined(u, { addActivity, firstName, greeterRoleId: () => stringVar("arrival.greeter_role"), seats: loadRoleHolders, everyone: () => members.all(), notify });
+  const inviteDoor = makeInviteDoor({ getPool, members }); // one invitation for both sign-up doors
+  registerSignUpRoutes(app, {
+    overLimit, clientIp, members, hashPassword, publicUser, joined, invites: inviteDoor,
+    makeHandle: (name) => uniqueHandle(slugifyHandle(name)),
+    encodeToken: (userId, email) => encodeToken(AUTH_TOKEN_SECRET, userId, email),
+  });
+  registerInviteRoutes(app, { authedUser, getPool, members, guardCapability, mayAct, overLimit, clientIp, invites: inviteDoor });
   registerGoogleAuthRoutes(app, {
     authSecret: AUTH_TOKEN_SECRET,
     availability: googleSignInAvailability,
@@ -8342,6 +8312,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     clientIp,
     recordAudit: recordAuthAudit,
     onMemberJoined: (user) => void joined(user), // every door in records the join and greets: register calls joined too
+    invites: inviteDoor,
   });
 
   /**
