@@ -45,8 +45,10 @@ import {
   refusalForMember,
   registerToken,
   tokenDef,
+  type TransferResult,
   TREASURY,
 } from "./lib/ledger";
+import { lockedBalanceRows } from "./repos/tokenBalances";
 import { repairTaintedListings } from "./lib/exchange";
 import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 
@@ -809,6 +811,71 @@ describe.skipIf(!configured)("the MySQL token ledger", () => {
       expect(String(second?.error)).toContain("collides with the already-posted key");
       expect(await balanceOf(pool, memberAccount("snap-two"), PLATFORM_TOKEN)).toBe(0);
       expect(await balanceOf(pool, memberAccount("snap-one"), PLATFORM_TOKEN)).toBe(5);
+    });
+
+    /**
+     * THE TWIN, in the clawback law. Its "already mirrored" read (question 4)
+     * is the only thing that stops a second mirror under a different village
+     * segment, because that is a different key and the UNIQUE index cannot
+     * see it. The caller's transaction reads first, a second connection
+     * commits the first mirror, then the second mirror is posted on the
+     * caller's connection. A plain read answers from the older snapshot, sees
+     * no mirror, and claws the same 12 back twice.
+     *
+     * The connection sets MariaDB's `innodb_snapshot_isolation` off, which is
+     * how MySQL 8 behaves: a locking read returns the latest committed row.
+     * MySQL 8 has no such variable, so the statement fails there and changes
+     * nothing. With it ON, MariaDB's default, the posting throws ER_CHECKREAD
+     * both before this fix and after it (measured), so that setting cannot
+     * tell the fix from the defect and is not the one asserted here.
+     */
+    async function secondMirrorAfterSnapshot(tag: string) {
+      const u = memberAccount(`mirror-snap-${tag}`);
+      const original = `quest.completed:local:mirror-snap:c:${tag}`;
+      await postTransfer(pool, {
+        from: RECOGNITION_FAUCET, to: u, amount: 12, source: "quest_consent", idempotencyKey: original,
+      });
+      // Spare value, so the overdraft rule is not what stops the second one.
+      await postTransfer(pool, {
+        from: RECOGNITION_FAUCET, to: u, amount: 50, source: "quest_consent", idempotencyKey: `${original}:spare`,
+      });
+      const conn = await pool.getConnection();
+      let second: TransferResult | undefined;
+      let thrown: { code?: string } | undefined;
+      let heldUnderLock: number | undefined;
+      try {
+        await conn.query("SET SESSION innodb_snapshot_isolation = OFF").catch(() => undefined);
+        await conn.beginTransaction();
+        await conn.query("SELECT COUNT(*) FROM `token_ledger`"); // module-review-ok: opens this transaction's read view, which is the condition under test
+        const first = await postTransfer(pool, {
+          from: u, to: RECOGNITION_FAUCET, amount: 12, source: "reversal", idempotencyKey: `reversal:local:${original}`,
+        });
+        expect(first.ok && !first.duplicate).toBe(true);
+        try {
+          second = await postTransferOn(conn, {
+            from: u, to: RECOGNITION_FAUCET, amount: 12, source: "reversal", idempotencyKey: `reversal:elsewhere:${original}`,
+          });
+          // What committing this transaction would leave the member holding,
+          // read under a lock so it is not the snapshot's figure: 50 is one
+          // clawback, 38 is two.
+          heldUnderLock = Number((await lockedBalanceRows(conn, u, PLATFORM_TOKEN))[0]?.balance);
+        } catch (e) {
+          thrown = e as { code?: string };
+        }
+      } finally {
+        await conn.rollback().catch(() => undefined);
+        await conn.query("SET SESSION innodb_snapshot_isolation = DEFAULT").catch(() => undefined);
+        conn.release();
+      }
+      return { second, thrown, heldUnderLock, after: await balanceOf(pool, u, PLATFORM_TOKEN) };
+    }
+
+    it("refuses a second mirror committed after a caller-owned transaction took its snapshot", async () => {
+      const r = await secondMirrorAfterSnapshot("locking");
+      expect(r.thrown).toBeUndefined();
+      expect({ ok: r.second?.ok, heldUnderLock: r.heldUnderLock }).toEqual({ ok: false, heldUnderLock: 50 });
+      expect(String(r.second?.error)).toContain("has already been reversed by");
+      expect(r.after).toBe(50);
     });
   });
 

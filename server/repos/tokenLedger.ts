@@ -267,6 +267,32 @@ export async function reversalMirrorRows(
 }
 
 /**
+ * `reversalMirrorRows` as a LOCKING read, on the caller's connection, for the
+ * one path whose snapshot may be older than its account locks: the clawback
+ * law inside a transaction somebody else opened (`postTransferOn`,
+ * server/lib/ledger.ts). A plain read there misses a mirror another connection
+ * committed after that snapshot, and a second mirror of one posting under a
+ * different village segment then lands. `LOCK IN SHARE MODE` for the reasons
+ * measured at `keyClashRows`. Why the other posting paths keep the plain read
+ * is measured at `clawbackRefusal`.
+ */
+export async function lockedReversalMirrorRows(
+  conn: PoolConnection,
+  toAccount: string,
+  tokenType: string,
+  fromAccount: string,
+  amount: number,
+): Promise<RowDataPacket[]> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    "SELECT `idempotency_key` FROM `token_ledger` " +
+      "WHERE `to_account` = ? AND `token_type` = ? AND `from_account` = ? AND `amount` = ? " +
+      "AND CAST(`source` AS BINARY) = 'reversal' LOCK IN SHARE MODE",
+    [toAccount, tokenType, fromAccount, amount],
+  );
+  return rows;
+}
+
+/**
  * What one account held of one token going into an instant, read off the rows
  * posted BEFORE it: credits minus debits, as one row with a `held` column.
  *
@@ -298,8 +324,9 @@ export async function heldBeforeRows(
 }
 
 /**
- * Whether a key already exists, for the collation clash check, and the ONE
- * read in this block that takes a lock.
+ * Whether a key already exists, for the collation clash check, and one of the
+ * two reads in this block that take a lock (`lockedReversalMirrorRows` is the
+ * other).
  *
  * Its caller (`postTransferOn`, server/lib/ledger.ts) reaches it after an
  * INSERT failed on the unique index, inside a transaction it may not own. A
