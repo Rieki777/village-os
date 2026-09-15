@@ -82,6 +82,17 @@ import { defaultTimingFor, kindOfSubject, noCloserRefusal, timingOf, type Propos
 // Windows lane: the open path is gated, and only the open path (19E).
 import { openingRefusal } from "./governanceWindows";
 import type { WeightMode } from "./governanceWeights";
+// The objections table's one enumerable home. Every statement against
+// `ballot_objections` lives there; the POLICY around them (which rulings
+// exist, that a ruling carries a note, who may file one) stays here beside the
+// sentences a member reads when it refuses them.
+import {
+  insertObjection,
+  openObjectionIdFor,
+  ruleOpenObjection,
+  standingObjectionCount,
+  updateObjectionText,
+} from "../repos/ballotObjections";
 
 export interface BallotRow {
   id: string;
@@ -163,38 +174,17 @@ export async function ballotsFor(pool: Pool, subjectType: string, subjectRef: st
 /**
  * WHICH DIALS A BALLOT ACTUALLY MOVED, READ BACK OUT OF THE LEDGER.
  *
- * The apply path stamps every amendment row with `gm:<proposal> bal:<ballot>`
- * (`applyMechanicsProposal`, server/index.ts), so the ballot that decided a
- * change is already written next to the change. Nothing has ever read it in
- * that direction. The outcome card's "What changed" came off the close
- * response instead, which means it existed only in the browser session that
- * closed the vote and was gone by the next morning, on exactly the decisions
- * worth coming back to.
+ * The statement and the reasoning behind it now live in
+ * `server/repos/mechanicsChanges.ts`, beside the one INSERT that writes the
+ * rows it reads. It is re-exported from here rather than moved out of the
+ * governance API, because every caller reaches it as part of serving a
+ * decision and the ballot engine is where they look for it.
  *
- * This is the permanent answer to the same question. It reports what the
- * ledger holds and never what a proposal asked for: a change the apply pass
- * refused is absent here, correctly, because it did not happen.
- *
- * `LIKE` because the reference is a composite of up to three parts and the
- * ballot marker sits at the end of it. The id is escaped for LIKE's own
- * wildcards before it goes in, so an id is matched as characters and not as
- * a pattern, whatever future ids turn out to contain.
- *
- * A LEADING WILDCARD SCANS, and that is the right trade here rather than an
- * oversight. `mechanics_changes` holds one row per dial a village has ever
- * moved, so it is hundreds of rows on an old village and a handful on a young
- * one, and this runs once when somebody opens one decision. The alternative
- * is a column duplicating a fact the reference already carries, which is a
- * second copy of one truth waiting to disagree with the first.
+ * It is the only read in this file that is not about a ballot table at all:
+ * `mechanics_changes` belongs to the amendment ledger, and asking a ballot
+ * which dials it moved is a question the ledger answers.
  */
-export async function amendedKeysFor(pool: Pool, ballotId: string): Promise<string[]> {
-  const escaped = ballotId.replace(/([\\%_])/g, "\\$1");
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT DISTINCT config_key FROM mechanics_changes WHERE source = 'governance' AND proposal_ref LIKE ? ORDER BY config_key",
-    [`%bal:${escaped}%`],
-  );
-  return rows.map((r) => String(r.config_key));
-}
+export { amendedKeysFor } from "../repos/mechanicsChanges";
 
 /**
  * DOES THIS SUBJECT TYPE HAVE A CLOSER? Registered by `server/index.ts` at
@@ -421,14 +411,15 @@ export async function talliesFor(pool: Pool, ballot: string | BallotRow): Promis
  * withdrawal is a retraction. An INTEGRATED objection blocks by design
  * (GOV_DESIGN 2.4): it means the proposal must change, so the ballot closes
  * as failed and the subject returns to staging for a fresh ballot.
+ *
+ * The statement lives in `server/repos/ballotObjections.ts` with every other
+ * statement against that table, and the source-level pin that keeps
+ * `integrated` inside the blocking set points at it there. It is imported
+ * above rather than re-exported straight through, because `closeBallot` in
+ * this file is one of its callers and a bare `export ... from` would not put
+ * the name in scope here.
  */
-export async function standingObjectionCount(pool: Pool, ballotId: string): Promise<number> {
-  const [[row]] = await pool.query<any[]>(
-    "SELECT COUNT(*) AS n FROM ballot_objections WHERE ballot_id = ? AND status IN ('open','integrated')",
-    [ballotId],
-  );
-  return Number(row.n);
-}
+export { standingObjectionCount };
 
 export type VoteResult = { ok: true; choice: VoteChoice } | { ok: false; error: string };
 
@@ -550,12 +541,13 @@ export async function castVote(
     [ballotId, userId, choice, cleanReason || null],
   );
   if (ballot.method === "consent" && choice === "no") {
-    const [mine] = await pool.query<RowDataPacket[]>(
-      "SELECT id FROM ballot_objections WHERE ballot_id = ? AND user_id = ? AND status = 'open' LIMIT 1",
-      [ballotId, userId],
-    );
-    if (mine[0]) {
-      await pool.query("UPDATE ballot_objections SET text = ? WHERE id = ?", [cleanReason, String(mine[0].id)]); // module-review-ok: the ballot tables' one enumerable home (the intents.ts pattern; no cache sits above them)
+    // ONE OPEN OBJECTION PER VOTER FROM THIS PATH. Re-voting `no` rewrites the
+    // reasoning on the objection already standing rather than stacking a second
+    // one, so a member who sharpens their wording twice has not tripled what
+    // the ballot has to answer.
+    const standing = await openObjectionIdFor(pool, ballotId, userId);
+    if (standing !== null) {
+      await updateObjectionText(pool, standing, cleanReason);
     } else {
       await fileObjection(pool, ballotId, userId, cleanReason);
     }
@@ -590,10 +582,7 @@ export async function fileObjection(
   );
   if (!inRoll[0]) return { ok: false, error: "Objections come from the ballot's own electorate" };
   const id = `obj-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  await pool.query( // module-review-ok: the ballot tables' one enumerable home (the intents.ts pattern; no cache sits above them)
-    "INSERT INTO ballot_objections (id, ballot_id, user_id, text, status) VALUES (?,?,?,?,'open')",
-    [id, ballotId, userId, clean],
-  );
+  await insertObjection(pool, { id, ballotId, userId, text: clean });
   return { ok: true, id };
 }
 
@@ -615,33 +604,31 @@ export async function ruleObjection(
   }
   const note = String(input.note ?? "").trim().slice(0, 2000);
   if (!note) return { ok: false, error: "Every ruling carries its reasoning. Say why" };
-  const [result] = await pool.query<any>(
-    "UPDATE ballot_objections SET status = ?, ruled_by = ?, ruled_at = NOW(), ruling_note = ? " +
-      "WHERE id = ? AND status = 'open'",
-    [ruling, input.ruledBy, note, input.objectionId],
-  );
-  if (Number(result.affectedRows) === 0) {
+  // Only an `open` objection takes a ruling, and that guard is in the statement
+  // rather than here: two facilitators pressing together cannot both reach the
+  // row. Zero rows is the answer this sentence is for, and the sentence stays
+  // here because "already ruled" and "no such objection" are the same row count
+  // and only this file has words for either.
+  const reached = await ruleOpenObjection(pool, {
+    objectionId: input.objectionId,
+    ruling,
+    ruledBy: input.ruledBy,
+    note,
+  });
+  if (reached === 0) {
     return { ok: false, error: "That objection is already ruled, or does not exist" };
   }
   return { ok: true };
 }
 
-export async function objectionsFor(pool: Pool, ballotId: string) {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT * FROM ballot_objections WHERE ballot_id = ? ORDER BY created_at, id",
-    [ballotId],
-  );
-  return rows.map((r) => ({
-    id: String(r.id),
-    userId: String(r.user_id),
-    text: String(r.text),
-    status: String(r.status) as "open" | ObjectionRuling,
-    ruledBy: r.ruled_by ?? null,
-    ruledAt: r.ruled_at ? iso(r.ruled_at) : null,
-    rulingNote: r.ruling_note ?? null,
-    createdAt: iso(r.created_at),
-  }));
-}
+/**
+ * Every objection on one ballot, oldest first.
+ *
+ * The statement and its row shape live in `server/repos/ballotObjections.ts`.
+ * Re-exported from here because a caller serving a decision reaches the whole
+ * ballot API through this file.
+ */
+export { objectionsForBallot as objectionsFor } from "../repos/ballotObjections";
 
 /**
  * ── THE QUORUM FRACTION WHEN PART OF THE ROLL IS OUTSIDE IT (19G) ───────────

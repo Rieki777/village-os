@@ -15,82 +15,8 @@
  * nobody anything: value only ever enters through the engine.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
+import { ARCHETYPES } from "../../shared/archetypes";
 import { CREDITS, ensureVoiceToken, HEARTS, VILLAGE_VOICE } from "./economy";
-
-/**
- * The five archetypal contributions, as classes.
- *
- * Copy carried over from the platform's own archetype list so the two products
- * describe the same five things in the same words. The class NAMES are the
- * village's vocabulary and renameable; these are the defaults a fork starts on.
- */
-const ARCHETYPES = [
-  {
-    key: "building",
-    name: "The Builder",
-    subtitle: "Building & Developing",
-    blurb: "Creating tools, systems, and infrastructure that serve the regenerative movement.",
-    examples: [
-      "Building out the village platform",
-      "Creating infrastructure for the land",
-      "Developing governance tools",
-      "Building dashboards and tracking systems",
-    ],
-    sigil: "hammer",
-  },
-  {
-    key: "researching",
-    name: "The Architect",
-    subtitle: "Researching & Architecting",
-    blurb: "Designing frameworks, exploring possibilities, and mapping the path forward.",
-    examples: [
-      "Designing tokenomics models",
-      "Researching regenerative land practices",
-      "Creating organizational frameworks",
-      "Mapping ecosystem relationships",
-    ],
-    sigil: "lens",
-  },
-  {
-    key: "facilitating",
-    name: "The Spaceholder",
-    subtitle: "Facilitating & Space Holding",
-    blurb: "Creating containers for collaboration, learning, and community growth.",
-    examples: [
-      "Facilitating community sessions",
-      "Hosting season incubators",
-      "Running onboarding calls",
-      "Holding space for conflict resolution",
-    ],
-    sigil: "circle",
-  },
-  {
-    key: "catalyzing",
-    name: "The Catalyst",
-    subtitle: "Catalyzing & Connecting",
-    blurb: "Weaving relationships, building bridges, and sparking new possibilities.",
-    examples: [
-      "Helping onboard new land projects",
-      "Making key introductions",
-      "Connecting people with projects",
-      "Building partnership networks",
-    ],
-    sigil: "thread",
-  },
-  {
-    key: "storytelling",
-    name: "The Storyteller",
-    subtitle: "Storytelling & Communicating",
-    blurb: "Sharing the vision, documenting the journey, and drawing others in.",
-    examples: [
-      "Telling the story of the land",
-      "Creating content that carries the work",
-      "Documenting the journey",
-      "Keeping the outside world in the loop",
-    ],
-    sigil: "book",
-  },
-];
 
 /**
  * The starting rules: VILLAGE VOICE AND VILLAGE CREDITS, and not Gratitude.
@@ -192,8 +118,25 @@ export async function seedEconomy(
         // once `renamed` is set. Until that editor ships, a rename is an admin
         // act on the row and this line would undo it, which is why the admin
         // surface is part of the same build.
-        "ON DUPLICATE KEY UPDATE `subtitle` = VALUES(`subtitle`), `blurb` = VALUES(`blurb`), " +
-        "`examples` = VALUES(`examples`), `sigil` = VALUES(`sigil`), `sort_order` = VALUES(`sort_order`)",
+        // EVERY COLUMN IS CONDITIONAL ON `customized`, and that column is why
+        // the admin editor could not ship before it. This statement used to
+        // overwrite subtitle, blurb, examples, sigil and sort_order on every
+        // deploy, so a village that re-blurbed a class would find its words
+        // replaced by the platform's at the next restart, with nothing said.
+        // The comment that stood here promised a `renamed` flag would protect
+        // them; no such column ever existed.
+        //
+        // `name` was already absent from this list and stays absent: a rename
+        // survived even before there was a screen to do it in.
+        //
+        // So a platform copy improvement travels to villages that have not
+        // made a class their own, and never undoes one that has.
+        "ON DUPLICATE KEY UPDATE " +
+        "`subtitle` = IF(`customized`, `subtitle`, VALUES(`subtitle`)), " +
+        "`blurb` = IF(`customized`, `blurb`, VALUES(`blurb`)), " +
+        "`examples` = IF(`customized`, `examples`, VALUES(`examples`)), " +
+        "`sigil` = IF(`customized`, `sigil`, VALUES(`sigil`)), " +
+        "`sort_order` = IF(`customized`, `sort_order`, VALUES(`sort_order`))",
       [
         villageId,
         a.key,

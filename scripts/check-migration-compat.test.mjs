@@ -114,6 +114,13 @@ function commitAll(repo, message) {
 function run(repo, args = [], envOverride = null) {
   const env = envOverride === undefined ? { ...process.env } : { ...process.env, ...(envOverride ?? {}) };
   if (envOverride === null && DB_URL) env.TEST_DATABASE_URL = DB_URL;
+  // GITHUB_BASE_REF reaches the fixture only when a scenario passes it. The guard picks its base ref
+  // from that variable, a pull_request run sets it to the pull request's target branch, and a
+  // fixture has nothing but `main`. Into main, the fallback candidate `main` resolved anyway and
+  // nothing showed. Into any other branch, a stacked pull request, the guard could not decide what
+  // the previous release was, and 15 of these 24 assertions failed on a change that touched no
+  // migration at all. Scenario 10 holds it.
+  if (!(envOverride && Object.hasOwn(envOverride, "GITHUB_BASE_REF"))) delete env.GITHUB_BASE_REF;
   // A key set to null REMOVES it from the child's environment. Spreading alone
   // cannot express that, and the scenario that needs it was silently broken for
   // it: it built a copy of process.env, DELETED TEST_DATABASE_URL from the
@@ -362,6 +369,55 @@ if (!DB_URL) {
     } finally {
       cleanup(repo);
     }
+  }
+}
+
+// ── 10. The base ref comes from the scenario, never from the runner ─────────
+{
+  const repo = makeFixture();
+  try {
+    writeMigration(repo, "0001_a.sql", "CREATE TABLE t (id varchar(30) NOT NULL, PRIMARY KEY (id));\n");
+    commitAll(repo, "main: 0001");
+    git(repo, "checkout", "-q", "-b", "stacked-target");
+    writeMigration(repo, "0002_b.sql", "ALTER TABLE t ADD COLUMN note varchar(80) NULL;\n");
+    commitAll(repo, "the branch a pull request is stacked on ships 0002");
+    git(repo, "checkout", "-q", "-b", "feature");
+    fs.rmSync(path.join(repo, "drizzle", "0002_b.sql"));
+    commitAll(repo, "the stacked pull request deletes its target's 0002");
+
+    // What a pull_request run into a stacked branch hands every process it starts. The fixture has
+    // no such branch, so a guard that inherited it could not decide what the previous release was.
+    // Neither run below reaches a phase that needs the database.
+    const before = process.env.GITHUB_BASE_REF;
+    process.env.GITHUB_BASE_REF = "a-target-no-fixture-has";
+    let inherited;
+    try {
+      inherited = runJson(repo, [], {});
+    } finally {
+      if (before === undefined) delete process.env.GITHUB_BASE_REF;
+      else process.env.GITHUB_BASE_REF = before;
+    }
+    checkTrue(
+      "a base ref left in the runner's environment never reaches the fixture",
+      inherited.status === 0 && /^main @ /.test(inherited.json?.base ?? ""),
+      `status ${inherited.status}: ${inherited.json?.base ?? inherited.json?.fatal}`,
+    );
+
+    // The control: the variable is not ignored. Passed on purpose it moves the base, and against the
+    // stacked target the deleted 0002 is a shipped file gone.
+    const asked = runJson(repo, [], { GITHUB_BASE_REF: "stacked-target" });
+    checkTrue(
+      "a base ref the scenario passes is the base the guard measures against",
+      /^stacked-target @ /.test(asked.json?.base ?? ""),
+      `${asked.json?.base ?? asked.json?.fatal}`,
+    );
+    checkTrue(
+      "measured against its own target, the deleted 0002 is caught",
+      asked.status === 1 && !!asked.json?.deleted?.includes("0002_b.sql"),
+      `status ${asked.status}: ${JSON.stringify(asked.json?.deleted)}`,
+    );
+  } finally {
+    cleanup(repo);
   }
 }
 

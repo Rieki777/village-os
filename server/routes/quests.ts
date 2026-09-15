@@ -62,6 +62,7 @@ import {
   leaveConversation,
 } from "../lib/messaging";
 import { effectiveLifecycle } from "../lib/modules";
+import { questClosed } from "../repos/quests";
 import { captureIntoCurrentPattern } from "../lib/seasonPatterns";
 
 /** The share-card raster. 1200x630 is what every major unfurler crops to. */
@@ -508,17 +509,17 @@ export function register(app: Express, deps: Deps): void {
     // in flight is work someone is doing or has already submitted, and
     // deleting the quest out from under it strands the claim (badges and
     // health both still join against it) with nothing left to consent.
-    const open = (await claimsRepo.all()).filter(
-      (c) => c.questId === req.params.id && (c.status === "claimed" || c.status === "submitted"),
-    );
-    if (open.length) {
+    // Counted inside `questsRepo.remove`, under the quest's row lock, which is
+    // the lock `openClaim` takes. Counted here, several awaits before the
+    // delete, a claim landing in between was left pointing at nothing.
+    const removed = await questsRepo.remove(req.params.id);
+    if (!removed.ok && removed.reason === "in_flight") {
       return res.status(409).json({
-        error: `${open.length} member(s) have this quest in flight. Consent or decline those claims first. Deleting it now would strand their work.`,
-        openClaims: open.length,
+        error: `${removed.count} member(s) have this quest in flight. Consent or decline those claims first. Deleting it now would strand their work.`,
+        openClaims: removed.count,
       });
     }
-    const removed = await questsRepo.remove(req.params.id);
-    if (!removed) return res.status(404).json({ error: "Not found" });
+    if (!removed.ok) return res.status(404).json({ error: "Not found" });
     void recordEvent(getPool(), {
       kind: "audit", text: `quest:deleted:${req.params.id}`,
       actorUserId: (await authedUser(req))?.id ?? adminActor(req)?.id ?? null,
@@ -538,6 +539,26 @@ export function register(app: Express, deps: Deps): void {
     // chain, because consent cannot happen without one.
     if (await isExampleRow(getPool(), "quests", req.params.id)) {
       return res.status(409).json(EXAMPLE_REFUSAL_BODY);
+    }
+    /*
+     * A CLOSED QUEST IS NOT AN INVITATION, and this route never asked.
+     *
+     * It checked `is_example`, `min_stage`, `requires_role` and the member's
+     * own claims, and never `quest.status`. Nothing on the client covered for
+     * it either: `Quests.tsx` filters the board by circle and difficulty only,
+     * so a quest an admin closed kept rendering with a live claim button, and
+     * the whole chain behind it stayed open. Refusing the claim closes the
+     * chain, the same reasoning the example guard above is written on.
+     *
+     * SUBMIT IS DELIBERATELY NOT GUARDED THIS WAY. Closing the board must
+     * never strand work already in flight: a member holding a claim from
+     * before the quest closed still hands it in and is still consented.
+     */
+    if (questClosed(quest.status)) {
+      return res.status(409).json({
+        error: "This quest is closed, so it is not taking new claims. The board has others open.",
+        status: String(quest.status ?? ""),
+      });
     }
 
     // Progression gates (revision 2, step 3). Structured fields enforce; the
@@ -563,9 +584,18 @@ export function register(app: Express, deps: Deps): void {
       }
     }
 
-    const mine = await claimsRepo.forUser(user.id);
-    const existing = mine.find((c) => c.questId === quest.id && c.status !== "declined");
-    if (existing) return res.status(409).json({ error: "Already claimed", claim: existing });
+    /*
+     * ONE CLAIM PER MEMBER PER QUEST, DECIDED UNDER A LOCK.
+     *
+     * This was `forUser()`, a `find()`, and an insert several awaits later,
+     * with nothing in the schema behind it: two taps arriving together both
+     * read no claim and both inserted one, and the member then held two rows
+     * a steward could consent separately. There is no unique index to fall
+     * back on and there cannot be one, because a declined claim frees the
+     * quest on purpose and a member declined once legitimately holds two rows
+     * for the same pair. `openClaim` holds the rule where it can be held, on
+     * the quest's own row. Its header and `drizzle/0196` carry the rest.
+     */
     const claim = {
       id: `claim-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       questId: quest.id,
@@ -577,7 +607,11 @@ export function register(app: Express, deps: Deps): void {
       artifactUrl: "",
       note: "",
     };
-    await claimsRepo.add(claim);
+    const taken = await claimsRepo.openClaim(claim);
+    if (!taken.ok) {
+      if (taken.reason === "gone") return res.status(404).json({ error: "Quest not found" });
+      return res.status(409).json({ error: "Already claimed", claim: taken.existing });
+    }
     res.json(claim);
   });
 
@@ -594,12 +628,23 @@ export function register(app: Express, deps: Deps): void {
     if (await isExampleRow(getPool(), "quests", req.params.id)) {
       return res.status(409).json(EXAMPLE_REFUSAL_BODY);
     }
-    const updated = await claimsRepo.update(active.id, (c) => {
-      c.status = "submitted";
-      c.artifactUrl = artifactUrl ?? "";
-      c.note = note ?? "";
-      c.submittedAt = new Date().toISOString();
+    // Under the claim's row lock, from `claimed` or `submitted` only. `active`
+    // was read several awaits back and a steward may have resolved the claim
+    // since; what writing over that used to do is on `submitOnce` in
+    // server/repos/quests.ts. Nobody is summoned for work already resolved.
+    const moved = await claimsRepo.submitOnce(active.id, {
+      artifactUrl: artifactUrl ?? "",
+      note: note ?? "",
+      at: new Date().toISOString(),
     });
+    if (!moved.ok) {
+      if (moved.reason === "missing") return res.status(404).json({ error: "No active claim for this quest" });
+      return res.status(409).json({
+        error: `This claim was already ${moved.status} when this submission arrived, so nothing was changed.`,
+        status: moved.status,
+      });
+    }
+    const updated = moved.claim;
     /*
      * SWEEP (the incomplete loop). The claim moved to `submitted` and the
      * route returned. Nobody who can consent was told, so a member who

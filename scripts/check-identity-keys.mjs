@@ -103,6 +103,7 @@ export const IDENTITY_KEYS = [
   "project.tagline",
   "project.memberName",
   "project.catalystName",
+  "project.commitmentName",
   "project.location",
   "project.country",
   "project.fiatCurrency",
@@ -146,6 +147,10 @@ export const NEUTRAL = {
   // and names no village, the same standing as "Village member" above. A
   // village that says founder or steward puts that in its own record.
   "project.catalystName": ["Catalyst"],
+  // The platform's word for the thing a member signs. Names no village, the
+  // same standing as "Village member" and "Catalyst" above. Amora says "Love
+  // Letter" and holds that in its own brand record rather than here.
+  "project.commitmentName": ["membership agreement"],
   "project.adminPath": ["/admin"],
   // Retired from KNOWN_PENDING on 2026-08-31, in the order the list was built
   // for: the founder entered Amora's own tagline in the live Admin FIRST, so
@@ -258,7 +263,20 @@ function skipArray(src, i) {
  * otherwise report the same green as a clean config.
  */
 export function parseConfigValues(src) {
-  const anchor = src.indexOf("GAME_CONFIG");
+  // ANCHOR ON THE DECLARATION, NEVER ON THE NAME.
+  //
+  // This used to be `src.indexOf("GAME_CONFIG")`, the first textual occurrence
+  // anywhere in the file, and on 2026-09-09 a COMMENT mentioning GAME_CONFIG
+  // was added above the declaration to explain a placeholder. The anchor moved
+  // into the prose, the reader parsed the wrong object, and the guard reported
+  // five image keys and a currency key as missing from a file that still had
+  // every one of them.
+  //
+  // It failed LOUDLY, which is the design working: a reader that breaks is a
+  // failure and not a note. But a guard that any sentence can move is a guard
+  // whose next break is somebody documenting the thing it reads.
+  const decl = /\bconst\s+GAME_CONFIG\b/.exec(src);
+  const anchor = decl ? decl.index : -1;
   if (anchor < 0) return null;
   const open = src.indexOf("{", anchor);
   if (open < 0) return null;
@@ -336,6 +354,41 @@ export function emptiedNeutralDefaults(values) {
 }
 
 /**
+ * A NEUTRAL entry naming a key this guard never walks.
+ *
+ * THIS RULE EXISTS BECAUSE THE OMISSION HAPPENED. Adding
+ * `project.commitmentName` to GAME_CONFIG on 2026-09-09 took six edits, and
+ * the sixth is IDENTITY_KEYS. With five of the six done the guard reported
+ * the same green, "29 checked", while the new key held a village's own word
+ * and nothing looked at it. The NEUTRAL entry beside it read as protection
+ * and was inert.
+ *
+ * IDENTITY_KEYS is deliberately a fixed list rather than a derived one, for
+ * the reason stated where it is declared: a derived list shrinks silently
+ * when somebody renames a key. That decision is right and this is its cost,
+ * so the cost is checked rather than remembered.
+ */
+export function neutralKeysNotChecked(neutral = NEUTRAL, keys = IDENTITY_KEYS) {
+  return Object.keys(neutral).filter((k) => !keys.includes(k));
+}
+
+/**
+ * The floor under every sweep in this file.
+ *
+ * Each rule here is a FILTER, and a filter over an empty set returns an empty
+ * set. The lists are derived rather than hand-kept, so they cannot go stale the
+ * way a written-down list does; what they can still do is be empty because a
+ * reader broke or an edit went wrong, at which point every check passes over
+ * nothing and the run prints the green it prints when everything is watched.
+ *
+ * Parameterised so it can be driven empty in a test. A floor nobody has seen
+ * refuse is a sentence in a comment.
+ */
+export function listsLookBroken(neutral = NEUTRAL, keys = IDENTITY_KEYS) {
+  return !Object.keys(neutral).length || !keys.length;
+}
+
+/**
  * The five rules, over an already-parsed config. Pure, so the test can drive
  * it with values that do not exist on disk.
  */
@@ -392,6 +445,31 @@ function main(argv) {
   }
   for (const key of result.unexpected) {
     problems.push(`${key} holds a value that is neither empty nor an approved platform-neutral one. Platform defaults belong to no village: every fork inherits this file, so a value here becomes thirteen villages' default. Put it in the deployment's own record through Admin, then clear it here. If it genuinely is a neutral platform default, add it to NEUTRAL with the reason.`);
+  }
+  /*
+   * A FLOOR UNDER THE SWEEP BELOW, and it is here because the sweep is a
+   * FILTER and a filter over an empty set returns an empty set.
+   *
+   * `neutralKeysNotChecked()` derives its subjects from NEUTRAL rather than
+   * from a hand-kept list, so it cannot go stale the way a written-down list
+   * does. What it can still do is return nothing for the wrong reason: if
+   * either list is empty because a reader broke or an edit went wrong, the
+   * filter is empty, no problem is pushed, and the run says the same green it
+   * says when every key is watched.
+   *
+   * That is this file's own defect one level up. It reports what it looked at
+   * where a reader takes it for what there was, which is why the summary line
+   * prints a denominator and why this exists.
+   */
+  if (listsLookBroken()) {
+    problems.push(
+      `the guard's own lists are empty (NEUTRAL ${Object.keys(NEUTRAL).length}, ` +
+        `IDENTITY_KEYS ${IDENTITY_KEYS.length}), so every check in this run passed over nothing. ` +
+        `That is a broken reader, not a clean config.`,
+    );
+  }
+  for (const key of neutralKeysNotChecked()) {
+    problems.push(`${key} has a NEUTRAL entry and is not in IDENTITY_KEYS, so this guard never looks at it and the entry protects nothing. Add it to IDENTITY_KEYS, or delete the NEUTRAL entry if the key is gone.`);
   }
   for (const key of result.stale) {
     problems.push(`${key} is listed as known-pending and is now clean. Good news, and it needs the bookkeeping: delete its entry from KNOWN_PENDING and lower PENDING_CEILING to ${KNOWN_PENDING.length - 1}. A pending entry left behind is a standing permission for that key to be repopulated without anybody noticing.`);

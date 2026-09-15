@@ -29,14 +29,22 @@ export const TONES = ["deep", "olive", "light"] as const;
 export type Presentation = (typeof PRESENTATIONS)[number];
 export type Tone = (typeof TONES)[number];
 
-/** The five seeded class keys. A village renames the LABELS, never these. */
-export const ARCHETYPE_KEYS = [
-  "building",
-  "researching",
-  "facilitating",
-  "catalyzing",
-  "storytelling",
-] as const;
+/**
+ * The five seeded class keys. A village renames the LABELS, never these.
+ *
+ * RE-EXPORTED, NOT RESTATED. These were written out a second time here until
+ * 2026-09-09, beside the cast in what was then server/lib/economySeed.ts, and
+ * the two lists agreed only because nobody had changed either. Adding a sixth
+ * archetype would have given it a class with no avatars and nothing would have
+ * said so: `AVATARS` below is built from this list, and `avatarFor` returns
+ * null for anything absent, so the failure is a medallion where a face should
+ * be rather than an error.
+ *
+ * One home, derived from the cast. A sixth archetype now needs art rather than
+ * a second edit somebody has to remember.
+ */
+export { ARCHETYPE_KEYS } from "../../shared/archetypes";
+import { ARCHETYPE_KEYS } from "../../shared/archetypes";
 
 /**
  * Every avatar this build ships, as a fixed set.

@@ -14,6 +14,30 @@
  * two dedupe keys, and the whole guarantee is that the same fact hashes the
  * same way whichever route it arrives through.
  *
+ * ── AND WHAT IT NO LONGER OWNS ───────────────────────────────────────────
+ *
+ * The three tables have enumerable homes now, and this file kept the policy
+ * rather than the storage:
+ *
+ *   - `server/repos/externalProposals.ts` holds the queue read, the read by
+ *     id, the batch read, the decision UPDATE, the reopen and the quote
+ *     clearing, with the column list and the row mapping.
+ *   - `server/repos/externalProposalSubjects.ts` holds the attribution reads
+ *     and the erasure DELETE.
+ *   - `server/repos/externalProposalDrops.ts` holds the counter's write and
+ *     its read.
+ *
+ * The functions those served are still exported from here, unchanged, because
+ * every caller reaches the vendor inbox through this file. What stayed BEHIND
+ * them is the argument for why an erasure must be able to list every reader of
+ * a table that holds verbatim quotes about people, and that argument is now
+ * written where the readers are.
+ *
+ * Three statements did not move and each header says which: the landing
+ * transaction's own steps, which cannot run on another connection; the
+ * reference resolver, which probes four other tables through a fixed map; and
+ * the export JOIN, which reads two tables as one answer.
+ *
  * ── THE TWO KEYS, AND WHY ONE IS NOT ENOUGH ──────────────────────────────
  *
  * `dedupeKey` covers (moduleId, kind, sourceRef, normalized claim). It answers
@@ -57,6 +81,19 @@ import { createHash, randomUUID } from "crypto";
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { recordEvent } from "./events";
 import { userIdForSubjectRef } from "./subjectRefs";
+// The three vendor tables' enumerable homes. Every statement that stands on
+// its own lives there; what stays here is the KEYS, the two refusals and the
+// landing transaction, which are policy and not storage.
+import { countDropRow, dropCountsSince } from "../repos/externalProposalDrops";
+import {
+  clearQuotesOn,
+  decideProposal,
+  proposalRowById,
+  proposalRowsInBatch,
+  proposalsByStatus,
+  reopenAcceptedFor,
+} from "../repos/externalProposals";
+import { deleteSubjectRowsForMember, proposalIdsNaming } from "../repos/externalProposalSubjects";
 
 /**
  * What a vendor may propose. A closed vocabulary, checked in code.
@@ -419,12 +456,7 @@ export async function countDrop(
   input: { villageId: string; moduleId: string; reason: DropReason },
 ): Promise<void> {
   try {
-    await pool.query( // module-review-ok: external_proposals has no repo cache above it, and this file is the table's one enumerable home (the ballots.ts pattern)
-      "INSERT INTO external_proposal_drops (id, village_id, module_id, on_day, reason, dropped) " +
-        "VALUES (?,?,?,CURRENT_DATE,?,1) " +
-        "ON DUPLICATE KEY UPDATE dropped = dropped + 1, last_at = CURRENT_TIMESTAMP",
-      [`xpdrop-${randomUUID().slice(0, 12)}`, input.villageId, input.moduleId, input.reason],
-    );
+    await countDropRow(pool, input);
   } catch (err) {
     // A counter that fails must never turn a refusal into an acceptance, and
     // must never turn one into a 500 either. Same contract recordEvent holds.
@@ -500,7 +532,7 @@ export async function landProposal(pool: Pool, input: LandInput): Promise<LandRe
   try {
     await conn.beginTransaction();
     try {
-      await conn.query( // module-review-ok: external_proposals has no repo cache above it, and this file is the table's one enumerable home (the ballots.ts pattern)
+      await conn.query( // module-review-ok: a step INSIDE the transaction this function opened; a repo function taking a pool would run it on another connection, outside that transaction
         "INSERT INTO external_proposals (id, village_id, module_id, batch_id, correlation_id, kind, payload, " +
           "quote, source_ref, source_occurred_at, subject_ref, trust_tier, significance, confidence, evidence, " +
           "audience, dedupe_key, identity_key) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -569,7 +601,7 @@ export async function landProposal(pool: Pool, input: LandInput): Promise<LandRe
       const ref = clip(subjects[i], 200);
       if (ref === null) continue;
       const memberId = await userIdForSubjectRef(pool, ref);
-      await conn.query( // module-review-ok: this file is the enumerable home of external_proposals and its subject rows, per 0140's note
+      await conn.query( // module-review-ok: a step INSIDE the landing transaction, so the record and the people it names commit together; server/repos/externalProposalSubjects.ts holds the statements that stand alone
         "INSERT IGNORE INTO external_proposal_subjects (id, proposal_id, subject_ref, member_id, position) VALUES (?,?,?,?,?)",
         [`eps-${randomUUID().slice(0, 12)}`, id, ref, memberId, i],
       );
@@ -577,7 +609,7 @@ export async function landProposal(pool: Pool, input: LandInput): Promise<LandRe
 
     let res: any;
     try {
-      [res] = await conn.query( // module-review-ok: external_proposals has no repo cache above it, and this file is the table's one enumerable home (the ballots.ts pattern)
+      [res] = await conn.query( // module-review-ok: the supersede step INSIDE the landing transaction, whose ORDER after the INSERT is what makes a vendor's redelivery a no-op
         "UPDATE external_proposals SET status = 'superseded' " +
           "WHERE identity_key = ? AND status = 'proposed' AND dedupe_key <> ?",
         [identityKey, dedupeKey],
@@ -616,60 +648,19 @@ export async function landProposal(pool: Pool, input: LandInput): Promise<LandRe
   }
 }
 
-const COLS =
-  "id, village_id, module_id, batch_id, correlation_id, kind, payload, quote, source_ref, source_occurred_at, " +
-  "subject_ref, trust_tier, significance, confidence, evidence, audience, dedupe_key, identity_key, status, " +
-  "decided_by, decided_at, decided_note, created_ref, received_at";
-
-function asJson(v: unknown): Record<string, unknown> {
-  if (v && typeof v === "object" && !Array.isArray(v)) return v as Record<string, unknown>;
-  if (typeof v === "string") {
-    try {
-      const parsed = JSON.parse(v);
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-    } catch {
-      return {};
-    }
-  }
-  return {};
-}
-
-const iso = (v: unknown): string | null => {
-  if (v === null || v === undefined) return null;
-  const d = v instanceof Date ? v : new Date(String(v));
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
-};
-
-const num = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
-
-function toRow(r: RowDataPacket): ExternalProposalRow {
-  return {
-    id: String(r.id),
-    villageId: String(r.village_id),
-    moduleId: String(r.module_id),
-    batchId: String(r.batch_id),
-    correlationId: r.correlation_id ? String(r.correlation_id) : null,
-    kind: String(r.kind),
-    payload: asJson(r.payload),
-    quote: r.quote ? String(r.quote) : null,
-    sourceRef: r.source_ref ? String(r.source_ref) : null,
-    sourceOccurredAt: iso(r.source_occurred_at),
-    subjectRef: r.subject_ref ? String(r.subject_ref) : null,
-    trustTier: String(r.trust_tier),
-    significance: num(r.significance),
-    confidence: num(r.confidence),
-    evidence: (["quoted", "anchored", "absent"] as const).includes(r.evidence) ? r.evidence : "absent",
-    audience: r.audience === "member" ? "member" : "steward",
-    dedupeKey: String(r.dedupe_key),
-    identityKey: String(r.identity_key),
-    status: String(r.status) as ProposalStatus,
-    decidedBy: r.decided_by ? String(r.decided_by) : null,
-    decidedAt: iso(r.decided_at),
-    decidedNote: r.decided_note ? String(r.decided_note) : null,
-    createdRef: r.created_ref ? String(r.created_ref) : null,
-    receivedAt: iso(r.received_at) ?? "",
-  };
-}
+/*
+ * ── THE READS ARE IN server/repos/externalProposals.ts ──────────────────────
+ *
+ * The column list, the row mapping and the four statements that stand on their
+ * own moved there in the raw-SQL burn-down. Three doors are kept here, because
+ * every caller reaches the vendor inbox through this file and a route asking
+ * for the queue should not have to know which of two modules holds it.
+ *
+ * The defaults stay here, at the door, rather than in the repo: 500 is what a
+ * caller gets when it asks for the queue without saying how much, and that is a
+ * fact about this API. The BOUND on it (1 at the least, 1000 at the most) is in
+ * the repo, with the statement it protects, where no caller can get past it.
+ */
 
 /**
  * What is waiting, oldest batch first.
@@ -684,24 +675,15 @@ export async function proposalQueue(
   status: ProposalStatus = "proposed",
   limit = 500,
 ): Promise<ExternalProposalRow[]> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT ${COLS} FROM external_proposals WHERE status = ? ORDER BY received_at ASC, id ASC LIMIT ?`,
-    [status, Math.max(1, Math.min(1000, limit))],
-  );
-  return rows.map(toRow);
+  return proposalsByStatus(pool, status, limit);
 }
 
 export async function proposalById(pool: Pool, id: string): Promise<ExternalProposalRow | null> {
-  const [rows] = await pool.query<RowDataPacket[]>(`SELECT ${COLS} FROM external_proposals WHERE id = ?`, [id]);
-  return rows[0] ? toRow(rows[0]) : null;
+  return proposalRowById(pool, id);
 }
 
 export async function proposalsInBatch(pool: Pool, batchId: string): Promise<ExternalProposalRow[]> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT ${COLS} FROM external_proposals WHERE batch_id = ? ORDER BY received_at ASC, id ASC`,
-    [batchId],
-  );
-  return rows.map(toRow);
+  return proposalRowsInBatch(pool, batchId);
 }
 
 /**
@@ -724,22 +706,7 @@ export async function markProposalDecided(
     editedPayload?: Record<string, unknown> | null;
   },
 ): Promise<boolean> {
-  const sets = ["status = ?", "decided_by = ?", "decided_at = CURRENT_TIMESTAMP", "decided_note = ?"];
-  const args: unknown[] = [input.status, input.decidedBy, input.note ?? null];
-  if (input.createdRef !== undefined) {
-    sets.push("created_ref = ?");
-    args.push(input.createdRef ?? null);
-  }
-  if (input.editedPayload) {
-    sets.push("payload = ?");
-    args.push(JSON.stringify(input.editedPayload));
-  }
-  args.push(input.id);
-  const [res]: any = await pool.query( // module-review-ok: external_proposals has no repo cache above it, and this file is the table's one enumerable home (the ballots.ts pattern)
-    `UPDATE external_proposals SET ${sets.join(", ")} WHERE id = ? AND status = 'proposed'`,
-    args,
-  );
-  return Number(res?.affectedRows ?? 0) > 0;
+  return decideProposal(pool, input);
 }
 
 export interface DropCount {
@@ -749,19 +716,14 @@ export interface DropCount {
   lastAt: string | null;
 }
 
-/** What was refused and never stored, so an empty queue can be read honestly. */
+/**
+ * What was refused and never stored, so an empty queue can be read honestly.
+ *
+ * 30 days is the default a caller gets for asking without saying; the window's
+ * bound is in `server/repos/externalProposalDrops.ts` with the statement.
+ */
 export async function recentDrops(pool: Pool, days = 30): Promise<DropCount[]> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT module_id, reason, SUM(dropped) AS dropped, MAX(last_at) AS last_at FROM external_proposal_drops " +
-      "WHERE on_day >= DATE_SUB(CURRENT_DATE, INTERVAL ? DAY) GROUP BY module_id, reason ORDER BY dropped DESC",
-    [Math.max(1, Math.min(365, days))],
-  );
-  return rows.map((r) => ({
-    moduleId: String(r.module_id),
-    reason: String(r.reason),
-    dropped: Number(r.dropped ?? 0),
-    lastAt: iso(r.last_at),
-  }));
+  return dropCountsSince(pool, days);
 }
 
 /**
@@ -778,12 +740,7 @@ export async function recentDrops(pool: Pool, days = 30): Promise<DropCount[]> {
  * superseded by a newer claim while the draft sat open, is left alone.
  */
 export async function reopenProposalsFor(pool: Pool, createdRef: string): Promise<number> {
-  const [r] = await pool.query<any>(
-    "UPDATE external_proposals SET status = 'proposed', decided_by = NULL, decided_at = NULL, " +
-      "decided_note = NULL, created_ref = NULL WHERE created_ref = ? AND status = 'accepted'",
-    [createdRef],
-  );
-  return Number(r?.affectedRows) || 0;
+  return reopenAcceptedFor(pool, createdRef);
 }
 
 /**
@@ -837,20 +794,15 @@ export async function forgetMemberInProposals(
   pool: Pool,
   memberId: string,
 ): Promise<{ records: number; quotesCleared: number }> {
-  const [about] = await pool.query<RowDataPacket[]>(
-    "SELECT DISTINCT proposal_id FROM external_proposal_subjects WHERE member_id = ?",
-    [memberId],
-  );
-  const ids = about.map((r) => String(r.proposal_id));
+  const ids = await proposalIdsNaming(pool, memberId);
   if (!ids.length) return { records: 0, quotesCleared: 0 };
 
-  const holes = ids.map(() => "?").join(",");
-  const [q] = await pool.query<any>(
-    `UPDATE external_proposals SET quote = NULL WHERE id IN (${holes}) AND quote IS NOT NULL`,
-    ids,
-  );
-  await pool.query("DELETE FROM external_proposal_subjects WHERE member_id = ?", [memberId]); // module-review-ok: external_proposal_subjects has no repo cache above it, and this file is the table's one enumerable home (the ballots.ts pattern)
-  return { records: ids.length, quotesCleared: Number(q?.affectedRows) || 0 };
+  // THE QUOTES GO FIRST, AND THE ATTRIBUTION SECOND. The ids that say which
+  // records to clear come from the attribution rows, so deleting those first
+  // would leave the quotes standing with nothing left pointing at them.
+  const quotesCleared = await clearQuotesOn(pool, ids);
+  await deleteSubjectRowsForMember(pool, memberId);
+  return { records: ids.length, quotesCleared };
 }
 
 /**
@@ -861,13 +813,12 @@ export async function forgetMemberInProposals(
  * erasure or an export is complete only with respect to what could be
  * attributed. A count of what could not is the difference between a promise
  * kept and a promise that looks kept.
+ *
+ * The statement lives in `server/repos/externalProposalSubjects.ts` with every
+ * other statement against that table, and is re-exported here because the
+ * admin surface that asks reaches the vendor inbox through this file.
  */
-export async function unattributedSubjectCount(pool: Pool): Promise<number> {
-  const [[r]] = await pool.query<RowDataPacket[]>(
-    "SELECT COUNT(*) AS n FROM external_proposal_subjects WHERE member_id IS NULL",
-  );
-  return Number(r?.n) || 0;
-}
+export { unattributedSubjectCount } from "../repos/externalProposalSubjects";
 
 /**
  * Re-resolve subject references that were stored before this village could
@@ -913,7 +864,7 @@ export async function reresolveSubjects(
       "SET eps.member_id = sr.user_id WHERE eps.member_id IS NULL"
     : "SELECT COUNT(*) AS n FROM external_proposal_subjects eps " +
       "JOIN subject_refs sr ON sr.ref = eps.subject_ref WHERE eps.member_id IS NULL";
-  const [r] = await pool.query<any>(sql); // module-review-ok: external_proposal_subjects has no repo above it, and this file is that table's one enumerable home, per 0140's note
+  const [r] = await pool.query<any>(sql); // module-review-ok: a two-table statement (external_proposal_subjects JOIN subject_refs) whose safety property reads as one thing beside the paragraph above it
   const n = opts.apply ? Number(r?.affectedRows) || 0 : Number(r?.[0]?.n) || 0;
   return { resolvable: n, updated: opts.apply ? n : 0 };
 }

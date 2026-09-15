@@ -244,6 +244,9 @@ export function currentCycle(date: Date = new Date(), clock: CycleClock = active
  * Pure, so it is unit-testable with no database and no clock. `distinctSenders`
  * is the interesting number socially: ten acknowledgments from one person is a
  * friendship, ten from ten people is a reputation.
+ *
+ * Reversed gifts are handed in by the caller and left out of every total here;
+ * the block inside says why that is the settlement's job and not the log's.
  */
 export interface SettleTotals {
   userId: string;
@@ -278,12 +281,38 @@ export function settleCycle(
   entries: readonly GratitudeEntryLike[],
   cycleId: string,
   eligibleSenders?: ReadonlySet<string>,
+  reversedEntryIds?: ReadonlySet<string>,
 ): SettleTotals[] {
   // Before any arithmetic. Everything below produces numbers a member reads as
   // facts about their moon, so a row this build cannot place must stop the
   // total rather than be quietly absent from it.
   refuseUnreadable(entries);
-  const inCycle = entries.filter((e) => e.cycleId === cycleId);
+  /*
+   * ── A REVERSED GIFT IS NOT A GIFT, AND THIS IS WHERE IT STOPPED BEING ONE ─
+   *
+   * This summed `gratitude_log` with no reversal term at all, and the ledger
+   * and the allowance both already knew better: `reverse()` debits the
+   * recognition back out of the recipient's balance, and `allowanceFor`
+   * (server/lib/economy.ts) hands the giver's allowance back. Only the
+   * settlement carried on as though the gift had happened, so the recipient
+   * kept the `received` total, kept the sender in `distinctSenders`, kept the
+   * `receivedEligible` it is paid on, and drew a share of the cycle's value
+   * pool for recognition that had been taken back. Three readings of one moon,
+   * and the one that released real value was the wrong one.
+   *
+   * Dropped rather than zeroed: a reversed gift is not a gift of nothing, it
+   * is a gift that did not happen, and a sender whose only gift was undone is
+   * not somebody who acknowledged you.
+   *
+   * OPTIONAL, and absent means "nothing was reversed" rather than "do not
+   * check". This function is pure and its callers own the read; the two that
+   * settle real value (the preview and the close, server/index.ts) pass the
+   * repo's `reversedIds()`, and the unit tests that pass nothing are stating
+   * that their fixtures hold no reversals.
+   */
+  const inCycle = entries.filter(
+    (e) => e.cycleId === cycleId && !reversedEntryIds?.has(e.id),
+  );
   const byRecipient = new Map<
     string,
     { received: number; eligible: number; hearts: number; acks: number; senders: Set<string> }

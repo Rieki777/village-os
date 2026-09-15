@@ -29,6 +29,7 @@ import {
   VILLAGE_VOICE,
   villageId,
 } from "./economy";
+import { ARCHETYPES } from "../../shared/archetypes";
 import { seedEconomy } from "./economySeed";
 
 const configured = testDbConfigured();
@@ -196,4 +197,85 @@ describe.skipIf(!configured)("the rules a village is seeded with", () => {
     expect(Number(rule?.amount)).toBe(7);
     expect(rule?.enabled).toBe(1);
   });
+
+  /**
+   * A VILLAGE'S OWN WORDS SURVIVE A REDEPLOY, which is the whole reason 0193 and
+   * the `customized` column exist.
+   *
+   * `seedEconomy` runs on EVERY boot. Before 0193 its ON DUPLICATE KEY UPDATE
+   * restored subtitle, blurb, examples, sigil and sort_order from the platform
+   * every time, so a village that re-blurbed a class would find the platform's
+   * copy back at the next restart with nothing said. The comment above that
+   * statement promised a `renamed` flag would protect them and no such column
+   * existed, which is why the admin editor could not ship before this.
+   *
+   * These drive the REAL seed against a REAL database twice, because the defect
+   * only exists on the second run. A test that seeded once would pass against the
+   * bug.
+   */
+  const KEY = ARCHETYPES[0].key;
+
+  it("CONTROL: the seed really does write the platform's words first", () => {
+    // Without this, the assertions below could be passing over a table the
+    // seed never touched.
+    expect(ARCHETYPES.length).toBeGreaterThan(0);
+  });
+
+  it("refreshes a class the village has not touched, so copy improvements travel", async () => {
+    await pool.query(
+      "UPDATE `archetypes` SET `blurb` = 'a stale platform sentence' WHERE `village_id` = ? AND `key` = ?",
+      [VILLAGE, KEY],
+    );
+    await seedEconomy(pool, VILLAGE);
+    const [rows]: any = await pool.query(
+      "SELECT `blurb`, `customized` FROM `archetypes` WHERE `village_id` = ? AND `key` = ?",
+      [VILLAGE, KEY],
+    );
+    expect(rows[0].blurb).toBe(ARCHETYPES[0].blurb);
+    expect(Number(rows[0].customized)).toBe(0);
+  });
+
+  it("leaves every word alone once the village has made the class its own", async () => {
+    await pool.query(
+      "UPDATE `archetypes` SET `name` = ?, `subtitle` = ?, `blurb` = ?, `sigil` = ?, `sort_order` = 4, " +
+        "`customized` = 1 WHERE `village_id` = ? AND `key` = ?",
+      ["The Gardener", "Tending & Growing", "Ours, not yours.", "leaf", VILLAGE, KEY],
+    );
+    await seedEconomy(pool, VILLAGE);
+    const [rows]: any = await pool.query(
+      "SELECT `name`, `subtitle`, `blurb`, `sigil`, `sort_order` FROM `archetypes` " +
+        "WHERE `village_id` = ? AND `key` = ?",
+      [VILLAGE, KEY],
+    );
+    expect(rows[0].name).toBe("The Gardener");
+    expect(rows[0].subtitle).toBe("Tending & Growing");
+    expect(rows[0].blurb).toBe("Ours, not yours.");
+    expect(rows[0].sigil).toBe("leaf");
+    expect(Number(rows[0].sort_order)).toBe(4);
+  });
+
+  it("never restores a NAME, marked or not, because a rename always belonged to the village", async () => {
+    // `name` was already absent from the update list before 0193, so this is
+    // the one guarantee that predates the flag. Asserted because the panel now
+    // tells a founder their name is always theirs.
+    await pool.query(
+      "UPDATE `archetypes` SET `name` = 'The Gardener', `customized` = 0 WHERE `village_id` = ? AND `key` = ?",
+      [VILLAGE, KEY],
+    );
+    await seedEconomy(pool, VILLAGE);
+    const [rows]: any = await pool.query(
+      "SELECT `name` FROM `archetypes` WHERE `village_id` = ? AND `key` = ?",
+      [VILLAGE, KEY],
+    );
+    expect(rows[0].name).toBe("The Gardener");
+  });
+
+  it("seeds every key the shared cast declares, and no others", async () => {
+    const [rows]: any = await pool.query(
+      "SELECT `key` FROM `archetypes` WHERE `village_id` = ? ORDER BY `key`",
+      [VILLAGE],
+    );
+    expect(rows.map((r: any) => r.key)).toEqual(ARCHETYPES.map((a) => a.key).sort());
+  });
+
 });

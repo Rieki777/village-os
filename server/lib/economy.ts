@@ -68,6 +68,10 @@ import {
   RECOGNITION_FAUCET,
   type TransferResult,
 } from "./ledger";
+// The one definition of "this gratitude row has been undone". It lives in the
+// repo because that is where queries live, and it is imported rather than
+// restated because the settlement reads it too: see its header.
+import { REVERSED_GRATITUDE_FROM } from "../repos/gratitude";
 
 /** Seeded by 0024. Named here rather than imported so this module does not
  *  depend on the library module being present. */
@@ -634,10 +638,20 @@ export async function reverse(
      * see the note on that set.
      */
     allowNegative: true,
-    // Prefix, because source_ref is varchar(120) and a quest occurrence key can
-    // run past it. A prefix is enough for the allowance query, which matches on
-    // `gratitude.given:<village>:%`, and the whole key rides in the note so a
-    // human reading the row can still find what was undone.
+    /*
+     * THE KEY THIS UNDOES, clipped only because `source_ref` is varchar(120)
+     * and a quest occurrence key can run past it (`idempotency_key` allows
+     * 191). The whole key also rides in the description below, so a human
+     * reading the row can find what was undone even when it was clipped.
+     *
+     * IT IS ALSO A JOIN COLUMN NOW. `REVERSED_GRATITUDE_FROM`
+     * (server/repos/gratitude.ts) walks from this mirror back to the posting
+     * it undoes by matching this against that posting's `idempotency_key`, so
+     * a key long enough to be clipped here is a key that walk cannot follow.
+     * Every gratitude key is under 50 characters and its own test holds that
+     * shut; nothing over 120 has ever been reversed. A future key that could
+     * exceed it needs the walk keyed on something else, not a wider slice.
+     */
     sourceRef: originalKey.slice(0, MAX_SOURCE_REF),
     description: opts.note ? `${opts.note} (${originalKey})` : originalKey,
     idempotencyKey: mirrorKey,
@@ -716,16 +730,64 @@ export async function allowanceFor(
   );
   const given = Number(rows[0]?.given ?? 0);
 
-  // Reversals of THIS cycle's gifts hand the allowance back. Keyed on the
-  // gratitude keys so a reversal of some other posting cannot inflate it.
+  /*
+   * ── WHAT A REVERSAL HANDS BACK, AND TO WHOM, AND IN WHICH CYCLE ──────────
+   *
+   * The same rows as the sum above, narrowed to the ones that have been
+   * undone. That is the whole shape of the fix: `back` is now a subset of
+   * `given` by construction, so the subtraction can only ever cancel gifts
+   * this member actually made in this window.
+   *
+   * IT USED TO BE A SEPARATE SUM OVER `token_ledger`, and it filtered on
+   * neither the giver nor the gift. Any reversal anywhere in the village
+   * reduced the computed spend of EVERY member for the window, so one
+   * correction handed every other member a refund of somebody else's gift.
+   * Two members, one reversal, and the second member's allowance moved:
+   * `server/lib/economy.allowance.test.ts` drives exactly that.
+   *
+   * ── AND IT WAS WINDOWED ON THE REVERSAL'S OWN TIMESTAMP, WHICH IS A CHOICE
+   *
+   * `t.at` was the mirror posting's `at`, so reversing a gift made three moons
+   * ago refunded allowance in the CURRENT moon — allowance that had never been
+   * spent here — and reversing this moon's gift a day after the boundary
+   * refunded nothing at all. Both readings cannot be right, so this picks one
+   * and says which:
+   *
+   *   AN ALLOWANCE IS SPENT IN THE CYCLE THE GIFT WAS MADE, SO A REFUND
+   *   BELONGS TO THAT CYCLE TOO.
+   *
+   * The allowance is a per-cycle budget and the note row is what charges it
+   * (`writeGratitudeRow` computes this sum and writes that row under one
+   * lock). A correction says the charge should not have happened, so it
+   * unwinds the charge where the charge landed. The window is therefore
+   * `g.at`, the GIFT's timestamp, and the mirror's own timestamp is not read
+   * at all — undoing a gift from a closed moon correctly changes nothing
+   * about this one, and undoing this moon's gift returns this moon's budget
+   * the moment it happens, however long the correction took to arrive.
+   *
+   * The reading it rejects — refund in the cycle the correction lands in —
+   * would let a village hand out allowance that no cycle had ever budgeted,
+   * by reversing old gifts, and would make a member's remaining budget depend
+   * on when an administrator got round to fixing something.
+   *
+   * `REVERSED_GRATITUDE_FROM` is shared with the settlement so the two cannot
+   * drift about what "reversed" means; its own header carries why it walks
+   * mirror → posting → note instead of matching a key prefix.
+   */
   const [reversed] = await conn.query<RowDataPacket[]>(
-    "SELECT COALESCE(SUM(t.`amount`), 0) AS back FROM `token_ledger` t " +
-      "WHERE t.`source` = 'reversal' AND t.`at` >= ? AND t.`at` < ? " +
-      "AND t.`source_ref` LIKE ?",
-    [startsAt, endsAt, `gratitude.given:${villageId()}:%`],
+    "SELECT COALESCE(SUM(g.`amount`), 0) AS back " +
+      REVERSED_GRATITUDE_FROM +
+      " AND g.`village_id` = ? AND g.`from_id` = ? AND g.`at` >= ? AND g.`at` < ?",
+    [villageId(), userId, startsAt, endsAt],
   );
   const back = Number(reversed[0]?.back ?? 0);
 
+  // The floor is now belt and braces rather than the load-bearing thing it
+  // was: both sums run over the same window, the same village and the same
+  // giver, so `back` cannot exceed `given`. It used to be the only reason a
+  // village-wide reversal did not report a NEGATIVE spend, which is exactly
+  // how a defect this large stayed invisible: it clamped to a plausible
+  // number instead of an impossible one.
   const spent = Math.max(0, given - back);
   return { total, spent, remaining: Math.max(0, total - spent), cycleKey: key };
 }
