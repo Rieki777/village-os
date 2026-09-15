@@ -1,6 +1,6 @@
 import { anonymizeMember } from "./lib/erasure";
 import { proposalsAboutMember } from "./lib/externalProposals";
-import { landPublicSubmission } from "./lib/publicForms";
+import { ideasProposedBy, landPublicSubmission } from "./lib/publicForms";
 // Local dev reads .env (PORT=3001 so the API doesn't collide with Vite's 3000);
 // on Railway the real environment always wins over the file.
 import "dotenv/config";
@@ -7778,8 +7778,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       submittedAt: new Date().toISOString(),
     };
     if (submitter) { entry.userId = submitter.id; entry.userName = submitter.name; }
-    // One INSERT, then a quest idea queued for review. The reasons, the race
-    // the INSERT closed among them, live in server/lib/publicForms.ts.
+    // One INSERT, then a quest idea queued for review: server/lib/publicForms.ts.
     await landPublicSubmission(submissionsRepo, getPool(), entry);
 
     /*
@@ -26679,6 +26678,7 @@ ${inner}
       tokenDecimals: Object.fromEntries(allTokens().map((t) => [t.slug, t.decimals])), // ...and what turns those rows into the numbers the member reads. Without it a Voice balance of 10000 in a downloaded file is unreadable by the one person entitled to read it.
       stageEvents: stageEventsRepo.all().filter((e: any) => e.userId === user.id),
       submissions: submissionsRepo.all().filter((s: any) => s.userId === user.id),
+      questIdeas: await ideasProposedBy(pool, user.id), // what they proposed through the Propose a Quest form, and what became of it
       notifications: notifRows,
       preferences: resolveNotifyPrefs(user.prefs),
       // What a MODULE wrote about this member. Absent until now, so a vendor

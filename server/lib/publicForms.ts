@@ -13,41 +13,57 @@
  * ── WHAT IS COPIED, AND WHAT IS NOT ──────────────────────────────────────
  *
  * The idea is copied: the title, what the person wants to do, and what they
- * bring, need, ask for in return and by when. Who they are is not. Name and
- * email stay in the submission, which the admin inbox, the member export, the
- * retention sweep and erasure already handle. The proposal points back at it
- * through `source_ref` (`submission:<id>`). A signed-in member's id goes in
- * `proposed_by`, which erasure clears (server/repos/questProposals.ts).
+ * bring, need, ask for in return and by when, each cut to what the table keeps
+ * before anything reads it. Who they are is not. Name and email stay in the
+ * submission, which the admin inbox, the member export, the retention sweep and
+ * erasure already handle. The proposal points back at it through `source_ref`
+ * (`submission:<id>`). A signed-in member's id goes in `proposed_by`, which the
+ * member export lists and erasure clears (server/repos/questProposals.ts), and
+ * nothing else on the row is made from it: the batch id names the submission,
+ * because a hash of a member's id identifies them to anybody holding the id.
  *
  * ── THE SUBMISSION IS THE RECORD, THE PROPOSAL IS DERIVED ────────────────
  *
  * A proposal that cannot be stored leaves the submission standing and the
  * response unchanged, because the steward inbox still receives every
- * submission. `proposeQuest` refuses an idea carrying an email address (the
- * screen vendor intake uses) or with nothing to title it by, and refuses one
- * past an allowance: three open ideas per member, ten from visitors together.
- * A database error keeps one out as well. So the derivation is awaited, logged
- * when it refuses, and never allowed to throw into the form's response.
+ * submission. An idea is held back when it carries an email address, has
+ * nothing to title it by, or would pass an allowance: three open ideas per
+ * member, ten from visitors together. Each one held back is counted in
+ * `external_proposal_drops` under this form's module id, which /review already
+ * reads out, so a queue emptied by hold-backs does not read like a queue nobody
+ * wrote to. A database error keeps an idea out as well, and is logged. The
+ * derivation is awaited and never allowed to throw into the form's response.
+ *
+ * ── THE ALLOWANCES HOLD UNDER A BURST ────────────────────────────────────
+ *
+ * Counting open ideas and inserting one are two statements. Requests arriving
+ * together would all count the same number and all insert, so both run under
+ * one named lock, on the connection holding it (`withIdeaLock`). Ideas arrive a
+ * few an hour, so nobody waits on it.
  *
  * ── WHY server/index.ts CALLS THIS INSTEAD OF DOING IT ───────────────────
  *
  * `POST /api/forms/submit` lives in server/index.ts, which may not grow
  * (scripts/check-server-index-size.mjs counts every line but a route import
  * and a register call). The handler's one INSERT became one call to
- * `landPublicSubmission`, and the reasoning lives here.
+ * `landPublicSubmission`, and the member export reads a member's ideas through
+ * `ideasProposedBy`, re-exported here so that file imports one module for both.
  */
-import { createHash } from "crypto";
 import type { Pool } from "mysql2/promise";
 import { PROPOSE_QUEST_MODULE, QUEST_IDEA_FORM } from "../../shared/questIdeas";
+import { MEMBER_BATCH_PREFIX, VISITOR_BATCH_PREFIX, openIdeas, withIdeaLock } from "../repos/questProposals";
 import { villageId } from "./economy";
+import { containsEmail, countDrop, type DropReason } from "./externalProposals";
 import { proposeQuest, type ProposeQuestResult } from "./questProposals";
+
+export { ideasProposedBy } from "../repos/questProposals";
 
 /**
  * How many ideas one member may hold in the review queue at once.
  *
- * The form's rate limit caps a burst from one address, and nothing capped a
- * member filling the queue over a week. A fourth idea is not lost: it stays in
- * the steward inbox as a submission, and the member can propose it again once a
+ * The form's rate limit slows one address down, and nothing capped a member
+ * filling the queue over a week. A fourth idea is not lost: it stays in the
+ * steward inbox as a submission, and the member can propose it again once a
  * steward has decided on one of the three.
  */
 export const OPEN_IDEAS_PER_MEMBER = 3;
@@ -56,11 +72,22 @@ export const OPEN_IDEAS_PER_MEMBER = 3;
  * How many ideas from visitors, taken together, may wait in the review queue.
  *
  * A visitor has no identity to count against, so visitors share one allowance.
- * The rate limit bounds a burst from one address, and this bounds a flood from
- * many, which would otherwise bury the ideas a steward is there to read. An idea
- * past it is not lost either: it stays in the steward inbox.
+ * The rate limit slows one address down, and this bounds a flood from many,
+ * which would otherwise bury the ideas a steward is there to read. An idea past
+ * it is not lost either: it stays in the steward inbox, and /review counts it.
  */
 export const OPEN_VISITOR_IDEAS = 10;
+
+/**
+ * The widths `proposeQuest` stores (`W` in server/lib/questProposals.ts), applied
+ * before anything reads an idea. A form body may carry a megabyte and the email
+ * screen reads every character it is handed, so an idea is first cut to what
+ * the table would keep. Four labelled answers of ANSWER_WIDTH fit the
+ * rationale's 8000.
+ */
+const TITLE_WIDTH = 200;
+const PROSE_WIDTH = 8000;
+const ANSWER_WIDTH = 1900;
 
 /** What the form sends. Every field is caller-controlled JSON, and nothing upstream checks a type. */
 type FormData = Record<string, unknown>;
@@ -74,8 +101,11 @@ export interface SubmissionEntry {
   [key: string]: unknown;
 }
 
-/** A string the caller sent, trimmed, or empty. */
-const text = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
+/** What became of a quest idea: stored, refused, or held back for a reason /review counts. */
+export type IdeaOutcome = ProposeQuestResult | { ok: false; error: string; heldBack: DropReason };
+
+/** A string the caller sent, trimmed and cut to `width`, or empty. */
+const text = (v: unknown, width: number): string => (typeof v === "string" ? v.trim().slice(0, width) : "");
 
 /**
  * The title a steward reads. The form's own title when there is one, which is
@@ -83,9 +113,9 @@ const text = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
  * do, cut at a word boundary short enough to read as a title.
  */
 export function titleFrom(data: FormData): string {
-  const given = text(data.title);
+  const given = text(data.title, TITLE_WIDTH);
   if (given) return given;
-  const first = text(data.whatYouWantToDo).split(/\r?\n/)[0]?.trim() ?? "";
+  const first = text(data.whatYouWantToDo, PROSE_WIDTH).split(/\r?\n/)[0]?.trim() ?? "";
   if (first.length <= 80) return first;
   const cut = first.slice(0, 80);
   const space = cut.lastIndexOf(" ");
@@ -102,42 +132,61 @@ const ASKED: ReadonlyArray<readonly [key: string, label: string]> = [
 
 export function rationaleFrom(data: FormData): string | null {
   const lines = ASKED.map(([key, label]) => {
-    const value = text(data[key]);
+    const value = text(data[key], ANSWER_WIDTH);
     return value ? `${label}: ${value}` : null;
   }).filter((line): line is string => line !== null);
   return lines.length ? lines.join("\n") : null;
 }
 
-/**
- * The batch a quest idea counts against. `proposeQuest` refuses a batch already
- * holding its cap of open ideas, so the batch is where each allowance above is
- * counted. A member's ideas share one batch, hashed because `batch_id` holds 64
- * characters and a user id may already be 64. Visitors share one between them.
- * Both begin with the module id, because every source of quest proposals counts
- * its batches in the same column.
- */
-function batchFor(member: string | null): { batchId: string; batchCap: number } {
-  if (!member) return { batchId: `${PROPOSE_QUEST_MODULE}:visitors`, batchCap: OPEN_VISITOR_IDEAS };
-  const digest = createHash("sha256").update(member).digest("hex").slice(0, 32);
-  return { batchId: `${PROPOSE_QUEST_MODULE}:member:${digest}`, batchCap: OPEN_IDEAS_PER_MEMBER };
+/** An idea kept out of the queue, counted where /review reads refusals. */
+async function heldBack(pool: Pool, reason: DropReason, error: string): Promise<IdeaOutcome> {
+  await countDrop(pool, { villageId: villageId(), moduleId: PROPOSE_QUEST_MODULE, reason });
+  return { ok: false, error, heldBack: reason };
 }
 
-/** Derive and store the review queue's copy of a quest idea. Refusals come back as values; a database error throws. */
-export async function proposeQuestFromSubmission(pool: Pool, entry: SubmissionEntry): Promise<ProposeQuestResult> {
+/** Derive and store the review queue's copy of a quest idea. Hold-backs come back as values; a database error throws. */
+export async function proposeQuestFromSubmission(pool: Pool, entry: SubmissionEntry): Promise<IdeaOutcome> {
   const data: FormData =
     entry.data && typeof entry.data === "object" && !Array.isArray(entry.data) ? (entry.data as FormData) : {};
   const member = typeof entry.userId === "string" && entry.userId ? entry.userId : null;
-  return proposeQuest(pool, {
-    villageId: villageId(),
-    moduleId: PROPOSE_QUEST_MODULE,
-    ...batchFor(member),
-    prose: { title: titleFrom(data), description: text(data.whatYouWantToDo) || null },
-    rationale: rationaleFrom(data),
-    quote: null,
-    sourceRef: `submission:${entry.id}`,
-    proposedBy: member,
-    proposedByKind: "human",
+  const prose = { title: titleFrom(data), description: text(data.whatYouWantToDo, PROSE_WIDTH) || null };
+  const rationale = rationaleFrom(data);
+
+  if (!prose.title) return heldBack(pool, "empty_payload", "An idea with nothing to title it by stays in the inbox.");
+  if (containsEmail([prose, rationale])) {
+    return heldBack(pool, "contained_an_email", "An idea carrying an email address stays in the inbox.");
+  }
+  // One batch per submission, so a batch id says which submission an idea came
+  // from and nothing about who sent it.
+  const batchId = `${member ? MEMBER_BATCH_PREFIX : VISITOR_BATCH_PREFIX}${entry.id}`;
+  if (batchId.length > 64 || (member ?? "").length > 64) {
+    return heldBack(pool, "identifier_too_long", "An idea whose identifiers run past 64 characters stays in the inbox.");
+  }
+
+  const outcome = await withIdeaLock(pool, async (conn): Promise<ProposeQuestResult | "full"> => {
+    const open = await openIdeas(conn, member ? { member } : "visitors");
+    if (open >= (member ? OPEN_IDEAS_PER_MEMBER : OPEN_VISITOR_IDEAS)) return "full";
+    return proposeQuest(conn, {
+      villageId: villageId(),
+      moduleId: PROPOSE_QUEST_MODULE,
+      batchId,
+      batchCap: 1,
+      prose,
+      rationale,
+      quote: null,
+      sourceRef: `submission:${entry.id}`,
+      proposedBy: member,
+      proposedByKind: "human",
+    });
   });
+  if (outcome !== "full") return outcome;
+  return heldBack(
+    pool,
+    "over_allowance",
+    member
+      ? `This member already has ${OPEN_IDEAS_PER_MEMBER} ideas waiting for a steward, so this one stays in the inbox.`
+      : `${OPEN_VISITOR_IDEAS} ideas from visitors already wait for a steward, so this one stays in the inbox.`,
+  );
 }
 
 /**
@@ -153,7 +202,7 @@ export async function landPublicSubmission(
   submissionsRepo: { insert(entry: any): Promise<unknown> },
   pool: Pool,
   entry: SubmissionEntry,
-): Promise<{ proposal: ProposeQuestResult | null }> {
+): Promise<{ proposal: IdeaOutcome | null }> {
   await submissionsRepo.insert(entry);
   if (entry.type !== QUEST_IDEA_FORM) return { proposal: null };
   try {

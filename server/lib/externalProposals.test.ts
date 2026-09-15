@@ -179,6 +179,19 @@ describe.skipIf(!configured)("the vendor proposal inbox", () => {
     expect(containsEmail(cyclic)).toBe(false);
   });
 
+  it("reads a long string in time that grows with its length, so a public form cannot stall it", () => {
+    // The unbounded pattern was quadratic: 40,000 letters took 820 ms and each doubling
+    // took four times as long. The bounded one reads a megabyte in about a fifth of a
+    // second on a developer machine, and these two strings in a few milliseconds.
+    const started = Date.now();
+    expect(containsEmail("a".repeat(100_000))).toBe(false);
+    expect(containsEmail("a".repeat(50_000) + "@" + "b".repeat(50_000))).toBe(false);
+    expect(Date.now() - started).toBeLessThan(1_000);
+    // And the bounds miss no address a person could have.
+    expect(containsEmail("x".repeat(100) + "@example.org")).toBe(true);
+    expect(containsEmail("write to ada.wren+quests@mail.example.co.uk today")).toBe(true);
+  });
+
   it("counts drops per reason, so an empty queue can be read honestly", async () => {
     await landProposal(pool, { ...base, payload: { note: "ada@example.org" } });
     await landProposal(pool, { ...base, payload: { note: "bea@example.org" } });

@@ -6,8 +6,8 @@
  * The submission is the record and the proposal is derived, so every case
  * checks both: that the submission was stored, and whether a proposal was. The
  * submissions repository is a recorder, because what it does with a row is not
- * this file's subject. `quest_proposals` is the real table, read back the way
- * /review reads it.
+ * this file's subject. `quest_proposals` and `external_proposal_drops` are the
+ * real tables, read back the way /review reads them.
  *
  * No TEST_DATABASE_URL and the suite skips loudly (harness rule).
  */
@@ -15,7 +15,14 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { forgetProposer } from "../repos/questProposals";
-import { landPublicSubmission, OPEN_IDEAS_PER_MEMBER, OPEN_VISITOR_IDEAS, titleFrom } from "./publicForms";
+import { recentDrops } from "./externalProposals";
+import {
+  ideasProposedBy,
+  landPublicSubmission,
+  OPEN_IDEAS_PER_MEMBER,
+  OPEN_VISITOR_IDEAS,
+  titleFrom,
+} from "./publicForms";
 import { questProposalQueue } from "./questProposals";
 
 const configured = testDbConfigured();
@@ -74,7 +81,11 @@ const landMany = async (count: number, over: (i: number) => Record<string, unkno
 describe.skipIf(!configured)("a quest idea from the public form reaches the review queue", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    // Room for a burst to hold its own connections at once, and warmed, so the
+    // burst case below races the code and not the driver opening sockets.
+    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 12 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    const warm = await Promise.all(Array.from({ length: 8 }, () => pool.getConnection()));
+    warm.forEach((c) => c.release());
   });
 
   afterAll(async () => {
@@ -85,6 +96,7 @@ describe.skipIf(!configured)("a quest idea from the public form reaches the revi
   beforeEach(async () => {
     stored = [];
     await pool.query("DELETE FROM quest_proposals"); // module-review-ok: resetting the scratch schema this suite provisioned, between cases
+    await pool.query("DELETE FROM external_proposal_drops"); // module-review-ok: resetting the scratch schema this suite provisioned, between cases
   });
 
   it("stores the submission and queues the idea for a steward, with the idea and without the person", async () => {
@@ -102,6 +114,8 @@ describe.skipIf(!configured)("a quest idea from the public form reaches the revi
       proposed_by: "u-ada",
       proposed_by_kind: "human",
       status: "proposed",
+      // The batch names the submission. Nothing on the row but proposed_by is made from the member.
+      batch_id: `propose-quest:member:${e.id}`,
     });
     expect(String(row.rationale)).toBe(
       [
@@ -124,7 +138,7 @@ describe.skipIf(!configured)("a quest idea from the public form reaches the revi
     const e = entry();
     await landPublicSubmission(submissionsRepo, pool, e);
     const [row] = await proposalsFor(e.id);
-    expect(row).toMatchObject({ proposed_by: null, proposed_by_kind: "human" });
+    expect(row).toMatchObject({ proposed_by: null, proposed_by_kind: "human", batch_id: `propose-quest:visitor:${e.id}` });
   });
 
   it("titles an idea with no title from the first line of what the person wants to do", async () => {
@@ -143,7 +157,7 @@ describe.skipIf(!configured)("a quest idea from the public form reaches the revi
   it("keeps an idea with an email address in its answers out of the queue, and the submission still stands", async () => {
     const e = entry({ data: { ...IDEA, resourcesNeeded: "Jars. Write to me at ada@example.test" } });
     const { proposal } = await landPublicSubmission(submissionsRepo, pool, e);
-    expect(proposal?.ok).toBe(false);
+    expect(proposal).toMatchObject({ ok: false, heldBack: "contained_an_email" });
     expect(stored).toHaveLength(1);
     expect(await proposalsFor(e.id)).toHaveLength(0);
   });
@@ -185,11 +199,70 @@ describe.skipIf(!configured)("a quest idea from the public form reaches the revi
     expect(await proposalsFor(member)).toHaveLength(1);
   });
 
+  it("keeps both allowances when ideas arrive together", async () => {
+    const burst = (count: number, over: (i: number) => Record<string, unknown>) =>
+      Promise.all(Array.from({ length: count }, (_, i) => landPublicSubmission(submissionsRepo, pool, entry(over(i)))));
+    await Promise.all([
+      burst(OPEN_IDEAS_PER_MEMBER + 5, (i) => ({ userId: "u-burst", data: { ...IDEA, title: `Burst ${i}` } })),
+      burst(OPEN_VISITOR_IDEAS + 5, (i) => ({ data: { ...IDEA, title: `Crowd ${i}` } })),
+    ]);
+    const [rows]: any = await pool.query( // module-review-ok: reading back what the lib wrote, on the S5 scratch schema this suite provisioned
+      "SELECT proposed_by, COUNT(*) AS n FROM quest_proposals GROUP BY proposed_by",
+    );
+    const counts = Object.fromEntries(rows.map((r: any) => [String(r.proposed_by), Number(r.n)]));
+    expect(counts).toEqual({ "u-burst": OPEN_IDEAS_PER_MEMBER, null: OPEN_VISITOR_IDEAS });
+  });
+
+  it("counts every idea it holds back where /review reads refusals", async () => {
+    await landPublicSubmission(submissionsRepo, pool, entry({ data: { ...IDEA, compensation: "Write to ada@example.test" } }));
+    await landPublicSubmission(submissionsRepo, pool, entry({ data: { name: "Ada Wren", email: "ada@example.test" } }));
+    await landMany(OPEN_IDEAS_PER_MEMBER + 1, (i) => ({ userId: "u-full", data: { ...IDEA, title: `Full ${i}` } }));
+
+    const drops = await recentDrops(pool);
+    expect(drops).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ moduleId: "propose-quest", reason: "contained_an_email", dropped: 1 }),
+        expect.objectContaining({ moduleId: "propose-quest", reason: "empty_payload", dropped: 1 }),
+        expect.objectContaining({ moduleId: "propose-quest", reason: "over_allowance", dropped: 1 }),
+      ]),
+    );
+    expect(drops.reduce((total, d) => total + d.dropped, 0)).toBe(3);
+  });
+
+  it("cuts an idea to what the table keeps before reading it, so a megabyte cannot stall the form", async () => {
+    const huge = "a".repeat(1_000_000);
+    const started = Date.now();
+    const e = entry({ data: { ...IDEA, title: huge, whatYouWantToDo: huge, resourcesNeeded: huge } });
+    const { proposal } = await landPublicSubmission(submissionsRepo, pool, e);
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(proposal?.ok).toBe(true);
+    const [row] = await proposalsFor(e.id);
+    expect(String(row.title)).toHaveLength(200);
+    expect(String(row.description)).toHaveLength(8000);
+    expect(String(row.rationale).length).toBeLessThanOrEqual(8000);
+
+    // What the screen reads is what the table keeps: an address past the kept width is cut away, never stored.
+    const tail = entry({ data: { ...IDEA, whatYouWantToDo: `${"b".repeat(9000)} ada@example.test` } });
+    expect((await landPublicSubmission(submissionsRepo, pool, tail)).proposal?.ok).toBe(true);
+    const [kept] = await proposalsFor(tail.id);
+    expect(String(kept.description)).not.toContain("@");
+  });
+
+  it("lists a member's ideas for their own export, and nobody else's", async () => {
+    await landPublicSubmission(submissionsRepo, pool, entry({ userId: "u-export", data: { ...IDEA, title: "Mine" } }));
+    await landPublicSubmission(submissionsRepo, pool, entry({ userId: "u-else", data: { ...IDEA, title: "Theirs" } }));
+    const listed = await ideasProposedBy(pool, "u-export");
+    expect(listed.map((i) => i.title)).toEqual(["Mine"]);
+    expect(listed[0]).toMatchObject({ status: "proposed", rationale: expect.stringContaining("What they bring") });
+    expect(Object.keys(listed[0])).not.toContain("decided_by");
+  });
+
   it("erasure clears the author and keeps the idea", async () => {
     const e = entry({ userId: "u-leaving" });
     await landPublicSubmission(submissionsRepo, pool, e);
     expect(await forgetProposer(pool, "u-leaving")).toBe(1);
     const [row] = await proposalsFor(e.id);
     expect(row).toMatchObject({ proposed_by: null, title: "Build a seed library shelf" });
+    expect(await ideasProposedBy(pool, "u-leaving")).toHaveLength(0);
   });
 });

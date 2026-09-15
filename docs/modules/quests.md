@@ -145,20 +145,25 @@ submissions pipeline under `intake.moderate`, as it always did, and then `landPu
 
 - The idea is copied. The title falls back to the first line of what the person wants to do, the
   description is what they want to do, and what they bring, need, ask for in return and by when
-  becomes the rationale, one labelled line each. `/review` shows the rationale beneath the
-  description and names the form as the idea's source (`PROPOSE_QUEST_MODULE` in
+  becomes the rationale, one labelled line each. Each is cut to the width the table keeps before
+  anything reads it, because a form body may carry a megabyte. `/review` shows the rationale
+  beneath the description and names the form as the idea's source (`PROPOSE_QUEST_MODULE` in
   `shared/questIdeas.ts`).
 - Who they are is not. Name and email stay in `submissions`, which the admin inbox, the member
   export and erasure already handle, and which `runRetentionSweep` sweeps once they age past
   `retention.submissions_days` in any status but `new`. The proposal points back through
-  `source_ref` (`submission:<id>`), and a signed-in member's id goes in `proposed_by`, which the
-  erasure sweep clears (the `quest-proposals` step, through `forgetProposer` in
-  `server/repos/questProposals.ts`).
-- `proposeQuest` keeps a proposal out when the idea carries an email address, has nothing to title
-  it by, or would pass an allowance: three open ideas per member (`OPEN_IDEAS_PER_MEMBER`), and ten
-  from visitors taken together (`OPEN_VISITOR_IDEAS`), because a visitor has no identity to count
-  against. A database error keeps one out too. In every case the submission and the form's answer
-  are unchanged, and the steward inbox still receives it.
+  `source_ref` (`submission:<id>`), and a signed-in member's id goes in `proposed_by`. The member
+  export lists those rows as `questIdeas`, and the erasure sweep clears `proposed_by` (the
+  `quest-proposals` step, through `forgetProposer` in `server/repos/questProposals.ts`). Nothing
+  else on the row is made from the member: the batch id names the submission.
+- An idea is held back when it carries an email address, has nothing to title it by, or would pass
+  an allowance: three open ideas per member (`OPEN_IDEAS_PER_MEMBER`, counted on `proposed_by`),
+  and ten from visitors taken together (`OPEN_VISITOR_IDEAS`), because a visitor has no identity to
+  count against. The count and the insert run under one named lock (`withIdeaLock`), so ideas sent
+  together cannot pass an allowance. Each idea held back is counted in `external_proposal_drops`
+  under `propose-quest` (`contained_an_email`, `empty_payload`, `over_allowance`), which `/review`
+  reads out beside the queue. A database error keeps an idea out too. In every case the submission
+  and the form's answer are unchanged, and the steward inbox still receives it.
 
 Vendor intake still writes nothing here: external `quest.proposed` records land in
 `external_proposals`, and the form is `proposeQuest`'s only caller. `quest_proposals` has no
@@ -264,7 +269,10 @@ for the second currency (`stay_credit_reward`), and none for the three calendar 
 reachable by curl, by the seed file, and by `acceptQuestProposal`. Everything Mechanics and
 Endpoints say those columns do is true and unreachable from the admin browser. `Review.tsx` is the
 one surface that can set two of them, `gratitude` and `stayCreditReward`, and only on the accept of
-a proposal, which today means an idea from the public form.
+a proposal, which today means an idea from the public form. Each proposal is a `QuestProposalCard`
+(`client/src/components/review/QuestProposalCard.tsx`), where the steward types the reward and may
+change the title and description first, because a person's idea goes onto a public board and only
+an email address is screened on the way.
 
 ## Mechanics
 

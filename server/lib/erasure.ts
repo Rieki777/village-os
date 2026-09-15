@@ -299,8 +299,8 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       // A quest idea they sent through the public form keeps its words and
-      // loses its author, the rule the submission it came from follows above.
-      // The idea carries no contact details to scrub: server/lib/publicForms.ts.
+      // loses its author's id. It holds no name or contact details, and its
+      // batch id names the submission, never them: server/lib/publicForms.ts.
       name: "quest-proposals",
       run: async () => {
         await forgetProposer(pool, target.id);
