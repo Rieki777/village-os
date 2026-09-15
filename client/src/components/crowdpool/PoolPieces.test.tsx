@@ -10,12 +10,16 @@
  * widths that actually land on the fills, the caption text, the spoken label.
  * None of it reads a component's props back to itself.
  *
- * 1. THE RING SHRINKS WHEN A VILLAGE SUCCEEDS. The hub sums pledged value
- *    filtering on the accepted status alone, and delivered and thanked are
- *    later states of the same lifecycle, so a confirmed delivery leaves the
- *    number. `pledgedTotal` is therefore a FLOOR, and no surface here may
- *    present it as a total. No correction is computed anywhere: a guess at the
- *    delivered value would be worse than an honest gap.
+ * 1. THE RING SHRINKS WHEN A VILLAGE SUCCEEDS, ON AN OLDER HUB. A hub at
+ *    crowdpool contract 1 sums pledged value filtering on the accepted status
+ *    alone, and delivered and thanked are later states of the same lifecycle,
+ *    so a confirmed delivery leaves the number. There `pledgedTotal` is a FLOOR,
+ *    and no surface here may present it as a total. Contract 2 (hub b835c28)
+ *    counts all three. The hub publishes which one it speaks at `meta.contract`
+ *    (hub commit 3c70b12c, ruled 2026-09-14), the server serves it as
+ *    `hubContract`, and the pieces below word the figure off that reading. No
+ *    correction is computed anywhere: a guess at the delivered value would be
+ *    worse than an honest gap.
  *
  * 2. DELIVERED CAN EXCEED WANTED. Their fulfil path is not idempotent, so two
  *    stewards confirming at once put delivered on two where one was wanted, ten
@@ -31,14 +35,15 @@ import { describe, expect, it } from "vitest";
 import {
   GoldRing,
   GrowthStrip,
-  HUB_PLEDGED_TOTAL_IS_A_FLOOR,
   MiniRing,
-  PLEDGED_FLOOR_PARAGRAPH,
-  RING_TIP,
   SlotMeter,
   capitalTint,
   isOverDelivered,
+  pledgedFloorParagraph,
+  pledgedFloorTip,
+  pledgedIsFloor,
   pooledLine,
+  ringTip,
 } from "./PoolPieces";
 
 const meter = (wanted: number, claimed: number, delivered: number) => {
@@ -55,51 +60,98 @@ const meter = (wanted: number, claimed: number, delivered: number) => {
   };
 };
 
-// ── Defect 1: the ring is a floor and says so ────────────────────────────────
+// ── Defect 1: the ring is a floor on an older hub and says so ────────────────
 
-describe("the pledged figure carries no qualifier, now the hub counts delivered", () => {
-  it("names the floor inside the ring and in what a screen reader hears", () => {
-    const { container } = render(
-      <GoldRing percentPledged={19} percentDelivered={4} label="Gathering the pool" />,
-    );
-    const texts = Array.from(container.querySelectorAll("text")).map((t) => t.textContent);
-    expect(texts).toContain("19%");
-    expect(texts).toContain("pooled");
-    expect(texts).not.toContain("pooled or more");
-    expect(container.querySelector("svg")!.getAttribute("aria-label")).toBe(
-      "19 percent pledged, 4 percent delivered",
-    );
-  });
+const ringOf = (floor: boolean) => {
+  const { container } = render(
+    <GoldRing percentPledged={19} percentDelivered={4} label="Gathering the pool" floor={floor} />,
+  );
+  return {
+    texts: Array.from(container.querySelectorAll("text")).map((t) => t.textContent),
+    spoken: container.querySelector("svg")!.getAttribute("aria-label"),
+  };
+};
 
-  it("names it on the list page's small ring too", () => {
-    const { container } = render(<MiniRing percent={19} />);
-    expect(container.querySelector("svg")!.getAttribute("aria-label")).toBe("19 percent pooled");
-  });
+const miniOf = (floor: boolean) =>
+  render(<MiniRing percent={19} floor={floor} />).container.querySelector("svg")!.getAttribute("aria-label");
 
-  it("qualifies the money line both pages print", () => {
-    expect(pooledLine(20700, 107400, "USD")).toBe("$20,700 of $107,400");
-  });
-
-  it("drops the floor explanation entirely, plaque and paragraph both", () => {
-    // The paragraph existed only to explain the hedge, so it goes to null and
-    // the page renders nothing in its place. The plaque keeps explaining what
-    // pooled MEANS, which was always true and is not about the hub defect.
-    expect(RING_TIP).not.toContain("floor");
-    expect(PLEDGED_FLOOR_PARAGRAPH).toBeNull();
-  });
-
+describe("one reading of the hub contract decides whether the figure is a floor", () => {
   /**
-   * The whole undo, in one place. When the hub lands its fix, this constant
-   * goes false and every sentence above leaves with it; this test is what makes
-   * that a one-line change instead of a hunt.
+   * The rule the old constant served, now per campaign: only a hub that has
+   * SAID it counts delivered pledges gets its figure printed as a total.
+   * Absent is a floor, and so is anything that is not an integer of 2 or more.
    */
-  it("reads every one of those sentences off one constant", () => {
-    // Was `true` while the hub's pledged total dropped delivered value. Their
-    // fix landed 2026-09-05 (b835c28) and this is the whole undo: the sentences
-    // below assert the qualifiers are GONE, and they are the reason flipping
-    // one constant could not quietly leave one of six surfaces still hedging.
-    expect(HUB_PLEDGED_TOTAL_IS_A_FLOOR).toBe(false);
+  it("is a total only at contract 2 or later, and a floor otherwise", () => {
+    expect(pledgedIsFloor({ crowdpool: 2 })).toBe(false);
+    expect(pledgedIsFloor({ crowdpool: 3 })).toBe(false);
+    expect(pledgedIsFloor({ crowdpool: 1 })).toBe(true);
+    expect(pledgedIsFloor(undefined)).toBe(true);
+    expect(pledgedIsFloor(null)).toBe(true);
+    expect(pledgedIsFloor({})).toBe(true);
+    expect(pledgedIsFloor({ crowdpool: 0 })).toBe(true);
+    expect(pledgedIsFloor({ crowdpool: "2" })).toBe(true);
+    expect(pledgedIsFloor({ crowdpool: 2.5 })).toBe(true);
+    expect(pledgedIsFloor({ crowdpool: Number.NaN })).toBe(true);
   });
+});
+
+describe("at hub contract 2 the pledged figure is a total and carries no qualifier", () => {
+  const floor = pledgedIsFloor({ crowdpool: 2 });
+
+  it("says nothing extra inside the ring or in what a screen reader hears", () => {
+    const ring = ringOf(floor);
+    expect(ring.texts).toContain("19%");
+    expect(ring.texts).toContain("pooled");
+    expect(ring.texts).not.toContain("pooled or more");
+    expect(ring.spoken).toBe("19 percent pledged, 4 percent delivered");
+  });
+
+  it("says nothing extra on the list page's small ring", () => {
+    expect(miniOf(floor)).toBe("19 percent pooled");
+  });
+
+  it("prints the money line both pages print with no at least", () => {
+    expect(pooledLine(20700, 107400, "USD", floor)).toBe("$20,700 of $107,400");
+  });
+
+  it("drops the floor explanation, plaque and paragraph both", () => {
+    // The paragraph exists only to explain the hedge, so it is null and the
+    // page renders nothing in its place. The plaque keeps explaining what
+    // pooled MEANS, which is true on any hub.
+    expect(ringTip(floor)).not.toContain("floor");
+    expect(pledgedFloorTip(floor)).toBe("This is everything pledged to the raising so far.");
+    expect(pledgedFloorParagraph(floor)).toBeNull();
+  });
+});
+
+describe("at hub contract 1, or with no contract served, the figure is named a floor", () => {
+  for (const [what, hubContract] of [
+    ["contract 1", { crowdpool: 1 }],
+    ["no contract served", undefined],
+  ] as const) {
+    const floor = pledgedIsFloor(hubContract);
+
+    it(`${what}: names the floor inside the ring and in what a screen reader hears`, () => {
+      const ring = ringOf(floor);
+      expect(ring.texts).toContain("19%");
+      expect(ring.texts).toContain("pooled or more");
+      expect(ring.spoken).toBe("at least 19 percent pledged, 4 percent delivered");
+    });
+
+    it(`${what}: names it on the list page's small ring too`, () => {
+      expect(miniOf(floor)).toBe("at least 19 percent pooled");
+    });
+
+    it(`${what}: qualifies the money line both pages print`, () => {
+      expect(pooledLine(20700, 107400, "USD", floor)).toBe("at least $20,700 of $107,400");
+    });
+
+    it(`${what}: explains the floor in the tip and the paragraph`, () => {
+      expect(pledgedFloorTip(floor)).toContain("Read the figure as a floor");
+      expect(ringTip(floor)).toContain("Read the figure as a floor");
+      expect(pledgedFloorParagraph(floor)).toContain("what this page shows is a floor");
+    });
+  }
 
   /**
    * DELIVERED CANNOT RUN AHEAD OF PLEDGED, because delivered work was pledged
