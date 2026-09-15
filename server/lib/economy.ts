@@ -77,6 +77,7 @@ import {
   CYCLE_POOL_FAUCET,
   MINT_FAUCET,
   RECOGNITION_FAUCET,
+  type TransferGuard,
   type TransferResult,
 } from "./ledger";
 // The one definition of "this gratitude row has been undone". It lives in the
@@ -191,7 +192,7 @@ export async function ensureVoiceToken(pool: Pool, displayName?: string): Promis
 export { CURRENCY_DECIMALS, VOICE_DECIMALS } from "../../shared/tokenScale";
 import { CURRENCY_DECIMALS, VOICE_DECIMALS, decayUnits } from "../../shared/tokenScale";
 import { faucetAccountRows, heldBeforeRows, issuedBySourceRows, legRowsForKeys } from "../repos/tokenLedger";
-import { balanceRowFor, memberHolderRows } from "../repos/tokenBalances";
+import { balanceRowFor, lockedBalanceRows, memberHolderRows } from "../repos/tokenBalances";
 
 /**
  * THE ONE REGISTRY READ FOR A TOKEN'S SCALE.
@@ -2561,6 +2562,41 @@ export function waningUnits(heldGoingIn: number, holdsNow: number, pct: number):
 }
 
 /**
+ * What `waningGuard` refuses with when the member's Voice moved between the
+ * read that sized the waning and the posting. Exported so the loop and a test
+ * name the same sentence.
+ */
+export const WANING_MOVED =
+  "this member's Voice moved while its waning was being decided, so this ask took nothing and the next ask decides again";
+
+/**
+ * THE WANING IS DECIDED AGAIN UNDER THE ACCOUNT LOCK, and the posting is
+ * refused unless the second answer is the same number.
+ *
+ * `decayVoice` sizes each waning from a pool read and posts it several awaits
+ * later. A spend landing in between used to leave the posting unchanged: a
+ * member at 5000 who spent 4000 in that window lost 50 of the 1000 left, which
+ * is five percent under a one percent dial. `postTransferOn` runs this after it
+ * has locked both account rows, so every other posting to this member waits,
+ * and `lockedBalanceRows` reads the committed balance.
+ *
+ * EQUAL, NOT "AT MOST", because both wrong directions last the whole moon. A
+ * posting above the rate takes more than the dial says. A posting below it
+ * writes the per-cycle key, so the shortfall could never be taken later in the
+ * moon. A refusal writes no row and no key; the next hourly ask sizes it again
+ * from fresh numbers. The guard can only refuse, never resize, and refusing is
+ * the whole shape: no second copy of the arithmetic, just `waningUnits` asked
+ * twice.
+ */
+export function waningGuard(account: string, heldGoingIn: number, pct: number, units: number): TransferGuard {
+  return async (conn) => {
+    const [row] = await lockedBalanceRows(conn, account, VILLAGE_VOICE);
+    const allowed = waningUnits(heldGoingIn, Number(row?.balance ?? 0), pct);
+    return units === allowed ? null : WANING_MOVED;
+  };
+}
+
+/**
  * WHAT WANES AT THE CLOSE OF A MOON (R3, R15).
  *
  * The founder's ruling: Voice can decay, it starts at 1 percent a lunar cycle,
@@ -2779,10 +2815,14 @@ export async function decayVoice(
       sourceRef: cycleKey,
       description: "Voice that waned this moon",
       idempotencyKey: key,
-    });
+    }, waningGuard(account, heldGoingIn, pct, units));
     if (res.ok && !res.duplicate) {
       out.holders += 1;
       out.total += units;
+    } else if (!res.ok && res.error === WANING_MOVED) {
+      // Not a fault and not reported: the member's own Voice moved mid-ask.
+      // Nothing was written, the key included, so the next hourly ask sizes
+      // this waning again. See `waningGuard`.
     } else if (!res.ok) {
       refuse(`Voice could not wane into "${VOICE_DECAY}": ${res.error ?? "the ledger refused the posting"}`);
     }
