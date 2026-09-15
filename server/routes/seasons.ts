@@ -50,14 +50,29 @@ type Deps = Pick<AppDeps, "isAdmin" | "adminActor" | "getPool" | "notify"> & {
   loadRoles(): Array<{ id: string; name?: string }>;
   permissionHoldings: RestampDeps["permissionHoldings"];
   writePermissionTerms: RestampDeps["writePermissionTerms"];
+  /** When a seat vote opened now would land (`seatVoteLandsAt`, server/lib/seatTermLanding.ts). */
+  seatVoteLandsAt(): Date;
 };
 
 export function register(app: Express, deps: Deps): void {
   const { isAdmin, adminActor, getPool, notify, seasonState, getSeasonConfig, seasonRepo, addActivity, loadRoles } = deps;
 
-  // Public: the computed season state (current picked by date, never stale).
+  // Public: the computed season state (current picked by date, never stale),
+  // and when a seat vote opened now would land, so the seat form measures a
+  // voted seat's term from the same instant the vote route does.
+  //
+  // The forecast reads the clock and the governance dials. Every page that
+  // shows the season reads this route, so a forecast that throws sends null
+  // and never takes the season down with it. The form then previews from the
+  // close and the vote route's own refusal still decides.
   app.get("/api/season", async (_req, res) => {
-    res.json(seasonState());
+    let seatVoteLandsAt: string | null = null;
+    try {
+      seatVoteLandsAt = deps.seatVoteLandsAt().toISOString();
+    } catch (err) {
+      console.warn("[season] seat vote landing forecast failed:", (err as Error)?.message ?? err);
+    }
+    res.json({ ...seasonState(), seatVoteLandsAt });
   });
 
   // Admin: the whole season list + cadence + timezone.

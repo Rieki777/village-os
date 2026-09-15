@@ -273,6 +273,18 @@ export type OpenBallotResult =
   | { ok: false; error: string; alreadyOpen?: BallotRow };
 
 /**
+ * The window a ballot opened at `at` runs: whole days between one and ninety,
+ * opening on the whole second. `openBallot` freezes exactly this, and a
+ * forecast of when a vote closes (`seatVoteLandsAt`) reads the same numbers
+ * from here, so the two cannot drift.
+ */
+export function ballotWindow(durationDays: number, at: number = Date.now()): { days: number; opensAt: Date; closesAt: Date } {
+  const days = Math.max(1, Math.min(90, Math.trunc(durationDays) || 1));
+  const opensAt = new Date(Math.floor(at / 1000) * 1000);
+  return { days, opensAt, closesAt: new Date(opensAt.getTime() + days * 24 * 60 * 60 * 1000) };
+}
+
+/**
  * Open a ballot: one transaction writing the snapshot whole. Fail-closed on
  * an empty electorate or zero total weight, with the sentence saying why —
  * a vote nobody could cast, or one where no cast could count, must refuse to
@@ -295,7 +307,8 @@ export async function openBallot(pool: Pool, input: OpenBallotInput): Promise<Op
   if (!(totalWeight > 0)) {
     return { ok: false, error: "The electorate's total voting weight is zero, so no vote could ever count. Allocate weight before opening a ballot" };
   }
-  const days = Math.max(1, Math.min(90, Math.trunc(input.durationDays) || 1));
+  const span = ballotWindow(input.durationDays);
+  const days = span.days;
   const id = `bal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const openKey = `${input.subjectType}:${input.subjectRef}`;
   /*
@@ -326,7 +339,7 @@ export async function openBallot(pool: Pool, input: OpenBallotInput): Promise<Op
    * truncation as `readInstant` in base-reads.ts, written out here instead of
    * imported: governance has no business depending on the chain-read module.)
    */
-  const opensAt = new Date(Math.floor(Date.now() / 1000) * 1000);
+  const opensAt = span.opensAt;
   /*
    * THE GOVERNANCE WINDOW GATES THE OPENING, AND ONLY THE OPENING (19E).
    *
@@ -346,7 +359,7 @@ export async function openBallot(pool: Pool, input: OpenBallotInput): Promise<Op
     relation: input.window?.relation ?? null,
   });
   if (closed) return { ok: false, error: closed };
-  const closesAt = new Date(opensAt.getTime() + days * 24 * 60 * 60 * 1000);
+  const closesAt = span.closesAt;
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
