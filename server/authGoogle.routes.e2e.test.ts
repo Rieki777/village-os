@@ -322,7 +322,7 @@ describe.skipIf(!DB_CONFIGURED)("a village with no Google credentials degrades h
 
 describe.skipIf(!DB_CONFIGURED)("a village WITH credentials offers Google beside the password", () => {
   it("reports both methods", async () => {
-    expect(await (await fetch(`${BASE}/api/auth/methods`)).json()).toEqual({ password: true, google: true, inviteOnly: false });
+    expect(await (await fetch(`${BASE}/api/auth/methods`)).json()).toEqual({ password: true, google: true, inviteOnly: false }); // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
   });
 
   it("sends the member to Google with the right client, scope, state and nonce", async () => {
@@ -685,7 +685,7 @@ describe.skipIf(!DB_CONFIGURED)("a village that joins by invitation, at the Goog
 
   /** A sign-in that starts from an invitation link, the way the sign-up page starts one. */
   async function beginInvitedSignIn(invite: string): Promise<{ state: string; nonce: string }> {
-    const res = await fetch(`${BASE}/api/auth/google/start?invite=${encodeURIComponent(invite)}`, { redirect: "manual" });
+    const res = await fetch(`${BASE}/api/auth/google/start?invite=${encodeURIComponent(invite)}`, { redirect: "manual" }); // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
     expect(res.status).toBe(302);
     const location = new URL(res.headers.get("location")!);
     return { state: location.searchParams.get("state")!, nonce: location.searchParams.get("nonce")! };
@@ -695,7 +695,7 @@ describe.skipIf(!DB_CONFIGURED)("a village that joins by invitation, at the Goog
   const statePayload = (state: string) => JSON.parse(Buffer.from(state.split(".")[0], "base64url").toString("utf-8"));
 
   async function asFounder(method: string, route: string, body?: unknown) {
-    const res = await fetch(`${BASE}${route}`, {
+    const res = await fetch(`${BASE}${route}`, { // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
       method,
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${founderToken}` },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -734,7 +734,7 @@ describe.skipIf(!DB_CONFIGURED)("a village that joins by invitation, at the Goog
   });
 
   it("says so on /api/auth/methods", async () => {
-    expect((await (await fetch(`${BASE}/api/auth/methods`)).json()).inviteOnly).toBe(true);
+    expect((await (await fetch(`${BASE}/api/auth/methods`)).json()).inviteOnly).toBe(true); // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
   });
 
   it("makes no account for somebody with no link, and still signs a member back in", async () => {
