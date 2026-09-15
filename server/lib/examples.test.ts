@@ -27,6 +27,8 @@ import {
   seedExamples,
   wireExampleCaches,
 } from "./examples";
+import { loadTokenRegistry } from "./ledger";
+import { ensureStayToken, listAccommodations } from "./stays";
 
 const configured = testDbConfigured();
 if (!configured) {
@@ -456,5 +458,45 @@ describe.skipIf(!configured)("standing examples", () => {
     } finally {
       await pool.query("DELETE FROM forum_threads WHERE id = 'real-thread-1'");
     }
+  });
+
+  /**
+   * A FRESH VILLAGE IS BORN AT TWO DECIMALS, SO THE SEED MUST NOT BE A STORED NUMBER.
+   *
+   * `ensureStayToken` registers stay-credit at the currency scale on a village
+   * that never ran a pre-ruling build. The seed used to hand `3` straight to the
+   * column, and at two decimals a stored 3 is three hundredths, so the example
+   * cabin advertised a night for 0.03 credits. The assertion reads the stored
+   * minor number AND the figure a member sees, and takes the expected human
+   * price from the seed file itself so the two cannot drift.
+   */
+  it("seeds an example room at the price the seed states, on a village born at two decimals", async () => {
+    await ensureStayToken(pool);
+    await loadTokenRegistry(pool);
+    const [[tok]] = await pool.query<any[]>("SELECT decimals FROM tokens WHERE slug = 'stay-credit'");
+    expect(Number(tok.decimals), "the fixture is a fresh village, so stay-credit is born at two").toBe(2);
+
+    expect(await seedExamples(pool, "stays", seed, { force: true })).toBeGreaterThan(0);
+
+    const [stored] = await pool.query<any[]>(
+      "SELECT id, amount_minor FROM accommodation_prices WHERE id IN ('ex-stay-cabin-price-1','ex-stay-cabin-price-3')",
+    );
+    const byId = Object.fromEntries(stored.map((r: any) => [String(r.id), Number(r.amount_minor)]));
+    expect(byId["ex-stay-cabin-price-1"], "three whole credits, stored in hundredths").toBe(300);
+    expect(byId["ex-stay-cabin-price-3"], "a usd price is already cents and never scaled").toBe(4500);
+
+    const rooms = Object.fromEntries((await listAccommodations(pool)).map((a) => [a.id, a.prices]));
+    for (const a of seed.stays.accommodations) {
+      for (const p of a.prices) {
+        const want = p.tokenType === "usd" ? p.amountMinor : p.amount;
+        expect(`${a.id} ${p.tokenType} ${p.audience} = ${rooms[a.id]?.[p.tokenType]?.[p.audience]}`)
+          .toBe(`${a.id} ${p.tokenType} ${p.audience} = ${want}`);
+      }
+    }
+
+    // The example credit tokens carry the currency scale from birth too.
+    expect(await seedExamples(pool, "exchange", seed, { force: true })).toBeGreaterThan(0);
+    const [scales] = await pool.query<any[]>("SELECT slug, decimals FROM tokens WHERE is_example = 1 ORDER BY slug");
+    expect(scales.map((r: any) => `${r.slug}=${r.decimals}`)).toEqual(["ex-credits=2", "ex-workshop=2"]);
   });
 });
