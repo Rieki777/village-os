@@ -172,9 +172,15 @@ describe.skipIf(!configured)("a seating written by a draft uses the same key as 
    * A calendar with a season running. A seating carries a term (0199), and a
    * publish that seats anybody without the village calendar is refused. No
    * change here asks for a date, so every seat ends with this season.
+   *
+   * THE SEASON IS DATED FROM TODAY, AND NEVER FAR OUT. The term lands in a
+   * TIMESTAMP column, which MySQL 8 caps at 2038-01-19. A season ending in 2099
+   * passed on the MariaDB these suites run on locally, which reaches 2106, and
+   * failed every seating on CI.
    */
+  const dayFromToday = (days: number) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
   const CALENDAR: SeatCalendar = {
-    seasons: [{ id: "season-now", startsOn: "2020-01-01", endsOn: "2099-01-01" }],
+    seasons: [{ id: "season-now", startsOn: dayFromToday(-30), endsOn: dayFromToday(60) }],
     currentSeasonId: "season-now",
     timezone: "UTC",
   };
