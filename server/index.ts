@@ -87,7 +87,7 @@ import { isPresentMember, presenceTest } from "./lib/memberPresence";
 import { runSeasonReminders } from "./lib/seasonReminders";
 import { forgetStewardActs, holdingHasLapsed, recordTermStarted, runTermWatch, setVetoWindowCheck, STEWARD_VETO, stewardMailRefusal, termWatchLookaheadDays } from "./lib/stewardship";
 import { freezeSeatTerm } from "./repos/ballotSeatTerms";
-import { termForCarriedSeat } from "./lib/seatTermLanding";
+import { roleVoteDays, seatVoteLandsAt, termForCarriedSeat } from "./lib/seatTermLanding";
 import { raisedHandTerm } from "./lib/raisedHandTerm";
 import { resolveSeatTerm, type SeatCalendar } from "../shared/seatTerms";
 import { decideRoleCapabilities, liveHolderCount, stewardSeatRefusal } from "./lib/roleGrants";
@@ -19622,7 +19622,7 @@ ${inner}
   // The season list and its save, which moves every seat that ends with its season (server/routes/seasons.ts).
   registerSeasonRoutes(app, {
     isAdmin, adminActor, getPool, notify, seasonState, getSeasonConfig, seasonRepo, addActivity, loadRoles,
-    permissionHoldings: loadRoleHolders,
+    permissionHoldings: loadRoleHolders, seatVoteLandsAt: () => seatVoteLandsAt(landingDeps(), roleVoteDays()),
     writePermissionTerms: (moves) => withRoleHolderLock(async () => {
       const to = new Map(moves.map((m) => [m.id, m.to.toISOString()]));
       await roleHoldersRepo.replaceAll(loadRoleHolders().map((h) => (to.has(h.id) ? { ...h, termEndsAt: to.get(h.id)! } : h)));
@@ -25323,10 +25323,7 @@ ${inner}
       snapshot,
       tokenProblem,
       electorate: await buildElectorate(),
-      durationDays: Math.max(
-        1,
-        numberVar(method === "consent" ? "governance.consent_window_days" : "governance.vote_days"),
-      ),
+      durationDays: roleVoteDays(),
     };
   }
 
@@ -25543,7 +25540,7 @@ ${inner}
     const setup = await roleBallotSetup();
     if (setup.tokenProblem) return res.status(409).json({ error: setup.tokenProblem });
 
-    const term = resolveSeatTerm({ requestedEndsOn: req.body?.termEndsOn, calendar: seatCalendar(), capAtSeasonEnd: ((role.capabilities ?? []) as string[]).includes(STEWARD_VETO), now: new Date(), startsNoEarlierThan: new Date(Date.now() + setup.durationDays * 86400000) });
+    const term = resolveSeatTerm({ requestedEndsOn: req.body?.termEndsOn, calendar: seatCalendar(), capAtSeasonEnd: ((role.capabilities ?? []) as string[]).includes(STEWARD_VETO), now: new Date(), startsNoEarlierThan: seatVoteLandsAt(landingDeps(), setup.durationDays) });
     if (!term.ok) return res.status(409).json({ error: term.error, code: term.code });
     const can = roleConsequences(role);
     const who = role.name ?? roleId;
