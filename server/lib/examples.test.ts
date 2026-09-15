@@ -489,7 +489,7 @@ describe.skipIf(!configured)("standing examples", () => {
     for (const a of seed.stays.accommodations) {
       for (const p of a.prices) {
         const want = p.tokenType === "usd" ? p.amountMinor : p.amount;
-        expect(`${a.id} ${p.tokenType} ${p.audience} = ${rooms[a.id]?.[p.tokenType]?.[p.audience]}`)
+        expect(`${a.id} ${p.tokenType} ${p.audience} = ${rooms[a.id]?.[p.tokenType]?.[p.audience as "guest" | "member"]}`)
           .toBe(`${a.id} ${p.tokenType} ${p.audience} = ${want}`);
       }
     }
