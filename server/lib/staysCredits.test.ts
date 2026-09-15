@@ -32,12 +32,44 @@ import {
   loadTokenRegistry,
   memberAccount,
   postTransfer,
+  registerToken,
 } from "./ledger";
-import { STAY_CREDIT, ensureStayToken, nightsOwed, postNightsForStay, stayById } from "./stays";
+import {
+  STAY_CREDIT,
+  ensureStayToken,
+  mintStayCredits,
+  nightsOwed,
+  nightsRemaining,
+  postNightsForStay,
+  priceFromStored,
+  priceScaleRefusal,
+  priceToStored,
+  stayById,
+} from "./stays";
 import { loadVariables, setVariable } from "./variables";
 
 const configured = testDbConfigured();
+/**
+ * PINNED to 0 in the setup below. It used to inherit the registry default, and
+ * `0202` ended that: credits are currency-like and now carry two places. This
+ * file is about a conversion being applied exactly once in each direction, so
+ * it needs one token with no scale and one with a big one, and the pin is what
+ * keeps the first of those true.
+ */
 const CREDITS = "credits";
+/**
+ * A credit token at FOUR decimals, which is where the whole platform is going.
+ *
+ * It has to be a token of its own: `registerToken` deliberately leaves
+ * `decimals` out of its upsert, so re-registering `credits` could never change
+ * its scale, which is the guard that stops a boot rescaling a live holding.
+ *
+ * Every expected number below is written as its decimals arithmetic (8 credits
+ * is 8 x 10^4 = 80_000 units) rather than as a call to `toLedgerUnits`, so a
+ * conversion that went missing cannot also go missing from the assertion.
+ */
+const CREDITS_4 = "credits-4dp";
+const ONE_4 = 10_000;
 
 describe.skipIf(!configured)("a night paid in village credits", () => {
   let db: TestDb;
@@ -81,10 +113,22 @@ describe.skipIf(!configured)("a night paid in village credits", () => {
     db = await provisionTestDb();
     pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 }); // module-review-ok: the S5 scratch-schema harness pool, the ballots.test.ts shape
     await loadTokenRegistry(pool);
-    // A fresh schema seeds gratitude, amora, voice and credits. `stay-credit`
+    // A fresh schema seeds gratitude, equity, voice and credits. `stay-credit`
     // is registered at BOOT by the stays module, not by a migration, so a
     // suite that talks to it has to do what boot does.
     await ensureStayToken(pool);
+    await registerToken(pool, {
+      slug: CREDITS_4,
+      name: "Four Decimal Credits",
+      kind: "credit",
+      governance: "platform",
+      transferable: true,
+      decimals: 4,
+    });
+    // The pin. See CREDITS above: this file needs one token with no scale, and
+    // the platform no longer ships one under that slug.
+    await pool.query("UPDATE tokens SET decimals = 0 WHERE slug = ?", [CREDITS]); // module-review-ok: the decimals seam this file exists to exercise, against the S5 scratch schema
+    await loadTokenRegistry(pool);
   });
 
   afterAll(async () => {
@@ -186,6 +230,127 @@ describe.skipIf(!configured)("a night paid in village credits", () => {
     const second = await postNightsForStay(pool, after, dateStr(0));
     expect(second.posted).toBe(0);
     expect(await balanceOf(pool, memberAccount("u-5"), CREDITS)).toBe(20);
+    await conserves();
+  });
+
+  /*
+   * ── The unit boundary, at both scales ──────────────────────────────────
+   *
+   * Every case above runs against tokens at `decimals: 0`, where a human
+   * number and a ledger unit are the same number and the question cannot be
+   * asked. These ask it.
+   *
+   * The cases are written so that REMOVING the conversion in `priceToStored`
+   * turns each of them red, which is the only thing that makes them tests
+   * rather than restatements: at decimals 0 an identity conversion is
+   * indistinguishable from no conversion at all.
+   */
+
+  it("stores a posted token price in MINOR units and reads it back whole", async () => {
+    // decimals 0: the identity, both ways. This is the half that must not move.
+    expect(priceToStored(CREDITS, 8)).toBe(8);
+    expect(priceFromStored(CREDITS, 8)).toBe(8);
+
+    // decimals 4: 8 credits is 8 x 10^4 units.
+    expect(priceToStored(CREDITS_4, 8)).toBe(80_000);
+    expect(priceFromStored(CREDITS_4, 80_000)).toBe(8);
+    expect(priceFromStored(CREDITS_4, priceToStored(CREDITS_4, 3))).toBe(3);
+
+    // usd is not a token and never converts: the column already holds cents,
+    // and the admin form is the thing that multiplied by 100.
+    expect(priceToStored("usd", 12_345)).toBe(12_345);
+    expect(priceFromStored("usd", 12_345)).toBe(12_345);
+
+    // EXACT at the token's scale. This line asserted 80_000 while
+    // `priceToStored` floored, which pinned the defect: a room could not post
+    // a fraction its token holds.
+    expect(priceToStored(CREDITS_4, 8.7)).toBe(87_000);
+
+    // Finer than the token holds is refused in words, before anything stores.
+    expect(priceScaleRefusal(CREDITS_4, 8.7)).toBeNull();
+    expect(priceScaleRefusal(CREDITS_4, 8.00005)).toMatch(/goes to 4 decimal places/);
+    expect(priceScaleRefusal(CREDITS, 2.5)).toMatch(/priced in whole amounts/);
+    expect(priceScaleRefusal("usd", 1234.5)).toMatch(/whole cents/);
+    expect(priceScaleRefusal("usd", 12_345)).toBeNull();
+  });
+
+  it("burns a four-decimal night at the LEDGER's scale, not the typed one", async () => {
+    // 20 credits held, a night posted at 8. Written as units, because that is
+    // what the column holds once the price route has converted.
+    await member("u-6", CREDITS_4, 20 * ONE_4);
+    const s = await stay("s-6", "u-6", CREDITS_4, priceToStored(CREDITS_4, 8), 2);
+
+    const r = await postNightsForStay(pool, s, dateStr(0));
+    expect(r.posted).toBe(2);
+    expect(r.stopped).toBe(false);
+    // 200_000 - 2 x 80_000. An unconverted rate would take 16 units and leave
+    // 199_984, and the guest would sleep 12,500 nights on twenty credits.
+    expect(await balanceOf(pool, memberAccount("u-6"), CREDITS_4)).toBe(40_000);
+    expect(await balanceOf(pool, TREASURY, CREDITS_4)).toBe(160_000);
+
+    // Each posted leg is one night at the token's own scale.
+    const [legs] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT amount FROM token_ledger WHERE token_type = ? AND source = 'stay_night' AND from_account = ? ORDER BY idempotency_key",
+      [CREDITS_4, memberAccount("u-6")],
+    );
+    expect(legs.map((l: any) => Number(l.amount))).toEqual([80_000, 80_000]);
+
+    // And the number a steward acts on agrees: 4 credits left buys no night
+    // at 8. Both arguments are minor, so this is right at any decimals.
+    expect(nightsRemaining(40_000, priceToStored(CREDITS_4, 8))).toBe(0);
+    expect(nightsRemaining(240_000, priceToStored(CREDITS_4, 8))).toBe(3);
+    await conserves();
+  });
+
+  it("stops a four-decimal stay at the SAME grace floor, one night past empty", async () => {
+    /*
+     * The grace floor is the failure that has no upper bound. It is built from
+     * the snapshot rate and compared against a `token_balances` figure, so a
+     * human rate against a minor balance makes `balance - rate < graceFloor`
+     * effectively unsatisfiable and the posting loop runs to the 366-night
+     * runaway guard instead of stopping.
+     *
+     * 10 credits held, 8 a night, one night of grace, five nights owed:
+     *   night 1  100_000 -> 20_000
+     *   night 2   20_000 -> -60_000   (floor is -80_000, so this is allowed)
+     *   night 3  -60_000 - 80_000 = -140_000 < -80_000  -> STOP
+     */
+    await setVariable(pool, "stay.grace_nights", "1");
+    await member("u-7", CREDITS_4, 10 * ONE_4);
+    const s = await stay("s-7", "u-7", CREDITS_4, priceToStored(CREDITS_4, 8), 5);
+
+    const r = await postNightsForStay(pool, s, dateStr(0));
+    expect(r.posted).toBe(2);
+    expect(r.stopped).toBe(true);
+    expect(await balanceOf(pool, memberAccount("u-7"), CREDITS_4)).toBe(-60_000);
+    // A legal negative, asked per (account, token) exactly as at decimals 0.
+    await conserves();
+  });
+
+  it("mints exactly the MINOR amount it is handed, and converts nothing", async () => {
+    /*
+     * `mintStayCredits` is a pass-through with a MINOR contract, and it has to
+     * stay one: two of its four callers hand it a number already derived from
+     * a minor `priceFor`. A `toLedgerUnits` inside it would multiply those a
+     * second time, which on a token sold for money is the free-money direction.
+     */
+    await member("u-8", STAY_CREDIT, 0);
+    const r = await mintStayCredits(pool, {
+      userId: "u-8",
+      amount: 40_000,
+      source: "stay_purchase",
+      sourceRef: "sp-unit-1",
+      idempotencyKey: "ord:sp-unit-1:leg1",
+    });
+    expect(r.ok).toBe(true);
+    expect(await balanceOf(pool, memberAccount("u-8"), STAY_CREDIT)).toBe(40_000);
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT amount, to_account FROM token_ledger WHERE idempotency_key = ?",
+      ["ord:sp-unit-1:leg1"],
+    );
+    expect(rows).toHaveLength(1);
+    expect(String(rows[0]?.to_account)).toBe(memberAccount("u-8"));
+    expect(Number(rows[0]?.amount)).toBe(40_000);
     await conserves();
   });
 });

@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 // and missed here renders nothing, with no error anywhere.
 import type { StageRule } from "@shared/gameConfig";
 import type { Capability } from "@shared/capabilities";
+import { removeStored, storedText } from "./safeStorage";
 
 /**
  * The ONE localStorage key for the session token. Exported so nothing else
@@ -400,17 +401,11 @@ export function useSeason(): SeasonState | null {
 }
 
 export function authToken(): string | null {
-  // A browser with site data blocked has no usable localStorage, and reading it
-  // THROWS rather than returning null. Unguarded, that throw escaped into every
-  // gameFetch in the product: a member with cookies off got a crash where they
-  // should have got a signed-out page. It surfaced when a portrait control that
-  // asks for headers during render met a test jsdom with the same shape.
-  // No token and no storage are the same answer to the caller, so say it once.
-  try {
-    return localStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
+  // Every request goes through here, so a browser blocking site data used to
+  // throw on any page that fetched anything. A blocked store reads as no
+  // session, which is true: it never held one. The member is told why when
+  // they sign in (client/src/lib/signInStorage.ts).
+  return storedText("local", TOKEN_KEY);
 }
 
 /**
@@ -419,14 +414,8 @@ export function authToken(): string | null {
  * left the notification bell and the module manifest permanently anonymous.
  */
 export function clearAuthToken(): void {
-  try {
-    localStorage.removeItem(TOKEN_KEY);
-  } catch {
-    // Same storage-blocked browser as authToken above. The read was guarded and
-    // the write was not, two lines apart, so a member with site data off loaded
-    // the page and then crashed on Sign Out. Dropping a session that was never
-    // storable has already happened.
-  }
+  // Dropping a session never refuses. See AuthContext.logout.
+  removeStored("local", TOKEN_KEY);
 }
 
 export async function gameFetch(path: string, init: RequestInit = {}): Promise<Response> {

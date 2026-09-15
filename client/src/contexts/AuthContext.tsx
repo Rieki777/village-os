@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { TOKEN_KEY } from "@/lib/gameApi";
 import { forgetExamplesCache } from "@/components/ExamplesBanner";
+import { removeStored, storedText, writeStored } from "@/lib/safeStorage";
+import { SIGN_IN_STORAGE_BLOCKED, canKeepSignedIn, sessionWriteRefused } from "@/lib/signInStorage";
 
 export interface User {
   id: string;
@@ -43,11 +45,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // (ModuleProvider fetches the module manifest with it) would otherwise see
   // null on first render and fetch an anonymous manifest, flashing NotFound
   // on gated pages before the real one lands.
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
+  // A browser blocking site data used to throw HERE, during the first render
+  // of the provider every page mounts under, which is how one blocked setting
+  // took the whole app down. A blocked store now reads as no session, which is
+  // the truth: nothing was ever stored in it. The member is told why at the
+  // moment they try to sign in. See client/src/lib/signInStorage.ts.
+  const [token, setToken] = useState<string | null>(() => storedText("local", TOKEN_KEY));
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const storedToken = localStorage.getItem(TOKEN_KEY);
+    const storedToken = storedText("local", TOKEN_KEY);
     if (storedToken) {
       validateToken(storedToken);
     } else {
@@ -67,7 +74,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // ONLY a genuine rejection clears the credential. A 500 or a 502
         // while the container restarts used to delete the member's only
         // stored token and sign them out for a server-side blip.
-        localStorage.removeItem(TOKEN_KEY);
+        // A removal that refuses leaves a dead token on disk, and the next
+        // load re-validates it and lands right back here. Signing this tab
+        // out is still the right move, so the result is read and not acted on.
+        removeStored("local", TOKEN_KEY);
         setToken(null);
         forgetExamplesCache();
       }
@@ -81,6 +91,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function login(email: string, password: string) {
+    // Asked before the password is sent, so a blocked browser costs a member
+    // a sentence and never a spent session. Rye's ruling, 2026-09-04: tell
+    // them, and tell them how to fix it.
+    if (!canKeepSignedIn()) throw new Error(SIGN_IN_STORAGE_BLOCKED);
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -91,7 +105,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error(err.error || "Login failed");
     }
     const data = await res.json();
-    localStorage.setItem(TOKEN_KEY, data.token);
+    // Checked again, because a store can fill between the question and the
+    // answer. Nothing below this line runs on a refusal, so no part of the
+    // app is left believing the member is signed in.
+    if (sessionWriteRefused(writeStored("local", TOKEN_KEY, data.token))) {
+      throw new Error(SIGN_IN_STORAGE_BLOCKED);
+    }
     setToken(data.token);
     setUser(data.user);
     // Session-scoped caches that live outside React state have to be dropped
@@ -103,6 +122,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function register(name: string, email: string, password: string, paths: string[]) {
+    // Ahead of the request for a sharper reason than login has: registering
+    // behind a blocked store would create an account the member cannot reach,
+    // and then refuse them at the door of their own village.
+    if (!canKeepSignedIn()) throw new Error(SIGN_IN_STORAGE_BLOCKED);
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -113,7 +136,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error(err.error || "Registration failed");
     }
     const data = await res.json();
-    localStorage.setItem(TOKEN_KEY, data.token);
+    if (sessionWriteRefused(writeStored("local", TOKEN_KEY, data.token))) {
+      throw new Error(SIGN_IN_STORAGE_BLOCKED);
+    }
     setToken(data.token);
     setUser(data.user);
     forgetExamplesCache();
@@ -123,7 +148,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Tell the server first: without this the token stays valid for its full
     // 30 days and anyone who copied it stays signed in. tokenVersion is the
     // only revocation lever, so this ends every session on every device.
-    const tk = localStorage.getItem(TOKEN_KEY);
+    const tk = storedText("local", TOKEN_KEY);
     if (tk) {
       try {
         await fetch("/api/auth/logout", {
@@ -139,7 +164,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error("Logout request failed:", err);
       }
     }
-    localStorage.removeItem(TOKEN_KEY);
+    // Signing out never refuses. A store that will not take the removal is
+    // no reason to hold somebody in a session they asked to leave.
+    removeStored("local", TOKEN_KEY);
     setToken(null);
     setUser(null);
     forgetExamplesCache();

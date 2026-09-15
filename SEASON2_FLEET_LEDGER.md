@@ -197,6 +197,114 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   under-reports, so run all three scans (the directory, `git ls-tree` over every remote AND
   local ref, and every `drizzle/*.sql` on disk across the worktrees), then
   `node scripts/check-migration-numbers.mjs --next` to confirm.
+- **renumber lane (RN), 2026-09-07: TAKES 0182 to 0188.** The seven economics migrations on
+  `wt/econ` sat at or below a ceiling their base ref had already passed, so the gate refused the
+  branch. Same bodies, new numbers, relative order preserved because the runner sorts by
+  filename and `0183` creates the `redemptions` table that `0184`'s guard reads:
+  `0160`->`0182`, `0161`->`0183`, `0162`->`0184`, `0165`->`0185`, `0166`->`0186`,
+  `0167`->`0187`, `0168`->`0188`. **`0179`, `0180` and `0181` are stepped over and burned**:
+  `wt/gratitude-voices` holds the first two on origin refs. `0181` is no longer merely claimed:
+  the treasury lane merged it, so `0181_a_circle_holds_its_own_treasury.sql` is IN the base tree
+  this lane renumbers into (`wt/econ` at `ddcf54a`), which is why the wave starts at `0182`.
+- **Ceiling for the line above, measured THREE WAYS at 2026-09-07, three separate times, the
+  last of them AT THE RENAME on the rebased base.** A reading expires in minutes, so the one
+  that counts is the last: every one of 677 ref trees reached **0181**, every `drizzle/` on
+  disk across 348 worktrees reached **0181**, and `git status --untracked-files=all` in each
+  of those worktrees reached **0162**, all three excluding this lane's own tree and its own
+  refs. Nothing anywhere holds `0182` through `0188`. The untracked scan earned its place on
+  the middle reading, when it was the only channel that could see
+  `0181_a_circle_holds_its_own_treasury.sql` sitting STAGED in `ECON` while the treasury lane
+  merged it; by the last reading that file was committed and the scan fell back to **0162**.
+  A channel that reports nothing today is not a channel you can drop.
+- **`git log --all --name-only --diff-filter=A` is the WRONG ref-side scan, and here is the
+  measurement, taken twice.** It never reports a rename. On the first reading it missed `0179`
+  and `0180`, which reach the log only under their pre-renumber names
+  `0169_seven_full_sends.sql` and `0170_the_wall_speaks_first.sql`, while it did see `0181`,
+  which was added and never moved. So its answer looked right and was blind to two numbers.
+  **The second reading, after this lane pushed, is the one to remember: at `0179` and above it
+  reported `0181` and NOTHING ELSE**, missing `0179`, `0180` and all seven of `0182` to `0188`,
+  because every one of those arrived as a rename. Nine numbers invisible, one visible.
+  **`--diff-filter=AR` read on the DESTINATION path saw all ten**, agreed with the 677-ref tree
+  walk exactly, and cost a fraction of it. A renumber that reaches main through a squashed
+  merge flattens into an addition, so `A` alone looks correct on everything that has landed
+  and is blind precisely to work still in flight, which is the only case the scan exists for.
+- **Renaming these seven was VERIFIED safe, never inherited, and one of them would NOT survive
+  a replay.** `0188_a_circle_has_two_caps.sql` is a bare `ALTER TABLE ... ADD COLUMN`; MySQL
+  offers no `IF NOT EXISTS` there, and replaying its body against a migrated schema fails with
+  `ER_DUP_FIELDNAME`, measured on the local MySQL. The other six are replay-safe by
+  construction and were each exercised: `0182` is an UPDATE whose WHERE stops matching, `0183`
+  and `0185` are `INSERT IGNORE`, `0186` and `0187` are `CREATE TABLE IF NOT EXISTS`, and
+  `0184` re-reads an empty guard and assigns the same constants (0 rows changed). So the rename
+  is safe only because nothing that persists holds an old name, and that was checked rather than
+  assumed: six schemas on the local MySQL hold the old filenames in `_migrations_applied`, and
+  every one is a `village_tpl_` template or a leaked `village_test_` scratch schema.
+  `migrationsFingerprint` in `server/db/testDb.ts` hashes every migration's NAME and BYTES, so
+  the renamed set keys to a fresh template and `buildTemplate` drops before it builds. No
+  deployed schema holds any of the seven. `rc_qa_crowdpool` reaches 0240 in its own numbering
+  universe and holds none of them.
+- **A RENUMBER CAN INVERT A COLUMN DEPENDENCY, AND NO GATE SEES IT. This one bricked boot
+  and `check-migration-numbers` stayed green.** `0181_a_circle_holds_its_own_treasury.sql`
+  adds its columns `AFTER cycle_amount_minor`, and that column arrives in the file this lane
+  moved from `0168` to `0188`. At `0168` it sorted BEFORE `0181` and the column was there. At
+  `0188` it sorts after, so `0181` named a column that did not exist yet and failed with
+  `Unknown column 'cycle_amount_minor' in 'circle_budgets'` on statement one. On this
+  platform that is thirteen villages that cannot start, and the only thing that caught it was
+  APPLYING the set to a scratch schema. Every static gate passed: the number check reads
+  names, the compat check reads the new files against the previous release, and neither
+  knows that moving a file past another file reorders their statements.
+- **The fix, and why nothing else was available.** Numbers only go forward and `0181` was
+  already in the base, so nothing this lane owned could sort below it: the ordering
+  requirement and the numbering rule cannot both be met by renumbering. The `AFTER` clause is
+  the only movable part, so `0181` now says `AFTER amount_minor`. **That is equivalent and it
+  was measured, not argued**: `AFTER` decides ordinal position and nothing else, `0188` adds
+  `cycle_amount_minor` `AFTER amount_minor` as well, and both trees were applied to a scratch
+  schema and `circle_budgets` read back column by column. All 18 columns identical, in the
+  same order, before and after. Editing `0181` is allowed because no release holds it:
+  `check-migration-compat` counts it among the files NEW since the previous release, and the
+  only schemas on this machine carrying it are five `village_tpl_` templates.
+- **So the drill that matters is RUN THE SET, TWICE, and the second run is the smaller half.**
+  A first run proves the wave applies in its new order. Here it was the first run that
+  failed, on a file this lane did not write and did not renumber.
+- **Swept as a STRING and not as a filename: 96 lines across 42 files, of which 14 were
+  filenames** and the rest were header lines, section markers, doc prose, test descriptions and
+  one runtime SQL string (`REFUSED by 0184`, asserted by
+  `server/tokenScale.migration.test.ts`). Eleven further mentions in three files are LEFT ALONE
+  on purpose: five in `docs/GAME_MECHANICS_AUDIT_2026-07-31.md` belong to a different numbering
+  universe that reaches 0219, and the six in this document and in
+  `docs/GOVERNANCE_EVOLUTION_PROMPT.md` are dated measurements of what a disk held on a given
+  day. Rewriting a measurement is how a record stops being one.
+- **econ merge, 2026-09-14: `0182` is RETIRED, and the number stays burned.**
+  `drizzle/0182_one_gift_one_key.sql` was deleted before it reached `main`. It renamed gratitude
+  postings' `idempotency_key` to `keys.gratitudeGiven` and left every `source_ref` alone, while
+  main's #233 finds a reversal by matching a mirror's `source_ref` to the posting's
+  `idempotency_key`. Both landing would have cut every acknowledgement-door reversal made before
+  the rename out of that join, so main's design stands and the rename went. RN's measurement above
+  found no deployed schema holding the economics filenames, only `village_tpl_` templates and
+  `village_test_` scratch schemas. **Never refill `0182`**: a template or scratch schema may still
+  record the filename, and the applied ledger keys on it.
+- **econ renumber lane 2, 2026-09-14: holds 0200 to 0206** on `wt/econ-renumber-2`, for the seven
+  economics migrations that `wt/econ` still carried at or below main's ceiling after the merge at
+  `fb2d94b`, kept in the same relative order: `0181`->`0200`, `0183`->`0201`, `0184`->`0202`,
+  `0185`->`0203`, `0186`->`0204`, `0187`->`0205`, `0188`->`0206`. `0182` stays burned and is not
+  refilled. Measured four ways between 12:46 and 12:58 PDT, after `git fetch origin`: all 271
+  origin refs, all 444 local branch refs and every worktree HEAD reach **0196**; the `drizzle/`
+  directories on disk across 360 worktrees reach **0199**, and that is
+  `drizzle/0199_every_seat_has_a_term.sql` UNTRACKED in `wt-govbuild` on `wt/seat-terms`, with no
+  claim for it in this file on any ref or in any worktree's copy on disk. `wt-theme` holds `0197`
+  and `0198` as STAGED renames on `wt/first-hour`, claimed only in that worktree's uncommitted
+  copy of this section. The brief this lane was handed measured the disk at 0198 and proposed
+  `0199` to `0205`; the untracked `0199` appeared after that, so the whole block moved up one.
+  `check-migration-numbers --next` answers 0197 in this tree, which is below the real ceiling.
+  Every `drizzle/` on this machine above 0199 (up to 0244) belongs to a clone of a different
+  repository, `ReGenCivics.Earth`, which numbers its migrations separately. Replay, measured at
+  12:58 PDT on the local MariaDB at 127.0.0.1:3307: 25 schemas hold `_migrations_applied` and
+  exactly one holds any of the seven old filenames, `village_tpl_e86746be575f_default`, a test
+  template. No persistent schema holds any of them, and none of the seven appears anywhere in the
+  history of `origin/main` or of any tag. **Re-measured at 13:03 PDT, immediately before the
+  rename, and the channels had already moved:** `0199` was COMMITTED and pushed on
+  `origin/wt/seat-terms` and on a second local branch `wt/seat-terms-ui`, and `0197` and `0198`
+  were committed and pushed on `origin/wt/first-hour` with that lane's claim now on a ref. The
+  ceiling was still **0199** on all four channels and nothing anywhere held `0200` or above.
 - **first-hour lane (profile), 2026-09-14: holds 0197 and 0198** for
   `drizzle/0197_a_training_module_says_whether_it_is_mandatory.sql` (one column on
   `training_modules`, `mandatory TINYINT(1) NOT NULL DEFAULT 1`) and
@@ -327,6 +435,104 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   0147 or above: refs, worktrees, Desktop\Amora and every temp scratchpad all agreed.
   CREATE TABLE IF NOT EXISTS only, no ALTER on an existing table, so it adds and takes nothing
   away.
+- **economics keys lane, 2026-09-04: claims 0154 for `drizzle/0154_one_gift_one_key.sql`.** One
+  UPDATE, no DDL: it rewrites `token_ledger.idempotency_key` for the gratitude legs the
+  acknowledgement door wrote under `gratitude_received:<noteId>` so both gratitude doors answer to
+  `keys.gratitudeGiven`. It moves no value and repairs only rows it can attribute; everything else
+  keeps its old key and is findable by one query (docs/ECONOMICS.md 10.33).
+  **Measured all three ways at 12:20 on 2026-09-04, immediately before creating the file, and the
+  reading was already four numbers past the disk.** `ls drizzle/` said 0150. Every REMOTE ref after
+  a fresh fetch reached 0151 (`origin/wt/profile-rebase`). Every LOCAL ref across the worktrees
+  reached 0152 (`wt/plural-subject-refs` and `wt/draft-deadlock`, both holding
+  `0152_a_vendor_record_names_more_than_one_person.sql`). UNTRACKED on disk reached **0153, held
+  TWICE**: `ECON-redeem/drizzle/0153_a_member_redeems_what_they_hold.sql` and
+  `wt-holders/drizzle/0153_subject_refs.sql`. Two lanes are on one number right now and neither
+  gate can see it; whichever lands second has to renumber before landing. 0154 was free in all
+  three scans. **`git log --all --diff-filter=A` is NOT a fourth way and it under-reports**: it
+  missed 0151 entirely, because that file reached its number by a rename and rename detection
+  reports an R and not an A. Sweep the ref TREES.
+- **redemption lane (RB), 2026-09-04: claims 0155 for
+  `drizzle/0155_a_member_redeems_what_they_hold.sql`.** One new table, `redemptions`, plus
+  `INSERT IGNORE` for two non-faucet system accounts (`sys:redemption-hold`,
+  `sys:redeemed`). Additive only. **It took 0153 first, collided, and renumbered before
+  landing.** Both readings are kept below, because the difference between them is the whole
+  lesson and a corrected number with the working thrown away teaches nobody.
+
+  **Reading one, 12:05. Answer 0153, and it was wrong within the hour.**
+  `node scripts/check-migration-numbers.mjs --next` printed **0151** and exited 0, and it was
+  wrong twice over. 0151 was already taken (`0151_a_member_finds_their_own_reservation.sql`,
+  found in the REMOTE scan across 220 refs, in the LOCAL scan across 331, and on DISK in
+  `TREASURES/` and `wt-rebase/`). 0152 was taken by an **UNTRACKED** file,
+  `0152_a_vendor_record_names_more_than_one_person.sql` in the `wt-bridge` worktree on branch
+  `wt/draft-deadlock`, reported by `git status` as `??`, found ONLY in the disk scan and on no
+  ref at all. So the gate was two behind and the disk scan was the only channel that knew.
+
+  **Reading two, 13:40, after the coordinator flagged a collision. Answer 0155.** Same three
+  scans, and every competing number is recorded with the channel it was hiding in, which is
+  what makes this repeatable instead of a claim:
+
+  | Number | Found in | File |
+  |---|---|---|
+  | 0151 | all three | `0151_a_member_finds_their_own_reservation.sql` |
+  | 0152 | remote and local refs, and disk in `RD-di`, `wt-bridge`, `wt-holders` | `0152_a_vendor_record_names_more_than_one_person.sql` |
+  | 0153 | **REMOTE**, pushed to `origin/wt/holders-readback` | `0153_subject_refs.sql` |
+  | 0153 | local refs and disk, this lane | `0153_a_member_redeems_what_they_hold.sql`, renumbered |
+  | 0154 | **DISK ONLY**, `ECON-keys`, unpushed | `0154_one_gift_one_key.sql` |
+
+  **Each of the three channels was the only one that knew about a different number**, which is
+  the argument for running all three every time: 0152 hid on disk at the first reading, 0153 hid
+  on a remote branch that is not `main`, and 0154 hid on disk in a sibling worktree with no ref
+  anywhere. Checking any one channel would have called at least one taken number free.
+
+  **`check-migration-numbers.mjs` returned success at both readings and was blind at both.** It
+  compares disk against `origin/main` only, and none of 0151 to 0154 is on `main`. It is
+  therefore structurally silent on the single case that collides, two branches in flight, while
+  reporting green. That is the same blindness that produced the live `0144` double-claim.
+
+  **Why the renumber was safe here, and the test it had to pass.** `_migrations_applied` keys on
+  FILENAME with no checksum, so on any database where the old name has run, a renamed file is a
+  NEW file that replays while the old name stays marked applied. This one had run in exactly
+  three places, all of which create and drop their own schema: the vitest harness, whose template
+  is named `village_tpl_<sha256 of every filename AND its bytes>` so a rename produces a
+  different template and can never reuse the old one (the stale template was dropped by hand
+  anyway), `check-migration-compat.mjs`, and one throwaway schema this lane made to run the file
+  twice. Nothing persistent had seen it. **Renumbered before landing, never after.**
+
+  **Swept for the number as a STRING, not only as a filename.** Four references outside the file
+  carried it and all four were corrected in the same change: the migration's own first line, two
+  "Seeded by 0153" comments in `server/lib/redemption.ts`, and the section marker in
+  `shared/capabilities.ts`. Two other files in the repository contain the digits `0153` and
+  neither is about a migration (`docs/prototypes/grounds-v0.html`, `shared/lunarTable.json`).
+- **decimals lane (DEC), 2026-09-04: claims 0160 and 0161, renumbered from 0154 and 0155.** No new
+  SQL: these are the economics keys lane's `one_gift_one_key` and the redemption lane's
+  `a_member_redeems_what_they_hold`, moved up because `origin/main` reached 0159 while `wt/econ`
+  was in flight. Neither number collided. **Both were legal on the branch and both would have been
+  refused the moment it took current main**, and the gate could not say so: `resolveBase()` uses
+  `merge-base HEAD origin/main`, our merge base was `e5446c2` whose ceiling is **0143**, so the
+  only-forward rule was comparing against a release seven numbers behind the one a rollback now
+  lands on. Proved by building a throwaway branch off current `origin/main` carrying both files:
+  the same script that exits 0 here exits 1 there and names both files against ceiling 0159.
+  **Measured all three ways immediately before renaming and all three agreed on 0159**: every
+  remote ref after a fresh fetch, every local ref across 336 worktrees, and every `drizzle/`
+  directory on disk. `origin/main` holds two files at 0156 (`an_investor_path_records_facts_not_money`
+  and `half_erased_members`), the pair that shipped eleven minutes apart and had to be
+  grandfathered, so 0156 is spent twice over and 0160 is the first number free of it.
+  **Why the renumber was safe.** `_migrations_applied` keys on FILENAME, so a renamed file that has
+  run somewhere persistent replays while the old name stays marked applied. A scan of all 57 schemas
+  on the local server holding a `_migrations_applied` table found the old names in four
+  `village_tpl_*` templates, which is NOT the "scratch schemas dropped per run" this lane was told
+  to expect. It is still safe, for a reason worth writing down: `migrationsFingerprint()` in
+  `server/db/testDb.ts` hashes every migration file's NAME and its BYTES, so a rename yields a
+  different template key and the old template can never be reused for the new set. No non-template
+  schema on the server carries either name, and this machine has no `DATABASE_URL` at all.
+  **Swept for both numbers as STRINGS**, pattern `git grep -nE '0154|0155'`: 23 lines over 11 paths.
+  **13 lines across 8 files were real references and were corrected**, plus the two migrations' own
+  header lines, which is 15 in all. Left alone on purpose: the 8 lines above in this ledger, which
+  are its history and the whole lesson; one generic EXAMPLE (`0155_add_widget.sql`, a docblock
+  illustration in `scripts/check-economics-narrative.mjs`); and one PNG that matches on bytes.
+  Not one of the 13 was a filename: they were comments, a section marker, doc prose, test
+  descriptions and two "Seeded by" lines. A sweep for the filename alone would have found none of
+  them.
 - **arch-store lane, 2026-08-31: claims 0122 for `drizzle/0122_collection_versions.sql`.** One
   new table, `collection_versions`, holding one counter per `dbCollection` table. It is what
   makes `replaceAll` able to tell a current snapshot from a stale one, and its row lock is the
@@ -2952,6 +3158,25 @@ Both look like intentional work and neither is.
 | 2026-09-04 | two sessions | migration `0156` | (landed) | **COLLIDED AND SHIPPED.** Both files ran on production eleven minutes apart, so neither can be renumbered: the applied ledger keys on FILENAME, and renaming makes the file new to every instance that already ran it. Grandfathered with evidence in `b5ed26f`. The list of grandfathered numbers does not grow. |
 | 2026-09-04 | governance (`b7f9ef`) | `docs/GOVERNANCE.md` and `scripts/generate-governance-doc.mjs` | `wt/gb-docs` | HELD — ruling top-up in flight |
 | 2026-09-04 | admin lane | `ledger.admin_mint_cycle_cap` and `ledger.admin_mint_cosign_over` | landed `4364a2c` | **RELEASED, but READ THIS BEFORE TOUCHING THE MINT SURFACE. The MEANING of both dial keys changed and their NAMES did not**, so a grep finds them unchanged and returns the old semantics. They were compared raw against ledger amounts and are now scaled through `toLedgerUnits`, so the number is WHOLE TOKENS. At 0 decimals nothing moves; for a token with a scale the co-sign threshold rises by that scale, which is a governance weakening arriving as a units fix. Both descriptions in `shared/gameVariables.ts` now state the unit, which is the only place it survives a merged PR body going stale. Separately: the cap's COUNTING is being rewritten by the economics lane on `wt/econ` (`92bd0f5`, unmerged at time of writing) to count all issuance net of returns, and that commit also carries the corrected sentence in `client/src/components/admin/TokensTab.tsx`. |
+| 2026-09-05 | main-merge lane (MM) | migrations `0148`, `0149`, `0150` | `wt/econ-mainmerge` | **RELEASED AND RENUMBERED to `0165`, `0166`, `0167`, at landing, exactly as 27b says a claim expires.** They were free when `wt/econ` took them and `origin/main` has since reached `0159`, so the gate refused all three as numbers added below a ceiling the base ref already passed. Ceiling re-measured three ways at the renumber: every ref's tree reaches **0164** (`0163`/`0164` on `origin/wt/governance-build`), every worktree's `drizzle/` reaches **0164**, and nothing on disk or in any scratchpad holds `0165` or above. Safe to rename, and VERIFIED for these three rather than inherited from the earlier pair, because every statement in all three is idempotent by construction: `0165` is one `INSERT IGNORE`, `0166` is two `CREATE TABLE IF NOT EXISTS`, `0167` is one. There is no `ALTER TABLE` and no `ADD COLUMN` anywhere in them, which is the statement that turns a replay into a bricked boot, so a rename replaying under a new name is a guaranteed no-op on any database that already holds the old name. Where they have actually run, measured on the local MySQL (48 schemas, 20 throwaway and 24 persistent): exactly ONE persistent schema has ever applied one of them, `n2_needs_ux` with `0149_a_village_says_what_it_is_for.sql`, and it is a lane's scratch schema. `rc_qa_crowdpool` holds `0148_reply_open_question_flag.sql` and `0150_recording_chapters_transcript.sql`, which are DIFFERENT FILES in a different numbering universe that reaches 0240, and are not these. No founder instance can hold any of the three: none is on `origin/main` or on any deployed ref. Test templates cannot be reused either, because `migrationsFingerprint` in `server/db/testDb.ts` hashes every migration's NAME and its BYTES, so a rename produces a fresh `village_tpl_` schema. Swept as a STRING, not as a filename: **31 references across 14 files**, of which only 5 were filenames and 2 were assertions on a filename inside `server/lib/needs.test.ts`. Two mentions of `0150` in this document and one in `CLAUDE_CODE_PROMPT_2026-09-03_ECONOMICS.md` are left alone on purpose: they are measurements of what the disk held on a given day, and rewriting a measurement is how a record stops being one. |
+| 2026-09-05 | main-merge lane (MM) | `scripts/server-index-size-baseline.json` | `wt/econ-mainmerge` | RELEASED. Lowered to **28038 lines / 408 routes**, measured on the merged `server/index.ts` and taken from neither side: `wt/econ` said 28358/412 and `origin/main` said 28091/409, and both were above the truth because each had only its own extractions in view. |
+| 2026-09-05 | main-merge lane (MM) | migrations `0160`, `0161`, `0162` | `wt/econ-mainmerge` | HELD, and confirmed clear at the same scan. No other ref and no untracked file on any sibling worktree holds them, so they are landing as they are. **Unrelated, and reported rather than touched: `0163` is held TWICE right now**, by `0163_an_override_names_the_ballot_it_answers.sql` on `origin/wt/governance-build` and by `0163_a_circle_has_two_caps.sql` on `wt/econ-burnrate`. Whichever lands second has to renumber, and neither gate can see the other. |
+| 2026-09-07 | treasury lane (TR) | migration `0181`, `drizzle/0181_a_circle_holds_its_own_treasury.sql` | `wt/econ-treasury` | HELD. Measured three ways at the claim, and the DOCUMENTED SCAN IN 27b UNDERCOUNTS, which is the finding worth carrying forward. `git log --all --name-only --diff-filter=A -- 'drizzle/*.sql'` reaches **0178** and MISSES every renumbered file, because a renumber is detected as a RENAME and never as an ADD: it does not show `0165` to `0168`, all four of which are committed on `wt/econ` right now. Enumerating every ref's TREE instead (`git for-each-ref` then `git ls-tree <ref> drizzle/`, 657 refs) reaches **0180**, held by `0179_seven_full_sends.sql` and `0180_the_wall_speaks_first.sql` on `origin/wt/gratitude-voices`. Disk across all 325 sibling worktrees reaches **0178**; `git ls-files --others` finds NO untracked `drizzle/` file anywhere. `origin/main` itself reaches **0178**. So `0181` is above all four scans. **Use the tree scan, not the add scan.** |
+| 2026-09-07 | treasury lane (TR) | `server/lib/mintCap.ts` `HAND_MINT_SOURCES` and `server/mintCap.e2e.test.ts` | `wt/econ-treasury` | HELD, superseding the row two above with the same claim: `circle_treasury_fund` is a FOURTH door that meets `mintCapGuard`. |
+| 2026-09-07 | treasury lane (TR) | inherited reds, REPORTED and not touched | `wt/econ-treasury` | Two gates were already red on `wt/econ` before this lane opened, measured by checking out `a1eb9e6` over this worktree and running the guard here rather than in `ECON`. **`ECON` IS DIRTY** (a sibling lane has 40+ files uncommitted in it), so a ratchet run there measures somebody's in-flight tree and not the branch: it reported `economy.ts` at 28 raw-SQL sites where the branch has 27, which is how a lane comes to believe it caused a red it did not. `validate-module.mjs resources` raw-SQL burn-down: **15 refusals at `a1eb9e6`, 14 with this lane's work**, and `server/lib/circleTreasury.ts`'s ten sites carry per-line `module-review-ok` reasons so the register does not grow. The `server/index.ts` ratchet had **ZERO slack** (28038 of 28038), so this lane's net counted addition to that file is 0: the permission seam, the dormancy hook and the supply figure all live in `server/lib/circleTreasury.ts`, and the monolith holds four call sites and one import. |
+| 2026-09-07 | treasury lane (TR) | `wt/econ-treasury`, VERIFIED IN CI and ready to integrate | pushed | **Run `34168402017` on `1b9eb7c`: completed, SUCCESS, 50 steps, 13m08s, no failed step.** Node 22 and MySQL 8, which this machine is neither: the local `node_modules` still holds express `4.22.2` against a lockfile on `^5.2.1`, so the local greens were never CI greens and the suites say so on every run. Migration `0181` is HELD and NOT YET TAKEN: per 27b the number is assigned at LANDING from a fresh scan, and this one was measured against `origin/main` at `0178` on 2026-09-07. Whoever integrates should re-scan by REF TREE (`git for-each-ref` then `git ls-tree`), not by `--diff-filter=A`, for the reason in the claim above. |
+| 2026-09-07 | treasury lane (TR) | `server/lib/mintCap.ts` `HAND_MINT_SOURCES` and `server/mintCap.e2e.test.ts` | `wt/econ-treasury` | HELD. `circle_treasury_fund` is a FOURTH door that meets `mintCapGuard`, so it joins the hand-mint list and the e2e that asserts the list against the doors now drives four. That assertion went red on its own when the door landed, which is the tripwire its comment promised. Left off the list, `capRefusal` would have told a founder who had just funded ten circle treasuries that their own issuance came from a door no admin opened. |
+| 2026-09-07 | treasury lane (TR) | `server/index.ts` (import + two route registrations + the circle-status hook) | `wt/econ-treasury` | HELD. Additive only, and the server-index ratchet subtracts imports and register calls, so the baseline does not move. **The unrelated finding: `check-migration-numbers --since origin/main` resolves the base ref to the MERGE-BASE and not to origin/main's tip.** On this branch that is `b865a34`, whose ceiling is `0159`, so `wt/econ`'s `0165` to `0168` pass today and will be refused the moment that branch rebases onto a main that has reached `0178`. A green from this gate is a statement about the merge-base, never about main. |
+| 2026-09-07 | renumber lane (RN) | migrations `0182`-`0188` | `wt/econ-renumber` | **TAKEN, and the two rows above are left standing as the record of what they held.** The seven files the MM lane numbered `0160`-`0162` and `0165`-`0167`, plus `0168`, all sat at or below the ceiling their base ref had reached, so `check-migration-numbers` refused `wt/econ` outright. Renumbered to `0182`-`0188` with `git mv`, order preserved. `0179` and `0180` (`wt/gratitude-voices`) and `0181` (`wt/econ-treasury`) are stepped over. REBASED onto `wt/econ` at `ddcf54a`, which already carries `0181`, and the ceiling re-measured three ways AT THE RENAME on that base: 677 ref trees reached `0181`, 348 worktrees on disk reached `0181`, and the untracked scan reached `0162`, every one of them excluding this lane's own tree and refs; full method and the per-file replay findings are in section 3. **The renumber INVERTED A COLUMN DEPENDENCY and bricked boot, and no static gate saw it:** `0181` adds columns `AFTER cycle_amount_minor`, which arrives in the file that moved from `0168` to `0188` and therefore now sorts after it, so `0181` failed with `Unknown column 'cycle_amount_minor'` on statement one. Only APPLYING the set caught it. `0181` now says `AFTER amount_minor`, which is equivalent and was measured: both trees applied to a scratch schema give `circle_budgets` the same 18 columns in the same order. **The number check is a statement about the MERGE-BASE, not about main's tip.** `resolveBase()` runs `git merge-base HEAD <ref>` and takes the newest match, so this branch's green is about `origin/main @ 773713eb`, which reached `0178`. `origin/main`'s TIP `47b4dfc` also reaches `0178` today, so the two agree for now; a branch can pass this gate and be refused the moment it takes a newer main. |
+
+| 2026-09-07 | rollover lane (RO) | `shared/gameVariables.ts` (ONE new dial, `resources.circle_cap_bonus_pct`) | `wt/econ-rollover` | HELD. Appended at the end of the Ledger category; no existing def edited, and `CYCLE_APPLY_KEYS` is NOT touched because the def carries `applyTiming` itself. |
+| 2026-09-07 | rollover lane (RO) | `shared/launchRequirements.ts` (one new requirement `issuance-cap`, one new optional field `declinable`) and `server/lib/launch.ts` | `wt/econ-rollover` | HELD. The founder is asked once for the village-wide issuance cap and MAY DECLINE; the decline is recorded in the `launch-state` document beside `manualConfirms`, so a declined cap and an unset cap are two different rows and not two readings of one blank. |
+| 2026-09-07 | rollover lane (RO) | `server/index.ts` — TWO MODIFIED LINES, ZERO ADDED | `wt/econ-rollover` | HELD, and the constraint is the reason for the shape. The ratchet has **ZERO slack** (27893 of 27893 lines, 403 of 403 routes, measured here at `ddcf54a`), so a new route module cannot be registered from that file at all. The bonus door therefore mounts inside `server/routes/circleTreasury.ts` (541 of 2000 lines), and the decline rides the EXISTING `POST /api/admin/launch/confirm` by widening the `done` argument it already forwards. Net line change to `server/index.ts` is 0. |
+| 2026-09-07 | rollover lane (RO) | `server/routes/circleTreasury.ts` (one new route) | `wt/econ-rollover` | HELD. TR's claim on this file reads VERIFIED IN CI and ready to integrate, so it is not in flight. |
+| 2026-09-07 | rollover lane (RO) | NO MIGRATION TAKEN | `wt/econ-rollover` | Recorded because the number board is contested this hour. The bonus dial is a game variable, the launch decision is a JSON field inside the existing `launch-state` `app_config` document, and the bonus payment is ledger rows through `postTransfer`. Nothing here needs a column. |
+
+| 2026-09-07 | rollover lane (RO) | `wt/econ-rollover`, VERIFIED IN CI and ready to integrate | pushed | **Run `34186761673` on `a295e4d`: completed, FAILURE, 54 steps, failed steps `Migration numbers` and `Test`. ZERO of those failures are this lane's**, and it is provable two ways rather than asserted. Locally: a pristine `ddcf54a` worktree (node_modules junctioned in, then `rmdir` before removal) fails the SAME five guards (`check-migration-numbers`, `check-governance-doc`, `check-variables-doc`, `check-modules-doc`, `check-capabilities-doc`) and the SAME tests. In CI: run `34169761102` on `eb84c64` of `wt/econ`, pushed before this branch existed, failed `server/exitLevers.routes.e2e.test.ts` x2, `shared/dryRun/types.test.ts`, `server/db/governanceDoc.test.ts` x2 and `server/lib/circleBonusGate.test.ts` x3, which is this run's set exactly, minus `adminTokens.e2e` (green here) plus `circleTreasury.e2e`'s season-window test, measured red on the pristine `ddcf54a` with no change of mine in the tree. Every suite this lane added or touched is GREEN in CI on Node 22 and MySQL 8. **The four generated-doc guards want ONE command from whoever integrates** (`generate-variables-doc`, `generate-modules-doc`, `generate-capabilities-doc`, `generate-governance-doc`); they were left alone here because regenerating `docs/VARIABLES.md` sweeps 20 other lanes' dials into this diff and the governance one stamps the committing SHA, so it can only be right as the LAST commit. |
+
 | 2026-09-14 | governance (`amora-b0`) | migration `0199` (`drizzle/0199_every_seat_has_a_term.sql`); `server/index.ts` (net 18 lines DOWN: the three season routes moved to `server/routes/seasons.ts`, baseline left at 27553 so the headroom goes to whoever lands next) | `wt/seat-terms` | HELD. Ceiling measured two ways on 2026-09-14: every remote ref reached `0196`, and UNTRACKED files in the `wt-theme` worktree hold `0197_a_training_module_says_whether_it_is_mandatory.sql` and `0198_a_member_is_vouched_into_membership.sql`, which no git command sees. **If `0199` lands first, those two sit below main's ceiling and the numbers gate refuses them: renumber to `0200`+ before landing.** Safe for them only because untracked files have never run outside a scratch schema. |
 | 2026-09-14 | seat-terms screens (lane) | `server/index.ts` (two counted lines in `POST /api/map/roles/:id/raise-hand`, logic in `server/lib/raisedHandTerm.ts`; the ratchet still passes against 27553), plus `docs/GOVERNANCE.md` and `docs/knowledge/governance-lineage.md` regenerated only, because `role_seat` joined `WIZARD_TYPES` and `CONDUCTABLE_TYPES` | `wt/seat-terms-ui`, PR base `wt/seat-terms` | HELD. No migration and no baseline moved. Land after `wt/seat-terms`; a later change to either governance source re-stamps the lineage fingerprint, so regenerate on rebase. |
 | 2026-09-14 | Org Map lane (`amora-d2`) | `server/index.ts` (circle admin routes moved to `server/routes/circles.ts`); the raw-SQL burn-down register and `BURNDOWN_CEILING` (lowered: `server/lib/orgDrafts.ts` 25 to 22); `docs/GOVERNANCE.md` and its lineage (regenerated) | `wt/circles-lens` | HELD. Lands AFTER the governance batch #249, agreed with governance (`amora-b0`). After #249: merge main, resolve the five `orgDrafts.ts` hunks as agreed, re-record the burn-down and regenerate the docs immediately before the push. A migration for `move_circle` will be claimed in section 3 first (0208 or above, four-channel scan). |

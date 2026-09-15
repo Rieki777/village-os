@@ -53,6 +53,23 @@ interface RuleRow {
   enabled: number;
 }
 
+/**
+ * The scale a token actually carries, read off the `tokens` table.
+ *
+ * NOT off `toLedgerUnits`: an assertion that calls the conversion under test
+ * can only ever agree with it, and the three balances below are exactly the
+ * numbers that conversion decides. `tokens.decimals` is what the flip migration
+ * will move, so a suite reading it is a suite that stays true across the flip
+ * instead of restating today's scale as a literal.
+ */
+async function scaleOf(slug: string): Promise<number> {
+  const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    "SELECT `decimals` FROM `tokens` WHERE `slug` = ?",
+    [slug],
+  );
+  return 10 ** Number(rows[0]?.decimals ?? 0);
+}
+
 async function rules(): Promise<RuleRow[]> {
   const [rows] = await pool.query<any[]>(
     "SELECT `id`, `trigger`, `token_slug`, `amount`, `ceiling`, `recipient`, `enabled` " +
@@ -169,10 +186,14 @@ describe.skipIf(!configured)("the rules a village is seeded with", () => {
     const out = await runSettlement(pool);
     expect(out.unpayable).toHaveLength(0);
     expect(out.stewardsThanked).toBe(1);
-    // Whole credits: `credits` carries decimals 0.
-    expect(await balanceOf(pool, memberAccount(u), CREDITS)).toBe(25);
-    // Voice rides in thousandths, so 50 in the rule is 50000 in the ledger.
-    expect(await balanceOf(pool, memberAccount(u), VILLAGE_VOICE)).toBe(50000);
+    // 25 credits and 50 voice are what the SEED promises; the ledger holds
+    // each in its own token's minor units, and neither number below restates
+    // a scale the registry owns. At decimals 0 these read 25 and 50; at 4 they
+    // read 250000 and 500000; the assertion does not change either way.
+    expect(await balanceOf(pool, memberAccount(u), CREDITS)).toBe(25 * (await scaleOf(CREDITS)));
+    expect(await balanceOf(pool, memberAccount(u), VILLAGE_VOICE)).toBe(
+      50 * (await scaleOf(VILLAGE_VOICE)),
+    );
     // The ruling: gratitude is not a default payout for holding a seat.
     expect(await balanceOf(pool, memberAccount(u), HEARTS)).toBe(0);
   });
@@ -180,7 +201,11 @@ describe.skipIf(!configured)("the rules a village is seeded with", () => {
   it("settles the same moon twice without paying twice", async () => {
     const again = await runSettlement(pool);
     expect(again.alreadyRun).toBe(true);
-    expect(await balanceOf(pool, memberAccount("seed-seat-1"), CREDITS)).toBe(25);
+    // The same 25 credits the first settlement left, and not 50: this reads the
+    // balance the test above created, so it carries that test's scale too.
+    expect(await balanceOf(pool, memberAccount("seed-seat-1"), CREDITS)).toBe(
+      25 * (await scaleOf(CREDITS)),
+    );
   });
 
   it("never restores a default a village has already changed", async () => {

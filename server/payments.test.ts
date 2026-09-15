@@ -78,6 +78,8 @@ describe("the allow-negative whitelist stays tight", () => {
     // ledger row as the only repair; allowing it puts the member's balance
     // below zero, which is the true statement of what they hold and clears
     // itself as they earn.
+    //
+    // The ruling is PLAN_TO_A.md section 1 item 5.
     expect(Array.from(ALLOW_NEGATIVE_SOURCES).sort()).toEqual([
       "payment_reversal",
       "reversal",

@@ -14,16 +14,20 @@ this module moves money, records a pledge, or holds a member's name.**
 
 ## Where the data comes from
 
-The hub serves a public, no-auth tRPC API at `/api/trpc`. Four procedures are
-read (measured live 2026-08-22):
+The hub serves a public, no-auth tRPC API at `/api/trpc`. Five procedures are
+read (measured live 2026-08-22). Four of them are the per-campaign bundle,
+dialled in parallel; `campaigns.list` is the fifth and runs only for a key that
+has never synced. This paragraph said FOUR and listed five from the day it
+shipped, and so did `server/lib/crowdpool.ts:5`; both were corrected on
+2026-09-04.
 
 - `campaigns.list` (input `{}`), used once per key to resolve a slug to an id
 - `campaigns.getById` (input `{id}`): one flat record with items, images,
   coverImage and contributorsCount embedded
 - `campaigns.getItems` (input `{campaignId}`): the needs, each with the
   three-slot `quantityWanted` / `quantityClaimed` / `quantityDelivered` meter,
-  a `kind` (loan, role, shift, knowledge, item, crypto), and one of the hub's
-  nine `capitalType` values
+  a `kind` (item, role, shift, loan, knowledge, crypto, financial_link: seven,
+  and the hub owns the enum, so read it and never assume it), and one of the hub's nine `capitalType` values
 - `campaigns.getActivity` (input `{campaignId}`): the public Pool Ledger
 - `campaigns.getPartnerLinks` (input `{campaignId}`): partner funders with the
   hub's own cached raised, percent and contributor count
@@ -35,7 +39,26 @@ private and loopback ranges refused, every redirect hop re-vetted.
 
 `endsAt` is DERIVED as `startedAt + durationDays`; the hub stores no end
 column. Campaign progress is `pledgedTotal / totalValue`; the delivered share
-weights each need's delivered fraction by its estimated value.
+weights each need's delivered fraction by its estimated value, clamped at 1 per
+need.
+
+## Three hub-side defects, and what this side does about each
+
+Measured by the Crowdpooling session against a scratch database of their own on
+2026-09-04 and relayed to this lane. This side re-verified only its own half.
+None of the three is fixable here, and all three change what this module may
+honestly claim.
+
+| Their defect | What it does to us | What we do |
+|---|---|---|
+| `pledgedTotal` is summed filtering on the ACCEPTED status alone, and delivered and thanked are later states of the same lifecycle | the ring shrinks when a village succeeds, and the drop is DEFERRED to the next unrelated acceptance, so it looks unrelated to the delivery that caused it | still divide by the hub's number, and NAME it as a floor everywhere a reader meets it. No correction is computed: a guess at the delivered value would be worse than an honest gap |
+| the fulfil path is not idempotent, so two stewards at once put `quantityDelivered` at 2 where 1 was wanted (ten trials out of ten) | a need can arrive with more delivered than wanted | `percentDelivered` clamps each need's share at 1 so the walls cannot pass the ring; the meter draws against what is WANTED and says out loud that more arrived than were wanted; the campaign page stops filing such a need away as quietly met |
+| a financial pledge is stored as a total and a financial SUBTOTAL, and three of the hub's own surfaces add the two, so a ten thousand pledge headlines as twenty thousand | nothing: we read them as separate fields and divide by the total alone | **our figure is right where their gallery is wrong.** `server/lib/crowdpoolPledgeNeverSums.test.ts` pins that to one spelling across the whole bridge, so a later lane cannot quietly "fix" ours to match theirs |
+
+The first two are being fixed on the hub. When the first lands,
+`HUB_PLEDGED_TOTAL_IS_A_FLOOR` in
+`client/src/components/crowdpool/PoolPieces.tsx` is the one switch that turns
+the floor language back off.
 
 ## Config shape
 

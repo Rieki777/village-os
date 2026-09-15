@@ -20,11 +20,20 @@
  *
  * And a circle with circles inside it is not deleted out from under them, the
  * same refusal the route already gave for seats.
+ *
+ * ── THE TREASURY (0200) ───────────────────────────────────────────────────
+ *
+ * Economics hangs two hooks on these routes, carried over from server/index.ts
+ * where #243 added them while this file was being written: a status change
+ * runs the circle treasury's hook with the status the edit replaced, and a
+ * delete is refused while the circle's treasury would be stranded.
  */
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { EXAMPLE_REFUSAL_BODY, isExampleRow, onRealItemPublished } from "../lib/examples";
 import { listOrgRoles } from "../lib/orgChart";
+import { circleDeleteProblem, onCircleStatusChange } from "../lib/circleTreasury";
+import { listBudgets } from "../lib/resources";
 import { CIRCLE_STATUSES } from "../../shared/draftKinds";
 import { parentingRefusal } from "../../shared/circleView";
 
@@ -110,6 +119,8 @@ export function register(app: Express, deps: Deps): void {
     }
     // isExample is pinned exactly like id: a request body may not forge the
     // flag onto a real row, nor strip it off an example to launder it.
+    // 0200: the status is read BEFORE the merge overwrites it, for the treasury hook below.
+    const wasStatus = String((all[idx] as any).status ?? "active");
     const merged = { ...all[idx], ...req.body, id: all[idx].id, isExample: all[idx].isExample };
     // An alias maps to exactly ONE circle: reject collisions with any other
     // circle's name or aliases — a quest resolving two ways is a data bug.
@@ -138,7 +149,7 @@ export function register(app: Express, deps: Deps): void {
     }
     all[idx] = { ...merged, aliases };
     await circlesRepo.replaceAll(all);
-    res.json(all[idx]);
+    res.json({ ...all[idx], ...(await onCircleStatusChange(getPool(), all[idx], wasStatus, adminActor(req)?.id ?? null, listBudgets)) });
   });
 
   app.delete("/api/admin/circles/:id", async (req, res) => {
@@ -169,6 +180,9 @@ export function register(app: Express, deps: Deps): void {
         message: `${inside.length} circle(s) still sit inside this one. Move them out first.`,
       });
     }
+    // 0200: nor with a treasury that the delete would strand.
+    const stranded = await circleDeleteProblem(getPool(), String(req.params.id), await listBudgets(getPool()), circlesRepo);
+    if (stranded) return res.status(409).json({ error: stranded });
     const remaining = circlesRepo.all().filter((c: any) => c.id !== req.params.id);
     if (remaining.length === circlesRepo.all().length) return res.status(404).json({ error: "Not found" });
     await circlesRepo.replaceAll(remaining);

@@ -38,7 +38,10 @@ defaults:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 25, raised from 15 on 2026-09-15: verify on 9f560fc took 14m43s (Test 10m38s), and
+    # on 1364bdb it took 15m05s and was cancelled mid-Test by this limit, not by a failure.
+    # The suite grows with every lane; cancelled reads like a red, so keep real headroom.
+    timeout-minutes: 25
     services:
       # S5: the DB-backed suites (server/db/*.test.ts) run against a real MySQL.
       # The harness provisions its own scratch schema and applies every
@@ -606,6 +609,36 @@ jobs:
         # the functions it describes) is server/db/tokenDoc.test.ts, in the
         # suite below.
         run: node scripts/check-token-doc.mjs
+
+      - name: Economics doc
+        # docs/ECONOMICS.md is HALF generated. Its token table, faucets, mint
+        # rules, sinks, boot invariants, member-facing refusals and occurrence
+        # keys are rendered from the migrations and the server source by
+        # scripts/generate-economics-doc.mjs; this regenerates them and fails
+        # when a region and the code have come apart.
+        #
+        # It exits 2, not 1, when it could not run at all (a missing marker, a
+        # missing document, a source file that moved). 1 means "I looked and
+        # the answer is bad"; 2 means "I could not look", and a red build has
+        # to say which. Dependency-free, no database.
+        run: node scripts/check-economics-doc.mjs
+
+      - name: Economics doc, narrative not stale
+        # The other half of that document is prose no generator can rebuild:
+        # the spend side, the exit path, the worked examples, the failure
+        # modes a member meets. This fails when a file on the ECONOMY SURFACE
+        # changed against the base and the document did not change with it.
+        #
+        # The base comes from GITHUB_BASE_REF (the pull request's base branch)
+        # and falls back to origin/main, exactly as the two migration guards
+        # above resolve theirs, so the `fetch-depth: 0` already set on the
+        # checkout is the only plumbing it needs. It exits 2, never 0, when the
+        # base will not resolve.
+        #
+        # It cannot tell whether what somebody wrote is true. It insists that
+        # somebody looked, which is the only moment the code and the document
+        # are cheap to reconcile. `--list` prints the surface.
+        run: node scripts/check-economics-narrative.mjs
 
       - name: Token doc, self-test
         # The generator's own fixture suite: the UPDATE sweep it exists to

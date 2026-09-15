@@ -8,6 +8,12 @@
  * (`restampSeatsToCalendar`, server/lib/seatTermLanding.ts). Rye, 2026-09-14:
  * "we have a seasonal schedule set up and need to make sure these are talking."
  *
+ * What the save writes is `seasonDocumentToStore`'s decision
+ * (server/lib/seasonCalendar.ts), carried over from the handler this file
+ * replaced: an unknown zone is refused in words, and an empty list or the
+ * derived list the Season tab was shown stores `seasons: []`. A stored [] still
+ * moves the seats, onto the list it derives.
+ *
  * Registered at exactly the point the handlers used to sit, which keeps them
  * ahead of `/api/admin/seasons/patterns` in registration order.
  *
@@ -27,7 +33,7 @@
  */
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
-import { suggestNextSeasonDates } from "../lib/seasonCalendar";
+import { seasonDocumentToStore, suggestNextSeasonDates } from "../lib/seasonCalendar";
 import { restampSeatsToCalendar, type RestampDeps } from "../lib/seatTermLanding";
 
 type SeasonConfig = { seasons: any[]; cadence: string; timezone: string };
@@ -35,7 +41,6 @@ type SeasonConfig = { seasons: any[]; cadence: string; timezone: string };
 type Deps = Pick<AppDeps, "isAdmin" | "adminActor" | "getPool" | "notify"> & {
   seasonState(): any;
   getSeasonConfig(): SeasonConfig;
-  normalizeSeasonConfig(raw: unknown): SeasonConfig;
   seasonRepo: { put(doc: SeasonConfig): Promise<unknown> };
   addActivity(
     kind: string,
@@ -48,8 +53,7 @@ type Deps = Pick<AppDeps, "isAdmin" | "adminActor" | "getPool" | "notify"> & {
 };
 
 export function register(app: Express, deps: Deps): void {
-  const { isAdmin, adminActor, getPool, notify, seasonState, getSeasonConfig, normalizeSeasonConfig, seasonRepo, addActivity, loadRoles } =
-    deps;
+  const { isAdmin, adminActor, getPool, notify, seasonState, getSeasonConfig, seasonRepo, addActivity, loadRoles } = deps;
 
   // Public: the computed season state (current picked by date, never stale).
   app.get("/api/season", async (_req, res) => {
@@ -73,9 +77,14 @@ export function register(app: Express, deps: Deps): void {
   app.put("/api/admin/seasons", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     if (!req.body || typeof req.body !== "object") return res.status(400).json({ error: "Body required" });
+    // An unknown zone is refused in words and nothing is stored (D2-8). An empty
+    // list, or the derived list the Season tab was shown, stores [] so the village
+    // keeps deriving (D2-9). Both rules live in server/lib/seasonCalendar.ts. The
+    // seats below still move, onto whatever the stored document now derives.
+    const saving = seasonDocumentToStore(req.body);
+    if (!saving.ok) return res.status(400).json({ error: saving.error });
     const before = seasonState().current?.id ?? null;
-    const next = normalizeSeasonConfig(req.body);
-    await seasonRepo.put(next);
+    await seasonRepo.put(saving.doc);
     const after = seasonState();
     if (after.current && after.current.id !== before) {
       await addActivity("season", `The season has turned: ${after.current.name}`, { actorUserId: adminActor(req)?.id, entityType: "season" });

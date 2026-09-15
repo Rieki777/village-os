@@ -1,5 +1,5 @@
 /**
- * The Setup Wizard's six steps, and which of them the screen can actually count.
+ * The Setup Wizard's seven steps, and which of them the screen can actually count.
  *
  * THE STEPS, IN ONE PLACE. There used to be two lists: the wizard's own, and a
  * copy in the Admin shell that decides whether setup is finished. Adding a
@@ -7,9 +7,11 @@
  * while a step sat undone, which is the kind of drift that only shows up as
  * "why is it still telling me I'm done". Both callers now read this file.
  *
- * Order is the order a founder works: name the place, dress it, set its
- * numbers, write its words, style its map, then ship. Go live stays last
- * because it is the step you stop coming back to.
+ * Order is the order a founder works: name the place, say what it is for,
+ * dress it, set its numbers, write its words, style its map, then ship. Go
+ * live stays last because it is the step you stop coming back to. The second
+ * step arrived after the other six; see the block above its entry for why it
+ * sits where it does.
  *
  * WHY COMPLETION IS NOW READ RATHER THAN TICKED. All six steps used to be
  * checkboxes a founder ticked, and a ticked box outlives whatever it was
@@ -24,8 +26,9 @@
  *
  * So the two steps whose fields live in the brand record this same screen
  * already loads are MEASURED: their completion is derived from the record and
- * there is no box to tick. The other four keep a checkbox, because what they
- * ask about is genuinely not in that record:
+ * there is no box to tick. The needs step is measured too, from a different
+ * read; see `needsObservation`. The other four keep a checkbox, because what
+ * they ask about is genuinely not in that record:
  *
  *   numbers    the figures on the Settings tab, where every single one is
  *              allowed to stay blank on purpose (a village states its own
@@ -72,9 +75,14 @@
  * blank is a legitimate final answer belongs in the self-reported group above,
  * not in `fields`.
  */
+import { HUMAN_NEEDS } from "@shared/needs";
+
+/** How many needs the platform offers. The denominator of the needs row. */
+const PLATFORM_NEED_COUNT = HUMAN_NEEDS.length;
 
 export type SetupStepKey =
   | "identity"
+  | "needs"
   | "images"
   | "numbers"
   | "content"
@@ -154,6 +162,24 @@ export const SETUP_STEPS: readonly SetupStep[] = [
        */
     ],
   },
+  /*
+   * SECOND, AND THE ORDER IS THE ARGUMENT (R1, lane N2).
+   *
+   * The order this file's header states is "name the place, dress it, set its
+   * numbers". What the village is FOR belongs before what it looks like and
+   * before its numbers, because the scope orients the scale: a village meeting
+   * one need for a tenth of its members and a village meeting all ten for all
+   * of them are two different economic engines, and a founder who dresses the
+   * village first and then discovers the engine is ten times too small has
+   * done the work in the wrong order.
+   *
+   * `fields` is empty because the answer is not in the brand document: it is
+   * rows in `village_needs`, read over `GET /api/needs/scope`. So this step is
+   * OBSERVED, and `needsObservation` below is the only thing that turns that
+   * read into a row. Pass no observation and this step is `unknown`, which is
+   * the honest answer while nobody has looked, and never a quiet `todo`.
+   */
+  { key: "needs", label: "What this village is for", fields: [] },
   {
     key: "images",
     label: "Pictures",
@@ -254,6 +280,21 @@ export interface SetupObservation {
   filled?: number;
   total?: number;
   detail?: string;
+  /**
+   * Whether a founder's tick may still carry this step. Defaults to true,
+   * which is the behaviour every step had before this field existed.
+   *
+   * FALSE IS FOR A STEP WHOSE BLANK IS NEVER A DELIBERATE ANSWER. The carry
+   * exists because a blank is sometimes the real answer: a village states its
+   * own land figures or states none, so a founder may say "this is finished"
+   * over a reading of `todo`. That reasoning does not reach the needs scope. A
+   * village with no needs in scope has not answered the question, and the row
+   * renders no checkbox anyway (SetupSection draws one only for a `declared`
+   * row), so a carry there would be a `true` sitting in the brand document
+   * from some earlier version of this list with no control able to clear it.
+   * That is the ticked-box outage in its newest shape.
+   */
+  carryable?: boolean;
 }
 
 export type SetupObservations = Partial<Record<SetupStepKey, SetupObservation>>;
@@ -330,7 +371,7 @@ export function measureSetup(
     /* A step read from somewhere else. The observation is the default answer,
        and a tick may still carry it, visibly. */
     if (observation) {
-      const carried = observation.state !== "done" && ticked;
+      const carried = observation.carryable !== false && observation.state !== "done" && ticked;
       const state: SetupState = carried ? "done" : observation.state;
       return {
         ...base,
@@ -386,5 +427,76 @@ export function setupCounts(
     unknown: rows.filter((r) => r.state === "unknown").length,
     declared: rows.filter((r) => r.declaredDone).length,
     total: rows.length,
+  };
+}
+
+/**
+ * What this screen knows about the needs scope, as `GET /api/needs/scope`
+ * answers it. `null` means the read has not come back.
+ *
+ * A SUBSET OF `scopeSummary`'s return and not the whole of it, so this file
+ * stays a pure reader with no server type crossing into it. The three fields
+ * are the only ones a completion reading turns on.
+ */
+export interface NeedsScopeReading {
+  /** False when this village has no rows at all: it has not answered yet. */
+  answered: boolean;
+  /** Needs in scope right now. A retired need is not counted here. */
+  adopted: number;
+  /** How many of those are the village's own, outside the platform ten. */
+  customAdopted: number;
+}
+
+/**
+ * The needs step's row, read from the scope. This is the completion predicate.
+ *
+ * THREE READINGS, AND THE THIRD IS WHY THIS IS NOT A BOOLEAN.
+ *
+ *   nothing read yet -> `unknown`. The fetch has not landed, or it refused.
+ *                       Nobody has looked, so this screen says nothing.
+ *   read, none in scope -> `todo`. Two ways to get here and the detail
+ *                       sentence keeps them apart: a village that has not
+ *                       said anything yet, and a village that said something
+ *                       and later retired all of it. Both are real answers to
+ *                       "is this step finished" and both are no.
+ *   read, one or more in scope -> `done`.
+ *
+ * WHY THE TOTAL IS TEN PLUS THE CUSTOM ONES. The header row reads "4 of 10
+ * filled in", and the denominator has to be the list this village actually
+ * chose from. A village that wrote a need of its own is choosing from eleven,
+ * and a fixed 10 would print "11 of 10" the day it adopts them all.
+ */
+export function needsObservation(reading: NeedsScopeReading | null | undefined): SetupObservations {
+  if (!reading) {
+    return {
+      needs: {
+        state: "unknown",
+        carryable: false,
+        detail: "The needs scope has not been read back yet, so this row says nothing either way.",
+      },
+    };
+  }
+  const total = PLATFORM_NEED_COUNT + Math.max(0, reading.customAdopted);
+  if (reading.adopted > 0) {
+    return {
+      needs: {
+        state: "done",
+        carryable: false,
+        filled: reading.adopted,
+        total,
+        detail: `This village has taken on ${reading.adopted} of the ${total} needs on its list.`,
+      },
+    };
+  }
+  return {
+    needs: {
+      state: "todo",
+      carryable: false,
+      filled: 0,
+      total,
+      detail: reading.answered
+        ? "Every need this village took on has since been retired, so nothing is in scope."
+        : "This village has not said which needs it is taking on.",
+    },
   };
 }

@@ -35,7 +35,7 @@
  */
 import { civilDate, seasonInstants, zonedTimeToUtc } from "../../shared/lunar";
 import { LUNAR_CLOCK, clockFor, type ClockMode } from "../../shared/cycleClock";
-import type { SeasonEntry } from "../../shared/gameConfig";
+import { GAME_CONFIG, type SeasonEntry } from "../../shared/gameConfig";
 
 /** How many seasons a derived default lays out. Two years of quarters. */
 const DERIVED_SEASON_COUNT = 8;
@@ -181,6 +181,139 @@ export function suggestNextSeasonDates(
   const end = new Date(d);
   end.setUTCMonth(end.getUTCMonth() + 3);
   return { startsOn: start, endsOn: end.toISOString().slice(0, 10) };
+}
+
+// ── The stored season document ─────────────────────────────────────────────
+//
+// Moved here from `server/index.ts` with `normalizeSeasonConfig` unchanged in
+// what it does to a list, so the two defects below could be measured without
+// booting a server, and so the reasoning does not cost the monolith ratchet.
+//
+// D2-8. A document holding an EMPTY list and a zone the runtime cannot format
+// ("", "Bogus/Zone") derived its seasons through `Intl.DateTimeFormat`, which
+// throws. Every season read threw, the Season tab that could fix the zone
+// among them. `raw?.timezone ?? def.timezone` let both through, because `??`
+// only replaces null. So the zone is checked before deriving, and the save
+// refuses an unknown zone in words instead of storing one.
+//
+// D2-9. The Season tab sends back the list it was SHOWN, and for a village
+// that never wrote one that list is derived. Storing it froze eight seasons
+// dated from the day of the first save, and the village stopped deriving.
+// So a save whose list is empty, or is exactly what would be derived for its
+// cadence and zone at that moment, stores an empty list.
+
+export interface SeasonConfig {
+  seasons: any[];
+  cadence: string;
+  timezone: string;
+}
+
+/** Whether this runtime can format a date in the named zone. */
+export function isTimeZone(tz: unknown): tz is string {
+  if (typeof tz !== "string" || !tz.trim()) return false;
+  try {
+    new Intl.DateTimeFormat("en-CA", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The sentence a season save is refused with for an unknown zone, or null. */
+export function timeZoneRefusal(tz: unknown): string | null {
+  if (isTimeZone(tz)) return null;
+  const shown = String(tz ?? "").trim().slice(0, 60);
+  return shown
+    ? `"${shown}" is not a timezone this server knows. Use a name from the IANA list, like UTC or Europe/Lisbon.`
+    : "The timezone is empty. Use a name from the IANA list, like UTC or Europe/Lisbon.";
+}
+
+/** Accepts either the new {seasons,cadence,timezone} shape or a single legacy
+ *  season object, so existing data/season.json keeps working after deploy. */
+export function normalizeSeasonConfig(raw: any, at: Date = new Date()): SeasonConfig {
+  const def = GAME_CONFIG.season;
+  if (raw && Array.isArray(raw.seasons) && raw.seasons.length > 0) { // an EMPTY list is the platform default's sentinel for "derive", handled at the bottom; every seat's term (0199) needs a season to end with
+    return {
+      seasons: raw.seasons.map((s: any, i: number) => ({
+        id: s.id || `season-${i + 1}`,
+        name: s.name ?? "",
+        theme: s.theme ?? "",
+        focus: s.focus ?? "",
+        startsOn: s.startsOn ?? "",
+        endsOn: s.endsOn ?? "",
+        // 0050. This normaliser rebuilds every season from a FIXED field list
+        // and runs on read as well as write, so a field missing from here is
+        // a field the village can never store: without this line the pattern
+        // id was silently dropped on every save AND every load, and the whole
+        // season-pattern system resolved to "no pattern running".
+        patternId: s.patternId ?? "",
+        goals: Array.isArray(s.goals)
+          ? s.goals.map((g: any) => ({ text: String(g?.text ?? ""), done: !!g?.done }))
+          : [],
+      })),
+      cadence: raw.cadence ?? def.cadence,
+      timezone: raw.timezone ?? def.timezone,
+    };
+  }
+  // Legacy single-season file: lift it into a one-item list.
+  if (raw && typeof raw === "object" && raw.name) {
+    return {
+      seasons: [{
+        id: "season-1",
+        name: raw.name, theme: raw.theme ?? "", focus: raw.focus ?? "",
+        startsOn: raw.startsOn ?? "", endsOn: raw.endsOn ?? "",
+        goals: Array.isArray(raw.goals) ? raw.goals : [],
+      }],
+      cadence: def.cadence,
+      timezone: def.timezone,
+    };
+  }
+  // Written nothing, OR WRITTEN AN EMPTY LIST, gets a list DERIVED from the
+  // cadence and timezone. The default document IS the empty list and `get()`
+  // returns it when no row exists, so the length test above is what makes this
+  // branch reachable: without it no fresh village had a season on any date.
+  // The zone is checked first (D2-8, above).
+  const cadence = raw?.cadence ?? def.cadence;
+  const timezone = isTimeZone(raw?.timezone) ? raw.timezone : isTimeZone(def.timezone) ? def.timezone : "UTC";
+  return {
+    seasons: (def.seasons.length ? def.seasons : defaultSeasonsFor(cadence, timezone, at)) as any[],
+    cadence,
+    timezone,
+  };
+}
+
+/** Two season lists are the same when every field a season stores matches. */
+function sameSeasonList(a: readonly any[], b: readonly any[]): boolean {
+  const key = (s: any) =>
+    JSON.stringify([
+      s?.id ?? "", s?.name ?? "", s?.theme ?? "", s?.focus ?? "", s?.startsOn ?? "", s?.endsOn ?? "",
+      s?.patternId ?? "", Array.isArray(s?.goals) ? s.goals.map((g: any) => [String(g?.text ?? ""), !!g?.done]) : [],
+    ]);
+  return a.length === b.length && a.every((s, i) => key(s) === key(b[i]));
+}
+
+/**
+ * The document `PUT /api/admin/seasons` stores, or the sentence it refuses
+ * with. An empty list, and a list identical to the one that would be derived
+ * right now, are both stored as an empty list, so the village keeps deriving.
+ */
+export function seasonDocumentToStore(
+  body: any,
+  at: Date = new Date(),
+): { ok: true; doc: SeasonConfig } | { ok: false; error: string } {
+  if (body?.timezone !== undefined) {
+    const refusal = timeZoneRefusal(body.timezone);
+    if (refusal) return { ok: false, error: refusal };
+  }
+  const doc = normalizeSeasonConfig(body, at);
+  const sent = Array.isArray(body?.seasons) && body.seasons.length > 0;
+  if (!sent && !body?.name) return { ok: true, doc: { ...doc, seasons: [] } };
+  if (sent) {
+    const derived = normalizeSeasonConfig({ cadence: doc.cadence, timezone: doc.timezone }, at).seasons;
+    const shown = derived.length ? normalizeSeasonConfig({ ...doc, seasons: derived }, at).seasons : [];
+    if (sameSeasonList(doc.seasons, shown)) return { ok: true, doc: { ...doc, seasons: [] } };
+  }
+  return { ok: true, doc };
 }
 
 export interface SeasonRunningState {

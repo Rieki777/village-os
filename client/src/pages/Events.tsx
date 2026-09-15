@@ -17,6 +17,7 @@
  */
 import Layout from "@/components/Layout";
 import ModuleGate from "@/components/modules/ModuleGate";
+import { storedText, writeStored } from "@/lib/safeStorage";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useModule, useModules } from "@/modules/ModuleProvider";
@@ -66,12 +67,10 @@ const MODE_KEY = "calendar.gridMode";
 const TAB_KEY = "calendar.tab";
 
 const remembered = <T extends string>(key: string, allowed: readonly T[], fallback: T): T => {
-  try {
-    const v = window.localStorage.getItem(key);
-    return allowed.includes(v as T) ? (v as T) : fallback;
-  } catch { return fallback; }
+  const v = storedText("local", key);
+  return allowed.includes(v as T) ? (v as T) : fallback;
 };
-const remember = (key: string, value: string) => { try { window.localStorage.setItem(key, value); } catch { /* private mode */ } };
+const remember = (key: string, value: string) => { writeStored("local", key, value); };
 
 /** "Today", "Tomorrow", "in 4 days", "3 days ago". */
 function whenLabel(days: number): string {

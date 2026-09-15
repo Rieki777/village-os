@@ -7,7 +7,7 @@
  * renders a picker from it. Leaving it in Admin.tsx would have forced the nav
  * to stay there too.
  */
-import { FileText, Users } from "lucide-react";
+import { Coins, FileText, Users } from "lucide-react";
 
 /*
  * ONE SECTION LEFT, and the six that went are why this comment exists.
@@ -39,6 +39,14 @@ export const CONTENT_SECTIONS = [
   // nothing saved it falls back to the same sentences minus the geography and
   // the number. Amora's own wording is in server/seeds/pages-covenant-seed.json.
   { key: "covenant", label: "Love Letter Covenant", icon: FileText },
+  // Economics lane, 2026-09-03: the money figures a village publishes about
+  // itself, plus its own words for what the value token converts to. A deposit
+  // range, eight venture investment ranges and one conversion sentence shipped
+  // as compiled client constants, so a fork published another village's
+  // dollars on day one. Same treatment as `legal` directly above: the claims
+  // move into this section, blank publishes NOTHING, and this entry is the
+  // founder's only door to them. Shape and readers: client/src/lib/moneyClaims.ts.
+  { key: "money", label: "Money & Value Claims", icon: Coins },
 ] as const;
 
 /**

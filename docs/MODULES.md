@@ -139,7 +139,7 @@ Recognition sends, lunar cycles, and the value pool distributed at each close.
 | Requires | nothing |
 | Recommends | nothing |
 | Capabilities it adds | none |
-| Variable keys it owns | `gratitude.base_budget`, `gratitude.require_message`, `gratitude.full_sends_per_cycle`, `gratitude.pool_per_cycle`, `gratitude.pool_token` |
+| Variable keys it owns | `gratitude.base_budget`, `gratitude.require_message`, `gratitude.full_sends_per_cycle`, `gratitude.pool_per_cycle`, `gratitude.pool_token`, `gratitude.proposal_accept_award` |
 | API prefixes | `/api/game/gratitude`, `/api/game/cycle`, `/api/admin/cycles` |
 | Contract doc | [gratitude.md](modules/gratitude.md) |
 
@@ -613,7 +613,7 @@ Read the other way: `map` cannot be switched off while `resources` is on, `forum
 
 ## The dials a module owns
 
-Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 23 modules own 74 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
+Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 23 modules own 75 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
 
 Three keys are claimed by more than one module, so switching one module off leaves the dial owned by the other:
 
@@ -625,7 +625,7 @@ Three keys are claimed by more than one module, so switching one module off leav
 
 ## Capabilities
 
-A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which holds 33 keys in total. It never becomes a second permission mechanism. The order of the one gate is admin, then badge denies, then role, then badge grants, then stage: a badge deny beats role and stage, and only admin outranks it. Eleven modules add keys:
+A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which holds 34 keys in total. It never becomes a second permission mechanism. The order of the one gate is admin, then badge denies, then role, then badge grants, then stage: a badge deny beats role and stage, and only admin outranks it. Eleven modules add keys:
 
 | Module | Capabilities |
 | --- | --- |
@@ -699,7 +699,8 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "gratitude.require_message",
         "gratitude.full_sends_per_cycle",
         "gratitude.pool_per_cycle",
-        "gratitude.pool_token"
+        "gratitude.pool_token",
+        "gratitude.proposal_accept_award"
       ],
       "apiPrefixes": [
         "/api/game/gratitude",

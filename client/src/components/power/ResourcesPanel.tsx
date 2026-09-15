@@ -36,6 +36,55 @@ interface MePayload {
   viewer: { userId: string | null; canRequest: boolean };
 }
 
+/**
+ * What each circle has left, read LIVE and stamped with the instant it
+ * answers for. Nothing here is stored: a ballot that needs the warning to
+ * survive review writes its own record, and that record belongs to the ballot.
+ */
+interface BurnRow {
+  kind: "module_off" | "ungoverned" | "metered";
+  circleId?: string;
+  sentence: string;
+}
+
+/**
+ * The burn readings, keyed by circle.
+ *
+ * A 404 here is the module being off, which is one of the four states and the
+ * only one the route cannot answer in words, because a 404 carries no body. A
+ * 401 is a member who is not signed in, which the panel already handles above
+ * with its own doors, so it produces no sentence at all.
+ */
+function useCircleBurn(on: boolean): Map<string, BurnRow> | null {
+  const [rows, setRows] = useState<Map<string, BurnRow> | null>(null);
+  useEffect(() => {
+    if (!on) return;
+    let live = true;
+    fetch("/api/resources/burn", { headers: headers() })
+      .then(async (r) => {
+        if (r.status === 404) return { readings: [{ kind: "module_off", sentence: MODULE_OFF_SENTENCE }] };
+        return r.ok ? r.json() : null;
+      })
+      .then((d) => {
+        if (!live || !d) return;
+        const next = new Map<string, BurnRow>();
+        for (const row of (d.readings ?? []) as BurnRow[]) {
+          if (row.circleId) next.set(row.circleId, row);
+        }
+        setRows(next);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [on]);
+  return rows;
+}
+
+/** Held here so the 404 branch says the same thing the server would say. */
+const MODULE_OFF_SENTENCE =
+  "This village is not keeping circle budgets. Nothing here says what a circle may issue, so an ask is measured against nothing.";
+
 function isIso(unit: string): boolean {
   return /^[A-Z]{3}$/.test(unit);
 }
@@ -57,6 +106,7 @@ export default function ResourcesPanel({
   circles: PowerCircle[];
 }) {
   const forumOn = !!useModule("forum");
+  const burn = useCircleBurn(!!resources);
   const [me, setMe] = useState<MePayload | null>(null);
   const [signedOut, setSignedOut] = useState(false);
   const [fx, setFx] = useState<FxTable | null>(null);
@@ -305,6 +355,11 @@ export default function ResourcesPanel({
                           )
                           .join(". ")}
                         {rules.length ? "." : ""}
+                        {burn?.get(c.id) && (
+                          <div className="mt-0.5 text-foreground/70" data-circle-burn={c.id}>
+                            {burn.get(c.id)!.sentence}
+                          </div>
+                        )}
                       </div>
                     );
                   })}

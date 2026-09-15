@@ -23,6 +23,11 @@
  * from one that never chose. That is the distinction the whole amendment ledger
  * is built on, so this read goes to the table.
  *
+ * A second caller needs the same distinction: `overrideFor` in
+ * server/lib/launch.ts, which asks whether a village chose its own issuance
+ * cap and must not read a row equal to the default as no row at all. Its
+ * statement was this one, character for character, and now calls it.
+ *
  * ── AND IT MUST NOT BE A CACHE READ FOR A SECOND REASON ────────────────────
  *
  * The executor is mid-flight when it asks. `setVariable` writes the row and

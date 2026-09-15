@@ -17,7 +17,7 @@
  * around them did.
  */
 import type { LucideIcon } from "lucide-react";
-import { Activity, BarChart3, Calendar, Circle, Coins, FileText, GraduationCap, Handshake, HardDrive, HelpCircle, Home, Inbox, KeyRound, LogOut, Mail, MessageSquare, Moon, Scale, Sparkles, ToggleLeft, TrendingUp, Users, Users2 } from "lucide-react";
+import { Activity, BarChart3, Calendar, Circle, Coins, FileText, GraduationCap, Handshake, HardDrive, Heart, HelpCircle, Home, Inbox, KeyRound, LogOut, Mail, MessageSquare, Moon, Scale, Sparkles, ToggleLeft, TrendingUp, Users, Users2 } from "lucide-react";
 import type { TabBadge } from "@/lib/adminNav";
 import { CONTENT_SECTIONS } from "./contentSections";
 
@@ -106,6 +106,12 @@ export function navGroups(setupComplete: boolean): NavGroup[] {
       title: MODULES_GROUP_TITLE,
       items: [
         { key: "modules", label: "Module Library", icon: ToggleLeft },
+        // Second in the group, and directly under the master switch, because
+        // it is the answer the rest of the group is FOR (R1, lane N2): which
+        // needs this village is taking on, how far it means to get on each,
+        // and what does the meeting. It is also step 2 of the Setup Wizard, so
+        // this row is where a founder comes back to it once setup is done.
+        { key: "needs-admin", label: "What This Village Is For", icon: Heart },
         { key: "variables", label: "Game Mechanics", icon: Activity },
         { key: "season", label: "Season", icon: Circle },
         { key: "seasons-patterns", label: "Season Shapes", icon: Calendar },
