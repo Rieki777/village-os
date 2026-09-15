@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `8e6372c678d23284`, which regenerating reproduces.
+It describes the sources at fingerprint `3ed9d967dc563e96`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -153,6 +153,7 @@ The dials a village holds, with the ring that says who may move each one and the
 | `governance.payout_delay_over` | Payouts above this wait three days before they are sent | `open` | `1000` | integer | when it is written |
 | `governance.steward_council` | A veto needs a majority of the stewards | `open` | `false` | boolean | when it is written |
 | `governance.veto_hours` | How long a steward has to stop a change | `open` | `72` | 72 to 720 hours | when it is written |
+| `governance.consent_notice_hours` | How long a change waits when every steward already said yes | `open` | `24` | 0 to 720 hours | when it is written |
 | `governance.landing_expiry_cycles` | Cycles a passed decision waits before it is written off | `open` | `3` | 1 to 12 cycles | when it is written |
 | `governance.change_cooldown_days` | Cooldown after a governed rule change | `open` | `0` | 0 to 365 days | when it is written |
 | `governance.window_changeset` | When a change to the Game Mechanics can go to the vote | `open` | `always_open` | text | when it is written |
@@ -188,7 +189,7 @@ The dials a village holds, with the ring that says who may move each one and the
 <!-- written by a person: dialsStorage -->
 Only CHANGED values are stored. An absent row means the platform default in the table above, so a fresh village starts with every one of these and no rows at all.
 
-11 settings across the whole registry wait for a cycle close instead of applying when they are written: `cycle.mode`, `economy.voice_claim_threshold`, `economy.claims_week_days`, `economy.claims_week_starts`, `gratitude.base_budget`, `gratitude.pool_per_cycle`, `gratitude.pool_token`, `gratitude.full_sends_per_cycle`, `feed.heart_amount`, `feed.max_hearts_per_recipient_per_cycle`, `ledger.admin_mint_cycle_cap`. The per-stage sending multipliers carry the same timing through their own override, one for each rung of the ladder. None of the 43 settings above is one of them, so every governance dial takes effect the moment it is written.
+11 settings across the whole registry wait for a cycle close instead of applying when they are written: `cycle.mode`, `economy.voice_claim_threshold`, `economy.claims_week_days`, `economy.claims_week_starts`, `gratitude.base_budget`, `gratitude.pool_per_cycle`, `gratitude.pool_token`, `gratitude.full_sends_per_cycle`, `feed.heart_amount`, `feed.max_hearts_per_recipient_per_cycle`, `ledger.admin_mint_cycle_cap`. The per-stage sending multipliers carry the same timing through their own override, one for each rung of the ladder. None of the 44 settings above is one of them, so every governance dial takes effect the moment it is written.
 
 ## What each kind of decision asks
 
@@ -904,7 +905,7 @@ A seated steward voting no on a token-send ballot fails it at the close, with th
 > 72 hours from close and a countdown on it.
 
 <!-- written by a person: ruling-29 -->
-The override lands at `governance.highest_tier`, which is itself priced at the highest tier. The windows are 9 settings, one per proposal kind, and each holds one shape: always open, the last N days of every cycle of the active clock, the last N days of every season, or a shape the village writes. All of them ship always open. This supersedes the 2026-08-31 line that proposals are never gated by the calendar: a village may gate them now, and always open stays a choice. The countdown reads one instant through one helper, so no surface can show a deadline the engine does not enforce.
+The override lands at `governance.highest_tier`, which is itself priced at the highest tier. The windows are 9 settings, one per proposal kind, and each holds one shape: always open, the last N days of every cycle of the active clock, the last N days of every season, or a shape the village writes. All of them ship always open. This supersedes the 2026-08-31 line that proposals are never gated by the calendar: a village may gate them now, and always open stays a choice. The countdown reads one instant through one helper, so no surface can show a deadline the engine does not enforce. Since 2026-09-14 that countdown is on the decision page itself, one clock for the village and the stewards together, and a carried decision reads as not yet in effect until it lands. A decision every seated steward voted yes on can no longer be stopped and waits only `governance.consent_notice_hours` after the close (a day by default, never longer than the steward window), while a village with no seated stewards keeps the whole window.
 
 ### 30. Lunar months, quorum by weight, the bundle waits, and timing per proposal
 
@@ -1031,7 +1032,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "8e6372c678d23284",
+  "commit": "3ed9d967dc563e96",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -1278,6 +1279,17 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "type": "integer",
       "default": "72",
       "min": 72,
+      "max": 720,
+      "choices": null,
+      "applyTiming": "instant"
+    },
+    {
+      "key": "governance.consent_notice_hours",
+      "label": "How long a change waits when every steward already said yes",
+      "ring": "open",
+      "type": "integer",
+      "default": "24",
+      "min": 0,
       "max": 720,
       "choices": null,
       "applyTiming": "instant"
