@@ -138,7 +138,7 @@ const STAYS = {
     balance: 12,
     balanceDecimals: 0,
     balances: {},
-    stays: [{ id: "s-1", status: "active", rateSnapshotToken: "cob-credit", rateSnapshotCredits: 3000, nightsRemaining: 2 }],
+    stays: [{ id: "s-1", status: "active", rateSnapshotToken: "cob-credit", rateSnapshotCredits: 3000, rateSnapshotDecimals: 3, nightsRemaining: 2 }],
   },
   earnQuests: [{ id: "q-1", title: "Plaster the north wall", stayCreditReward: 4, gratitude: null }],
   guestBookingEnabled: true,
@@ -171,6 +171,26 @@ describe("/stay prints a nightly rate in the units the balance above it is in", 
     // divide by 3 and not by the balance line's 0.
     await waitFor(() => expect(screen.getByText(/Your stay is active at/)).toBeInTheDocument());
     expect(screen.getByText(/Your stay is active at/).textContent).toContain("3 credit(s)/night");
+  });
+
+  it("reads a stay's rate at the scale sent with it, even when no room still posts that token", async () => {
+    // `priceTokens` lists the tokens rooms post TODAY. This stay was activated
+    // in a token no room prices any more, so only `rateSnapshotDecimals`
+    // knows that its 850 minor units are 8.5.
+    vi.stubGlobal(
+      "fetch",
+      answering({
+        ...STAYS,
+        mine: {
+          ...STAYS.mine,
+          stays: [{ id: "s-2", status: "active", rateSnapshotToken: "retired-credit", rateSnapshotCredits: 850, rateSnapshotDecimals: 2, nightsRemaining: 1 }],
+        },
+      }),
+    );
+    render(<Router><Stay /></Router>);
+    await waitFor(() => expect(screen.getByText(/Your stay is active at/)).toBeInTheDocument());
+    expect(screen.getByText(/Your stay is active at/).textContent).toContain("at 8.5 credit(s)/night");
+    expect(screen.getByText(/Your stay is active at/).textContent).not.toContain("850");
   });
 });
 
