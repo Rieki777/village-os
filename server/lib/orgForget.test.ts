@@ -194,21 +194,21 @@ describe.skipIf(!configured)("taking a person off the org chart", () => {
     const ANON = "A departed member";
 
     beforeEach(async () => {
-      await pool.query("DELETE FROM org_draft_changes");
-      await pool.query("DELETE FROM org_drafts");
-      await pool.query(
+      await pool.query("DELETE FROM org_draft_changes"); // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
+      await pool.query("DELETE FROM org_drafts"); // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
+      await pool.query( // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
         "INSERT INTO org_drafts (id, title, created_by, status) VALUES ('d', 'A season of changes', 'u-steward', 'open')",
       );
     });
 
     const change = async (id: string, op: string, payload: unknown, before: unknown = null) =>
-      pool.query(
+      pool.query( // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
         "INSERT INTO org_draft_changes (id, draft_id, op, org_role_id, payload, before_json, sort_order) VALUES (?,?,?,?,?,?,0)",
         [id, "d", op, "seat-a", JSON.stringify(payload), before === null ? null : JSON.stringify(before)],
       );
 
     const readChange = async (id: string) => {
-      const [[row]] = await pool.query<any[]>("SELECT payload, before_json FROM org_draft_changes WHERE id = ?", [id]);
+      const [[row]] = await pool.query<any[]>("SELECT payload, before_json FROM org_draft_changes WHERE id = ?", [id]); // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
       const j = (v: any) => (v == null ? null : typeof v === "string" ? JSON.parse(v) : v);
       return { payload: j(row.payload), before: j(row.before_json) };
     };

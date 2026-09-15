@@ -47,7 +47,7 @@ let pool: mysql.Pool;
 
 /** A seat that exists, and a draft that renames it. */
 async function seatAndDraft() {
-  await pool.query(
+  await pool.query( // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
     "INSERT INTO org_roles (id, name, seats, active) VALUES ('keeper', 'Water Keeper', 1, 1)",
   );
   const made = await createDraft(pool, {
@@ -67,7 +67,7 @@ async function seatAndDraft() {
 }
 
 const seatName = async () => {
-  const [[row]] = await pool.query<any[]>("SELECT name FROM org_roles WHERE id = 'keeper'");
+  const [[row]] = await pool.query<any[]>("SELECT name FROM org_roles WHERE id = 'keeper'"); // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
   return String(row?.name ?? "");
 };
 
@@ -120,7 +120,7 @@ describe.skipIf(!configured)("a draft publishes exactly once", () => {
     // loser captures after the winner has committed.
     const id = await seatAndDraft();
     await Promise.all([publishDraft(pool, id, "u-steward"), publishDraft(pool, id, "u-steward")]);
-    const [[row]] = await pool.query<any[]>(
+    const [[row]] = await pool.query<any[]>( // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
       "SELECT before_json FROM org_draft_changes WHERE draft_id = ?", [id],
     );
     const before = typeof row.before_json === "string" ? JSON.parse(row.before_json) : row.before_json;
@@ -168,7 +168,7 @@ describe.skipIf(!configured)("a seating written by a draft uses the same key as 
   const TRAILING_SPACE = "Alex ";
 
   async function draftSeating(name: string) {
-    await pool.query("INSERT INTO org_roles (id, name, seats, active) VALUES ('keeper', 'Water Keeper', 2, 1)");
+    await pool.query("INSERT INTO org_roles (id, name, seats, active) VALUES ('keeper', 'Water Keeper', 2, 1)"); // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
     const made = await createDraft(pool, { title: "Seat Alex", createdBy: "u-steward", sourceKind: "human", openCap: 99 });
     if (!made.ok) throw new Error(made.error);
     const r = await addChange(pool, made.id, { op: "seat_holder", orgRoleId: "keeper", payload: { displayName: name } });
@@ -182,14 +182,14 @@ describe.skipIf(!configured)("a seating written by a draft uses the same key as 
     // person, so the same human could be seated twice in one seat.
     const id = await draftSeating(TRAILING_SPACE);
     expect((await publishDraft(pool, id, "u-steward")).ok).toBe(true);
-    const [[row]] = await pool.query<any[]>("SELECT holder_key FROM org_role_assignments WHERE org_role_id = 'keeper'");
+    const [[row]] = await pool.query<any[]>("SELECT holder_key FROM org_role_assignments WHERE org_role_id = 'keeper'"); // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
     expect(row.holder_key).toBe("doc:alex");
   });
 
   it("refuses a documented holder with no name, in words", async () => {
     // seatHolder's own refusal, which the inline INSERT skipped entirely: it
     // wrote `doc:unnamed` and called that a person.
-    await pool.query("INSERT INTO org_roles (id, name, seats, active) VALUES ('keeper', 'Water Keeper', 2, 1)");
+    await pool.query("INSERT INTO org_roles (id, name, seats, active) VALUES ('keeper', 'Water Keeper', 2, 1)"); // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
     const made = await createDraft(pool, { title: "Seat nobody", createdBy: "u-steward", sourceKind: "human", openCap: 99 });
     if (!made.ok) throw new Error(made.error);
     await addChange(pool, made.id, { op: "seat_holder", orgRoleId: "keeper", payload: {} });
@@ -209,7 +209,7 @@ describe.skipIf(!configured)("a seating written by a draft uses the same key as 
      * publish applied. What this asserts is the half that lives here: the
      * transaction reports WHO it seated, with the words it wrote.
      */
-    await pool.query("INSERT INTO org_roles (id, name, aim, seats, active) VALUES ('keeper', 'Water Keeper', 'Hold the pond', 2, 1)");
+    await pool.query("INSERT INTO org_roles (id, name, aim, seats, active) VALUES ('keeper', 'Water Keeper', 'Hold the pond', 2, 1)"); // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
     const made = await createDraft(pool, { title: "Seat Bo", createdBy: "u-steward", sourceKind: "human", openCap: 99 });
     if (!made.ok) throw new Error(made.error);
     await addChange(pool, made.id, { op: "seat_holder", orgRoleId: "keeper", payload: { userId: "u-bo", displayName: "Bo" } });
@@ -236,7 +236,7 @@ describe.skipIf(!configured)("a seating written by a draft uses the same key as 
     const id = await draftSeating(TRAILING_SPACE);
     await publishDraft(pool, id, "u-steward");
     expect((await revertDraft(pool, id)).ok).toBe(true);
-    const [[live]] = await pool.query<any[]>(
+    const [[live]] = await pool.query<any[]>( // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
       "SELECT COUNT(*) AS n FROM org_role_assignments WHERE org_role_id = 'keeper' AND ended_at IS NULL",
     );
     expect(Number(live.n)).toBe(0);

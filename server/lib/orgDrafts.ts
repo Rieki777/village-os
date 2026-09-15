@@ -36,7 +36,7 @@
  * is lossy, and an archive may not be.
  */
 import type { Pool, PoolConnection } from "mysql2/promise";
-import { draftStatus, withdrawDraftRow } from "../repos/orgDrafts";
+import { draftChangesNamingPeople, draftStatus, rewriteDraftChangePeople, withdrawDraftRow } from "../repos/orgDrafts";
 import { stageIndex } from "../../shared/gameConfig";
 import { documentedKey, listOrgAssignments, listOrgRoles, peopleOnly, seatHolder, seatState, type LapseContext, type OrgAssignment } from "./orgChart";
 
@@ -159,9 +159,7 @@ export function visionMetricKnown(metric: string): boolean {
  * works and only the person is gone.
  */
 export async function forgetMemberInDrafts(pool: Pool, userId: string, anon: string): Promise<number> {
-  const [rows]: any = await pool.query(
-    "SELECT id, op, payload, before_json FROM org_draft_changes WHERE op IN ('seat_holder', 'end_holding')",
-  );
+  const rows = await draftChangesNamingPeople(pool);
   const parse = (v: unknown) => {
     if (v == null) return null;
     if (typeof v !== "string") return v as any;
@@ -189,9 +187,11 @@ export async function forgetMemberInDrafts(pool: Pool, userId: string, anon: str
       changed = true;
     }
     if (!changed) continue;
-    await pool.query(
-      "UPDATE org_draft_changes SET payload = ?, before_json = ? WHERE id = ?",
-      [payload === null ? null : JSON.stringify(payload), before === null ? null : JSON.stringify(before), r.id],
+    await rewriteDraftChangePeople(
+      pool,
+      String(r.id),
+      payload === null ? null : JSON.stringify(payload),
+      before === null ? null : JSON.stringify(before),
     );
     touched += 1;
   }
@@ -1045,7 +1045,7 @@ export async function publishDraft(
     // rewritten above with whatever is there NOW, so the second pass
     // overwrote every revert value with the ALREADY-PUBLISHED state and
     // the draft became unrevertable behind a success.
-    const [done]: any = await conn.query(
+    const [done]: any = await conn.query( // module-review-ok: a step inside this function's own transaction on its connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
       "UPDATE org_drafts SET status = 'published', published_by = ?, published_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'open'",
       [publishedBy, draftId],
     );
@@ -1147,7 +1147,7 @@ async function applyChange(conn: PoolConnection, c: DraftChange): Promise<DraftS
     // Only a MEMBER can be told. A documented holder has no account to
     // reach, which is the same rule the direct seating route follows.
     if (!p.userId || !seated.assignmentId) return null;
-    const [[seat]] = await conn.query<any[]>("SELECT name, aim FROM org_roles WHERE id = ?", [c.orgRoleId]);
+    const [[seat]] = await conn.query<any[]>("SELECT name, aim FROM org_roles WHERE id = ?", [c.orgRoleId]); // module-review-ok: read inside the publish transaction on purpose, so the words a seated member is sent are the ones this publish wrote
     return {
       userId: String(p.userId),
       orgRoleId: c.orgRoleId,
@@ -1244,7 +1244,7 @@ export async function revertDraft(
     }
     // Same count, same reason as publish: without it a second revert put
     // every `before_json` value back a second time and reported success.
-    const [done]: any = await conn.query(
+    const [done]: any = await conn.query( // module-review-ok: a step inside this function's own transaction on its connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
       "UPDATE org_drafts SET status = 'reverted', reverted_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'published'",
       [draftId],
     );
