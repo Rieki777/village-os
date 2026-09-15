@@ -487,6 +487,40 @@ describe.skipIf(!DB_CONFIGURED)("a guest the village pays does not climb past th
     expect(named.json?.stage).toBe("contributor");
   });
 
+  it("leaves a paid guest off the roll a ballot freezes, beside the members it does freeze", async () => {
+    /*
+     * THE GOVERNANCE HALF OF THE HOLE. A ballot freezes its roll into
+     * `ballot_electorate` from `buildElectorate` the moment it opens, and after
+     * that nothing about a member's standing reaches the vote. So the live count
+     * the first case measures is half the claim, and the snapshot is the other
+     * half. Opened here, after Pax was paid and before anybody lets Pax in, so a
+     * rung reached by pay alone would have put Pax on it.
+     */
+    const proposed = await call("POST", "/api/game/mechanics/proposals", {
+      body: {
+        title: "Raise the gratitude budget a little for the season",
+        rationale: "A real proposal is how a village freezes a roll, and the roll it freezes is what this case reads.",
+        changes: [{ key: "gratitude.base_budget", to: "110" }],
+      },
+    });
+    expect(proposed.status, JSON.stringify(proposed.json)).toBe(200);
+    const opened = await call("POST", `/api/governance/mechanics/${proposed.json?.id}/open-ballot`);
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    const ballotId = String(opened.json?.ballot?.id ?? "");
+    expect(ballotId, "the ballot opened").toBeTruthy();
+
+    const [rows] = await pool.query<any[]>("SELECT user_id FROM ballot_electorate WHERE ballot_id = ?", [ballotId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const frozen = rows.map((r) => String(r.user_id));
+    expect(frozen, "a paid guest who was never let in holds no vote").not.toContain(paxId);
+    // THE CONTROLS, in the same snapshot: a member placed by a stage grant and
+    // since paid, a member the 0058 freeze admitted, and one whose signed letter
+    // the village accepted.
+    for (const [who, id] of [["Wren", wrenId], ["Orla", orlaId], ["Mallory", malloryId]] as const) {
+      expect(frozen, `${who} is on the frozen roll`).toContain(id);
+    }
+    expect(Number(opened.json?.ballot?.electorateCount), "the ballot's count is the rows it froze").toBe(frozen.length);
+  });
+
   it("opens once the village lets them in, and the pay they already had then counts", async () => {
     const before = await onTheRoll();
     const admitted = await call("POST", `/api/members/${paxId}/super-vouch`);
