@@ -459,20 +459,75 @@ export async function addChange(
  *
  * Accepting again after the fix works because the reopened proposal goes back
  * through the same normaliser, which finds the circle an admin just created.
+ *
+ * THE SENTENCE NAMES THE RECOVERY THAT EXISTS. It used to say "accept the batch
+ * again", and accepting a batch takes every waiting proposal in it, including
+ * ones the steward never read. Withdrawing reopens exactly this draft's
+ * proposals, so that is what it says. A draft a person made has no proposals
+ * to reopen, so its sentence says to make it again.
  */
-function circleNameBlock(payload: Record<string, any> | null | undefined): string | null {
+function circleNameBlock(payload: Record<string, any> | null | undefined, fromQueue: boolean): string | null {
+  if (hasCircleId(payload?.circleId)) return null;
   const circleName = typeof payload?.circleName === "string" ? payload.circleName.trim() : "";
-  if (circleName === "" || payload?.circleId) return null;
+  const unread: string[] = Array.isArray(payload?.circleUnread)
+    ? payload.circleUnread.filter((k: unknown): k is string => typeof k === "string" && k !== "")
+    : [];
+  const after = fromQueue
+    ? "then withdraw this draft. Its proposals go back in the review queue, ready to accept again"
+    : "then withdraw this draft and make it again";
+  if (circleName === "" && unread.length) {
+    const keys = unread.map((k) => `"${k}"`).join(", ");
+    return fromQueue
+      ? `This seat gave its circle under ${keys} in a form this village cannot read. Withdraw this draft. ` +
+          `Its proposals go back in the review queue, where you can write the circle's name under "circle" and accept again`
+      : `This seat gave its circle under ${keys} in a form this village cannot read. ` +
+          `Withdraw this draft and make it again with the circle's id under "circleId"`;
+  }
+  if (circleName === "") return null;
   if (Number(payload?.circleMatches) > 1) {
     return (
       `More than one circle answers to "${circleName}". Ask an admin to give those circles distinct names ` +
-      `and aliases, then withdraw this draft and accept the batch again`
+      `and aliases, ${after}`
     );
   }
-  return (
-    `There is no circle called "${circleName}" yet. Ask an admin to create it, ` +
-    `then withdraw this draft and accept the batch again`
-  );
+  return `There is no circle called "${circleName}" yet. Ask an admin to create it, ${after}`;
+}
+
+/**
+ * A circle id is there unless it is absent, null or blank. 0 and false are
+ * checked like any other id: tested by truthiness they skipped the existence
+ * check and published a seat into a circle called "0".
+ */
+function hasCircleId(v: unknown): boolean {
+  return v !== undefined && v !== null && v !== "";
+}
+
+/** Seat fields the INSERT and UPDATE write as text, with the words a steward uses for them. */
+const SEAT_TEXT_FIELDS: Record<string, string> = {
+  name: "name", aim: "aim", domain: "domain", whyItMatters: "why it matters",
+};
+
+/**
+ * A seat field of a shape the chart cannot hold.
+ *
+ * Bound into the INSERT as they arrive, an object publishes as the literal
+ * "[object Object]", an array expands into extra values and rolls the whole
+ * publish back on a column count, and `recruiting: "yes"` publishes as not
+ * recruiting. The normaliser keeps these out of a proposal; this keeps them
+ * out of any draft, including one built by hand.
+ */
+function seatShapeBlock(payload: Record<string, any> | null | undefined): string | null {
+  for (const [key, words] of Object.entries(SEAT_TEXT_FIELDS)) {
+    const v = payload?.[key];
+    if (v !== undefined && v !== null && typeof v !== "string" && typeof v !== "number") {
+      return `This seat's ${words} is not text, so the chart cannot hold it`;
+    }
+  }
+  const r = payload?.recruiting;
+  if (r !== undefined && r !== null && !([true, false, 0, 1, "0", "1"] as unknown[]).includes(r)) {
+    return "Recruiting is true or false";
+  }
+  return null;
 }
 
 export interface PreviewLine {
@@ -518,6 +573,9 @@ export async function previewDraft(
   // A machine-sourced draft is held to more than a human one, and the extra
   // rules are all below. `machine` is the switch.
   const machine = draft.sourceKind !== "human";
+  // A draft the review queue made has proposals a withdraw puts back, which
+  // decides what the circle sentences tell somebody to do next.
+  const fromQueue = !!draft.sourceProposalId;
   const cap = changeCap ?? Infinity;
   // Seats this draft creates count as existing for the changes after them, so
   // a draft can create a seat and then put somebody in it.
@@ -567,10 +625,11 @@ export async function previewDraft(
     if (c.op === "create_seat") {
       reads = `Create the seat "${c.payload?.name ?? c.orgRoleId}"`;
       if (existing) blocked = "A seat with that id already exists";
-      if (c.payload?.circleId && !circleIds.has(String(c.payload.circleId))) {
+      if (hasCircleId(c.payload?.circleId) && !circleIds.has(String(c.payload.circleId))) {
         blocked = "That circle does not exist. A draft cannot create circles";
       }
-      if (!blocked) blocked = circleNameBlock(c.payload);
+      if (!blocked) blocked = circleNameBlock(c.payload, fromQueue);
+      if (!blocked) blocked = seatShapeBlock(c.payload);
       /*
        * ── THE SHAPE RULES, which the old block list did not have ──────────
        *
@@ -611,7 +670,8 @@ export async function previewDraft(
 
       if (c.op === "update_seat") {
         reads = `Edit ${name}`;
-        if (!blocked) blocked = circleNameBlock(c.payload);
+        if (!blocked) blocked = circleNameBlock(c.payload, fromQueue);
+        if (!blocked) blocked = seatShapeBlock(c.payload);
         // A change naming nothing this village can apply is not a change. It
         // previewed as "Edit <seat>", applied as an UPDATE with an empty SET
         // list, and left a reader believing something happened.
@@ -624,7 +684,7 @@ export async function previewDraft(
           const v = Number(n2);
           if (!Number.isInteger(v) || v < 1 || v > 50) blocked = "A seat holds between 1 and 50 people";
         }
-        if (!blocked && c.payload?.circleId && !circleIds.has(String(c.payload.circleId))) {
+        if (!blocked && hasCircleId(c.payload?.circleId) && !circleIds.has(String(c.payload.circleId))) {
           blocked = "That circle does not exist. A draft cannot create circles";
         }
       }

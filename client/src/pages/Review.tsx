@@ -207,6 +207,25 @@ function notReadLines(
   return lines;
 }
 
+/** What the last accept left out, and the draft it made, so a withdraw of that draft clears it. */
+interface NotRead {
+  draftId: string | null;
+  lines: NotReadLine[];
+}
+
+const NOTHING_LEFT_OUT: NotRead = { draftId: null, lines: [] };
+
+/**
+ * The server's `blockedLines`, one sentence per seat that cannot apply. An
+ * older server sends none, which is no lines and the count alone.
+ */
+function blockedReasons(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return (v as { reads?: unknown; blocked?: unknown }[])
+    .filter((l) => typeof l?.blocked === "string" && l.blocked !== "")
+    .map((l) => (typeof l.reads === "string" && l.reads !== "" ? `${l.reads}: ${l.blocked}` : String(l.blocked)));
+}
+
 export default function Review() {
   const { user } = useAuth();
   const [queue, setQueue] = useState<Queue | null>(null);
@@ -221,14 +240,16 @@ export default function Review() {
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [rewards, setRewards] = useState<Record<string, { gratitude: string; stayCreditReward: string }>>({});
   const [busy, setBusy] = useState<string | null>(null);
-  // A draft this queue just made that cannot publish. Held so the steward has
-  // a way out of it without leaving the page, because until they withdraw it
-  // the draft occupies one of the village's open-draft slots.
-  const [stuck, setStuck] = useState<{ draftId: string; blocked: number } | null>(null);
+  // A draft this queue just made that cannot publish, with the reason for each
+  // blocked seat. Held so the steward has a way out of it without leaving the
+  // page, because until they withdraw it the draft occupies one of the
+  // village's open-draft slots. The reasons ride along because no other screen
+  // shows them: the draft preview is an admin route nothing on the client calls.
+  const [stuck, setStuck] = useState<{ draftId: string; blocked: number; lines: string[] } | null>(null);
   // What the last accept left out of its draft, one line per proposal. The
   // server names every key it did not read, and a steward who is not told has
   // no way to know a vendor said more than the draft shows.
-  const [notRead, setNotRead] = useState<NotReadLine[]>([]);
+  const [notRead, setNotRead] = useState<NotRead>(NOTHING_LEFT_OUT);
 
   /**
    * Members whose erasure this village could not finish, because a connected
@@ -378,11 +399,22 @@ export default function Review() {
       return;
     }
     setBusy(card.id);
+    // The card describes the accept that just returned, so the last one's goes first.
+    setNotRead(NOTHING_LEFT_OUT);
     try {
       const d = await post(`/api/review/proposals/${card.id}/accept`, { payload });
       if (d) {
-        setNotRead(notReadLines(d.ignored, (id) => (id === card.id ? payload : undefined)));
-        toast.success("Accepted");
+        const draftId = typeof d.createdRef === "string" ? d.createdRef : null;
+        setNotRead({ draftId, lines: notReadLines(d.ignored, (id) => (id === card.id ? payload : undefined)) });
+        // READ `blocked` HERE TOO. This path used to say a flat "Accepted" for
+        // a seat that could never publish, and offered no way to withdraw it.
+        const blocked = Number(d.blocked ?? 0);
+        if (blocked > 0 && draftId) {
+          setStuck({ draftId, blocked, lines: blockedReasons(d.blockedLines) });
+          toast.error("Accepted, and this seat cannot apply yet. The reason is on this page, beside a way to withdraw it.");
+        } else {
+          toast.success("Accepted");
+        }
         await load();
       }
     } finally {
@@ -409,11 +441,10 @@ export default function Review() {
    * Every edit the steward has made in this batch rides along, keyed by
    * proposal id, so accepting the batch accepts the corrected versions.
    */
-  const withdrawStuck = async () => {
-    if (!stuck) return;
-    setBusy(stuck.draftId);
+  const withdraw = async (draftId: string) => {
+    setBusy(draftId);
     try {
-      const res = await fetch(`/api/review/drafts/${stuck.draftId}/withdraw`, {
+      const res = await fetch(`/api/review/drafts/${draftId}/withdraw`, {
         method: "POST",
         headers: headers(),
       }).catch(() => null);
@@ -424,7 +455,9 @@ export default function Review() {
       }
       const n = (d as { reopened?: number }).reopened ?? 0;
       toast.success(n > 0 ? `Withdrawn, and ${n} proposal(s) are back in the queue` : "Withdrawn");
-      setStuck(null);
+      // Both cards described that draft, which no longer exists.
+      setStuck((s) => (s?.draftId === draftId ? null : s));
+      setNotRead((r) => (r.draftId === draftId ? NOTHING_LEFT_OUT : r));
       await load();
     } finally {
       setBusy(null);
@@ -442,6 +475,7 @@ export default function Review() {
       if (edits[item.id] !== undefined) payloads[item.id] = p;
     }
     setBusy(batch.batchId);
+    setNotRead(NOTHING_LEFT_OUT);
     try {
       const res = await fetch(`/api/review/batches/${batch.batchId}/accept`, {
         method: "POST",
@@ -461,20 +495,30 @@ export default function Review() {
       // the failure that comment was written to prevent: a steward told forty
       // seats were accepted, finding out at the publish button that none of
       // them can apply.
-      const body = d as { accepted?: number; blocked?: number; noted?: number; draftId?: string; ignored?: unknown };
-      setNotRead(
-        notReadLines(
+      const body = d as {
+        accepted?: number;
+        blocked?: number;
+        noted?: number;
+        draftId?: string;
+        ignored?: unknown;
+        blockedLines?: unknown;
+      };
+      setNotRead({
+        draftId: body.draftId ?? null,
+        lines: notReadLines(
           body.ignored,
           (id) =>
             (payloads[id] as Record<string, unknown> | undefined) ?? batch.items.find((i) => i.id === id)?.payload,
         ),
-      );
+      });
       const blocked = body.blocked ?? 0;
-      if (blocked > 0 && body.draftId) setStuck({ draftId: body.draftId, blocked });
+      if (blocked > 0 && body.draftId) {
+        setStuck({ draftId: body.draftId, blocked, lines: blockedReasons(body.blockedLines) });
+      }
       if (blocked > 0) {
         toast.error(
           `${body.accepted} accepted, and ${blocked} of the seats cannot apply. This draft will not publish ` +
-            `until those are dealt with. Open it in the admin org panel to see which, or withdraw it to put ` +
+            `until those are dealt with. The reasons are on this page, beside a way to withdraw it and put ` +
             `these proposals back in the queue.`,
         );
       } else {
@@ -501,6 +545,8 @@ export default function Review() {
         },
       });
       if (ok) {
+        // A quest leaves no field out, so "the last accept" is no longer the one the card named.
+        setNotRead(NOTHING_LEFT_OUT);
         toast.success("On the board");
         await load();
       }
@@ -645,18 +691,59 @@ export default function Review() {
         {/* What the last accept left out of its draft, one line per proposal.
             Outside the batch cards on purpose: an accepted batch leaves the
             queue, and a line inside its card would leave with it. */}
-        {notRead.length > 0 && (
+        {/* A draft that cannot publish, with each reason, beside the way out.
+            Outside the batch cards for the same reason: a batch accepted whole
+            leaves the queue, and this card used to leave with it. */}
+        {stuck && (
+          <div className={card}>
+            <h2 className="text-sm font-semibold text-foreground">The draft this made cannot publish</h2>
+            <p className="text-sm text-muted-foreground mt-2">
+              {stuck.blocked} of its seats are blocked. Withdrawing puts its proposals back in the queue, so
+              you can accept fewer at a time or deal with the reasons below first.
+            </p>
+            {stuck.lines.length > 0 && (
+              <ul className="text-sm text-muted-foreground mt-2 space-y-1">
+                {stuck.lines.map((line, i) => (
+                  <li key={`${i}:${line}`}>{line}</li>
+                ))}
+              </ul>
+            )}
+            <button
+              disabled={busy === stuck.draftId}
+              onClick={() => void withdraw(stuck.draftId)}
+              className="text-sm border border-border rounded-lg px-4 py-2 mt-3 min-h-[44px] font-medium"
+            >
+              Withdraw that draft
+            </button>
+          </div>
+        )}
+
+        {notRead.lines.length > 0 && (
           <div className={card}>
             <h2 className="text-sm font-semibold text-foreground">
               The last accept left some fields out of the draft
             </h2>
+            <p className="text-sm text-muted-foreground mt-2">
+              The draft publishes without them. If one belongs on a seat, withdraw the draft, which puts its
+              proposals back in the queue, then write that value as text under a field the seat has and
+              accept again. If none of them belongs on a seat, there is nothing to do.
+            </p>
             <ul className="text-sm text-muted-foreground mt-2 space-y-1">
-              {notRead.map((n, i) => (
+              {notRead.lines.map((n, i) => (
                 <li key={`${i}:${n.label}`}>
                   Not read from &ldquo;{n.label}&rdquo;: {n.keys.join(", ")}
                 </li>
               ))}
             </ul>
+            {notRead.draftId && notRead.draftId !== stuck?.draftId && (
+              <button
+                disabled={busy === notRead.draftId}
+                onClick={() => void withdraw(String(notRead.draftId))}
+                className="text-sm border border-border rounded-lg px-4 py-2 mt-3 min-h-[44px] font-medium"
+              >
+                Withdraw that draft
+              </button>
+            )}
           </div>
         )}
 
@@ -744,23 +831,6 @@ export default function Review() {
             >
               Accept all {batch.items.length}, with my edits
             </button>
-
-            {stuck ? (
-              <div className="mt-4 rounded-lg border border-border p-3">
-                <p className="text-sm text-foreground">
-                  The draft this made cannot publish: {stuck.blocked} of its seats are blocked.
-                  Withdrawing puts these proposals back in the queue so you can accept fewer at a
-                  time, or make the circles they name first.
-                </p>
-                <button
-                  disabled={busy === stuck.draftId}
-                  onClick={() => void withdrawStuck()}
-                  className="text-sm border border-border rounded-lg px-4 py-2 mt-3 min-h-[44px] font-medium"
-                >
-                  Withdraw that draft
-                </button>
-              </div>
-            ) : null}
           </div>
         ))}
 

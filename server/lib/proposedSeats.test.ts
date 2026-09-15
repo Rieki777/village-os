@@ -142,6 +142,19 @@ describe("aliases", () => {
     expect(normaliseProposedSeat({ why_it_matters: "because" }, CIRCLES).payload.whyItMatters).toBe("because");
   });
 
+  it("lets an alias with a value beat a BLANK canonical key, which says nothing", () => {
+    // A blank name blocked as nameless with role_name sitting beside it unreported.
+    const a = normaliseProposedSeat({ name: "", role_name: "Mill Warden" }, CIRCLES);
+    expect(a.payload.name).toBe("Mill Warden");
+    expect(a.ignored).toEqual([]);
+    // A blank circleId wrote circle_id = '' and published into no circle past every check.
+    const b = normaliseProposedSeat({ name: "S", circleId: "", circle_id: "trade" }, CIRCLES);
+    expect(b.payload.circleId).toBe("trade");
+    expect(normaliseProposedSeat({ name: "S", circleId: "  ", circle_id: "trade" }, CIRCLES).payload.circleId).toBe("trade");
+    // Blank alone is still carried, as the NULL a seat in no circle stores.
+    expect(normaliseProposedSeat({ name: "S", circleId: "" }, CIRCLES).payload).toEqual({ name: "S", circleId: null });
+  });
+
   it("lets an explicit circleId, or circle_id, beat any circle name", () => {
     const a = normaliseProposedSeat({ name: "A", circleId: "trade", circle: "Coordination & Records" }, CIRCLES);
     expect(a.payload.circleId).toBe("trade");
@@ -151,6 +164,106 @@ describe("aliases", () => {
     expect(b.payload).not.toHaveProperty("circleName");
     expect(b.circleProblem).toBeNull();
     expect(b.ignored).toEqual([]);
+  });
+
+  it("reads a circle id of 0 or false as none, so a circle name beside it is still placed", () => {
+    // 0 used to win as an explicit id, swallow the name, skip the existence
+    // check and publish into a circle called "0".
+    const a = normaliseProposedSeat({ role_name: "Cook", circle_id: 0, circle: "Nowhere Circle" }, CIRCLES);
+    expect(a.payload).not.toHaveProperty("circleId");
+    expect(a.payload.circleName).toBe("Nowhere Circle");
+    expect(a.circleProblem?.kind).toBe("unknown");
+    const b = normaliseProposedSeat({ role_name: "Cook", circleId: false, circle: "Money & Trade" }, CIRCLES);
+    expect(b.payload.circleId).toBe("trade");
+    expect(normaliseProposedSeat({ name: "Cook", circle_id: 0 }, CIRCLES).payload).toEqual({ name: "Cook", circleId: null });
+    // A real numeric id still counts.
+    expect(normaliseProposedSeat({ name: "Cook", circleId: 7, circle: "Money & Trade" }, CIRCLES).payload.circleId).toBe(7);
+  });
+});
+
+describe("a value of a shape the chart cannot hold is reported and left out", () => {
+  it("reports an object or a list under a text field, which would publish as [object Object]", () => {
+    const r = normaliseProposedSeat(
+      { role_name: { en: "Cook" }, aim: { text: "Feed the village" }, domain: ["Water lines", "Pumps"], why_it_matters: true },
+      CIRCLES,
+    );
+    expect(r.payload).toEqual({});
+    expect(r.ignored).toEqual(["role_name", "aim", "domain", "why_it_matters"]);
+    // A number is text enough, and is kept as text.
+    expect(normaliseProposedSeat({ name: 7, aim: 3 }, CIRCLES).payload).toEqual({ name: "7", aim: "3" });
+  });
+
+  it("takes an alias of the right shape over a canonical key of the wrong one", () => {
+    const r = normaliseProposedSeat({ name: { en: "Cook" }, role_name: "Cook" }, CIRCLES);
+    expect(r.payload.name).toBe("Cook");
+    expect(r.ignored).toEqual([]);
+  });
+
+  it("reads the spellings of recruiting senders use, and reports the rest", () => {
+    for (const yes of [true, 1, "1", "true", "YES ", "yes"]) {
+      expect(normaliseProposedSeat({ name: "S", recruiting: yes }, CIRCLES).payload.recruiting).toBe(true);
+    }
+    for (const no of [false, 0, "0", "false", "No"]) {
+      expect(normaliseProposedSeat({ name: "S", recruiting: no }, CIRCLES).payload.recruiting).toBe(false);
+    }
+    expect(normaliseProposedSeat({ name: "S", recruiting: "" }, CIRCLES).payload.recruiting).toBeNull();
+    const odd = normaliseProposedSeat({ name: "S", recruiting: "maybe" }, CIRCLES);
+    expect(odd.payload).not.toHaveProperty("recruiting");
+    expect(odd.ignored).toEqual(["recruiting"]);
+  });
+
+  it("reports an accountabilities list holding objects, which used to empty to [] and count as read", () => {
+    expect(normaliseAccountabilities([{ text: "Run the mill" }, { text: "Keep the log" }])).toBeUndefined();
+    expect(normaliseAccountabilities(["Run the mill", ["nested"]])).toBeUndefined();
+    const r = normaliseProposedSeat({ name: "N", accountabilities: [{ text: "Run the mill" }] }, CIRCLES);
+    expect(r.payload).not.toHaveProperty("accountabilities");
+    expect(r.ignored).toEqual(["accountabilities"]);
+  });
+});
+
+describe("a circle given in a shape nothing reads blocks the seat", () => {
+  it("marks a circle sent as an object or a number", () => {
+    const a = normaliseProposedSeat({ role_name: "Spring Keeper", circle: { id: "springs", name: "Springs" } }, CIRCLES);
+    expect(a.payload).toEqual({ name: "Spring Keeper", circleUnread: ["circle"] });
+    expect(a.ignored).toEqual(["circle"]);
+    expect(a.circleProblem).toEqual({ kind: "unreadable", name: "circle", matches: [] });
+    expect(normaliseProposedSeat({ name: "S", circle: 7 }, CIRCLES).payload.circleUnread).toEqual(["circle"]);
+    expect(normaliseProposedSeat({ name: "S", circleId: { id: "trade" } }, CIRCLES).payload.circleUnread).toEqual(["circleId"]);
+  });
+
+  it("marks a circle under a key nothing reads, and only when no circle was placed", () => {
+    for (const key of ["parent_circle", "circles", "circle_title"]) {
+      const r = normaliseProposedSeat({ name: "S", [key]: "Money & Trade" }, CIRCLES);
+      expect(r.payload.circleUnread, key).toEqual([key]);
+      expect(r.ignored).toEqual([key]);
+    }
+    const placed = normaliseProposedSeat({ name: "S", circle: "Money & Trade", parent_circle: "x" }, CIRCLES);
+    expect(placed.payload).toEqual({ name: "S", circleId: "trade" });
+    expect(placed.ignored).toEqual(["parent_circle"]);
+    // An explicit "no circle" does not outvote a circle given somewhere else.
+    expect(normaliseProposedSeat({ name: "S", circleId: null, parent_circle: "x" }, CIRCLES).payload.circleUnread).toEqual([
+      "parent_circle",
+    ]);
+  });
+
+  it("keeps the mark on a second pass, and drops it once the steward names a circle", () => {
+    const once = normaliseProposedSeat({ name: "S", parent_circle: "Money & Trade" }, CIRCLES);
+    const twice = normaliseProposedSeat(once.payload, CIRCLES);
+    expect(twice.payload).toEqual(once.payload);
+    expect(twice.ignored).toEqual([]);
+    const fixed = normaliseProposedSeat({ ...once.payload, circle: "Money & Trade" }, CIRCLES);
+    expect(fixed.payload).toEqual({ name: "S", circleId: "trade" });
+  });
+
+  it("marks every seat of a structure that gave its circle once, beside the list", () => {
+    const r = readProposedSeats(
+      { title: "Structure", circle: "Money & Trade", seats: [{ name: "A" }, { name: "B", circle: "Stewards" }] },
+      CIRCLES,
+      { readsTitle: true },
+    );
+    expect(r.seats[0].payload).toEqual({ name: "A", circleUnread: ["circle"] });
+    expect(r.seats[1].payload).toEqual({ name: "B", circleId: "stewards" });
+    expect(r.ignored).toEqual(["circle"]);
   });
 });
 
@@ -228,47 +341,64 @@ describe("placing a circle by name", () => {
 });
 
 describe("keys nothing reads", () => {
-  it("reports every one, and never reports a structural key", () => {
-    const r = normaliseProposedSeat(
-      {
-        id: "vendor-seat-7",
-        title: "t",
-        rationale: "r",
-        role_name: "Seat",
-        vendor_rank: 3,
-        holder: "somebody",
-        circle: "Money & Trade",
-        circleMatches: 5,
-      },
-      CIRCLES,
-    );
+  const RECORD = {
+    id: "vendor-seat-7",
+    title: "t",
+    rationale: "r",
+    role_name: "Seat",
+    vendor_rank: 3,
+    holder: "somebody",
+    circle: "Money & Trade",
+    circleMatches: 5,
+  };
+
+  it("reports every one, and never reports id or a key the caller says it reads", () => {
+    const r = normaliseProposedSeat(RECORD, CIRCLES, { readByCaller: ["title", "rationale"] });
     expect(r.ignored).toEqual(["vendor_rank", "holder"]);
     expect(r.vendorId).toBe("vendor-seat-7");
     expect(r.payload).toEqual({ name: "Seat", circleId: "trade" });
   });
 
+  it("reports title and rationale when the caller does not read them", () => {
+    // The accept path reads a title off the first proposal only and a rationale
+    // only when a decision holds one proposal. The other eighteen of nineteen
+    // rationales used to vanish with ignored: [].
+    expect(normaliseProposedSeat(RECORD, CIRCLES).ignored).toEqual(["title", "rationale", "vendor_rank", "holder"]);
+    expect(readProposedSeats(RECORD, CIRCLES, { readsTitle: true }).ignored).toEqual(["rationale", "vendor_rank", "holder"]);
+    expect(readProposedSeats(RECORD, CIRCLES, { readsTitle: true, readsRationale: true }).ignored).toEqual([
+      "vendor_rank",
+      "holder",
+    ]);
+  });
+
+  it("reports a title on a seat INSIDE a structure's list, which no draft reads", () => {
+    const r = readProposedSeats(
+      { title: "Structure", seats: [{ title: "Mill Warden", circle: "Money & Trade" }] },
+      CIRCLES,
+      { readsTitle: true, readsRationale: true },
+    );
+    expect(r.seats[0].payload).toEqual({ circleId: "trade" });
+    expect(r.ignored).toEqual(["title"]);
+  });
+
   it("reports a circle key whose value is not a name", () => {
     const r = normaliseProposedSeat({ name: "Seat", circle: { id: "trade" } }, CIRCLES);
     expect(r.ignored).toEqual(["circle"]);
-    expect(r.payload).toEqual({ name: "Seat" });
+    expect(r.payload).toEqual({ name: "Seat", circleUnread: ["circle"] });
   });
 
   it("reads a whole structure's seat list and reports keys beside it and inside it", () => {
-    const r = readProposedSeats(
-      {
-        title: "The structure",
-        rationale: "Because",
-        source_meeting: "m-1",
-        seats: [
-          { id: "a", name: "A", circleId: "trade" },
-          { id: "b", roleName: "B", notes: "x" },
-          "not a seat",
-        ],
-      },
-      CIRCLES,
-    );
+    const structure = {
+      title: "The structure",
+      rationale: "Because",
+      source_meeting: "m-1",
+      seats: [{ id: "a", name: "A", circleId: "trade" }, { id: "b", roleName: "B", notes: "x" }, "not a seat"],
+    };
+    const r = readProposedSeats(structure, CIRCLES, { readsTitle: true, readsRationale: true });
     expect(r.seats.map((s) => s.payload.name)).toEqual(["A", "B"]);
     expect(r.ignored).toEqual(["source_meeting", "notes"]);
+    // The second structure in a decision gives the draft neither.
+    expect(readProposedSeats(structure, CIRCLES).ignored).toEqual(["title", "rationale", "source_meeting", "notes"]);
 
     const one = readProposedSeats(REAL_ONE, CIRCLES);
     expect(one.seats).toHaveLength(1);

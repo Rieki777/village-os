@@ -383,6 +383,8 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
         role_name: "Pipe Mender", aim: "No line stays broken for a week.", domain: "The water lines.",
         accountabilities: "Walk the lines after rain\nCarry the repair kit", circle: "Water Care", seat_count: 2,
         recruiting: false, vendor_rank: 3,
+        // A batch of three gives its draft no rationale, so this one is reported.
+        rationale: "The lines break every rain.",
       },
       {
         role_name: "Mill Warden", aim: "The mill turns when the grain is in.", domain: "The mill.",
@@ -421,8 +423,16 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
     expect(first.json.seats).toBe(3);
     // One blocked, and only the one whose circle does not exist yet.
     expect(first.json.blocked).toBe(1);
-    // Named, never dropped in silence.
-    expect(first.json.ignored).toEqual([{ proposalId: ids[1], keys: ["vendor_rank"] }]);
+    // Named, never dropped in silence. Sorted, because a JSON column may
+    // reorder an object's keys on the way back out.
+    expect(first.json.ignored).toHaveLength(1);
+    expect(first.json.ignored[0].proposalId).toBe(ids[1]);
+    expect([...first.json.ignored[0].keys].sort()).toEqual(["rationale", "vendor_rank"]);
+    // The reason itself reaches the steward, and it names the recovery walked below.
+    expect(first.json.blockedLines).toEqual([
+      { reads: 'Create the seat "Mill Warden"', blocked: expect.stringContaining('There is no circle called "Milling Circle" yet') },
+    ]);
+    expect(first.json.blockedLines[0].blocked).toContain("withdraw this draft. Its proposals go back in the review queue");
 
     const one = await payloadsByName(first.json.draftId);
     expect(one["Spring Keeper"]).toMatchObject({
@@ -449,5 +459,26 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
     const two = await payloadsByName(again.json.draftId);
     expect(two["Mill Warden"]).toMatchObject({ circleId: String(mill.json.id) });
     expect(two["Mill Warden"]).not.toHaveProperty("circleName");
+    expect(again.json.blockedLines).toEqual([]);
+
+    // ONE proposal through the single accept: it returns the blocked reason
+    // too, and a lone proposal's rationale names the draft, so it is read.
+    const out = await call("POST", `/api/review/drafts/${again.json.draftId}/withdraw`, {}, kiraToken);
+    expect(out.status, out.text).toBe(200);
+    const single = await landProposal(pool, {
+      villageId: "v1",
+      moduleId: "saberra",
+      batchId: "batch-vendor-single",
+      kind: "role.proposed",
+      sourceRef: "record-single",
+      quote: "The record describes the seat Kiln Tender.",
+      payload: { role_name: "Kiln Tender", circle: "Kiln Circle", rationale: "Somebody fires the kiln." },
+    });
+    expect(single.ok).toBe(true);
+    const lone = await call("POST", `/api/review/proposals/${single.ok ? single.id : ""}/accept`, {}, kiraToken);
+    expect(lone.status, lone.text).toBe(200);
+    expect(lone.json.blocked).toBe(1);
+    expect(lone.json.blockedLines[0].blocked).toContain('There is no circle called "Kiln Circle" yet');
+    expect(lone.json.ignored).toEqual([]);
   });
 });

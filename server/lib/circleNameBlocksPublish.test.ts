@@ -25,12 +25,17 @@ const configured = testDbConfigured();
 let db: TestDb;
 let pool: mysql.Pool;
 
-async function draftWith(changes: { op: DraftOp; orgRoleId: string; payload: Record<string, unknown> }[]) {
+async function draftWith(
+  changes: { op: DraftOp; orgRoleId: string; payload: Record<string, unknown> }[],
+  // Set for a draft the review queue made, which is the one a withdraw reopens proposals for.
+  sourceProposalId: string | null = "xprop-cnb",
+) {
   const made = await createDraft(pool, {
     title: "Seats as a vendor proposed them",
     createdBy: "u-steward",
     sourceKind: "agent",
     sourceModuleId: "vendor",
+    sourceProposalId,
     openCap: 99,
   });
   if (!made.ok) throw new Error(made.error);
@@ -53,7 +58,7 @@ async function liveCircles(): Promise<LiveCircle[]> {
 
 async function seatRow(id: string) {
   const [[row]] = await pool.query<any[]>( // module-review-ok: same
-    "SELECT id, circle_id, accountabilities FROM org_roles WHERE id = ?", [id],
+    "SELECT id, circle_id, accountabilities, aim, recruiting FROM org_roles WHERE id = ?", [id],
   );
   return row;
 }
@@ -88,12 +93,76 @@ describe.skipIf(!configured)("a circle given by a name this village cannot place
     const preview = await previewDraft(pool, id, 99);
     expect(preview.blocked).toBe(1);
     expect(preview.lines[0].blocked).toContain('There is no circle called "Nowhere Circle" yet');
-    expect(preview.lines[0].blocked).toContain("withdraw this draft and accept the batch again");
+    // The recovery that exists: a withdraw reopens this draft's proposals.
+    // "Accept the batch again" would also take every other waiting proposal.
+    expect(preview.lines[0].blocked).toContain("withdraw this draft. Its proposals go back in the review queue");
+    expect(preview.lines[0].blocked).not.toContain("batch");
 
     const r = await publishDraft(pool, id, "u-steward", 99);
     expect(r.ok).toBe(false);
     expect(!r.ok ? r.error : "").toContain("Nowhere Circle");
     expect(await seatRow("cnb-spring")).toBeUndefined();
+  });
+
+  it("tells a person who made the draft by hand to make it again, since no proposal goes back", async () => {
+    const id = await draftWith(
+      [{ op: "create_seat", orgRoleId: "cnb-hand", payload: { name: "Hand Seat", circleName: "Nowhere Circle", circleMatches: 0 } }],
+      null,
+    );
+    const preview = await previewDraft(pool, id, 99);
+    expect(preview.lines[0].blocked).toContain("withdraw this draft and make it again");
+    expect(preview.lines[0].blocked).not.toContain("queue");
+  });
+
+  it("blocks a seat whose circle arrived in a shape nothing reads, which published into no circle", async () => {
+    const seat = normaliseProposedSeat(
+      { role_name: "Spring Keeper", circle: { id: "springs", name: "Springs & Wells" } },
+      await liveCircles(),
+    );
+    expect(seat.payload.circleUnread).toEqual(["circle"]);
+    const id = await draftWith([{ op: "create_seat", orgRoleId: "cnb-unread", payload: seat.payload }]);
+    const preview = await previewDraft(pool, id, 99);
+    expect(preview.blocked).toBe(1);
+    expect(preview.lines[0].blocked).toContain('This seat gave its circle under "circle" in a form this village cannot read');
+    const r = await publishDraft(pool, id, "u-steward", 99);
+    expect(r.ok).toBe(false);
+    expect(await seatRow("cnb-unread")).toBeUndefined();
+  });
+
+  it("checks a circle id of 0 against the circles, where truthiness skipped it and published circle \"0\"", async () => {
+    const id = await draftWith([{ op: "create_seat", orgRoleId: "cnb-zero", payload: { name: "Zero Seat", circleId: 0 } }]);
+    const preview = await previewDraft(pool, id, 99);
+    expect(preview.lines[0].blocked).toBe("That circle does not exist. A draft cannot create circles");
+    expect((await publishDraft(pool, id, "u-steward", 99)).ok).toBe(false);
+    expect(await seatRow("cnb-zero")).toBeUndefined();
+  });
+
+  it("blocks a text field that is an object or a list, and a recruiting flag it would write as 0", async () => {
+    const cases: [string, Record<string, unknown>, string][] = [
+      // An object publishes as the literal "[object Object]".
+      ["cnb-obj-aim", { name: "Cook", aim: { text: "Feed the village" } }, "This seat's aim is not text"],
+      ["cnb-obj-name", { name: { en: "Cook" } }, "This seat's name is not text"],
+      // An array expands into extra VALUES and rolls the whole publish back.
+      ["cnb-arr-domain", { name: "Pump Keeper", domain: ["Water lines", "Pumps"] }, "This seat's domain is not text"],
+      ["cnb-yes", { name: "Recruiter", recruiting: "yes" }, "Recruiting is true or false"],
+    ];
+    for (const [seatId, payload, sentence] of cases) {
+      const id = await draftWith([{ op: "create_seat", orgRoleId: seatId, payload }]);
+      const preview = await previewDraft(pool, id, 99);
+      expect(preview.lines[0].blocked, seatId).toContain(sentence);
+      expect((await publishDraft(pool, id, "u-steward", 99)).ok, seatId).toBe(false);
+      expect(await seatRow(seatId), seatId).toBeUndefined();
+    }
+  });
+
+  it("publishes a vendor's recruiting \"yes\" as recruiting, read by the normaliser", async () => {
+    const seat = normaliseProposedSeat({ role_name: "Recruiter", recruiting: "yes", aim: "Find people" }, await liveCircles());
+    const id = await draftWith([{ op: "create_seat", orgRoleId: "cnb-recruits", payload: seat.payload }]);
+    const r = await publishDraft(pool, id, "u-steward", 99);
+    expect(r.ok, !r.ok ? r.error : "").toBe(true);
+    const row = await seatRow("cnb-recruits");
+    expect(Number(row.recruiting)).toBe(1);
+    expect(row.aim).toBe("Find people");
   });
 
   it("blocks a name that matched more than one circle, with its own sentence", async () => {
@@ -115,6 +184,13 @@ describe.skipIf(!configured)("a circle given by a name this village cannot place
     const preview = await previewDraft(pool, id, 99);
     expect(preview.blocked).toBe(1);
     expect(preview.lines[0].blocked).toContain('There is no circle called "Nowhere Circle" yet');
+
+    // The same seat, edited with an aim of a shape the UPDATE would bind raw.
+    const shaped = await draftWith([
+      { op: "update_seat", orgRoleId: "cnb-existing", payload: { aim: { text: "A new aim" } } },
+    ]);
+    const shapedPreview = await previewDraft(pool, shaped, 99);
+    expect(shapedPreview.lines[0].blocked).toContain("This seat's aim is not text");
   });
 
   it("publishes a seat whose circle name resolved, into that circle, with its accountabilities as a list", async () => {

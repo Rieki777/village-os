@@ -119,6 +119,12 @@ interface IgnoredKeys {
   keys: string[];
 }
 
+/** One change in the draft that cannot apply: what it would do, and why it cannot. */
+interface BlockedLine {
+  reads: string;
+  blocked: string;
+}
+
 /*
  * WHAT A PROPOSAL MAY SAY ABOUT A SEAT lives in server/lib/proposedSeats.ts:
  * the allowlist, the vendor spellings it accepts, how a circle given by NAME
@@ -298,7 +304,15 @@ export function register(app: Express, deps: Deps): void {
     edits: Record<string, Record<string, unknown> | null>,
     actor: string,
   ): Promise<
-    | { ok: true; draftId: string | null; seats: number; blocked: number; noted: number; ignored: IgnoredKeys[] }
+    | {
+        ok: true;
+        draftId: string | null;
+        seats: number;
+        blocked: number;
+        blockedLines: BlockedLine[];
+        noted: number;
+        ignored: IgnoredKeys[];
+      }
     | { ok: false; error: string }
   > => {
     const roster = await activeMembers();
@@ -313,7 +327,9 @@ export function register(app: Express, deps: Deps): void {
         editedPayload: edits[p.id] ?? null,
       });
     }
-    if (!org.length) return { ok: true, draftId: null, seats: 0, blocked: 0, noted: notes.length, ignored: [] };
+    if (!org.length) {
+      return { ok: true, draftId: null, seats: 0, blocked: 0, blockedLines: [], noted: notes.length, ignored: [] };
+    }
 
     const first = org[0];
     const firstPayload = edits[first.id] ?? first.payload;
@@ -358,10 +374,17 @@ export function register(app: Express, deps: Deps): void {
     const circles = circlesRepo.all() as LiveCircle[];
     let seats = 0;
     const ignored: IgnoredKeys[] = [];
-    for (const p of org) {
+    for (let i = 0; i < org.length; i++) {
+      const p = org[i];
       // An edited payload goes through the same reading as the vendor's own,
-      // so a steward's correction is placed and reported the same way.
-      const read = readProposedSeats(edits[p.id] ?? p.payload, circles);
+      // so a steward's correction is placed and reported the same way. The
+      // flags match what `createDraft` above took: the title off the first
+      // proposal, the rationale only when there is one, so a rationale on any
+      // other record is reported instead of vanishing.
+      const read = readProposedSeats(edits[p.id] ?? p.payload, circles, {
+        readsTitle: i === 0,
+        readsRationale: org.length === 1,
+      });
       if (read.ignored.length) ignored.push({ proposalId: p.id, keys: read.ignored });
       for (const seat of read.seats) {
         seats += 1;
@@ -408,7 +431,14 @@ export function register(app: Express, deps: Deps): void {
       audience: "admin",
     });
 
-    return { ok: true, draftId: made.id, seats, blocked: preview.blocked, noted: notes.length, ignored };
+    // The reasons themselves, and not only their count. The preview route that
+    // also serves them is admin-only and no screen calls it, so without these
+    // the sentence saying what to do next reached nobody.
+    const blockedLines: BlockedLine[] = preview.lines
+      .filter((l) => l.blocked)
+      .map((l) => ({ reads: l.reads, blocked: String(l.blocked) }));
+
+    return { ok: true, draftId: made.id, seats, blocked: preview.blocked, blockedLines, noted: notes.length, ignored };
   };
 
   app.post("/api/review/proposals/:id/accept", async (req, res) => {
@@ -426,7 +456,14 @@ export function register(app: Express, deps: Deps): void {
         : null;
     const r = await acceptInto([proposal], { [proposal.id]: edited }, actor);
     if (!r.ok) return res.status(409).json({ error: r.error });
-    res.json({ success: true, createdRef: r.draftId, seats: r.seats, blocked: r.blocked, ignored: r.ignored });
+    res.json({
+      success: true,
+      createdRef: r.draftId,
+      seats: r.seats,
+      blocked: r.blocked,
+      blockedLines: r.blockedLines,
+      ignored: r.ignored,
+    });
   });
 
   app.post("/api/review/proposals/:id/reject", async (req, res) => {
@@ -547,6 +584,7 @@ export function register(app: Express, deps: Deps): void {
       // publish until somebody deals with it, and a steward who is not told
       // finds out at the publish button with no idea why.
       blocked: r.blocked,
+      blockedLines: r.blockedLines,
       noted: r.noted,
       // Every key a proposal carried that nothing read, per proposal. Named
       // for the same reason `blocked` is: a vendor's field the draft left out
