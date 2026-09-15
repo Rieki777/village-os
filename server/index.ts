@@ -15366,6 +15366,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       vocab: vocabulary(resourcesConfig().labels),
       config: resourcesConfig(),
       defaultUnit: resourcesDefaultUnit(),
+      tokens: allTokens().map((t) => ({ slug: t.slug, name: t.name, decimals: t.decimals })), // every `token:<slug>` a unit may name, with its scale: an amountMinor here is minor units AT that scale, both ways
       circles: circles.map((c: any) => ({ id: c.id, name: c.name })),
       seats: orgRoles
         .filter((r) => r.active && !r.isExample)

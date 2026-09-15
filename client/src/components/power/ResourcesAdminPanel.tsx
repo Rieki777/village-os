@@ -15,6 +15,8 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { exponentOf, formatMoney } from "@shared/money";
+import { finerThanScale } from "@shared/tokenScale";
+import { formatTokenAmount } from "@/lib/tokenAmount";
 import { ResourcesRoutingEditor } from "@/components/admin/ModuleConfigPanels";
 
 interface Rule {
@@ -73,6 +75,8 @@ interface AdminPayload {
   };
   config: { requestCategory: string; measuredVisibleTo: string; labels: Record<string, string> };
   defaultUnit: string;
+  /** Every registry token, with the scale its `token:<slug>` amounts are minor units at. */
+  tokens?: TokenScale[];
   circles: Array<{ id: string; name: string }>;
   seats: Array<{ id: string; name: string; circleId: string | null }>;
   measured: {
@@ -81,22 +85,68 @@ interface AdminPayload {
   } | null;
 }
 
+interface TokenScale {
+  slug: string;
+  name: string;
+  decimals: number;
+}
+
 function isIso(unit: string): boolean {
   return /^[A-Z]{3}$/.test(unit);
 }
 
-function money(amountMinor: number, unit: string): string {
-  if (isIso(unit)) return formatMoney(amountMinor, unit);
-  return `${amountMinor} ${unit.replace(/^token:/, "")}`;
+const TOKEN_UNIT = /^token:(.+)$/;
+
+/**
+ * HOW MANY DECIMAL PLACES A UNIT'S MINOR UNITS CARRY, OR NULL FOR "NOT KNOWN".
+ *
+ * Every `amountMinor` this panel reads or sends is minor units at the unit's
+ * real scale: Intl's exponent for a currency, the registry's `decimals` for
+ * `token:<slug>`. The server posts treasury amounts straight to the ledger and
+ * formats rules and budgets with the registry scale (`amountWords`,
+ * server/lib/resources.ts). This panel used 0 digits for every token, so a
+ * steward typing 60 on a two-decimal token minted 0.60, and a treasury holding
+ * 125.50 read as 12550.
+ *
+ * NULL IS A REFUSAL, NEVER A ZERO. A token missing from the payload's registry
+ * has a scale this page cannot see, and guessing 0 is exactly the defect above.
+ * A unit that is neither shape reads 0: the server refuses that unit by name
+ * whatever the amount, so no scale can make it post.
+ */
+function digitsFor(unit: string, tokens: TokenScale[] | undefined): number | null {
+  if (isIso(unit)) return exponentOf(unit);
+  const m = TOKEN_UNIT.exec(unit);
+  if (!m) return 0;
+  const t = tokens?.find((x) => x.slug === m[1]);
+  const d = Number(t?.decimals);
+  return t && Number.isInteger(d) && d >= 0 ? d : null;
 }
 
-/** Major-unit text to minor units for the unit's own exponent. */
-function toMinor(text: string, unit: string): number {
-  const major = Number(text);
-  if (!Number.isFinite(major) || major <= 0) return 0;
-  const digits = isIso(unit) ? exponentOf(unit) : 0;
-  return Math.round(major * Math.pow(10, digits));
+function moneyAt(amountMinor: number, unit: string, tokens: TokenScale[] | undefined): string {
+  if (isIso(unit)) return formatMoney(amountMinor, unit);
+  const slug = unit.replace(/^token:/, "");
+  const digits = digitsFor(unit, tokens);
+  if (digits === null) return `${amountMinor} ${slug} in its smallest unit, because this page could not read its scale`;
+  return `${formatTokenAmount(amountMinor, digits)} ${slug}`;
 }
+
+/**
+ * One submission's idempotency id.
+ *
+ * The ledger key the server builds from `requestId` is what dedupes, so the id
+ * has to name ONE SUBMISSION: the same on a double click or a retry, different
+ * the next time a steward funds the same amount for the same reason. It was
+ * built from the amount and the note, so next month's identical funding and a
+ * second identical payment were both answered `duplicate: true` and moved
+ * nothing, while this panel said "funded" and "Paid".
+ */
+function newRequestId(): string {
+  const uuid = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto?.randomUUID?.();
+  return uuid ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+/** What a steward reads when the server already had this exact submission. */
+const ALREADY_RECORDED = "This exact request was already recorded, so nothing new moved.";
 
 const EMPTY_RULE = {
   scope: "circle",
@@ -113,8 +163,12 @@ const EMPTY_RULE = {
 const EMPTY_SOURCE = { name: "", kind: "donations", sharePct: "", amountPerYear: "", unit: "", note: "" };
 const EMPTY_BUDGET = { circleId: "", seasonId: "", amount: "", cycleAmount: "", unit: "", note: "", mode: "cap" };
 
-/** One row's treasury inputs. Kept per budget so two rows cannot share a draft. */
-const EMPTY_MOVE = { amount: "", toUserId: "", note: "" };
+/**
+ * One row's treasury inputs. Kept per budget so two rows cannot share a draft.
+ * `requestId` is minted on every edit (see `setDraft`), so it names what is in
+ * the boxes when the button is pressed.
+ */
+const EMPTY_MOVE = { amount: "", toUserId: "", note: "", requestId: "" };
 
 export default function ResourcesAdminPanel({ password }: { password: string }) {
   const auth = { Authorization: `Bearer ${password}` };
@@ -172,7 +226,8 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
     load();
   }, [load]);
 
-  const act = async (route: string, method: string, body?: unknown) => {
+  /** The answer's body on success (so a caller can read `duplicate`), or null. */
+  const act = async (route: string, method: string, body?: unknown): Promise<Record<string, any> | null> => {
     setProblem(null);
     setNote(null);
     const res = await fetch(route, {
@@ -183,18 +238,42 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
     const json = await res.json().catch(() => null);
     if (!res.ok) {
       setProblem(String(json?.error ?? "That did not go through"));
-      return false;
+      return null;
     }
     await load();
-    return true;
+    return json ?? {};
+  };
+
+  /**
+   * Typed major units into minor units at the unit's REAL scale, or null after
+   * saying why nothing was sent. Blank, zero and junk come back as 0 so the
+   * server's own sentence answers them, which is what they always did.
+   */
+  const minorOrRefuse = (text: string, unit: string): number | null => {
+    const digits = digitsFor(unit, data?.tokens);
+    if (digits === null) {
+      setNote(null);
+      setProblem(`This page could not read how many decimal places ${unit} carries, so it sent nothing. Reload the page. If this stays, that token is missing from the registry.`);
+      return null;
+    }
+    const major = Number(text);
+    if (!Number.isFinite(major) || major <= 0) return 0;
+    if (finerThanScale(major, digits)) {
+      setNote(null);
+      setProblem(`${unit} goes to ${digits} decimal places, so ${text} cannot be sent exactly. Nothing was sent.`);
+      return null;
+    }
+    return Math.round(major * 10 ** digits);
   };
 
   const saveRule = async () => {
+    const amountMinor = minorOrRefuse(rule.amount, rule.unit.trim());
+    if (amountMinor === null) return;
     const ok = await act("/api/admin/resources/rules", "POST", {
       id: editingRuleId ?? undefined,
       scope: rule.scope,
       scopeId: rule.scopeId,
-      amountMinor: toMinor(rule.amount, rule.unit.trim()),
+      amountMinor,
       unit: rule.unit.trim(),
       approval: rule.approval,
       approvalNote: rule.approvalNote.trim() || undefined,
@@ -210,7 +289,9 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
   };
 
   const saveSource = async () => {
-    const amountMinorPerYear = source.amountPerYear.trim() ? toMinor(source.amountPerYear, source.unit.trim()) : null;
+    const perYear = source.amountPerYear.trim() ? minorOrRefuse(source.amountPerYear, source.unit.trim()) : 0;
+    if (perYear === null) return;
+    const amountMinorPerYear = source.amountPerYear.trim() ? perYear : null;
     const ok = await act("/api/admin/resources/sources", "POST", {
       name: source.name,
       kind: source.kind,
@@ -226,14 +307,16 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
   };
 
   const saveBudget = async () => {
+    const amountMinor = minorOrRefuse(budget.amount, budget.unit.trim());
+    if (amountMinor === null) return;
+    // Blank leaves the cycle cap unset. "0" is a real cap and means zero.
+    const cycleAmountMinor = budget.cycleAmount.trim() === "" ? null : minorOrRefuse(budget.cycleAmount, budget.unit.trim());
+    if (budget.cycleAmount.trim() !== "" && cycleAmountMinor === null) return;
     const ok = await act("/api/admin/resources/budgets", "POST", {
       circleId: budget.circleId,
       seasonId: budget.seasonId.trim() || undefined,
-      amountMinor: toMinor(budget.amount, budget.unit.trim()),
-      // Blank leaves the cycle cap unset. "0" is a real cap and means zero.
-      cycleAmountMinor: budget.cycleAmount.trim() === ""
-        ? null
-        : toMinor(budget.cycleAmount, budget.unit.trim()),
+      amountMinor,
+      cycleAmountMinor,
       unit: budget.unit.trim(),
       note: budget.note.trim() || undefined,
       // A mode is a STARTING CONDITION and only reaches the INSERT. Changing
@@ -249,8 +332,14 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
 
   /** The draft for one budget row's treasury moves. */
   const draft = (id: string) => move[id] ?? EMPTY_MOVE;
-  const setDraft = (id: string, patch: Partial<typeof EMPTY_MOVE>) =>
-    setMove((m) => ({ ...m, [id]: { ...(m[id] ?? EMPTY_MOVE), ...patch } }));
+  /**
+   * EVERY EDIT IS A NEW SUBMISSION, so every edit mints a new `requestId`.
+   * Pressing the button twice, or again after a failure, without touching the
+   * boxes sends the same id and the ledger dedupes it. Clearing the boxes after
+   * a success is an edit too, so the next identical funding is a new one.
+   */
+  const setDraft = (id: string, patch: Partial<Omit<typeof EMPTY_MOVE, "requestId">>) =>
+    setMove((m) => ({ ...m, [id]: { ...(m[id] ?? EMPTY_MOVE), ...patch, requestId: newRequestId() } }));
 
   /**
    * SCHEDULE A MODE CHANGE. It lands at the period boundary and never now, so
@@ -275,40 +364,50 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
   /** MINT INTO A TREASURY. This is issuance and the village's cap binds it. */
   const fundTreasury = async (b: Budget) => {
     const d = draft(b.id);
-    const ok = await act(`/api/admin/resources/budgets/${b.id}/fund`, "POST", {
-      amountMinor: toMinor(d.amount, b.unit),
+    const amountMinor = minorOrRefuse(d.amount, b.unit);
+    if (amountMinor === null) return;
+    const answer = await act(`/api/admin/resources/budgets/${b.id}/fund`, "POST", {
+      amountMinor,
       note: d.note.trim() || "Funding the circle's treasury",
-      requestId: `${b.id}:${d.amount}:${d.note.trim()}`,
+      requestId: d.requestId || undefined,
     });
-    if (ok) {
+    if (answer) {
       setDraft(b.id, { amount: "" });
-      setNote("The treasury is funded. Those tokens are minted, so they spent the village's issuance room for this cycle.");
+      setNote(answer.duplicate
+        ? ALREADY_RECORDED
+        : "The treasury is funded. Those tokens are minted, so they spent the village's issuance room for this cycle.");
     }
   };
 
   /** PAY SOMEBODY FROM A TREASURY. This moves tokens that already exist. */
   const spendTreasury = async (b: Budget) => {
     const d = draft(b.id);
-    const ok = await act(`/api/admin/resources/budgets/${b.id}/spend`, "POST", {
+    const amountMinor = minorOrRefuse(d.amount, b.unit);
+    if (amountMinor === null) return;
+    const answer = await act(`/api/admin/resources/budgets/${b.id}/spend`, "POST", {
       toUserId: d.toUserId.trim(),
-      amountMinor: toMinor(d.amount, b.unit),
+      amountMinor,
       note: d.note.trim() || "Paid from the circle's treasury",
-      requestId: `${b.id}:${d.toUserId.trim()}:${d.amount}`,
+      requestId: d.requestId || undefined,
     });
-    if (ok) {
+    if (answer) {
       setDraft(b.id, { amount: "", toUserId: "" });
-      setNote("Paid. A treasury spend moves tokens the circle already holds, so the village's issuance cap did not move.");
+      setNote(answer.duplicate
+        ? ALREADY_RECORDED
+        : "Paid. A treasury spend moves tokens the circle already holds, so the village's issuance cap did not move.");
     }
   };
 
   /** HAND A TREASURY BACK. The issuance room comes back with the tokens. */
   const returnTreasury = async (b: Budget) => {
     const d = draft(b.id);
+    const asked = d.amount.trim() ? minorOrRefuse(d.amount, b.unit) : undefined;
+    if (asked === null) return;
     const res = await fetch(`/api/admin/resources/budgets/${b.id}/return`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...auth },
       body: JSON.stringify({
-        amountMinor: d.amount.trim() ? toMinor(d.amount, b.unit) : undefined,
+        amountMinor: asked,
         note: d.note.trim() || "Handed back to the village",
       }),
     });
@@ -349,6 +448,8 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
     return <p className="text-sm text-muted-foreground">{problem ?? "Reading the declarations…"}</p>;
   }
 
+  /** Minor units at the unit's real scale, into what a steward reads. */
+  const money = (amountMinor: number, unit: string) => moneyAt(amountMinor, unit, data.tokens);
   const circleName = (id: string) => data.circles.find((c) => c.id === id)?.name ?? id;
   const seatName = (id: string) => data.seats.find((s) => s.id === id)?.name ?? id;
   const scopeName = (r: Rule) => (r.scope === "circle" ? circleName(r.scopeId) : seatName(r.scopeId));
@@ -398,10 +499,13 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
                     className="text-xs text-teal-deep font-medium"
                     onClick={() => {
                       setEditingRuleId(r.id);
+                      // The same scale both ways. An unreadable one leaves the
+                      // box blank, so the save stays disabled.
+                      const digits = digitsFor(r.unit, data.tokens);
                       setRule({
                         scope: r.scope,
                         scopeId: r.scopeId,
-                        amount: String(r.amountMinor / Math.pow(10, isIso(r.unit) ? exponentOf(r.unit) : 0)),
+                        amount: digits === null ? "" : formatTokenAmount(r.amountMinor, digits),
                         unit: r.unit,
                         approval: r.approval,
                         approvalNote: r.approvalNote ?? "",
