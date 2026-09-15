@@ -266,6 +266,37 @@ export async function reversalMirrorRows(
   return rows;
 }
 
+/**
+ * What one account held of one token going into an instant, read off the rows
+ * posted BEFORE it: credits minus debits, as one row with a `held` column.
+ *
+ * `decayVoice` (server/lib/economy.ts) reads this at the moon's opening, so a
+ * waning acts on what a member carried into the moon and never on whatever a
+ * payout during the moon made of their balance. Its caller holds the reasons.
+ *
+ * `UNIX_TIMESTAMP(at) < ?` and never `at < ?` with a Date: a `timestamp`
+ * column is compared in the SESSION zone, and a pool without `SET time_zone`
+ * shifts that comparison by the database host's offset. Epoch seconds are the
+ * same number in every zone. The two account indexes (`token_ledger_to_idx`,
+ * `token_ledger_from_idx`) narrow each sum to one account's rows first.
+ */
+export async function heldBeforeRows(
+  conn: Pool | PoolConnection,
+  accountId: string,
+  tokenType: string,
+  beforeEpochSeconds: number,
+): Promise<RowDataPacket[]> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    "SELECT " +
+      "COALESCE((SELECT SUM(`amount`) FROM `token_ledger` " +
+      "WHERE `to_account` = ? AND `token_type` = ? AND UNIX_TIMESTAMP(`at`) < ?), 0) - " +
+      "COALESCE((SELECT SUM(`amount`) FROM `token_ledger` " +
+      "WHERE `from_account` = ? AND `token_type` = ? AND UNIX_TIMESTAMP(`at`) < ?), 0) AS held",
+    [accountId, tokenType, beforeEpochSeconds, accountId, tokenType, beforeEpochSeconds],
+  );
+  return rows;
+}
+
 /** Whether a key already exists, for the collation clash check. */
 export async function keyClashRows(conn: Pool | PoolConnection, key: string): Promise<RowDataPacket[]> {
   const [rows] = await conn.query<RowDataPacket[]>(

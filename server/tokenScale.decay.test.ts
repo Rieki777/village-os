@@ -25,7 +25,7 @@ import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 import { loadTokenRegistry, memberAccount, registerToken } from "./lib/ledger";
 import { loadVariables, numberVar, stringVar } from "./lib/variables";
 import { recordGameStart } from "./lib/gameStart";
-import { decayVoice, ensureVoiceToken, VILLAGE_VOICE, VOICE_DECAY, VOICE_MINT, mint } from "./lib/economy";
+import { cycleWindow, decayVoice, ensureVoiceToken, VILLAGE_VOICE, VOICE_DECAY, VOICE_MINT, mint } from "./lib/economy";
 import { CURRENCY_DECIMALS, VOICE_DECIMALS, decayFloorMinorUnits, decayUnits } from "../shared/tokenScale";
 
 const configured = testDbConfigured();
@@ -63,6 +63,7 @@ describe.skipIf(!configured)("waning reaches a small balance at two decimals", (
         "ON DUPLICATE KEY UPDATE `name` = VALUES(`name`)",
       [id, id, `${id}@examples.invalid`],
     ); // module-review-ok: fixture against the S5 scratch schema
+    const key = `dec.scale.seed:${id}:${(seq += 1)}`;
     const r = await mint(pool, {
       toUserId: id,
       tokenSlug: VILLAGE_VOICE,
@@ -71,9 +72,18 @@ describe.skipIf(!configured)("waning reaches a small balance at two decimals", (
       source: "role_cycle",
       sourceRef: id,
       description: "seeded for a waning measurement",
-      idempotencyKey: `dec.scale.seed:${id}:${(seq += 1)}`,
+      idempotencyKey: key,
     });
     expect(r.ok, `seeding ${id}`).toBe(true);
+    // Carried INTO the moon: waning acts on what a member held when the cycle
+    // opened, so the seed row is moved to a day before it. Epoch seconds,
+    // because the column is a `timestamp` and this pool sets no session zone
+    // on every connection.
+    const carriedIn = Math.floor(cycleWindow(new Date()).startsAt.getTime() / 1000) - 24 * 60 * 60;
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "UPDATE `token_ledger` SET `at` = FROM_UNIXTIME(?) WHERE `idempotency_key` = ?",
+      [carriedIn, key],
+    );
     return id;
   };
 
