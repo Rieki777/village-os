@@ -38,10 +38,12 @@
  * already at or above the advertised top gets no lift, and a quest naming no
  * readable top gets none.
  */
+import type { ConsentBounds, ConsentCapMode } from "../../shared/questConsentBounds";
 import { describeRange, type RewardRange } from "../../shared/questRewards";
 
-/** The cap modes this module knows. */
-export type ConsentCapMode = "posted" | "capped" | "unlimited";
+// The bounds shape and the mode union live in shared/, so a steward's screen and
+// this module read one definition.
+export type { ConsentBounds, ConsentCapMode };
 
 /**
  * Read a stored cap mode. Anything unrecognised is `posted`.
@@ -193,21 +195,6 @@ export function payoutFor(input: { granted: number; multiplier: number; liftTop:
   const multiplier = Number.isFinite(input.multiplier) && input.multiplier > 1 ? input.multiplier : 1;
   const lifted = multiplier === 1 ? granted : Math.floor(granted * multiplier);
   return Math.max(granted, Math.min(lifted, liftTop));
-}
-
-/** What a steward may grant on one quest, for a surface to show before anybody presses. */
-export interface ConsentBounds {
-  /** The quest's advertised label, verbatim. */
-  label: string;
-  /** Whether the label names a number. Under a cap, a quest naming none refuses every consent. */
-  readable: boolean;
-  /** The lowest grant above zero. Null when nothing bounds it: `unlimited`, or an unreadable label. */
-  floor: number | null;
-  /** The highest grant. Null under the same conditions, since `unlimited` bounds no grant. */
-  ceiling: number | null;
-  /** Whether a consent of exactly 0 passes. */
-  zeroAllowed: boolean;
-  mode: ConsentCapMode;
 }
 
 /**

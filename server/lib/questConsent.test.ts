@@ -8,6 +8,7 @@
  * rows is driven end to end in `server/routes/questConsentPayout.test.ts`.
  */
 import { describe, expect, it } from "vitest";
+import { canGrant } from "../../shared/questConsentBounds";
 import { parseRewardRange } from "../../shared/questRewards";
 import { checkConsentAmount, consentBounds, consentCapMode, payoutFor, type ConsentAmountInput } from "./questConsent";
 
@@ -164,7 +165,7 @@ describe("a badge lifts a consent toward the cap, never past it (ruling 8)", () 
   });
 });
 
-describe("consentBounds states exactly what checkConsentAmount enforces (finding 10)", () => {
+describe("the queue's bounds, and the screen's check against them, are exactly what consent enforces (finding 10)", () => {
   it("agrees with the refusal for every mode, label, zero dial and amount", () => {
     const labels = ["50-100", "0", "0-50", "200", "tbd", ""];
     const amounts = [0, 1, 49, 50, 75, 100, 101, 150, 199, 200, 201, 400, 401];
@@ -176,13 +177,8 @@ describe("consentBounds states exactly what checkConsentAmount enforces (finding
           const b = consentBounds(base);
           for (const requested of amounts) {
             const enforced = checkConsentAmount({ ...base, requested }).ok;
-            const shown =
-              requested === 0
-                ? b.zeroAllowed
-                : (b.mode === "unlimited" || b.readable) &&
-                  (b.floor === null || requested >= b.floor) &&
-                  (b.ceiling === null || requested <= b.ceiling);
-            expect(shown, `${capMode} "${label}" zero=${allowZero} amount=${requested}`).toBe(enforced);
+            // `canGrant` is the check a steward's screen runs before it lets them press.
+            expect(canGrant(requested, b), `${capMode} "${label}" zero=${allowZero} amount=${requested}`).toBe(enforced);
             compared += 1;
           }
         }
@@ -190,6 +186,15 @@ describe("consentBounds states exactly what checkConsentAmount enforces (finding
     }
     // Printed denominator: a grid that silently shrank would still be green.
     expect(compared).toBe(4 * 6 * 2 * 13);
+  });
+
+  it("the screen never offers a fraction or a negative, which the ledger could not post", () => {
+    const b = consentBounds({ range: parseRewardRange("50-100"), capMode: "posted", capMultiplier: 2, allowZero: true });
+    expect(canGrant(60, b)).toBe(true);
+    expect(canGrant(0, b)).toBe(true);
+    expect(canGrant(60.5, b)).toBe(false);
+    expect(canGrant(-1, b)).toBe(false);
+    expect(canGrant(Number.NaN, b)).toBe(false);
   });
 
   it("names the numbers a steward needs", () => {

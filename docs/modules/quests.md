@@ -184,7 +184,7 @@ that file alphabetically would make `field` a quest id that does not exist.
 | `GET /api/admin/quest-claims` | `mayStillSee("quest.consent")` | A read, so it asks the see-path and never `mayAct`. There is no break-glass on a GET. Each claim carries `bounds` from `consentBounds` (`server/lib/questConsent.ts`): the floor, the ceiling, whether 0 passes and whether the label is readable, as the consent route will enforce them under the dials in force, or `null` when the claim's quest is gone. |
 | `POST /api/admin/quest-claims/:id/consent` | `mayAct("quest.consent")` | The whole of Mechanics below. |
 | `GET /api/admin/quest-claims/attention` | `isAdmin` | The flagged-claims queue. Note the gate: this one is `isAdmin` and not the capability, unlike the two rows above it. |
-| `GET /api/review/queue` | `guardCapability("intake.moderate")` | Served from `server/routes/review.ts`. Returns the full prose, rationale, quote and source ref of every `proposed` quest, through `questProposalQueue(pool, "proposed")`. A different key from the `quest.approve` on the accept and reject routes below. |
+| `GET /api/review/queue` | `mayStillSee("intake.moderate")` or `mayStillSee("quest.approve")` | Served from `server/routes/review.ts`. Returns the full prose, rationale, quote and source ref of every `proposed` quest, through `questProposalQueue(pool, "proposed")`. `intake.moderate` reads both halves of the queue. `quest.approve` alone reads this quest half, and the proposal half and the dropped-batch summary are never queried for it. `scope` in the response names the halves that were read, so a page can tell an empty half from a hidden one. Neither key: `401 {"error":"auth_required"}`, as before. |
 
 ### Writes to this module's tables from outside
 
@@ -507,10 +507,11 @@ A refusal has three shapes, and they differ on purpose:
 
 `quest.approve`, "Put a proposed quest on the board and set what it pays", is a real key enforced
 by `guardCapability` on the two `/api/review/quests/:id/*` routes, and **no module declares it**.
-The read and the write on a proposed quest are different keys: `GET /api/review/queue`, the only
-route that lists them, asks `intake.moderate`. A holder of `intake.moderate` alone can read every
-proposed quest and put none on the board; a holder of `quest.approve` alone can accept a proposal
-they are not allowed to see.
+It also opens the read: `GET /api/review/queue`, the only route that lists proposed quests, answers
+`quest.approve` with the quest half of the queue. Until 2026-09-14 that route asked
+`intake.moderate` alone, so a holder of `quest.approve` alone could accept a proposal they were not
+allowed to see. A holder of `intake.moderate` alone still reads every proposed quest and puts none
+on the board, which is exactly what that key grants: reading a proposal creates no obligation.
 `docs/CAPABILITIES.md` lists it among eleven such keys and states the rule: a key reaches the gate
 from any route that asks for it, and the admin surfaces these cover sit outside every module. So
 the absence is not a hole in the gate. It does mean that auditing "what powers does the quests
