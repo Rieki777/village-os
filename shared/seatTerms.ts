@@ -125,6 +125,7 @@ export interface SeatTermAsk {
 export type SeatTermRefusal =
   | "unreadable_date"
   | "no_season"
+  | "no_next_season"
   | "open_ended_season"
   | "past_season_end"
   | "already_over"
@@ -145,13 +146,46 @@ export type SeatTerm =
     }
   | { ok: false; code: SeatTermRefusal; error: string };
 
+/**
+ * THE SEASON THE SEAT WILL ACTUALLY SIT IN.
+ *
+ * A seat vote cannot seat anybody before it lands, and a vote opened in the
+ * last vote-length of a season lands after that season has turned. Measured
+ * against the running season, its default end falls on or before the day it
+ * starts and every such vote refuses; for a steward, whose seat is capped at
+ * the season's end, no vote could open at all. Main went red on exactly this
+ * on 2026-09-15, one week before a derived season turned, and it recurs every
+ * season, so it is a rule and never a fixture.
+ *
+ * So when the running season ends at or before the seat could start, the seat
+ * is measured against the season it starts in: the first scheduled season,
+ * dated and ended, whose end is after the start. Null when nothing is
+ * scheduled after the running season, which the caller refuses in words.
+ */
+function seasonTheSeatStartsIn(
+  calendar: SeatCalendar,
+  running: CalendarSeason | null,
+  starts: Date | null,
+): { season: CalendarSeason | null; rolledOver: boolean } {
+  if (!running || !starts) return { season: running, rolledOver: false };
+  const tz = calendar.timezone || "UTC";
+  const runningEnd = running.endsOn ? civilDateInstant(running.endsOn, tz) : null;
+  if (!runningEnd || runningEnd.getTime() > starts.getTime()) return { season: running, rolledOver: false };
+  const next = calendar.seasons
+    .map((s) => ({ s, from: civilDateInstant(s.startsOn, tz), to: civilDateInstant(s.endsOn, tz) }))
+    .filter((x) => x.from && x.to && x.from.getTime() >= runningEnd.getTime() && x.to.getTime() > starts.getTime())
+    .sort((a, b) => a.from!.getTime() - b.from!.getTime())[0];
+  return { season: next?.s ?? null, rolledOver: true };
+}
+
 /** Decide a seat's term. See the header for the three rules. */
 export function resolveSeatTerm(ask: SeatTermAsk): SeatTerm {
   const { calendar, capAtSeasonEnd, now } = ask;
   const tz = calendar.timezone || "UTC";
-  const current = calendar.currentSeasonId
+  const running = calendar.currentSeasonId
     ? calendar.seasons.find((s) => s.id === calendar.currentSeasonId) ?? null
     : null;
+  const { season: current, rolledOver } = seasonTheSeatStartsIn(calendar, running, ask.startsNoEarlierThan ?? null);
   const seasonEndsOn = current?.endsOn ? String(current.endsOn).trim() : "";
   const seasonEnd = seasonEndsOn ? civilDateInstant(seasonEndsOn, tz) : null;
 
@@ -175,6 +209,15 @@ export function resolveSeatTerm(ask: SeatTermAsk): SeatTerm {
   // A season end is needed whenever nothing was asked, and always for a
   // steward, whose seat can never outlast the season it was given in.
   if (!asked || capAtSeasonEnd) {
+    if (!current && rolledOver) {
+      return {
+        ok: false,
+        code: "no_next_season",
+        error: capAtSeasonEnd
+          ? "A steward's seat ends with the season at the latest, and this season ends before the vote could land with no next season set. Add the next season in Admin first."
+          : "This season ends before the vote could land, and no next season is set, so there is no season end for this seat to end with. Add the next season in Admin, or give the seat its own end date.",
+      };
+    }
     if (!current) {
       return {
         ok: false,
