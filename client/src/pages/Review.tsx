@@ -61,6 +61,7 @@ import { authToken } from "@/lib/gameApi";
 import { toast } from "sonner";
 import { Inbox } from "lucide-react";
 import { Link } from "wouter";
+import { PROPOSE_QUEST_MODULE } from "@shared/questIdeas";
 
 interface ProposalCard {
   id: string;
@@ -911,11 +912,13 @@ export default function Review() {
           <div key={q.id} className={card}>
             <h2 className="font-semibold text-foreground">{String(q.prose.title ?? "A proposed quest")}</h2>
             <p className="text-xs text-muted-foreground mt-1">
-              Proposed by {q.moduleId}, {when(q.receivedAt)}
+              {q.moduleId === PROPOSE_QUEST_MODULE ? "Proposed through the Propose a Quest form" : `Proposed by ${q.moduleId}`},{" "}
+              {when(q.receivedAt)}
             </p>
             {q.prose.description && (
               <p className="text-sm text-muted-foreground mt-2">{String(q.prose.description)}</p>
             )}
+            {q.rationale && <p className="text-xs text-muted-foreground mt-2 whitespace-pre-line">{q.rationale}</p>}
             {q.quote && (
               <p className="text-xs text-muted-foreground mt-2 italic">&ldquo;{q.quote}&rdquo;</p>
             )}

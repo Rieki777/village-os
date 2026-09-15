@@ -114,6 +114,7 @@ import { forgetMemberInDrafts } from "./orgDrafts";
 import { forgetPortraitsForMember, portraitFilesForMember } from "../repos/characterPortraits";
 import { forgetCharactersForMember } from "../repos/playerCharacters";
 import { forgetAgentForMember } from "../repos/memberAgent";
+import { forgetProposer } from "../repos/questProposals";
 import {
   beginErasure,
   erasureRecord,
@@ -294,6 +295,15 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
           scrubbed = true;
         }
         if (scrubbed) await submissionsRepo.replaceAll(submissions);
+      },
+    },
+    {
+      // A quest idea they sent through the public form keeps its words and
+      // loses its author, the rule the submission it came from follows above.
+      // The idea carries no contact details to scrub: server/lib/publicForms.ts.
+      name: "quest-proposals",
+      run: async () => {
+        await forgetProposer(pool, target.id);
       },
     },
     {

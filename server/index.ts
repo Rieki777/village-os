@@ -1,5 +1,6 @@
 import { anonymizeMember } from "./lib/erasure";
 import { proposalsAboutMember } from "./lib/externalProposals";
+import { landPublicSubmission } from "./lib/publicForms";
 // Local dev reads .env (PORT=3001 so the API doesn't collide with Vite's 3000);
 // on Railway the real environment always wins over the file.
 import "dotenv/config";
@@ -7777,10 +7778,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       submittedAt: new Date().toISOString(),
     };
     if (submitter) { entry.userId = submitter.id; entry.userName = submitter.name; }
-    // One INSERT, not snapshot→push→replaceAll: two concurrent public
-    // submissions used to race, and the later whole-table rewrite deleted
-    // the earlier member's row. Same append pattern as raise-hand.
-    await submissionsRepo.insert(entry);
+    // One INSERT, then a quest idea queued for review. The reasons, the race
+    // the INSERT closed among them, live in server/lib/publicForms.ts.
+    await landPublicSubmission(submissionsRepo, getPool(), entry);
 
     /*
      * The origin comes from OUR configuration, never from the request.
