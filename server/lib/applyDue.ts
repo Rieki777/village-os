@@ -303,7 +303,7 @@ export interface StampInput {
  * lets the proposer choose which three days a steward gets, and lets a passed
  * ballot be parked until the one seat holder posts about a trip.
  */
-export function landingOf(deps: LandingDeps, input: StampInput): Landing {
+export function landingOf(deps: Pick<LandingDeps, "vetoHours" | "nextBoundaryAfter" | "consentNoticeHours">, input: StampInput): Landing {
   const b = input.ballot;
   const kind: GovernanceKind = kindOfSetOrSubject(b.subjectType, input.itemKinds);
   return landingFor({
