@@ -136,6 +136,40 @@ describe("what a settlement would pay", () => {
     expect(sentences(r)).toMatch(/is set to 0, so it pays nothing/i);
   });
 
+  /*
+   * ── THE CEILING, WHICH THIS RUN HELD AND NEVER READ (MX) ──────────────────
+   *
+   * `DryRunRule` has carried `ceiling` since it was written and the run used it
+   * for exactly one thing: narrating a queued change to it. So the one screen a
+   * founder opens to find out whether a setting works before they bet a village
+   * on it printed the rule's amount where the engine prints the clamp, and it
+   * agreed with the two surfaces that were already wrong.
+   */
+  it("thanks every seat holder at the CLAMP, which is what the engine will pay", () => {
+    const r = dryRun(
+      snapshot({ seatCount: 3, rules: [seatRule({ amount: 20, ceiling: 5 })] }),
+      { moons: 2, from: FROM },
+    );
+    const paid = r.turns[0].findings.filter((f) => f.area === "settlement" && f.outcome === "issued");
+    expect(paid).toHaveLength(1);
+    // The engine pays 5 a seat. This said 20, and 60 for the moon.
+    expect(paid[0].sentence).toContain("5 Gratitude");
+    expect(paid[0].sentence).toContain("15 for the moon");
+    expect(paid[0].sentence).not.toContain("20 Gratitude");
+  });
+
+  it("refuses a seat rule the ceiling stops outright, and names the ceiling", () => {
+    const r = dryRun(
+      snapshot({ seatCount: 3, rules: [seatRule({ amount: 20, ceiling: 0 })] }),
+      { moons: 2, from: FROM },
+    );
+    // It used to print "3 seat holders each thanked 20 Gratitude" for a rule
+    // the engine refuses before it reaches a single seat.
+    expect(sentences(r)).not.toMatch(/each thanked/i);
+    expect(sentences(r)).toMatch(/ceiling is 0, so it can pay no Gratitude at all/i);
+    expect(r.refusals.filter((f) => f.area === "settlement").length).toBeGreaterThan(0);
+  });
+
   it("names a token the ledger has no faucet for", () => {
     const r = dryRun(snapshot({ rules: [seatRule({ tokenSlug: "voice" })] }), { moons: 2, from: FROM });
     expect(sentences(r)).toMatch(/has no faucet/i);

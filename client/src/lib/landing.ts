@@ -45,6 +45,8 @@
  * Nothing reads it while the automatic switch is off; it is the number to
  * restore, kept beside the rule it belongs to.
  */
+import { storedText, writeStored } from "./safeStorage";
+
 export const LANDING_SWITCH_VISIT = 3;
 
 /** Whether visit count alone may promote the map to the landing page. */
@@ -80,25 +82,17 @@ const PREFERENCE_KEY = "village.landing.preference";
 const MAP_SEEN_KEY = "village.landing.mapAvailable";
 
 /**
- * localStorage throws in private browsing on some engines, and reading a
- * corrupted value should never take the page down. Every accessor here fails
- * to the first-visit defaults, which land on the welcome page — the safe
- * direction to be wrong in.
+ * Every accessor here fails to the first-visit defaults, which land on the
+ * welcome page, the safe direction to be wrong in. See `./safeStorage` for
+ * what a browser that refuses actually does.
  */
 function read(key: string): string | null {
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
+  return storedText("local", key);
 }
 
 function write(key: string, value: string): void {
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    /* private browsing: the member simply always sees the welcome page */
-  }
+  /* private browsing: the member simply always sees the welcome page */
+  writeStored("local", key, value);
 }
 
 /** Increment and return this browser's visit count. Call once per page load. */

@@ -12,12 +12,23 @@ import { GAME_CONFIG } from "@shared/gameConfig";
 import {
   SETUP_STEPS,
   measureSetup,
+  needsObservation,
   setupCounts,
   setupIsComplete,
   type BrandLike,
+  type SetupObservations,
 } from "./setupProgress";
 
-const ALL_TICKED = { identity: true, images: true, numbers: true, content: true, map: true, technical: true };
+const ALL_TICKED = { identity: true, needs: true, images: true, numbers: true, content: true, map: true, technical: true };
+
+/**
+ * The needs step is READ, never ticked, so every fixture that means "this
+ * village finished setup" has to supply the reading as well as the record.
+ * A tick cannot carry it: `SETUP_STEPS` gives it no fields and
+ * `needsObservation` always answers `measured`, so the box that carries the
+ * other four is never rendered for this one.
+ */
+const NEEDS_IN_SCOPE: SetupObservations = needsObservation({ answered: true, adopted: 4, customAdopted: 0 });
 
 /** The shape `GET /api/admin/brand` returns for a village that has saved nothing. */
 function emptyBrand(): BrandLike {
@@ -41,7 +52,7 @@ function filledBrand(): BrandLike {
 }
 
 const row = (brand: BrandLike | null | undefined, key: string) =>
-  measureSetup(brand).find((r) => r.key === key)!;
+  measureSetup(brand, NEEDS_IN_SCOPE).find((r) => r.key === key)!;
 
 describe("measureSetup", () => {
   it("does not let a ticked box stand in for an empty field", () => {
@@ -50,7 +61,7 @@ describe("measureSetup", () => {
     expect(row(brand, "identity").filled).toBe(0);
     expect(row(brand, "images").done).toBe(false);
     expect(row(brand, "images").filled).toBe(0);
-    expect(setupIsComplete(brand)).toBe(false);
+    expect(setupIsComplete(brand, NEEDS_IN_SCOPE)).toBe(false);
   });
 
   it("counts a measured row up as fields are saved", () => {
@@ -59,7 +70,7 @@ describe("measureSetup", () => {
     const brand = filledBrand();
     expect(row(brand, "identity")).toMatchObject({ done: true, filled: 5, total: 5, blank: [] });
     expect(row(brand, "images")).toMatchObject({ done: true, filled: 9, total: 9, blank: [] });
-    expect(setupIsComplete(brand)).toBe(true);
+    expect(setupIsComplete(brand, NEEDS_IN_SCOPE)).toBe(true);
   });
 
   it("names the fields still empty, and goes back to unfinished when one is cleared", () => {
@@ -134,7 +145,10 @@ describe("measureSetup", () => {
       expect(row(brand, "images")).toMatchObject({ state: "unknown", filled: null, total: null });
       expect(row(brand, "numbers")).toMatchObject({ state: "unknown", declaredDone: false });
       expect(setupIsComplete(brand)).toBe(false);
-      expect(setupCounts(brand)).toMatchObject({ done: 0, todo: 0, unknown: 6 });
+      // Seven, and the needs row is one of them EVEN WITH a reading passed
+      // in: an observation of one step cannot make the screen knowledgeable
+      // about a record that never arrived.
+      expect(setupCounts(brand, NEEDS_IN_SCOPE)).toMatchObject({ done: 0, todo: 0, unknown: 7 });
     }
   });
 
@@ -204,20 +218,103 @@ describe("observations, for the steps whose values live elsewhere", () => {
 
 describe("setupCounts", () => {
   it("tells still-to-do apart from nobody-has-looked", () => {
-    const counts = setupCounts(emptyBrand());
-    // Two counted rows sit empty; the four boxes are all ticked.
-    expect(counts).toEqual({ done: 4, todo: 2, unknown: 0, declared: 4, total: 6 });
+    const counts = setupCounts(emptyBrand(), NEEDS_IN_SCOPE);
+    // Two counted rows sit empty; the four boxes are all ticked; the needs
+    // row is read from the scope and is done, and is never one of the four
+    // declared rows because it has a reading of its own.
+    expect(counts).toEqual({ done: 5, todo: 2, unknown: 0, declared: 4, total: 7 });
   });
 
   it("counts a finished village as finished", () => {
-    expect(setupCounts(filledBrand())).toMatchObject({ done: 6, todo: 0, unknown: 0 });
-    expect(setupIsComplete(filledBrand())).toBe(true);
+    expect(setupCounts(filledBrand(), NEEDS_IN_SCOPE)).toMatchObject({ done: 7, todo: 0, unknown: 0 });
+    expect(setupIsComplete(filledBrand(), NEEDS_IN_SCOPE)).toBe(true);
+  });
+});
+
+describe("the needs step reads the scope", () => {
+  /* The completion predicate for step 2. What a founder ticked has no say in
+     it: the scope is readable, so it is read. */
+
+  it("ticks when one need is in scope and unticks when every one is retired", () => {
+    const brand = filledBrand();
+    const inScope = needsObservation({ answered: true, adopted: 1, customAdopted: 0 });
+    expect(measureSetup(brand, inScope).find((r) => r.key === "needs")).toMatchObject({
+      state: "done",
+      done: true,
+      measured: true,
+      source: "measured",
+      declaredDone: false,
+      filled: 1,
+      total: 10,
+    });
+    expect(setupIsComplete(brand, inScope)).toBe(true);
+
+    const allRetired = needsObservation({ answered: true, adopted: 0, customAdopted: 0 });
+    expect(measureSetup(brand, allRetired).find((r) => r.key === "needs")).toMatchObject({
+      state: "todo",
+      done: false,
+      filled: 0,
+      total: 10,
+    });
+    expect(setupIsComplete(brand, allRetired)).toBe(false);
+  });
+
+  it("keeps a scope nobody has read apart from a scope that is empty", () => {
+    /* The whole reason this is three states. An unread scope and a village
+       that took on nothing are different facts, and a screen that prints one
+       for the other is how nine empty picture slots read as finished. */
+    const unread = needsObservation(null).needs!;
+    expect(unread.state).toBe("unknown");
+    expect(unread.filled).toBeUndefined();
+    expect(unread.total).toBeUndefined();
+
+    const answeredNone = needsObservation({ answered: true, adopted: 0, customAdopted: 0 }).needs!;
+    const neverAnswered = needsObservation({ answered: false, adopted: 0, customAdopted: 0 }).needs!;
+    expect(answeredNone.state).toBe("todo");
+    expect(neverAnswered.state).toBe("todo");
+    expect(answeredNone.detail).not.toBe(neverAnswered.detail);
+  });
+
+  it("counts against the list this village chose from, custom needs included", () => {
+    /* A fixed ten would print "11 of 10" the day a village adopts its own
+       need alongside all ten platform ones. */
+    expect(needsObservation({ answered: true, adopted: 11, customAdopted: 1 }).needs).toMatchObject({
+      filled: 11,
+      total: 11,
+    });
+  });
+
+  it("cannot be carried by a founder's tick", () => {
+    /* Every other unmeasured step lets a tick stand in. This one never does,
+       because it has a reading, and SetupSection renders no box for a measured
+       row. A brand document with every box ticked and nothing in scope is the
+       outage this file exists for, in its newest shape. */
+    const brand = filledBrand();
+    brand.setup = { ...ALL_TICKED };
+    const rows = measureSetup(brand, needsObservation({ answered: false, adopted: 0, customAdopted: 0 }));
+    expect(rows.find((r) => r.key === "needs")).toMatchObject({
+      state: "todo",
+      done: false,
+      declaredDone: false,
+      source: "measured",
+    });
+    expect(setupIsComplete(brand, needsObservation({ answered: false, adopted: 0, customAdopted: 0 }))).toBe(false);
   });
 });
 
 describe("the step list", () => {
-  it("keeps the six steps in the order a founder works", () => {
-    expect(SETUP_STEPS.map((s) => s.key)).toEqual(["identity", "images", "numbers", "content", "map", "technical"]);
+  it("keeps the seven steps in the order a founder works", () => {
+    // What the village is FOR sits second, ahead of what it looks like and
+    // ahead of its numbers, because the scope orients the scale (R1).
+    expect(SETUP_STEPS.map((s) => s.key)).toEqual([
+      "identity",
+      "needs",
+      "images",
+      "numbers",
+      "content",
+      "map",
+      "technical",
+    ]);
   });
 
   it("measures every picture the platform has a slot for", () => {

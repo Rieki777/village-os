@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { useVillageLinks } from "@/lib/gameApi";
 import { useVillageName } from "@/hooks/useVillageName";
 import { useTokenName, useValueTokenName } from "@/hooks/useTokenNames";
+import { useValueConversion } from "@/lib/moneyClaims";
 import { 
   Sparkles, 
   ArrowRight, 
@@ -45,7 +46,16 @@ const principles = (villageName: string, tokenName: string, valueName: string) =
 
 // The three cards read BOTH live token names (Admin → Tokens): a fork
 // that names its tokens renames every mention here in one act.
-const recognitionInfo = (tokenName: string, valueName: string, villageName: string) => [
+/*
+ * The third card here promised a conversion this product does not perform, and
+ * it was a whole card: "Future Conversion", "As {village} matures, {value}
+ * convert to cash or equity". Founder ruling, 2026-09-03: the conversion is
+ * real and happens OFF the platform, an on-platform process is coming and is
+ * not built, and the words are his to write. So the card carries
+ * `money.valueConversion` from the runtime content document and is ABSENT
+ * altogether when a village has published nothing. See lib/moneyClaims.ts.
+ */
+const recognitionInfo = (tokenName: string, valueName: string, villageName: string, conversionNote: string) => [
   {
     title: `Earn ${tokenName}`,
     description: `Complete quests, fulfill roles, or receive revenue shares from community and private businesses. Every contribution is acknowledged with ${tokenName}, the recognition signal, with no financial value of its own, on purpose.`,
@@ -56,11 +66,13 @@ const recognitionInfo = (tokenName: string, valueName: string, villageName: stri
     description: `Each cycle, the community sets aside a real pool of ${valueName} and splits it across everyone's ${tokenName}. Appreciation is the signal; ${valueName} are the value it steers: the honest record of the work, time, and resources everyone is pooling to make ${villageName} real.`,
     icon: "📊",
   },
-  {
-    title: "Future Conversion",
-    description: `As ${villageName} matures, ${valueName} convert to cash or equity. For now, they're how we honor contributions we can't yet pay in cash.`,
-    icon: "🌱",
-  },
+  ...(conversionNote
+    ? [{
+        title: "Conversion",
+        description: `${conversionNote} For now, they're how we honor contributions we can't yet pay in cash.`,
+        icon: "🌱",
+      }]
+    : []),
 ];
 
 const governanceOptions = [
@@ -113,6 +125,7 @@ export default function HowWeCreate() {
   const valueName = useValueTokenName();
   const tokenName = useTokenName("Recognition");
   const villageName = useVillageName();
+  const conversionNote = useValueConversion({ village: villageName, value: valueName });
   return (
     <Layout>
       <section className="py-24 bg-background">
@@ -189,13 +202,15 @@ export default function HowWeCreate() {
               <p className="text-muted-foreground max-w-2xl mx-auto mb-2">
                 Two tokens work together here. Contributions, work, time, resources and expertise are all acknowledged in <strong>{tokenName}</strong>, the recognition signal, which carries no financial value of its own. <strong>{valueName}</strong> are the tracked value: <strong>each cycle the community sets aside a real pool of {valueName} and shares it across everyone's {tokenName}</strong>, so appreciation decides where the value flows.
               </p>
-              <p className="text-sm text-muted-foreground">
-                Every {valueName.replace(/s$/, "")} is a promise: as {villageName} grows, they convert to cash or equity.
-              </p>
+              {/* The same claim a second time on the same page. Gone with the
+                  card above unless the founder has published a sentence. */}
+              {conversionNote && (
+                <p className="text-sm text-muted-foreground">{conversionNote}</p>
+              )}
             </div>
 
             <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-              {recognitionInfo(tokenName, valueName, villageName).map((item, index) => (
+              {recognitionInfo(tokenName, valueName, villageName, conversionNote).map((item, index) => (
                 <motion.div
                   key={item.title}
                   initial={{ opacity: 0, y: 20 }}

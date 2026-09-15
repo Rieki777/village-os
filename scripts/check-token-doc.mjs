@@ -59,6 +59,26 @@ function main() {
     report([`${REL} is generated from:`, ...SOURCES.map((s) => `  ${s}`)]);
   }
 
+  /*
+   * ── COULD NOT RUN IS EXIT 2, NOT EXIT 1 ────────────────────────────────
+   *
+   * This script used to exit 1 for everything that was not a pass: the
+   * document drifted, the document was absent, and the generator threw were
+   * all one code. None of those was ever reported as success, so it was never
+   * a false green; what it cost is that a person reading a red build could not
+   * tell "I looked and the document is wrong" from "I could not look", and the
+   * printed message was the only thing carrying the difference.
+   *
+   * That difference now matters more than it did. `setConst` refuses a
+   * keystone set written in any shape but the two documented ones, and that
+   * refusal arrives here as a throw. A widened `ALLOW_NEGATIVE_SOURCES` and a
+   * hand-edited table are very different emergencies and must not share an
+   * exit code.
+   *
+   * 1 = I compared and they differ. 2 = I could not compare.
+   * scripts/check-economics-doc.mjs has drawn the line there since it was
+   * written, and this now matches it.
+   */
   let wanted;
   let facts;
   try {
@@ -70,13 +90,17 @@ function main() {
       String(err?.message ?? err),
       "",
       "The generator reads the code and refuses to guess. Fix what it names, or teach it the new shape.",
+      "Exit 2: nothing was compared.",
     ]);
-    process.exit(1);
+    process.exit(2);
   }
 
   if (!fs.existsSync(DOC_PATH)) {
-    report([`${REL} is missing. Run: ${REGENERATE}`]);
-    process.exit(1);
+    report([
+      `${REL} is missing, so there is nothing to check against the code. Run: ${REGENERATE}`,
+      "Exit 2, not 1: a document that is absent has not drifted.",
+    ]);
+    process.exit(2);
   }
 
   const found = fs.readFileSync(DOC_PATH, "utf8");

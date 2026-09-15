@@ -61,6 +61,6 @@ describe("the session token key", () => {
   it("reaches SetPassword through the constant", () => {
     const src = fs.readFileSync(SET_PASSWORD, "utf-8");
     expect(src).toContain('import { TOKEN_KEY } from "@/lib/gameApi"');
-    expect(src).toContain("localStorage.setItem(TOKEN_KEY,");
+    expect(src).toContain('writeStored("local", TOKEN_KEY,');
   });
 });

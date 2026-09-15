@@ -1,0 +1,43 @@
+-- 0203: the account Voice wanes into (R3 and R15, 2026-09-03).
+--
+-- The founder's ruling: Voice can decay, it starts at 1 percent of a lunar
+-- cycle by default, a village may set any percent, and the decay is uniform
+-- over Voice that was bought and Voice that was earned alike.
+--
+-- WANING IS A POSTING, NEVER A REWRITE OF A BALANCE. The settlement moves
+-- units from `mem:<user>` to this account through `postTransfer` like every
+-- other movement in the platform, so per token SUM(balance) is still 0
+-- afterwards, the member can read the row that took it, and a ballot's frozen
+-- weights read whatever the ledger held when they opened.
+--
+-- NOT A FAUCET, and the reason is three deep.
+--   1. A faucet's negative balance IS that token's issued supply. This account
+--      only ever receives, so its balance is positive and rising, and that
+--      number is all the Voice that has waned in this village to date. A
+--      faucet flag would let it go negative, and a negative balance here
+--      would say the waning account had ISSUED Voice.
+--   2. `postTransfer` reads `ledger_accounts.faucet` for the launch gate, so a
+--      faucet flag would put waning behind the issuance gate, which is
+--      backwards.
+--   3. So it may go positive without bound, and negative never. It is a sink.
+--
+-- Nothing spends it. What a village may later do with what gathers here is
+-- not ruled, and turning waning into a redistribution is a different economy
+-- that needs the founder's word.
+--
+-- A CORRECTION TO THE RECORD, made here rather than by editing a shipped file.
+-- `drizzle/0109_voice_is_never_taken.sql` and the comments beside `DENIABLE`
+-- in `shared/capabilities.ts` said that a rule under which unused voice decays
+-- over time "belongs to Hypha". As of R3 it belongs here as well, and the
+-- comments in `shared/capabilities.ts` and `shared/capabilities.test.ts` are
+-- corrected in the same commit as this file. What 0109 ruled is untouched and
+-- stays untouched: WANING IS NOT REMOVAL, and an act by which one party strips
+-- another's earned voice is not legitimate, held by anybody, at any tier. This
+-- account is reached by a published percentage at a cycle close, it names no
+-- actor in any row it receives, and no admin can point it at one member.
+--
+-- INSERT IGNORE, the shape `drizzle/0027_member_exit.sql` used to seed
+-- `sys:exit-settlement`: a village that somehow already holds the row keeps
+-- what it has, and re-running this file changes nothing.
+INSERT IGNORE INTO `ledger_accounts` (`id`, `kind`, `user_id`, `label`, `faucet`) VALUES
+  ('sys:voice-decay', 'system', NULL, 'Voice that waned', 0);

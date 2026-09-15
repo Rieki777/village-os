@@ -694,7 +694,7 @@ export async function eventsOpenState(pool: Pool): Promise<{ count: number; desc
   }
   if (held.count) {
     parts.push(
-      `${held.count} seat fee(s) worth ${held.amount} are still held in escrow. Cancel those gatherings to refund them, or let them happen.`,
+      `${held.count} seat fee(s) worth ${held.byToken.map((b) => `${b.amount} ${b.tokenType}`).join(", ")} are still held in escrow. Cancel those gatherings to refund them, or let them happen.`,
     );
   }
   return {

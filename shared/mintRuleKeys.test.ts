@@ -12,6 +12,8 @@ import { VARIABLES_BY_KEY } from "./gameVariables";
 import {
   AMOUNT_FROM_SOURCE,
   MINT_RULE_FIELDS,
+  MINT_RULE_MAX,
+  MINT_RULE_PLACES,
   displayMintRuleValue,
   isMintRuleKey,
   mintRuleKey,
@@ -82,6 +84,59 @@ describe("what a field will accept", () => {
     expect(mintRuleValueProblem("enabled", "false")).toBeNull();
     expect(mintRuleValueProblem("enabled", "1")).toContain("true or false");
     expect(mintRuleValueProblem("enabled", "yes")).toContain("true or false");
+  });
+
+  /*
+   * ── WHAT THE COLUMN CAN ACTUALLY HOLD (MX) ────────────────────────────────
+   *
+   * Measured before this block existed: finiteness and sign were the whole of
+   * the check, and `mint_rules.amount` and `mint_rules.ceiling` are both
+   * `decimal(18,4)`. So three values passed a vote and became something the
+   * village never decided.
+   *
+   *   0.00001 as a ceiling   stored 0.0000, which is a ceiling that refuses
+   *   0.00001 as an amount   stored 0.0000, which is a silent off switch
+   *   1e14    either field   threw an out-of-range error from inside the
+   *                          ballot executor, after the vote had carried
+   *
+   * The first two are the dangerous ones: a village votes for a payment above
+   * zero and gets a rule that pays nobody, with `ok` on the way in and no
+   * sentence anywhere. A refusal at the raise costs one retype.
+   */
+  it("refuses a number the column would round away to nothing", () => {
+    // A vote that silently becomes an off switch is worse than a refusal.
+    expect(mintRuleValueProblem("ceiling", "0.00001")).toContain("nothing at all");
+    expect(mintRuleValueProblem("amount", "0.00001")).toContain("nothing at all");
+    // And it names the smallest figure the rule can actually carry.
+    expect(mintRuleValueProblem("amount", "0.00001")).toContain("0.0001");
+  });
+
+  it("refuses a number the column would quietly reshape", () => {
+    // 1.00001 stores as 1.0000. The village asked for one number and the row
+    // would hold another, so the sentence names the one it would hold.
+    expect(mintRuleValueProblem("amount", "1.00001")).toContain("stored as 1");
+    expect(mintRuleValueProblem("ceiling", "250.00009")).toContain("stored as 250.0001");
+    // Four places is exactly what the column keeps, so four places pass.
+    expect(mintRuleValueProblem("amount", "0.0001")).toBeNull();
+    expect(mintRuleValueProblem("ceiling", "250.0001")).toBeNull();
+    expect(mintRuleValueProblem("amount", "20.0000")).toBeNull();
+  });
+
+  it("refuses a number above what the rule can hold, instead of throwing later", () => {
+    // This used to reach `queueRuleChange` and come back as a driver error
+    // from inside the ballot executor, which is a refusal nobody can act on.
+    expect(mintRuleValueProblem("amount", "1e14")).toContain("above that");
+    expect(mintRuleValueProblem("ceiling", "1e14")).toContain("above that");
+    expect(mintRuleValueProblem("amount", String(MINT_RULE_MAX))).toBeNull();
+  });
+
+  it("holds the bound where a number can still be checked against the column", () => {
+    // `decimal(18,4)` stops at 99999999999999.9999 and a double stops sooner:
+    // four decimal places need `n * 10000` to be a whole number a double can
+    // carry, which runs out at `Number.MAX_SAFE_INTEGER`. The tighter of the
+    // two is the bound, because above it nothing can check the value at all.
+    expect(MINT_RULE_MAX).toBe(Number.MAX_SAFE_INTEGER / 10 ** MINT_RULE_PLACES);
+    expect(MINT_RULE_PLACES).toBe(4);
   });
 });
 

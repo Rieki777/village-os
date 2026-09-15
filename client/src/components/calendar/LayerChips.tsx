@@ -12,6 +12,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import type { CalendarItem, CalendarLayer } from "@shared/gatherings";
+import { readStoredJson, writeStoredJson } from "@/lib/safeStorage";
 
 const STORE_KEY = "calendar.layersOff";
 
@@ -24,13 +25,9 @@ const CHIP_ORDER: Array<{ id: CalendarLayer; label: string }> = [
 ];
 
 function readOff(): Set<CalendarLayer> {
-  try {
-    const raw = window.localStorage.getItem(STORE_KEY);
-    const list = raw ? JSON.parse(raw) : [];
-    return new Set(Array.isArray(list) ? list : []);
-  } catch {
-    return new Set();
-  }
+  const stored = readStoredJson("local", STORE_KEY);
+  const list = stored.status === "value" ? stored.value : [];
+  return new Set(Array.isArray(list) ? list : []);
 }
 
 /** Chip state plus the filtered list, shared by the week and month views. */
@@ -43,11 +40,7 @@ export function useLayerFilter(items: CalendarItem[]): {
   const [off, setOff] = useState<Set<CalendarLayer>>(() => readOff());
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem(STORE_KEY, JSON.stringify(Array.from(off)));
-    } catch {
-      /* private mode */
-    }
+    writeStoredJson("local", STORE_KEY, Array.from(off));
   }, [off]);
 
   const toggle = useCallback((layer: CalendarLayer) => {

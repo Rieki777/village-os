@@ -18,6 +18,8 @@
  * loses nothing that matters.
  */
 
+import { storedText, writeStored } from "./safeStorage";
+
 export interface WalkStep {
   id: string;
   /** Modules that must ALL be showing examples for this stop to make sense. */
@@ -96,25 +98,18 @@ const DONE_KEY = "village.firstWalk.done";
 const DISMISSED_KEY = "village.firstWalk.dismissed";
 
 /**
- * localStorage throws in private browsing on some engines, and a corrupted
- * value should never take a page down. Every accessor fails to "nothing done
- * yet", which is the safe direction: the worst case is a founder being
- * offered the walk again.
+ * Every accessor fails to "nothing done yet", which is the safe direction:
+ * the worst case is a founder being offered the walk again. The reasoning
+ * about a browser that refuses lives in `./safeStorage`, which this and two
+ * other modules each used to hold a private copy of.
  */
 function read(key: string): string | null {
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
+  return storedText("local", key);
 }
 
 function write(key: string, value: string): void {
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    /* private browsing: the walk simply never remembers */
-  }
+  /* private browsing: the walk simply never remembers */
+  writeStored("local", key, value);
 }
 
 export function getDoneSteps(): string[] {

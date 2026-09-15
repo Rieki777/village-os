@@ -70,8 +70,106 @@ export const KIND_LABELS: Record<string, string> = {
   land: "land",
 };
 
+// ── What the hub's numbers can and cannot be asked to mean ───────────────────
+
+/**
+ * THE HUB'S PLEDGED TOTAL IS A FLOOR AND NOT A TOTAL, SO THIS PAGE SAYS SO.
+ *
+ * Measured by the Crowdpooling session on 2026-09-04 against a scratch
+ * database of their own, and relayed to this lane: the hub sums a campaign's
+ * pledged value filtering on the ACCEPTED status alone, and delivered and
+ * thanked are LATER states of the same lifecycle. So the moment a steward
+ * confirms a delivery, that value leaves the number this ring divides. Their
+ * trial: accept ten thousand, deliver it, accept five thousand more, and the
+ * campaign reports five thousand where the honest figure is fifteen. They
+ * recompute in one branch only, so the drop is DEFERRED and lands later, on an
+ * unrelated acceptance. A member watching a village do well sees the ring go
+ * backwards at a moment that looks like it has nothing to do with the delivery
+ * that caused it.
+ *
+ * IT IS THEIRS TO FIX AND THEY ARE FIXING IT. Ours is to stop presenting it as
+ * our own truth in the meantime. No correction is computed anywhere on this
+ * page: a figure that guessed at the delivered value would be worse than an
+ * honest gap, because it would be wrong in a way nobody could see. What
+ * happens instead is that every place a reader meets the number names it as a
+ * floor, and the growth strip refuses to describe the impossible relation
+ * (delivered running ahead of pooled) as a healthy one.
+ *
+ * THE HUB LANDED ITS FIX ON 2026-09-05, so this is false and the language is
+ * gone with it. That was the whole undo, and it is why the language read off a
+ * constant instead of being typed into six places.
+ *
+ * Their commit b835c28: the pledged total now counts accepted, fulfilled AND
+ * thanked, so delivered value stays in the number this page divides, and it no
+ * longer falls when a village succeeds. They fixed it on the CALLERS and not on
+ * the columns, deliberately, so nothing about the wire changed for us and this
+ * file's reader needed no edit. They also found a second stale-number path
+ * while chasing the deferral: their expiry sweep marked a claim expired and let
+ * its value go on counting as pledged indefinitely.
+ *
+ * WHAT WE ARE ASSERTING, precisely, because they were careful to hand us the
+ * weaker true claim rather than the stronger convenient one. Their CI ran the
+ * suite against real MySQL and their deploy succeeded. Neither of us has read
+ * the rendered number off a live campaign since. The residual after that is
+ * OURS and not theirs: this bridge caches for ninety seconds and a sync job
+ * writes a snapshot every ten minutes, so a floored figure can survive here for
+ * one sync window after their fix went live. It is self-healing and it only
+ * ever reads LOW, which is why flipping now is safe and leaving the hedge up
+ * would not have been: a qualifier that has stopped being true is the same
+ * stale sentence this build kept finding, just one we wrote ourselves.
+ */
+export const HUB_PLEDGED_TOTAL_IS_A_FLOOR = false;
+
+/** The plain mechanics behind the word "pooled", on any surface. */
+export const PLEDGED_FLOOR_TIP = HUB_PLEDGED_TOTAL_IS_A_FLOOR
+  ? "The hub counts a pledge in this total only while it waits to be delivered, so confirmed deliveries drop out of it. Read the figure as a floor: the real pool is this much or more. The hub is repairing that."
+  : "This is everything pledged to the raising so far.";
+
+/** The campaign page's plaque: what the two arcs mean, then the floor. */
+export const RING_TIP = `The gold ring is everything pledged so far and the quieter green arc inside it is what has actually arrived. ${PLEDGED_FLOOR_TIP}`;
+
+/**
+ * The plain-language paragraph, for the "What this pool is" plaque. Null when
+ * the hub has landed its fix, so the sentence leaves the page with the rest of
+ * the floor language and nobody has to remember it is there.
+ */
+export const PLEDGED_FLOOR_PARAGRAPH: string | null = HUB_PLEDGED_TOTAL_IS_A_FLOOR
+  ? "Every figure here is the hub's own, kept as it was given. The pooled total is one the hub is still repairing: it drops a pledge out of the count once a delivery is confirmed, so what this page shows is a floor and the true pool is that much or more."
+  : null;
+
+/**
+ * One spelling of the pooled money line, so the list card and the campaign
+ * page cannot drift apart on the qualifier.
+ */
+export function pooledLine(pledged: number, total: number, currency: string): string {
+  const figures = `${money(pledged, currency)} of ${money(total, currency)}`;
+  return HUB_PLEDGED_TOTAL_IS_A_FLOOR ? `at least ${figures}` : figures;
+}
+
+/**
+ * MORE DELIVERED THAN WERE EVER WANTED, which is arriving.
+ *
+ * The hub's fulfil path is not idempotent despite a comment of theirs claiming
+ * it is: two stewards confirming at once put delivered on two instead of one,
+ * ten trials out of ten. It does not reach us as a payout, because this bridge
+ * reads the meter and never the payoff. It reaches us as a need whose counts
+ * cannot all be true at once, and the rule of this page is that impossible
+ * data is handled and never assumed away. One predicate, used by the meter and
+ * by the campaign page, so the two cannot disagree about what counts as
+ * impossible.
+ */
+export function isOverDelivered(n: { quantityWanted: number; quantityDelivered: number }): boolean {
+  return n.quantityWanted > 0 && n.quantityDelivered > n.quantityWanted;
+}
+
 // ── The phase label: the map's own words ─────────────────────────────────────
 
+/**
+ * The 50% cut here reads the hub's pledged share, which is the floor described
+ * above, so a village genuinely past half can still be labelled "Gathering the
+ * pool". That is the honest direction to be wrong in: it understates a village
+ * doing well and never overstates one that is not.
+ */
 export function phaseLabel(status: string, percentPledged: number): string {
   if (status === "draft" || status === "pending_review") return "Waiting to open";
   if (status === "funded") return "The pool is full";
@@ -148,9 +246,13 @@ export function GoldRing({
   const pledged = Math.min(100, Math.max(0, percentPledged));
   const delivered = Math.min(100, Math.max(0, percentDelivered));
   const landing = useMomentWindow(ripple, 3200);
+  const floor = HUB_PLEDGED_TOTAL_IS_A_FLOOR;
+  const spoken = floor
+    ? `at least ${pledged} percent pledged, ${delivered} percent delivered`
+    : `${pledged} percent pledged, ${delivered} percent delivered`;
   return (
     <div className="cp-ring-wrap" style={{ width: size, height: size }}>
-      <svg viewBox="0 0 200 200" width={size} height={size} role="img" aria-label={`${pledged} percent pledged, ${delivered} percent delivered`}>
+      <svg viewBox="0 0 200 200" width={size} height={size} role="img" aria-label={spoken}>
         <defs>
           <linearGradient id="cp-gold" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0" stopColor="#ecd08a" />
@@ -177,7 +279,9 @@ export function GoldRing({
           transform="rotate(-90 100 100)"
         />
         <text x="100" y="97" textAnchor="middle" className="cp-ring-pct">{pledged}%</text>
-        <text x="100" y="117" textAnchor="middle" className="cp-ring-sub">pooled</text>
+        {/* The sub-label is where the floor is said inside the ring itself, so
+            the numeral is never read alone. See HUB_PLEDGED_TOTAL_IS_A_FLOOR. */}
+        <text x="100" y="117" textAnchor="middle" className="cp-ring-sub">{floor ? "pooled or more" : "pooled"}</text>
       </svg>
       {landing && (
         <span className="cp-ring-land" style={GOLD_WATER}>
@@ -195,13 +299,18 @@ export function GoldRing({
   );
 }
 
-/** The list page's small ring: one arc, the percent, nothing else. */
+/**
+ * The list page's small ring: one arc, the percent, nothing else. The card's
+ * own money line carries the floor qualifier in words (`pooledLine`); here
+ * only the spoken label has room for it.
+ */
 export function MiniRing({ percent, size = 64 }: { percent: number; size?: number }) {
   const r = 26;
   const c = 2 * Math.PI * r;
   const p = Math.min(100, Math.max(0, percent));
+  const spoken = HUB_PLEDGED_TOTAL_IS_A_FLOOR ? `at least ${p} percent pooled` : `${p} percent pooled`;
   return (
-    <svg viewBox="0 0 64 64" width={size} height={size} role="img" aria-label={`${p} percent pooled`}>
+    <svg viewBox="0 0 64 64" width={size} height={size} role="img" aria-label={spoken}>
       <circle cx="32" cy="32" r={r} fill="none" stroke="rgba(201,162,94,.25)" strokeWidth="5" />
       <circle
         cx="32" cy="32" r={r} fill="none" className="cp-arc"
@@ -257,17 +366,40 @@ export function StarLantern({ daysRemaining, endsAt }: { daysRemaining: number |
 /**
  * wanted / claimed / delivered as one bar: delivered is solid (the walls),
  * claimed is the ghost (spoken for, still travelling), the rest is open air.
+ *
+ * THE TRACK IS WHAT WAS WANTED, and that is a change made on purpose.
+ *
+ * The denominator used to be `Math.max(wanted, claimed, delivered, 1)`, which
+ * looks defensive and is not. Measured on 2026-09-04, a need arriving with one
+ * wanted, one claimed and two delivered (the hub's non-idempotent fulfil, see
+ * `isOverDelivered` above) drew BOTH fills at 100% and captioned itself
+ * "2 arrived, 0 spoken for, 1 wanted": the bar was pixel-identical to a need
+ * that finished perfectly, the impossible pair was printed flat with no
+ * comment, and the real claimed count was erased, because `claimed - delivered`
+ * had gone negative and floored to zero. Nothing overflowed, but only because
+ * the denominator had quietly grown to match whatever the largest number was.
+ * That is a clamp by accident, and a clamp by accident is the shape this
+ * repository keeps finding underneath a confident comment.
+ *
+ * So: the track is `wanted`, both fills clamp at 100% by rule, and a need with
+ * more arrived than wanted SAYS SO in the caption and in the spoken label. A
+ * need the hub gives no wanted count for falls back to the largest count it
+ * does give, which is the only case where the old denominator was right.
  */
 export function SlotMeter({
   wanted, claimed, delivered, tint,
 }: {
   wanted: number; claimed: number; delivered: number; tint: string;
 }) {
-  const total = Math.max(wanted, claimed, delivered, 1);
-  const dPct = Math.min(100, (delivered / total) * 100);
-  const cPct = Math.min(100, (Math.max(claimed, delivered) / total) * 100);
+  const track = wanted > 0 ? wanted : Math.max(claimed, delivered, 1);
+  const dPct = Math.min(100, Math.max(0, (delivered / track) * 100));
+  const cPct = Math.min(100, Math.max(0, (Math.max(claimed, delivered) / track) * 100));
+  const over = isOverDelivered({ quantityWanted: wanted, quantityDelivered: delivered });
+  const spoken = over
+    ? `${delivered} delivered, ${claimed} claimed, ${wanted} wanted, which is more delivered than wanted`
+    : `${delivered} delivered, ${claimed} claimed, ${wanted} wanted`;
   return (
-    <div className="cp-slots" role="img" aria-label={`${delivered} delivered, ${claimed} claimed, ${wanted} wanted`}>
+    <div className="cp-slots" role="img" aria-label={spoken}>
       <div className="cp-slots-track">
         <div className="cp-slots-claimed" style={{ width: `${cPct}%`, background: tint }} />
         <div className="cp-slots-delivered" style={{ width: `${dPct}%`, background: tint }} />
@@ -277,6 +409,12 @@ export function SlotMeter({
         <span>{Math.max(0, claimed - delivered)} spoken for</span>
         <span>{wanted} wanted</span>
       </div>
+      {over && (
+        <p className="cp-slots-over">
+          More arrived than were wanted. The hub counts a delivery twice when two stewards confirm
+          it at once, and it is fixing that. Nothing here changes what the hub recorded.
+        </p>
+      )}
     </div>
   );
 }
@@ -326,11 +464,39 @@ export function GrowthStrip({ percentDelivered, percentPledged }: { percentDeliv
       <p className="cp-growth-crossed" role="status" aria-live="polite">
         {crossing ? `The walls reached ${stages[stage].name}.` : ""}
       </p>
+      {/*
+        * THE THIRD BRANCH IS THE ONE THAT MATTERS.
+        *
+        * There were two, and delivered running AHEAD of pooled fell into the
+        * happy one: measured on 2026-09-04 at 5% pooled against 40% delivered,
+        * this paragraph read "Delivered work is keeping pace with the pool: 40%
+        * standing." Delivered value has to have been pledged first, so that
+        * pair cannot both be true, and the page was narrating it as health.
+        * The cause is the hub's accepted-only pledged sum
+        * (HUB_PLEDGED_TOTAL_IS_A_FLOOR above), and the honest thing to print is
+        * the contradiction, never an arithmetic patch over it.
+        *
+        * THIS BRANCH IS NOT GATED ON THAT CONSTANT AND MUST NOT BE. The hub
+        * fixed the cause we knew about on 2026-09-05, and the impossible pair
+        * is still impossible: if it appears again the reason will be a new one.
+        * What changed is the SENTENCE. It used to name the hub's defect and
+        * promise a fix, which was true then and would be a confident wrong
+        * answer now. It says what is observable instead, that one of the two
+        * figures is wrong and this page does not know which, because the page
+        * genuinely does not.
+        *
+        * It was also the one surface the flip did not reach: six read the
+        * constant and this one carried the word on its own, so removing the
+        * hedge everywhere else would have left it here alone, unqualified and
+        * pointing at a repair that had already happened.
+        */}
       <p className="cp-growth-note">
         The ring holds the promise; the walls are what has arrived.
-        {percentPledged > percentDelivered
-          ? ` Right now the ring runs ahead: ${percentPledged}% pooled, ${percentDelivered}% delivered and standing.`
-          : ` Delivered work is keeping pace with the pool: ${percentDelivered}% standing.`}
+        {percentDelivered > percentPledged
+          ? ` More is standing than the pool records as pledged: ${percentPledged}% pooled against ${percentDelivered}% delivered. Both cannot be true, because delivered work was pledged first. One of the two figures is wrong and this page does not know which.`
+          : percentPledged > percentDelivered
+            ? ` Right now the ring runs ahead: ${percentPledged}% pooled, ${percentDelivered}% delivered and standing.`
+            : ` Delivered work is keeping pace with the pool: ${percentDelivered}% standing.`}
       </p>
     </div>
   );
@@ -401,6 +567,9 @@ export function CrowdpoolStyles() {
       .cp-slots-claimed{position:absolute;inset:0 auto 0 0;opacity:.32}
       .cp-slots-delivered{position:absolute;inset:0 auto 0 0}
       .cp-slots-caption{display:flex;justify-content:space-between;font-size:10.5px;color:#4a3a26;margin-top:3px;letter-spacing:.04em}
+      /* No colour of its own: it inherits the plaque ink and marks itself with
+         weight and a rule, so the board keeps one palette. */
+      .cp-slots-over{font-size:10.5px;line-height:1.45;font-weight:600;margin-top:4px;border-left:2px solid currentColor;padding-left:6px}
       .cp-need{position:relative;padding:12px 14px 12px 16px;border-left-width:4px;border-left-style:solid}
       .cp-need .cp-pin{position:absolute;top:8px;right:10px;font-size:10px;letter-spacing:.12em;color:#8a6a33;font-variant:small-caps}
       .cp-ledger-line{animation:none}

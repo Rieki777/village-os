@@ -31,7 +31,7 @@ import type { ModuleLifecycle } from "@shared/modules";
 import { ExampleChip, forgetExamplesCache } from "@/components/ExamplesBanner";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import { describeToken, tokenModule, tokenModuleIsOff, visibleTokens } from "@/components/admin/tokenCatalog";
-import { formatTokenAmount, toMinorUnits } from "@/lib/tokenAmount";
+import { formatTokenAmount, smallestUnit } from "@/lib/tokenAmount";
 
 /**
  * THE ONE PAGE WHERE A TOKEN IS NAMED.
@@ -186,8 +186,15 @@ export default function TokensTab({ password, lifecycles }: { password: string; 
         headers: authHeaders(password, { "Content-Type": "application/json" }),
         body: JSON.stringify({
           toUserId: mint.toUserId,
-          // Typed in whole tokens, sent in the units the ledger moves.
-          amount: toMinorUnits(mint.amount, decimalsOfSlug(mint.slug)),
+          // HUMAN TOKENS, fractions included, and the conversion is the
+          // ROUTE's. Two lanes fixed "a steward typed 10 Voice and minted a
+          // hundredth" at once, one here and one at
+          // `POST /api/admin/tokens/:slug/mint`, which does
+          // `toLedgerUnits(slug, amt)` on the way in. Converting in both places
+          // multiplies twice, so the screen sends what was typed. The route
+          // refuses, in words, an amount finer than the token holds; it used to
+          // truncate 2.5 to 2 and this toast said "Minted".
+          amount: Number(mint.amount),
           reason: mint.reason,
         }),
       });
@@ -446,9 +453,11 @@ export default function TokensTab({ password, lifecycles }: { password: string; 
           <div className="border border-gray-200 rounded-xl p-5">
             <h3 className="font-semibold text-gray-900 mb-1">Mint by hand</h3>
             <p className="text-xs text-gray-500 mb-3">
-              Issues from the dedicated mint faucet, with a reason, audited. All admins
-              together can mint at most {mintCap.toLocaleString()} per token per lunar
-              cycle (ledger.admin_mint_cycle_cap).
+              Issues from the dedicated mint faucet, with a reason, audited. This village
+              can bring at most {mintCap.toLocaleString()} of a token into existence per
+              lunar cycle, counted across every door and not by hand alone, and counted
+              net of what comes back (ledger.admin_mint_cycle_cap). A busy month of stays
+              or quests can use it up before anyone mints anything here.
               {/* State what is true, then get out of the way (R56). Both of
                   these are facts about what the route will do, and neither
                   argues with the village about its own dials. */}
@@ -469,7 +478,7 @@ export default function TokensTab({ password, lifecycles }: { password: string; 
                 {players.map((p) => <option key={p.id} value={p.id}>{p.name}{p.handle ? ` (@${p.handle})` : ""}</option>)}
               </select>
               <input value={mint.amount} onChange={(e) => setMint({ ...mint, amount: e.target.value })}
-                placeholder="Amount" type="number" min="1" className="text-sm border border-gray-200 rounded-lg px-3 py-2 w-28" />
+                placeholder="Amount" type="number" min={smallestUnit(decimalsOfSlug(mint.slug))} step={smallestUnit(decimalsOfSlug(mint.slug))} className="text-sm border border-gray-200 rounded-lg px-3 py-2 w-28" />
               <input value={mint.reason} onChange={(e) => setMint({ ...mint, reason: e.target.value })}
                 placeholder="Reason (required)" className="text-sm border border-gray-200 rounded-lg px-3 py-2 flex-1 min-w-48" />
               <button onClick={doMint} disabled={!mint.slug || !mint.toUserId || !mint.amount || !mint.reason.trim()}
@@ -498,7 +507,9 @@ export default function TokensTab({ password, lifecycles }: { password: string; 
                   <div key={g.id} className="flex flex-wrap items-center gap-3 border border-gray-100 rounded-lg px-3 py-2.5">
                     <div className="flex-1 min-w-64">
                       <p className="text-sm text-gray-900">
-                        <strong>{formatTokenAmount(Number(g.amount), decimalsOfSlug(g.tokenSlug))} {g.tokenName}</strong>
+                        {/* `admin_mint_requests.amount` holds WHOLE tokens: the route stores
+                            what was typed and converts only at the post. */}
+                        <strong>{Number(g.amount).toLocaleString()} {g.tokenName}</strong>
                         {" to "}{g.toName ?? g.toUserId}
                       </p>
                       <p className="text-xs text-gray-500">

@@ -24,6 +24,7 @@ import { useEffect, useState } from "react";
 import { Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { authToken } from "@/lib/gameApi";
+import { readStoredJson, writeStoredJson } from "@/lib/safeStorage";
 
 interface Unclaimed {
   assignmentId: string;
@@ -36,21 +37,14 @@ interface Unclaimed {
 const DISMISSED_KEY = "village.seatClaim.dismissed";
 
 function readDismissed(): string[] {
-  try {
-    const raw = window.localStorage.getItem(DISMISSED_KEY);
-    const arr = raw ? JSON.parse(raw) : [];
-    return Array.isArray(arr) ? arr.map(String) : [];
-  } catch {
-    return [];
-  }
+  const stored = readStoredJson("local", DISMISSED_KEY);
+  const arr = stored.status === "value" ? stored.value : [];
+  return Array.isArray(arr) ? arr.map(String) : [];
 }
 
 function remember(id: string): void {
-  try {
-    window.localStorage.setItem(DISMISSED_KEY, JSON.stringify([...readDismissed(), id]));
-  } catch {
-    /* private browsing: the card simply offers itself again next visit */
-  }
+  // Private browsing: the card simply offers itself again next visit.
+  writeStoredJson("local", DISMISSED_KEY, [...readDismissed(), id]);
 }
 
 export default function SeatClaimCard() {

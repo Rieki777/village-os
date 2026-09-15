@@ -1,8 +1,10 @@
 /**
  * The org chart: links, structural drafts, seat history, and the admin edits.
  *
- * Nineteen routes, lifted out of server/index.ts unchanged. Grouped as they
- * were grouped there, because they were already one contiguous run:
+ * Twenty routes. Nineteen were lifted out of server/index.ts unchanged and
+ * are grouped as they were grouped there, because they were already one
+ * contiguous run. The twentieth is marked below and is the only one that was
+ * not a move:
  *
  *   links       GET  /api/org/relations
  *               GET  /api/org/:kind/:id/relations
@@ -18,6 +20,7 @@
  *   terms       GET  /api/admin/org/expiring
  *   history     GET  /api/org/:kind/:id/journal
  *               GET  /api/org/roles/:id/history
+ *   needs       GET  /api/org/roles/:id/needs
  *   claiming    GET  /api/org/my-unclaimed-seats
  *               POST /api/org/seatings/:id/claim
  *   editing     POST /api/admin/org/roles
@@ -52,6 +55,7 @@ import type { AppDeps } from "../lib/appDeps";
 import { hasCapability } from "../../shared/capabilities";
 import { recordEvent } from "../lib/events";
 import { EXAMPLE_REFUSAL_BODY, isExampleRow } from "../lib/examples";
+import { linksForSubject } from "../lib/needs";
 import {
   claimSeating,
   createOrgRole,
@@ -483,6 +487,40 @@ export function register(app: Express, deps: Deps): void {
         endedReason: a.endedReason,
       })),
     );
+  });
+
+  /**
+   * WHAT NEEDS THIS SEAT IS HELD FOR (R1, R18, migration 0204).
+   *
+   * THE TWENTIETH ROUTE, and the only one in this file that was not a move
+   * out of server/index.ts. It exists because the seat's own read payload is
+   * assembled inside `GET /api/org`, which lives at server/index.ts:26911
+   * under a ratchet that only turns down, and a lane that cannot add a line
+   * there cannot put the links where they belong. So the answer comes on its
+   * own door beside the seat's history, in the file that already owns every
+   * other per-seat read. If `GET /api/org` ever moves into a module, this
+   * folds into it and the route goes.
+   *
+   * ONE SEAT, NOT ALL OF THEM, and that is a cost decision stated out loud.
+   * A whole-chart answer would be a query per seat behind one URL, which is
+   * the same round trips with the fan-out hidden. The seat card asks when a
+   * reader opens it.
+   *
+   * MEMBER-TIER, matching `GET /api/needs/scope`, which is the read this
+   * answer is only meaningful beside. It names no person: a seat, a need the
+   * village took on, and whether the seat carries that need alone or helps.
+   *
+   * R18 IS THE POINT OF IT. The more needs a village takes on, the more seats
+   * it needs to meet them, and `needSeatings` in server/lib/needs.ts turns
+   * these rows into seats needed against seats filled. Nothing here computes
+   * that: this route is the tagging half, and the counting half has one home.
+   */
+  app.get("/api/org/roles/:id/needs", async (req, res) => {
+    if (!(await authedUser(req))) {
+      return res.status(401).json({ error: "auth_required", message: "Sign in to see what this seat is held for" });
+    }
+    const needs = await linksForSubject(getPool(), "role", String(req.params.id));
+    res.json({ needs });
   });
 
   /**

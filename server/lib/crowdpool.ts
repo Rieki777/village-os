@@ -2,8 +2,13 @@
  * Crowdpool (R44/R45): the bridge between this village's game surface and the
  * hub's public crowdpool campaigns.
  *
- * The hub serves a public, no-auth tRPC API at `/api/trpc` with four reads
- * this module cares about, measured live on 2026-08-22:
+ * The hub serves a public, no-auth tRPC API at `/api/trpc` with five reads
+ * this module cares about, measured live on 2026-08-22. Four of them are the
+ * per-campaign bundle `fetchCampaignBundle` dials in parallel; `campaigns.list`
+ * is the fifth and runs only to resolve a slug that carries no id. This line
+ * said FOUR and listed five from the day it shipped, in this file and in
+ * `docs/modules/crowdpool.md` both, which is the count a reader integrating
+ * against this module would take at face value:
  *
  *   campaigns.list            -> every published campaign (input: {})
  *   campaigns.getById         -> one flat campaign record with items, images,
@@ -40,6 +45,48 @@
  * an app_config document across reboots (snapshotExport/snapshotImport are
  * the seam). Deps are injected the same way agentInbox injects `post`, so the
  * tests dial a local fixture while production dials guardedFetchJson.
+ *
+ * ── TWO HUB-SIDE DEFECTS THIS FILE CANNOT FIX AND MUST NOT HIDE ─────────────
+ *
+ * Both were measured by the Crowdpooling session against a scratch database of
+ * their own on 2026-09-04 and relayed here. This side re-verified only what is
+ * verifiable from this side, which is what OUR code does with the answers.
+ *
+ * 1. `pledgedTotal` WAS A FLOOR UNTIL 2026-09-05, AND THE HUB FIXED IT. The
+ *    hub summed a campaign's pledged value filtering on the ACCEPTED status
+ *    alone, so the moment a steward confirmed a delivery that value left the
+ *    number. Their measurement: accept ten thousand, deliver it, accept five
+ *    thousand more, and the campaign reported five thousand where the honest
+ *    figure was fifteen, the drop deferred to a later, unrelated acceptance.
+ *    The hub's commit b835c28 counts accepted, fulfilled and thanked, confirmed
+ *    live on their main with CI and the deploy green, and 7c83ef4 switched
+ *    `HUB_PLEDGED_TOTAL_IS_A_FLOOR` in `client/src/components/crowdpool/PoolPieces.tsx`
+ *    off. `percentPledged` below divides by the hub's number, as it always did,
+ *    because inventing a correction here would be worse than an honest gap.
+ *    This side reads no hub contract version, so a fork pointed at a hub older
+ *    than b835c28 would show a floor as a total; that flag is the one switch.
+ *
+ * 2. THE THREE-SLOT METER CAN ARRIVE WITH DELIVERED ABOVE WANTED. Their fulfil
+ *    path is not idempotent despite a comment claiming it is: two stewards at
+ *    once put delivered on two instead of one, ten trials out of ten. It does
+ *    not cross to us as a payout, because this file reads the meter and never
+ *    the payoff. It does cross as a need whose `quantityDelivered` exceeds its
+ *    `quantityWanted`. `percentDelivered` below already clamps each need's
+ *    share at 1 so one over-delivered need cannot push the walls past the
+ *    ring; the client makes the same state deliberate where it is drawn.
+ *
+ * ── AND THE ONE THAT IS THEIRS AND WRONG WHERE OURS IS RIGHT ────────────────
+ *
+ * A financial pledge is stored on the hub in TWO fields: `pledgedTotal`, the
+ * campaign total, and `pledgedFinancial`, the financial subtotal INSIDE it.
+ * Three of the hub's own surfaces add the two together, so a ten thousand
+ * pledge reads as twenty thousand on their public gallery headline. This file
+ * reads them as separate fields and divides using the total alone, so our
+ * figure is right where their gallery is wrong. THE HAZARD IS THE OBVIOUS ONE:
+ * a later lane compares our number to the hub's public page, sees a mismatch,
+ * and "fixes" ours to match. `server/lib/crowdpoolPledgeNeverSums.test.ts`
+ * pins the rule to one spelling across the whole bridge, server and client
+ * both, and fails on any line that adds the two.
  */
 
 export interface CrowdpoolCampaignRef {
@@ -68,7 +115,21 @@ export interface CrowdpoolDeps {
 export interface CrowdpoolNeed {
   id: string;
   name: string;
-  /** loan | role | shift | knowledge | item | crypto | land (open set). */
+  /**
+   * The hub'''s need kind: item, role, shift, loan, knowledge, crypto,
+   * financial_link. Seven, and the hub owns the enum.
+   *
+   * THIS COMMENT HAS BEEN WRONG TWICE AND THE SECOND TIME WAS MINE. It listed
+   * six and called the set open; a lane then added `land` to make seven, and
+   * `land` is not a kind at all. It belongs to a DIFFERENT enum on the same hub
+   * table, `category`, which carries land, equipment, role and resource and is
+   * the taxonomy that predates the needs registry. So the list was seven long
+   * with two members wrong, which is exactly why the length looked right.
+   *
+   * The two enums got conflated here because `normalizeNeed` FALLS BACK from
+   * kind to category, so this field really can hold a category value. See the
+   * note there: the fallback is the reason the confusion was available to make.
+   */
   kind: string;
   category: string;
   /** One of the hub's nine capitals. The page tints with it, never charts it. */
@@ -78,6 +139,12 @@ export interface CrowdpoolNeed {
   pledgedValue: number;
   quantityWanted: number;
   quantityClaimed: number;
+  /**
+   * CAN EXCEED `quantityWanted`, and does. The hub's fulfil path is not
+   * idempotent (defect 2 at the top of this file), so two stewards confirming
+   * at once put this at two where one was wanted. Nothing here corrects it;
+   * every consumer handles the state instead of assuming it away.
+   */
   quantityDelivered: number;
   needDeadline: string | null;
   priorityPinned: boolean;
@@ -117,8 +184,17 @@ export interface CrowdpoolCampaign {
   status: string;
   currency: string;
   totalValue: number;
+  /**
+   * The hub's campaign-wide pledged value: accepted, fulfilled and thanked
+   * pledges, since the hub's b835c28 on 2026-09-05. It was a floor before that;
+   * see item 1 at the top of this file.
+   */
   pledgedTotal: number;
   financialTarget: number;
+  /**
+   * The financial SUBTOTAL inside `pledgedTotal`, carried separately and
+   * never added to it. See the last block at the top of this file.
+   */
   pledgedFinancial: number;
   /** pledgedTotal over totalValue, 0..100. The gold ring. */
   percentPledged: number;
@@ -199,6 +275,20 @@ export function normalizeNeed(it: any): CrowdpoolNeed {
   return {
     id: String(it?.id ?? ""),
     name: needName(it),
+    /*
+     * THE FALLBACK CROSSES TWO TAXONOMIES AND IS KEPT DELIBERATELY, NARROWLY.
+     *
+     * `kind` and `category` are different enums on the hub'''s table. When kind
+     * is absent this writes a CATEGORY value into a kind field, so a need can
+     * arrive labelled `land`, which no kind ever was. That is not a default, it
+     * is a value from another vocabulary, and it is how this file'''s own comment
+     * came to list one.
+     *
+     * Kept because the hub names kind in its stable set, so an absent kind means
+     * a legacy row rather than a rename, and a legacy row with a category reads
+     * better than one reading "item". Not widened: nothing downstream may treat
+     * a kind as a member of a closed set.
+     */
     kind: String(it?.kind ?? it?.category ?? "item").toLowerCase().slice(0, 32),
     category: String(it?.category ?? "").toLowerCase().slice(0, 32),
     capitalType: String(it?.capitalType ?? "material").toLowerCase().slice(0, 32),
@@ -277,6 +367,20 @@ const pct = (part: number, whole: number): number =>
  * same clock. `percentDelivered` weights each need's delivered share by its
  * estimated value, so two hundred fence posts cannot outvote a well: the ring
  * is the pledged promise, this is how much of the promise became walls.
+ *
+ * TWO ARITHMETIC RULES HERE ARE LOAD-BEARING, both explained at the top of
+ * this file:
+ *
+ *   `percentPledged` divides by `pledgedTotal` ALONE. `pledgedFinancial` is a
+ *   subtotal inside it, and adding the two double-counts every financial
+ *   pledge. Our figure is right where the hub's own gallery is wrong, so a
+ *   later lane will meet a mismatch and be tempted to make ours match theirs.
+ *   `server/lib/crowdpoolPledgeNeverSums.test.ts` refuses that edit by name.
+ *
+ *   the delivered share clamps each need at 1 (`Math.min` below). The hub's
+ *   fulfil path is not idempotent, so a need can arrive with more delivered
+ *   than were ever wanted; without the clamp one such need would push the
+ *   walls past the ring, which is a state that cannot be true.
  */
 export function normalizeCampaign(
   byId: any,
