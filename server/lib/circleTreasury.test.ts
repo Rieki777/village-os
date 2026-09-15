@@ -60,6 +60,7 @@ import {
 } from "./circleTreasury";
 import { readCycleIssuance } from "./mintCap";
 import { applyRoll, type RollPlan } from "./seasonPatterns";
+import { backfillOrgChart } from "./orgChart";
 import { modeAt } from "../../shared/circleTreasury";
 
 const configured = testDbConfigured();
@@ -494,6 +495,85 @@ describe.skipIf(!configured)("a circle's treasury", () => {
     // And the roll that brings it back tells the steward what it held, as the PUT does.
     const woke = await applyRoll(pool, plan("dormant", "active"), { seasonId: null, byUserId: "usr-roller" });
     expect(String(woke.treasury[0]?.treasuryNote ?? "")).toContain("Rolled held");
+  }, 60_000);
+
+  // ── B3's twin: the org-chart backfill is a third writer of a circle's status ─
+
+  it("SWEEPS A CIRCLE THE ORG-CHART BACKFILL MAKES DORMANT, and hands over only real transitions", async () => {
+    const tokenFor = (u: string) => (u === UNIT ? TOKEN : null);
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO circles (id, name, status) VALUES (?,?,?), (?,?,?), (?,?,?)",
+      ["bf-sleepy", "BF Sleepy", "active", "bf-rested", "BF Rested", "dormant", "bf-council", "BF Council", "active"],
+    );
+    for (const id of ["bf-sleepy", "bf-rested", "bf-council"]) {
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO circle_budgets (id, circle_id, season_id, amount_minor, unit, mode) VALUES (?,?,?,?,?,?)",
+        [`bud-${id}`, id, null, 1000, UNIT, "treasury"],
+      );
+    }
+    // The Sleepy circle holds 180 when the backfill turns it dormant.
+    const funded = await fundTreasury(pool, {
+      circleId: "bf-sleepy", circleName: "BF Sleepy", circleStatus: "active", tokenSlug: TOKEN,
+      amountMinor: 180, actorId: null, note: "its season", idempotencyKey: key("bf-sleepy"), permit: ALLOW,
+    });
+    expect(funded.ok, funded.error).toBe(true);
+    // The Rested circle already went dormant holding 60, so its record stands.
+    expect((await fundTreasury(pool, {
+      circleId: "bf-rested", circleName: "BF Rested", circleStatus: "active", tokenSlug: TOKEN,
+      amountMinor: 60, actorId: null, note: "before it rested", idempotencyKey: key("bf-rested"), permit: ALLOW,
+    })).ok).toBe(true);
+    expect((await sweepDormantCircle(pool, {
+      circleId: "bf-rested", budgets: [{ id: "bud-bf-rested", unit: UNIT }], tokenTypeFor: tokenFor, actorId: null,
+    }))[0]!.movedMinor).toBe(60);
+
+    // The backfill skips once org_roles holds as many seats as it would write,
+    // so it is handed one more seat than the table already carries.
+    const [[seats]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM org_roles"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const cards = Array.from({ length: Number(seats.n) + 1 }, (_, i) => ({ id: `bf-seat-${i}`, name: `Backfill seat ${i}` }));
+    const masterBefore = await balanceOf(TREASURY);
+
+    const report = await backfillOrgChart(pool, {
+      cards,
+      circleCards: [],
+      corrections: {
+        circles: [
+          { id: "bf-sleepy", name: "BF Sleepy", status: "dormant" },
+          { id: "bf-new", name: "BF New", status: "dormant" },
+        ],
+        councilsToForming: ["bf-rested", "bf-council"],
+      },
+    });
+    expect(report.skipped).toBe(false);
+
+    const statusOf = async (id: string) => {
+      const [[row]] = await pool.query<any[]>("SELECT status FROM circles WHERE id = ?", [id]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      return String(row?.status);
+    };
+    expect(await statusOf("bf-sleepy")).toBe("dormant");
+
+    // THE DEFECT: a circle the backfill made dormant kept its treasury.
+    const sleepy = report.treasury.find((t) => t.circleId === "bf-sleepy");
+    expect(sleepy?.treasurySwept?.[0]?.movedMinor, JSON.stringify(report.treasury)).toBe(180);
+    expect((await treasuryHoldings(pool, "bf-sleepy", TOKEN)).balanceMinor, "it holds nothing now").toBe(0);
+    expect(await balanceOf(TREASURY)).toBe(masterBefore + 180);
+    const [[record]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT dormant_held_minor, dormant_to FROM circle_budgets WHERE id = ?",
+      ["bud-bf-sleepy"],
+    );
+    expect(Number(record.dormant_held_minor)).toBe(180);
+    expect(String(record.dormant_to)).toBe("master_treasury");
+
+    // Dormant to forming is a revival, and the steward is told what it held.
+    expect(await statusOf("bf-rested")).toBe("forming");
+    expect(String(report.treasury.find((t) => t.circleId === "bf-rested")?.treasuryNote ?? "")).toContain("BF Rested held");
+    // Active to forming touches no money, so the hook has nothing to report.
+    expect(await statusOf("bf-council")).toBe("forming");
+    expect(report.treasury.some((t) => t.circleId === "bf-council")).toBe(false);
+    // A circle the backfill created had no status before, so nothing was handed over.
+    expect(report.circlesCreated).toEqual(["bf-new"]);
+    expect(report.treasury.some((t) => t.circleId === "bf-new")).toBe(false);
+    expect(report.treasury.every((t) => !t.error), JSON.stringify(report.treasury)).toBe(true);
+    expect(await conservation()).toBe(0);
   }, 60_000);
 
   // ── B5 on #243: deleting what a treasury hangs off ──────────────────────────

@@ -1269,3 +1269,60 @@ export async function onCircleStatusChange(
   }
   return {};
 }
+
+/** One status change a writer of `circles.status` made, as the hook needs it. */
+export interface CircleStatusMove {
+  id: string;
+  name: string;
+  /** The status the row held before the writer touched it. */
+  from: string;
+  /** The status the row holds now. */
+  to: string;
+}
+
+/** What the hook did for one circle. Circles it had nothing to say about are omitted. */
+export interface CircleStatusOutcome {
+  circleId: string;
+  treasurySwept?: DormancySweep[];
+  treasuryNote?: string;
+  /** The hook threw. The status change still stands. */
+  error?: string;
+}
+
+/**
+ * THE HOOK, FOR EVERY WRITER OF `circles.status` THAT IS NOT THE ADMIN PUT.
+ *
+ * The PUT calls `onCircleStatusChange` for its one circle. Two other writers
+ * change the column in bulk with their own SQL: the season roll
+ * (`applyRoll` in server/lib/seasonPatterns.ts) and the org-chart backfill
+ * (`backfillOrgChart` in server/lib/orgChart.ts). Each once skipped the hook,
+ * so a circle either of them made dormant kept its treasury and got no dormant
+ * record (B3 on #243 and its twin). One loop here, so the two cannot drift
+ * apart on how a change is handed over.
+ *
+ * CALL IT AFTER THE WRITES, with `from` read BEFORE them. Each circle's outcome
+ * is caught on its own: the status change is already committed, and a ledger
+ * failure on one circle must not stop the next one being swept. A failure comes
+ * back by name, and a dormant circle still holding tokens stays listed by
+ * `GET /api/resources/treasuries` until somebody returns them.
+ */
+export async function applyCircleStatusChanges(
+  pool: Pool,
+  moves: readonly CircleStatusMove[],
+  actorId: string | null,
+  listBudgetsFor: Parameters<typeof onCircleStatusChange>[4],
+): Promise<CircleStatusOutcome[]> {
+  const out: CircleStatusOutcome[] = [];
+  for (const m of moves) {
+    if (m.from === m.to) continue;
+    try {
+      const outcome = await onCircleStatusChange(
+        pool, { id: m.id, name: m.name, status: m.to }, m.from, actorId, listBudgetsFor,
+      );
+      if (outcome.treasurySwept || outcome.treasuryNote) out.push({ circleId: m.id, ...outcome });
+    } catch (e: any) {
+      out.push({ circleId: m.id, error: String(e?.message ?? e) });
+    }
+  }
+  return out;
+}

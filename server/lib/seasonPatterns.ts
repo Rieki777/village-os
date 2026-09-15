@@ -27,7 +27,7 @@
  * invariant 14), and it is what makes the preview meaningful.
  */
 import type { Pool } from "mysql2/promise";
-import { onCircleStatusChange, type DormancySweep } from "./circleTreasury";
+import { applyCircleStatusChanges, type CircleStatusOutcome } from "./circleTreasury";
 import { listBudgets } from "./resources";
 
 export type PatternKind = "circle" | "org_role" | "badge" | "quest";
@@ -394,32 +394,17 @@ export async function applyRoll(
    * returned by name on the roll's response, and the dormant circle still
    * holding tokens is listed by the treasuries read until somebody returns them.
    */
-  const treasury: RollTreasuryOutcome[] = [];
-  for (const ch of circleMoves) {
-    try {
-      const outcome = await onCircleStatusChange(
-        pool,
-        { id: ch.entityId, name: ch.name, status: ch.to },
-        String(ch.from ?? "active"),
-        ctx.byUserId,
-        listBudgets,
-      );
-      if (outcome.treasurySwept || outcome.treasuryNote) treasury.push({ circleId: ch.entityId, ...outcome });
-    } catch (e: any) {
-      treasury.push({ circleId: ch.entityId, error: String(e?.message ?? e) });
-    }
-  }
+  const treasury = await applyCircleStatusChanges(
+    pool,
+    circleMoves.map((ch) => ({ id: ch.entityId, name: ch.name, from: String(ch.from ?? "active"), to: ch.to })),
+    ctx.byUserId,
+    listBudgets,
+  );
   return { applied, treasury };
 }
 
-/** What the treasury hook did for one circle a roll moved. Empty outcomes are omitted. */
-export interface RollTreasuryOutcome {
-  circleId: string;
-  treasurySwept?: DormancySweep[];
-  treasuryNote?: string;
-  /** The hook threw. The status change still stands. */
-  error?: string;
-}
+/** What the treasury hook did for one circle a roll moved. The backfill reports the same shape. */
+export type RollTreasuryOutcome = CircleStatusOutcome;
 
 /**
  * Anything created while a season runs joins that season's pattern by
