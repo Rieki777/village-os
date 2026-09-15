@@ -222,6 +222,17 @@ describe.skipIf(!configured)("stay credits across a decimals flip", () => {
       expect(row.prices.usd.guest).toBe(5_000);
     });
 
+    it("refuses a fractional price the token cannot hold, and posts nothing", async () => {
+      const accId = await room("acc-d0-frac");
+      const put = await api("PUT", `/api/admin/stays/accommodations/${accId}/prices`, {
+        prices: [{ tokenType: STAY_CREDIT, audience: "guest", amountMinor: 2.5 }],
+      });
+      // `priceToStored` used to floor this and answer 200 with a stored 2.
+      expect(put.status).toBe(400);
+      expect(put.json.error).toMatch(/priced in whole amounts, so a price of 2\.5 cannot be posted exactly/);
+      expect(await storedPrice(accId, STAY_CREDIT)).toBeNull();
+    });
+
     it("comps, adjusts and refunds the same numbers it always did", async () => {
       const accId = await room("acc-d0b");
       await api("PUT", `/api/admin/stays/accommodations/${accId}/prices`, {
@@ -277,6 +288,26 @@ describe.skipIf(!configured)("stay credits across a decimals flip", () => {
       const row = catalog.json.accommodations.find((a: any) => a.id === accId);
       expect(row.prices[STAY_CREDIT].guest).toBe(2);
       expect(row.prices.usd.guest).toBe(5_000);
+    });
+
+    it("stores a fractional price exactly, and refuses one finer than the token holds", async () => {
+      const accId = await room("acc-d4-frac");
+      const put = await api("PUT", `/api/admin/stays/accommodations/${accId}/prices`, {
+        prices: [{ tokenType: STAY_CREDIT, audience: "guest", amountMinor: 2.5 }],
+      });
+      expect(put.status).toBe(200);
+      // 2.5 credits is 2.5 x 10^4 units. Floored first, this column held 2 x 10^4.
+      expect(await storedPrice(accId, STAY_CREDIT)).toBe(25_000);
+      const catalog = await api("GET", "/api/admin/stays");
+      expect(catalog.json.accommodations.find((a: any) => a.id === accId).prices[STAY_CREDIT].guest).toBe(2.5);
+
+      const fine = await api("PUT", `/api/admin/stays/accommodations/${accId}/prices`, {
+        prices: [{ tokenType: STAY_CREDIT, audience: "guest", amountMinor: 2.00005 }],
+      });
+      expect(fine.status).toBe(400);
+      expect(fine.json.error).toMatch(/goes to 4 decimal places/);
+      // Refused before the write, so the room's rate is still 2.5.
+      expect(await storedPrice(accId, STAY_CREDIT)).toBe(25_000);
     });
 
     it("snapshots the rate in minor, burns nights at that rate, and counts nights right", async () => {

@@ -74,6 +74,7 @@ import {
   mintStayCredits,
   nightsRemaining,
   priceFor,
+  priceScaleRefusal,
   priceToStored,
   runNightlyPosting,
   stayById,
@@ -421,14 +422,18 @@ export function register(app: Express, deps: Deps): void {
       }
       if (!["guest", "member"].includes(String(p?.audience))) return res.status(400).json({ error: "Audience is guest or member" });
       if (!(Number(p?.amountMinor) > 0)) return res.status(400).json({ error: "Amounts must be positive" });
+      // Every price is checked before any is written, so a refusal here posts nothing.
+      const scaleRefusal = priceScaleRefusal(String(p.tokenType), Number(p.amountMinor));
+      if (scaleRefusal) return res.status(400).json({ error: scaleRefusal });
     }
     await getPool().query("UPDATE accommodation_prices SET active = 0 WHERE accommodation_id = ?", [req.params.id]);
     for (const p of prices) {
       await getPool().query(
         "INSERT INTO accommodation_prices (id, accommodation_id, token_type, audience, amount_minor, active) VALUES (?,?,?,?,?,1) " +
           "ON DUPLICATE KEY UPDATE amount_minor = VALUES(amount_minor), active = 1",
-        // THE ONE WRITE. A token price arrives here as the whole number an
-        // admin typed and is stored in that token's minor units, so `priceFor`,
+        // THE ONE WRITE. A token price arrives here as the human number an
+        // admin typed, fractions included and already held to the token's
+        // scale above, and is stored in that token's minor units, so `priceFor`,
         // the activation snapshot, the nightly burn, the grace floor and
         // `nightsRemaining` all speak the ledger's unit from here on. usd
         // arrives as cents already and is left alone. See `priceToStored`.
