@@ -21,6 +21,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { wireAssistant } from "./assistant";
+import { presenceTest } from "./memberPresence";
 import {
   acceptOpportunity,
   adminDemand,
@@ -357,6 +358,9 @@ async function addUser(id: string, name: string, joinedDaysAgo = 0) {
   );
 }
 
+/** The host's bound presence predicate. The fixture users above all hold a password. */
+const isPresent = presenceTest("intents-test-secret");
+
 interface SpyDeps extends IntentsDeps {
   notified: Array<{ userId: string; type: string; title: string; dedupeKey: string; link?: string | null }>;
   agent: Array<{ userId: string; data: any }>;
@@ -384,6 +388,7 @@ function makeDeps(over: Partial<IntentsDeps> = {}): SpyDeps {
     },
     budgetNearlySpent: async () => false,
     orgSeats: async () => [],
+    isPresent,
     vars: {
       recipientDailyCap: () => 3,
       matchFloor: () => 3,
@@ -633,8 +638,8 @@ describe.skipIf(!configured)("intents repo (MySQL)", () => {
 
     // The board never carries it, signed in or out. Ana's own seek is board
     // content; Ben's private words are the thing that must not be.
-    expect(JSON.stringify(await listBoard(pool, ANA))).not.toContain("private note");
-    expect(await listBoard(pool, null)).toEqual([]);
+    expect(JSON.stringify(await listBoard(pool, ANA, isPresent))).not.toContain("private note");
+    expect(await listBoard(pool, null, isPresent)).toEqual([]);
 
     // Admin demand carries no private words either.
     const demand = await adminDemand(pool);
@@ -948,7 +953,7 @@ describe.skipIf(!configured)("intents repo (MySQL)", () => {
 
     // The board never lists it, the admin demand never quotes it. Ana's own
     // offer is public board content; Ben's words are what must not travel.
-    expect(JSON.stringify(await listBoard(pool, ANA))).not.toContain("quietly seeking");
+    expect(JSON.stringify(await listBoard(pool, ANA, isPresent))).not.toContain("quietly seeking");
     const demand = await adminDemand(pool);
     expect(JSON.stringify(demand)).not.toContain("quietly seeking");
     expect(JSON.stringify(demand)).not.toContain("after a loss");
@@ -981,12 +986,12 @@ describe.skipIf(!configured)("intents repo (MySQL)", () => {
     await createIntent(pool, BEN, { kind: "offer", text: "offering bicycle repair", tier: "members" });
     await createIntent(pool, CARA, { kind: "seek", text: "seeking quiet company", tier: "incognito" });
 
-    const visitor = await listBoard(pool, null);
+    const visitor = await listBoard(pool, null, isPresent);
     expect(visitor.map((b) => b.text)).toEqual(["seeking a chess partner"]);
     expect(visitor[0].firstName).toBe("Ana");
     expect(JSON.stringify(visitor)).not.toContain("Ruiz");
 
-    const member = await listBoard(pool, BEN);
+    const member = await listBoard(pool, BEN, isPresent);
     expect(member.map((b) => b.text).sort()).toEqual(["offering bicycle repair", "seeking a chess partner"]);
     expect(JSON.stringify(member)).not.toContain("quiet company");
   });
