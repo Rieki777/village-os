@@ -81,10 +81,26 @@ const REQUIREMENT: Record<Exclude<StageRule["type"], "quests">, string> = {
   account: "Create an account",
   "training-complete": "Finish community training",
   membership: "Sign the membership covenant",
+  tokens: "Be paid for something you brought",
   granted: "The village grants this one",
 };
 
-function requirementOf(rule: StageRule, consented: number | null): string {
+function requirementOf(
+  rule: StageRule,
+  consented: number | null,
+  training?: { done: number; required: number } | null,
+): string {
+  /*
+   * The training rung shows the same shape the quest rungs do. It could only
+   * ever say "Finish community training", which tells somebody the price and
+   * never how much of it they have paid, and the count has been on the payload
+   * since the rung became reachable at all. Only MANDATORY modules are counted,
+   * because only those gate the rung.
+   */
+  if (rule.type === "training-complete" && training && training.required > 0) {
+    const unit = training.required === 1 ? "required module" : "required modules";
+    return `${Math.min(training.done, training.required)} of ${training.required} ${unit}`;
+  }
   if (rule.type !== "quests") return REQUIREMENT[rule.type];
   const unit = rule.min === 1 ? "consented quest" : "consented quests";
   // Progress, when the member's own count is known. A bare "3 consented
@@ -123,6 +139,7 @@ function buildClimb(
   stages: GameStagePublic[],
   stageIndex: number,
   consentedQuests: number | null,
+  training?: { done: number; required: number } | null,
 ): Rung[] {
   const byRung = new Map<string, ProgressionCapability[]>();
   for (const row of catalogue) {
@@ -135,7 +152,7 @@ function buildClimb(
     id: s.id,
     name: s.name,
     description: s.description,
-    requirement: requirementOf(s.rule, consentedQuests),
+    requirement: requirementOf(s.rule, consentedQuests, training),
     // The allowance earns its line only where it MOVES. Printed on every rung
     // it was "Base sending allowance" five times running, which buries the two
     // rungs where the number actually rises. Shown only on the change, the
@@ -188,18 +205,21 @@ export default function PowersMap({
   stages,
   stageIndex,
   consentedQuests = null,
+  training = null,
 }: {
   catalogue: ProgressionCapability[];
   stages: GameStagePublic[];
   stageIndex: number;
   /** The member's own consented-quest count, for the rungs priced in quests. */
   consentedQuests?: number | null;
+  /** Their progress through the modules that gate the training rung. */
+  training?: { done: number; required: number } | null;
 }) {
   const [showClosed, setShowClosed] = useState(true);
 
   if (catalogue.length === 0) return null;
 
-  const climb = buildClimb(catalogue, stages, stageIndex, consentedQuests);
+  const climb = buildClimb(catalogue, stages, stageIndex, consentedQuests, training);
   const appointed = catalogue.filter((c) => c.opens.via === "appointment");
   const openCount = catalogue.filter((c) => c.held).length;
   const climbCount = catalogue.length - appointed.length;
@@ -209,7 +229,21 @@ export default function PowersMap({
   // badgeCapabilities -> stage` lets a deny outrank standing. Those rows say
   // "Closed" on a walked rung, which is the true thing, and claims no
   // mechanism this payload cannot see.
-  const rungs = showClosed ? climb : climb.filter((r) => r.state !== "ahead");
+  /*
+   * HIDING "WHAT IS CLOSED" HIDES CLOSED POWERS, and it used to hide RUNGS
+   * AHEAD instead, which is a different set. The gate is `admin -> badgeDenies
+   * -> role -> badgeCapabilities -> stage`, so a badge or a role can open a
+   * power whose rung sits above where a member stands: filtering by rung threw
+   * those away while the sentence underneath still counted them, so the button
+   * hid powers the member had actually earned and announced a number it was
+   * not showing.
+   *
+   * Filtered by `held`, the two agree by construction. A rung with nothing held
+   * on it drops out, which is what makes the short view short.
+   */
+  const rungs = showClosed
+    ? climb
+    : climb.map((r) => ({ ...r, powers: r.powers.filter((p) => p.held) })).filter((r) => r.powers.length > 0);
   const appointedShown = showClosed ? appointed : appointed.filter((c) => c.held);
 
   return (
@@ -228,9 +262,13 @@ export default function PowersMap({
             {climbCount} open by climbing, {appointed.length} by appointment.
           </p>
         </div>
+        {/* No `aria-pressed`. This button's NAME changes to describe what the
+            next press does, and a toggle that does that must not also carry a
+            pressed state: "Hide what is closed, pressed" announced that hiding
+            was on at the exact moment everything was shown. One or the other,
+            never both. */}
         <button
           type="button"
-          aria-pressed={showClosed}
           onClick={() => setShowClosed((v) => !v)}
           className="min-h-11 shrink-0 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
         >

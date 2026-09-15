@@ -48,7 +48,8 @@ import {
   WIRED_BUT_HELD_BACK,
   type PowerHolder,
 } from "./lib/capabilityRegistry";
-import { allVariables, boolVar, numberVar, rawValue, setVariable, stringVar } from "./lib/variables";
+import { allVariables, boolVar, loadVariables, numberVar, rawValue, setVariable, stringVar } from "./lib/variables";
+import { memberJoined } from "./lib/arrival";
 import { adminGateWasConsulted, markAdminGate } from "./lib/adminGate";
 import { type FaqPathway, register as registerFaqRoutes } from "./routes/faqs";
 import { register as registerGratitudeVoiceRoutes } from "./routes/gratitudeVoices";
@@ -90,6 +91,7 @@ import { register as registerHousingRoutes } from "./routes/housing";
 import { register as registerJourneyRoutes } from "./routes/journey";
 import { register as registerProfileRoutes } from "./routes/profile";
 import { register as registerPathLadderRoutes } from "./routes/pathLadders";
+import { register as registerVouchRoutes } from "./routes/vouches";
 import { register as registerPlacesRoutes } from "./routes/places";
 import { register as registerMapSceneRoutes } from "./routes/mapScene";
 import { register as registerBadgesRoutes } from "./routes/badges";
@@ -307,6 +309,9 @@ import {
   registerToken,
   tokenDef,
   TREASURY,
+  contributionTokens,
+  hasBeenPaidByVillage,
+  paidByVillageMany,
 } from "./lib/ledger";
 import type { TransferGuard } from "./lib/ledger";
 import {
@@ -323,7 +328,8 @@ import { loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle }
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
 import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requestVoiceClaim, settleVoiceClaim } from "./lib/voiceClaim";
 import { defaultSeasonsFor, seasonRunningProblem, suggestNextSeasonDates } from "./lib/seasonCalendar";
-import { completionsFor, completionsForMany, trainingIsComplete } from "./lib/trainingRecord";
+import { completionsFor, completionsForMany, gatingModuleIds, trainingIsComplete, trainingProgress } from "./lib/trainingRecord";
+import { starterTrainingModules } from "./lib/trainingStarter";
 import { respondToTerminalError, installCrashHandlers, installShutdownHandlers, reachedSomebody, reportError, reportErrorWithin, wireErrorReporting } from "./lib/errors";
 import {
   STAY_CREDIT,
@@ -741,7 +747,6 @@ import { applyPending, connect as dbConnect } from "./db/migrate";
 import { startMaintenanceServer } from "./db/maintenanceMode";
 import { alignTableCollations } from "./db/collation";
 import { dbCollection, dbDocument } from "./repos/store-db";
-import { loadVariables } from "./lib/variables";
 import {
   activeClock,
   assertCycleSettingsRead,
@@ -1060,58 +1065,8 @@ const DEFAULT_SETTINGS = {
   },
 };
 
-/**
- * The starter training list a fresh deployment gets, once, when the table is
- * empty. Two of these descriptions named Amora outright, so every village that
- * installed this platform opened its training page and read another village's
- * name back at itself on day one. A FUNCTION rather than a const because the
- * name is read at seed time from the merged config (brand overlay over the
- * gameConfig default), which is not known at module load.
- *
- * Only the identity moved. The practices are the platform's opinion about what
- * a village should learn first and they stay exactly as written.
- */
-function defaultTrainingModules() {
-  const village = mergedConfig().project.name;
-  return [
-  {
-    id: "nvc-intro",
-    title: "Introduction to Nonviolent Communication",
-    description:
-      `The foundation of how we talk to each other at ${village}. Learn the four components of NVC and why they matter.`,
-    type: "Video",
-    url: "",
-    order: 1,
-  },
-  {
-    id: "authentic-relating",
-    title: "Authentic Relating Practices",
-    description:
-      "Games and practices for deeper, more honest connection with the people around you.",
-    type: "Practice",
-    url: "",
-    order: 2,
-  },
-  {
-    id: "consent-decisions",
-    title: "Consent-Based Decision Making",
-    description:
-      `How ${village} makes decisions together: the difference between consensus and consent, and why it matters.`,
-    type: "Article",
-    url: "",
-    order: 3,
-  },
-  {
-    id: "circle-facilitation",
-    title: "Circle Facilitation Basics",
-    description:
-      "How to hold and participate in a circle meeting. The roles, the rhythms, and the practices.",
-    type: "Workshop",
-    url: "",
-    order: 4,
-  },
-  ];
-}
+/** The starter training list, read with this village's name. See server/lib/trainingStarter.ts. */
+const defaultTrainingModules = () => starterTrainingModules(mergedConfig().project.name);
 
 const FORM_TYPE_TO_PATHWAY: Record<string, "investor" | "steward" | "resident" | "prosperity"> = {
   investor: "investor",
@@ -1236,6 +1191,7 @@ const trainingRepo = dbCollection(getPool(), {
     { js: "description", db: "description" },
     { js: "type", db: "type" },
     { js: "url", db: "url" },
+    { js: "mandatory", db: "mandatory", kind: "bool" }, // 0197, see gatingModuleIds
     { js: "order", db: "sort_order", kind: "int" },
   ],
 });
@@ -3794,9 +3750,9 @@ function hasMembership(user: any): boolean {
  */
 /** Server-recorded completions against the live catalogue. See lib/trainingRecord.ts. */
 const trainingDoneHere = (done: readonly string[]): boolean =>
-  trainingIsComplete(trainingRepo.all().map((m: any) => String(m.id)), done);
+  trainingIsComplete(gatingModuleIds(trainingRepo.all()), done);
 
-function computeStage(user: any, consentedQuests: number, trainingDone: readonly string[]): string {
+function computeStage(user: any, consentedQuests: number, trainingDone: readonly string[], paidByVillage = false): string {
   let earned = GAME_CONFIG.stages[0].id;
   const grantedIdx = user.stageGranted ? stageIndex(user.stageGranted) : -1;
   for (const stage of GAME_CONFIG.stages) {
@@ -3807,9 +3763,9 @@ function computeStage(user: any, consentedQuests: number, trainingDone: readonly
       case "account": ok = true; break; // having a user record implies an account
       case "training-complete": ok = trainingDoneHere(trainingDone); break;
       case "membership": ok = hasMembership(user); break;
-      // The threshold reads the registry (progression.quests_for.<stage>,
-      // default = the config min), so climbing speed is village-tunable.
+      // Threshold from the registry (progression.quests_for.<stage>), so speed is tunable.
       case "quests": ok = consentedQuests >= Math.max(1, numberVar(`progression.quests_for.${stage.id}`)); break;
+      case "tokens": ok = paidByVillage; break; // ever paid BY THE VILLAGE; see hasBeenPaidByVillage
       case "granted": ok = grantedIdx >= idx; break;
     }
     if (ok && idx > stageIndex(earned)) earned = stage.id;
@@ -3820,7 +3776,7 @@ function computeStage(user: any, consentedQuests: number, trainingDone: readonly
 
 /** The one-member form: fetch the consented count, then compute. */
 async function stageOf(user: any): Promise<string> {
-  return computeStage(user, await claimsRepo.consentedCount(user.id), await completionsFor(getPool(), user.id));
+  return computeStage(user, await claimsRepo.consentedCount(user.id), await completionsFor(getPool(), user.id), await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()));
 }
 
 /**
@@ -8139,7 +8095,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       avatar: null,
     };
     await members.add(user);
-    await addActivity("join", `${firstName(name)} stepped into the village as a Guest`, { actorUserId: userId, entityType: "user", entityRef: userId });
+    await joined({ id: userId, name, handle: user.handle });
     const token = encodeToken(AUTH_TOKEN_SECRET, userId, email);
     res.json({ success: true, token, user: publicUser(user) });
   });
@@ -8375,6 +8331,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     projectName: () => mergedConfig().project.name,
     recordAudit: recordAuthAudit,
   });
+  const joined = (u: { id: string; name: string; handle: string }) => memberJoined(u, { addActivity, firstName, greeterRoleId: () => stringVar("arrival.greeter_role"), seats: loadRoleHolders, everyone: () => members.all(), notify });
   registerGoogleAuthRoutes(app, {
     authSecret: AUTH_TOKEN_SECRET,
     availability: googleSignInAvailability,
@@ -8385,11 +8342,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     overLimit,
     clientIp,
     recordAudit: recordAuthAudit,
-    onMemberJoined: (user) => {
-      void addActivity("join", `${firstName(user.name)} stepped into the village as a Guest`, {
-        actorUserId: user.id, entityType: "user", entityRef: user.id,
-      });
-    },
+    onMemberJoined: (user) => void joined(user), // every door in records the join and greets: register calls joined too
   });
 
   /**
@@ -9193,6 +9146,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // ONE query for the whole roll. A per-member read inside the loop would be
     // the N+1 the consented counts above already go out of their way to avoid.
     const trained = await completionsForMany(getPool(), (all as any[]).map((u) => String(u.id)));
+    // Third read of the same shape, and for the same reason as the two above.
+    const paid = await paidByVillageMany(getPool(), (all as any[]).map((u) => String(u.id)), contributionTokens());
     const memberIdx = stageIndex("member");
     const eligible = new Set<string>();
     for (const u of all as any[]) {
@@ -9201,7 +9156,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       if (u.isExample) continue;
       const count = consented.get(u.id) ?? 0;
       const done = trained.get(String(u.id)) ?? [];
-      if (count >= 1 || stageIndex(computeStage(u, count, done)) >= memberIdx) eligible.add(u.id);
+      if (count >= 1 || stageIndex(computeStage(u, count, done, paid.has(String(u.id)))) >= memberIdx) eligible.add(u.id);
     }
     return eligible;
   }
@@ -17930,6 +17885,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   // because it answers only to the account behind the token, and derived from
   // live rows on every read so a rung falls with nothing written anywhere.
   registerPathLadderRoutes(app, { authedUser, getPool, lapseContext });
+  registerVouchRoutes(app, { authedUser, getPool, members, guardCapability, stageOf, recordStageEvent });
 
   // Journey to Launch: the founding team's own tracker, read and written
   // through the admin gate. Registered at exactly the point it used to sit.
@@ -19865,7 +19821,7 @@ ${inner}
     // single query stageOf was already paying.
     const consentedQuests = await claimsRepo.consentedCount(user.id);
     const trained = await completionsFor(getPool(), user.id);
-    const stageId = computeStage(user, consentedQuests, trained);
+    const stageId = computeStage(user, consentedQuests, trained, await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()));
     const claims = await claimsRepo.forUser(user.id);
     const ctx = await capabilityCtx(user);
     // What each consented quest actually paid. `amount` is what the witness
@@ -19907,7 +19863,7 @@ ${inner}
       ),
       journeys: user.journeys ?? {},
       membership: hasMembership(user),
-      trainingComplete: trainingDoneHere(trained),
+      trainingComplete: trainingDoneHere(trained), training: trainingProgress(trainingRepo.all(), trained), // done/required, mandatory only
       // The third rule type as a number, beside the two booleans that were
       // already here. With the ladder now carrying its rules, these three
       // fields are everything a reader needs to evaluate any rung except
@@ -20770,7 +20726,7 @@ ${inner}
     // Same substitution as /api/game/me, same single query: the count the
     // ladder measures is kept instead of collapsed into a stage id.
     const consentedQuests = await claimsRepo.consentedCount(user.id);
-    const stageId = computeStage(user, consentedQuests, await completionsFor(getPool(), user.id));
+    const stageId = computeStage(user, consentedQuests, await completionsFor(getPool(), user.id), await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()));
     const ctx = await capabilityCtx(user);
     res.json({
       stage: servedStage(stageId),
@@ -25650,7 +25606,7 @@ ${inner}
       return res.status(409).json({ error: "That is one of the platform's example roles, not one of this village's. Declare a role of your own first." });
     }
     const carried = ((role.capabilities ?? []) as string[]).filter((c) =>
-      ["ballot.vote", "member.vouch"].includes(c),
+      ["ballot.vote", "member.vouch"].includes(c), // superVouch absent: SUPER_VOUCH_PLACEMENT
     );
     if (carried.length) {
       return res.status(409).json({

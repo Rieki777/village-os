@@ -32,6 +32,7 @@
  *     also the largest. You arrive here by choosing to; the page does not need
  *     to announce itself.
  */
+import { Link } from "wouter";
 import Layout from "@/components/Layout";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -333,10 +334,26 @@ export default function Characters() {
             <p className="text-sm text-gray-700">
               Play as many as you like. Every door stays open to every hand.
             </p>
+            {/*
+              THE WAY OUT, AND IT USED TO ONLY EXIST FOR PEOPLE WHO GAVE UP.
+
+              This page had no navigation at all: `walk()` posts and stops, and
+              the only forward link was this one, reading "Skip for now" even
+              after somebody had chosen. So the second screen of the product
+              told a member who did exactly what was asked that their only
+              option was to not do it.
+
+              It says what is true of the member now. A wouter Link rather than
+              a raw anchor, because an anchor forces a whole document reload
+              inside a single-page app.
+            */}
             {firstRun ? (
-              <a href="/profile" className="min-h-11 py-3 text-sm font-medium text-teal-deep underline">
-                Skip for now
-              </a>
+              <Link
+                href="/profile"
+                className="min-h-11 py-3 text-sm font-medium text-teal-deep underline"
+              >
+                {party.length > 0 ? "Go to your profile" : "Skip for now"}
+              </Link>
             ) : null}
           </div>
 
@@ -461,6 +478,25 @@ export default function Characters() {
                   {playing ? "Save this look" : "Walk this path"}
                 </button>
                 {error ? <p role="alert" className="mt-3 text-sm text-red-700">{error}</p> : null}
+                {/*
+                  THE DOOR OUT OF THE SECOND SCREEN.
+
+                  Choosing a character posted and then left the member exactly
+                  where they were, with no forward action anywhere on the page.
+                  This appears once they actually have somebody in their party,
+                  so it is an answer to what they just did and not a nag while
+                  they are still deciding.
+                */}
+                {firstRun && party.length > 0 ? (
+                  <p className="mt-4">
+                    <Link
+                      href="/profile"
+                      className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-teal-deep px-6 py-3 font-semibold text-teal-deep hover:bg-teal-deep/5"
+                    >
+                      Continue to your profile
+                    </Link>
+                  </p>
+                ) : null}
               </div>
             </section>
 

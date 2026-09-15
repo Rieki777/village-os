@@ -171,6 +171,8 @@ export const CAPABILITY_CONSEQUENCE: Record<Capability, string> = {
   "org.declare": "declare the village's shape and how any circle decides",
   "ballot.vote": "vote on the village's own ballots",
   "member.vouch": "vouch for applicants at the membrane",
+  "member.superVouch":
+    "admit somebody as a member outright, without the vouches the village asks for",
   "org.seat": "seat people in the village's seats, and take them out again",
   "org.seatAgent": "seat software agents in the village's seats, and take them out again",
   "intake.moderate": "work the queues the village puts things into, and act on what gets reported",

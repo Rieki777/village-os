@@ -18,6 +18,7 @@ import { useRoute } from "wouter";
 import { authToken } from "@/lib/gameApi";
 import { useTokenName } from "@/hooks/useTokenNames";
 import { formatTokenAmount } from "@/lib/tokenAmount";
+import VouchPanel from "@/components/profile/VouchPanel";
 import { moonsOnLandPhrase } from "@shared/villageMoon";
 
 const headers = (): Record<string, string> => {
@@ -251,6 +252,17 @@ export default function PublicProfile() {
                 : `Thanked ${sheet.gratitude.givenThisSeason} members in return.`}
             </p>
           </section>
+        ) : null}
+
+        {/* THE MEMBRANE. Somebody's profile is where a member meets the person
+            they might speak for, so the vouch belongs here and nowhere else.
+            The panel draws nothing for a member who is already in, nothing
+            while the read is unknown, and nothing for a viewer who cannot
+            vouch yet beyond the sentence saying which rung opens it. */}
+        {sheet.handle ? (
+          <div className="mt-10">
+            <VouchPanel handle={sheet.handle} name={sheet.name} />
+          </div>
         ) : null}
       </div>
     </Layout>
