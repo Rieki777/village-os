@@ -249,6 +249,13 @@ export function emailCadenceFor(type: string, p: NotifyPrefs): "immediate" | "da
       return "immediate";
     case "payments_alert":
       return "immediate"; // ops: sig-fails and disputes cannot wait for a digest
+    // The failed-actions report, at most once a day. Daily and not immediate on
+    // purpose: the failures that cannot wait already alert on their own
+    // (payments_alert for a refused signature or a dispute, reportError for a
+    // job that threw), and this is the one line that gathers everything else.
+    // Without a case here it would be in-app only, and silently so.
+    case "failed_action":
+      return "daily";
     case "restorative_intake":
       return "immediate"; // a human reached out about a rupture — same day matters
     // Moderation: a report waiting for a steward, and the reply to the member

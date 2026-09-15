@@ -742,7 +742,11 @@ migration has to rescale every `held` row by the same factor it applies to
 charge; convert only the post and it reports the same drift from the other side.
 `heldSeatValue` is the read that had to change shape as well as scale: one
 `SUM(amount)` over the whole table added tokens at different scales together, so
-it groups by token and divides by each token's own.
+it groups by token and divides by each token's own. `keysFor`, which derives a
+seat charge's pay, refund and keep keys, is exported for one outside reader: the
+failed-actions report (`server/lib/failedActions.ts`) asks through it whether a
+kept fee's transfer landed, so the key format keeps a single home. None of the
+formats in the occurrence-key table changed with it.
 
 **Stays answered it on the WRITE, and the answer is worth copying.** Four of the
 29 are stay credits, and a fix at each of the four would have repaired the debit

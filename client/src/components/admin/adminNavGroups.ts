@@ -17,7 +17,7 @@
  * around them did.
  */
 import type { LucideIcon } from "lucide-react";
-import { Activity, BarChart3, Calendar, Circle, Coins, FileText, GraduationCap, Handshake, HardDrive, Heart, HelpCircle, Home, Inbox, KeyRound, LogOut, Mail, MessageSquare, Moon, Scale, Sparkles, ToggleLeft, TrendingUp, Users, Users2 } from "lucide-react";
+import { Activity, AlertTriangle, BarChart3, Calendar, Circle, Coins, FileText, GraduationCap, Handshake, HardDrive, Heart, HelpCircle, Home, Inbox, KeyRound, LogOut, Mail, MessageSquare, Moon, Scale, Sparkles, ToggleLeft, TrendingUp, Users, Users2 } from "lucide-react";
 import type { TabBadge } from "@/lib/adminNav";
 import { CONTENT_SECTIONS } from "./contentSections";
 
@@ -166,6 +166,10 @@ export function navGroups(setupComplete: boolean): NavGroup[] {
         { key: "message-reports", label: "Message Reports", icon: MessageSquare },
         { key: "drafts", label: "Her Drafts", icon: Inbox },
         { key: "brain", label: "Village Brain", icon: FileText },
+        // What keeps failing, and what to do about each. Last in the queues
+        // because it is the queue of last resort: everything on it either
+        // retries on its own or is waiting for a person.
+        { key: "failures", label: "What's Failing", icon: AlertTriangle },
       ],
     },
     {

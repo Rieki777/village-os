@@ -645,13 +645,13 @@ export async function anonymizeMember(
 /**
  * Finish a sweep that stopped part way.
  *
- * WHY THIS IS PRESSED AND NOT SCHEDULED. The same argument
- * `server/routes/erasureQueue.ts` makes about re-asking a vendor: nothing else
- * will ever erase these members again, because they are already gone, so the
- * retry has to be something somebody does. It lives on the queue that already
- * shows the count, because the person reading the number is the person who
- * wants to press it. A scheduled job can come later, once anybody has watched
- * this work.
+ * WHO CALLS THIS. Nothing else will ever erase these members again, because
+ * they are already gone, so something has to come back for them. Two things
+ * do. The retry button on /review (`server/routes/erasureQueue.ts`), pressed by
+ * a steward, finishes any sweep. The hourly failed-actions job
+ * (`server/lib/failedActions.ts`) finishes only a sweep that stopped AFTER the
+ * tombstone step, when the account is already closed, and its header says why
+ * it goes no further than that.
  *
  * RE-READS THE MEMBER rather than taking one. The record outlives the request
  * that made it, and the row may have been tombstoned by the attempt that

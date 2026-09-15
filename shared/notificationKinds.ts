@@ -288,6 +288,14 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} money matters need a look.",
     celebrate: false,
   },
+  // The failed-actions report, at most once a day. Never celebrated: a list of
+  // what is broken is a chore to get through, not a moment.
+  failed_action: {
+    group: "village",
+    blurb: "Something in the village keeps failing, and the report says what to do about it.",
+    many: "{n} reports of things failing in the village.",
+    celebrate: false,
+  },
   stays: {
     group: "economy",
     blurb: "Your stay: nights posting, credits arriving, or a balance running low.",

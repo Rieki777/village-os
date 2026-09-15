@@ -68,6 +68,7 @@ import { register as registerCircleRoutes } from "./routes/circles";
 import { register as registerReviewRoutes } from "./routes/review";
 import { register as registerHoldersRoutes } from "./routes/holders";
 import { register as registerErasureQueueRoutes } from "./routes/erasureQueue";
+import { register as registerFailedActionsRoutes } from "./routes/failedActions";
 import { register as registerCircleBurnRoutes } from "./routes/circleBurn";
 import { register as registerCircleBonusGateRoutes } from "./routes/circleBonusGate";
 import { budgetDeleteProblem, treasuryFacts, register as registerCircleTreasuryRoutes } from "./routes/circleTreasury";
@@ -26305,6 +26306,7 @@ ${inner}
   });
   registerHoldersRoutes(app, { guardCapability, getPool });
   registerErasureQueueRoutes(app, { guardCapability, getPool, erasureDeps });
+  registerFailedActionsRoutes(app, { isAdmin, getPool, notifyAdmins, erasureDeps });
 
   // ── Season patterns (0050) ───────────────────────────────────────────────
   //

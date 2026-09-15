@@ -59,6 +59,7 @@ import TokenNamingLink from "@/components/admin/TokenNamingLink";
 import TokensTab from "@/components/admin/TokensTab";
 import SetupSection from "@/components/admin/SetupSection";
 import HandoverTab from "@/components/admin/HandoverTab";
+import FailuresTab from "@/components/admin/FailuresTab";
 import VariablesTab from "@/components/admin/VariablesTab";
 import VotingWeightsPanel from "@/components/admin/VotingWeightsPanel";
 import NeedsPanel, { NeedsSetupStep, useNeedsSetupObservation } from "@/components/admin/NeedsPanel";
@@ -10139,6 +10140,7 @@ export default function Admin() {
           {activeTab === "org-chart" && <OrgChartTab password={password} />}
           {activeTab === "governance-weights" && <VotingWeightsPanel password={password} onOpenTab={setActiveTab} />}
           {activeTab === "brain" && <VillageBrainTab password={password} />}
+          {activeTab === "failures" && <FailuresTab password={password} />}
           {activeTab === "drafts" && <DraftQueueTab password={password} />}
           {activeTab === "seasons-patterns" && <SeasonPatternsTab password={password} />}
           {activeTab === "circles-map" && <CirclesMapTab password={password} />}
