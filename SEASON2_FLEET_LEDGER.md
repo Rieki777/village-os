@@ -197,6 +197,13 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   under-reports, so run all three scans (the directory, `git ls-tree` over every remote AND
   local ref, and every `drizzle/*.sql` on disk across the worktrees), then
   `node scripts/check-migration-numbers.mjs --next` to confirm.
+- **membrane lane (invitations), 2026-09-14: holds 0209** for
+  `drizzle/0209_a_member_arrives_by_invitation.sql` (one new table, `member_invites`). Measured three
+  ways before the file was created: every remote and local ref and every worktree disk reached 0207
+  (`wt/failed-actions`), and an UNTRACKED `drizzle/0208_a_draft_can_move_a_circle.sql` sat in the
+  `CIRCLES` worktree, which no git command sees, so 0208 was left to it. Expand-only: the previous
+  release neither reads nor writes the table. Lands after #243 (0200 to 0206), #247 (0207) and
+  whichever branch takes 0208.
 - **first-hour lane (profile), 2026-09-14: holds 0197 and 0198** for
   `drizzle/0197_a_training_module_says_whether_it_is_mandatory.sql` (one column on
   `training_modules`, `mandatory TINYINT(1) NOT NULL DEFAULT 1`) and
@@ -2958,6 +2965,8 @@ Both look like intentional work and neither is.
 | 2026-09-08 | first-hour lane (profile) | migration `0179`, `drizzle/0179_a_training_module_says_whether_it_is_mandatory.sql` | `wt/first-hour` | **RENUMBERED TWICE, kept as history: `0179` became `0191`, and on 2026-09-14 `0197` (section 3 holds the claim).** Originally HELD. Ceiling measured TWO WAYS per the rule above: every remote ref and every file on disk reach `0178`, and `check-migration-numbers.mjs --next` agrees at `0179`. Adds one column to `training_modules`, `mandatory TINYINT(1) NOT NULL DEFAULT 1`, so every existing row keeps today's behaviour exactly (all modules mandatory = all must be finished, which is what `trainingIsComplete` already requires). Expand-only, no backfill needed, and the previous release ignores the column. |
 
 | 2026-09-08 | first-hour lane (profile) | migration `0190`, `drizzle/0190_a_member_is_vouched_into_membership.sql` | `wt/first-hour` | **RENUMBERED TWICE, kept as history: `0190` became `0192`, and on 2026-09-14 `0198` (section 3 holds the claim).** Originally HELD, AND READ WHY THE NUMBER WAS NOT 0180. `check-migration-numbers.mjs --next` said **0180**, because it measures against `origin/main` alone. A two-way scan says otherwise: remote refs reach `0189` and sibling worktrees reach `0189`, and `0180`-`0189` are all taken by other lanes (`the_wall_speaks_first`, `a_circle_holds_its_own_treasury`, `one_gift_one_key`, `a_member_redeems_what_they_hold`, `a_village_spends_its_credits_in_hundredths`, `voice_that_waned`, `a_village_says_what_it_is_for`, `a_member_says_how_they_are`, `a_circle_has_two_caps`, `the_voices_reach_a_village_that_already_exists`). Taking the script's answer would have collided with TEN lanes at once. This is the same failure the 2026-09-05 row records, and the script still cannot see either source. |
+
+| 2026-09-14 | membrane lane (invitations) | migration `0209`, `drizzle/0209_a_member_arrives_by_invitation.sql`; `POST /api/auth/register` moved out of `server/index.ts` into `server/routes/register.ts` (the size ratchet fell, the baseline was left alone); one fixture opinion in `server/db/testDb.ts`, `ProvisionOptions.inviteOnly`, so scratch villages provision with `membership.invite_only` off | `wt/invite-links`, PR #259 | HELD. Lands after `0200` to `0208` are on main. A suite that counts customized variables sees `membership.invite_only` stored by the harness; the loop suite names it rather than counting it. |
 
 ### 27d — Verification: CI runs the full suite, lanes run what they touched
 
