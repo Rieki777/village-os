@@ -13,7 +13,7 @@ import { ADMISSION_RUNG, climbLadder, isAdmitted } from "./admission";
 import { makeGoogleLink } from "./oauthAccounts";
 import { hasWorkingCredential, isPresentMember, presenceTest } from "./memberPresence";
 
-const SECRET = "a-test-signing-secret";
+const SECRET = "a-test-signing-secret"; // module-review-ok: a fixture signing secret for tokens this test mints and reads back, never a real credential
 
 /** The exact record server/routes/authGoogle.ts writes for a new Google member. */
 const googleMember = (id = "user-google") => ({

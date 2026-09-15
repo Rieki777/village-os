@@ -59,7 +59,7 @@ const people = [
 ];
 const isAdmin = (u: Record<string, any>) => u.role === "admin" || u.role === "founder";
 /** The host's bound presence predicate, as server/index.ts hands it in. */
-const SECRET = "season-reminders-test-secret";
+const SECRET = "season-reminders-test-secret"; // module-review-ok: a fixture signing secret for tokens this test mints and reads back, never a real credential
 const isPresent = presenceTest(SECRET);
 /** The record server/routes/authGoogle.ts writes for a new Google member: no password, a signed link. */
 const googleOnly = { id: "u-gina", passwordHash: "", role: "member", prefs: { googleLink: makeGoogleLink(SECRET, "u-gina", "google-sub-gina") } };

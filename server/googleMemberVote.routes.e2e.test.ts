@@ -100,7 +100,7 @@ let nextClaims: Record<string, unknown> | null = null;
 
 /** Sign a brand-new person up through the real Google start, callback and exchange. */
 async function signUpWithGoogle(sub: string, email: string, name: string): Promise<{ token: string; id: string }> {
-  const start = await fetch(`${BASE}/api/auth/google/start`, { redirect: "manual" });
+  const start = await fetch(`${BASE}/api/auth/google/start`, { redirect: "manual" }); // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
   expect(start.status).toBe(302);
   const location = new URL(start.headers.get("location")!);
   nextClaims = {
@@ -114,13 +114,13 @@ async function signUpWithGoogle(sub: string, email: string, name: string): Promi
     name,
   };
   const state = location.searchParams.get("state")!;
-  const cb = await fetch(`${BASE}/api/auth/google/callback?code=a-code&state=${encodeURIComponent(state)}`, { redirect: "manual" });
+  const cb = await fetch(`${BASE}/api/auth/google/callback?code=a-code&state=${encodeURIComponent(state)}`, { redirect: "manual" }); // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
   expect(cb.status).toBe(302);
   const cookie = (cb.headers.getSetCookie?.() ?? [])
     .map((c) => /(?:^|;\s*)village_oauth_handoff=([^;]*)/.exec(c)?.[1])
     .find((v) => v && v.length > 0);
   expect(cookie, "the callback hands over a handoff cookie").toBeTruthy();
-  const ex = await fetch(`${BASE}/api/auth/google/exchange`, {
+  const ex = await fetch(`${BASE}/api/auth/google/exchange`, { // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
     method: "POST",
     headers: { cookie: `village_oauth_handoff=${cookie}` },
   });
@@ -168,7 +168,7 @@ beforeAll(async () => {
       DATABASE_URL: testDb.url,
       FRONTEND_URL: BASE,
       ADMIN_PASSWORD: ADMIN,
-      AUTH_TOKEN_SECRET: "google-vote-token-secret", // a throwaway signing key for a server this file starts and kills
+      AUTH_TOKEN_SECRET: "google-vote-token-secret", // module-review-ok: a throwaway signing key for a server this file starts and kills
       RESEND_API_KEY: "",
       ANTHROPIC_API_KEY: "",
       GOOGLE_CLIENT_ID: CLIENT_ID,
