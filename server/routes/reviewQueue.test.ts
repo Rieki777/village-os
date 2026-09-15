@@ -127,7 +127,8 @@ describe("the review queue answers either key, each for its own half (finding 11
       getPool: () => ({}),
       members: { all: async () => [] },
       questsRepo: {},
-      circlesRepo: {},
+      // #251 counts a batch's proposed changes against the live circles.
+      circlesRepo: { all: () => [] },
     } as any);
     server = http.createServer(app);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
