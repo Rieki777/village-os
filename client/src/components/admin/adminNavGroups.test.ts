@@ -115,7 +115,7 @@ describe("navGroups", () => {
       "health-admin",
     ]],
     ["Money and agreements", ["tokens", "ledger", "cycles", "products", "resources-admin", "exits-admin", "settings"]],
-    ["Day to day", ["submissions", "feedback", "quest-claims", "forum-moderation", "message-reports", "drafts", "brain"]],
+    ["Day to day", ["submissions", "feedback", "quest-claims", "forum-moderation", "message-reports", "drafts", "brain", "failures"]],
     ["Library and files", ["training-modules", "investor-vault", "uploaded-files"]],
   ];
 
@@ -145,8 +145,11 @@ describe("navGroups", () => {
       "tokens", "ledger", "cycles", "variables", "season", "settings", "work-with-us",
       "faqs", "milestones", "visit-config", "investor-summary",
     ];
+    // Tabs added after the reorder, listed apart so `before` stays a record of
+    // what the rail carried at the time.
+    const addedSince = ["failures"];
     for (const setupComplete of [true, false]) {
-      expect(new Set(allKeys(setupComplete)), `setupComplete=${setupComplete}`).toEqual(new Set(before));
+      expect(new Set(allKeys(setupComplete)), `setupComplete=${setupComplete}`).toEqual(new Set([...before, ...addedSince]));
     }
   });
 

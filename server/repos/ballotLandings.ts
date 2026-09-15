@@ -488,3 +488,22 @@ export async function vetoedBallotCount(pool: Pool, proposalId: string): Promise
   );
   return Number(rows[0]?.n ?? 0);
 }
+
+/**
+ * Each ballot's `landing_status`, for the failed-actions report
+ * (server/lib/failedActions.ts), which lists an unfinished landing attempt only
+ * while its decision is still owed a landing. An id with no ballot is simply
+ * absent from the map.
+ *
+ * A read by bound ids rather than a join from `governance_executor_pending`, so
+ * no comparison crosses two tables' collations on a village whose alignment has
+ * not run yet.
+ */
+export async function landingStatusesFor(pool: Pool, ballotIds: readonly string[]): Promise<Map<string, string>> {
+  if (ballotIds.length === 0) return new Map();
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT id, landing_status FROM ballots WHERE id IN (${ballotIds.map(() => "?").join(",")})`,
+    [...ballotIds],
+  );
+  return new Map(rows.map((r) => [String(r.id), String(r.landing_status)] as [string, string]));
+}

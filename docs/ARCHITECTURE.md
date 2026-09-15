@@ -147,7 +147,7 @@ top to bottom in that function; the stages below are the landmarks:
    running, so enumerate them rather than trusting a count in prose:
 
    ```bash
-   grep -n 'registerJob(' server/index.ts server/lib/*.ts
+   grep -n 'registerJob(' server/index.ts server/lib/*.ts server/routes/*.ts
    ```
 
    Each module-owned job checks `effectiveLifecycle` and sleeps while its
@@ -522,7 +522,7 @@ the constant. Over the cap the in-app row still exists and only the email
 drops. Cadence per type, and read the switch in `emailCadenceFor` rather than
 this list, which has drifted twice:
 quests/roles/mentions/replies immediate by preference, gratitude/stage/
-`feedback` daily, `thread_activity` in-app only, `payments_alert`,
+`feedback`/`failed_action` daily, `thread_activity` in-app only, `payments_alert`,
 `restorative_intake`, `moderation` and `submission_status` always immediate,
 unknown types in-app only. `quest_submitted` rides the member's quest
 preference, because work arriving for consent is the same conversation as
@@ -548,13 +548,21 @@ The registry of jobs is the `registerJob` calls themselves, and it has grown
 faster than any list in this file could. Enumerate it:
 
 ```bash
-grep -n 'registerJob(' server/index.ts server/lib/*.ts
+grep -n 'registerJob(' server/index.ts server/lib/*.ts server/routes/*.ts
 ```
 
 Each call carries its own interval as its second argument. The shapes worth
 knowing: `stay-nightly` is idempotent by keyed ledger legs, `exchange-reconcile`
 is a reaper and never a settler, and every module-owned job early-returns while
 its module reads off, so a village that runs three modules pays for three.
+
+When a job throws, the scheduler writes `FAILED:` into its row and `reportError`
+tells admins and founders. What keeps saying so afterwards is the hourly
+`failed-actions` job (`server/lib/failedActions.ts`, registered in
+`server/routes/failedActions.ts`): it lists every job whose last run threw or
+that has gone past twice its interval, beside the other failures it gathers, on
+the admin tab What's Failing. Its header says why it reruns only one kind of
+work, a closed account's unfinished deletion, and reports the rest.
 
 ### 3.8 The payments trio — `server/lib/payments.ts`
 

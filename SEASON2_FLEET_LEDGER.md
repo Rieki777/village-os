@@ -197,6 +197,13 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   under-reports, so run all three scans (the directory, `git ls-tree` over every remote AND
   local ref, and every `drizzle/*.sql` on disk across the worktrees), then
   `node scripts/check-migration-numbers.mjs --next` to confirm.
+- **failed-actions lane (the retry-and-report job), 2026-09-14: holds 0207** for
+  `drizzle/0207_a_failure_is_kept_until_it_is_fixed.sql` (one new table, `failed_action_items`,
+  and one new non-unique index on `payments_log`). Measured three ways minutes before creating it: every remote and
+  local ref and every worktree disk hold 0196 through 0206 (0197 and 0198 on `wt/first-hour`, 0199
+  on `wt/seat-terms`, 0200 to 0206 on `wt/econ`) and nothing at 0207 or above.
+  `check-migration-numbers.mjs --next` answered 0197 on this main-based branch, which is the usual
+  under-report. Additive only: the previous release neither reads nor writes the table.
 - **quest-consent integrity lane, 2026-09-10: holds 0196** for
   `drizzle/0196_one_live_claim_per_member.sql`. The number was ASSIGNED by the coordinator, not
   measured by this lane, and `check-migration-numbers.mjs` reported next-free 0190 in this
@@ -2938,6 +2945,7 @@ Both look like intentional work and neither is.
 | 2026-09-04 | two sessions | migration `0156` | (landed) | **COLLIDED AND SHIPPED.** Both files ran on production eleven minutes apart, so neither can be renumbered: the applied ledger keys on FILENAME, and renaming makes the file new to every instance that already ran it. Grandfathered with evidence in `b5ed26f`. The list of grandfathered numbers does not grow. |
 | 2026-09-04 | governance (`b7f9ef`) | `docs/GOVERNANCE.md` and `scripts/generate-governance-doc.mjs` | `wt/gb-docs` | HELD — ruling top-up in flight |
 | 2026-09-04 | admin lane | `ledger.admin_mint_cycle_cap` and `ledger.admin_mint_cosign_over` | landed `4364a2c` | **RELEASED, but READ THIS BEFORE TOUCHING THE MINT SURFACE. The MEANING of both dial keys changed and their NAMES did not**, so a grep finds them unchanged and returns the old semantics. They were compared raw against ledger amounts and are now scaled through `toLedgerUnits`, so the number is WHOLE TOKENS. At 0 decimals nothing moves; for a token with a scale the co-sign threshold rises by that scale, which is a governance weakening arriving as a units fix. Both descriptions in `shared/gameVariables.ts` now state the unit, which is the only place it survives a merged PR body going stale. Separately: the cap's COUNTING is being rewritten by the economics lane on `wt/econ` (`92bd0f5`, unmerged at time of writing) to count all issuance net of returns, and that commit also carries the corrected sentence in `client/src/components/admin/TokensTab.tsx`. |
+| 2026-09-14 | failed-actions lane | migration `0207`, `drizzle/0207_a_failure_is_kept_until_it_is_fixed.sql`; one import line and one register line in `server/index.ts`; the `failures` admin tab key | `wt/failed-actions` | HELD. The number was measured three ways before the file was created (remote refs, local refs, worktree disks): section 3 carries the bullet. The index.ts lines are exempt from the size ratchet and sit beside `registerErasureQueueRoutes`, so a rebase conflict there is one line. |
 
 ### 27d — Verification: CI runs the full suite, lanes run what they touched
 

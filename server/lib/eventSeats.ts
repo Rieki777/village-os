@@ -68,8 +68,12 @@ export interface SeatChargeRow {
 
 const newId = () => `sc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
-/** Ledger keys for one attempt on one place. Derived, never typed twice. */
-function keysFor(row: { eventId: string; occurrenceKey: string; userId: string; chargeSeq: number }) {
+/**
+ * Ledger keys for one attempt on one place. Derived, never typed twice: the
+ * failed-actions report imports this to ask whether a kept fee's transfer
+ * landed, so the key format keeps one home.
+ */
+export function keysFor(row: { eventId: string; occurrenceKey: string; userId: string; chargeSeq: number }) {
   const place = `seat:${row.eventId}:${row.occurrenceKey || "-"}:${row.userId}:${row.chargeSeq}`;
   return { pay: `${place}:pay`, refund: `${place}:refund`, keep: `${place}:keep` };
 }
