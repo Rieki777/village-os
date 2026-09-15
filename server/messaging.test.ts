@@ -22,6 +22,7 @@ import mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 import { splitStatements } from "./db/migrate";
 import type { NotifyDeps } from "./lib/notify";
+import { presenceTest } from "./lib/memberPresence";
 import {
   addMembers,
   advanceRead,
@@ -81,6 +82,7 @@ const notifyDeps = (): NotifyDeps => ({
   },
   origin: () => "https://example.test",
   projectName: () => "Test village",
+  isPresent: presenceTest("messaging-test-secret"),
 });
 
 async function notificationsFor(userId: string) {

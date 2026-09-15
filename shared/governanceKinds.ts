@@ -339,6 +339,25 @@ export interface LandingInput {
    */
   notVetoableReason?: "veto_map" | "out_of_tier_reach";
   /**
+   * TRUE WHEN EVERY SEATED STEWARD VOTED YES ON THIS BALLOT.
+   *
+   * Rye, 2026-09-14: "if all stewards already voted yes, then there is no veto
+   * window needed and it can pass immediately", and then, on the design: "It's
+   * also the villages countdown (they share it)". So consent takes the VETO
+   * away and shortens only the veto term of the wait, to `consentNoticeHours`.
+   * The boundary term is never touched.
+   *
+   * The caller decides it over a NON-EMPTY steward set (`everyStewardSaidYes`
+   * in server/lib/stewardship.ts), because every yes over nobody is vacuously
+   * true. It is ignored for a decision that was not vetoable anyway: the
+   * precedent above `isVetoable` is that the act nobody can stop never gets a
+   * faster clock, and stewards agreeing to an edit of their own limits is
+   * exactly the case that precedent is about.
+   */
+  stewardConsent?: boolean;
+  /** `governance.consent_notice_hours`, raw. `consentWindowHours` clamps it. */
+  consentNoticeHours?: unknown;
+  /**
    * TRUE WHEN THIS DECISION MAY ONLY LAND ON A BOUNDARY.
    *
    * A cycle-timed dial, a minting rule or a stage multiplier changes the basis
@@ -360,6 +379,44 @@ export interface Landing {
   vetoable: boolean;
   /** The sentence a member reads on the decision page. */
   because: string;
+  /** Why no steward may stop it, or null when one may. Frozen at close into `veto_locked`. */
+  lockReason?: "veto_map" | "out_of_tier_reach" | "steward_consent" | null;
+  /** The hours of window this landing counted, after any consent. */
+  windowHours?: number;
+}
+
+/** What a member reads while a decision every steward agreed to waits out its notice. */
+export const CONSENT_STOPPER =
+  "Every steward already said yes, so nobody can stop this one. The wait is the village's notice that it is coming.";
+
+/**
+ * The window a unanimous steward yes leaves, in hours.
+ *
+ * Never longer than the steward window it replaces, so consent can only ever
+ * shorten a wait. An unreadable, negative or missing value FAILS CLOSED to the
+ * full steward window: a typo in the setting costs the village a few days of
+ * notice it would have had anyway, and never takes the notice away.
+ */
+export function consentWindowHours(noticeRaw: unknown, vetoHours: number): number {
+  const ceiling = Math.max(0, Math.floor(Number(vetoHours) || 0));
+  if (noticeRaw === null || noticeRaw === undefined || String(noticeRaw).trim() === "") return ceiling;
+  const n = Number(noticeRaw);
+  if (!Number.isFinite(n) || n < 0) return ceiling;
+  return Math.min(Math.floor(n), ceiling);
+}
+
+/**
+ * The countdown's sentence, from the lock frozen at close.
+ *
+ * `ballots.veto_locked` holds 0 (a steward may stop it), 1 (a carve-out, so
+ * nobody may) or 2 (every steward already said yes). The reason is stored
+ * rather than recomputed because the steward set it was measured against can
+ * change the day after the close.
+ */
+export function countdownSentence(lock: 0 | 1 | 2): string {
+  if (lock === 2) return CONSENT_STOPPER;
+  if (lock === 1) return "No steward can stop this one. It still waits, so the village can see it coming.";
+  return "A steward can stop this until it lands.";
 }
 
 /**
@@ -388,9 +445,17 @@ export interface Landing {
  * a payout that can be stopped.
  */
 export function landingFor(input: LandingInput): Landing {
-  const windowMs = Math.max(0, input.vetoHours) * 60 * 60 * 1000;
+  const vetoHours = Math.max(0, input.vetoHours);
+  const consented = !!input.stewardConsent && !input.notVetoable;
+  const windowHours = consented ? consentWindowHours(input.consentNoticeHours, vetoHours) : vetoHours;
+  const windowMs = windowHours * 60 * 60 * 1000;
   const windowClose = new Date(input.closesAt.getTime() + windowMs);
-  const vetoable = !input.notVetoable;
+  const vetoable = !input.notVetoable && !consented;
+  const lockReason: Landing["lockReason"] = vetoable
+    ? null
+    : consented
+      ? "steward_consent"
+      : input.notVetoableReason ?? "veto_map";
 
   if (input.noWindow) {
     return {
@@ -422,7 +487,9 @@ export function landingFor(input: LandingInput): Landing {
    */
   const stopper = vetoable
     ? "A steward can stop it until then."
-    : input.notVetoableReason === "out_of_tier_reach"
+    : consented
+      ? CONSENT_STOPPER
+      : input.notVetoableReason === "out_of_tier_reach"
       ? "No steward can stop this one: the village has not put decisions of this size in the seat's reach."
       : "Nobody can stop this one: the village decided it about the seat itself, so the seat has no say in it.";
 
@@ -465,10 +532,12 @@ export function landingFor(input: LandingInput): Landing {
       vetoClosesAt: at,
       executesAtClose: false,
       vetoable,
+      lockReason,
+      windowHours,
       because:
         at.getTime() > windowClose.getTime()
           ? `This one moves a number the running cycle is being settled against, so it waits for the cycle to turn. ${stopper}`
-          : `This changes the Game, so it lands ${input.vetoHours} hours after the vote closes. ${stopper}`,
+          : `This changes the Game, so it lands ${windowHours} hours after the vote closes. ${stopper}`,
     };
   }
 
@@ -480,10 +549,14 @@ export function landingFor(input: LandingInput): Landing {
     vetoClosesAt: landsAt,
     executesAtClose: false,
     vetoable,
+    lockReason,
+    windowHours,
     because:
       boundary.getTime() > windowClose.getTime()
         ? `This starts with the next new moon. ${stopper}`
-        : `The new moon is less than ${input.vetoHours} hours away, so this lands ${input.vetoHours} hours after the vote closes instead. A steward is owed the whole window.`,
+        : consented
+          ? `The new moon is less than ${windowHours} hours away, so this lands ${windowHours} hours after the vote closes instead. ${stopper}`
+          : `The new moon is less than ${input.vetoHours} hours away, so this lands ${input.vetoHours} hours after the vote closes instead. A steward is owed the whole window.`,
   };
 }
 

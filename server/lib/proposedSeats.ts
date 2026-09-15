@@ -143,18 +143,43 @@ const givesACircle = (key: string, v: unknown): boolean =>
  */
 const LIST_MARKER = /^(?:(?:\d{1,3}[.)]|[-*•])\s+)+/;
 
-/** A numbered marker later in the text: " 2. ", " 3) ". */
-const INLINE_MARKER = /\s\d{1,3}[.)]\s/;
+/**
+ * A numbered list that lost its line breaks, from its last leading number on,
+ * or null. "1. Keep the site. 2. Update it." is one item, and stripping only
+ * the "1." published it counting from 2.
+ *
+ * ONLY THE NEXT NUMBER COUNTS. Any number with a period after it used to keep
+ * the marker, so "1. Survey Lot 3. Stake it" kept its "1." while the items
+ * around it lost theirs, and a bullet was kept for the same "3.". A bullet has
+ * no next number, so it is never kept.
+ */
+function numberedRun(s: string): string | null {
+  const lead = LIST_MARKER.exec(s)?.[0] ?? "";
+  const last = /(\d{1,3})[.)]\s+$/.exec(lead);
+  if (!last) return null;
+  const next = new RegExp(`\\s${Number(last[1]) + 1}[.)]\\s`);
+  return next.test(s.slice(lead.length)) ? s.slice(lead.length - last[0].length) : null;
+}
+
+/** An item without its leading markers, unless it is a numbered run (`numberedRun`). */
+function stripMarkers(s: string): string {
+  return numberedRun(s) ?? s.replace(LIST_MARKER, "");
+}
 
 /**
- * An item without its leading markers, unless a numbered marker follows later
- * in it. "1. Keep the site. 2. Update it." with its line breaks lost is one
- * item, and stripping only the "1." published it counting from 2.
+ * One item's text before its markers are judged: trimmed, one trailing period
+ * off, trimmed again. Judged before the period came off, "1. Pay 2. ." kept its
+ * "1." as a run, lost the period, and a second pass then stripped the "1.".
  */
-function stripMarkers(s: string): string {
-  const rest = s.replace(LIST_MARKER, "");
-  return INLINE_MARKER.test(rest) ? s : rest;
-}
+const itemText = (s: string): string => s.trim().replace(/\.$/, "").trim();
+
+/**
+ * A one-item list of a string or a number, read as that item. `seats: [2]`
+ * blocked as a bad count and `criticality: ["high"]` as a bad level, while the
+ * value inside was fine.
+ */
+const onlyItem = (v: unknown): unknown =>
+  Array.isArray(v) && v.length === 1 && (typeof v[0] === "string" || typeof v[0] === "number") ? v[0] : v;
 
 /*
  * Letters are spelled as ranges, accented Latin included ("gestión", "Pérez"),
@@ -171,6 +196,11 @@ const PLAIN_WORD = /^[a-zß-öø-ÿ][a-zß-öø-ÿ-]*[a-zß-öø-ÿ]$/;
 /** Lowercase words that are abbreviations, and a capital after them starts no sentence. */
 const LOWERCASE_ABBREVIATIONS = new Set([
   "etc", "vs", "approx", "aprox", "incl", "excl", "esp", "min", "max", "no", "nos", "tel", "ext", "cf", "ca", "pp",
+  // Titles and offices written in lowercase, which cut "lic. Mora" off its duty.
+  "lic", "licda", "ing", "prof", "profa", "dra", "sra", "srta", "arq", "dpto", "depto", "admón", "gral",
+  "hrs", "hr", "dept", "govt", "est", "mgr", "asst",
+  // Spanish weekdays.
+  "lun", "mar", "mié", "jue", "vie", "sáb", "dom",
 ]);
 
 /** A quote mark, or an apostrophe with no letter on one side of it ("parcel's" is not a quote). */
@@ -267,8 +297,9 @@ const namesACircle = (v: unknown): boolean =>
  * will split, which is narrower than every period.
  *
  * An array passes through with items trimmed, leading list markers dropped, and
- * null or blank items dropped. A leading marker stays on an item, string or
- * array, that has another numbered marker later in it (`stripMarkers`).
+ * null or blank items dropped. A leading number stays on an item, string or
+ * array, whose text later carries the next number as a marker (`numberedRun`),
+ * and a string holding such a run is never split at its sentences.
  * An array holding an object or a nested list is `undefined` as a whole, since
  * keeping the text items would publish a list with duties quietly missing.
  * `null` passes through as `null`. Anything else is `undefined`, which the
@@ -279,9 +310,11 @@ export function normaliseAccountabilities(v: unknown): string[] | null | undefin
   if (v === null) return null;
   if (typeof v === "string") {
     const text = v.trim();
-    return (/[;\r\n]/.test(text) ? text.split(/[;\r\n]+/) : splitSentences(text))
-      .map((s) => stripMarkers(s.trim()).replace(/\.$/, "").trim())
-      .filter((s) => s !== "");
+    // A numbered run is decided on the whole text, before any split: split at
+    // sentences first, "1. Keep the site. Tidy it. 2. Update it." lost its "1."
+    // with its first sentence and the rest counted from 2.
+    const parts = /[;\r\n]/.test(text) ? text.split(/[;\r\n]+/) : numberedRun(itemText(text)) ? [text] : splitSentences(text);
+    return parts.map((s) => stripMarkers(itemText(s)).trim()).filter((s) => s !== "");
   }
   if (Array.isArray(v)) {
     if (v.some((s) => carries(s) && typeof s !== "string" && typeof s !== "number" && typeof s !== "boolean")) {
@@ -383,9 +416,10 @@ export function normaliseProposedSeat(
     if (v) out[k] = typeof v.value === "number" ? String(v.value) : v.value;
   }
   for (const k of ["criticality", "seats"] as const) {
-    // The preview checks both loudly, so a bad value blocks there by name.
+    // The preview checks both loudly, so a bad value blocks there by name. A
+    // one-item list is stored as its item, so the payload holds what is checked.
     const v = pick(k);
-    if (v) out[k] = v.value;
+    if (v) out[k] = onlyItem(v.value);
   }
 
   const recruiting = pick("recruiting", (v) => normaliseRecruiting(v) !== undefined);
@@ -398,9 +432,10 @@ export function normaliseProposedSeat(
   // exactly one live circle becomes that id. Anything else stays a name, with
   // the count, so the preview can say which of the two problems it is.
   const circleUnread: string[] = [];
-  const id = pick("circleId", namesACircle, (v) => blank(v) || v === 0 || v === false);
+  // A one-item list is read as its item, the way the preview reads a draft's.
+  const id = pick("circleId", (v) => namesACircle(onlyItem(v)), (v) => blank(v) || v === 0 || v === false);
   for (const k of ["circleId", ...(SEAT_KEY_ALIASES.circleId ?? [])]) if (unusable.has(k)) circleUnread.push(k);
-  const explicitId = id && namesACircle(id.value) ? id.value : null;
+  const explicitId = id && namesACircle(onlyItem(id.value)) ? onlyItem(id.value) : null;
   let sentName: string | null = null;
   for (const k of CIRCLE_NAME_KEYS) {
     if (!has(raw, k)) continue;

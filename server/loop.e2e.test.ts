@@ -442,7 +442,8 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const profile = await api("GET", "/api/profile", undefined, idlerToken);
     expect(profile.json.recognitionBalance).toBe(0);
 
-    // Declining is still allowed from any state, so stale claims can be cleared.
+    // Declining is still allowed before any consent, from claimed as well as
+    // submitted, so stale claims can be cleared.
     const declined = await api(
       "POST",
       `/api/admin/quest-claims/${claim.json.id}/consent`,
@@ -1369,7 +1370,9 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       founderToken,
     );
     expect(first.status).toBe(200);
-    expect(first.json.toBalance).toBe(9000);
+    // `toBalance` is the recipient's MINOR balance, and `stay-credits` is a credit token,
+    // so it is born at the currency scale (feea3d2). `remaining` stays human, like the cap.
+    expect(first.json.toBalance).toBe(9000 * (await scale("stay-credits")));
     expect(first.json.remaining).toBe(1000);
 
     const overflow = await api(
@@ -1383,7 +1386,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
 
     // The mint landed in the member's own ledger view, in the new token.
     const ledger = await api("GET", "/api/game/ledger", undefined, peerToken);
-    expect(ledger.json.balances["stay-credits"]?.balance).toBe(9000);
+    expect(ledger.json.balances["stay-credits"]?.balance).toBe(9000 * (await scale("stay-credits")));
 
     // And the audit trail names the mint: exactly one row for the 9000 that
     // landed, none for the 1001 that was refused (the cap answers before any
@@ -1417,7 +1420,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const mintRow = rec.json.systemAccounts.find(
       (s: any) => s.id === "sys:mint" && s.tokenType === "stay-credits",
     );
-    expect(mintRow?.issuedToDate).toBe(9000);
+    expect(mintRow?.issuedToDate).toBe(9000 * (await scale("stay-credits")));
     const poolRow = rec.json.systemAccounts.find(
       (s: any) => s.id === "sys:cycle-pool" && s.tokenType === "credits",
     );
@@ -2077,6 +2080,14 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const peerNow = await api("GET", "/api/admin/players", undefined, founderToken);
     const peerRow = peerNow.json.find((p: any) => p.id === peerId);
     expect(peerRow).toBeTruthy();
+    // Contact opens at Member, and the doer is a guest whose consented quest
+    // paid them. Pay lifts only somebody the village has let in
+    // (server/lib/admission.ts), so the village lets them in first, the way a
+    // steward does. Without this the opt-out refusal below would be the gate
+    // refusing a guest, and would prove nothing about the opt-out.
+    const letIn = await api("POST", `/api/members/${doerId}/super-vouch`, {}, founderToken);
+    expect(letIn.status, JSON.stringify(letIn.json)).toBe(200);
+    expect(letIn.json.admitted).toBe(true);
     await api("PUT", "/api/game/preferences", { contactable: false }, peerToken);
     const refused = await api("POST", "/api/map/contact", { toUserId: peerId, message: "hello" }, doerToken);
     expect(refused.status).toBe(403);
@@ -4347,8 +4358,13 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
      * "Includes 10000 Cob Credit" and has nothing to divide by.
      */
     const packRow = catalog.products.find((p: any) => p.id === pack.json.id);
-    expect(packRow.grantsToken.amount, "minor units, as the row stores them").toBe(5);
-    expect(packRow.grantsToken.decimals, "the scale that turns them into what a member reads").toBe(0);
+    // The row stores WHOLE tokens (the create route floors a human number and the grant
+    // converts it); the catalog ships them converted, beside `decimals`, so /contribute
+    // divides once and prints the 5 the pack grants.
+    expect(packRow.grantsToken.amount, "minor units, converted from the row's whole tokens").toBe(5 * (await scale("swap-b")));
+    expect(packRow.grantsToken.decimals, "the scale that turns them into what a member reads").toBe(
+      Math.round(Math.log10(await scale("swap-b"))),
+    );
     expect(typeof packRow.grantsToken.decimals).toBe("number");
     const donationId = donation.json.id;
     expect((await api("POST", `/api/products/${donationId}/checkout`, { amountMinor: 100 }, peerToken)).status).toBe(400);
@@ -4385,7 +4401,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(paid.status).toBe("paid");
     expect(Number(paid.periods_paid)).toBe(1);
     const afterBal = (await api("GET", "/api/game/ledger", undefined, peerToken)).json.balances["swap-b"].balance;
-    expect(afterBal).toBe(before + 5);
+    expect(afterBal).toBe(before + 5 * (await scale("swap-b")));
     const [grantLegs] = await testDb.conn.query<any[]>(
       "SELECT from_account FROM token_ledger WHERE source = 'product_grant' AND source_ref = ?", [purchaseRow.id],
     );
@@ -4545,7 +4561,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       data: { object: { id: "ch_1", payment_intent: "pi_sub_1" } },
     })).status).toBe(200);
     const balAfter = (await api("GET", "/api/game/ledger", undefined, peerToken)).json.balances["pack-tok"].balance;
-    expect(balBefore - balAfter).toBe(1); // one period's tokens, not two
+    expect(balBefore - balAfter).toBe(1 * (await scale("pack-tok"))); // one period's tokens, not two
     const [reversals] = await testDb.conn.query<any[]>(
       "SELECT idempotency_key FROM token_ledger WHERE source = 'payment_reversal' AND source_ref = ?", [subBuy.id],
     );
@@ -4835,8 +4851,10 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       "SELECT COALESCE(SUM(amount),0) AS n FROM token_ledger WHERE from_account = 'sys:mint' AND token_type = 'cap-tok'",
     );
     // The ledger is the witness. Before the guard this could reach 100.
-    expect(Number(minted.n)).toBeLessThanOrEqual(30);
-    expect(Number(minted.n)).toBe(accepted * 10);
+    // The ledger sums MINOR units; the cap (30) and each stocking (10) are human.
+    const capScale = await scale("cap-tok");
+    expect(Number(minted.n)).toBeLessThanOrEqual(30 * capScale);
+    expect(Number(minted.n)).toBe(accepted * 10 * capScale);
 
     // ── AN ABANDONED CHECKOUT MUST NOT HOLD SOMEONE IN THE VILLAGE. ──
     // A pending order blocks disabling the exchange AND blocks that member's

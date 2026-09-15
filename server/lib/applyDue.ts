@@ -92,7 +92,7 @@ import { ballotById, votesFor, type BallotRow } from "./ballots";
 import { floorForCriticality, thresholdSettingsFrom, type ThresholdSettings } from "../../shared/ballotSubjects";
 import type { Criticality } from "../../shared/governanceEngine";
 import { numberVar, stringVar } from "./variables";
-import { keyIsVetoMap, recordVeto as recordStewardAct, stewardNoBlocks, stewardsSeated, tierIsInStewardReach, vetoWatchMarksDue, type VetoWindowVerdict } from "./stewardship";
+import { everyStewardSaidYes, keyIsVetoMap, recordVeto as recordStewardAct, stewardNoBlocks, stewardsSeated, tierIsInStewardReach, vetoWatchMarksDue, type VetoWindowVerdict } from "./stewardship";
 import { asChangeItem, pricingOf, type ChangeInput } from "./mechanics";
 import { criticalityOfItems } from "../../shared/ballotSubjects";
 /*
@@ -203,6 +203,11 @@ export interface VetoDeps {
 export interface LandingDeps extends VetoDeps {
   /** The village's veto window, already floored at 72 hours. */
   vetoHours: () => number;
+  /**
+   * `governance.consent_notice_hours`, raw. Optional, and absent means consent
+   * shortens nothing: `consentWindowHours` fails closed to the full window.
+   */
+  consentNoticeHours?: () => unknown;
   /** Is the founder's brake off? */
   autoApplyEnabled: () => boolean;
   /** Does a veto need a majority of the seated stewards? */
@@ -287,6 +292,8 @@ export interface StampInput {
   outOfTierReach?: boolean;
   /** True when the set moves a number the running cycle is being settled against. */
   snapToBoundary?: boolean;
+  /** True when every seated steward voted yes (`stewardConsentAtClose`), 2026-09-14. */
+  stewardConsent?: boolean;
 }
 
 /**
@@ -314,6 +321,8 @@ export function landingOf(deps: LandingDeps, input: StampInput): Landing {
     // seat's own limits, and that is the more specific thing to tell a member.
     notVetoableReason: input.editsVetoMap || isSeatSubject(b.subjectType) ? "veto_map" : "out_of_tier_reach",
     snapToBoundary: !!input.snapToBoundary,
+    stewardConsent: !!input.stewardConsent,
+    consentNoticeHours: deps.consentNoticeHours ? deps.consentNoticeHours() : undefined,
   });
 }
 
@@ -368,7 +377,8 @@ export async function stampLanding(deps: LandingDeps, b: BallotRow, landing: Lan
     ballotId: b.id,
     landsAt: landing.landsAt,
     landingStatus: landing.executesAtClose ? "not_applicable" : "pending",
-    vetoLocked: landing.vetoable ? 0 : 1,
+    // 0 a steward may stop it, 1 a carve-out, 2 every steward already said yes.
+    vetoLocked: landing.vetoable ? 0 : landing.lockReason === "steward_consent" ? 2 : 1,
   });
   if (hasProposal(b.subjectType)) {
     await stampProposalLanding(deps.pool, b.subjectRef, landing.landsAt);
@@ -430,6 +440,20 @@ export async function stewardNoVote(
   });
   if (!verdict.blocks) return null;
   return { stewardIds: verdict.stewardIds, reason: verdict.reason, seated: verdict.seated };
+}
+
+/**
+ * DID EVERY SEATED STEWARD SAY YES ON THIS BALLOT, AT THE CLOSE?
+ *
+ * The same seat set `stewardNoVote` reads, at the same moment, so a steward is
+ * one set of people to both doors. The rule is `everyStewardSaidYes`; this reads
+ * the rows. No frozen-at-open holder exists on this build, so all readers stay on
+ * the close-time set together.
+ */
+export async function stewardConsentAtClose(deps: LandingDeps, b: BallotRow): Promise<boolean> {
+  const seated = (await stewardsSeated(deps.pool, nowOf(deps))).filter((h) => !h.lapsed);
+  if (seated.length === 0) return false;
+  return everyStewardSaidYes(seated.map((h) => h.userId), await votesFor(deps.pool, b.id));
 }
 
 export type VetoResult =
@@ -934,8 +958,10 @@ export const TICK_MS = 5 * 60 * 1000;
  * reopened window that lands mid-cycle moves a ceiling under somebody already
  * spending against it exactly as the first stamp would have.
  */
-async function snappedWindowEnd(deps: LandingDeps, b: BallotRow, at: Date): Promise<Date> {
-  const end = new Date(at.getTime() + vetoHoursFrom(deps.vetoHours()) * 60 * 60 * 1000);
+async function snappedWindowEnd(deps: LandingDeps, b: BallotRow, at: Date, hours?: number): Promise<Date> {
+  // `hours` is the window the landing actually counted, so a late-settled
+  // decision every steward agreed to is restamped with its notice, not 72 hours.
+  const end = new Date(at.getTime() + (hours ?? vetoHoursFrom(deps.vetoHours())) * 60 * 60 * 1000);
   if (!(await snapsToBoundary(deps, b))) return end;
   const boundary = deps.nextBoundaryAfter(new Date(end.getTime() - 1));
   return boundary.getTime() >= end.getTime() ? boundary : end;
@@ -1195,6 +1221,7 @@ export async function routeOutcome(
     editsVetoMap: await editsVetoMap(deps, b),
     outOfTierReach: await outOfStewardTierReach(deps, b),
     snapToBoundary: await snapsToBoundary(deps, b),
+    stewardConsent: await stewardConsentAtClose(deps, b),
   });
   await stampLanding(deps, b, landing);
 
@@ -1213,9 +1240,11 @@ export async function routeOutcome(
    * the reason, and every steward is told. The village loses nothing it was
    * promised; it gains the notice it was promised.
    */
-  if (landing.landsAt && landing.landsAt.getTime() <= nowOf(deps).getTime()) {
+  // A notice of zero hours is a village's own choice to land at the close, and
+  // is not late: without this it would read as a missed window and be restamped.
+  if (landing.landsAt && (landing.windowHours ?? 1) > 0 && landing.landsAt.getTime() <= nowOf(deps).getTime()) {
     const at = nowOf(deps);
-    const restamped = await snappedWindowEnd(deps, b, at);
+    const restamped = await snappedWindowEnd(deps, b, at, landing.windowHours);
     const why =
       `The vote's window ended at ${new Date(b.closesAt).toISOString()} and it was not read until ` +
       `${at.toISOString()}, so the instant it should have landed at was already past. ` +

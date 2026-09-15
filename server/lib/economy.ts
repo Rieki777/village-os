@@ -77,6 +77,7 @@ import {
   CYCLE_POOL_FAUCET,
   MINT_FAUCET,
   RECOGNITION_FAUCET,
+  type TransferGuard,
   type TransferResult,
 } from "./ledger";
 // The one definition of "this gratitude row has been undone". It lives in the
@@ -188,10 +189,10 @@ export async function ensureVoiceToken(pool: Pool, displayName?: string): Promis
  * came down from three to two, which is that two scales are fewer places a
  * display and an input can disagree than three.
  */
-export { CURRENCY_DECIMALS, VOICE_DECIMALS } from "../../shared/tokenScale";
+export { CURRENCY_DECIMALS, VOICE_DECIMALS, finerThanScale } from "../../shared/tokenScale";
 import { CURRENCY_DECIMALS, VOICE_DECIMALS, decayUnits } from "../../shared/tokenScale";
-import { faucetAccountRows, issuedBySourceRows, legRowsForKeys } from "../repos/tokenLedger";
-import { memberHolderRows } from "../repos/tokenBalances";
+import { faucetAccountRows, heldBeforeRows, issuedBySourceRows, legRowsForKeys } from "../repos/tokenLedger";
+import { balanceRowFor, lockedBalanceRows, memberHolderRows } from "../repos/tokenBalances";
 
 /**
  * THE ONE REGISTRY READ FOR A TOKEN'S SCALE.
@@ -2547,6 +2548,55 @@ export interface VoiceDecaySummary {
 }
 
 /**
+ * What one member's waning may take this moon, in minor units: the published
+ * rate applied to what they carried INTO the moon, capped by what they hold
+ * now. Floors, through `decayUnits`, for the reason written below.
+ *
+ * Pure and exported so the posting and its guard share ONE copy of the
+ * decision. Anything at or below zero on either side takes nothing.
+ */
+export function waningUnits(heldGoingIn: number, holdsNow: number, pct: number): number {
+  const base = Math.min(Number(heldGoingIn), Number(holdsNow));
+  if (!(base > 0)) return 0;
+  return decayUnits(base, pct);
+}
+
+/**
+ * What `waningGuard` refuses with when the member's Voice moved between the
+ * read that sized the waning and the posting. Exported so the loop and a test
+ * name the same sentence.
+ */
+export const WANING_MOVED =
+  "this member's Voice moved while its waning was being decided, so this ask took nothing and the next ask decides again";
+
+/**
+ * THE WANING IS DECIDED AGAIN UNDER THE ACCOUNT LOCK, and the posting is
+ * refused unless the second answer is the same number.
+ *
+ * `decayVoice` sizes each waning from a pool read and posts it several awaits
+ * later. A spend landing in between used to leave the posting unchanged: a
+ * member at 5000 who spent 4000 in that window lost 50 of the 1000 left, which
+ * is five percent under a one percent dial. `postTransferOn` runs this after it
+ * has locked both account rows, so every other posting to this member waits,
+ * and `lockedBalanceRows` reads the committed balance.
+ *
+ * EQUAL, NOT "AT MOST", because both wrong directions last the whole moon. A
+ * posting above the rate takes more than the dial says. A posting below it
+ * writes the per-cycle key, so the shortfall could never be taken later in the
+ * moon. A refusal writes no row and no key; the next hourly ask sizes it again
+ * from fresh numbers. The guard can only refuse, never resize, and refusing is
+ * the whole shape: no second copy of the arithmetic, just `waningUnits` asked
+ * twice.
+ */
+export function waningGuard(account: string, heldGoingIn: number, pct: number, units: number): TransferGuard {
+  return async (conn) => {
+    const [row] = await lockedBalanceRows(conn, account, VILLAGE_VOICE);
+    const allowed = waningUnits(heldGoingIn, Number(row?.balance ?? 0), pct);
+    return units === allowed ? null : WANING_MOVED;
+  };
+}
+
+/**
  * WHAT WANES AT THE CLOSE OF A MOON (R3, R15).
  *
  * The founder's ruling: Voice can decay, it starts at 1 percent a lunar cycle,
@@ -2592,16 +2642,29 @@ export interface VoiceDecaySummary {
  * There is no absent flag in this path and exempting absence would leave the
  * dial with nothing to do.
  *
- * ONE EDGE THIS DOES NOT SMOOTH, measured and named rather than discovered.
- * The settlement job asks hourly, and a member holding NOTHING when the moon's
- * first ask runs is not in the read at all, so no key is written for them. If
- * they are paid later in that same moon, the next hourly ask finds a positive
- * balance and wanes one percent of the payout they have only just received.
- * Everybody who already held Voice at the first ask wanes against the balance
- * they carried in, once, and is then locked by the key. The residue is one
- * percent of one cycle's earnings for somebody who started that cycle at zero,
- * it happens once in a member's life, and closing it would mean writing a
- * ledger row of zero, which `postTransfer` refuses for good reasons.
+ * THE BASE IS WHAT THE MEMBER CARRIED INTO THE MOON, and it is read off the
+ * ledger rows posted before the cycle opened (`heldBeforeRows`), never off
+ * the balance at whatever hour the job happens to ask. This used to read the
+ * live balance, and the key was written only when a posting landed, so a
+ * member holding nothing (or less than the floor) at the moon's first hourly
+ * ask got no key; paid later that same moon, the next ask found a positive
+ * balance and waned one percent of a payout they had only just received. That
+ * happened every moon to anyone below the floor at its first ask, and the
+ * seat loop's own payout was the commonest victim. Now:
+ *
+ *  - below the floor going in, nothing wanes this moon, however many asks
+ *    follow and whatever arrives;
+ *  - a payout received during the moon is never part of this moon's base;
+ *  - at or above the floor going in, the member wanes once, on that base,
+ *    and the per-cycle key locks every later ask out.
+ *
+ * The base is CAPPED by the balance held now, because Voice spent during the
+ * moon cannot be waned: the posting would overdraw. `waningUnits` is that
+ * whole decision and the only copy of it.
+ *
+ * The ledger's `at` column holds whole seconds, so the boundary is compared at
+ * the second the cycle opened and a row posted in that same second counts as
+ * inside the moon. That direction takes less, never more.
  *
  * NOBODY IS NAMED IN THE ROW. R65 and R66 rule that no party may strip
  * another's earned voice, and a row naming an admin would read as exactly that
@@ -2683,6 +2746,7 @@ export async function decayVoice(
    * somebody remembering to add it to a list.
    */
   const holders = await memberHolderRows(pool, VILLAGE_VOICE);
+  const openedAtSeconds = Math.floor(cycleWindow(at).startsAt.getTime() / 1000);
 
   /*
    * Each DISTINCT refusal once, for the reason the seat loop gives two hundred
@@ -2713,7 +2777,18 @@ export async function decayVoice(
       continue;
     }
 
-    const units = decayUnits(balanceUnits, pct);
+    // What they carried into the moon. Nothing carried in is nothing this
+    // moon's rate can reach, and it is not counted as "too small": a member
+    // paid for the first time this moon is not a dust balance.
+    const account = memberAccount(userId);
+    const [carried] = await heldBeforeRows(pool, account, VILLAGE_VOICE, openedAtSeconds);
+    const heldGoingIn = Number(carried?.held ?? 0);
+    if (!(heldGoingIn > 0)) continue;
+
+    // Read again here and not taken off the holder row above: a village with
+    // hundreds of holders reaches the last of them long after that read.
+    const [held] = await balanceRowFor(pool, account, VILLAGE_VOICE);
+    const units = waningUnits(heldGoingIn, Number(held?.balance ?? balanceUnits), pct);
     if (units <= 0) {
       out.skippedTooSmall += 1;
       continue;
@@ -2740,10 +2815,14 @@ export async function decayVoice(
       sourceRef: cycleKey,
       description: "Voice that waned this moon",
       idempotencyKey: key,
-    });
+    }, waningGuard(account, heldGoingIn, pct, units));
     if (res.ok && !res.duplicate) {
       out.holders += 1;
       out.total += units;
+    } else if (!res.ok && res.error === WANING_MOVED) {
+      // Not a fault and not reported: the member's own Voice moved mid-ask.
+      // Nothing was written, the key included, so the next hourly ask sizes
+      // this waning again. See `waningGuard`.
     } else if (!res.ok) {
       refuse(`Voice could not wane into "${VOICE_DECAY}": ${res.error ?? "the ledger refused the posting"}`);
     }
@@ -2854,11 +2933,16 @@ export async function runSettlement(pool: Pool, at: Date = new Date()): Promise<
    * would leave its dial reading 1 percent while nothing ever moved: no error,
    * no log line, a mechanism that is simply not there.
    *
-   * It also means THIS MOON'S SEAT PAYOUT DOES NOT WANE THIS MOON. A balance
+   * THIS MOON'S SEAT PAYOUT DOES NOT WANE THIS MOON, and the position is no
+   * longer what guarantees it. `decayVoice` wanes what a member carried INTO
+   * the cycle, read off the rows posted before it opened, so a payout made by
+   * this run or by any later hourly run of the same moon is outside the base
+   * wherever the step sits. (It used to be the position alone, and a second
+   * hourly run waned the payout the first one made.) A balance
    * wanes after it has sat through a cycle, which is what makes the published
    * arithmetic true: an accrual of `a` a moon against a rate `d` settles at
    * `a / d` and stands at `a * (1 - (1 - d)^n) / d` after n moons from zero.
-   * Waning after the seat loop would settle at `a * (1 - d) / d` instead, one
+   * Waning this moon's payout would settle at `a * (1 - d) / d` instead, one
    * whole cycle of accrual lower, and every ceiling a founder is shown beside
    * the dial would be wrong by that much.
    *
@@ -2913,7 +2997,11 @@ export async function runSettlement(pool: Pool, at: Date = new Date()): Promise<
     const decimals = decimalsFor(r.tokenSlug);
     const capped = ceilingOutcome(r, r.amount, decimals, tokenDef(r.tokenSlug)?.name ?? r.tokenSlug);
     if (r.amount > 0 && capped.refusal) {
-      out.unpayable.push({ token: r.tokenSlug, reason: capped.refusal });
+      // Into `ruleProblems` like the two reasons above, and not straight onto
+      // `out.unpayable`: only `ruleProblems` reaches `reportUnpayable`, so a
+      // seat rule its own ceiling refused used to pay nobody every moon with
+      // no line in any log. It still lands on `out.unpayable` once, below.
+      ruleProblems.push({ token: r.tokenSlug, reason: capped.refusal });
       return false;
     }
     // An amount that rounds to nothing in this token's minor units is the

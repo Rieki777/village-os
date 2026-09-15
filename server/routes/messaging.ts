@@ -46,7 +46,6 @@ import { hasCapability } from "../../shared/capabilities";
 import { sortMembersByName } from "../../shared/memberOrder";
 import type { AppDeps } from "../lib/appDeps";
 import { recordEvent } from "../lib/events";
-import { isExampleUser } from "../lib/examples";
 import {
   MAX_BODY_CHARS,
   addMembers as addConversationMembers,
@@ -159,13 +158,14 @@ export function register(app: Express, deps: Deps): void {
   }
 
   /**
-   * Addressable members only: a real account somebody can sign into. Example
-   * identities and tombstoned accounts are refused at the door, because a
-   * conversation with one is a conversation nobody will ever read.
+   * Addressable members only: a present person (server/lib/memberPresence.ts),
+   * which includes a member who signs in with Google and has no password.
+   * Example identities, tombstones and unclaimed accounts are refused at the
+   * door, because a conversation with one is a conversation nobody will read.
    */
   async function addressableMember(id: string): Promise<any | null> {
     const target = await members.byId(String(id));
-    if (!target || isExampleUser(target) || !target.passwordHash) return null;
+    if (!target || !deps.notifyDeps.isPresent(target)) return null;
     return target;
   }
 
@@ -224,7 +224,7 @@ export function register(app: Express, deps: Deps): void {
     // ten every time, and a searcher can tell what they are looking at.
     const matches = sortMembersByName(
       all
-        .filter((u: any) => u.id !== user.id && !isExampleUser(u) && u.passwordHash)
+        .filter((u: any) => u.id !== user.id && deps.notifyDeps.isPresent(u))
         .filter(
           (u: any) =>
             String(u.name ?? "").toLowerCase().includes(q) ||

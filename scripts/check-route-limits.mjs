@@ -60,7 +60,9 @@
  * ── WHAT IT DELIBERATELY DOES NOT SEE ────────────────────────────────────
  *
  * A refusal that lives in middleware mounted somewhere else reads as unguarded
- * and needs a waiver. That is the intended direction of the error: this guard
+ * and needs a waiver, and so does a guard handed to the registration by name
+ * (`app.post(url, adminOnly, ...)`), since only a CALL is matched. So does a
+ * bound more than one call away. That is the intended direction of the error: this guard
  * over-reports and never under-reports, because a missed bound is a village
  * paying for a stranger's traffic and a false alarm is one line.
  *
@@ -83,7 +85,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+// ROUTE_LIMITS_ROOT exists for scripts/check-route-limits.test.mjs, which runs
+// the real script against a scratch fixture tree. Unset, it reads this repo.
+const ROOT = process.env.ROUTE_LIMITS_ROOT
+  ? path.resolve(process.env.ROUTE_LIMITS_ROOT)
+  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TABLE = process.argv.includes("--table");
 
 function serverFiles() {
@@ -190,6 +196,198 @@ const files = serverFiles();
  */
 const GUARD_DECL =
   /(?:^|\s)(?:export\s+)?(?:async\s+)?function\s+(\w+)|(?:^|\s)(?:const|let)\s+(\w+)\s*=\s*(?:async\s*)?\([^)]*\)\s*(?::[^=]+)?=>/;
+// The registrar test below used ROUTE itself, which has no `m` flag, so its `^`
+// only ever saw a span's first line and the skip it describes never fired.
+// Harmless while spans stopped at the next declaration; with spans that reach
+// a function's real end, a register() holding routes would otherwise enter the
+// set under its own name, carrying every 401 its routes answer.
+const ROUTE_ANYWHERE = new RegExp(ROUTE.source, "m");
+
+/*
+ * A DECLARATION'S BODY IS WHERE THE FUNCTION ENDS, NOT WHERE THE NEXT ONE STARTS.
+ *
+ * Until 2026-09-14 the body of every declaration ran to the next `GUARD_DECL`
+ * match anywhere in the file. So a one-line helper borrowed whatever followed
+ * it: `const reply = (r: PromiseResult) => res.json(r);`, inside
+ * `POST /api/map/promise`, ran 230 lines into the next handler, picked up a
+ * `status(401)` there, and entered server/index.ts's guard set. Every route in
+ * that file calling `reply(` then read as guarded. Nothing about the helper
+ * changed when an unrelated one-line arrow was inserted near line 3678 and
+ * `reply` dropped out of the set: the insertion only moved where some other
+ * span stopped. Which routes this gate reported depended on the order of
+ * unrelated code, in the direction the header forbids.
+ *
+ * So the span now ends where the function does. A `function` and a block
+ * arrow end at the brace that closes the body; a single-expression arrow ends
+ * at the `;` (or the unopened bracket, or the statement boundary) that closes
+ * the expression. Brackets are counted on a MASK of the file with every string,
+ * template, regex and comment blanked, so a `}` in a message cannot close a
+ * body early and a `(` in a regex cannot hold one open. A helper is a guard
+ * when ITS OWN text refuses, including anything nested inside it, and never
+ * because of what happens to be written after it.
+ */
+
+/** The file with comment, string, template and regex CONTENT replaced by
+ *  spaces. Same length, same newlines, so offsets line up with the source.
+ *  `${ ... }` inside a template stays code, since it is code. */
+function codeMask(text) {
+  const out = text.split("");
+  const n = text.length;
+  const blank = (a, b) => {
+    for (let k = a; k < b && k < n; k++) if (out[k] !== "\n" && out[k] !== "\r") out[k] = " ";
+  };
+  const REGEX_AFTER = "(,=:[!&|?{};+-*%<>~^";
+  const REGEX_AFTER_WORD = /^(?:return|typeof|case|in|of|delete|void|throw|new|else|do|yield|await)$/;
+  const holes = []; // brace depth inside each open `${`
+  let inTemplate = false;
+  let lastSig = "";
+  let lastWord = "";
+  let i = 0;
+  while (i < n) {
+    const c = text[i];
+    if (inTemplate) {
+      if (c === "\\") { blank(i, i + 2); i += 2; continue; }
+      if (c === "`") { inTemplate = false; lastSig = "a"; lastWord = ""; i++; continue; }
+      if (c === "$" && text[i + 1] === "{") { holes.push(0); inTemplate = false; lastSig = "{"; i += 2; continue; }
+      blank(i, i + 1);
+      i++;
+      continue;
+    }
+    if (c === "/" && text[i + 1] === "/") {
+      const e = text.indexOf("\n", i);
+      const end = e === -1 ? n : e;
+      blank(i, end);
+      i = end;
+      continue;
+    }
+    if (c === "/" && text[i + 1] === "*") {
+      const e = text.indexOf("*/", i + 2);
+      const end = e === -1 ? n : e + 2;
+      blank(i, end);
+      i = end;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      let k = i + 1;
+      while (k < n && text[k] !== c && text[k] !== "\n") k += text[k] === "\\" ? 2 : 1;
+      blank(i + 1, k);
+      i = k + 1;
+      lastSig = "a";
+      lastWord = "";
+      continue;
+    }
+    if (c === "`") { inTemplate = true; i++; continue; }
+    if (c === "/" && (lastSig === "" || REGEX_AFTER.includes(lastSig) || (lastSig === "a" && REGEX_AFTER_WORD.test(lastWord)))) {
+      let k = i + 1;
+      let cls = false;
+      while (k < n && text[k] !== "\n" && (cls || text[k] !== "/")) {
+        if (text[k] === "\\") k++;
+        else if (text[k] === "[") cls = true;
+        else if (text[k] === "]") cls = false;
+        k++;
+      }
+      if (k < n && text[k] === "/") {
+        blank(i + 1, k);
+        i = k + 1;
+        while (i < n && /[a-z]/i.test(text[i])) i++;
+        lastSig = "a";
+        lastWord = "";
+        continue;
+      }
+    }
+    if (/[A-Za-z0-9_$]/.test(c)) {
+      let k = i;
+      while (k < n && /[A-Za-z0-9_$]/.test(text[k])) k++;
+      lastSig = "a";
+      lastWord = text.slice(i, k);
+      i = k;
+      continue;
+    }
+    if (holes.length && c === "{") holes[holes.length - 1]++;
+    if (holes.length && c === "}") {
+      if (holes[holes.length - 1] === 0) { holes.pop(); inTemplate = true; i++; continue; }
+      holes[holes.length - 1]--;
+    }
+    if (!/\s/.test(c)) { lastSig = c; lastWord = ""; }
+    i++;
+  }
+  return out.join("");
+}
+
+const OPEN = "([{";
+const CLOSE = ")]}";
+
+/** From an opening bracket at `i`, the offset just past its partner, or null. */
+function closeOf(mask, i) {
+  let depth = 0;
+  for (let k = i; k < mask.length; k++) {
+    if (OPEN.includes(mask[k])) depth++;
+    else if (CLOSE.includes(mask[k]) && --depth === 0) return k + 1;
+  }
+  return null;
+}
+
+const prevSig = (mask, i) => {
+  let k = i - 1;
+  while (k >= 0 && /\s/.test(mask[k])) k--;
+  return k >= 0 ? mask[k] : "";
+};
+
+/**
+ * `function name<T>(params): ReturnType { body }`, scanning from just after the
+ * name. The parameter list is skipped whole. After it, a `{` that follows `:`,
+ * `|`, `&`, `<`, `,` or `(` is an object type in the return annotation; the
+ * first `{` that follows anything else opens the body. A `;` before any body is
+ * an overload signature, which has no body to refuse in.
+ */
+function functionEnd(mask, from) {
+  const open = mask.indexOf("(", from);
+  if (open === -1) return null;
+  let k = closeOf(mask, open);
+  if (k === null) return null;
+  for (; k < mask.length; k++) {
+    const c = mask[k];
+    if (c === ";") return k + 1;
+    if (c === "{" && !":|&<,(".includes(prevSig(mask, k))) return closeOf(mask, k);
+    if (OPEN.includes(c)) {
+      k = closeOf(mask, k);
+      if (k === null) return null;
+      k--;
+    }
+  }
+  return null;
+}
+
+/**
+ * `const name = (params) => <body>`, scanning from just after the `=>`. A block
+ * body ends at its closing brace. An expression ends at a `;` or `,` outside
+ * any bracket, at a bracket it never opened (it was an argument), or at a line
+ * break where neither side of the break continues the expression.
+ */
+function arrowEnd(mask, from) {
+  let k = from;
+  while (k < mask.length && /\s/.test(mask[k])) k++;
+  if (mask[k] === "{") return closeOf(mask, k);
+  const CONTINUES_AFTER = "=+-*/%&|?:<>!~^(,.";
+  const CONTINUES_BEFORE = ".?:&|+-*/%=<>)]},";
+  for (; k < mask.length; k++) {
+    const c = mask[k];
+    if (c === ";" || c === ",") return k + 1;
+    if (CLOSE.includes(c)) return k;
+    if (OPEN.includes(c)) {
+      k = closeOf(mask, k);
+      if (k === null) return null;
+      k--;
+      continue;
+    }
+    if (c === "\n") {
+      let j = k + 1;
+      while (j < mask.length && /\s/.test(mask[j])) j++;
+      if (!CONTINUES_AFTER.includes(prevSig(mask, k)) && !CONTINUES_BEFORE.includes(mask[j] ?? "")) return k;
+    }
+  }
+  return null;
+}
 /*
  * PER FILE, NOT REPO-WIDE, and this was proved the expensive way.
  *
@@ -211,6 +409,12 @@ const guards = new Set();
  * this mode's day) lives in callAssistant below", and it does. A rule that can
  * follow a refusal into a helper but not a limit into one would report that
  * route forever, and the fix would be a waiver pinned to working code.
+ *
+ * CORRECTION, 2026-09-14: that route never passed on this rule. The bound is
+ * TWO calls down (route -> handleProposalAssistant -> callAssistant), and
+ * `handleProposalAssistant` only read as bounding because its span borrowed
+ * someone else's `overLimit`. With spans fixed it carries a `limit-ok:` naming
+ * where the bound lives, which is the one-hop rule below working as argued.
  */
 const bounders = new Set();
 /** file -> the names IT declares that refuse, and that bound. */
@@ -245,19 +449,28 @@ for (const file of files) {
       if (name) imported.add(name);
     }
   }
-  const decls = [];
-  for (let i = 0; i < src.length; i++) {
-    const m = GUARD_DECL.exec(src[i]);
-    if (m) decls.push({ name: m[1] || m[2], line: i });
-  }
-  for (let k = 0; k < decls.length; k++) {
-    const end = k + 1 < decls.length ? decls[k + 1].line : src.length;
-    const body = src.slice(decls[k].line, end).join("\n");
+  const text = src.join("\n");
+  const mask = codeMask(text);
+  const maskLines = mask.split("\n");
+  let lineStart = 0;
+  for (let i = 0; i < maskLines.length; i++) {
+    const at = lineStart;
+    lineStart += maskLines[i].length + 1;
+    // Matched against CODE only: ` * function that writes each row` in a
+    // comment is not a declaration, and it used to enter the set as `that`.
+    const m = GUARD_DECL.exec(maskLines[i]);
+    if (!m) continue;
+    const name = m[1] || m[2];
+    const from = at + m.index + m[0].length;
+    const end = m[1] ? functionEnd(mask, from) : arrowEnd(mask, from);
+    // A span that cannot be closed is the declaration line alone. Too short
+    // only ever drops a guard, which reports a route; too long borrows one.
+    const body = text.slice(at + m.index, end ?? at + maskLines[i].length);
     // A route registration inside the span means this is not a small helper,
     // it is the register() function, and its 401s belong to its routes.
-    if (ROUTE.test(body)) continue;
-    if (REFUSES.test(body)) { g.add(decls[k].name); guards.add(decls[k].name); }
-    if (BOUNDED.test(body)) { b.add(decls[k].name); bounders.add(decls[k].name); }
+    if (ROUTE_ANYWHERE.test(body)) continue;
+    if (REFUSES.test(body)) { g.add(name); guards.add(name); }
+    if (BOUNDED.test(body)) { b.add(name); bounders.add(name); }
   }
   guardsIn.set(file, g);
   boundersIn.set(file, b);

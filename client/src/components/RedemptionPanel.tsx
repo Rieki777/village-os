@@ -24,7 +24,7 @@
  */
 import { useEffect, useState } from "react";
 import { authToken } from "@/lib/gameApi";
-import { formatTokenAmount } from "@/lib/tokenAmount";
+import { formatHumanAmount } from "@/lib/tokenAmount";
 import { HandCoins } from "lucide-react";
 
 const headers = (): Record<string, string> => {
@@ -210,7 +210,7 @@ export default function RedemptionPanel() {
           {Object.entries(data.held).map(([slug, held]) => (
             <p key={slug} className="text-sm text-foreground">
               <span className="font-semibold">
-                {formatTokenAmount(held, decimalsFor(slug))}{" "}
+                {formatHumanAmount(held, decimalsFor(slug))}{" "}
                 {data.tokens.find((t) => t.slug === slug)?.name ?? slug}
               </span>{" "}
               are held against a redemption you have open. They are yours until it is
@@ -237,7 +237,7 @@ export default function RedemptionPanel() {
             <div key={r.id} className="border border-border rounded-lg px-4 py-3">
               <p className="text-sm text-foreground">
                 <span className="font-semibold">
-                  {formatTokenAmount(r.amount, decimalsFor(r.token))} {r.tokenName}
+                  {formatHumanAmount(r.amount, decimalsFor(r.token))} {r.tokenName}
                 </span>{" "}
                 for {r.askedFor}, opened {day(r.openedAt)}, waiting on a steward.
                 {r.expiresAt ? ` It runs out on ${day(r.expiresAt)}.` : ""}
@@ -346,7 +346,7 @@ export default function RedemptionPanel() {
             .map((r) => (
               <div key={r.id} className="border border-border rounded-lg px-4 py-2">
                 <p className="text-sm text-foreground">
-                  {formatTokenAmount(r.amount, decimalsFor(r.token))} {r.tokenName} for{" "}
+                  {formatHumanAmount(r.amount, decimalsFor(r.token))} {r.tokenName} for{" "}
                   {r.askedFor}. {isEnding(r.state) ? ENDING[r.state] : r.state}.
                 </p>
                 {r.state === "confirmed" && (

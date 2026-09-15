@@ -38,9 +38,12 @@ import {
 } from "./circleBurn";
 import {
   applyPendingModes,
+  budgetDeleteProblem,
+  circleDeleteProblem,
   circleFundingClause,
   circleFundingSince,
   circleTreasuryAccount,
+  dormancySweepKey,
   dormantHoldings,
   fundTreasury,
   masterTreasuryExists,
@@ -56,6 +59,8 @@ import {
   type TreasuryPermit,
 } from "./circleTreasury";
 import { readCycleIssuance } from "./mintCap";
+import { applyRoll, type RollPlan } from "./seasonPatterns";
+import { backfillOrgChart } from "./orgChart";
 import { modeAt } from "../../shared/circleTreasury";
 
 const configured = testDbConfigured();
@@ -76,6 +81,13 @@ const SEASONS: SeasonSpan[] = [
 const ALLOW: TreasuryPermit = () => null;
 /** And one that refuses, so the seam is proven to be load bearing. */
 const DENY: TreasuryPermit = (action, circleId) => `no: ${action} on ${circleId}`;
+/**
+ * The payees in this file are fixture ids with no users row, because what is
+ * under test is the ledger. The member lookup is the caller's, and the real one
+ * is driven in server/circleTreasury.e2e.test.ts; the refusal it produces is
+ * proven below against a lookup that says no.
+ */
+const PAYABLE = () => true;
 
 let db: TestDb;
 let pool: mysql.Pool;
@@ -150,7 +162,7 @@ describe.skipIf(!configured)("a circle's treasury", () => {
     const spent = await spendTreasury(pool, {
       circleId, circleStatus: "active", tokenSlug: TOKEN,
       toUserId: "usr-paid", amountMinor: 300, actorId: null, note: "paid a member",
-      idempotencyKey: key("spend"), permit: ALLOW,
+      idempotencyKey: key("spend"), permit: ALLOW, memberExists: PAYABLE,
     });
     expect(spent.ok, spent.error).toBe(true);
     expect(await conservation()).toBe(0);
@@ -176,7 +188,7 @@ describe.skipIf(!configured)("a circle's treasury", () => {
     const r = await spendTreasury(pool, {
       circleId: "cons", circleStatus: "active", tokenSlug: TOKEN,
       toUserId: "usr-paid", amountMinor: 5_000, actorId: null, note: "more than it has",
-      idempotencyKey: key("over"), permit: ALLOW,
+      idempotencyKey: key("over"), permit: ALLOW, memberExists: PAYABLE,
     });
     expect(r.ok).toBe(false);
     expect(r.error).toContain("insufficient");
@@ -192,7 +204,7 @@ describe.skipIf(!configured)("a circle's treasury", () => {
       }),
       () => spendTreasury(pool, {
         circleId: "cons", circleStatus: "active", tokenSlug: TOKEN, toUserId: "usr-paid",
-        amountMinor: 10, actorId: null, note: "x", idempotencyKey: key("dspend"), permit: DENY,
+        amountMinor: 10, actorId: null, note: "x", idempotencyKey: key("dspend"), permit: DENY, memberExists: PAYABLE,
       }),
       () => returnTreasury(pool, {
         circleId: "cons", tokenSlug: TOKEN, amountMinor: 10, actorId: null,
@@ -207,6 +219,31 @@ describe.skipIf(!configured)("a circle's treasury", () => {
     expect(after.balanceMinor, "a refused permit moves nothing").toBe(before.balanceMinor);
     expect(after.rows).toBe(before.rows);
   }, 60_000);
+
+  it("REFUSES TO PAY AN ID THAT NAMES NO MEMBER, and opens no account for it (B1d on #243)", async () => {
+    /*
+     * `postTransferOn` creates whatever `mem:<id>` it is handed, so a mistyped
+     * payee used to receive real tokens in an account no member will ever open.
+     */
+    const ghost = "usr-nobody-typed-this";
+    const before = await treasuryHoldings(pool, "cons", TOKEN);
+    const r = await spendTreasury(pool, {
+      circleId: "cons", circleStatus: "active", tokenSlug: TOKEN, toUserId: ghost,
+      amountMinor: 10, actorId: "usr-steward", note: "a typo", idempotencyKey: key("ghost"),
+      permit: ALLOW, memberExists: (id) => id !== ghost,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain("No member of this village");
+    const after = await treasuryHoldings(pool, "cons", TOKEN);
+    expect(after.balanceMinor, "nothing left the treasury").toBe(before.balanceMinor);
+    expect(after.rows).toBe(before.rows);
+    const [[acct]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT COUNT(*) AS n FROM ledger_accounts WHERE id = ?",
+      [memberAccount(ghost)],
+    );
+    expect(Number(acct.n), "no account was opened for an id nobody holds").toBe(0);
+    expect(await conservation()).toBe(0);
+  }, 30_000);
 
   // ── 2 and 3. Funding is issuance; spending is not ─────────────────────────
 
@@ -226,7 +263,7 @@ describe.skipIf(!configured)("a circle's treasury", () => {
     const r = await spendTreasury(pool, {
       circleId: "issuance", circleStatus: "active", tokenSlug: TOKEN,
       toUserId: "usr-spend-target", amountMinor: 200, actorId: null, note: "paid",
-      idempotencyKey: key("nospend"), permit: ALLOW,
+      idempotencyKey: key("nospend"), permit: ALLOW, memberExists: PAYABLE,
     });
     expect(r.ok, r.error).toBe(true);
     expect(await issuanceNet(), "a treasury spend moves tokens that already exist").toBe(before);
@@ -337,6 +374,234 @@ describe.skipIf(!configured)("a circle's treasury", () => {
     });
     expect(second[0]!.movedMinor, "a genuine second dormancy is not a duplicate").toBe(120);
     expect((await treasuryHoldings(pool, circleId, TOKEN)).balanceMinor).toBe(0);
+    expect(await conservation()).toBe(0);
+  }, 60_000);
+
+  // ── B7 on #243: the sweep key, and what a duplicate reports ─────────────────
+
+  const sleepyTokenFor = (u: string) => (u === UNIT ? TOKEN : null);
+  const sweepSleepy = (at: Date) => sweepDormantCircle(pool, {
+    circleId: "sleepy", budgets: [{ id: "bud-sleepy", unit: UNIT }], tokenTypeFor: sleepyTokenFor, at, actorId: null,
+  });
+  const fundSleepy = (amountMinor: number, label: string) => fundTreasury(pool, {
+    circleId: "sleepy", circleName: "Sleepy", circleStatus: "active", tokenSlug: TOKEN,
+    amountMinor, actorId: null, note: label, idempotencyKey: key(label), permit: ALLOW,
+  });
+
+  it("SAME DAY AND SAME BALANCE AFTER A REVIVAL IS A REAL SECOND SWEEP, and it posts", async () => {
+    /*
+     * The case the key used to concede. Dormant, revived, funded to EXACTLY the
+     * same amount and dormant again on the same day built the same key, so the
+     * ledger turned the second posting away as a repeat and the 55 stayed in
+     * the account while the sweep reported it moved.
+     */
+    const at = new Date("2026-10-06T00:00:00Z");
+    expect((await treasuryHoldings(pool, "sleepy", TOKEN)).balanceMinor).toBe(0);
+    expect((await fundSleepy(55, "b7-first")).ok).toBe(true);
+    const masterBefore = await balanceOf(TREASURY);
+    const first = await sweepSleepy(at);
+    expect(first[0]!.movedMinor).toBe(55);
+
+    expect((await fundSleepy(55, "b7-second")).ok).toBe(true);
+    const second = await sweepSleepy(at);
+    expect(second[0]!.duplicate, "a second dormancy is not a retry of the first").toBe(false);
+    expect(second[0]!.movedMinor).toBe(55);
+    expect((await treasuryHoldings(pool, "sleepy", TOKEN)).balanceMinor, "nothing is left in the account").toBe(0);
+    expect(await balanceOf(TREASURY)).toBe(masterBefore + 110);
+    expect(await conservation()).toBe(0);
+  }, 60_000);
+
+  it("A SWEEP THE LEDGER CALLS A DUPLICATE RECORDS NOTHING AND REPORTS NOTHING MOVED", async () => {
+    const at = new Date("2026-10-07T00:00:00Z");
+    expect((await fundSleepy(44, "b7-dup")).ok).toBe(true);
+    const held = await treasuryHoldings(pool, "sleepy", TOKEN);
+
+    /*
+     * The same sweep, already on the books: a racing twin posted under the key
+     * this sweep will build. It touches neither the circle's account nor its
+     * row count, so from the sweep's side it is indistinguishable from the
+     * first of two concurrent sweeps having won.
+     */
+    const twin = await postTransfer(pool, {
+      from: MINT_FAUCET, to: memberAccount("usr-b7-twin"), tokenType: TOKEN, amount: 1,
+      source: "admin_mint", idempotencyKey: dormancySweepKey("sleepy", TOKEN, at, held.balanceMinor, held.rows),
+    });
+    expect(twin.ok).toBe(true);
+
+    const readRecord = async () => {
+      const [[row]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "SELECT dormant_held_minor, dormant_at FROM circle_budgets WHERE id = ?",
+        ["bud-sleepy"],
+      );
+      return { held: Number(row.dormant_held_minor), at: new Date(row.dormant_at).toISOString() };
+    };
+    const recordBefore = await readRecord();
+
+    const swept = await sweepSleepy(at);
+    expect(swept[0]!.duplicate).toBe(true);
+    expect(swept[0]!.movedMinor, "nothing moved, so nothing is reported moved").toBe(0);
+    expect(await readRecord(), "and nothing is written down as having left").toEqual(recordBefore);
+    expect((await treasuryHoldings(pool, "sleepy", TOKEN)).balanceMinor, "the tokens really are still there").toBe(44);
+
+    // Hand it back so the dormant circle holds nothing for the files below.
+    const back = await returnTreasury(pool, {
+      circleId: "sleepy", tokenSlug: TOKEN, amountMinor: 44, actorId: null,
+      note: "tidy", idempotencyKey: key("b7-tidy"), permit: ALLOW,
+    });
+    expect(back.ok, back.error).toBe(true);
+    expect(await conservation()).toBe(0);
+  }, 60_000);
+
+  // ── B3 on #243: the season roll is a second writer of a circle's status ─────
+
+  it("SWEEPS A CIRCLE THE SEASON ROLL MAKES DORMANT, and writes the record", async () => {
+    const circleId = "rolled";
+    const budgetId = "bud-rolled";
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO circles (id, name, status) VALUES (?,?,?)",
+      [circleId, "Rolled", "active"],
+    );
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO circle_budgets (id, circle_id, season_id, amount_minor, unit, mode) VALUES (?,?,?,?,?,?)",
+      [budgetId, circleId, null, 1000, UNIT, "treasury"],
+    );
+    const funded = await fundTreasury(pool, {
+      circleId, circleName: "Rolled", circleStatus: "active", tokenSlug: TOKEN,
+      amountMinor: 210, actorId: null, note: "its season", idempotencyKey: key("rolled"), permit: ALLOW,
+    });
+    expect(funded.ok, funded.error).toBe(true);
+    const masterBefore = await balanceOf(TREASURY);
+
+    const plan = (from: string, to: string): RollPlan => ({
+      patternId: null, patternName: null, blocked: [], lapsing: [],
+      changes: [{ kind: "circle", entityId: circleId, name: "Rolled", from, to }],
+    });
+    const rolled = await applyRoll(pool, plan("active", "dormant"), { seasonId: null, byUserId: "usr-roller" });
+    expect(rolled.applied).toBe(1);
+    const [[status]] = await pool.query<any[]>("SELECT status FROM circles WHERE id = ?", [circleId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(String(status.status)).toBe("dormant");
+
+    expect(rolled.treasury[0]?.treasurySwept?.[0]?.movedMinor, JSON.stringify(rolled.treasury)).toBe(210);
+    expect((await treasuryHoldings(pool, circleId, TOKEN)).balanceMinor, "a circle the roll made dormant holds nothing").toBe(0);
+    expect(await balanceOf(TREASURY)).toBe(masterBefore + 210);
+    const [[record]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT dormant_held_minor, dormant_to FROM circle_budgets WHERE id = ?",
+      [budgetId],
+    );
+    expect(Number(record.dormant_held_minor)).toBe(210);
+    expect(String(record.dormant_to)).toBe("master_treasury");
+    expect(await conservation()).toBe(0);
+
+    // And the roll that brings it back tells the steward what it held, as the PUT does.
+    const woke = await applyRoll(pool, plan("dormant", "active"), { seasonId: null, byUserId: "usr-roller" });
+    expect(String(woke.treasury[0]?.treasuryNote ?? "")).toContain("Rolled held");
+  }, 60_000);
+
+  // ── B3's twin: the org-chart backfill is a third writer of a circle's status ─
+
+  it("SWEEPS A CIRCLE THE ORG-CHART BACKFILL MAKES DORMANT, and hands over only real transitions", async () => {
+    const tokenFor = (u: string) => (u === UNIT ? TOKEN : null);
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO circles (id, name, status) VALUES (?,?,?), (?,?,?), (?,?,?)",
+      ["bf-sleepy", "BF Sleepy", "active", "bf-rested", "BF Rested", "dormant", "bf-council", "BF Council", "active"],
+    );
+    for (const id of ["bf-sleepy", "bf-rested", "bf-council"]) {
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO circle_budgets (id, circle_id, season_id, amount_minor, unit, mode) VALUES (?,?,?,?,?,?)",
+        [`bud-${id}`, id, null, 1000, UNIT, "treasury"],
+      );
+    }
+    // The Sleepy circle holds 180 when the backfill turns it dormant.
+    const funded = await fundTreasury(pool, {
+      circleId: "bf-sleepy", circleName: "BF Sleepy", circleStatus: "active", tokenSlug: TOKEN,
+      amountMinor: 180, actorId: null, note: "its season", idempotencyKey: key("bf-sleepy"), permit: ALLOW,
+    });
+    expect(funded.ok, funded.error).toBe(true);
+    // The Rested circle already went dormant holding 60, so its record stands.
+    expect((await fundTreasury(pool, {
+      circleId: "bf-rested", circleName: "BF Rested", circleStatus: "active", tokenSlug: TOKEN,
+      amountMinor: 60, actorId: null, note: "before it rested", idempotencyKey: key("bf-rested"), permit: ALLOW,
+    })).ok).toBe(true);
+    expect((await sweepDormantCircle(pool, {
+      circleId: "bf-rested", budgets: [{ id: "bud-bf-rested", unit: UNIT }], tokenTypeFor: tokenFor, actorId: null,
+    }))[0]!.movedMinor).toBe(60);
+
+    // The backfill skips once org_roles holds as many seats as it would write,
+    // so it is handed one more seat than the table already carries.
+    const [[seats]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM org_roles"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const cards = Array.from({ length: Number(seats.n) + 1 }, (_, i) => ({ id: `bf-seat-${i}`, name: `Backfill seat ${i}` }));
+    const masterBefore = await balanceOf(TREASURY);
+
+    const report = await backfillOrgChart(pool, {
+      cards,
+      circleCards: [],
+      corrections: {
+        circles: [
+          { id: "bf-sleepy", name: "BF Sleepy", status: "dormant" },
+          { id: "bf-new", name: "BF New", status: "dormant" },
+        ],
+        councilsToForming: ["bf-rested", "bf-council"],
+      },
+    });
+    expect(report.skipped).toBe(false);
+
+    const statusOf = async (id: string) => {
+      const [[row]] = await pool.query<any[]>("SELECT status FROM circles WHERE id = ?", [id]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      return String(row?.status);
+    };
+    expect(await statusOf("bf-sleepy")).toBe("dormant");
+
+    // THE DEFECT: a circle the backfill made dormant kept its treasury.
+    const sleepy = report.treasury.find((t) => t.circleId === "bf-sleepy");
+    expect(sleepy?.treasurySwept?.[0]?.movedMinor, JSON.stringify(report.treasury)).toBe(180);
+    expect((await treasuryHoldings(pool, "bf-sleepy", TOKEN)).balanceMinor, "it holds nothing now").toBe(0);
+    expect(await balanceOf(TREASURY)).toBe(masterBefore + 180);
+    const [[record]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT dormant_held_minor, dormant_to FROM circle_budgets WHERE id = ?",
+      ["bud-bf-sleepy"],
+    );
+    expect(Number(record.dormant_held_minor)).toBe(180);
+    expect(String(record.dormant_to)).toBe("master_treasury");
+
+    // Dormant to forming is a revival, and the steward is told what it held.
+    expect(await statusOf("bf-rested")).toBe("forming");
+    expect(String(report.treasury.find((t) => t.circleId === "bf-rested")?.treasuryNote ?? "")).toContain("BF Rested held");
+    // Active to forming touches no money, so the hook has nothing to report.
+    expect(await statusOf("bf-council")).toBe("forming");
+    expect(report.treasury.some((t) => t.circleId === "bf-council")).toBe(false);
+    // A circle the backfill created had no status before, so nothing was handed over.
+    expect(report.circlesCreated).toEqual(["bf-new"]);
+    expect(report.treasury.some((t) => t.circleId === "bf-new")).toBe(false);
+    expect(report.treasury.every((t) => !t.error), JSON.stringify(report.treasury)).toBe(true);
+    expect(await conservation()).toBe(0);
+  }, 60_000);
+
+  // ── B5 on #243: deleting what a treasury hangs off ──────────────────────────
+
+  it("REFUSES TO DELETE THE LAST BUDGET OR THE CIRCLE while the treasury holds tokens", async () => {
+    const repo = { all: () => [{ id: "keeper", name: "The Keeper" }] };
+    const only = { id: "bud-keeper", circleId: "keeper", unit: UNIT };
+    const funded = await fundTreasury(pool, {
+      circleId: "keeper", circleName: "The Keeper", circleStatus: "active", tokenSlug: TOKEN,
+      amountMinor: 90, actorId: null, note: "x", idempotencyKey: key("keeper"), permit: ALLOW,
+    });
+    expect(funded.ok, funded.error).toBe(true);
+
+    expect(await budgetDeleteProblem(pool, only, [only], repo)).toContain("The Keeper still holds 0.9 credits");
+    expect(await circleDeleteProblem(pool, "keeper", [only], repo)).toContain("Return the balance to the village first");
+    // A sibling budget in the same token still reaches the account, so this row strands nothing.
+    const sibling = { id: "bud-keeper-next", circleId: "keeper", unit: UNIT };
+    expect(await budgetDeleteProblem(pool, only, [only, sibling], repo)).toBeNull();
+    // A sibling in a currency reaches no ledger account at all.
+    expect(await budgetDeleteProblem(pool, only, [only, { ...sibling, unit: "CHF" }], repo)).not.toBeNull();
+
+    const back = await returnTreasury(pool, {
+      circleId: "keeper", tokenSlug: TOKEN, amountMinor: 90, actorId: null,
+      note: "handed back", idempotencyKey: key("keeper-back"), permit: ALLOW,
+    });
+    expect(back.ok, back.error).toBe(true);
+    expect(await budgetDeleteProblem(pool, only, [only], repo)).toBeNull();
+    expect(await circleDeleteProblem(pool, "keeper", [only], repo)).toBeNull();
     expect(await conservation()).toBe(0);
   }, 60_000);
 

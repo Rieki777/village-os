@@ -56,6 +56,26 @@ export function minorPerWhole(decimals: number): number {
 }
 
 /**
+ * IS THIS HUMAN AMOUNT FINER THAN THE TOKEN CAN HOLD?
+ *
+ * Converting to minor units rounds, deliberately (0.1 * 1000 is not 100 in
+ * binary), so a route that converts and posts would silently move 2 when a
+ * person asked for 1.5 at whole units, or 2 when a steward typed 2.5 on a route
+ * that truncated first. Converting and converting back is the cheap exact
+ * test. True means refuse, in words, and move nothing.
+ *
+ * ONE CHECK FOR EVERY HUMAN-AMOUNT DOOR. The redemption ask wrote it inline
+ * first; the hand-mint route truncated instead and said "Minted". Both read
+ * this now, so the two doors cannot disagree about what "too fine" means.
+ */
+export function finerThanScale(human: number, decimals: number): boolean {
+  const n = Number(human);
+  if (!Number.isFinite(n)) return true;
+  const per = minorPerWhole(decimals);
+  return Math.round(n * per) / per !== n;
+}
+
+/**
  * THE ENGINE'S OWN FLOOR. `decayVoice` calls this and nothing else, so the
  * sentence a village reads beside the dial and the arithmetic that takes their
  * Voice are the same function and cannot drift apart.

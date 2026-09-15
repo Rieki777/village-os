@@ -265,7 +265,7 @@ export default function ProposalWizard() {
           It is in front of the village
         </h2>
         <p className="mt-2 text-stone-800 leading-relaxed">{cfg?.consequence}</p>
-        {supportThreshold > 0 && (
+        {supportThreshold > 0 && !cfg?.opensVote && (
           <p className="mt-2 text-sm text-stone-700 leading-relaxed">
             It needs {supportThreshold} {supportThreshold === 1 ? "supporter" : "supporters"} before it can go to a
             vote. Sensing happens where the proposal lives, and anyone can add theirs.
@@ -358,6 +358,7 @@ export default function ProposalWizard() {
                 problem={stepProblems.get(field.key)}
                 onChange={(v) => set(field.key, v)}
                 dials={dials}
+                answers={answers}
               />
             ))}
           </div>
@@ -381,7 +382,12 @@ export default function ProposalWizard() {
                   const shown =
                     field.kind === "changeSet"
                       ? (Array.isArray(v) ? v : []).map((c: any) => `${c.key} becomes ${c.to}`).join(", ")
-                      : String(v ?? "");
+                      : field.kind === "seatTerm"
+                        ? // A blank end date is an answer: the seat ends with the season.
+                          String(v ?? "").trim()
+                          ? `Until ${String(v).trim()}`
+                          : "Until the season ends"
+                        : String(v ?? "");
                   return (
                     <div key={field.key} className="flex flex-wrap gap-x-4 gap-y-1 p-3">
                       <dt className="w-40 shrink-0 text-sm font-medium text-stone-600">{field.label}</dt>
@@ -426,9 +432,13 @@ export default function ProposalWizard() {
             <div className="rounded-xl border border-stone-200 bg-stone-50 p-4">
               <p className="text-sm font-semibold text-stone-900">What publishing does</p>
               <p className="mt-1 text-sm text-stone-700 leading-relaxed">{cfg.consequence}</p>
-              <p className="mt-1.5 text-sm text-stone-600 leading-relaxed">
-                Publishing does not start a vote. The village senses it first, and someone has to take it to a ballot.
-              </p>
+              {/* A type whose route opens the ballot itself says so in its
+                  consequence, and this sentence would contradict it. */}
+              {!cfg.opensVote && (
+                <p className="mt-1.5 text-sm text-stone-600 leading-relaxed">
+                  Publishing does not start a vote. The village senses it first, and someone has to take it to a ballot.
+                </p>
+              )}
             </div>
           </div>
         )}

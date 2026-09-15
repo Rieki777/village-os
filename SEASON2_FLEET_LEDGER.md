@@ -305,6 +305,20 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   `origin/wt/seat-terms` and on a second local branch `wt/seat-terms-ui`, and `0197` and `0198`
   were committed and pushed on `origin/wt/first-hour` with that lane's claim now on a ref. The
   ceiling was still **0199** on all four channels and nothing anywhere held `0200` or above.
+- **first-hour lane (profile), 2026-09-14: holds 0197 and 0198** for
+  `drizzle/0197_a_training_module_says_whether_it_is_mandatory.sql` (one column on
+  `training_modules`, `mandatory TINYINT(1) NOT NULL DEFAULT 1`) and
+  `drizzle/0198_a_member_is_vouched_into_membership.sql` (one new table, `member_vouches`). These
+  are the SAME two files section 27 records as 0179 and 0190, carried as 0191 and 0192 on
+  `wt/first-hour` after other lanes landed at and above both numbers. Measured all three ways
+  minutes before the move: 710 refs (every remote AND local ref) and 358 worktree disks hold
+  nothing at 0197 or above, `origin/main` tops out at 0196, and `check-migration-numbers.mjs`
+  answers next-free 0199 after it. As far as this lane knows neither file ran anywhere but a
+  dropped scratch schema, so no instance replays them. A local database that DID boot the old
+  names replays both under the new ones: 0198 is `CREATE TABLE IF NOT EXISTS` and passes, and
+  0197's `ADD COLUMN` stops that boot on a duplicate column, so drop that scratch schema. **0191
+  and 0192 are BURNED**: copies still sit on six worktree disks and in a peer session's scratch
+  copy.
 - **quest-consent integrity lane, 2026-09-10: holds 0196** for
   `drizzle/0196_one_live_claim_per_member.sql`. The number was ASSIGNED by the coordinator, not
   measured by this lane, and `check-migration-numbers.mjs` reported next-free 0190 in this
@@ -3163,6 +3177,14 @@ Both look like intentional work and neither is.
 
 | 2026-09-07 | rollover lane (RO) | `wt/econ-rollover`, VERIFIED IN CI and ready to integrate | pushed | **Run `34186761673` on `a295e4d`: completed, FAILURE, 54 steps, failed steps `Migration numbers` and `Test`. ZERO of those failures are this lane's**, and it is provable two ways rather than asserted. Locally: a pristine `ddcf54a` worktree (node_modules junctioned in, then `rmdir` before removal) fails the SAME five guards (`check-migration-numbers`, `check-governance-doc`, `check-variables-doc`, `check-modules-doc`, `check-capabilities-doc`) and the SAME tests. In CI: run `34169761102` on `eb84c64` of `wt/econ`, pushed before this branch existed, failed `server/exitLevers.routes.e2e.test.ts` x2, `shared/dryRun/types.test.ts`, `server/db/governanceDoc.test.ts` x2 and `server/lib/circleBonusGate.test.ts` x3, which is this run's set exactly, minus `adminTokens.e2e` (green here) plus `circleTreasury.e2e`'s season-window test, measured red on the pristine `ddcf54a` with no change of mine in the tree. Every suite this lane added or touched is GREEN in CI on Node 22 and MySQL 8. **The four generated-doc guards want ONE command from whoever integrates** (`generate-variables-doc`, `generate-modules-doc`, `generate-capabilities-doc`, `generate-governance-doc`); they were left alone here because regenerating `docs/VARIABLES.md` sweeps 20 other lanes' dials into this diff and the governance one stamps the committing SHA, so it can only be right as the LAST commit. |
 
+| 2026-09-14 | governance (`amora-b0`) | migration `0199` (`drizzle/0199_every_seat_has_a_term.sql`); `server/index.ts` (net 18 lines DOWN: the three season routes moved to `server/routes/seasons.ts`, baseline left at 27553 so the headroom goes to whoever lands next) | `wt/seat-terms` | HELD. Ceiling measured two ways on 2026-09-14: every remote ref reached `0196`, and UNTRACKED files in the `wt-theme` worktree hold `0197_a_training_module_says_whether_it_is_mandatory.sql` and `0198_a_member_is_vouched_into_membership.sql`, which no git command sees. **If `0199` lands first, those two sit below main's ceiling and the numbers gate refuses them: renumber to `0200`+ before landing.** Safe for them only because untracked files have never run outside a scratch schema. |
+| 2026-09-14 | seat-terms screens (lane) | `server/index.ts` (two counted lines in `POST /api/map/roles/:id/raise-hand`, logic in `server/lib/raisedHandTerm.ts`; the ratchet still passes against 27553), plus `docs/GOVERNANCE.md` and `docs/knowledge/governance-lineage.md` regenerated only, because `role_seat` joined `WIZARD_TYPES` and `CONDUCTABLE_TYPES` | `wt/seat-terms-ui`, PR base `wt/seat-terms` | HELD. No migration and no baseline moved. Land after `wt/seat-terms`; a later change to either governance source re-stamps the lineage fingerprint, so regenerate on rebase. |
+
+
+| 2026-09-08 | first-hour lane (profile) | migration `0179`, `drizzle/0179_a_training_module_says_whether_it_is_mandatory.sql` | `wt/first-hour` | **RENUMBERED TWICE, kept as history: `0179` became `0191`, and on 2026-09-14 `0197` (section 3 holds the claim).** Originally HELD. Ceiling measured TWO WAYS per the rule above: every remote ref and every file on disk reach `0178`, and `check-migration-numbers.mjs --next` agrees at `0179`. Adds one column to `training_modules`, `mandatory TINYINT(1) NOT NULL DEFAULT 1`, so every existing row keeps today's behaviour exactly (all modules mandatory = all must be finished, which is what `trainingIsComplete` already requires). Expand-only, no backfill needed, and the previous release ignores the column. |
+
+| 2026-09-08 | first-hour lane (profile) | migration `0190`, `drizzle/0190_a_member_is_vouched_into_membership.sql` | `wt/first-hour` | **RENUMBERED TWICE, kept as history: `0190` became `0192`, and on 2026-09-14 `0198` (section 3 holds the claim).** Originally HELD, AND READ WHY THE NUMBER WAS NOT 0180. `check-migration-numbers.mjs --next` said **0180**, because it measures against `origin/main` alone. A two-way scan says otherwise: remote refs reach `0189` and sibling worktrees reach `0189`, and `0180`-`0189` are all taken by other lanes (`the_wall_speaks_first`, `a_circle_holds_its_own_treasury`, `one_gift_one_key`, `a_member_redeems_what_they_hold`, `a_village_spends_its_credits_in_hundredths`, `voice_that_waned`, `a_village_says_what_it_is_for`, `a_member_says_how_they_are`, `a_circle_has_two_caps`, `the_voices_reach_a_village_that_already_exists`). Taking the script's answer would have collided with TEN lanes at once. This is the same failure the 2026-09-05 row records, and the script still cannot see either source. |
+| 2026-09-14 | handover-confirm lane | `server/index.ts`, LINE-NEUTRAL (the ratchet sits at its baseline): one import widened, and `GET /api/admin/capabilities/holding` roles gain `holderCount`. Plus `docs/GOVERNANCE.md` if the generator restamps it | `wt/handover-confirm` | HELD - lands alone per 27b item 3, rebased last |
 
 ### 27d — Verification: CI runs the full suite, lanes run what they touched
 

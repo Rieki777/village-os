@@ -22,7 +22,7 @@ import { GAME_CONFIG } from "./gameConfig";
 import { STAGE_UNLOCKS } from "./capabilities";
 import { NEED_DEPTHS, NEED_DEPTH_LABELS } from "./needs";
 import { TIER_FLOORS, type Criticality } from "./governanceEngine";
-import { MINT_RULE, SUBJECT_THRESHOLDS } from "./ballotSubjects";
+import { MINT_RULE, SUBJECT_THRESHOLDS, VILLAGE_LAUNCH } from "./ballotSubjects";
 import { isAnchorDateAcceptable } from "./villageMoon";
 
 export type VariableType = "integer" | "decimal" | "percentage" | "boolean" | "choice" | "text";
@@ -111,6 +111,53 @@ export const VOICE_WEIGHTING_CHOICES = [
 
 export const VARIABLES: VariableDef[] = [
   // ── Gratitude: the in-site recognition economy ────────────────────────────
+  {
+    key: "membership.vouches_required",
+    category: "Membership",
+    label: "Vouches that admit a member",
+    /*
+     * STRUCTURAL, which is what main's own `membership.vouch_threshold` carried
+     * before this dial replaced it, and the merge that retired that dial left
+     * this one routine. It prices a proposal to move the bar: who gets in is
+     * not a routine change.
+     */
+    criticality: "structural",
+    description:
+      "How many people have to say they know somebody before that person becomes a member. The default matches how a village starts: it launches when a founder brings two more and all three carry the launch, which leaves exactly the vouchers the fourth member needs, so this number is read from the launch bar itself. A vouch cannot be taken back, so this bar is only ever crossed forwards. 0 turns vouching off: no number of vouches admits anybody, and a steward's super vouch is how people are admitted. Raise it and a young village may not be able to admit anybody at all, which is what the steward override exists for.",
+    type: "integer",
+    unit: "vouches",
+    /*
+     * DERIVED. A village launches with `minElectorate` founders precisely so
+     * that the next arrival has that many vouchers available, so the two
+     * numbers are one fact. Typed here it was a copy, and the sentence
+     * explaining the coupling was written three times with nothing comparing
+     * them. See DEFAULT_VOUCHES_FOR_MEMBERSHIP in server/lib/vouches.ts, which
+     * reads the same field.
+     */
+    default: String(SUBJECT_THRESHOLDS[VILLAGE_LAUNCH].minElectorate),
+    /*
+     * ZERO IS OFF, and the floor is 0 rather than 1. The contract is not new:
+     * main's own `membership.vouch_threshold` documented "0 keeps vouching
+     * off" with a minimum of 0 before this dial replaced it. A minimum of 1
+     * would not be a default, it would be a mandate: thirteen forks inherit
+     * this file, and a village that already admits people by interview or by
+     * a circle's consent would have gained a second gate it could not remove,
+     * with the steward override as its only way through. An override used for
+     * every arrival stops being read as an override. `vouchBar` in
+     * server/lib/vouches.ts is the one reading of this number.
+     */
+    min: 0,
+    max: 20,
+  },
+  {
+    key: "arrival.greeter_role",
+    category: "Membership",
+    label: "The seat that greets a new arrival",
+    description:
+      "The role whose holders are told the moment somebody joins. Greeting belongs to a seat, so the village re-seats it each season and the message follows with nobody editing a setting. Leave it empty and the founders hear it, which is also what happens when the seat is named and nobody is sitting in it: a village that has not built its org chart yet, and one whose greeter stepped down last week, both still find out that a person arrived. Paste the role id from the org chart.",
+    type: "text",
+    default: "",
+  },
   {
     key: "gratitude.base_budget",
     category: "Gratitude",
@@ -524,6 +571,27 @@ export const VARIABLES: VariableDef[] = [
       { value: "never", label: "Never", hint: "Seats end only on their own term date, or when somebody steps down." },
     ],
   },
+  {
+    /*
+     * Rye, 2026-09-14: "the 3 changes per account seems to be a broken limit!
+     * Let's definitely make this a setting and set it to much higher as the
+     * beginnings will all have massive changes like this to get a village up."
+     *
+     * It replaced `max(3, activeMembers * 3)`, which gave a village of two
+     * accounts a limit of six and blocked twelve lines of an eighteen-seat
+     * first import. Read through `draftChangeCap` in server/lib/orgDrafts.ts.
+     */
+    key: "org.proposal_change_limit",
+    category: "Progression",
+    label: "Most changes one outside batch can propose",
+    description:
+      "How many seats one batch from an outside service can put into a single draft. A village's first import is often its whole structure arriving at once, so the limit starts high. Nothing publishes on a batch's say-so: a steward still reads every line and accepts it before any of it becomes the chart. Lower it once the village is built and imports settle into small changes. A draft somebody builds by hand is never held to it.",
+    type: "integer",
+    default: "500",
+    min: 1,
+    max: 10000,
+    unit: "changes",
+  },
 
   // ── Quests: how work becomes recognition ──────────────────────────────────
   {
@@ -774,6 +842,25 @@ export const VARIABLES: VariableDef[] = [
     type: "integer",
     default: "72",
     min: 72,
+    max: 720,
+    unit: "hours",
+  },
+  // Rye, 2026-09-14: "if all stewards already voted yes, then there is no veto
+  // window needed", and "It's also the villages countdown (they share it)". So
+  // consent removes the veto and shortens the wait to this notice. It defaults
+  // to a day, not to zero: the countdown is the village's notice as well as the
+  // stewards' door. Veto-locked (`CONSENT_NOTICE_HOURS_KEY` in
+  // server/lib/stewardship.ts) for the same reason the window length is.
+  {
+    key: "governance.consent_notice_hours",
+    category: "Governance",
+    label: "How long a change waits when every steward already said yes",
+    criticality: "constitutional",
+    description:
+      "When every seated steward votes yes on a decision, nobody is left to stop it, so it does not need the whole steward window. It still waits this many hours after the vote closes, because the countdown is the village's notice that a change is coming. It only ever shortens the wait: a number above the steward window counts as the steward window. A village with no seated stewards never gets this, because nobody said yes. Zero lets a change land as soon as the vote closes whenever every steward agrees.",
+    type: "integer",
+    default: "24",
+    min: 0,
     max: 720,
     unit: "hours",
   },
@@ -1221,19 +1308,6 @@ export const VARIABLES: VariableDef[] = [
     min: 1,
     max: 24,
     unit: "cycles",
-  },
-  {
-    key: "membership.vouch_threshold",
-    category: "Governance",
-    label: "Vouches to admit a member",
-    criticality: "structural",
-    description:
-      "How many standing members must vouch for an applicant before membership completes on its own. 0 keeps vouching off and admission stays whatever your current process is. Vouching comes from contributors and up, a member may never vouch for themself, and every vouch is on the record.",
-    type: "integer",
-    default: "0",
-    min: 0,
-    max: 20,
-    unit: "vouches",
   },
 
   // ── Tokens: read from Base, governed on Hypha ──────────────────────────────
@@ -2509,7 +2583,7 @@ export const VARIABLES: VariableDef[] = [
     category: "Exit",
     label: "What happens to Voice at a departure",
     description:
-      "Voice is the one holding that is also standing in the village, so it gets its own answer. Forfeit is what happens today. Keep is refused while a resolved exit turns the account into a tombstone, and the refusal says when it becomes available. Convert needs a rate under it, and a conversion at zero is refused as well. Works with: 'Share of Voice a leaver keeps' and 'Credits per Voice when converting'.",
+      "Voice is the one holding that is also standing in the village, so it gets its own answer. Forfeit is what happens today. Keep is refused while a resolved exit turns the account into a tombstone, and the refusal says when it becomes available. Convert needs a rate under it and a share of Voice the leaver keeps, because only that share converts, so convert with a rate of 0 or a share of 0 is refused as well. Works with: 'Share of Voice a leaver keeps' and 'Credits per Voice when converting'.",
     type: "choice",
     default: "forfeit",
     choices: [
@@ -2571,19 +2645,24 @@ export const VARIABLES: VariableDef[] = [
   // are ten to thirty of those and this surface is a flat searchable list.
   // Ring derives to `open` for the reason the Exit block gives above.
   //
-  // TWO OF THE FIVE DEFAULTS ARE LIFTED FROM THE STORE, not from the design.
-  // `upsertScopeNeed` (server/lib/needs.ts) hardcodes `depthTarget ??
+  // TWO OF THE FIVE DEFAULTS WERE LIFTED FROM THE STORE, not from the design.
+  // `upsertScopeNeed` (server/lib/needs.ts) used to hardcode `depthTarget ??
   // "satisfied"` and `breadthTargetPct === undefined ? 100`, so those two
-  // literals are what a village adopting a need gets today and those two
-  // literals are the defaults here. Breadth is an INTEGER and not a
+  // literals became the defaults here, and a village that never votes still
+  // adopts needs at them. Breadth is an INTEGER and not a
   // `percentage`, because `scopeProblem` refuses a fractional percent by name
   // and a dial accepting 50.5 would hand the store a number it will not take.
   //
-  // NOTHING READS THESE FIVE YET. Measured at this ref by grepping every key
-  // across the tree: no file names any of them. The scope editor writes the
-  // two literals above, the member card reads the floor when that lane lands,
-  // and the launch checklist reads the last one when it lands. Every
-  // description below says what is true today.
+  // THREE OF THE FIVE ARE READ, all by server/lib/needs.ts at the point of
+  // use: `needs.aggregate_floor` through `aggregateFloor` (the aggregate's
+  // suppression and the floor the member card prints), and
+  // `needs.default_depth_target` and `needs.default_breadth_pct` through
+  // `defaultDepthTarget` and `defaultBreadthPct` (the rung and share a need
+  // is adopted at when the scope editor names none). The other two,
+  // `needs.totality_target_pct` and `needs.launch_requirement`, are named by
+  // no server, client or shared file outside this registry and its tests,
+  // measured by grepping both keys at this ref. Every description below says
+  // what is true today.
   {
     key: "needs.totality_target_pct",
     category: "Needs",
@@ -2623,7 +2702,7 @@ export const VARIABLES: VariableDef[] = [
     category: "Needs",
     label: "Smallest count of members that may be shown",
     description:
-      "The smallest number of members whose answers may appear as a count anywhere in the village. Under it the village sees nothing at all, because in a small place a count of one is a name and a count of two is a name and a guess. 3 is the floor the aggregate keeps and the number the member's own needs card prints into the sentence that says when a count appears. Raise it in a village where people know each other well enough for four to be identifiable.",
+      "The smallest number of answers on one need that may appear as a count anywhere in the village. Below it the counts are withheld, and a need the village never adopted is left off the list entirely, so one member's answer cannot put a need only they named in front of everybody. 3 is where the platform starts, and the member's own needs card prints this number into the sentence that says when a count appears. What the floor does is keep a small count out of casual reading. It cannot stop inference: anyone who already knows how the other members answered on a need can subtract those answers from the total and learn the rest, so at a floor of 3, knowing two answers is enough to learn the third. Raise it where members know enough of each other's answers for that to matter.",
     type: "integer",
     default: "3",
     min: 1,

@@ -19,6 +19,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, X } from "lucide-react";
 import { authToken } from "@/lib/gameApi";
 import { GLOSS_MAX } from "@shared/power";
+import SeatTermField from "./SeatTermField";
 import type { PowerCircle, PowerData, PowerSeat } from "./types";
 
 const headers = (): Record<string, string> => {
@@ -102,13 +103,15 @@ export default function SetupWalk({
     setAt((i) => Math.min(i + 1, steps.length - 1));
   };
 
-  const assign = (seatId: string, userId: string) => {
+  // `termEndsOn` empty sends no date, and the route ends the seat with the
+  // season (0199). A refusal comes back as a sentence and lands in `status`.
+  const assign = (seatId: string, userId: string, termEndsOn: string) => {
     setBusy(true);
     setStatus("");
     fetch(`/api/admin/org/roles/${seatId}/holders`, {
       method: "POST",
       headers: { ...headers(), "Content-Type": "application/json" },
-      body: JSON.stringify({ userId }),
+      body: JSON.stringify({ userId, ...(termEndsOn ? { termEndsOn } : {}) }),
     })
       .then(async (r) => {
         const d = await r.json();
@@ -251,11 +254,14 @@ function SeatStep({
   data: PowerData;
   tray: TrayMember[];
   busy: boolean;
-  onAssign: (seatId: string, userId: string) => void;
+  onAssign: (seatId: string, userId: string, termEndsOn: string) => void;
   onOpenCall: (seatId: string) => void;
   onSkip: () => void;
 }) {
   const [picking, setPicking] = useState(false);
+  const [termEndsOn, setTermEndsOn] = useState("");
+  // A date picked for one seat never carries onto the next seat in the walk.
+  useEffect(() => setTermEndsOn(""), [seat.id]);
   const circle = data.circles.find((c) => c.id === seat.circleId);
   return (
     <div>
@@ -270,6 +276,9 @@ function SeatStep({
 
       {picking ? (
         <div>
+          <div className="mb-3">
+            <SeatTermField value={termEndsOn} onChange={setTermEndsOn} />
+          </div>
           <p className="text-xs font-semibold text-foreground mb-1.5">Who takes it up?</p>
           <div className="flex flex-wrap gap-1.5 max-h-44 overflow-y-auto" data-power-member-tray>
             {tray.map((m) => (
@@ -277,7 +286,7 @@ function SeatStep({
                 key={m.id}
                 type="button"
                 disabled={busy}
-                onClick={() => onAssign(seat.id, m.id)}
+                onClick={() => onAssign(seat.id, m.id, termEndsOn)}
                 className="flex items-center gap-1.5 text-xs bg-muted text-foreground pl-1 pr-2 py-1 rounded-full hover:bg-muted/70 disabled:opacity-40"
               >
                 {m.avatar ? (

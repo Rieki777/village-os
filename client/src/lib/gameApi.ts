@@ -113,11 +113,16 @@ export interface SeasonState {
   current: SeasonEntry | null;
   upcoming: SeasonEntry | null;
   needsNextSeason: boolean;
-  daysLeft: number;
+  /** Null while the current season has no end date. */
+  daysLeft: number | null;
+  /** True while the current season runs until somebody starts the next. */
+  openEnded?: boolean;
   daysUntilStart: number;
   timezone: string;
   cadence: string;
   today: string;
+  /** The whole dated calendar, in order. A seat's term is decided against it. */
+  seasons?: SeasonEntry[];
 }
 
 // One shared, cached fetch of the public config so many components don't each hit it.
@@ -469,6 +474,15 @@ export interface GameMe {
   journeys: Record<string, string[]>;
   membership: boolean;
   trainingComplete: boolean;
+  /**
+   * Progress toward the training rung, counting MANDATORY modules only.
+   *
+   * `trainingComplete` is a boolean and a boolean is the wrong shape for a rung
+   * somebody is working toward: the quest rungs can say "1 of 3" and this one
+   * could only say "not yet". Absent on a server older than this field, where
+   * the rung falls back to naming its requirement without the count.
+   */
+  training?: { done: number; required: number };
   /**
    * Consented quests to this member's name, which is what the one numeric
    * rung counts. Read it against `stages[n].rule` to say how far along a

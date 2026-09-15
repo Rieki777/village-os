@@ -201,6 +201,10 @@ describe.skipIf(!DB_CONFIGURED)("harm metric 1: a power moves, and the holder ac
     const holding = await call("GET", "/api/admin/capabilities/holding");
     expect(holding.status).toBe(200);
     expect(holding.json.powers.every((p: any) => p.heldBy === null)).toBe(true);
+    // The count the handover tab warns from (Rye, 2026-09-14): a power may go
+    // to a role nobody holds, and the panel says so from this served number.
+    const steward = holding.json.roles.find((r: any) => r.id === "steward-circle");
+    expect(steward?.holderCount, "nobody is seated in the Steward Circle yet").toBe(0);
   });
 
   it("refuses to hand a power to a role that could not act on it", async () => {
@@ -233,6 +237,10 @@ describe.skipIf(!DB_CONFIGURED)("harm metric 1: a power moves, and the holder ac
     expect(asked.json.escalations.map((e: any) => e.capability)).toEqual(["intake.moderate"]);
     // The sentence says the consequence and never the key.
     expect(String(asked.json.escalations[0].consequence)).toContain("queues");
+    // The refusal names no control. It used to say "Tick the ones you mean",
+    // which the only client showed in an OK/Cancel box with nothing to tick.
+    expect(String(asked.json.error)).toContain("nothing has changed yet");
+    expect(String(asked.json.error)).not.toMatch(/\btick\b/i);
 
     const after = await call("GET", "/api/roles", undefined, "");
     expect((after.json ?? []).find((r: any) => r.id === "steward-circle").capabilities)
@@ -248,6 +256,8 @@ describe.skipIf(!DB_CONFIGURED)("harm metric 1: a power moves, and the holder ac
   it("seats Kira, hands the power to the village, and Kira works the queue with a member token", async () => {
     const seated = await call("POST", "/api/admin/roles/steward-circle/holders", { userId: kiraId, action: "add" });
     expect(seated.status, seated.text).toBe(200);
+    const counted = await call("GET", "/api/admin/capabilities/holding");
+    expect(counted.json.roles.find((r: any) => r.id === "steward-circle")?.holderCount, "Kira now holds it").toBe(1);
 
     const moved = await call("PUT", "/api/admin/capabilities/intake.moderate/holding", { roleId: "steward-circle" });
     expect(moved.status, moved.text).toBe(200);

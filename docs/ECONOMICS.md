@@ -130,7 +130,7 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `admin_mint:<slug>:<body>` | `server/index.ts` |
 | `admin_mint:req:<id>` | `server/index.ts` |
 | `circle_treasury:<kind>:<budgetId.slice(0, 40)>:<tail>` | `server/routes/circleTreasury.ts` |
-| `circle_treasury:dormant:<circleId>:<tokenSlug>:<day>:<balanceMinor>` | `server/lib/circleTreasury.ts` |
+| `circle_treasury:dormant:<circleId.slice(0, 40)>:<tokenSlug>:<day>:<balanceMinor>:<accountRows>` | `server/lib/circleTreasury.ts` |
 | `circle-bonus:<recordId>:<unit>` | `server/lib/circleBonus.ts` |
 | `comp-<Date.now()>-<Math.random().toString(36).slice(2, 6)>` | `server/routes/stays.ts` |
 | `exit:<exitId>:convert-credit:<token>` | `server/lib/exit.ts` |
@@ -2581,6 +2581,7 @@ display name as the member sees it.
 - `This village has chosen that redemptions go to a village vote, and that path is still being finished. A steward can move it back to a steward confirming in the village's dials`
 - `You have a departure open, and what happens to your balance is being settled there`
 - `You have opened <openedThisCycle> redemptions this moon, which is what this village allows. The count starts again at the new moon`
+- `Ask for <name> in positive amounts with at most <decimals> decimal places`
 - `Ask for <name> in whole positive amounts`
 - `You hold <free> <name> that is free, and <held> more is already held against a redemption you have open`
 - `You hold <free> <name>, and that is what there is to redeem`
