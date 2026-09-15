@@ -54,7 +54,7 @@ import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { recordEvent } from "../lib/events";
 import { allTokens, tokenDef } from "../lib/ledger";
-import { cycleWindow, fromLedgerUnits, toLedgerUnits } from "../lib/economy";
+import { cycleWindow, decimalsFor, finerThanScale, fromLedgerUnits, toLedgerUnits } from "../lib/economy";
 import { isListedForTrade } from "../lib/exchange";
 import { openExitFor } from "../lib/exit";
 import {
@@ -177,10 +177,11 @@ export function register(app: Express, deps: Deps): void {
      * not 100 in binary), so at 0 decimals a member asking for 1.5 credits
      * would silently redeem 2 and be told nothing. Converting and converting
      * back is the cheap exact test, and it costs the member one sentence
-     * instead of half a token.
+     * instead of half a token. `finerThanScale` is that test, shared with the
+     * hand-mint route so the two doors agree on what "too fine" means.
      */
     const units = toLedgerUnits(slug, asked);
-    if (tokenDef(slug) && fromLedgerUnits(slug, units) !== asked) {
+    if (tokenDef(slug) && finerThanScale(asked, decimalsFor(slug))) {
       return res.status(400).json({
         error: `Ask for ${tokenDef(slug)?.name ?? slug} in whole positive amounts.`,
       });

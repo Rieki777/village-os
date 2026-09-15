@@ -183,9 +183,12 @@ export function register(app: Express, deps: Deps): void {
      *
      * `accommodation_prices.amount_minor` is the ledger's MINOR units, so a
      * room at three Village Credits stores 300 once credits is at its ruled
-     * two decimals (docs/ECONOMICS.md section 11). The page
-     * printed that raw fifty-eight lines under a balance line that divides,
-     * which is one page answering the same question two ways.
+     * two decimals (docs/ECONOMICS.md section 11). `accommodations` above does
+     * NOT carry that column: `listAccommodations` sends `priceFromStored`, so
+     * every rate here is HUMAN (3), and so is each `earnQuests` reward. The
+     * scale below is for printing those at the token's precision and for the
+     * MINOR fields in `mine`. It is never a divisor for a rate: Stay.tsx once
+     * divided a human rate by it and printed a ten-credit night as 0.1.
      *
      * Derived from the ROOMS' own price keys rather than from `mine.balances`,
      * which is where the token's name used to come from and could never have

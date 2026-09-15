@@ -188,7 +188,7 @@ export async function ensureVoiceToken(pool: Pool, displayName?: string): Promis
  * came down from three to two, which is that two scales are fewer places a
  * display and an input can disagree than three.
  */
-export { CURRENCY_DECIMALS, VOICE_DECIMALS } from "../../shared/tokenScale";
+export { CURRENCY_DECIMALS, VOICE_DECIMALS, finerThanScale } from "../../shared/tokenScale";
 import { CURRENCY_DECIMALS, VOICE_DECIMALS, decayUnits } from "../../shared/tokenScale";
 import { faucetAccountRows, issuedBySourceRows, legRowsForKeys } from "../repos/tokenLedger";
 import { memberHolderRows } from "../repos/tokenBalances";

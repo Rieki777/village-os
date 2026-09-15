@@ -244,4 +244,30 @@ describe("this screen speaks whole tokens", () => {
     expect(posted).toHaveLength(1);
     expect(posted[0].amount, "the screen posts whole tokens; the route converts once").toBe(10);
   });
+
+  it("lets a steward type a fraction the token holds, and posts it exactly", async () => {
+    /*
+     * The box had `min="1"` and no step, so a fraction was a browser warning,
+     * and the route truncated what arrived: 2.5 minted 2 under a "Minted"
+     * toast. The route now refuses a finer amount in words and moves a valid
+     * fraction exactly, so the box steps at the token's smallest unit.
+     */
+    const user = (await import("@testing-library/user-event")).default.setup();
+    render(<TokensTab password="secret" lifecycles={{} as Record<string, ModuleLifecycle>} />);
+    await screen.findByRole("table");
+
+    const selects = screen.getAllByRole("combobox");
+    await user.selectOptions(selects.find((s) => within(s).queryByText("Village Voice"))!, "village-voice");
+    const box = screen.getByPlaceholderText("Amount");
+    // The fixture's Voice carries 3 decimals on purpose (see the describe's header).
+    expect(box.getAttribute("step")).toBe("0.001");
+    expect(box.getAttribute("min")).toBe("0.001");
+
+    await user.selectOptions(selects.find((s) => s.querySelector('option[value=""]')?.textContent?.includes("Member"))!, "u1");
+    await user.type(box, "2.5");
+    await user.type(screen.getByPlaceholderText(/Reason/i), "For the harvest");
+    await user.click(screen.getByRole("button", { name: /^Mint$/ }));
+    expect(posted).toHaveLength(1);
+    expect(posted[0].amount).toBe(2.5);
+  });
 });
