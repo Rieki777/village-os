@@ -21,6 +21,7 @@ import {
   VARIABLES,
   VARIABLES_BY_KEY,
 } from "./gameVariables";
+import { NEED_DEPTHS, NEED_DEPTH_LABELS } from "./needs";
 import { GAME_CONFIG } from "./gameConfig";
 import { HIGHEST_TIER_KEY, isMetaSetting } from "./ballotSubjects";
 import { CRITICALITIES } from "./governanceEngine";
@@ -80,6 +81,51 @@ describe("ring resolution", () => {
     expect(applyTimingOf(VARIABLES_BY_KEY["gratitude.pool_per_cycle"])).toBe("cycle-close");
     expect(applyTimingOf(VARIABLES_BY_KEY["progression.multiplier.member"])).toBe("cycle-close");
     expect(applyTimingOf(VARIABLES_BY_KEY["quest.consent_cap_mode"])).toBe("instant");
+    // The waning dials carry their timing on the DEF rather than in
+    // CYCLE_APPLY_KEYS, which two sessions edit at once, and a def-level
+    // override cannot be lost in a merge.
+    expect(applyTimingOf(VARIABLES_BY_KEY["economy.voice_decay_pct"])).toBe("cycle-close");
+    expect(applyTimingOf(VARIABLES_BY_KEY["economy.voice_decay_basis"])).toBe("cycle-close");
+  });
+});
+
+describe("the waning dials (R3, R15)", () => {
+  const pct = VARIABLES_BY_KEY["economy.voice_decay_pct"];
+  const basis = VARIABLES_BY_KEY["economy.voice_decay_basis"];
+
+  it("starts at 1 percent a cycle, and any village may set any percent", () => {
+    // The ruling, as data. 1 by default, 0 turns it off, 100 is the ceiling.
+    expect(pct.default).toBe("1");
+    expect(pct.type).toBe("percentage");
+    expect(pct.min).toBe(0);
+    expect(pct.max).toBe(100);
+    expect(parseVariable(pct, undefined)).toBe(1);
+    expect(parseVariable(pct, "0")).toBe(0);
+    expect(validateVariable(pct, "0")).toBeNull();
+    expect(validateVariable(pct, "0.5")).toBeNull();
+    expect(validateVariable(pct, "101")).toMatch(/at most 100/);
+    expect(validateVariable(pct, "-1")).toMatch(/at least 0/);
+  });
+
+  it("lives under The Mint, where every other economy dial lives", () => {
+    // There is no Economy category in this registry, and a fifth `economy.*`
+    // key anywhere else would split one admin panel across two headings.
+    expect(pct.category).toBe("The Mint");
+    expect(basis.category).toBe("The Mint");
+    // Ring 2, derived. Any village may govern its own rate, which is the
+    // ruling: "it can be any %".
+    expect(ringOf(pct)).toBe("open");
+    expect(ringOf(basis)).toBe("open");
+  });
+
+  it("offers one basis, and refuses the one it does not ship", () => {
+    // A member's balance already IS their unspent Voice, so `unspent` has no
+    // second number to mean. The key exists so a village that later gains
+    // another way to spend Voice gets a real option without a rename.
+    expect(basis.choices?.map((c) => c.value)).toEqual(["all"]);
+    expect(basis.default).toBe("all");
+    expect(validateVariable(basis, "all")).toBeNull();
+    expect(validateVariable(basis, "unspent")).toMatch(/Must be one of: all/);
   });
 });
 
@@ -253,6 +299,237 @@ describe("governance.hub_url: https-only, no loopback exemption (bridges lane)",
     expect(rpcDef).toBeTruthy();
     expect(validateVariable(rpcDef, "http://127.0.0.1:8545")).toBeNull();
     expect(validateVariable(rpcDef, "http://some-other-host:8545")).toMatch(/https URL/);
+  });
+});
+
+describe("the Exit levers (R4), whose whole job is to change nothing on the day they land", () => {
+  /*
+   * THE ONE PROPERTY THIS BLOCK EXISTS FOR.
+   *
+   * `sweepBalances` (`server/lib/exit.ts`) READS these dials now, and on the
+   * values below it does what it always did: every positive balance goes, in
+   * full, to `sys:exit-settlement`, with nothing kept and no date gating the
+   * settle. So the defaults are not a taste question: each one has to be the
+   * value that reproduces that sentence exactly, and each is asserted here BY
+   * NAME against the behaviour it reproduces, so a later lane cannot quietly
+   * change what an untouched village does by editing a default.
+   *
+   * `server/lib/exitDefaults.test.ts` is the other half of this claim: it
+   * runs a real exit against a scratch schema on these defaults and compares
+   * the token_ledger rows to the ones origin/main's `sweepBalances` writes.
+   * A default asserted here and a posting measured there are two different
+   * kinds of evidence for one sentence. `server/lib/exitSplit.test.ts` is the
+   * mirror: what a village that MOVES one of these gets instead.
+   */
+  const def = (key: string) => {
+    const d = VARIABLES_BY_KEY[key];
+    expect(d, `missing Exit def ${key}`).toBeTruthy();
+    return d;
+  };
+
+  it("the four keep shares all start at nothing, which is what a departure does today", () => {
+    for (const kind of ["credit", "voice", "recognition", "equity"]) {
+      const d = def(`exit.keep_pct.${kind}`);
+      expect(d.default, `exit.keep_pct.${kind} default`).toBe("0");
+      expect(d.type).toBe("percentage");
+      expect(d.min).toBe(0);
+      expect(d.max).toBe(100);
+      // A share is parsed as the NUMBER zero from an unset village, and the
+      // same zero when a village types it. An empty state and a real zero are
+      // different facts about the row and the same fact about the sweep.
+      expect(parseVariable(d, undefined)).toBe(0);
+      expect(parseVariable(d, "0")).toBe(0);
+      expect(validateVariable(d, "101")).toMatch(/at most 100/);
+      expect(validateVariable(d, "-1")).toMatch(/at least 0/);
+    }
+  });
+
+  it("the remainder lands in exit settlement, which is the account the sweep names today", () => {
+    const d = def("exit.remainder_account");
+    expect(d.default).toBe("settlement");
+    expect(d.choices?.map((c) => c.value)).toEqual(["settlement", "treasury", "cycle-pool", "burn"]);
+    expect(validateVariable(d, "settlement")).toBeNull();
+    expect(validateVariable(d, "sys:exit-settlement")).toMatch(/Must be one of/);
+  });
+
+  it("the two choices that redefine a published supply figure each carry the warning", () => {
+    // `spending.ts` already argues this case for stay credits: a faucet's
+    // negative balance IS issued supply, so paying into one turns "released to
+    // date" into "outstanding" on every surface that prints it. The dial is
+    // allowed to do it and is not allowed to do it quietly.
+    const d = def("exit.remainder_account");
+    for (const value of ["cycle-pool", "burn"]) {
+      const choice = d.choices?.find((c) => c.value === value);
+      expect(choice?.hint, `${value} hint`).toMatch(/outstanding/);
+      expect(choice?.hint, `${value} hint`).toMatch(/released to date/);
+      expect(choice?.hint, `${value} hint`).toMatch(/only if you mean it/);
+    }
+    for (const value of ["settlement", "treasury"]) {
+      expect(d.choices?.find((c) => c.value === value)?.hint ?? "").not.toMatch(/outstanding/);
+    }
+  });
+
+  it("cooling starts at zero days, which is the guard the settle route has today", () => {
+    const d = def("exit.cooling_days");
+    expect(d.default).toBe("0");
+    expect(d.type).toBe("integer");
+    expect(d.min).toBe(0);
+    expect(d.max).toBe(365);
+    expect(validateVariable(d, "0.5")).toMatch(/whole number/);
+    expect(validateVariable(d, "366")).toMatch(/at most 365/);
+  });
+
+  it("Voice is forfeit by default, and the rate under it is zero", () => {
+    const voice = def("exit.voice_on_exit");
+    expect(voice.default).toBe("forfeit");
+    expect(voice.choices?.map((c) => c.value)).toEqual(["forfeit", "keep", "convert"]);
+    const rate = def("exit.voice_convert_rate");
+    expect(rate.default).toBe("0");
+    expect(rate.type).toBe("decimal");
+    expect(rate.min).toBe(0);
+    expect(rate.max).toBe(1000);
+    // A decimal accepts a fraction; the refusal that matters for this pair is
+    // `exitLeverProblem`'s, not the type's.
+    expect(validateVariable(rate, "0.25")).toBeNull();
+  });
+
+  it("no departure asks the village, and no leaver sells anything back", () => {
+    const vote = def("exit.vote_over");
+    expect(vote.default).toBe("0"); // 0 means never, which is every village today
+    expect(vote.type).toBe("integer");
+    expect(vote.min).toBe(0);
+    const sellback = def("exit.sellback_enabled");
+    expect(sellback.default).toBe("false");
+    expect(sellback.type).toBe("boolean");
+    // A boolean has no range to draw, which the block below enforces registry
+    // wide; asserted here too because this is the def a fork copies.
+    expect(sellback.min).toBeUndefined();
+    expect(sellback.max).toBeUndefined();
+  });
+
+  it("every Exit dial is the village's to govern, and none of them waits for a cycle", () => {
+    // Ring 2 by derivation: "Exit" is outside FOUNDER_CATEGORIES and no key is
+    // in FOUNDER_KEYS. That is the answer to "Ring 1 or Ring 2": a village
+    // governs its own exit terms.
+    const exitDefs = VARIABLES.filter((v) => v.category === "Exit");
+    expect(exitDefs.length).toBe(10);
+    for (const d of exitDefs) {
+      expect(ringOf(d), `${d.key} ring`).toBe("open");
+      // A departure is not a cycle close, and none of these is a settlement
+      // basis. Pinned so a later lane cannot fold them into CYCLE_APPLY_KEYS
+      // and delay a policy change by a moon for no reason.
+      expect(applyTimingOf(d), `${d.key} timing`).toBe("instant");
+    }
+  });
+});
+
+describe("the Needs dials (R1), re-derived against what the needs store actually does", () => {
+  it("the two starting answers are what the store falls back to", () => {
+    /*
+     * `upsertScopeNeed` (server/lib/needs.ts) now writes
+     * `input.depthTarget ?? defaultDepthTarget()` and
+     * `input.breadthTargetPct === undefined ? defaultBreadthPct() : ...`,
+     * and those two accessors read THESE keys. The constants they fall back
+     * to when nothing is voted are `NEEDS_DEFAULT_DEPTH_TARGET` and
+     * `NEEDS_DEFAULT_BREADTH_PCT`, which server/lib/needs.dials.test.ts pins
+     * against this registry from the other side. So these two defaults are
+     * still what a village that never opens the panel adopts needs at, and
+     * a village that DOES open it now gets what it chose.
+     */
+    expect(VARIABLES_BY_KEY["needs.default_depth_target"].default).toBe("satisfied");
+    expect(VARIABLES_BY_KEY["needs.default_breadth_pct"].default).toBe("100");
+  });
+
+  it("the depth choices ARE the five rungs, taken from the taxonomy and never retyped", () => {
+    const d = VARIABLES_BY_KEY["needs.default_depth_target"];
+    expect(d.choices?.map((c) => c.value)).toEqual([...NEED_DEPTHS]);
+    expect(d.choices?.map((c) => c.label)).toEqual(NEED_DEPTHS.map((k) => NEED_DEPTH_LABELS[k]));
+    // A rung added to the taxonomy reaches this dial with no edit here. A
+    // retyped list would go stale in silence, which is the mirror-annotation
+    // trap this repository has already paid for once.
+    expect(validateVariable(d, "thriving")).toBeNull();
+    expect(validateVariable(d, "content")).toMatch(/Must be one of/);
+  });
+
+  it("breadth is a WHOLE percent, because the store refuses a fraction by name", () => {
+    // `scopeProblem` answers "A breadth is a whole number of percent, from 0
+    // to 100." A dial typed `percentage` would accept 50.5 here and hand the
+    // store a number it will not take, so the dial is an integer.
+    const d = VARIABLES_BY_KEY["needs.default_breadth_pct"];
+    expect(d.type).toBe("integer");
+    expect(validateVariable(d, "50.5")).toMatch(/whole number/);
+    expect(validateVariable(d, "100")).toBeNull();
+    expect(validateVariable(d, "0")).toBeNull();
+  });
+
+  it("the totality target says on itself that it sizes nothing", () => {
+    // R1's ruling and question 3's default: DESCRIPTIVE, never an engine
+    // input. Nothing in the tree reads this key, and the description has to
+    // say so plainly or a founder reads the target as a budget.
+    const d = VARIABLES_BY_KEY["needs.totality_target_pct"];
+    expect(d.default).toBe("0"); // 0 means nobody has said yet
+    expect(d.description).toMatch(/sizes nothing/);
+    expect(d.description).toMatch(/gates nothing/);
+  });
+
+  it("the aggregate floor starts at three, and can never be set to one", () => {
+    const d = VARIABLES_BY_KEY["needs.aggregate_floor"];
+    expect(d.default).toBe("3");
+    expect(d.type).toBe("integer");
+    expect(d.min).toBe(1);
+    expect(validateVariable(d, "0")).toMatch(/at least 1/);
+  });
+
+  it("a needs target never blocks the launch vote, and there is no choice that would", () => {
+    // Question 4's default, held as data: the severities the launch registry
+    // knows are blocking, recommended and optional. This dial offers neither
+    // `blocking` nor anything that maps to it, so no edit to this value can
+    // hold a village's Game over an unanswered target.
+    const d = VARIABLES_BY_KEY["needs.launch_requirement"];
+    expect(d.default).toBe("recommended");
+    expect(d.choices?.map((c) => c.value)).toEqual(["recommended", "none"]);
+    expect(validateVariable(d, "blocking")).toMatch(/Must be one of/);
+  });
+
+  it("every Needs dial is the village's to govern, and none of them waits for a cycle", () => {
+    const needsDefs = VARIABLES.filter((v) => v.category === "Needs");
+    expect(needsDefs.length).toBe(5);
+    for (const d of needsDefs) {
+      expect(ringOf(d), `${d.key} ring`).toBe("open");
+      expect(applyTimingOf(d), `${d.key} timing`).toBe("instant");
+    }
+  });
+});
+
+describe("what this wave added to the registry, counted", () => {
+  /*
+   * THE COUNT IS PER CATEGORY AND NOT A REGISTRY TOTAL, deliberately.
+   *
+   * Measured at this ref: the registry held 151 defs before this wave and
+   * holds 166 after it, which is the fifteen below and nothing else. A pin on
+   * 166 would be a merge landmine, because nine lanes are adding dials to
+   * other categories in the same week and every one of them would go red on a
+   * number that says nothing about their change. Two category counts say the
+   * same thing about THIS change and stay true through everybody else's.
+   */
+  it("fifteen new dials, in two new categories, and no key collides", () => {
+    expect(VARIABLES.filter((v) => v.category === "Exit").length).toBe(10);
+    expect(VARIABLES.filter((v) => v.category === "Needs").length).toBe(5);
+    // The import-time guard's invariant, re-asserted after fifteen additions:
+    // a duplicate key would make VARIABLES_BY_KEY silently keep the last def.
+    expect(Object.keys(VARIABLES_BY_KEY).length).toBe(VARIABLES.length);
+  });
+
+  it("every one of the fifteen has a label, a description and a unit or a choice list", () => {
+    for (const d of VARIABLES.filter((v) => v.category === "Exit" || v.category === "Needs")) {
+      expect(d.label.length, `${d.key} label`).toBeGreaterThan(0);
+      expect(d.description.length, `${d.key} description`).toBeGreaterThan(80);
+      // Admin renders a value as `${raw} ${unit}` for a number and as a
+      // labelled option for a choice. A number with no unit prints a bare
+      // figure a founder has to guess at.
+      if (d.type === "choice" || d.type === "boolean") expect(d.choices ?? d.type).toBeTruthy();
+      else expect(d.unit, `${d.key} unit`).toBeTruthy();
+    }
   });
 });
 

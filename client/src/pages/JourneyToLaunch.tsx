@@ -383,6 +383,14 @@ function StartTheGame({
  *
  * THE REFUSALS COME FIRST on purpose. A run that only showed the successes
  * would have told the founder nothing they needed.
+ *
+ * R12 OPENED THE DOOR. "Any member as all members may suggest upgrades and
+ * will need to run models and tests." The card is the same card for everybody
+ * and it carries no admin affordance of its own: it posts to `/api/dry-run`,
+ * which answers any signed-in member (`server/routes/dryRun.ts`), and it
+ * renders whatever comes back. A member's report leaves out the rules that are
+ * switched off and the changes an admin has queued, and the route's header says
+ * why. Nothing on this card needs to know which of the two it is holding.
  */
 interface DryRunFinding { area: string; outcome: "issued" | "refused" | "idle"; sentence: string }
 // `cycleKey` is the stored id and stays the React key for the list. `moon` is
@@ -420,7 +428,7 @@ function TestRun() {
   const run = () => {
     setRunning(true);
     setProblem("");
-    fetch("/api/admin/dry-run", { method: "POST", headers: headers(), body: JSON.stringify({ moons }) })
+    fetch("/api/dry-run", { method: "POST", headers: headers(), body: JSON.stringify({ moons }) })
       .then(async (r) => {
         const d = await r.json();
         if (!r.ok) throw new Error(d.message ?? d.error ?? "The run was refused");
@@ -618,7 +626,16 @@ export default function JourneyToLaunch() {
   }, []);
   useEffect(() => { if (isAdmin) load(); }, [isAdmin, load]);
 
-  const confirm = (id: string, done: boolean) => {
+  /**
+   * The three answers this page can give about one checklist row.
+   *
+   * `true` and `false` are the manual confirmation and its retraction, which
+   * this button has always sent. `"declined"` is the third, and only a row the
+   * registry marks `declinable` accepts one: the server refuses it by name on
+   * any other, so a founder cannot decline their way past the shared-password
+   * exit from here or from anywhere else.
+   */
+  const confirm = (id: string, done: boolean | "declined") => {
     setBusy(id);
     fetch("/api/admin/launch/confirm", {
       method: "POST", headers: headers(), body: JSON.stringify({ id, done }),
@@ -651,9 +668,24 @@ export default function JourneyToLaunch() {
       .finally(() => setBusy(""));
   };
 
-  // ── Gate: same posture as the old page — admins walk in, others are told. ──
+  /*
+   * ── Three doors, and R12 opened the middle one ────────────────────────────
+   *
+   * A stranger still meets the wall: this page reads /api/admin/launch and the
+   * server refuses them.
+   *
+   * A SIGNED-IN MEMBER now gets the test run. R12: "any member as all members
+   * may suggest upgrades and will need to run models and tests." The checklist,
+   * the manual confirmations and the launch ballot stay with the founding team,
+   * because every one of them is a WRITE that /api/admin/launch* gates, and the
+   * readiness bar above is built from a payload a member cannot read. So the
+   * member's page is the one card they can honestly use, and it is the same
+   * card the admin sees below.
+   *
+   * An admin walks into the whole page, as before.
+   */
   if (loading) return <Layout><div className="py-24 text-center text-muted-foreground">Checking your access…</div></Layout>;
-  if (!isAdmin) {
+  if (!user) {
     return (
       <Layout>
         <div className="py-24 flex justify-center px-4">
@@ -663,11 +695,38 @@ export default function JourneyToLaunch() {
             </div>
             <h1 className="font-display text-xl font-bold text-foreground mb-1">Journey to Launch</h1>
             <p className="text-sm text-muted-foreground mb-5">
-              {user ? `Signed in as ${user.name}, but this area is for the team running the village.` : "This area is for the team running the village."}
+              Sign in to see how far this village is from opening its doors. Members can run the
+              test over its settings; the checklist itself belongs to the team running the village.
             </p>
             <a href="/admin" className="block w-full bg-teal-deep text-white py-3 rounded-xl font-semibold text-sm">
-              Sign in with an admin account
+              Sign in
             </a>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+  if (!isAdmin) {
+    return (
+      <Layout>
+        <div className="bg-teal-band text-white py-8">
+          <div className="container">
+            <div className="flex items-center gap-3 mb-2">
+              <FlaskConical className="w-6 h-6 text-amber-on-band" />
+              <span className="text-amber-on-band font-medium text-sm tracking-widest uppercase">Test run</span>
+            </div>
+            <h1 className="font-display text-3xl md:text-4xl font-bold mb-2">See what these settings would do</h1>
+            <p className="text-white text-sm max-w-2xl">
+              Turn this village's moons over quickly and read what its rules would pay, who a
+              settlement would thank, when Claims Week opens, and what you could give each moon.
+              It writes nothing. The launch checklist and the ballot belong to the team running
+              the village, so they are not on your copy of this page.
+            </p>
+          </div>
+        </div>
+        <div className="bg-stone-50 min-h-screen py-8">
+          <div className="container max-w-3xl space-y-6">
+            <TestRun />
           </div>
         </div>
       </Layout>
@@ -783,6 +842,7 @@ export default function JourneyToLaunch() {
                             <p className={`text-xs mt-1.5 ${i.state === "ok" ? "text-emerald-700" : "text-stone-600"}`}>
                               {i.detail}
                               {i.confirmedAt && ` · ${new Date(i.confirmedAt).toLocaleDateString()}`}
+                              {i.declinedAt && ` · ${new Date(i.declinedAt).toLocaleDateString()}`}
                             </p>
                             <div className="flex items-center gap-3 mt-2">
                               {i.fixAt.startsWith("http") ? (
@@ -807,6 +867,32 @@ export default function JourneyToLaunch() {
                                   }`}
                                 >
                                   {i.state === "ok" ? "Un-confirm" : "Mark done"}
+                                </button>
+                              )}
+                              {/*
+                                * THE SECOND ANSWER, AND IT IS THE WHOLE POINT
+                                * OF A DECLINABLE ROW.
+                                *
+                                * The founder is asked once for the village's
+                                * issuance cap and may say no. Without a door
+                                * for that answer, "you may decline" is a
+                                * sentence with no mechanism behind it and the
+                                * row is a step somebody skipped. The link
+                                * beside this button is where the cap is set;
+                                * this is where naming none is recorded, with
+                                * a name and an instant on it.
+                                */}
+                              {i.declinable && (
+                                <button
+                                  onClick={() => confirm(i.id, i.declinedBy ? false : "declined")}
+                                  disabled={busy === i.id}
+                                  className={`text-xs font-medium rounded-lg px-2.5 py-1 border ${
+                                    i.declinedBy
+                                      ? "text-stone-500 border-stone-200 hover:bg-stone-50"
+                                      : "text-white bg-teal-deep border-teal-deep"
+                                  }`}
+                                >
+                                  {i.declinedBy ? "Undo" : "Decline"}
                                 </button>
                               )}
                             </div>

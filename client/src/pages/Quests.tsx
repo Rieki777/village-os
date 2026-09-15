@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchGameMe, QuestClaim, useGameConfig } from "@/lib/gameApi";
 import { useTokenName, useValueTokenName } from "@/hooks/useTokenNames";
+import { useValueConversion } from "@/lib/moneyClaims";
 import { rewardCeiling } from "@shared/questRewards";
 import { ExamplesBanner } from "@/components/ExamplesBanner";
 import InfoTip from "@/components/InfoTip";
@@ -86,6 +87,24 @@ export default function Quests() {
     "All"
   );
   const { user } = useAuth();
+  /*
+   * WHAT HAPPENS TO THE VALUE TOKEN, IN THE FOUNDER'S OWN WORDS.
+   *
+   * This card said "As {village} grows, {value} can convert to cash, equity,
+   * or community currency" as compiled copy, and nothing in the product
+   * converts anything. The founder's ruling (2026-09-03) is that the
+   * conversion is REAL and happens OFF the platform, and that an on-platform
+   * redemption process is coming and is not built. That is a claim only he can
+   * make and only he should be able to correct, so it comes from the runtime
+   * content document and changes without a deploy.
+   *
+   * A village that has written nothing SAYS nothing here, and the two
+   * sentences around it stand on their own.
+   *
+   * This is a claim about the VALUE token. It does not touch the wallet's
+   * "money flows in and never back out", which is the credit token's rule.
+   */
+  const conversionNote = useValueConversion({ village: villageName, value: valueName });
   const [claims, setClaims] = useState<Record<string, QuestClaim>>({});
   const [claimList, setClaimList] = useState<QuestClaim[]>([]);
   const [quests, setQuests] = useState<BoardQuest[]>([]);
@@ -549,7 +568,7 @@ export default function Quests() {
                 },
                 {
                   title: "Share",
-                  body: `Each cycle, everyone's ${currencyName} shares in a real pool of ${valueName}. As ${villageName} grows, ${valueName} can convert to cash, equity, or community currency. This is how we honor contributions made before we could pay in cash.`,
+                  body: `Each cycle, everyone's ${currencyName} shares in a real pool of ${valueName}.${conversionNote ? ` ${conversionNote}` : ""} This is how we honor contributions made before we could pay in cash.`,
                   icon: Sprout,
                 },
               ].map((item) => (

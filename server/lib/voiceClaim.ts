@@ -337,6 +337,17 @@ export async function requestVoiceClaim(
       from: memberAccount(userId),
       to: VOICE_BRIDGE,
       tokenType: VILLAGE_VOICE,
+      // ALREADY MINOR. DO NOT CONVERT. `amountUnits` is assigned once, from
+      // `SELECT balance FROM token_balances ... FOR UPDATE` above, and nothing
+      // between there and here multiplies or divides it. The threshold check
+      // converts the OTHER side (`toLedgerUnits(VILLAGE_VOICE, ready.threshold)`),
+      // which is the correct direction, and the INSERT writes a SEPARATE human
+      // value with `fromLedgerUnits` without rebinding this one.
+      //
+      // Same shape as `sweepBalances` in `server/lib/exit.ts`: minor in from
+      // the balance cache, minor out to the ledger. Wrapping this would take a
+      // hundred times the member's voice at the two decimals Voice now carries,
+      // and would be invisible at zero.
       amount: amountUnits,
       source: "voice_claim",
       sourceRef: claimId,
@@ -426,6 +437,13 @@ export async function settleVoiceClaim(
       from: VOICE_BRIDGE,
       to: VOICE_SETTLED,
       tokenType: VILLAGE_VOICE,
+      // ALREADY CONVERTED. DO NOT CONVERT AGAIN. `voice_claims.amount` is
+      // `decimal(18,4)` and holds a HUMAN number, written once at the INSERT in
+      // `requestVoiceClaim` as `fromLedgerUnits(VILLAGE_VOICE, amountUnits)`.
+      // This is the matching multiply, and `toLedgerUnits` reads the registry's
+      // `decimals` at CALL TIME, so this line is right at 0, 3 or 4 with no
+      // edit. Headroom note: `decimal(18,4)` is exact at 4 decimals and
+      // silently rounds at 5, so a ruling above 4 changes the column too.
       amount: toLedgerUnits(VILLAGE_VOICE, Number(claim.amount)),
       source: "voice_claim_settled",
       sourceRef: claimId,
@@ -442,6 +460,16 @@ export async function settleVoiceClaim(
     from: VOICE_BRIDGE,
     to: memberAccount(String(claim.user_id)),
     tokenSlug: VILLAGE_VOICE,
+    // ALREADY CONVERTED, and it is an ASSERTION rather than an instruction.
+    // `reverse` never posts this number: it reads the original row out of
+    // `token_ledger` and mirrors THAT (see `reverse` in `server/lib/economy.ts`,
+    // which says so on the line). This value is compared against the row's
+    // minor amount, so it has to be minor, and converting it a second time
+    // would turn every correct refund into a loud mismatch.
+    //
+    // Keep the assertion. It is the one place a registry flip done without
+    // rescaling `token_ledger` surfaces as a failure somebody can read,
+    // instead of a refund that silently moves the wrong amount.
     amount: toLedgerUnits(VILLAGE_VOICE, Number(claim.amount)),
     note: note ?? `Voice returned: ${to}`,
   });
@@ -496,6 +524,10 @@ export async function retryRefund(
     from: VOICE_BRIDGE,
     to: memberAccount(String(claim.user_id)),
     tokenSlug: VILLAGE_VOICE,
+    // ALREADY CONVERTED, and an ASSERTION, exactly as in `settleVoiceClaim`
+    // above. Worth knowing for the runbook: this is the repair path for the
+    // failure that assertion produces, and it fails in the same place for the
+    // same reason. The repair tool does not repair a units mismatch.
     amount: toLedgerUnits(VILLAGE_VOICE, Number(claim.amount)),
     note: `Voice returned on repair: ${state}`,
   });
@@ -512,6 +544,20 @@ export async function retryRefund(
  * a debit posted against a claim that was then abandoned: each breaks this
  * equality, and none of them break conservation on their own, which is why
  * conservation alone was never going to catch them.
+ *
+ * UNITS, and this one is a trap that has not been sprung yet. `held`, `owed`
+ * and `drift` are all MINOR UNITS, while every other export in this file
+ * returns human numbers. Nothing renders them today, so nothing is wrong; the
+ * first admin panel, poller or alert threshold that reads `drift` will be
+ * comparing a minor number against a human one. A threshold written as "alert
+ * above 1" would fire on one ten-thousandth of a voice. Whoever gives this a
+ * caller either renames the three fields to say `Units`, or divides all three
+ * with `fromLedgerUnits` and moves the test's `toLedgerUnits` wrappers off.
+ *
+ * `owed` also rounds ONCE over the SQL sum while `held` is the sum of
+ * individually rounded postings. At `decimal(18,4)` storage and decimals 4
+ * every term is exact and the two agree. At 5 they diverge and `drift`
+ * reports a number nothing did wrong.
  */
 export async function bridgeReconciliation(
   pool: Pool,

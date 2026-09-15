@@ -84,12 +84,12 @@ import { allocatedWeight } from "../repos/governanceWeightRows";
 import { elementRowsForBallot, upsertElementRow } from "../repos/governanceElementLedger";
 import { insertMechanicsChange } from "../repos/mechanicsChanges";
 import { markProposalApplied } from "../repos/mechanicsProposals";
-import { VARIABLES_BY_KEY, applyTimingOf, ringOf } from "../../shared/gameVariables";
+import { VARIABLES_BY_KEY, applyTimingOf, ringOf, validateVariable } from "../../shared/gameVariables";
 import { isMintRuleKey } from "../../shared/mintRuleKeys";
 import { asChangeItem, type ChangeInput, type ChangeItem } from "./mechanics";
 import { kindOfItem, kindOfSet, type GovernanceKind } from "../../shared/governanceKinds";
 import { keyIsVetoLocked } from "./stewardship";
-import { setVariable, type SetResult } from "./variables";
+import { setVariable, variableSetRefusal, type SetResult } from "./variables";
 import { applyMintRuleChanges } from "./economy";
 import { setWeight, weightChangeProblem, weightTokenProblem } from "./governanceWeights";
 import { effectiveLifecycle, setModuleLifecycle } from "./modules";
@@ -202,6 +202,10 @@ export async function validateElements(
       const def = VARIABLES_BY_KEY[item.key];
       if (!def) return refuse(index, item.kind, "this dial no longer exists in the registry");
       if (ringOf(def) !== "open") return refuse(index, item.kind, "this dial is no longer community-governable");
+      // The registry's own bounds, here and not first in phase 2, where a
+      // refusal lands after the elements before it were already written.
+      const invalid = validateVariable(def, String(item.to).trim());
+      if (invalid) return refuse(index, item.kind, invalid);
       const previous = await currentDialValue(deps, item.key);
       elements.push({
         index,
@@ -250,6 +254,11 @@ export async function validateElements(
       if (!choices.includes(String(item.to))) {
         return refuse(index, item.kind, `${item.to} is not one of the ways this platform assigns weight`);
       }
+      // The registry's bounds on the token the switch also writes, here and not
+      // first in phase 2, where it would refuse after the mode had been written.
+      const tokenDial = VARIABLES_BY_KEY["governance.weight_token"];
+      const badToken = item.weightToken && tokenDial ? validateVariable(tokenDial, String(item.weightToken).trim()) : null;
+      if (badToken) return refuse(index, item.kind, badToken);
       /*
        * A TOKEN MONEY CAN BUY IS NOT WHAT WEIGHS A VOTE, and this is the one
        * door that could have walked past that rule. `weightTokenProblem`
@@ -301,6 +310,21 @@ export async function validateElements(
 
   const mixed = notVetoableMixRefusal(elements);
   if (mixed) return refuse(mixed.index, mixed.itemKind, mixed.problem);
+
+  /*
+   * THE SET'S FINAL DIAL STATE, JUDGED BEFORE ANYTHING IS WRITTEN. The write
+   * guard judges one dial against what stands, so [convert, rate 2.5] refused
+   * its first element, wrote its second, and the set was recorded as landed
+   * half applied, with the answer depending on element order. Here every
+   * dial the set moves is read at its final value: a refused final state
+   * refuses the whole set, and an allowed one is written with the same final
+   * values beside each write (`finalDialValues` in the loop below).
+   */
+  const blocked = variableSetRefusal(finalDialValues(elements));
+  if (blocked) {
+    const at = elements.find((e) => blocked.key in finalDialValues([e])) ?? elements[0];
+    return refuse(at.index, at.item.kind, `${blocked.sentence} (${blocked.key})`);
+  }
 
   elements.sort((a, b) => rankOf(a.item.kind) - rankOf(b.item.kind) || a.index - b.index);
   return { ok: true, elements, kind: kindOfSet(elements.map((e) => e.item.kind)) };
@@ -361,6 +385,23 @@ export function notVetoableMixRefusal(
       `with item ${other.index + 1} (${nameOf(other)}), which a steward may stop. Split them into two proposals: ` +
       "one proposal, one answer to the question of who can stop it",
   };
+}
+
+/**
+ * Every dial a set moves, at the value the whole set leaves it at. Proposal
+ * order, so a later element naming the same dial wins, as it would on disk.
+ */
+export function finalDialValues(elements: readonly ValidatedElement[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const el of [...elements].sort((a, b) => a.index - b.index)) {
+    const item = el.item;
+    if (item.kind === "dial") out[item.key] = String(item.to).trim();
+    if (item.kind === "mode_switch") {
+      out["governance.weight_mode"] = String(item.to).trim();
+      if (item.weightToken) out["governance.weight_token"] = String(item.weightToken).trim();
+    }
+  }
+  return out;
 }
 
 /** The value in force for a dial right now, or null when it sits at its default. */
@@ -503,13 +544,28 @@ export async function applyChangeSet(deps: ChangesetDeps, input: ApplySetInput):
    * IS the order the writes happen in.
    */
   let writeSeq = 0;
+  // Phase 1 judged exactly these values together; each write carries them so
+  // the guard never judges the half-written state between two of them.
+  const finals = finalDialValues(validated.elements);
+  /*
+   * WHAT AN EARLIER ATTEMPT AT THIS LANDING ALREADY WROTE, BY ELEMENT. A
+   * landing that throws is retried whole. A dial or a module written twice is
+   * a no-op, but a weight allocation appends a trail row per write and a queued
+   * minting rule an amendment-ledger row per queue, so a retry recorded both
+   * twice (measured: two trail rows, two ledger rows). Their element-ledger row,
+   * keyed on (ballot, element index), is the record the first attempt wrote
+   * them, so a retry skips them and reports them as landed.
+   */
+  const landedBefore = new Set(
+    (await elementRowsForBallot(deps.pool, input.ballotId)).map((r) => `${r.kind}:${r.index}`),
+  );
   for (const el of validated.elements) {
     const item = el.item;
     writeSeq += 1;
 
     if (item.kind === "dial" || item.kind === "mode_switch") {
       const key = item.kind === "dial" ? item.key : "governance.weight_mode";
-      const r: SetResult = await setVariable(deps.pool, key, String(item.to));
+      const r: SetResult = await setVariable(deps.pool, key, String(item.to), { alongside: finals });
       if (!r.ok) {
         failed.push({ key, problem: r.error ?? "refused" });
         continue;
@@ -542,7 +598,7 @@ export async function applyChangeSet(deps: ChangesetDeps, input: ApplySetInput):
       // switching into token mode without naming a token is a village that
       // weighs nothing.
       if (item.kind === "mode_switch" && item.weightToken) {
-        const t = await setVariable(deps.pool, "governance.weight_token", String(item.weightToken));
+        const t = await setVariable(deps.pool, "governance.weight_token", String(item.weightToken), { alongside: finals });
         if (t.ok) {
           await deps.recordMechanicsChange("governance.weight_token", t, input.actor, "governance", input.proposalRef, null);
           applied.push("governance.weight_token");
@@ -579,6 +635,10 @@ export async function applyChangeSet(deps: ChangesetDeps, input: ApplySetInput):
     }
 
     if (item.kind === "weight_allocation") {
+      if (landedBefore.has(`weight_allocation:${el.index}`)) {
+        applied.push(`weight:${item.userId}`);
+        continue;
+      }
       try {
         const out = await setWeight(deps.pool, {
           userId: item.userId,
@@ -606,7 +666,11 @@ export async function applyChangeSet(deps: ChangesetDeps, input: ApplySetInput):
     }
   }
 
-  const mintItems = validated.elements.filter((e) => e.item.kind === "mint_rule");
+  const mintElements = validated.elements.filter((e) => e.item.kind === "mint_rule");
+  const mintItems = mintElements.filter((e) => !landedBefore.has(`mint_rule:${e.index}`));
+  for (const e of mintElements) {
+    if (!mintItems.includes(e)) queued.push((e.item as { key: string }).key);
+  }
   if (mintItems.length > 0) {
     const out = await applyMintRuleChanges(
       deps.pool,
@@ -718,7 +782,12 @@ export async function applyMechanicsProposal(
     changes: p.changeSet,
   });
 
-  if (result.applied.length > 0 || result.queued.length > 0) {
+  // APPLIED MEANS EVERY ELEMENT. A set where any element failed used to be
+  // stamped applied the moment one other element landed, so a decision the
+  // village could not read was recorded as done. It stays unapplied, its
+  // `failed` list says why, and a retry re-writes what already landed as a
+  // no-op (the element ledger is keyed on the element).
+  if (result.ok && (result.applied.length > 0 || result.queued.length > 0)) {
     await markProposalApplied(deps.pool, p.id);
     await hooks.onApplied(p, result);
   }

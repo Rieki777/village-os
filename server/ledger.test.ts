@@ -13,30 +13,45 @@
  * Runs against the S5 harness: a scratch schema with every real migration
  * applied. No TEST_DATABASE_URL → skips loudly.
  */
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
+import * as ledgerModule from "./lib/ledger";
 import {
+  ALLOW_NEGATIVE_SOURCES,
   balanceOf,
   balancesFor,
   checkLedgerInvariants,
+  CLAWBACK_SOURCES,
   CYCLE_POOL_FAUCET,
+  type DebtProof,
   entriesForMember,
+  frozenSet,
   loadTokenRegistry,
   memberAccount,
   MINT_FAUCET,
   PLATFORM_TOKEN,
+  postClawbackMirror,
+  postClawbackMirrorPair,
+  postGraceNightBurn,
+  postPaymentReversalLeg,
   postTransfer,
+  postTransferOn,
   postTransferPair,
   questCreditsFor,
   RECOGNITION_FAUCET,
   refusalForMember,
   registerToken,
   tokenDef,
+  type TransferResult,
   TREASURY,
   hasBeenPaidByVillage,
   paidByVillageMany,
   contributionTokens,
 } from "./lib/ledger";
+import { lockedBalanceRows } from "./repos/tokenBalances";
 import { repairTaintedListings } from "./lib/exchange";
 import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 
@@ -298,7 +313,7 @@ describe.skipIf(!configured)("the MySQL token ledger", () => {
 
   it("refuses allowNegative, duplicate keys within the pair, and invalid legs", async () => {
     const debt = await postTransferPair(pool, [
-      { from: memberAccount("swapper"), to: TREASURY, tokenType: "pair-a", amount: 1, source: "exchange_swap", idempotencyKey: "k1", allowNegative: true },
+      { from: memberAccount("swapper"), to: TREASURY, tokenType: "pair-a", amount: 1, source: "exchange_swap", idempotencyKey: "k1", allowNegative: {} as unknown as DebtProof },
       { from: TREASURY, to: memberAccount("swapper"), tokenType: "pair-b", amount: 1, source: "exchange_swap", idempotencyKey: "k2" },
     ]);
     expect(debt.ok).toBe(false);
@@ -668,6 +683,728 @@ describe.skipIf(!configured)("the MySQL token ledger", () => {
       expect(await paidByVillageMany(pool, [], contributionTokens())).toEqual(new Set());
       expect(await hasBeenPaidByVillage(pool, "paid-one", [])).toBe(false);
     });
+  });
+
+  /*
+   * ── W3 adversary findings, closed here ────────────────────────────────────
+   *
+   * Every case below is one of the four W3 lanes' repros, rewritten to read
+   * outcomes rather than return values: balances, ledger rows and the boot
+   * invariant report. Each names its finding, quotes what the adversary
+   * observed, and asserts the fact that observation was a lie about.
+   */
+
+  describe("W3 F12/F13: allowNegative is a capability, not a flag beside a string", () => {
+    /** Fund an account through the ordinary primitive, so nothing is raw. */
+    const fund = async (member: string, amount: number, key: string) => {
+      const r = await postTransfer(pool, {
+        from: RECOGNITION_FAUCET, to: memberAccount(member),
+        amount, source: "admin_mint", idempotencyKey: key,
+      });
+      expect(r.ok).toBe(true);
+    };
+
+    it("refuses `allowNegative: true`, which used to take an account holding 10 down to -990", async () => {
+      // ADVERSARY A1, verbatim: postTransfer with source "reversal",
+      // allowNegative true, 1000 out of an account holding 10.
+      // Observed then: `A1 ok= true err= undefined balance= -990`.
+      await fund("f12-a1", 10, "f12-a1-fund");
+      const attack = await postTransfer(pool, {
+        from: memberAccount("f12-a1"), to: TREASURY, amount: 1000,
+        source: "reversal",
+        // The old signature took `true` here. It is a type error now, and the
+        // cast is what an attacker (or a JavaScript caller) actually has.
+        allowNegative: true as unknown as DebtProof,
+        idempotencyKey: "reversal:local:f12-a1",
+      });
+      expect(attack.ok).toBe(false);
+      expect(String(attack.error)).toContain("capability the ledger issues");
+      expect(await balanceOf(pool, memberAccount("f12-a1"), PLATFORM_TOKEN)).toBe(10);
+    });
+
+    it("refuses a forged proof, and a real proof spent on the wrong source", async () => {
+      await fund("f12-forge", 10, "f12-forge-fund");
+      const forged = await postTransfer(pool, {
+        from: memberAccount("f12-forge"), to: TREASURY, amount: 1000,
+        source: "reversal",
+        allowNegative: { reason: "reversal" } as unknown as DebtProof,
+        idempotencyKey: "reversal:local:f12-forge",
+      });
+      // Shape is not the gate. Identity is: this object is not one of the three.
+      expect(forged.ok).toBe(false);
+      expect(String(forged.error)).toContain("capability the ledger issues");
+
+      // The other half of this test used to spend a REAL `CLAWBACK_DEBT` on
+      // source "stay_night" and read back "licenses source". It cannot be
+      // written any more, and that is the improvement: the three proofs are
+      // module-private, so no test and no module can hold one to mis-spend.
+      // The proof/source agreement check stays in `validateLeg` as defence in
+      // depth; what proves it now is that the names do not leave the module,
+      // which `the debt capability never leaves the ledger` asserts below.
+      const stillForged = await postTransfer(pool, {
+        from: memberAccount("f12-forge"), to: TREASURY, amount: 1000,
+        source: "stay_night", allowNegative: { reason: "stay_night" } as unknown as DebtProof,
+        idempotencyKey: "f12-forge-mismatch",
+      });
+      expect(stillForged.ok).toBe(false);
+      expect(String(stillForged.error)).toContain("capability the ledger issues");
+      expect(await balanceOf(pool, memberAccount("f12-forge"), PLATFORM_TOKEN)).toBe(10);
+    });
+
+    it("keeps source `reversal` inside the mirror namespace, both ways", async () => {
+      await fund("f12-ns", 10, "f12-ns-fund");
+      // ADVERSARY B6: all three keystone sources let an arbitrary caller
+      // create debt. `reversal` cannot be spelled outside reverse() now,
+      // because a mirror is keyed `reversal:<village>:<original>`.
+      const loose = await postTransfer(pool, {
+        from: memberAccount("f12-ns"), to: TREASURY, amount: 5,
+        source: "reversal", allowNegative: { reason: "reversal" } as unknown as DebtProof,
+        idempotencyKey: "f12-ns-not-a-mirror",
+      });
+      expect(loose.ok).toBe(false);
+      expect(String(loose.error)).toContain("reserved for the mirror reverse() derives");
+
+      // And the other direction: the namespace does not accept a squatter.
+      const squat = await postTransfer(pool, {
+        from: RECOGNITION_FAUCET, to: memberAccount("f12-ns"), amount: 1,
+        source: "quest_consent", idempotencyKey: "reversal:local:f12-ns-squat",
+      });
+      expect(squat.ok).toBe(false);
+      expect(String(squat.error)).toContain("only reverse() may write");
+      expect(await balanceOf(pool, memberAccount("f12-ns"), PLATFORM_TOKEN)).toBe(10);
+    });
+
+    it("refuses every near-miss spelling of a keystone source, which used to tag an account for free", async () => {
+      // ADVERSARY B2/A7. "REVERSAL" was postable with NO flag at all,
+      // because the JS gate is byte-exact and never saw it, and it then
+      // exempted the account from invariant 5 because the SQL gate's
+      // collation could not tell it from `reversal`. Observed:
+      // {"reversal ":0, "REVERSAL":0, "ReVeRsAl":0} where 0 means an illegal
+      // negative went UNREPORTED.
+      await fund("f13-variants", 10, "f13-variants-fund");
+      const variants = ["REVERSAL", "reversal ", " reversal", "ReVeRsAl", "reversal\t", "Stay_Night", "PAYMENT_REVERSAL"];
+      for (const variant of variants) {
+        const r = await postTransfer(pool, {
+          from: memberAccount("f13-variants"), to: TREASURY, amount: 1,
+          source: variant, idempotencyKey: `f13-variant:${JSON.stringify(variant)}`,
+        });
+        expect([variant, r.ok]).toEqual([variant, false]);
+        expect(String(r.error)).toContain("differs only in case or whitespace");
+      }
+      expect(await balanceOf(pool, memberAccount("f13-variants"), PLATFORM_TOKEN)).toBe(10);
+    });
+
+    it("reads the SQL half of the gate byte-exactly, so a `REVERSAL` row buys no exemption", async () => {
+      // The variants are refused at the write now, so the only way this row
+      // exists is a legacy one or a hand insert. Manufacture it the way the
+      // adversary did and check the boot report, which is the surface that
+      // was blind.
+      const account = memberAccount("f13-sql");
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT IGNORE INTO ledger_accounts (id, kind, user_id, label, faucet) VALUES (?,?,?,?,0)",
+        [account, "member", "f13-sql", "f13-sql"],
+      );
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO token_ledger (id, from_account, to_account, token_type, amount, source, idempotency_key) VALUES " + // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+          "('led-f13-tag', ?, ?, ?, 1, 'REVERSAL', 'f13-sql-tag')," +
+          "('led-f13-hole', ?, ?, ?, 500, 'quest_consent', 'f13-sql-hole')",
+        [account, TREASURY, PLATFORM_TOKEN, account, TREASURY, PLATFORM_TOKEN],
+      );
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO token_balances (account_id, token_type, balance) VALUES (?,?,-501) " + // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+          "ON DUPLICATE KEY UPDATE balance = balance - 501",
+        [account, PLATFORM_TOKEN],
+      );
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO token_balances (account_id, token_type, balance) VALUES (?,?,501) " + // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+          "ON DUPLICATE KEY UPDATE balance = balance + 501",
+        [TREASURY, PLATFORM_TOKEN],
+      );
+
+      const report = await checkLedgerInvariants(pool);
+      const mine = report.problems.filter((p) => p.includes(account));
+      expect(mine.length).toBe(1);
+      expect(mine[0]).toContain("is negative: -501");
+      // The `REVERSAL` row counts for nothing, so the whole -501 is unlawful.
+      expect(mine[0]).toContain("only 0 of that is lawful");
+
+      await pool.query("DELETE FROM token_ledger WHERE id IN ('led-f13-tag','led-f13-hole')"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("UPDATE token_balances SET balance = balance + 501 WHERE account_id = ? AND token_type = ?", [account, PLATFORM_TOKEN]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("UPDATE token_balances SET balance = balance - 501 WHERE account_id = ? AND token_type = ?", [TREASURY, PLATFORM_TOKEN]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      expect((await checkLedgerInvariants(pool)).ok).toBe(true);
+    });
+  });
+
+  describe("W3 F14: the keystone set is frozen for real, not by its type", () => {
+    it("throws on .add, .delete and .clear, and on the borrowed-method form", () => {
+      // ADVERSARY A9: `(ALLOW_NEGATIVE_SOURCES as Set<string>).add("spend")`
+      // then a post with source "spend" and allowNegative. Observed:
+      // `A9 before ok= false insufficient gratitude | after add() ok= true |
+      //  balance= -490`, and `A9 negatives while mutated: []`.
+      const before = Array.from(ALLOW_NEGATIVE_SOURCES).sort();
+      const live = ALLOW_NEGATIVE_SOURCES as Set<string>;
+      expect(() => live.add("spend")).toThrow(/frozen/);
+      expect(() => live.delete("reversal")).toThrow(/frozen/);
+      expect(() => live.clear()).toThrow(/frozen/);
+      // A subclass would leave this one working. A Proxy has no [[SetData]].
+      expect(() => Set.prototype.add.call(live, "spend")).toThrow(TypeError);
+      expect(Array.from(ALLOW_NEGATIVE_SOURCES).sort()).toEqual(before);
+      expect(ALLOW_NEGATIVE_SOURCES.has("spend")).toBe(false);
+      expect(ALLOW_NEGATIVE_SOURCES.size).toBe(3);
+    });
+
+    it("still reads as a Set everywhere the ledger uses one", () => {
+      expect(ALLOW_NEGATIVE_SOURCES instanceof Set).toBe(true);
+      expect(ALLOW_NEGATIVE_SOURCES.has("reversal")).toBe(true);
+      expect(ALLOW_NEGATIVE_SOURCES.has("REVERSAL")).toBe(false);
+      let counted = 0;
+      ALLOW_NEGATIVE_SOURCES.forEach(() => { counted += 1; });
+      expect(counted).toBe(3);
+      expect([...ALLOW_NEGATIVE_SOURCES].sort()).toEqual(["payment_reversal", "reversal", "stay_night"]);
+    });
+
+    it("leaves the debt gate exactly where it was after the mutation attempt", async () => {
+      try { (ALLOW_NEGATIVE_SOURCES as Set<string>).add("spend"); } catch { /* the point */ }
+      await postTransfer(pool, {
+        from: RECOGNITION_FAUCET, to: memberAccount("f14-gate"), amount: 10,
+        source: "admin_mint", idempotencyKey: "f14-gate-fund",
+      });
+      const r = await postTransfer(pool, {
+        from: memberAccount("f14-gate"), to: TREASURY, amount: 500,
+        source: "spend", allowNegative: { reason: "spend" } as unknown as DebtProof, idempotencyKey: "f14-gate-attack",
+      });
+      expect(r.ok).toBe(false);
+      expect(await balanceOf(pool, memberAccount("f14-gate"), PLATFORM_TOKEN)).toBe(10);
+    });
+  });
+
+  describe("W3 F17/F24: a collation collision is refused, never called a duplicate", () => {
+    it("refuses a second occurrence whose key differs only by case", async () => {
+      // ADVERSARY A1 (keys lane): mint `...usr-aB1` then `...usr-Ab1`.
+      // Observed: `first {"ok":true,"duplicate":false,"balance":7} second
+      // {"ok":true,"duplicate":true,"balance":7}` and ONE row for both keys.
+      // The second member was silently not paid while mint reported ok.
+      const first = await postTransfer(pool, {
+        from: RECOGNITION_FAUCET, to: memberAccount("collide-one"), amount: 7,
+        source: "quest_consent", idempotencyKey: "quest.completed:local:q:c:usr-aB1",
+      });
+      expect(first.ok && !first.duplicate).toBe(true);
+      const second = await postTransfer(pool, {
+        from: RECOGNITION_FAUCET, to: memberAccount("collide-two"), amount: 7,
+        source: "quest_consent", idempotencyKey: "quest.completed:local:q:c:usr-Ab1",
+      });
+      expect(second.ok).toBe(false);
+      expect(second.duplicate).toBe(false);
+      expect(String(second.error)).toContain("collides with the already-posted key");
+      // Nobody was quietly told they had been paid.
+      expect(await balanceOf(pool, memberAccount("collide-two"), PLATFORM_TOKEN)).toBe(0);
+      expect(await balanceOf(pool, memberAccount("collide-one"), PLATFORM_TOKEN)).toBe(7);
+    });
+
+    it("refuses a trailing-space variant, and still replays the exact key as a duplicate", async () => {
+      // ADVERSARY A2: `bare {...balance:3} padded {"duplicate":true,...}`
+      // under the PAD SPACE half of the local collation.
+      await postTransfer(pool, {
+        from: RECOGNITION_FAUCET, to: memberAccount("pad-one"), amount: 3,
+        source: "quest_consent", idempotencyKey: "quest.completed:local:pad:c:u",
+      });
+      const padded = await postTransfer(pool, {
+        from: RECOGNITION_FAUCET, to: memberAccount("pad-two"), amount: 3,
+        source: "quest_consent", idempotencyKey: "quest.completed:local:pad:c:u ",
+      });
+      // A NO PAD collation (mysql:8's utf8mb4_0900_ai_ci) lets this through as
+      // a second row, which is also correct: two keys, two occurrences, two
+      // payments. What must never happen is two occurrences reported as one.
+      if (!padded.ok) {
+        expect(String(padded.error)).toContain("collides with the already-posted key");
+        expect(await balanceOf(pool, memberAccount("pad-two"), PLATFORM_TOKEN)).toBe(0);
+      } else {
+        expect(padded.duplicate).toBe(false);
+        expect(await balanceOf(pool, memberAccount("pad-two"), PLATFORM_TOKEN)).toBe(3);
+      }
+      const replay = await postTransfer(pool, {
+        from: RECOGNITION_FAUCET, to: memberAccount("pad-one"), amount: 3,
+        source: "quest_consent", idempotencyKey: "quest.completed:local:pad:c:u",
+      });
+      expect(replay.ok && replay.duplicate).toBe(true);
+      expect(await balanceOf(pool, memberAccount("pad-one"), PLATFORM_TOKEN)).toBe(3);
+    });
+
+    it("refuses a collision committed after a caller-owned transaction took its snapshot", async () => {
+      // THE STALE SNAPSHOT. `postTransferOn` runs inside whatever transaction
+      // its caller opened. Here that transaction takes its read view FIRST,
+      // then a second connection commits `...usr-aB1`, then the case variant
+      // is posted on the first connection. The INSERT sees the committed row
+      // and fails as a duplicate; the read back used to be a plain SELECT,
+      // answered from the older snapshot, found nothing, and reported
+      // `{ ok: true, duplicate: true }` for a member who was never paid.
+      const conn = await pool.getConnection();
+      let second: Awaited<ReturnType<typeof postTransferOn>> | undefined;
+      try {
+        await conn.beginTransaction();
+        await conn.query("SELECT COUNT(*) FROM `token_ledger`"); // module-review-ok: opens this transaction's read view, which is the condition under test
+        const first = await postTransfer(pool, {
+          from: RECOGNITION_FAUCET, to: memberAccount("snap-one"), amount: 5,
+          source: "quest_consent", idempotencyKey: "quest.completed:local:snap:c:usr-aB1",
+        });
+        expect(first.ok && !first.duplicate).toBe(true);
+        second = await postTransferOn(conn, {
+          from: RECOGNITION_FAUCET, to: memberAccount("snap-two"), amount: 5,
+          source: "quest_consent", idempotencyKey: "quest.completed:local:snap:c:usr-Ab1",
+        });
+      } finally {
+        await conn.rollback();
+        conn.release();
+      }
+      expect({ ok: second?.ok, duplicate: second?.duplicate }).toEqual({ ok: false, duplicate: false });
+      expect(String(second?.error)).toContain("collides with the already-posted key");
+      expect(await balanceOf(pool, memberAccount("snap-two"), PLATFORM_TOKEN)).toBe(0);
+      expect(await balanceOf(pool, memberAccount("snap-one"), PLATFORM_TOKEN)).toBe(5);
+    });
+
+    /**
+     * THE TWIN, in the clawback law. Its "already mirrored" read (question 4)
+     * is the only thing that stops a second mirror under a different village
+     * segment, because that is a different key and the UNIQUE index cannot
+     * see it. The caller's transaction reads first, a second connection
+     * commits the first mirror, then the second mirror is posted on the
+     * caller's connection. A plain read answers from the older snapshot, sees
+     * no mirror, and claws the same 12 back twice.
+     *
+     * The connection sets MariaDB's `innodb_snapshot_isolation` off, which is
+     * how MySQL 8 behaves: a locking read returns the latest committed row.
+     * MySQL 8 has no such variable, so the statement fails there and changes
+     * nothing. With it ON, MariaDB's default, the posting throws ER_CHECKREAD
+     * both before this fix and after it (measured), so that setting cannot
+     * tell the fix from the defect and is not the one asserted here.
+     */
+    async function secondMirrorAfterSnapshot(tag: string) {
+      const u = memberAccount(`mirror-snap-${tag}`);
+      const original = `quest.completed:local:mirror-snap:c:${tag}`;
+      await postTransfer(pool, {
+        from: RECOGNITION_FAUCET, to: u, amount: 12, source: "quest_consent", idempotencyKey: original,
+      });
+      // Spare value, so the overdraft rule is not what stops the second one.
+      await postTransfer(pool, {
+        from: RECOGNITION_FAUCET, to: u, amount: 50, source: "quest_consent", idempotencyKey: `${original}:spare`,
+      });
+      const conn = await pool.getConnection();
+      let second: TransferResult | undefined;
+      let thrown: { code?: string } | undefined;
+      let heldUnderLock: number | undefined;
+      try {
+        await conn.query("SET SESSION innodb_snapshot_isolation = OFF").catch(() => undefined); // module-review-ok: a session setting on the test's own connection, no table read; MariaDB only, and it gives MySQL 8's locking-read behaviour
+        await conn.beginTransaction();
+        await conn.query("SELECT COUNT(*) FROM `token_ledger`"); // module-review-ok: opens this transaction's read view, which is the condition under test
+        const first = await postTransfer(pool, {
+          from: u, to: RECOGNITION_FAUCET, amount: 12, source: "reversal", idempotencyKey: `reversal:local:${original}`,
+        });
+        expect(first.ok && !first.duplicate).toBe(true);
+        try {
+          second = await postTransferOn(conn, {
+            from: u, to: RECOGNITION_FAUCET, amount: 12, source: "reversal", idempotencyKey: `reversal:elsewhere:${original}`,
+          });
+          // What committing this transaction would leave the member holding,
+          // read under a lock so it is not the snapshot's figure: 50 is one
+          // clawback, 38 is two.
+          heldUnderLock = Number((await lockedBalanceRows(conn, u, PLATFORM_TOKEN))[0]?.balance);
+        } catch (e) {
+          thrown = e as { code?: string };
+        }
+      } finally {
+        await conn.rollback().catch(() => undefined);
+        await conn.query("SET SESSION innodb_snapshot_isolation = DEFAULT").catch(() => undefined); // module-review-ok: puts the pooled connection's session setting back before it is released
+        conn.release();
+      }
+      return { second, thrown, heldUnderLock, after: await balanceOf(pool, u, PLATFORM_TOKEN) };
+    }
+
+    it("refuses a second mirror committed after a caller-owned transaction took its snapshot", async () => {
+      const r = await secondMirrorAfterSnapshot("locking");
+      expect(r.thrown).toBeUndefined();
+      expect({ ok: r.second?.ok, heldUnderLock: r.heldUnderLock }).toEqual({ ok: false, heldUnderLock: 50 });
+      expect(String(r.second?.error)).toContain("has already been reversed by");
+      expect(r.after).toBe(50);
+    });
+  });
+
+  describe("W3 F5: invariant 5 is bounded by what the allow-negative legs took", () => {
+    /**
+     * The account's cache and the ledger have to agree or invariant 4 fires
+     * instead of invariant 5, so these build the illegal negative the way the
+     * adversary did (a posting that skipped `postTransfer`) and then move both
+     * sides by hand.
+     */
+    const manufacture = async (
+      member: string,
+      rows: Array<{ id: string; amount: number; source: string; key: string }>,
+    ) => {
+      const account = memberAccount(member);
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT IGNORE INTO ledger_accounts (id, kind, user_id, label, faucet) VALUES (?,?,?,?,0)",
+        [account, "member", member, member],
+      );
+      let total = 0;
+      for (const r of rows) {
+        await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+          "INSERT INTO token_ledger (id, from_account, to_account, token_type, amount, source, idempotency_key) VALUES (?,?,?,?,?,?,?)", // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+          [r.id, account, TREASURY, PLATFORM_TOKEN, r.amount, r.source, r.key],
+        );
+        total += r.amount;
+      }
+      for (const [acct, delta] of [[account, -total], [TREASURY, total]] as Array<[string, number]>) {
+        await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+          "INSERT INTO token_balances (account_id, token_type, balance) VALUES (?,?,?) " + // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+            "ON DUPLICATE KEY UPDATE balance = balance + VALUES(balance)",
+          [acct, PLATFORM_TOKEN, delta],
+        );
+      }
+      return account;
+    };
+    const unmanufacture = async (account: string, ids: string[], total: number) => {
+      await pool.query(`DELETE FROM token_ledger WHERE id IN (${ids.map(() => "?").join(",")})`, ids); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("UPDATE token_balances SET balance = balance + ? WHERE account_id = ? AND token_type = ?", [total, account, PLATFORM_TOKEN]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("UPDATE token_balances SET balance = balance - ? WHERE account_id = ? AND token_type = ?", [total, TREASURY, PLATFORM_TOKEN]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    };
+
+    it("reports a -99925 balance that one lawful 25 clawback used to excuse forever", async () => {
+      // ADVERSARY B4. Observed then: `B4 balance= -99925 | negatives: []`.
+      // The exemption was an EXISTENCE test, so a single reversal debit put
+      // the account outside invariant 5 for that token permanently.
+      const rows = [
+        { id: "led-b4-lawful", amount: 25, source: "reversal", key: "reversal:local:b4-original" },
+        { id: "led-b4-hole", amount: 99900, source: "quest_consent", key: "b4-hole" },
+      ];
+      const account = await manufacture("b4-member", rows);
+      const report = await checkLedgerInvariants(pool);
+      const mine = report.problems.filter((p) => p.includes(account));
+      expect(mine.length).toBe(1);
+      expect(mine[0]).toContain("is negative: -99925");
+      expect(mine[0]).toContain("only -25 of that is lawful");
+      await unmanufacture(account, rows.map((r) => r.id), 99925);
+    });
+
+    it("still passes a genuine -25 after a clawback of a spent 25", async () => {
+      // The lawful shape the bound must not break: the member owes exactly
+      // what the clawback took, and the village still boots.
+      const rows = [{ id: "led-b3-lawful", amount: 25, source: "reversal", key: "reversal:local:b3-original" }];
+      const account = await manufacture("b3-member", rows);
+      const report = await checkLedgerInvariants(pool);
+      expect(report.problems.filter((p) => p.includes(account))).toEqual([]);
+      await unmanufacture(account, ["led-b3-lawful"], 25);
+    });
+
+    it("cannot be laundered clean by a 1-unit clawback posted after the fact", async () => {
+      // ADVERSARY C1. Observed then:
+      //   C1 before, balance= -4900 negatives: ["non-faucet account mem:c1 ..."]
+      //   C1 launder post ok= true
+      //   C1 after,  balance= -4901 negatives: []
+      // One minor unit silenced a standing boot failure that predated it.
+      const account = await manufacture("c1-member", [
+        { id: "led-c1-hole", amount: 4900, source: "quest_consent", key: "c1-hole" },
+      ]);
+      const before = (await checkLedgerInvariants(pool)).problems.filter((p) => p.includes(account));
+      expect(before.length).toBe(1);
+
+      await manufacture("c1-member", [
+        { id: "led-c1-launder", amount: 1, source: "reversal", key: "reversal:local:c1-launder" },
+      ]);
+      const after = (await checkLedgerInvariants(pool)).problems.filter((p) => p.includes(account));
+      expect(after.length).toBe(1);
+      expect(after[0]).toContain("is negative: -4901");
+      expect(after[0]).toContain("only -1 of that is lawful");
+      await unmanufacture(account, ["led-c1-hole", "led-c1-launder"], 4901);
+    });
+
+    it("does not let one token's clawback excuse another token's debt", async () => {
+      // ADVERSARY B1/A8 held on the old code and must keep holding: the bound
+      // is per (account, token), not per account.
+      const account = memberAccount("b1-member");
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT IGNORE INTO ledger_accounts (id, kind, user_id, label, faucet) VALUES (?,?,?,?,0)",
+        [account, "member", "b1-member", "b1-member"],
+      );
+      await registerToken(pool, { slug: "b1-other", name: "B1 Other", kind: "credit", governance: "platform", transferable: false });
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO token_ledger (id, from_account, to_account, token_type, amount, source, idempotency_key) VALUES " + // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+          "('led-b1-lawful', ?, ?, ?, 50, 'reversal', 'reversal:local:b1-original')," +
+          "('led-b1-other', ?, ?, 'b1-other', 5, 'quest_consent', 'b1-other-hole')",
+        [account, TREASURY, PLATFORM_TOKEN, account, TREASURY],
+      );
+      const moves: Array<[string, string, number]> = [
+        [account, PLATFORM_TOKEN, -50], [TREASURY, PLATFORM_TOKEN, 50],
+        [account, "b1-other", -5], [TREASURY, "b1-other", 5],
+      ];
+      for (const [acct, token, delta] of moves) {
+        await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+          "INSERT INTO token_balances (account_id, token_type, balance) VALUES (?,?,?) " + // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+            "ON DUPLICATE KEY UPDATE balance = balance + VALUES(balance)",
+          [acct, token, delta],
+        );
+      }
+      const mine = (await checkLedgerInvariants(pool)).problems.filter((p) => p.includes(account));
+      expect(mine.length).toBe(1);
+      expect(mine[0]).toContain("b1-other");
+      await pool.query("DELETE FROM token_ledger WHERE id IN ('led-b1-lawful','led-b1-other')"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("UPDATE token_balances SET balance = balance + 50 WHERE account_id = ? AND token_type = ?", [account, PLATFORM_TOKEN]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("UPDATE token_balances SET balance = balance - 50 WHERE account_id = ? AND token_type = ?", [TREASURY, PLATFORM_TOKEN]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("UPDATE token_balances SET balance = balance + 5 WHERE account_id = ? AND token_type = 'b1-other'", [account]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("UPDATE token_balances SET balance = balance - 5 WHERE account_id = ? AND token_type = 'b1-other'", [TREASURY]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      expect((await checkLedgerInvariants(pool)).ok).toBe(true);
+    });
+  });
+
+  describe("W4: the three narrow doors, and the law behind the clawback one", () => {
+    /*
+     * The debt proofs used to be `export const`, so the set of modules that
+     * could create member debt was every module willing to type an import. A
+     * closing proof imported all three into a test module and took one
+     * account to -990, -990 and -777 through the ordinary public primitive,
+     * with `checkLedgerInvariants` reporting NOTHING each time: the debit's
+     * own source is allow-negative, so it raises the account's lawful bound
+     * by exactly what it just took.
+     *
+     * The proofs are module-private now and these three functions are what
+     * left the module instead. Each supplies its own proof and pins the
+     * source that proof licenses, so the capability is never a value anybody
+     * holds.
+     */
+    const DOOR = "l8-door";
+
+    beforeAll(async () => {
+      await registerToken(pool, { slug: DOOR, name: "Door Credit", kind: "credit", governance: "platform", transferable: false });
+    });
+
+    const fundDoor = async (member: string, amount: number, key: string): Promise<void> => {
+      const r = await postTransfer(pool, {
+        from: MINT_FAUCET, to: memberAccount(member), tokenType: DOOR,
+        amount, source: "admin_mint", idempotencyKey: key,
+      });
+      expect(r.ok).toBe(true);
+    };
+
+    it("burns a grace night into debt, and the debt is lawful at boot", async () => {
+      await fundDoor("l8-gn", 10, "l8-gn-fund");
+      const burn = await postGraceNightBurn(pool, {
+        from: memberAccount("l8-gn"), to: TREASURY, tokenType: DOOR, amount: 25,
+        sourceRef: "stay-l8", description: "Night of 2026-09-03",
+        idempotencyKey: "stay:stay-l8:night:2026-09-03",
+      });
+      expect(burn.ok).toBe(true);
+      expect(await balanceOf(pool, memberAccount("l8-gn"), DOOR)).toBe(-15);
+      const report = await checkLedgerInvariants(pool);
+      expect(report.problems.filter((p) => p.includes(memberAccount("l8-gn")))).toEqual([]);
+    });
+
+    it("posts a payment reversal leg into debt, and the debt is lawful at boot", async () => {
+      await fundDoor("l8-pv", 5, "l8-pv-fund");
+      const claw = await postPaymentReversalLeg(pool, {
+        from: memberAccount("l8-pv"), to: TREASURY, tokenType: DOOR, amount: 20,
+        sourceRef: "ord-l8pv", description: "Refund: tokens returned to stock",
+        idempotencyKey: "ord:ord-l8pv:reversal-leg1",
+      });
+      expect(claw.ok).toBe(true);
+      expect(await balanceOf(pool, memberAccount("l8-pv"), DOOR)).toBe(-15);
+      const report = await checkLedgerInvariants(pool);
+      expect(report.problems.filter((p) => p.includes(memberAccount("l8-pv")))).toEqual([]);
+    });
+
+    it("mirrors a posting through the clawback door, into debt, lawfully", async () => {
+      const payer = memberAccount("l8-cb");
+      const spent = memberAccount("l8-cb-sink");
+      const original = await postTransfer(pool, {
+        from: MINT_FAUCET, to: payer, tokenType: DOOR, amount: 25,
+        source: "quest_consent", idempotencyKey: "l8-cb-original",
+      });
+      expect(original.ok).toBe(true);
+      // Spent onward, which is the case where the clawback has to be able to
+      // finish and the negative balance is the truthful state.
+      await postTransfer(pool, {
+        from: payer, to: spent, tokenType: DOOR, amount: 25,
+        source: "member_send", idempotencyKey: "l8-cb-spent",
+      });
+      const mirror = await postClawbackMirror(pool, {
+        from: payer, to: MINT_FAUCET, tokenType: DOOR, amount: 25,
+        sourceRef: "l8-cb-original", description: "l8-cb-original",
+        idempotencyKey: "reversal:local:l8-cb-original",
+      });
+      expect(mirror.ok).toBe(true);
+      expect(await balanceOf(pool, payer, DOOR)).toBe(-25);
+      const report = await checkLedgerInvariants(pool);
+      expect(report.problems.filter((p) => p.includes(payer))).toEqual([]);
+    });
+
+    it("refuses an invented mirror even through the narrow door, because the law is behind it", async () => {
+      // Holding the door buys nothing on its own: the law derives the row
+      // from the posting the key names, so a caller who invents a number
+      // gets the same refusal a caller of plain postTransfer would.
+      await fundDoor("l8-inv", 40, "l8-inv-fund");
+      const inflated = await postClawbackMirror(pool, {
+        from: memberAccount("l8-inv"), to: MINT_FAUCET, tokenType: DOOR, amount: 1000,
+        idempotencyKey: "reversal:local:l8-cb-original",
+      });
+      expect(inflated.ok).toBe(false);
+      expect(String(inflated.error)).toContain("does not mirror");
+
+      const ghost = await postClawbackMirror(pool, {
+        from: memberAccount("l8-inv"), to: MINT_FAUCET, tokenType: DOOR, amount: 5,
+        idempotencyKey: "reversal:local:l8-never-happened",
+      });
+      expect(ghost.ok).toBe(false);
+      expect(String(ghost.error)).toContain("to reverse");
+      expect(await balanceOf(pool, memberAccount("l8-inv"), DOOR)).toBe(40);
+    });
+
+    it("undoes both legs of a pair through the pair door, and neither alone", async () => {
+      const u = memberAccount("l8-pair");
+      await fundDoor("l8-pair", 100, "l8-pair-fund");
+      await postTransfer(pool, { from: MINT_FAUCET, to: TREASURY, tokenType: PLATFORM_TOKEN, amount: 500, source: "exchange_stock", idempotencyKey: "l8-pair-stock" });
+      const swap = await postTransferPair(pool, [
+        { from: u, to: TREASURY, tokenType: DOOR, amount: 100, source: "exchange_swap", sourceRef: "ord-l8p", idempotencyKey: "ord:ord-l8p:leg1" },
+        { from: TREASURY, to: u, tokenType: PLATFORM_TOKEN, amount: 40, source: "exchange_swap", sourceRef: "ord-l8p", idempotencyKey: "ord:ord-l8p:leg2" },
+      ]);
+      expect(swap.ok).toBe(true);
+
+      // One leg alone, through the door that carries no proof at all: still
+      // refused, and the refusal names the sibling.
+      const half = await postClawbackMirror(pool, {
+        from: u, to: TREASURY, tokenType: PLATFORM_TOKEN, amount: 40,
+        idempotencyKey: "reversal:local:ord:ord-l8p:leg2",
+      });
+      expect(half.ok).toBe(false);
+      expect(String(half.error)).toContain("ord:ord-l8p:leg1");
+
+      const both = await postClawbackMirrorPair(pool, [
+        { from: TREASURY, to: u, tokenType: DOOR, amount: 100, idempotencyKey: "reversal:local:ord:ord-l8p:leg1" },
+        { from: u, to: TREASURY, tokenType: PLATFORM_TOKEN, amount: 40, idempotencyKey: "reversal:local:ord:ord-l8p:leg2" },
+      ]);
+      expect(both.ok).toBe(true);
+      expect(await balanceOf(pool, u, DOOR)).toBe(100);
+      expect(await balanceOf(pool, u, PLATFORM_TOKEN)).toBe(0);
+    });
+
+    it("still reports a report after a prototype swap on the keystone set is refused", async () => {
+      // The other half of the prototype finding: an emptied set made
+      // `IN (?)` expand to `IN ()`, which MySQL will not parse, so the boot
+      // check THREW where it was meant to report. The trap stops the set
+      // being emptied and the placeholder list stops the empty case being
+      // expressible; this asks the check itself, against a real database.
+      expect(() => Object.setPrototypeOf(ALLOW_NEGATIVE_SOURCES as object, { has: () => true })).toThrow();
+      expect(Array.from(ALLOW_NEGATIVE_SOURCES)).toHaveLength(3);
+      const report = await checkLedgerInvariants(pool);
+      expect(Array.isArray(report.problems)).toBe(true);
+    });
+  });
+
+});
+
+/**
+ * THE DEBT CAPABILITY NEVER LEAVES THE LEDGER, held by a walk instead of by a
+ * paragraph.
+ *
+ * This needs no database and is deliberately outside the skip above: the
+ * property it defends is about the module graph, and a machine with no
+ * `TEST_DATABASE_URL` can still tell the truth about it. It follows the same
+ * shape `server/dryRun.test.ts` uses to pin its own isolation, and it asks
+ * two independent questions, because either one alone can be satisfied while
+ * the property is false:
+ *
+ *  - the RUNTIME namespace of `server/lib/ledger.ts` carries no `_DEBT` name,
+ *    which is the exact measurement a closing proof made when it printed
+ *    `_DEBT names on ledger module ["GRACE_NIGHT_DEBT", ...]` and then
+ *    borrowed all three;
+ *  - no module under `server/` NAMES one in an import clause, which is the
+ *    call-graph question rather than a substring question: a comment saying
+ *    `CLAWBACK_DEBT` is documentation, and an import of it is a capability.
+ */
+describe("the debt capability never leaves the ledger", () => {
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const LEDGER = path.join(HERE, "lib", "ledger.ts");
+  const PROOF_NAMES = ["GRACE_NIGHT_DEBT", "PAYMENT_REVERSAL_DEBT", "CLAWBACK_DEBT"];
+
+  const tsFilesUnder = (dir: string): string[] => {
+    const out: string[] = [];
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === "node_modules" || entry.name === "dist") continue;
+        out.push(...tsFilesUnder(full));
+      } else if (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx")) {
+        out.push(full);
+      }
+    }
+    return out;
+  };
+
+  /** The names a file imports, from every `import { ... } from "..."` clause. */
+  const importedNames = (src: string): string[] => {
+    const names: string[] = [];
+    for (const m of src.matchAll(/import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["'][^"']+["']/g)) {
+      for (const raw of m[1].split(",")) {
+        const cleaned = raw.replace(/\btype\b/, "").trim().split(/\s+as\s+/)[0].trim();
+        if (cleaned) names.push(cleaned);
+      }
+    }
+    return names;
+  };
+
+  it("exports none of the three proofs, at runtime", () => {
+    const exported = Object.keys(ledgerModule).filter((k) => k.endsWith("_DEBT"));
+    expect(exported).toEqual([]);
+    for (const name of PROOF_NAMES) {
+      expect((ledgerModule as Record<string, unknown>)[name]).toBeUndefined();
+    }
+  });
+
+  it("declares them module-private in the source, and exports the narrow doors instead", () => {
+    const source = fs.readFileSync(LEDGER, "utf8");
+    expect(source.length).toBeGreaterThan(1000);
+    expect(source).not.toMatch(/export\s+const\s+\w*_DEBT\b/);
+    for (const name of PROOF_NAMES) {
+      expect(source).toMatch(new RegExp(`^const ${name}: DebtProof = issueDebtProof\\(`, "m"));
+    }
+    for (const door of ["postGraceNightBurn", "postPaymentReversalLeg", "postClawbackMirror"]) {
+      expect(source).toMatch(new RegExp(`export async function ${door}\\(`));
+    }
+  });
+
+  it("is imported by nobody under server/", () => {
+    const files = tsFilesUnder(HERE).filter((f) => path.resolve(f) !== path.resolve(LEDGER));
+    expect(files.length).toBeGreaterThan(50);
+    const borrowers: string[] = [];
+    for (const file of files) {
+      const names = importedNames(fs.readFileSync(file, "utf8"));
+      if (names.some((n) => PROOF_NAMES.includes(n))) borrowers.push(path.relative(HERE, file));
+    }
+    expect(borrowers).toEqual([]);
+  });
+});
+
+/**
+ * The frozen set's last hole, closed. No database: this is about one object.
+ */
+describe("a frozen set keeps its prototype too", () => {
+  it("refuses a prototype swap that used to make `has` answer anything", () => {
+    // PROOF FS: `Object.setPrototypeOf -> SUCCEEDED: has("zzz")=true
+    // Array.from=[]`, and on the keystone itself `has(spend) = true |
+    // Array.from = [] | size = undefined`. One line widened the allow-negative
+    // gate to every source there is and emptied the list the boot check builds
+    // its `IN (...)` from.
+    const set = frozenSet(["a", "b"]);
+    expect(() => Object.setPrototypeOf(set as object, { has: () => true })).toThrow(/frozen/);
+    expect(set.has("zzz")).toBe(false);
+    expect(Array.from(set)).toEqual(["a", "b"]);
+    expect(set.size).toBe(2);
+  });
+
+  it("keeps the two keystone sets intact through the attempt", () => {
+    expect(() => Object.setPrototypeOf(ALLOW_NEGATIVE_SOURCES as object, { has: () => true })).toThrow(/frozen/);
+    expect(() => Object.setPrototypeOf(CLAWBACK_SOURCES as object, { has: () => true })).toThrow(/frozen/);
+    expect(ALLOW_NEGATIVE_SOURCES.has("spend")).toBe(false);
+    expect(ALLOW_NEGATIVE_SOURCES.has("reversal")).toBe(true);
+    expect([...ALLOW_NEGATIVE_SOURCES].sort()).toEqual(["payment_reversal", "reversal", "stay_night"]);
+    expect([...CLAWBACK_SOURCES].sort()).toEqual(["payment_reversal", "reversal"]);
+    expect(ALLOW_NEGATIVE_SOURCES.size).toBe(3);
   });
 });
 

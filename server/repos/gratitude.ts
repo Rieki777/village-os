@@ -9,7 +9,7 @@
  * content, D5) makes "already acknowledged" an expected outcome, not an
  * error. Plain sends carry NULL context and are exempt from that index.
  */
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool, RowDataPacket, PoolConnection } from "mysql2/promise";
 import type { CycleRecord, DistributionRecord } from "../lib/gratitude-cycles";
 
 const toIso = (v: unknown): string =>
@@ -66,6 +66,92 @@ export const REVERSED_GRATITUDE_FROM =
   "AND orig.`source` IN ('gratitude_received', 'heart_received') " +
   "JOIN `gratitude_log` g ON g.`id` = orig.`source_ref` " +
   "WHERE rev.`source` = 'reversal'";
+
+/**
+ * One giver's gifts in a window, summed per recipient. HUMAN units, the way
+ * `gratitude_log.amount` holds them. `server/lib/economy.ts` reads this for the
+ * allowance and the share cap; see `gratitudeGivenInCycle` there for the rule.
+ */
+export async function givenInWindow(
+  conn: Pool | PoolConnection,
+  villageId: string,
+  fromId: string,
+  startsAt: Date,
+  endsAt: Date,
+): Promise<Array<{ toId: string; amount: number }>> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    "SELECT `to_id` AS to_id, COALESCE(SUM(`amount`), 0) AS given FROM `gratitude_log` " +
+      "WHERE `village_id` = ? AND `from_id` = ? AND `at` >= ? AND `at` < ? GROUP BY `to_id`",
+    [villageId, fromId, startsAt, endsAt],
+  );
+  return rows.map((r) => ({ toId: String(r.to_id), amount: Number(r.given) }));
+}
+
+/**
+ * The part of those gifts since reversed, per recipient, windowed on the GIFT's
+ * timestamp and never the mirror's. A subset of `givenInWindow` by
+ * construction: same village, same giver, same window, narrowed to the notes a
+ * mirror undid.
+ */
+export async function reversedInWindow(
+  conn: Pool | PoolConnection,
+  villageId: string,
+  fromId: string,
+  startsAt: Date,
+  endsAt: Date,
+): Promise<Array<{ toId: string; amount: number }>> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    "SELECT g.`to_id` AS to_id, COALESCE(SUM(g.`amount`), 0) AS back " +
+      REVERSED_GRATITUDE_FROM +
+      " AND g.`village_id` = ? AND g.`from_id` = ? AND g.`at` >= ? AND g.`at` < ? GROUP BY g.`to_id`",
+    [villageId, fromId, startsAt, endsAt],
+  );
+  return rows.map((r) => ({ toId: String(r.to_id), amount: Number(r.back) }));
+}
+
+/**
+ * What the village's REAL members gave in a window, in HUMAN units, as one
+ * row. Joined to `users` so a gift from somebody anonymised or an example row
+ * is left out, the same roster `realMemberIdRows` (server/repos/users.ts)
+ * reads. Its caller is `snapshotAllowance` in server/lib/health.ts, which
+ * subtracts the row below and floors the difference.
+ */
+export async function givenByRealMembersInWindow(
+  pool: Pool,
+  villageId: string,
+  start: Date,
+  end: Date,
+): Promise<any[]> {
+  const [rows] = await pool.query<any[]>(
+    "SELECT COALESCE(SUM(g.amount), 0) AS given FROM gratitude_log g " +
+      "JOIN users u ON u.id = g.from_id " +
+      "WHERE g.village_id = ? AND g.at >= ? AND g.at < ? AND g.is_example = 0 " +
+      "AND u.email NOT LIKE '%anonymized.invalid' AND u.is_example = 0",
+    [villageId, start, end],
+  );
+  return rows;
+}
+
+/**
+ * The part of those gifts since reversed, as one row, windowed on the GIFT's
+ * timestamp through `REVERSED_GRATITUDE_FROM`, the same definition the
+ * allowance and the settlement read.
+ */
+export async function reversedFromRealMembersInWindow(
+  pool: Pool,
+  villageId: string,
+  start: Date,
+  end: Date,
+): Promise<any[]> {
+  const [rows] = await pool.query<any[]>(
+    "SELECT COALESCE(SUM(g.amount), 0) AS back " +
+      REVERSED_GRATITUDE_FROM +
+      " AND g.village_id = ? AND g.at >= ? AND g.at < ? AND g.is_example = 0 " +
+      "AND g.from_id IN (SELECT u.id FROM users u WHERE u.email NOT LIKE '%anonymized.invalid' AND u.is_example = 0)",
+    [villageId, start, end],
+  );
+  return rows;
+}
 
 export interface GratitudeEntry {
   id: string;

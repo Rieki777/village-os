@@ -51,11 +51,11 @@ import {
   X,
 } from "lucide-react";
 import { Link } from "wouter";
-import InfoTip from "@/components/InfoTip";
 import { useCatalyst, useGameConfig, authToken } from "@/lib/gameApi";
 import { ballotReturn } from "./gameMechanicsBallotCopy";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFocusTarget } from "@/lib/useFocusTarget";
+import InfoTip, { DialFact } from "@/components/InfoTip";
 
 interface MechanicsVariable {
   key: string;
@@ -971,7 +971,7 @@ export default function GameMechanics() {
                                       )}
                                     </span>
                                   </div>
-                                  <p className="text-sm text-stone-600 mt-1 leading-relaxed">{v.description}</p>
+                                  <p className="text-sm text-stone-600 mt-1 leading-relaxed">{v.description}<DialFact v={v} staged={stagedValue} /></p>
                                   {editable && (
                                     <div className="mt-2 flex items-center gap-2">
                                       <DialEditor v={v} staged={stagedValue} onStage={stage} />

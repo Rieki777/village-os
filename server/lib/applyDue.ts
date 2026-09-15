@@ -303,7 +303,7 @@ export interface StampInput {
  * lets the proposer choose which three days a steward gets, and lets a passed
  * ballot be parked until the one seat holder posts about a trip.
  */
-export function landingOf(deps: LandingDeps, input: StampInput): Landing {
+export function landingOf(deps: Pick<LandingDeps, "vetoHours" | "nextBoundaryAfter" | "consentNoticeHours">, input: StampInput): Landing {
   const b = input.ballot;
   const kind: GovernanceKind = kindOfSetOrSubject(b.subjectType, input.itemKinds);
   return landingFor({
@@ -534,6 +534,8 @@ export async function recordVeto(
     };
   }
 
+  // A vetoed decision reads as failed (Rye, 2026-09-08). The write, and why
+  // `outcome_note` is deliberately left alone, live on `recordVetoOnBallot`.
   const moved = await recordVetoOnBallot(deps.pool, {
     ballotId: b.id,
     at,

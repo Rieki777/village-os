@@ -12,7 +12,43 @@
  * ten Village Voice is 10000 in the ledger and has to read as 10.
  */
 import { describe, expect, it } from "vitest";
-import { decimalsOf, formatTokenAmount, smallestUnit, toMinorUnits } from "./tokenAmount";
+import { decimalsOf, formatHumanAmount, formatTokenAmount, smallestUnit, toMinorUnits } from "./tokenAmount";
+
+/**
+ * A NUMBER THAT IS ALREADY HUMAN IS NEVER DIVIDED AND NEVER TRUNCATED.
+ *
+ * The redemption routes and the stays catalog convert before they send. Their
+ * numbers went through `formatTokenAmount` anyway: 50 credits held read as 0.5,
+ * and a steward's queue at decimals 0 read 12.5 as 12.
+ */
+describe("formatHumanAmount", () => {
+  it("prints a human number as itself at the token's scale", () => {
+    expect(formatHumanAmount(50, 2)).toBe("50");
+    expect(formatHumanAmount(12.5, 2)).toBe("12.5");
+    expect(formatHumanAmount(0.01, 2)).toBe("0.01");
+    // The two defects, side by side with the right answer.
+    expect(formatTokenAmount(50, 2)).toBe("0.5");
+    expect(formatTokenAmount(12.5, 0)).toBe("12");
+  });
+
+  it("never truncates or rounds a figure the scale it was handed cannot hold", () => {
+    expect(formatHumanAmount(12.5)).toBe("12.5");
+    expect(formatHumanAmount(12.5, 0)).toBe("12.5");
+    expect(formatHumanAmount(1.234, 2)).toBe("1.234");
+  });
+
+  it("tidies binary noise off a number that is the same at the token's scale", () => {
+    expect(formatHumanAmount(0.1 + 0.2, 2)).toBe("0.3");
+    expect(formatHumanAmount(1229 / 100, 2)).toBe("12.29");
+  });
+
+  it("answers zero for a zero, a negative zero and junk", () => {
+    expect(formatHumanAmount(0, 2)).toBe("0");
+    expect(formatHumanAmount(-0, 2)).toBe("0");
+    expect(formatHumanAmount(Number.NaN, 2)).toBe("0");
+    expect(formatHumanAmount(-4.5, 2)).toBe("-4.5");
+  });
+});
 
 describe("formatTokenAmount", () => {
   it("shows ten Village Voice as ten, not ten thousand", () => {

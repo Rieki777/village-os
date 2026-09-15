@@ -28,6 +28,8 @@ import { swatchFor } from "@/lib/swatch";
 import { gameFetch } from "@/lib/gameApi";
 import { PeopleLockNote, type PeopleTier } from "@/components/PeopleLock";
 import SeatHistory from "@/components/power/SeatHistory";
+import SeatNeeds from "@/components/power/SeatNeeds";
+import { useAuth } from "@/contexts/AuthContext";
 
 type RoleStatus = "filled" | "open" | "forming" | "partial";
 
@@ -84,9 +86,11 @@ interface RoleCardProps {
   index: number;
   /** Whether holder names reached this reader at all. */
   canSeePeople: boolean;
+  /** Whether this reader may say what the seat is held for. */
+  canTagNeeds: boolean;
 }
 
-function RoleCard({ role, expanded, onToggle, index, canSeePeople }: RoleCardProps) {
+function RoleCard({ role, expanded, onToggle, index, canSeePeople, canTagNeeds }: RoleCardProps) {
   const Icon = ICONS[role.icon ?? ""] ?? CircleDot;
   // Admin-editable colour, resolved together with the ink that stays legible
   // on it. See client/src/lib/swatch.ts.
@@ -196,6 +200,15 @@ function RoleCard({ role, expanded, onToggle, index, canSeePeople }: RoleCardPro
                   <SeatHistory roleId={role.id} canSeePeople={canSeePeople} />
                 </div>
               )}
+              {/* Which of the village's needs this seat carries (R18). A
+                  description of the seat and never a condition on holding it:
+                  who may sit here is decided by `org.seat` and by nothing
+                  written on this line. */}
+              {!role.isExample && (
+                <div className="pt-4 border-t border-border">
+                  <SeatNeeds roleId={role.id} canEdit={canTagNeeds} />
+                </div>
+              )}
             </div>
           </motion.div>
         )}
@@ -211,6 +224,10 @@ export default function Roles() {
   const [failed, setFailed] = useState(false);
   const [people, setPeople] = useState<PeopleTier | null>(null);
   const [seatCounts, setSeatCounts] = useState({ seats: 0, held: 0 });
+  // Who may say what a seat is held for. The server refuses everybody else by
+  // itself; this only decides whether the control is drawn.
+  const { user } = useAuth();
+  const canTagNeeds = !!user && (user.role === "admin" || user.role === "founder");
 
   // Seats are rows now (0049), not cards in a document. `state` arrives
   // DERIVED from live holdings against the seat count, so the page can no
@@ -368,6 +385,7 @@ export default function Roles() {
                       onToggle={() => toggle(role.id)}
                       index={i}
                       canSeePeople={!!people?.visible}
+                      canTagNeeds={canTagNeeds}
                     />
                   ))}
                 </div>

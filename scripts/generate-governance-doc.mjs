@@ -598,13 +598,39 @@ export function governanceDials(root = ROOT) {
         arr = arr.expression.expression;
       }
       if (ts.isIdentifier(arr)) {
-        const resolved = constAnywhere(abs, arr.text);
-        if (!resolved) fail(`${rel}: the dial "${def.key}" takes its choices from ${arr.text}, which is not a const in this file`);
+        /*
+         * FOLLOW THE IMPORT WHEN THE CONST IS NOT LOCAL.
+         *
+         * This read only the file the dial lives in, so a dial whose choices
+         * come from another module failed with "not a const in this file",
+         * which is true and unhelpful: the choices exist, one import away.
+         * The importSource helper was already here for exactly this and was not reached
+         * from this branch. The needs dials are the first to take their choices
+         * from a sibling module; they will not be the last.
+         */
+        let resolved = constAnywhere(abs, arr.text);
+        if (!resolved) {
+          const from = importSource(abs, arr.text);
+          if (from) resolved = constAnywhere(from.abs, from.exported);
+        }
+        if (!resolved) fail(`${rel}: the dial "${def.key}" takes its choices from ${arr.text}, which is neither a const in this file nor an export this reader can follow`);
         arr = resolved;
       }
       if (ts.isAsExpression(arr)) arr = arr.expression;
       if (!ts.isArrayLiteralExpression(arr)) fail(`${rel}: the dial "${def.key}" has choices this reader cannot read`);
-      def.choices = arr.elements.map((e) => objectOf(e, abs));
+      /*
+       * A CHOICE MAY BE A BARE STRING, and until now that failed as "expected
+       * an object literal".
+       *
+       * Most dials spell their choices as objects carrying a value, a label and
+       * a hint. A dial whose choices come from a union's own const array spells
+       * them as plain strings, because the array exists to define the type and
+       * a label would be a second place to change a name. Only `value` is read
+       * downstream, so a string normalises to exactly that and nothing is lost.
+       */
+      def.choices = arr.elements.map((e) =>
+        ts.isStringLiteral(e) ? { value: e.text } : objectOf(e, abs),
+      );
     }
     defs.push(def);
   });

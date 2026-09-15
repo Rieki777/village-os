@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { writeStored } from "@/lib/safeStorage";
 import {
   DEFAULT_MAP_SKIN,
   FLOW_STYLES,
@@ -77,7 +78,7 @@ export default function MapSkinPanel({ password }: { password: string }) {
        * because writing an identical value fires no storage event.
        */
       window.dispatchEvent(new Event(MAP_SKIN_SAVED_EVENT));
-      try { localStorage.setItem(MAP_SKIN_SAVED_KEY, String(Date.now())); } catch { /* private mode */ }
+      writeStored("local", MAP_SKIN_SAVED_KEY, String(Date.now()));
       toast.success("Map style saved. An open map retints straight away");
     } catch { toast.error("Save failed"); }
     setSaving(false);

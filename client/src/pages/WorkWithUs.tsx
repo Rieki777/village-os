@@ -1,6 +1,7 @@
 import Layout from "@/components/Layout";
 import { useEffect, useState } from "react";
 import { fetchConfigCached } from "@/lib/gameApi";
+import { readStoredJson, removeStored, writeStoredJson } from "@/lib/safeStorage";
 import { useAuth } from "@/contexts/AuthContext";
 import GuideChat from "@/components/GuideChat";
 import { submitProposal } from "@/lib/proposals";
@@ -94,10 +95,10 @@ export default function WorkWithUs() {
       .then((d) => { setAiAvailable(!!d.available); setMode(d.available ? "ai" : "form"); })
       .catch(() => { setAiAvailable(false); setMode("form"); });
     // restore a saved form draft
-    try {
-      const saved = localStorage.getItem("amora-work-with-us-draft");
-      if (saved) setForm({ ...EMPTY, ...JSON.parse(saved) });
-    } catch { /* ignore */ }
+    const saved = readStoredJson("local", "amora-work-with-us-draft");
+    if (saved.status === "value" && saved.value && typeof saved.value === "object") {
+      setForm({ ...EMPTY, ...(saved.value as Partial<Proposal>) });
+    }
   }, []);
 
   // Prefill name/email for a signed-in member (only if they haven't typed yet).
@@ -110,12 +111,12 @@ export default function WorkWithUs() {
 
   const saveDraft = (next: Proposal) => {
     setForm(next);
-    try { localStorage.setItem("amora-work-with-us-draft", JSON.stringify(next)); } catch { /* ignore */ }
+    writeStoredJson("local", "amora-work-with-us-draft", next);
   };
 
   const onSubmitted = () => {
     setSubmitted(true);
-    try { localStorage.removeItem("amora-work-with-us-draft"); } catch { /* ignore */ }
+    removeStored("local", "amora-work-with-us-draft");
   };
 
   if (submitted) {

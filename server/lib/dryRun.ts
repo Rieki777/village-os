@@ -57,7 +57,10 @@ import { activeClock, boundsForNumber, formatCycleId } from "./gratitude-cycles"
 import type { VillageMoon } from "../../shared/villageMoon";
 import { villageMoonForCycle } from "./villageMoon";
 import { cyclePoolProblem } from "./cyclePool";
-import { faucetFor, toLedgerUnits, VILLAGE_VOICE } from "./economy";
+// `toLedgerUnits` is gone from this list on purpose: the conversion happens
+// inside `ceilingOutcome` now, so this module converts nothing of its own and
+// cannot come to disagree with the engine about the scale it converted at.
+import { ceilingOutcome, decimalsFor, faucetFor, humanAtScale, VILLAGE_VOICE } from "./economy";
 import { shareCapFor } from "./gratitude";
 import { tokenDef } from "./ledger";
 import { numberVar, stringVar } from "./variables";
@@ -193,6 +196,22 @@ export interface DryRunOptions {
   moons: number;
   /** The instant the first simulated moon contains. Injected for the suite. */
   from?: Date;
+  /**
+   * Who is reading. Defaults to "admin", which is exactly what every caller
+   * got before this option existed, so an omitted value changes nothing.
+   *
+   * "member" narrows the SNAPSHOT before the first turn is walked, and it
+   * drops two things: a rule that is switched off, and a queued change on a
+   * rule that is still on. Neither is what the village does today. A switched
+   * off rule pays nobody, and a `pending_*` change is a decision an admin has
+   * stamped for a future moon and not yet announced. R12 opened this run to
+   * every member (`server/routes/dryRun.ts`), and the narrowing is what makes
+   * that safe to do without asking the founding team to publish their drafts.
+   *
+   * The report a member gets is otherwise identical: same dials, same enabled
+   * rules, same allowance table, same jobs, same refusals.
+   */
+  audience?: "admin" | "member";
   /**
    * The lunation this village calls Moon 1, resolved by the caller (the route
    * reads it; this function stays pure and clockless). Null on a village that
@@ -357,6 +376,12 @@ function allowanceTable(feedOff: boolean): DryRunAllowance[] {
  * source a seat does not have, so it pays nothing forever; a rule for a token
  * with no faucet can never pay; and a rule whose amount rounds to zero ledger
  * units pays nothing while showing a number on the dial.
+ *
+ * The fourth was NOT mirrored and is now: the ceiling. This function held the
+ * column on its rule type and read it only to narrate a queued change, so it
+ * printed the rule's amount where the engine would have printed the clamp, and
+ * it did that on the one screen a founder opens to find out whether a setting
+ * works before they bet a village on it.
  */
 function settlementFindings(
   snapshot: DryRunSnapshot,
@@ -451,8 +476,31 @@ function settlementFindings(
       });
       continue;
     }
-    const units = toLedgerUnits(r.tokenSlug, r.amount);
-    if (units <= 0) {
+    /*
+     * THE CEILING, THROUGH THE ENGINE'S OWN FUNCTION.
+     *
+     * `DryRunRule` has carried `ceiling` since it was written and used it for
+     * exactly one thing: narrating a queued change to it. So a founder running
+     * the test run over `amount 25, ceiling 5` was told "each thanked 25", the
+     * one surface built to catch a setting that cannot work agreed with the
+     * two that were already wrong, and at a ceiling of 0 all three promised a
+     * payout of 25 that the engine would refuse outright.
+     *
+     * `ceilingOutcome` decides it, the same call `runSettlement` makes, so a
+     * disagreement between the run and the moon is now a compile-time
+     * impossibility instead of a habit.
+     */
+    const decimals = decimalsFor(r.tokenSlug);
+    const capped = ceilingOutcome(r, r.amount, decimals, tokenName);
+    if (capped.refusal) {
+      out.push({
+        area: "settlement",
+        outcome: "refused",
+        sentence: `The ${tokenName} rule for holding a seat cannot pay, because ${capped.refusal}.`,
+      });
+      continue;
+    }
+    if (capped.units <= 0) {
       out.push({
         area: "settlement",
         outcome: "refused",
@@ -460,12 +508,17 @@ function settlementFindings(
       });
       continue;
     }
+    // What the engine would actually post, converted back once for the
+    // sentence. The moon total is the per-seat integer times the seats, so it
+    // carries the clamp rather than restating the rule's own number.
+    const each = humanAtScale(capped.units, decimals);
+    const moon = humanAtScale(capped.units * snapshot.seatCount, decimals);
     out.push({
       area: "settlement",
       outcome: "issued",
       sentence:
         `${plural(snapshot.seatCount, "seat holder", "seat holders")} each thanked ` +
-        `${r.amount} ${tokenName}, which comes to ${snapshot.seatCount * r.amount} for the moon.`,
+        `${each} ${tokenName}, which comes to ${moon} for the moon.`,
     });
   }
   return out;
@@ -526,13 +579,34 @@ function promotionFindings(
 }
 
 /**
+ * The same village, described by what it does today.
+ *
+ * Two lines, and both of them are subtractions. A rule that is switched off
+ * leaves; a queued change leaves the rule it was queued against. Nothing else
+ * is touched, so every sentence the run produces afterwards is produced by the
+ * same code that produced the admin's.
+ *
+ * The three emptinesses in `settlementFindings` survive this, which is the
+ * property to keep: a village whose every rule is off reads as "No mint rule
+ * is switched on for this village" to a member, the same sentence an admin
+ * gets, because `everyRule` is now empty for the same reason it was before.
+ */
+function narrowForMember(snapshot: DryRunSnapshot): DryRunSnapshot {
+  return {
+    ...snapshot,
+    rules: snapshot.rules.filter((r) => r.enabled).map((r) => ({ ...r, pending: null })),
+  };
+}
+
+/**
  * The whole run.
  *
  * Takes a snapshot and returns a report. No pool, no connection, no write. A
  * reader who wants to be sure of that can check the imports at the top of this
  * file: none of them can reach a database.
  */
-export function dryRun(snapshot: DryRunSnapshot, options: DryRunOptions): DryRunReport {
+export function dryRun(input: DryRunSnapshot, options: DryRunOptions): DryRunReport {
+  const snapshot = options.audience === "member" ? narrowForMember(input) : input;
   const from = options.from ?? new Date();
   // NaN survives Math.min and Math.max, and a NaN moon count runs zero turns
   // while the report still says how many moons it covered. The route validates

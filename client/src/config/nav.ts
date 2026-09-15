@@ -32,7 +32,12 @@ export type NavLink = {
   module?: string;
   /** Signed-in roles allowed to see this. Absent means everyone. */
   roles?: readonly string[];
-  /** Amber treatment, for the one team-only entry. */
+  /**
+   * Amber treatment, for the two entries that lead into the village's own
+   * working surfaces. It reads as "this is the machine room", not as "this is
+   * the team's": the Launch Plan is open to every signed-in member and the
+   * Command Centre is not, and they wear the same amber.
+   */
   accent?: boolean;
   /**
    * This entry is named after a token, so what a member reads is whatever the
@@ -176,10 +181,31 @@ export const NAV: readonly NavEntry[] = [
       { href: "/decisions", label: "Decisions", module: "governance" },
       { href: "/master-plan", label: "Master Plan" },
       { href: "/team", label: "Our Team" },
+      /**
+       * R12 opened this page to every member, and the menu was the last door
+       * still shut. `POST /api/dry-run` answers any signed-in member ("any
+       * member as all members may suggest upgrades and will need to run models
+       * and tests"), the page renders a test-run card for one, and the admin
+       * door it used to sit behind is gone. So a member could run the village's
+       * test run and had no way to find it short of being told the URL.
+       *
+       * SIGNED IN, NOT EVERYONE, and the three roles are how this file says
+       * that. `visible()` in Layout.tsx passes a link with no `roles` to a
+       * stranger too, and this page meets a stranger with a sign-in wall, which
+       * is the locked-door-in-a-public-menu defect the Command Centre entry
+       * below was written to avoid. `PUT /api/admin/users/:id/role` refuses any
+       * value outside `["member", "admin", "founder"]`, so listing all three is
+       * the whole signed-in population and not a guess. A fourth role would
+       * have to be added here as well as there.
+       *
+       * NO `module`. The dry-run route mounts outside `requireModule()`, so a
+       * module gate here would hide a working page on every fork that has that
+       * module off, which is every fresh fork.
+       */
       {
         href: "/journey-to-launch",
         label: "🌳 Launch Plan",
-        roles: ["admin", "founder"],
+        roles: ["member", "admin", "founder"],
         accent: true,
       },
       /**

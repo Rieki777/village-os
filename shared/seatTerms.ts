@@ -129,7 +129,22 @@ export type SeatTermRefusal =
   | "open_ended_season"
   | "past_season_end"
   | "already_over"
-  | "ends_before_it_starts";
+  | "ends_before_it_starts"
+  | "past_record_limit";
+
+/**
+ * THE LAST INSTANT A SEAT'S END CAN BE WRITTEN DOWN.
+ *
+ * `role_holders.term_ends_at`, `org_role_assignments.term_ends_at` and the
+ * term history are TIMESTAMP columns, and MySQL 8, which CI and production
+ * run, caps TIMESTAMP at this instant. MariaDB reaches 2106, so a later date
+ * passed every local run and then failed at the INSERT as a raw database
+ * error. A term past it is refused here in words instead.
+ */
+export const RECORD_LIMIT = new Date(Date.UTC(2038, 0, 19, 3, 14, 7));
+
+/** The last civil date that fits under `RECORD_LIMIT` in every zone. */
+export const RECORD_LIMIT_DATE = "2038-01-18";
 
 export type SeatTerm =
   | {
@@ -251,6 +266,15 @@ export function resolveSeatTerm(ask: SeatTermAsk): SeatTerm {
       error: `A steward's seat ends with the season at the latest. This season ends on ${seasonEndsOn}, so pick that date or an earlier one.`,
     };
   }
+  if (end.getTime() > RECORD_LIMIT.getTime()) {
+    return {
+      ok: false,
+      code: "past_record_limit",
+      error: asked
+        ? `Seat records can hold an end date up to ${RECORD_LIMIT_DATE}, and this one is later. Pick an earlier date.`
+        : `The season this seat would end with ends after ${RECORD_LIMIT_DATE}, and seat records can only hold an end date up to then. Give the seat its own earlier end date, or move the season's end in Admin.`,
+    };
+  }
   if (end.getTime() <= now.getTime()) {
     return { ok: false, code: "already_over", error: "That end date has already passed. Pick a date after today." };
   }
@@ -316,7 +340,9 @@ export function restampsFor(holdings: readonly FollowingHolding[], calendar: Sea
     const season = calendar.seasons.find((s) => s.id === h.seasonId);
     if (!season?.endsOn) continue;
     const to = civilDateInstant(season.endsOn, tz);
-    if (!to || to.getTime() === from.getTime()) continue;
+    // A season moved past what the record can hold leaves its seats on the
+    // last date they had, the same as a season that became open-ended.
+    if (!to || to.getTime() === from.getTime() || to.getTime() > RECORD_LIMIT.getTime()) continue;
     out.push({ id: h.id, from, to });
   }
   return out;

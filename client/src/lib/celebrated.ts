@@ -34,6 +34,8 @@
  * drive it without a DOM.
  */
 
+import { readStored, writeStored } from "./safeStorage";
+
 const KEY = "village.celebrated";
 
 /**
@@ -92,21 +94,16 @@ export function parseMoments(raw: string | null): string[] {
 export function claimMoment(id: string): boolean {
   if (!id) return false;
   if (typeof window === "undefined") return false;
-  let raw: string | null;
-  try {
-    raw = window.localStorage.getItem(KEY);
-  } catch {
-    return false;
-  }
-  const result = rememberMoment(parseMoments(raw), id);
+  const stored = readStored("local", KEY);
+  // A store that REFUSES is not a store that is empty, and here the two
+  // answers are opposite: empty means this moment is news, refused means
+  // nothing is known and silence is the only safe reply.
+  if (stored.status === "unavailable") return false;
+  const result = rememberMoment(parseMoments(stored.status === "value" ? stored.value : null), id);
   if (!result.fresh) return false;
-  try {
-    window.localStorage.setItem(KEY, JSON.stringify(result.moments));
-  } catch {
-    // The preference never sticks in private browsing. Play it this once
-    // rather than never: a moment shown twice is a smaller loss than a
-    // member who did the work and saw nothing.
-    return true;
-  }
+  // A refused WRITE still plays it this once. The preference never sticks in
+  // private browsing, and a moment shown twice is a smaller loss than a
+  // member who did the work and saw nothing.
+  writeStored("local", KEY, JSON.stringify(result.moments));
   return true;
 }
