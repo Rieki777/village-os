@@ -38,7 +38,10 @@ defaults:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 25, raised from 15 on 2026-09-15: verify on 9f560fc took 14m43s (Test 10m38s), and
+    # on 1364bdb it took 15m05s and was cancelled mid-Test by this limit, not by a failure.
+    # The suite grows with every lane; cancelled reads like a red, so keep real headroom.
+    timeout-minutes: 25
     services:
       # S5: the DB-backed suites (server/db/*.test.ts) run against a real MySQL.
       # The harness provisions its own scratch schema and applies every
