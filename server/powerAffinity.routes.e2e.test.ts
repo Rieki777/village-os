@@ -36,7 +36,7 @@ if (!DB_CONFIGURED) {
 
 const DIST = path.resolve(process.cwd(), "dist/index.js");
 // Its window is checked by scripts/check-e2e-ports.mjs, not claimed here.
-const PORT = 4400 + (process.pid % 400);
+const PORT = 5800 + (process.pid % 200);
 const BASE = `http://localhost:${PORT}`;
 const ADMIN = "power-affinity-admin";
 const PASSWORD = "PowerAffinity123!";
