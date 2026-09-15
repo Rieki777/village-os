@@ -106,10 +106,13 @@ describe("navGroups", () => {
   const ORDER: Array<[string, string[]]> = [
     ["Start here", ["setup"]],
     ["Who runs this village", ["players", "game-roles", "org-chart", "handover", "governance-weights"]],
-    ["Make it yours", ["team", "legal", "covenant", "work-with-us", "faqs", "milestones", "visit-config", "investor-summary"]],
+    // `money` is a CONTENT_SECTIONS entry the economics branch adds (Money &
+    // Value Claims, the editor behind `client/src/lib/moneyClaims.ts`), so it
+    // rides in with the other three rather than being placed here.
+    ["Make it yours", ["team", "legal", "covenant", "money", "work-with-us", "faqs", "milestones", "visit-config", "investor-summary"]],
     ["Connections", ["integrations", "email-settings"]],
     ["What your village runs", [
-      "modules", "variables", "season", "seasons-patterns", "circles-map", "housing",
+      "modules", "needs-admin", "variables", "season", "seasons-patterns", "circles-map", "housing",
       "events-admin", "quests-admin", "tools-admin", "library-admin", "badges-admin",
       "stays-admin", "exchange-admin", "crowdpool-admin", "calls-admin", "intents-admin",
       "health-admin",
@@ -133,6 +136,14 @@ describe("navGroups", () => {
      * still on it, and nothing new appeared. A tab dropped here is a panel a
      * founder can still deep-link to and can no longer find, which is the
      * failure a reorder makes easy and silent.
+     *
+     * TWO KEYS AT THE END ARE ADDITIONS, NOT MOVES, and they are listed apart
+     * so the permutation this case is about stays readable. The economics
+     * branch adds `needs-admin` (What This Village Is For, step 2 of the Setup
+     * Wizard) and `money` (Money & Value Claims, a CONTENT_SECTIONS entry). A
+     * new tab is the one change this case must not refuse, and a new tab that
+     * arrives without a line here is still caught, because the set comparison
+     * is exact in both directions.
      */
     const before = [
       "setup", "submissions", "feedback", "forum-moderation", "message-reports", "products",
@@ -144,6 +155,8 @@ describe("navGroups", () => {
       "health-admin", "resources-admin", "exits-admin", "calls-admin", "intents-admin",
       "tokens", "ledger", "cycles", "variables", "season", "settings", "work-with-us",
       "faqs", "milestones", "visit-config", "investor-summary",
+      // Added by this branch, see above.
+      "needs-admin", "money",
     ];
     for (const setupComplete of [true, false]) {
       expect(new Set(allKeys(setupComplete)), `setupComplete=${setupComplete}`).toEqual(new Set(before));

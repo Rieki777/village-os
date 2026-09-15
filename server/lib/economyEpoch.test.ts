@@ -47,16 +47,28 @@ const configured = testDbConfigured();
 const VILLAGE = villageId();
 
 let db: TestDb | undefined;
-let pool: mysql.Pool;
+let pool: mysql.Pool;
+
+/**
+ * A token's scale, read off the registry rather than typed. The seeded
+ * `quest.completed` rules pay 10 Voice and 25 Credits, both HUMAN numbers in
+ * `mint_rules.amount`, and `balanceOf` answers in MINOR units. Those were the
+ * same number until `0202`, which is why these assertions read as bare
+ * literals and why the literal is the wrong shape rather than the wrong value.
+ */
+async function scaleOf(slug: string): Promise<number> {
+  const [rows] = await pool.query<any[]>("SELECT `decimals` FROM `tokens` WHERE `slug` = ?", [slug]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+  return 10 ** Number(rows[0]?.decimals ?? 0);
+}
 
 /** A member who can be paid. The mint needs a user row and a ledger account. */
 async function seatAMember(id: string): Promise<string> {
-  await pool.query(
+  await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x') " +
       "ON DUPLICATE KEY UPDATE `name` = VALUES(`name`)",
     [id, id, `${id}@examples.invalid`],
   );
-  await pool.query(
+  await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "INSERT IGNORE INTO `ledger_accounts` (`id`, `kind`, `user_id`, `label`, `faucet`) VALUES (?,?,?,?,0)",
     [memberAccount(id), "member", id, id],
   );
@@ -69,13 +81,13 @@ async function seatAMember(id: string): Promise<string> {
  */
 async function neverStarted(): Promise<void> {
   forgetEpoch();
-  await pool.query("DELETE FROM `app_config` WHERE `config_key` = 'economy-state'");
+  await pool.query("DELETE FROM `app_config` WHERE `config_key` = 'economy-state'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
 }
 
 describe.skipIf(!configured)("the first confirmed quest in a village's life", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 10 });
+    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 10 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await loadTokenRegistry(pool);
     await seedEconomy(pool, VILLAGE);
     await loadTokenRegistry(pool);
@@ -101,8 +113,9 @@ describe.skipIf(!configured)("the first confirmed quest in a village's life", ()
 
     // The sentence the server logged for every village's first quest.
     expect(res.skipped).toBeUndefined();
-    expect(await balanceOf(pool, memberAccount(u), CREDITS)).toBe(25);
-    expect(await balanceOf(pool, memberAccount(u), VILLAGE_VOICE)).toBe(10000);
+    // The seeded rule pays 25 Credits and 10 Voice, both whole tokens.
+    expect(await balanceOf(pool, memberAccount(u), CREDITS)).toBe(25 * (await scaleOf(CREDITS)));
+    expect(await balanceOf(pool, memberAccount(u), VILLAGE_VOICE)).toBe(10 * (await scaleOf(VILLAGE_VOICE)));
   });
 
   it("starts the clock at the claim, so the SECOND quest is paid the same as the first", async () => {
@@ -114,7 +127,7 @@ describe.skipIf(!configured)("the first confirmed quest in a village's life", ()
       confirmedAt: new Date(),
     });
     expect(res.skipped).toBeUndefined();
-    expect(await balanceOf(pool, memberAccount(u), CREDITS)).toBe(25);
+    expect(await balanceOf(pool, memberAccount(u), CREDITS)).toBe(25 * (await scaleOf(CREDITS)));
   });
 
   it("still refuses work from before the engine started", async () => {

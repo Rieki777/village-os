@@ -2,29 +2,25 @@
  * THE ONE PLACE MINOR UNITS BECOME THE NUMBER A MEMBER READS.
  *
  * `token_ledger.amount` and `token_balances.balance` are INTs, so a token with
- * decimals stores minor units: Village Voice rides in thousandths, and a
- * member who earned 10 Voice has 10000 on the row. Dividing is not a nicety.
- * A surface that prints the row prints 10000, and a member who is told they
- * hold ten thousand of something they earned ten of has been lied to by the
+ * decimals stores minor units: Village Voice rides in hundredths, and a
+ * member who earned 10 Voice has 1000 on the row. Dividing is not a nicety.
+ * A surface that prints the row prints 1000, and a member who is told they
+ * hold a thousand of something they earned ten of has been lied to by the
  * one page they came to trust.
  *
- * WHY THIS EXISTS BEFORE THE SCALE MOVES, AND NOT AS PART OF IT.
+ * WHY THIS EXISTS AT ALL, AND WHY IT IS NOT ABOUT ONE TOKEN.
  *
- * This file was written under a ruling that every token would move to 4
- * decimals. That was CANCELLED on 2026-09-04 and replaced with a narrower one:
- * Village Credits goes from 0 to 2, and nothing else moves (docs/ECONOMICS.md
- * section 11). The argument survives the change intact and gets sharper, so it
- * is corrected here rather than deleted.
+ * Rye ruled the scale on 2026-09-04: two decimals on the tokens a village
+ * spends, prices and redeems, whole numbers for everything else, and Village
+ * Voice at two. `shared/tokenScale.ts` holds both numbers and the reasoning.
+ * Four tokens carry a scale now and three do not, so a surface that prints the
+ * row without dividing is wrong by a hundred on more than half of them.
  *
- * Today exactly one token carries a scale, Village Voice at 3, so exactly one
- * number on one screen was wrong and it was wrong by 1000x. `credits` is the
- * token a room is priced in, the token members send each other and the token
- * the cycle pool pays out: the day it moves, most of the surfaces in the
- * product are wrong at once, with no single broken screen to point at. So the
- * dividing goes in first, on every surface, while there is still one token to
- * check it against. The ruling says the same thing in the other direction: the
- * display pass comes BEFORE the column change. Moving a token's scale after
- * that is a registry row and nothing else.
+ * A scale-aware payload and ONE conversion helper are what stop a display and
+ * an input disagreeing, and they do it at ANY scale. That is why this file is
+ * not written against a particular number of decimals: a village that rescales
+ * a token, or a fork that ships another one, changes a registry row and nothing
+ * here.
  *
  * A surface that renders a token amount calls `formatTokenAmount`. It does not
  * write its own division: two spellings of the same rule is how the profile
@@ -59,12 +55,34 @@ export function formatTokenAmount(units: number, decimals: number): string {
 }
 
 /**
- * The decimals for one token out of a payload's `slug -> decimals` map.
+ * A number that is ALREADY human, to the text a member reads. No division.
  *
- * Absent means zero, which is what every token in the registry carried before
- * Voice and what an unregistered slug honestly means. It never guesses at a
- * token's scale from its name.
+ * `formatTokenAmount` is for a payload that carries minor units. Some routes
+ * convert before they send (`fromLedgerUnits` in server/routes/redemption.ts,
+ * `priceFromStored` in server/lib/stays.ts), and handing their number to
+ * `formatTokenAmount` divides a second time: 50 credits held read as 0.5.
+ * Handing it over at decimals 0 truncates instead: 12.5 read as 12. Both
+ * shipped. This is the formatter for that kind of field.
+ *
+ * `decimals` only tidies. When the figure at the token's scale is the same
+ * number (0.30000000000000004 at 2 is 0.3), that is what prints. When it is
+ * not, the figure prints exactly as sent, because a human number is the truth
+ * and this function never rounds it to a coarser scale. Omit `decimals` where
+ * the payload carries none and the number still prints whole and true.
+ *
+ * Same formatting rule as `formatTokenAmount`: 10, not 10.00.
  */
+export function formatHumanAmount(human: number, decimals?: number): string {
+  const n = Number(human);
+  if (!Number.isFinite(n)) return "0";
+  const d = Math.min(20, Math.max(0, Number(decimals) || 0));
+  const atScale = Number(n.toFixed(d));
+  // Binary noise is a few ulps. A real fraction the scale cannot hold is not.
+  const sameNumber = Math.abs(atScale - n) <= Number.EPSILON * 8 * Math.max(1, Math.abs(n));
+  const shown = sameNumber ? atScale : n;
+  return String(Object.is(shown, -0) ? 0 : shown);
+}
+
 /**
  * The inverse of `formatTokenAmount`: what a member TYPED, into what the ledger
  * stores. Mirrors the server's `toLedgerUnits` in server/lib/economy.ts, and
@@ -104,6 +122,13 @@ export function smallestUnit(decimals: number): number {
   return d <= 0 ? 1 : 1 / 10 ** d;
 }
 
+/**
+ * The decimals for one token out of a payload's `slug -> decimals` map.
+ *
+ * Absent means zero, which is what every token in the registry carried before
+ * Voice and what an unregistered slug honestly means. It never guesses at a
+ * token's scale from its name.
+ */
 export function decimalsOf(map: Record<string, number> | undefined | null, slug: string): number {
   return Number(map?.[slug] ?? 0) || 0;
 }

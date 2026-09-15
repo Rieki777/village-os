@@ -115,6 +115,8 @@ const ALLOWED = {
     "The fetch half of 'paste your site address' shipped on its own, deliberately: it is the security surface and it was built and reviewed apart from the screen that calls it. The setup screen and the brand extractor are separate lanes. Delete this line when the screen lands.",
   "POST /api/admin/site-pull/assets":
     "Waiting on the same screen as POST /api/admin/site-pull, and on the rights checkbox that screen has to render. Delete this line when the screen lands.",
+  "POST /api/admin/resources/budgets/:id/bonus":
+    "The unspent-cap bonus. It cannot succeed on this build and a control for it would be a button that can only ever refuse: a bonus needs the village to have voted a circle's work complete, that vote's subject is a COMMITMENT RECORD, and no table in this schema stores one (measured across a migrated schema, server/lib/circleBonusGate.ts). The reading beside it, GET on the same path, is reachable and says exactly that. Delete this line when a village has somewhere to write down what a circle takes on.",
 };
 
 /**

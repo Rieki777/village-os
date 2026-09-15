@@ -25,9 +25,37 @@
  *     where junk could become currency gets the guards.
  *   - No non-negative account goes negative here: nothing library-side
  *     passes allowNegative. Insufficient credits is a refusal, not a debt.
+ *
+ * UNITS. Two of them, and the line between them runs at the ledger's door.
+ *
+ *   CREDITS (whole, human) is what this module thinks in: every Library game
+ *   variable declares `unit: "credits"`, and every money column here holds
+ *   one. `library_items.credit_value` is an appraisal a steward typed.
+ *   `library_loans.escrow_credits`, `wear_fee` and `damage_fee` are the same
+ *   number a member is quoted. Those columns STAY human. The decision is
+ *   deliberate and it is the reason 0202 needed no backfill on this module's
+ *   tables when library credits went to two decimals: nothing here mirrors the
+ *   ledger's scale.
+ *
+ *   MINOR UNITS is what `token_ledger.amount` holds, at whatever scale the
+ *   registry says the token carries. Every one of the five posting legs
+ *   converts with `toLedgerUnits(LIBRARY_CREDIT, ...)` on the way in, and the
+ *   two readers that quote a ledger figure to a person or compare one against
+ *   a steward's number (`intakeMintedThisCycle`, `supplyVsBacking`) convert
+ *   back with `fromLedgerUnits`. `escrowReconciliation` is the one place that
+ *   goes the other way, converting the stored column UP so the invariant
+ *   compares integers.
+ *
+ *   The conversions are exact in both directions here, because every credit
+ *   figure in this file is a whole number: `toLedgerUnits` is then a
+ *   multiplication by a power of ten, so a sum converted once equals the sum
+ *   of the conversions and escrow always drains to zero.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { balanceOf, ledgerEntryExists, memberAccount, MINT_FAUCET, postTransfer, registerToken, tokenDef, TREASURY } from "./ledger";
+import { holdingFor, lockedShortfall, type TokenHolding } from "./holdings";
+import { fromLedgerUnits, toLedgerUnits } from "./economy";
+import { CURRENCY_DECIMALS } from "../../shared/tokenScale";
 import { numberVar } from "./variables";
 import { cycleIdFor, currentCycle } from "./gratitude-cycles";
 import { recordEvent } from "./events";
@@ -48,6 +76,16 @@ export async function ensureLibraryToken(pool: Pool): Promise<void> {
     kind: "credit",
     governance: "platform",
     transferable: false,
+    /*
+     * A CREDIT TOKEN IS CURRENCY-LIKE, so it carries the currency scale from
+     * the day it is created. This is stated here and not left to
+     * `registerToken`'s whole-unit default because a FRESH village would
+     * otherwise create this token at 0 while a migrated one holds 2, and
+     * `registerToken` leaves `decimals` out of its upsert on purpose, so
+     * nothing would ever reconcile the two. The migration that rescaled the
+     * existing rows is the other half of this line.
+     */
+    decimals: CURRENCY_DECIMALS,
   });
 }
 
@@ -161,7 +199,22 @@ export type IntakeResult =
   | { ok: true; itemId: string; award: number; pendingSecondSignoff: boolean }
   | { ok: false; error: string };
 
-/** What the mint has issued to this member this lunation, via intake. */
+/**
+ * What the mint has issued to this member this lunation, via intake, IN
+ * CREDITS.
+ *
+ * The SUM is over `token_ledger.amount`, which is minor units, and every
+ * number it meets is a whole credit: `award` off an appraisal, and
+ * `library.intake_member_cycle_cap`, whose own unit is "credits"
+ * (`shared/gameVariables.ts`). One function feeds four of those meetings (the
+ * two cap comparisons and the two refusal strings), so the conversion belongs
+ * here, once, rather than at each of them.
+ *
+ * Today the two units coincide and the mixture is invisible. At 4 decimals it
+ * breaks TIGHT, never loose: one 75-credit award leaves the raw sum at 750000
+ * against a cap of 500, so the donor's next intake is refused forever and the
+ * steward is told "750000 of 500 already granted".
+ */
 async function intakeMintedThisCycle(pool: Pool, userId: string): Promise<number> {
   const cycle = currentCycle();
   const [[row]] = await pool.query<any[]>(
@@ -169,7 +222,7 @@ async function intakeMintedThisCycle(pool: Pool, userId: string): Promise<number
       "AND token_type = ? AND source = 'library_intake' AND at >= ?",
     [LIBRARY_MINT, memberAccount(userId), LIBRARY_CREDIT, new Date(cycle.startsAt)],
   );
-  return Number(row.s);
+  return fromLedgerUnits(LIBRARY_CREDIT, Number(row.s));
 }
 
 export async function recordIntake(pool: Pool, input: IntakeInput): Promise<IntakeResult> {
@@ -204,7 +257,10 @@ export async function recordIntake(pool: Pool, input: IntakeInput): Promise<Inta
       from: LIBRARY_MINT,
       to: memberAccount(input.donorUserId),
       tokenType: LIBRARY_CREDIT,
-      amount: award,
+      // `award` is whole credits (floor of an appraised value times a percent).
+      // The ledger takes minor units, so the conversion happens here, at the
+      // boundary, and never inside postTransfer.
+      amount: toLedgerUnits(LIBRARY_CREDIT, award),
       source: "library_intake",
       sourceRef: itemId,
       description: `Intake: ${input.name.trim().slice(0, 100)}`,
@@ -239,7 +295,10 @@ export async function approveIntake(pool: Pool, itemId: string, approverId: stri
       from: LIBRARY_MINT,
       to: memberAccount(item.donorUserId),
       tokenType: LIBRARY_CREDIT,
-      amount: award,
+      // Whole credits in, minor units out, exactly as the single-signature
+      // path above. This is the route every HIGH-VALUE item takes, so leaving
+      // it human would underpay the largest awards by the whole scale factor.
+      amount: toLedgerUnits(LIBRARY_CREDIT, award),
       source: "library_intake",
       sourceRef: itemId,
       description: `Intake (dual-signed): ${item.name}`,
@@ -251,6 +310,28 @@ export async function approveIntake(pool: Pool, itemId: string, approverId: stri
 }
 
 // ── Loans ────────────────────────────────────────────────────────────────────
+
+/**
+ * WHAT A MEMBER HAS HERE, AND WHAT THEY CAN SPEND HERE.
+ *
+ * `balance` and `balanceDecimals` are exactly what `GET /api/library` sent
+ * before and are kept, so nothing reading the old shape has to move. What is
+ * added is the other three quarters of the reading: the deposits locked in
+ * items that are out, the total those add up to, and one entry per item saying
+ * which item and how to get the credits back.
+ *
+ * The arithmetic and the sentences live in server/lib/holdings.ts, because the
+ * same four numbers are owed on every holdings surface and a second
+ * implementation is a second place for them to disagree. This function is the
+ * library's window onto it.
+ */
+export async function libraryHoldingsFor(
+  pool: Pool,
+  userId: string,
+): Promise<TokenHolding & { balance: number; balanceDecimals: number }> {
+  const holding = await holdingFor(pool, userId, LIBRARY_CREDIT);
+  return { ...holding, balance: holding.spendableUnits, balanceDecimals: holding.decimals };
+}
 
 export function escrowFor(creditValue: number): number {
   const pct = Math.max(0, numberVar("library.escrow_pct"));
@@ -320,7 +401,11 @@ export async function reserveItem(
         from: memberAccount(input.userId),
         to: LIBRARY_ESCROW,
         tokenType: LIBRARY_CREDIT,
-        amount: escrow,
+        // `escrow` is whole credits and `library_loans.escrow_credits` stores
+        // it that way, four statements above. The COLUMN stays human and the
+        // LEDGER goes minor, so `escrowReconciliation` converts the column up
+        // rather than either side being read in the other's unit.
+        amount: toLedgerUnits(LIBRARY_CREDIT, escrow),
         source: "library_escrow",
         sourceRef: loanId,
         description: `Escrow: ${item.name}`,
@@ -343,6 +428,30 @@ export async function reserveItem(
       // transaction and cannot join the one above.
       await pool.query("DELETE FROM library_loans WHERE id = ?", [loanId]);
       await pool.query("UPDATE library_items SET status = 'available' WHERE id = ?", [item.id]);
+      /*
+       * WHY THEY ARE SHORT, WHEN THE REASON IS SOMETHING THEY ARE HOLDING.
+       *
+       * A member with seventy credits and fifty locked in a camera has twenty
+       * to spend, and the sentence they used to meet said only that they need
+       * more. It was true and it was useless: they can remember earning the
+       * seventy, the page prints twenty, and nothing anywhere joined the two.
+       *
+       * `lockedShortfall` returns null when the locks would not have covered
+       * this anyway, so a member who is genuinely short still hears the
+       * ordinary sentence and is never sent to fetch an item that would not
+       * have been enough. This loan's own escrow was compensated above and its
+       * row is gone, so the reading below cannot count the deposit it just
+       * failed to take.
+       */
+      const holding = await holdingFor(pool, input.userId, LIBRARY_CREDIT);
+      const why = lockedShortfall(holding, toLedgerUnits(LIBRARY_CREDIT, escrow));
+      if (why) {
+        return {
+          ok: false,
+          status: 409,
+          error: `You need ${escrow} library credit(s) set aside to borrow this and ${holding.spendable} of yours are free. ${why}`,
+        };
+      }
       return { ok: false, status: 409, error: `You need ${escrow} library credit(s) set aside to borrow this. Earn them by contributing items or work` };
     }
   }
@@ -445,7 +554,14 @@ export async function settleLoan(
   const release = escrowHeld - fee;
   if (fee > 0) {
     const r = await postTransfer(pool, {
-      from: LIBRARY_ESCROW, to: LIBRARY_POOL, tokenType: LIBRARY_CREDIT, amount: fee,
+      // `fee` and `release` below are both whole credits, both derived from
+      // the human `escrow_credits` column, and they sum to exactly what the
+      // escrow leg deposited. Converting them SEPARATELY is still exact, so
+      // the escrow account drains to zero: toLedgerUnits is a multiplication
+      // by a power of ten over integers. Convert one leg and not the other
+      // and the account strands a surplus, which is what the boot invariant
+      // refuses to serve over.
+      from: LIBRARY_ESCROW, to: LIBRARY_POOL, tokenType: LIBRARY_CREDIT, amount: toLedgerUnits(LIBRARY_CREDIT, fee),
       source: "library_fee", sourceRef: input.loanId,
       description: `Loan ${settled.outcome}: wear ${settled.wearFee}, damage ${settled.damageFee}`,
       idempotencyKey: `loan:${input.loanId}:settle:pool`,
@@ -454,7 +570,7 @@ export async function settleLoan(
   }
   if (release > 0) {
     const r = await postTransfer(pool, {
-      from: LIBRARY_ESCROW, to: memberAccount(loan.userId), tokenType: LIBRARY_CREDIT, amount: release,
+      from: LIBRARY_ESCROW, to: memberAccount(loan.userId), tokenType: LIBRARY_CREDIT, amount: toLedgerUnits(LIBRARY_CREDIT, release),
       source: "library_release", sourceRef: input.loanId,
       description: `Escrow released (${settled.outcome})`,
       idempotencyKey: `loan:${input.loanId}:settle:release`,
@@ -554,15 +670,34 @@ export async function stalledIntakes(pool: Pool, days: number): Promise<StalledI
 
 // ── Invariants, strikes, red flags ───────────────────────────────────────────
 
-/** balance(sys:library-escrow) === SUM(unsettled escrow). To the credit. */
-export async function escrowReconciliation(pool: Pool): Promise<{ ok: boolean; expected: number; actual: number }> {
+/**
+ * balance(sys:library-escrow) === SUM(unsettled escrow). To the credit.
+ *
+ * BOTH NUMBERS ARE MINOR UNITS. `library_loans.escrow_credits` stores whole
+ * credits (the steward's unit, and the unit every Library game variable
+ * declares), so the stored side is converted UP to meet the ledger rather than
+ * the ledger being divided down to meet it. Two reasons for that direction:
+ * the comparison stays integer, so a one-unit drift can never round away, and
+ * the finest thing the escrow can actually hold is a minor unit.
+ *
+ * A SUM converted once equals the sum of the conversions, because every stored
+ * escrow is a whole number and toLedgerUnits multiplies by a power of ten.
+ *
+ * `decimals` rides along because both figures leave this process. The admin
+ * panel spreads this object straight into its payload, and a number in minor
+ * units with no scale beside it is the shape that has already been printed raw
+ * to a member twice. Shipping the scale with the amount is the house pattern
+ * (`balanceDecimals` on the wallet, `t.decimals` on `publicSupply`), and it
+ * means the render site needs nothing from the route to divide correctly.
+ */
+export async function escrowReconciliation(pool: Pool): Promise<{ ok: boolean; expected: number; actual: number; decimals: number }> {
   const [[row]] = await pool.query<any[]>(
     `SELECT COALESCE(SUM(escrow_credits),0) AS s FROM library_loans WHERE settled_at IS NULL AND status IN (${LIVE_LOAN_STATUSES.map(() => "?").join(",")})`,
     [...LIVE_LOAN_STATUSES],
   );
-  const expected = Number(row.s);
+  const expected = toLedgerUnits(LIBRARY_CREDIT, Number(row.s));
   const actual = await balanceOf(pool, LIBRARY_ESCROW, LIBRARY_CREDIT);
-  return { ok: expected === actual, expected, actual };
+  return { ok: expected === actual, expected, actual, decimals: tokenDef(LIBRARY_CREDIT)?.decimals ?? 0 };
 }
 
 export async function assertLibraryInvariants(pool: Pool): Promise<void> {
@@ -603,8 +738,15 @@ export async function assertLibraryInvariants(pool: Pool): Promise<void> {
   }
   const rec = await escrowReconciliation(pool);
   if (!rec.ok) {
+    // The comparison is in minor units and the sentence is in credits: this is
+    // read by an operator under pressure while boot is refused, and a number in
+    // hundredths is the last thing that surface should hand them. The
+    // minor figures ride along in parentheses so the two can be reconciled
+    // against the raw rows without a calculator.
     throw new Error(
-      `library escrow reconciliation failed: account holds ${rec.actual} but open loans expect ${rec.expected}, refusing to serve`,
+      `library escrow reconciliation failed: account holds ${fromLedgerUnits(LIBRARY_CREDIT, rec.actual)} credit(s) ` +
+        `but open loans expect ${fromLedgerUnits(LIBRARY_CREDIT, rec.expected)} ` +
+        `(${rec.actual} vs ${rec.expected} in minor units), refusing to serve`,
     );
   }
 }
@@ -622,6 +764,17 @@ export async function noShowStrikes(pool: Pool, userId: string): Promise<number>
  * The supply-vs-backing red flag: outstanding credits (what the mint has
  * issued and not reclaimed) against the replacement value still on the
  * shelves. Credits above backing = the intake door leaked.
+ *
+ * EVERY NUMBER OUT OF HERE IS WHOLE CREDITS. `balanceOf` answers in minor
+ * units and `SUM(library_items.credit_value)` is an appraisal a steward typed,
+ * so the two sides of `flagged` were being compared across a scale that only
+ * happens to be 1 today. At 4 decimals the raw comparison is true forever and
+ * the mint's own over-issuance alarm goes permanently red, which is the same
+ * as having no alarm.
+ *
+ * The division happens ONCE, on the minor totals, so `outstanding` is exactly
+ * the ledger's own figure over the token's scale and cannot drift from it by
+ * an accumulated rounding.
  */
 export async function supplyVsBacking(pool: Pool): Promise<{ outstanding: number; backing: number; flagged: boolean; shelfBacked: number; sold: number }> {
   // Two provenances of circulating credit: what the intake door minted
@@ -630,12 +783,14 @@ export async function supplyVsBacking(pool: Pool): Promise<{ outstanding: number
   // the first, so sold credits never counted against the shelves and the
   // red flag stayed grey however many were sold. Treasury stock still
   // sitting unsold is subtracted — inventory is not circulation.
-  const shelfBacked = -(await balanceOf(pool, LIBRARY_MINT, LIBRARY_CREDIT));
-  const sold = Math.max(
+  const shelfBackedUnits = -(await balanceOf(pool, LIBRARY_MINT, LIBRARY_CREDIT));
+  const soldUnits = Math.max(
     0,
     -(await balanceOf(pool, MINT_FAUCET, LIBRARY_CREDIT)) - (await balanceOf(pool, TREASURY, LIBRARY_CREDIT)),
   );
-  const outstanding = shelfBacked + sold;
+  const shelfBacked = fromLedgerUnits(LIBRARY_CREDIT, shelfBackedUnits);
+  const sold = fromLedgerUnits(LIBRARY_CREDIT, soldUnits);
+  const outstanding = fromLedgerUnits(LIBRARY_CREDIT, shelfBackedUnits + soldUnits);
   const [[row]] = await pool.query<any[]>(
     // Example items are not on any shelf, so counting their appraisals as
     // backing would hold the over-issuance flag grey while real circulating

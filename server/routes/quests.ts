@@ -35,6 +35,12 @@
  * move recognition around the human gate. The section comment below carries
  * the rest of that reasoning.
  *
+ * WHAT NEED A QUEST MEETS RIDES ON TWO OF THESE THIRTEEN and on no others.
+ * The detail read carries the quest's need links, and the delete clears them
+ * through the needs store. Both are marked at the handler. Nothing else in
+ * this file reads a tag, and the claim gate at the bottom reads none: the tag
+ * is a description of the work and never a condition on it.
+ *
  * THE OG CARD'S TWO DIMENSIONS ARE EXPORTED, not passed in. They moved here
  * with the renderer that uses them, and server/index.ts imports them back for
  * the `og:image:width` and `og:image:height` meta tags on the share page.
@@ -62,6 +68,7 @@ import {
   leaveConversation,
 } from "../lib/messaging";
 import { effectiveLifecycle } from "../lib/modules";
+import { linksForSubject, unlinkSubject } from "../lib/needs";
 import { questClosed } from "../repos/quests";
 import { captureIntoCurrentPattern } from "../lib/seasonPatterns";
 
@@ -177,7 +184,38 @@ export function register(app: Express, deps: Deps): void {
           q.circle === quest.circle,
       )
       .slice(0, 3);
-    res.json({ quest, related });
+    /*
+     * WHAT NEED THIS QUEST MEETS (R1, R18, migration 0204).
+     *
+     * A DESCRIPTION AND NEVER A GATE. The claim handler at the bottom of this
+     * file reads `minStage` and `requiresRole` and nothing else, and no tag
+     * added here reaches it. The precedent is `quests.archetypes`, the one
+     * display tag this repo already allows near a claim, held away from it in
+     * so many words by server/lib/characters.ts: a class guides what you are
+     * shown and never what you may claim. A needs tag that gated a payout
+     * would be a second capability system nobody voted for.
+     *
+     * It rides on the detail read and not on `GET /api/quests`, so the board
+     * still costs one query and a deep link carries the answer without a
+     * second round trip.
+     *
+     * MEMBER-TIER, AND THE FIELD IS ABSENT FOR A STRANGER. The rest of this
+     * payload is public and stays public. The tags are not, because
+     * `GET /api/needs/scope` withholds the same facts at the same tier and for
+     * the stated reason: the coverage read names the needs with nothing meeting
+     * them, and a village mid-setup gets to finish before a stranger reads its
+     * gaps. Reading the tag off every quest one at a time would rebuild most of
+     * that scope from outside, so this route would otherwise be the door around
+     * that one.
+     *
+     * ABSENT AND NOT `[]`. An untagged quest answers `[]`, which is a real zero
+     * a screen can say "nothing yet" about. A stranger gets no key at all, so
+     * the two facts never arrive looking the same.
+     */
+    const viewer = await authedUser(req);
+    if (!viewer) return res.json({ quest, related });
+    const needs = await linksForSubject(getPool(), "quest", id);
+    res.json({ quest, related, needs });
   });
 
   /**
@@ -520,6 +558,19 @@ export function register(app: Express, deps: Deps): void {
       });
     }
     if (!removed.ok) return res.status(404).json({ error: "Not found" });
+    /*
+     * THE TAGS GO WITH IT. `need_links` carries no foreign key, because this
+     * schema has none anywhere, so the domain that owns the subject is the
+     * reconciler: a quest that leaves takes its links with it or the coverage
+     * read counts a quest nobody can open. Through the store's own
+     * `unlinkSubject` and never a DELETE written here, so there is one place
+     * that knows the table's shape.
+     *
+     * AFTER BOTH REFUSALS ABOVE and never before. A quest whose delete refuses
+     * (an example row, or a claim in flight, refused inside questsRepo.remove)
+     * keeps every tag it had.
+     */
+    await unlinkSubject(getPool(), "quest", req.params.id);
     void recordEvent(getPool(), {
       kind: "audit", text: `quest:deleted:${req.params.id}`,
       actorUserId: (await authedUser(req))?.id ?? adminActor(req)?.id ?? null,

@@ -16,6 +16,8 @@
  */
 import { useEffect, useState } from "react";
 import { TOKEN_KEY, useCatalyst } from "@/lib/gameApi";
+import { writeStored } from "@/lib/safeStorage";
+import { SIGN_IN_STORAGE_BLOCKED, sessionWriteRefused } from "@/lib/signInStorage";
 
 export type GoogleReturnState =
   | { status: "none" }
@@ -106,7 +108,15 @@ export function useGoogleSignInReturn(): GoogleReturnState {
           return;
         }
         const data = await res.json();
-        localStorage.setItem(TOKEN_KEY, data.token);
+        // A blocked store used to throw into the catch below, which told the
+        // member the village could not be reached. The village answered and
+        // the round trip worked; the browser is the part that refused, and
+        // that is what they need to hear. Nothing redirects on a refusal, so
+        // the app never shows a signed-in page it cannot back up.
+        if (sessionWriteRefused(writeStored("local", TOKEN_KEY, data.token))) {
+          if (alive) setState({ status: "failed", message: SIGN_IN_STORAGE_BLOCKED });
+          return;
+        }
         const next = params.get("next");
         // Same rule the server applies to the destination, applied again here
         // because this value came back through a URL a member could edit.

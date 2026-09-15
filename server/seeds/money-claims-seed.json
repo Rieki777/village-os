@@ -1,0 +1,16 @@
+{
+  "_readme": "Amora's own money figures, preserved as DATA when they came out of client code (economics lane, 2026-09-03). Nothing loads this file at boot. It is applied by one authenticated admin PUT to /api/admin/content/money, the same way server/seeds/brochure-legal-seed.json is applied, because Amora already has a content row and the seed-on-empty path will never touch it. A fresh village writes its own figures in Admin, Content, Money & Value Claims and inherits none of these. Every value below is byte-for-byte what the pages published at d7526a4: no figure was changed, rounded, reformatted or re-worded when it moved.",
+  "depositRange": "from $5k to $20k+ depending on the home type you're reserving",
+  "depositSummary": "$5k-$20k+ depending on home type",
+  "ventureInvestment": {
+    "retreat-center": "$5M - $10M",
+    "health-wellness": "$500K - $1.5M",
+    "cafe-restaurant": "$200K - $500K",
+    "artisan-market": "$100K - $300K",
+    "learning-center": "$300K - $800K",
+    "fitness-recreation": "$150K - $400K",
+    "art-culture": "$200K - $500K",
+    "regenerative-agriculture": "$100K - $300K"
+  },
+  "valueConversion": "Converting {value} to cash, equity, or community currency is arranged directly with {village}, off the platform. A way to do it inside the platform is planned and is not built yet."
+}

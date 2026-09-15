@@ -1,6 +1,7 @@
 import Layout from "@/components/Layout";
 import GameDashboard from "@/components/GameDashboard";
 import ProfileJourney from "@/components/ProfileJourney";
+import NeedCard from "@/components/NeedCard";
 import NotifyPrefsPanel from "@/components/NotifyPrefsPanel";
 import YourAgentPanel from "@/components/YourAgentPanel";
 import ProfileSheet from "@/components/ProfileSheet";
@@ -433,6 +434,12 @@ export default function Profile() {
                   }}
                 />
               ) : null}
+
+              {/* R20: what this member needs, and how they are doing on it.
+                  Private to them; the village only ever reads counts. */}
+              <div id="my-needs">
+                <NeedCard />
+              </div>
 
               {/*
                 ABOUT YOU IS A DAY-ONE ACT, so it reads in the day-one band.

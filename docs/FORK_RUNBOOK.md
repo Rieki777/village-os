@@ -270,6 +270,20 @@ two from the admin panel and almost never touches the first.
   plus a read through the generic `/api/content/:section` route. Nothing about
   the remaining pages needs new infrastructure, only the work.
   `docs/PROVISIONING.md` step 7 now tells founders this before they launch.
+- **Money & Value Claims is the sixth extraction** (economics lane,
+  2026-09-03), and a fork inherits none of it. The `money` content section
+  holds the home deposit range, the venture investment ranges on
+  `/opportunities`, and the sentence about what the value token converts to.
+  All four claims used to be compiled client constants, so a fresh deployment
+  published another village's dollars on day one. Every field is blank by
+  default and a blank field PUBLISHES NOTHING: no figure, no zero and no
+  placeholder. Write yours in Admin, Content, Money & Value Claims; the shape
+  and the readers are in `client/src/lib/moneyClaims.ts`. The first village's
+  own figures are preserved as data in `server/seeds/money-claims-seed.json`,
+  which NOTHING loads at boot: like `server/seeds/brochure-legal-seed.json` it
+  is applied by one authenticated admin PUT to `/api/admin/content/money`,
+  because an instance that already has a `content` row never runs the
+  seed-on-empty path.
 - **Images are WebP, and CI enforces it.**
   `node scripts/check-image-budget.mjs` walks `client/public` and fails on any
   raster that is not WebP or AVIF, on any single file over 400 KB, and on a

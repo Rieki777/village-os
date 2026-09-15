@@ -167,6 +167,12 @@ export const POWERS: readonly PowerEntry[] = [
     routes: ["/api/review/quests/:id/accept", "/api/review/quests/:id/reject"],
   },
   {
+    capability: "redemption.confirm",
+    title: "Redemptions",
+    surface: "Agreeing that a member was paid off the platform, and destroying what they redeemed",
+    routes: ["/api/redemptions/:id/confirm", "/api/redemptions/:id/refuse"],
+  },
+  {
     capability: "quest.consent",
     title: "Releasing value on finished work",
     surface: "Consenting to somebody else's finished quest",

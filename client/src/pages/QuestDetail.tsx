@@ -21,11 +21,13 @@ import {
   Heart, Lightbulb, ListChecks, Send, Sparkles, Sprout, Users,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { fetchGameMe, QuestClaim, useGameConfig } from "@/lib/gameApi";
+import { fetchGameMe, gameFetch, QuestClaim, useGameConfig } from "@/lib/gameApi";
 import { useTokenName } from "@/hooks/useTokenNames";
 import QuestActions from "@/components/QuestActions";
 import QuestCrews from "@/components/QuestCrews";
 import QuestCard, { difficultyColors, iconFor, QuestPoster } from "@/components/QuestCard";
+import NeedChips, { type NeedTag } from "@/components/NeedChips";
+import NeedTagPicker from "@/components/admin/NeedTagPicker";
 import {
   currentClaims, gateLabel, relativeWhen, statusIs,
   type BoardQuest, type FieldSigns,
@@ -52,6 +54,29 @@ export default function QuestDetail() {
   const [roleName, setRoleName] = useState<string>("");
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
+  // What this quest is for (R1, R18). It arrives on the same detail read, so
+  // the chips are painted with the page and never after a second round trip.
+  const [needTags, setNeedTags] = useState<NeedTag[]>([]);
+  /*
+   * WHAT THE BOARD MAY PROMISE, AND WHO DECIDES IT.
+   *
+   * `quest.consent_cap_mode` is an open-ring dial with three settings, and
+   * only ONE of them ("posted") makes the advertised amount the payout. Its
+   * own registry entry uses this page's sentence to describe that one setting:
+   * "Capping it at the posted amount keeps the quest board honest: what a
+   * quest advertises is what it pays." This page printed that guarantee
+   * unconditionally, so a village on "capped" or on "unlimited" published a
+   * promise it had voted away.
+   *
+   * `GET /api/game/rules` is the anonymous whitelist that exists so the UI can
+   * render the game's actual rules, and it already carried the mode. It now
+   * carries the multiplier beside it, because the capped sentence is about a
+   * number and a number stated here would be a second copy of the dial.
+   */
+  const [rules, setRules] = useState<{
+    quests?: { consentCapMode?: string; consentCapMultiplier?: number };
+  } | null>(null);
+  const iAmAdmin = !!user && (user.role === "admin" || user.role === "founder");
 
   useEffect(() => {
     if (!questId) return;
@@ -60,7 +85,11 @@ export default function QuestDetail() {
     // One quest and the three beside it, in one small response. Finding the
     // quest inside the whole board meant every deep link carried every other
     // quest's story, steps and tips across the wire.
-    fetch(`/api/quests/${encodeURIComponent(questId)}`)
+    // `gameFetch` and not a bare `fetch`: the need tags on this read are
+    // member-tier, and `authedUser` consults the Authorization header alone.
+    // A signed-in member asking without it is a stranger, which is how three
+    // other pages spent months reading `/api/org` with no holders in it.
+    gameFetch(`/api/quests/${encodeURIComponent(questId)}`)
       .then((r) => {
         if (r.status === 404) return null;
         if (!r.ok) throw new Error(`quest ${r.status}`);
@@ -70,6 +99,7 @@ export default function QuestDetail() {
         if (!live) return;
         setQuest(d?.quest ?? null);
         setRelated(Array.isArray(d?.related) ? d.related : []);
+        setNeedTags(Array.isArray(d?.needs) ? d.needs : []);
       })
       .catch(() => { if (live) setFailed(true); })
       .finally(() => { if (live) setLoaded(true); });
@@ -79,6 +109,15 @@ export default function QuestDetail() {
       .catch(() => { /* the page renders without counts */ });
     return () => { live = false; };
   }, [questId]);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/game/rules")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && d) setRules(d); })
+      .catch(() => { /* the paragraph says less, and never a guarantee */ });
+    return () => { alive = false; };
+  }, []);
 
   const refreshClaims = () => {
     fetchGameMe().then((me) => {
@@ -113,6 +152,22 @@ export default function QuestDetail() {
     () => (quest && signs ? signs.recent.filter((r) => r.questId === quest.id) : []),
     [quest, signs],
   );
+  /*
+   * ONE SENTENCE PER SETTING, and NOTHING while the rules have not arrived.
+   * An absent payload and a village on "posted" are different facts: the
+   * empty string prints the range sentence alone, which is true under all
+   * three settings, and only a mode the server actually named earns a
+   * guarantee after it.
+   */
+  const capRules = rules?.quests;
+  const capSentence =
+    capRules?.consentCapMode === "posted"
+      ? "What a quest advertises is what it pays."
+      : capRules?.consentCapMode === "capped" && typeof capRules.consentCapMultiplier === "number"
+        ? `The circle may add a bonus above the posted amount, up to ${capRules.consentCapMultiplier} times what the quest advertises.`
+        : capRules?.consentCapMode === "unlimited"
+          ? "The circle may release any amount when it consents."
+          : "";
   const gate = quest ? gateLabel(quest, stages) : null;
   const gateText =
     quest?.requiresRole && !quest.roleRequired && roleName
@@ -247,11 +302,30 @@ export default function QuestDetail() {
             )}
           </div>
 
+          {/* What this quest is for. A description of the work and never a
+              condition on it: the claim gate reads the stage floor and the
+              role gate above, and no tag reaches either. */}
+          <NeedChips tags={needTags} className="mt-3" />
+
           {quest.isExample && (
             <p className="mt-4 text-sm text-muted-foreground bg-amber/10 border border-amber/30 rounded-xl px-4 py-3">
               A standing example. It shows what a quest looks like here until the
               village posts its own, and it cannot be claimed.
             </p>
+          )}
+
+          {/* The founder's own control, on the page the quest already has.
+              client/src/pages/Admin.tsx is at its line ratchet, so the quest
+              editor there cannot grow a picker; this is the door. */}
+          {iAmAdmin && (
+            <div className="mt-5">
+              <NeedTagPicker
+                subjectType="quest"
+                subjectRef={quest.id}
+                tags={needTags}
+                onChanged={setNeedTags}
+              />
+            </div>
           )}
         </div>
       </section>
@@ -365,7 +439,7 @@ export default function QuestDetail() {
                 {quest.gratitude && (
                   <p className="text-xs text-muted-foreground mt-3">
                     The circle sets the exact amount inside the {quest.gratitude} range
-                    when it consents to your work. What a quest advertises is what it pays.
+                    when it consents to your work.{capSentence ? ` ${capSentence}` : ""}
                   </p>
                 )}
               </div>

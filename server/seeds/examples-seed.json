@@ -537,7 +537,7 @@
   },
   "stays": {
     "_trigger": "POST /api/admin/stays/accommodations creates a real room",
-    "_note": "Rooms and posted prices are pure catalog: no ledger, no Stripe. Booking an example is refused, so no stays row and no open state is ever created.",
+    "_note": "Rooms and posted prices are pure catalog: no ledger, no Stripe. Booking an example is refused, so no stays row and no open state is ever created. A token price is `amount`, in WHOLE credits as a founder types it, and the seeder converts it once at insert with the token's live decimals (priceToStored). A usd price is `amountMinor`, in cents.",
     "accommodations": [
       {
         "id": "ex-stay-cabin",
@@ -551,12 +551,12 @@
           {
             "tokenType": "stay-credit",
             "audience": "guest",
-            "amountMinor": 3
+            "amount": 3
           },
           {
             "tokenType": "stay-credit",
             "audience": "member",
-            "amountMinor": 2
+            "amount": 2
           },
           {
             "tokenType": "usd",
@@ -582,12 +582,12 @@
           {
             "tokenType": "stay-credit",
             "audience": "guest",
-            "amountMinor": 1
+            "amount": 1
           },
           {
             "tokenType": "stay-credit",
             "audience": "member",
-            "amountMinor": 1
+            "amount": 1
           },
           {
             "tokenType": "usd",
@@ -613,12 +613,12 @@
           {
             "tokenType": "stay-credit",
             "audience": "guest",
-            "amountMinor": 5
+            "amount": 5
           },
           {
             "tokenType": "stay-credit",
             "audience": "member",
-            "amountMinor": 3
+            "amount": 3
           },
           {
             "tokenType": "usd",

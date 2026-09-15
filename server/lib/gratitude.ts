@@ -15,8 +15,8 @@ import { boolVar, numberVar } from "./variables";
 import { parseCycleId } from "./gratitude-cycles";
 import { isExampleUser } from "./examples";
 import { issuanceRefusal } from "./gameStart";
-import { memberAccount, postTransferOn, RECOGNITION_FAUCET } from "./ledger";
-import { allowanceFor, writeGratitudeRow, shareCapFor, fullSendsIn, recognitionName, type Allowance } from "./economy";
+import { PLATFORM_TOKEN, memberAccount, postTransferOn, RECOGNITION_FAUCET } from "./ledger";
+import { allowanceFor, writeGratitudeRow, shareCapFor, fullSendsIn, recognitionName, toLedgerUnits, type Allowance } from "./economy";
 import { userIdForHandle } from "./profile";
 import type { GratitudeLogRepo, GratitudeEntry } from "../repos/gratitude";
 import type { UsersRepo } from "../repos/users";
@@ -36,6 +36,13 @@ export interface GratitudeDeps {
   stageMultiplierFor(user: any): Promise<number>;
 }
 
+/**
+ * HUMAN units, every number. `gratitude.base_budget` is declared in Gratitude
+ * and `spent` is a SUM over `gratitude_log.amount`, the column that holds what
+ * a member typed. This is the second reader of the same figures `Allowance`
+ * carries in server/lib/economy.ts, and the two must never disagree about the
+ * unit: they are summed from one table and weighed against one dial.
+ */
 export interface GratitudeBudget {
   total: number;
   spent: number;
@@ -198,6 +205,12 @@ async function resolveTyped(
 export async function sendGratitude(deps: GratitudeDeps, input: SendInput): Promise<SendOutcome> {
   const user = input.fromUser;
   const kind = input.kind ?? "gratitude";
+  // HUMAN, and floored rather than refused, which is this door's own answer to
+  // the question `checkGive` answers with a sentence. Flooring FIRST keeps the
+  // log and the ledger describing one number, so a fraction here costs a
+  // member part of their gift and never splits the two records apart. The two
+  // gratitude doors differ on this, and that is worth knowing rather than
+  // changing under a units sweep.
   const amt = Math.floor(Number(input.amount) || 0);
   const typed = String(input.to ?? "").trim();
   if ((!typed && !input.toEmail && !input.toId) || amt <= 0) {
@@ -391,10 +404,41 @@ export async function sendGratitude(deps: GratitudeDeps, input: SendInput): Prom
       const res = await postTransferOn(conn, {
         from: RECOGNITION_FAUCET,
         to: memberAccount(recipient.id),
-        amount: amt,
+        /*
+         * NAMED, NOT INHERITED (sweep lane F). Left off, this fell through to
+         * `validateLeg`'s `input.tokenType ?? PLATFORM_TOKEN` in
+         * server/lib/ledger.ts, while the line below reads the SAME token's
+         * decimals through the registry fallback inside `toLedgerUnits` in
+         * server/lib/economy.ts. Two defaults, in two files, answering one
+         * question, and a decimals change is exactly the edit that can move
+         * one of them and leave the other: a conversion done for one token and
+         * a posting made in another is a wrong amount with nothing to compare
+         * it against. Both now read the same constant on two adjacent lines.
+         */
+        tokenType: PLATFORM_TOKEN,
+        /*
+         * `amt` is HUMAN and stays human everywhere else in this function: it
+         * is weighed against the budget, written to `gratitude_log.amount`,
+         * printed in the refusals, and carried out in `entry.amount`. The
+         * poster takes MINOR units, so the conversion happens here and only
+         * here.
+         */
+        amount: toLedgerUnits(PLATFORM_TOKEN, amt),
         source: kind === "heart" ? "heart_received" : "gratitude_received",
         sourceRef: noteId,
         description: `${recognitionName()} from ${String(user.name ?? "").split(" ")[0]}`,
+        /*
+         * A HAND-BUILT KEY, AND NOT A DEFECT ANY MORE. A reversal finds its
+         * gift through the posting it undoes (`REVERSED_GRATITUDE_FROM`,
+         * server/repos/gratitude.ts), never by matching this string, so either
+         * door's key shape reaches the refund and the settlement alike.
+         *
+         * The economics branch once rewrote this to `keys.gratitudeGiven` and
+         * repaired old rows with a migration. That design was retired when it
+         * met main's: the migration renamed the postings and not the mirrors
+         * whose `source_ref` points at them, which would have cut every
+         * historical reversal from this door out of the join.
+         */
         idempotencyKey: `gratitude_received:${noteId}`,
       });
       if (!res.ok) return { ok: false, error: res.error ?? "ledger refused the credit", status: 500 };
@@ -436,6 +480,16 @@ export async function sendGratitude(deps: GratitudeDeps, input: SendInput): Prom
 
   // The balance column is a recomputed cache of the ledger, and the credit
   // that produced it committed with the note above.
+  //
+  // MINOR UNITS, and three readers take it raw. Two are display
+  // (client/src/pages/Profile.tsx, server/routes/players.ts) and the third
+  // is a GATE: server/index.ts weighs `Number(user.recognitionBalance)`
+  // against `governance.hypha_threshold`, a dial declared in Gratitude. At
+  // decimals 0 the two units coincide and the gate is right by accident;
+  // above zero it is not. The repair belongs with those readers and not
+  // here, because a cache of the ledger holding anything but the ledger's
+  // own number would be a second unit for one fact. Filed for the index and
+  // read-side lanes.
   const balance = result.posted?.balance;
   if (balance !== undefined) {
     await deps.members.update(recipient.id, (u: any) => {

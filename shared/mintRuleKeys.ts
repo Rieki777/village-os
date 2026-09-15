@@ -59,6 +59,104 @@ export type MintRuleField = (typeof MINT_RULE_FIELDS)[number];
  */
 export const AMOUNT_FROM_SOURCE = "from-source";
 
+/**
+ * The decimal places `mint_rules.amount` and `mint_rules.ceiling` keep.
+ *
+ * Both columns are `decimal(18,4)` (drizzle/0071_economy_core.sql), so a fifth
+ * place is not stored, it is ROUNDED AWAY by the driver on the way in. The
+ * column is the authority on this number and this constant is the one place
+ * the rest of the build reads it from.
+ */
+export const MINT_RULE_PLACES = 4;
+
+/**
+ * The largest number a minting rule can carry, and it is a property of the
+ * LANGUAGE before it is a property of the column.
+ *
+ * `decimal(18,4)` stops at 99999999999999.9999. A JavaScript number stops
+ * sooner: checking a value against four decimal places means asking whether
+ * `n * 10000` is a whole number, and doubles stop being able to answer that at
+ * `Number.MAX_SAFE_INTEGER`. Above 900719925474.0991 the value cannot be
+ * checked against the column at all, so the tighter of the two bounds is the
+ * one that ships. Everything it refuses, the column either cannot hold or
+ * cannot be shown to hold.
+ *
+ * Before this existed, a value at or above 1e14 passed every check here, was
+ * queued, and threw an out-of-range error from the driver INSIDE the ballot
+ * executor, after the village had already voted. A refusal at the raise costs
+ * one retype; a throw at execution costs the whole proposal.
+ */
+export const MINT_RULE_MAX = Number.MAX_SAFE_INTEGER / 10 ** MINT_RULE_PLACES;
+
+/**
+ * What the column would actually store for this number.
+ *
+ * `toFixed` and never `Math.round(n * 10000) / 10000`: the spec pins `toFixed`
+ * to the decimal string closest to the value, picking the larger on a tie,
+ * which is the same half-up rounding MySQL applies to a `decimal` column. It
+ * is also exact for every magnitude this function is asked about, where the
+ * multiply-and-divide form loses the low bits as soon as `n * 10000` passes
+ * 2^53 and would then call a whole number unstorable.
+ */
+function storedValue(n: number): number {
+  return Number(n.toFixed(MINT_RULE_PLACES));
+}
+
+/**
+ * Is this NUMBER acceptable for this field, said in the member's words.
+ *
+ * The numeric half of `mintRuleValueProblem`, split out so the two writers ask
+ * one question. `mintRuleValueProblem` parses a change set's string and calls
+ * this; `queueRuleChange` in server/lib/economy.ts is handed numbers by the
+ * admin route and calls this directly. Two spellings of this bound is how the
+ * ballot path and the admin path would come to disagree about what a village
+ * may vote for.
+ *
+ * ── WHY THE ROUNDING CASES REFUSE, AND WHY NEITHER IS A WARNING ────────────
+ *
+ * Rye's standing ruling is that warnings never block and ride the proposal for
+ * stewards to read. That ruling is about a decision the village CAN enact and
+ * might regret. These two are a decision the village cannot enact at all:
+ *
+ *   0.00001 stores as 0.0000, so an amount the village voted above zero
+ *   becomes an off switch and a ceiling becomes a refusal. Nobody voted for
+ *   either. A warning riding a proposal that pays nobody is a note attached to
+ *   a broken rule.
+ *
+ *   1.00001 stores as 1.0000, so the row holds a number nobody typed. The
+ *   sentence names the number the column would hold, which turns a silent
+ *   reshaping into one retype.
+ *
+ * There is also nowhere for a warning to ride today. `validateChangeSet`
+ * (server/lib/mechanics.ts) carries `problems` and nothing else, and the
+ * proposal document renders that list; a warning channel is a change to the
+ * governance side's files and its own decision. Said out loud here so the day
+ * that channel lands, the 1.00001 case is the one to move onto it.
+ */
+export function mintRuleNumberProblem(field: Exclude<MintRuleField, "enabled">, n: number): string | null {
+  if (!Number.isFinite(n)) return "This one takes a number.";
+  if (field === "amount" && !(n > 0)) {
+    return `An amount is greater than zero, or "${AMOUNT_FROM_SOURCE}" to read it from whatever posted the work.`;
+  }
+  if (field === "ceiling" && n < 0) return "A ceiling is zero or more, and zero means zero.";
+  if (Math.abs(n) > MINT_RULE_MAX) {
+    return `A minting rule holds numbers up to ${MINT_RULE_MAX}, and ${n} is above that. Ask for less.`;
+  }
+  const stored = storedValue(n);
+  if (stored === n) return null;
+  const smallest = 1 / 10 ** MINT_RULE_PLACES;
+  if (n > 0 && stored === 0) {
+    return (
+      `A minting rule keeps ${MINT_RULE_PLACES} decimal places, so ${n} would be stored as nothing at all ` +
+      `and this rule would pay nobody. Ask for ${smallest} or more.`
+    );
+  }
+  return (
+    `A minting rule keeps ${MINT_RULE_PLACES} decimal places, so ${n} would be stored as ${stored}. ` +
+    `Ask for ${stored}, or for a number with no more than ${MINT_RULE_PLACES} decimal places.`
+  );
+}
+
 export interface ParsedMintRuleKey {
   ruleId: string;
   field: MintRuleField;
@@ -110,12 +208,11 @@ export function mintRuleValueProblem(field: MintRuleField, raw: string): string 
   if (field === "amount" && value === AMOUNT_FROM_SOURCE) return null;
   const n = Number(value);
   if (value === "" || !Number.isFinite(n)) return "This one takes a number.";
-  if (field === "amount") {
-    return n > 0
-      ? null
-      : `An amount is greater than zero, or "${AMOUNT_FROM_SOURCE}" to read it from whatever posted the work.`;
-  }
-  return n >= 0 ? null : "A ceiling is zero or more, and zero means zero.";
+  // Everything the number itself decides is decided ONCE, in the function the
+  // admin route's writer calls too. Sign, range and what the column would keep
+  // of it all live there. See `mintRuleNumberProblem` for why the two rounding
+  // cases refuse instead of riding the proposal as warnings.
+  return mintRuleNumberProblem(field, n);
 }
 
 /**

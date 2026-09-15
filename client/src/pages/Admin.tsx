@@ -14,6 +14,7 @@ import {
   type MessageReport, type ReportStatus,
 } from "@/lib/messageReports";
 import { resolutionLine } from "@/lib/reportFeedback";
+import { storedText, writeStored } from "@/lib/safeStorage";
 import { ALL_CAPABILITIES, isDeniable } from "@shared/capabilities";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import { SeatSomebody } from "@/components/power/SeatSomebody";
@@ -45,6 +46,7 @@ import ResourcesAdminPanel from "@/components/power/ResourcesAdminPanel";
 import { CrowdpoolAdminTab, ForumCategoriesEditor, ToolsCategoriesEditor } from "@/components/admin/ModuleConfigPanels";
 import { CONTENT_SECTIONS, emptyContentFor } from "@/components/admin/contentSections";
 import { displayCurrencyProblem } from "@shared/money";
+import { formatTokenAmount } from "@/lib/tokenAmount";
 import InvoluntaryExitDialog from "@/components/admin/InvoluntaryExitDialog";
 import ContentEditorTab from "@/components/admin/ContentEditorTab";
 import WorkWithUsTab from "@/components/admin/WorkWithUsTab";
@@ -57,6 +59,7 @@ import SetupSection from "@/components/admin/SetupSection";
 import HandoverTab from "@/components/admin/HandoverTab";
 import VariablesTab from "@/components/admin/VariablesTab";
 import VotingWeightsPanel from "@/components/admin/VotingWeightsPanel";
+import NeedsPanel, { NeedsSetupStep, useNeedsSetupObservation } from "@/components/admin/NeedsPanel";
 import RelationsEditor from "@/components/admin/RelationsEditor";
 import HousingAdminPanel from "@/components/HousingAdminPanel";
 import WalkEditorPanel from "@/components/WalkEditorPanel";
@@ -537,11 +540,11 @@ function AdminNav({
     () => !open
       && typeof window !== "undefined"
       && window.matchMedia("(hover: none)").matches
-      && !localStorage.getItem("admin.navHintSeen"),
+      && !storedText("local", "admin.navHintSeen"),
   );
   const dismissHint = useCallback(() => {
     setHint(false);
-    localStorage.setItem("admin.navHintSeen", "1");
+    writeStored("local", "admin.navHintSeen", "1");
   }, []);
   useEffect(() => {
     if (!hint) return;
@@ -5898,8 +5901,8 @@ function StaysAdminTab({ password, onOpenTab }: { password: string; onOpenTab: (
     const cm = val("cm", acc.prices?.["stay-credit"]?.member);
     const ug = val("ug", acc.prices?.usd?.guest ? acc.prices.usd.guest / 100 : undefined);
     const um = val("um", acc.prices?.usd?.member ? acc.prices.usd.member / 100 : undefined);
-    if (cg) prices.push({ tokenType: "stay-credit", audience: "guest", amountMinor: Math.floor(cg) });
-    if (cm) prices.push({ tokenType: "stay-credit", audience: "member", amountMinor: Math.floor(cm) });
+    if (cg) prices.push({ tokenType: "stay-credit", audience: "guest", amountMinor: cg });
+    if (cm) prices.push({ tokenType: "stay-credit", audience: "member", amountMinor: cm });
     if (ug) prices.push({ tokenType: "usd", audience: "guest", amountMinor: Math.round(ug * 100) });
     if (um) prices.push({ tokenType: "usd", audience: "member", amountMinor: Math.round(um * 100) });
     /*
@@ -5919,8 +5922,8 @@ function StaysAdminTab({ password, onOpenTab }: { password: string; onOpenTab: (
     if (vSlug) {
       const vg = val("vg", acc.prices?.[vSlug]?.guest);
       const vm = val("vm", acc.prices?.[vSlug]?.member);
-      if (vg) prices.push({ tokenType: vSlug, audience: "guest", amountMinor: Math.floor(vg) });
-      if (vm) prices.push({ tokenType: vSlug, audience: "member", amountMinor: Math.floor(vm) });
+      if (vg) prices.push({ tokenType: vSlug, audience: "guest", amountMinor: vg });
+      if (vm) prices.push({ tokenType: vSlug, audience: "member", amountMinor: vm });
     }
     const d = await post(`/admin/stays/accommodations/${acc.id}/prices`, { prices }, "PUT");
     if (d) { toast.success("Prices posted"); setPriceDraft((p) => ({ ...p, [acc.id]: {} })); load(); }
@@ -6027,7 +6030,7 @@ function StaysAdminTab({ password, onOpenTab }: { password: string; onOpenTab: (
                   <label key={k} className="text-xs text-gray-500">
                     {label}
                     <input
-                      type="number" min={0} step={k.startsWith("u") ? "0.01" : "1"}
+                      type="number" min={0} step={k.startsWith("u") ? "0.01" : "any"}
                       value={priceDraft[a.id]?.[k] ?? cur ?? ""}
                       disabled={a.isExample}
                       onChange={(e) => setPriceDraft((p) => ({ ...p, [a.id]: { ...(p[a.id] ?? {}), [k]: e.target.value } }))}
@@ -6110,11 +6113,10 @@ function StaysAdminTab({ password, onOpenTab }: { password: string; onOpenTab: (
                   {/* 0092: the rate means nothing without the token it is in,
                       now that a night can be paid in either. */}
                   <td className="py-2 pr-3">
-                    {s.rateSnapshotCredits ?? "-"}
-                    {s.rateSnapshotCredits ? ` ${s.rateTokenName ?? s.rateSnapshotToken}` : ""}
+                    {s.rateSnapshotCredits == null ? "-" : `${formatTokenAmount(s.rateSnapshotCredits, s.rateSnapshotDecimals)}${s.rateSnapshotCredits ? ` ${s.rateTokenName ?? s.rateSnapshotToken}` : ""}`}
                     {s.audienceSnapshot ? ` (${s.audienceSnapshot})` : ""}
                   </td>
-                  <td className={`py-2 pr-3 ${s.balance < 0 ? "text-red-600 font-semibold" : ""}`}>{s.balance}</td>
+                  <td className={`py-2 pr-3 ${s.balance < 0 ? "text-red-600 font-semibold" : ""}`}>{formatTokenAmount(s.balance, s.rateSnapshotDecimals)}</td>
                   <td className="py-2 pr-3">{s.nightsRemaining ?? "-"}</td>
                   <td className="py-2 pr-3">
                     <button onClick={async () => { const d = await post(`/admin/stays/${s.id}`, { autopay: !s.autopay }, "PUT"); if (d) load(); }}
@@ -6143,7 +6145,7 @@ function StaysAdminTab({ password, onOpenTab }: { password: string; onOpenTab: (
                             </option>
                           ))}
                       </select>
-                      <button onClick={async () => { const d = await post(`/admin/stays/${s.id}/activate`, { tokenType: activateToken[s.id] ?? "stay-credit" }); if (d) { toast.success(`Active at ${d.rateSnapshotCredits}/night (${d.audienceSnapshot})`); load(); } }}
+                      <button onClick={async () => { const d = await post(`/admin/stays/${s.id}/activate`, { tokenType: activateToken[s.id] ?? "stay-credit" }); if (d) { toast.success(`Active at ${formatTokenAmount(d.rateSnapshotCredits, d.rateSnapshotDecimals)}/night (${d.audienceSnapshot})`); load(); } }}
                         className="text-xs text-teal-deep font-medium hover:underline">
                         {s.status === "active" ? "Re-rate" : "Activate"}
                       </button>
@@ -9003,6 +9005,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
   const [brand, setBrand] = useState<any>(null);
   const [defaults, setDefaults] = useState<any>(null);
   const [savingSection, setSavingSection] = useState<string | null>(null);
+  const needsSetup = useNeedsSetupObservation(password);
   /**
    * Which currency codes the daily rate table actually carries.
    *
@@ -9075,7 +9078,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
 
   /* Identity and Pictures are read from `brand`; the other four still come from
      the flags a founder ticks. See client/src/components/admin/setupProgress.ts. */
-  const rows = measureSetup(brand);
+  const rows = measureSetup(brand, needsSetup.observations);
   const doneCount = rows.filter((r) => r.done).length;
   const setupComplete = doneCount === rows.length;
 
@@ -9308,7 +9311,9 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
         <p className="text-xs text-gray-400 mt-2">Instantly updates the game layer (profile, gratitude, season banner, pulse). Page marketing copy is edited under Content below.</p>
       </SetupSection>
 
-      <SetupSection {...step} id="images" n={2} title="Pictures" subtitle="Hero images across the site. Upload your own (we host and compress them) or point at a URL you already host.">
+      <NeedsSetupStep {...step} onOpenTab={onOpenTab} summary={needsSetup.summary} />
+
+      <SetupSection {...step} id="images" n={3} title="Pictures" subtitle="Hero images across the site. Upload your own (we host and compress them) or point at a URL you already host.">
         <div className="grid md:grid-cols-3 gap-4 mb-4">
           {imageField("hero", "Homepage hero")}
           {imageField("investorHero", "Investor hero")}
@@ -9335,7 +9340,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
         <IdentityPackPanel password={password} />
       </SetupSection>
 
-      <SetupSection {...step} id="numbers" n={3} title="Numbers" subtitle="The editable figures on your site.">
+      <SetupSection {...step} id="numbers" n={4} title="Numbers" subtitle="The editable figures on your site.">
         <p className="text-sm text-gray-600 mb-3">
           Village dues live in the Settings tab, and so do the land and money figures the
           investor page and the master plan show. Every one of them ships blank. A blank figure
@@ -9346,7 +9351,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
         </button>
       </SetupSection>
 
-      <SetupSection {...step} id="content" n={4} title="Content" subtitle="Rewrite the words, questions, milestones, and quests for your project.">
+      <SetupSection {...step} id="content" n={5} title="Content" subtitle="Rewrite the words, questions, milestones, and quests for your project.">
         <div className="space-y-2">
           {contentEditors.map((c) => (
             <div key={c.tab} className="flex items-center justify-between gap-3 border border-gray-100 rounded-lg px-4 py-2.5">
@@ -9365,7 +9370,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
         <ArchetypesPanel password={password} />
       </SetupSection>
 
-      <SetupSection {...step} id="map" n={5} title="Map & styling" subtitle="How the Living Map draws your land. Blank keeps the map's own look.">
+      <SetupSection {...step} id="map" n={6} title="Map & styling" subtitle="How the Living Map draws your land. Blank keeps the map's own look.">
         <MapSkinPanel password={password} />
         <WalkEditorPanel password={password} />
         {/* The vocabulary route has been live since the map shipped and its
@@ -9373,7 +9378,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
         <MapVocabularyPanel password={password} />
       </SetupSection>
 
-      <SetupSection {...step} id="technical" n={6} title="Go live" subtitle="One-time technical setup. Hand these to your developer or Claude Code.">
+      <SetupSection {...step} id="technical" n={7} title="Go live" subtitle="One-time technical setup. Hand these to your developer or Claude Code.">
         <ol className="space-y-4 text-sm text-gray-700">
           <li>
             <p className="font-medium text-gray-900">1. Deploy on Railway</p>
@@ -9899,18 +9904,18 @@ export default function Admin() {
   // passes everything through, so a slow link never flashes an empty rail.
   const [moduleLifecycles, setModuleLifecycles] = useState<Record<string, ModuleLifecycle> | null>(null);
 
+  // The needs scope, so this rail and the wizard agree about "finished".
+  const needsSetup = useNeedsSetupObservation(password);
   // The nav rail's width, remembered. Phones and small tablets start
   // collapsed — 224px of menu on a 390px screen left the settings themselves
   // in a column too narrow to read — and anything laptop-sized starts open,
   // where there is room for both. A stored choice beats both defaults.
   const [navOpen, setNavOpen] = useState<boolean>(() => {
-    const saved = localStorage.getItem("admin.navOpen");
+    const saved = storedText("local", "admin.navOpen");
     if (saved !== null) return saved === "1";
     return window.innerWidth >= 1024;
   });
-  useEffect(() => {
-    localStorage.setItem("admin.navOpen", navOpen ? "1" : "0");
-  }, [navOpen]);
+  useEffect(() => { writeStored("local", "admin.navOpen", navOpen ? "1" : "0"); }, [navOpen]);
 
   useEffect(() => {
     if (!password) return;
@@ -9919,9 +9924,9 @@ export default function Admin() {
       // The wizard and this nav have to agree about what "finished" means, so
       // both ask setupProgress.ts. Reading `setup` here on its own was how the
       // rail could call a village done while its pictures were empty.
-      .then((d) => setSetupComplete(setupIsComplete(d?.brand)))
+      .then((d) => setSetupComplete(setupIsComplete(d?.brand, needsSetup.observations)))
       .catch(() => { /* leave as incomplete; the wizard just stays pinned */ });
-  }, [password, activeTab]);
+  }, [password, activeTab, needsSetup.observations]);
 
   if (!password) {
     return <AdminGate onAuth={setPassword} />;
@@ -9971,19 +9976,12 @@ export default function Admin() {
           {/* The Go-live card (L1): mounts once, above whichever panel is
               open, keyed by the open tab's module. It also feeds the nav
               filter, so the rail and the card ride one fetch. */}
-          <AdminGoLive
-            token={password}
-            moduleId={TAB_MODULE[activeTab] ?? null}
-            onLifecycles={(m) => setModuleLifecycles(m as Record<string, ModuleLifecycle>)}
-          />
+          <AdminGoLive token={password} moduleId={TAB_MODULE[activeTab] ?? null}
+            onLifecycles={(m) => setModuleLifecycles(m as Record<string, ModuleLifecycle>)} />
           {activeTab === "setup" && <SetupWizard password={password} onOpenTab={setActiveTab} />}
           {activeTab === "events-admin" && <EventsAdminPanel password={password} />}
           {activeTab === "submissions" && <SubmissionsTab password={password} />}
-          {CONTENT_SECTIONS.map(({ key, label }) =>
-            activeTab === key ? (
-              <ContentEditorTab key={key} password={password} sectionKey={key} sectionLabel={label} />
-            ) : null
-          )}
+          {CONTENT_SECTIONS.map(({ key, label }) => (activeTab === key ? <ContentEditorTab key={key} password={password} sectionKey={key} sectionLabel={label} /> : null))}
           {activeTab === "email-settings" && <EmailSettingsTab password={password} openIntegrations={() => setActiveTab("integrations")} />}
           {activeTab === "integrations" && <IntegrationsTab password={password} />}
           {activeTab === "feedback" && <FeedbackAdminTab password={password} />}
@@ -9998,6 +9996,7 @@ export default function Admin() {
           {activeTab === "players" && <PlayersTab password={password} />}
           {activeTab === "game-roles" && <GameRolesTab password={password} />}
           {activeTab === "handover" && <HandoverTab password={password} />}
+          {activeTab === "needs-admin" && <NeedsPanel password={password} onOpenTab={setActiveTab} />}
           {activeTab === "modules" && <ModulesTab password={password} />}
           {activeTab === "housing" && <HousingAdminPanel password={password} />}
           {activeTab === "org-chart" && <OrgChartTab password={password} />}
