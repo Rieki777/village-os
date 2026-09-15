@@ -924,8 +924,18 @@ function table(headers, rows) {
   return lines.join("\n");
 }
 
-/** Markdown table cells cannot hold a bare pipe. */
-const cell = (v) => String(v).replace(/\|/g, "\\|");
+/**
+ * Markdown table cells cannot hold a bare pipe, and escaping the pipe alone is
+ * not enough. A value that already carries a backslash before a pipe would come
+ * out as an escaped backslash followed by a LIVE pipe, so the cell being
+ * protected opens a new column instead. Backslashes are escaped first for that
+ * reason, and whitespace collapses because a row is one line. This is the same
+ * rule the variables, modules and capabilities generators already follow; this
+ * copy had only the pipe half, which CodeQL raised on PR #243 as
+ * js/incomplete-sanitization.
+ */
+export const cell = (v) =>
+  String(v).replace(/\s+/g, " ").replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
 
 /**
  * Every system account the migrations seed, with the faucet flag they seed it
