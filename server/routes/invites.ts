@@ -88,6 +88,8 @@ export function register(app: Express, deps: Deps): void {
     res.json({
       mayInvite,
       closed: mayInvite ? null : NOT_YET,
+      // How long a new link lasts, so a sentence about it reads the rule and never a copy of it.
+      days: INVITE_DAYS,
       cap: OPEN_INVITES_CAP,
       open: await openInviteCount(pool, String(user.id)),
       invites: rows.map((r) => {

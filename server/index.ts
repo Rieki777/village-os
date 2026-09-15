@@ -1118,6 +1118,7 @@ const FORM_TYPE_TO_PATHWAY: Record<string, "investor" | "steward" | "resident" |
  */
 const PUBLIC_FORM_TYPES: ReadonlySet<string> = new Set([
   "membership-508",
+  "membership-request", // RequestMembership.tsx: asking to join with no invitation (Rye, 2026-09-09)
   "visit-inquiry",
   "steward-interest",
   "steward",

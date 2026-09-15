@@ -257,7 +257,8 @@ no key; the warning is for the fork that moves a rung.
 contributor in `server/routes/vouches.ts`. The `membership` rung is crossed whenever `membershipGranted` is
 set: by `PUT /api/admin/submissions/:id/status` when an accepted Love Letter names its signer (gated on
 `intake.moderate`), by the vouch routes in `server/routes/vouches.ts` when the bar is met or a steward vouches,
-and once each, at boot, by `freezeEmailMatchedMemberships` and `freezeStandingAboveTheDoor`. The
+by the inviter's `arrival` vouch in `server/lib/inviteDoor.ts` in a village whose bar is one, and once each,
+at boot, by `freezeEmailMatchedMemberships` and `freezeStandingAboveTheDoor`. The
 `training-complete` rung is crossed by `POST /api/game/journey/sync`. None of those calls `recordStageEvent`. So the crossing into `member`,
 which opens nine of the thirteen stage unlocks, writes no `stage_events` row, no pulse line and no
 notification. The member is never told, and their profile history skips the rung entirely.

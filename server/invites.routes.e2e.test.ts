@@ -283,6 +283,28 @@ describe.skipIf(!DB_CONFIGURED)("a village that joins by invitation", () => {
   });
 });
 
+describe.skipIf(!DB_CONFIGURED)("somebody with no invitation asks to join", () => {
+  it("lands in the admin queue as a membership request, attributed to nobody, and makes no account", async () => {
+    const asked = await call("POST", "/api/forms/submit", {
+      token: null,
+      body: {
+        type: "membership-request",
+        hp: "",
+        data: { name: "Tess Asks", email: `tess-asks-${PORT}@example.test`, why: "I keep bees.", heardFrom: "a friend" },
+      },
+    });
+    expect(asked.status, JSON.stringify(asked.json)).toBe(200);
+    const [rows] = await pool.query<any[]>("SELECT type, status, user_id FROM submissions WHERE type = 'membership-request'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(rows).toHaveLength(1);
+    expect(String(rows[0].status)).toBe("new");
+    expect(rows[0].user_id).toBeNull();
+    expect(await accountsFor("tess-asks"), "asking is not joining").toBe(0);
+
+    // The lists say how long a link lasts, so no sentence has to carry its own copy of the number.
+    expect((await call("GET", "/api/me/invites")).json?.days).toBe(14);
+  });
+});
+
 describe.skipIf(!DB_CONFIGURED)("a village that turns the dial off", () => {
   it("lets anybody make an account, still counts a good link, and ignores a bad one", async () => {
     const off = await call("PUT", "/api/admin/variables/membership.invite_only", { body: { value: "false" } });
