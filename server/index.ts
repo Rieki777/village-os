@@ -26668,7 +26668,7 @@ ${inner}
   // gates. NOT under /api/admin: a steward who is not an admin is exactly who
   // this is for, so it is capability-gated all the way down.
   registerReviewRoutes(app, {
-    isAdmin, authedUser, guardCapability, mayAct, adminActor, getPool, members, questsRepo,
+    isAdmin, authedUser, guardCapability, mayAct, adminActor, getPool, members, questsRepo, circlesRepo,
   });
   registerHoldersRoutes(app, { guardCapability, getPool });
   registerErasureQueueRoutes(app, { guardCapability, getPool, erasureDeps });
