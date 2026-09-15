@@ -32,7 +32,7 @@ let pool: mysql.Pool;
 beforeAll(async () => {
   if (!configured) return;
   db = await provisionTestDb();
-  pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+  pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the S5 scratch-schema harness pool, as every DB suite holds
 });
 
 afterAll(async () => {
@@ -132,7 +132,7 @@ describe.skipIf(!configured)("the daily cap and the season-end reminder", () => 
     expect(first).toMatchObject({ recipients: 2, told: 2 });
     expect(second.told, "a second sweep inserts nothing").toBe(0);
 
-    const [rows] = await pool.query<any[]>(
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT user_id, link FROM notifications WHERE dedupe_key LIKE 'season-ending:spring-2026:2026-10-01:14:u-sweep-%' ORDER BY user_id",
     );
     expect(rows.map((r) => [r.user_id, r.link])).toEqual([

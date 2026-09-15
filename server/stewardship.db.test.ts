@@ -153,7 +153,7 @@ describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
     expect(r.ok).toBe(false);
     expect(r.termEndsAt).toBeNull();
     expect(String(r.error)).toContain("no end date");
-    const [count]: any = await pool.query("SELECT COUNT(*) AS n FROM role_holders");
+    const [count]: any = await pool.query("SELECT COUNT(*) AS n FROM role_holders"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(Number(count[0].n), "and it wrote nothing on its way out").toBe(0);
   });
 
@@ -169,7 +169,7 @@ describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
       seasonEndsAt: new Date(Date.now() - 86400000),
     });
     expect(past.ok, "a season that has already ended cannot hold a term either").toBe(false);
-    const [count]: any = await pool.query("SELECT COUNT(*) AS n FROM role_holders");
+    const [count]: any = await pool.query("SELECT COUNT(*) AS n FROM role_holders"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(Number(count[0].n)).toBe(0);
   });
 
