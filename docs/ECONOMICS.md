@@ -136,7 +136,7 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `exit:<exitId>:convert-credit:<token>` | `server/lib/exit.ts` |
 | `exit:<exitId>:convert:<token>` | `server/lib/exit.ts` |
 | `exit:<exitId>:sweep:<token>` | `server/lib/exit.ts` |
-| `gratitude_pool:<cycleNumber>:<userId>` | `server/index.ts` |
+| `gratitude_pool:<cycleNumber>:<userId>` | `server/lib/cycleSettlement.ts` |
 | `gratitude_received:<noteId>` | `server/lib/gratitude.ts` |
 | `gratitude.given:<esc(v)>:<esc(noteId)>` | `server/lib/economy.ts` |
 | `intake:<itemId>` | `server/lib/library.ts` |
