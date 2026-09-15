@@ -23446,7 +23446,7 @@ ${inner}
     vetoHours: () => numberVar("governance.veto_hours"),
     autoApplyEnabled: () => boolVar("governance.auto_apply_enabled"),
     stewardCouncil: () => boolVar("governance.steward_council"),
-    stewardVetoTiers: () => stringVar("governance.steward_veto_tiers"),
+    stewardVetoTiers: () => stringVar("governance.steward_veto_tiers"), consentNoticeHours: () => numberVar("governance.consent_notice_hours"),
     nextBoundaryAfter: (after: Date) => activeClock().nextBoundaryAfter(after),
     cycleNumberAt: (at: Date) => activeClock().cycleNumberAt(at),
     landingExpiryCycles: () => numberVar("governance.landing_expiry_cycles"),

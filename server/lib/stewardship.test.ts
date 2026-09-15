@@ -55,6 +55,8 @@ import {
   STEWARD_SUBJECTS_KEY,
   STEWARD_VETO,
   VETO_HOURS_KEY,
+  CONSENT_NOTICE_HOURS_KEY,
+  everyStewardSaidYes,
 } from "./stewardship";
 import { emailCadenceFor, resolveNotifyPrefs } from "./notify";
 import type { CarriedUnseating } from "../repos/stewardshipBallots";
@@ -123,6 +125,7 @@ describe("what a steward may NEVER stop, however the list is set", () => {
     expect(keyIsVetoLocked(STEWARD_COUNCIL_KEY)).toBe(true);
     expect(keyIsVetoLocked(VETO_HOURS_KEY)).toBe(true);
     expect(keyIsVetoLocked(HIGHEST_TIER_KEY)).toBe(true);
+    expect(keyIsVetoLocked(CONSENT_NOTICE_HOURS_KEY), "a limit on the window is a limit on the seat").toBe(true);
   });
 
   it("leaves every other setting exactly where it was", () => {
@@ -696,5 +699,21 @@ describe("a veto cast while its steward was being voted out says so (Rye, 2026-0
     expect(beingVotedOutAt([unseat({ roleId: "gardener" })], ROLES, new Date("2026-09-11T00:00:00Z"))).toBeNull();
     expect(beingVotedOutAt([unseat({ landsAt: null })], ROLES, new Date("2026-09-11T00:00:00Z"))).toBeNull();
     expect(beingVotedOutAt([unseat({ closedAt: null })], ROLES, new Date("2026-09-11T00:00:00Z"))).toBeNull();
+  });
+});
+
+describe("every steward said yes (Rye, 2026-09-14)", () => {
+  const yes = (userId: string) => ({ userId, choice: "yes" });
+
+  it("is never true over zero stewards, which is the dangerous case", () => {
+    expect(everyStewardSaidYes([], [])).toBe(false);
+    expect(everyStewardSaidYes([], [yes("u-a"), yes("u-b")])).toBe(false);
+  });
+
+  it("needs an explicit yes from every seat, and nothing else counts", () => {
+    expect(everyStewardSaidYes(["s1", "s2"], [yes("s1"), yes("s2"), yes("u-a")])).toBe(true);
+    expect(everyStewardSaidYes(["s1", "s2"], [yes("s1")]), "a missing vote").toBe(false);
+    expect(everyStewardSaidYes(["s1", "s2"], [yes("s1"), { userId: "s2", choice: "abstain" }]), "an abstention").toBe(false);
+    expect(everyStewardSaidYes(["s1", "s2"], [yes("s1"), { userId: "s2", choice: "no" }]), "a no").toBe(false);
   });
 });

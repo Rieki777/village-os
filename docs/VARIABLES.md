@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 145 open and 33 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 146 open and 33 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 155 of them as soon as it is saved, and 23 of them at the next cycle close.
+Each dial also says WHEN a change lands. 156 of them as soon as it is saved, and 23 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-178 dials in 29 categories. 104 carry a minimum and a maximum. By type: 82 integer, 13 decimal, 10 percentage, 21 boolean, 22 choice, 30 text.
+179 dials in 29 categories. 105 carry a minimum and a maximum. By type: 83 integer, 13 decimal, 10 percentage, 21 boolean, 22 choice, 30 text.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -45,7 +45,7 @@ Each dial also says WHEN a change lands. 155 of them as soon as it is saved, and
 | The Mint | 4 | 3 | 1 |
 | Progression | 28 | 28 | 0 |
 | Quests | 5 | 5 | 0 |
-| Governance | 43 | 39 | 4 |
+| Governance | 44 | 40 | 4 |
 | Tokens | 4 | 1 | 3 |
 | Hypha | 8 | 0 | 8 |
 | Tools | 2 | 2 | 0 |
@@ -136,6 +136,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Payouts above this wait three days before they are sent | `governance.payout_delay_over` | Governance | integer | `1000` | the whole village |
 | A veto needs a majority of the stewards | `governance.steward_council` | Governance | boolean | `false` | the whole village |
 | How long a steward has to stop a change | `governance.veto_hours` | Governance | integer | `72` | the whole village |
+| How long a change waits when every steward already said yes | `governance.consent_notice_hours` | Governance | integer | `24` | the whole village |
 | Cycles a passed decision waits before it is written off | `governance.landing_expiry_cycles` | Governance | integer | `3` | the whole village |
 | Cooldown after a governed rule change | `governance.change_cooldown_days` | Governance | integer | `0` | the whole village |
 | When a change to the Game Mechanics can go to the vote | `governance.window_changeset` | Governance | text | `always_open` | the whole village |
@@ -1201,7 +1202,7 @@ Consent normally needs a second person to witness the work: nobody may consent t
 
 ## Governance
 
-43 dials. 39 for the whole village, 4 for the founder or an admin.
+44 dials. 40 for the whole village, 4 for the founder or an admin.
 
 ### How sensing is weighted
 
@@ -1376,6 +1377,21 @@ A change to the Game that the village has passed does not take effect straight a
 | Type | integer, a whole number |
 | Default | `72` |
 | Range | 72 to 720 |
+| Counted in | hours |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
+
+### How long a change waits when every steward already said yes
+
+When every seated steward votes yes on a decision, nobody is left to stop it, so it does not need the whole steward window. It still waits this many hours after the vote closes, because the countdown is the village's notice that a change is coming. It only ever shortens the wait: a number above the steward window counts as the steward window. A village with no seated stewards never gets this, because nobody said yes. Zero lets a change land as soon as the vote closes whenever every steward agrees.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.consent_notice_hours` |
+| Type | integer, a whole number |
+| Default | `24` |
+| Range | 0 to 720 |
 | Counted in | hours |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |

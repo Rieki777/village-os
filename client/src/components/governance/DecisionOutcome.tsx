@@ -23,7 +23,8 @@
 import { CheckCircle2, CircleSlash, MinusCircle } from "lucide-react";
 import { Celebration } from "@/components/natural";
 import { pctText, weightText } from "./voteBars";
-import type { Ballot } from "./governanceApi";
+import type { Ballot, Landing } from "./governanceApi";
+import LandingClock from "./LandingClock";
 
 /**
  * WHAT A CLOSED DECISION READS AS.
@@ -100,6 +101,30 @@ const UNKNOWN_OUTCOME = {
 
 export const DECISION_OUTCOME_COPY = OUTCOME;
 
+/**
+ * WHAT THE CHIP SAYS once the landing is known.
+ *
+ * Rye, 2026-09-08: a decision "should never pass until the veto window expires",
+ * and vetoed proposals must "clearly show that they didn't pass". Rye,
+ * 2026-09-14: "a member can see a countdown timer until it passes". So a
+ * decision that carried and is still counting down is not yet law: it reads
+ * "Carried, not yet in effect", takes no celebration, and shows the countdown.
+ * One a steward stopped reads as stopped even on a build where the ballot row
+ * still says passed. `ballots.status` itself is never reinterpreted here; the
+ * landing is what moves the word, exactly as 0172 separates the two questions.
+ */
+export function outcomeFor(status: Ballot["status"], landing?: Landing | null, nowMs: number = Date.now()) {
+  const base = OUTCOME[status] ?? UNKNOWN_OUTCOME;
+  if (status !== "passed" || !landing) return base;
+  if (landing.landingStatus === "vetoed" || landing.vetoedAt) {
+    return { ...OUTCOME.failed, word: "Stopped by a steward" };
+  }
+  if (landing.landingStatus === "pending" && landing.landsAt && Date.parse(landing.landsAt) > nowMs) {
+    return { ...base, word: "Carried, not yet in effect", law: false };
+  }
+  return base;
+}
+
 export default function DecisionOutcome({
   ballot,
   /** What the close actually changed. Empty is normal and says so. */
@@ -107,13 +132,17 @@ export default function DecisionOutcome({
   held,
   /** True only in the session that just closed it, so the moment is rare. */
   fresh = false,
+  /** The countdown, once the page has read it. Absent renders exactly as before. */
+  landing = null,
 }: {
   ballot: Ballot;
   applied?: string[];
   held?: string | null;
   fresh?: boolean;
+  landing?: Landing | null;
 }) {
-  const o = OUTCOME[ballot.status] ?? UNKNOWN_OUTCOME;
+  const o = outcomeFor(ballot.status, landing);
+  const counting = ballot.status === "passed" && landing?.landingStatus === "pending" && !!landing.landsAt && !o.law;
   const Icon = o.icon;
   const closedOn = ballot.closedAt
     ? new Date(ballot.closedAt).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })
@@ -137,6 +166,8 @@ export default function DecisionOutcome({
           <Icon className="w-3.5 h-3.5" aria-hidden="true" />
           {o.word}
         </span>
+
+        {counting && landing?.landsAt && <LandingClock landsAt={landing.landsAt} sentence={landing.countdownSentence} />}
 
         {/* The human sentence, at the size the sentence deserves. */}
         {ballot.outcomeNote ? (
