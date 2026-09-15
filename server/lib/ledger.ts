@@ -1266,8 +1266,18 @@ export async function postTransfer(
  * the same order. Taking this lock BEFORE the first plain read means the view
  * is fixed only once nobody else can move these rows. Re-taking it inside
  * `postTransferOn` afterwards is free: the rows are already this
- * transaction's. A row that does not exist yet takes no lock, which is safe
- * here because creating it cannot trip the snapshot check.
+ * transaction's.
+ *
+ * A ROW THAT DOES NOT EXIST YET STILL TAKES A LOCK. Under REPEATABLE READ the
+ * missing id's GAP is locked, so a different new member account inserted into
+ * that gap waits. Measured on MariaDB 12.3.2 on 2026-09-15 in a scratch
+ * schema: an INSERT into the gap timed out and an INSERT outside it did not,
+ * and two transactions each locking a first-time recipient beside the faucet
+ * and then creating that account, the `postTransferOn` shape, deadlocked
+ * (ER_LOCK_DEADLOCK). `postTransferOn` always took this statement, so the
+ * deadlock predates the early lock; a caller that takes it early holds the
+ * gap longer before the INSERT IGNORE, and the retry in
+ * `lostConcurrencyRace` is what heals it.
  */
 export async function lockLedgerAccounts(
   conn: PoolConnection,
