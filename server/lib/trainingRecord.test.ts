@@ -56,14 +56,19 @@ describe("what completion means, with no database", () => {
     expect(trainingIsComplete(["a"], ["a", "b-retired"])).toBe(true);
   });
 
-  it("answers FALSE for a village with no modules, which is the safe direction", () => {
+  it("answers TRUE when the village requires no modules, so everybody skips the rung (Rye, 2026-09-14)", () => {
     /*
-     * "There is nothing to complete" must not read as "everybody has completed
-     * everything", or emptying the catalogue would hand the rung to the whole
-     * village at once. The old code had this shape and it is kept on purpose.
+     * Rye, 2026-09-14, overruling the earlier shape: "if there's no required
+     * modules in training, then everyone skips past them." This test used to
+     * assert the opposite. On main every module counts as required, so an
+     * empty catalogue is an empty required set, and a member with stray
+     * completions for retired modules skips it the same way.
      */
-    expect(trainingIsComplete([], [])).toBe(false);
-    expect(trainingIsComplete([], ["a"])).toBe(false);
+    expect(trainingIsComplete([], [])).toBe(true);
+    expect(trainingIsComplete([], ["a-retired"])).toBe(true);
+    // The ruling is about an EMPTY required set only. One required module
+    // still has to be done, which is what keeps the exploit test below honest.
+    expect(trainingIsComplete(["a"], [])).toBe(false);
   });
 
   it("refuses the old door for training and leaves every other journey alone", () => {

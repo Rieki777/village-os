@@ -203,6 +203,12 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "The calendar has been stopped for {n} sweeps.",
     celebrate: false,
   },
+  season_ending: {
+    group: "decisions",
+    blurb: "The season turns soon. Before it does, the village records what this season did and seats people for the next one, so the reminders start two weeks out.",
+    many: "{n} reminders that the season is turning.",
+    celebrate: false,
+  },
   term_expiring: {
     group: "decisions",
     blurb: "The agreement to keep holding your seat is running out. On a seat that carries permissions those end with the term (0171), so it is the moment to renew or hand it on.",
