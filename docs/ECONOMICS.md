@@ -2956,6 +2956,13 @@ person is `shareCapFor(100) = max(1, floor(100 x 25 / 100)) = 25`.
 One human act, **three** ledger rows, from three different faucets. `canConfirm`
 refuses first if Ash and Wren are the same person.
 
+Ash's amount is checked where Ash types it, before the route sees it. Each claim in
+the steward's claims read (`GET /api/admin/quest-claims`) carries its `bounds`, which
+`consentBounds` states from the same dials `checkConsentAmount` enforces, so the
+consent queue opens on the quest's floor where it has one and will not send an
+amount the route would refuse. That read moves no value, and nothing in this table
+changes with it.
+
 | # | Posted by | From | To | Token | Amount | Source | Idempotency key |
 |---|---|---|---|---|---|---|---|
 | 1 | the consent route | `sys:gratitude-pool` | `mem:<wren>` | `gratitude` | the consented amount, lifted by any standing badge multiplier (1 by default) and never past a top: the range's top under `posted`, the bonus ceiling under `capped`, the advertised top under `unlimited` | `quest_consent` | `quest_consent:<claimId>` |
