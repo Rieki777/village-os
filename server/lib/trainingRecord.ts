@@ -87,23 +87,37 @@ export async function completionsForMany(
 }
 
 /**
- * Has this member finished every module the village currently offers?
+ * Has this member finished every module the village requires?
  *
  * PURE, and it takes both sets, because `computeStage` is pure and synchronous
  * on purpose: the callers that already hold their counts pay nothing extra, and
  * the one that loops over every member batch-fetches instead of querying inside
  * the loop.
  *
- * A village with NO modules answers false, which is the shape the old code had
- * and is worth keeping deliberately: "there is nothing to complete" must not
- * read as "everybody has completed everything", because that would hand the
- * rung to the whole village the moment an admin emptied the catalogue.
+ * NO REQUIRED MODULES MEANS EVERYBODY SKIPS THE RUNG. Rye, 2026-09-14,
+ * overruling the shape this function shipped with: "if there's no required
+ * modules in training, then everyone skips past them." It used to answer false
+ * for an empty list, on the theory that "there is nothing to complete" must not
+ * read as "everybody has completed everything". The ruling is that it should
+ * read exactly that way: a rung that asks for nothing is a rung everybody
+ * already stands on, and a village with no training must not hold its whole
+ * membership one step below it.
+ *
+ * `moduleIds` is the REQUIRED set. On main every module in the catalogue counts
+ * as required, because there is no mandatory or optional column yet, so today
+ * an empty catalogue is what satisfies the rung. When such a column lands the
+ * caller passes only the required ids, and this function does not change.
+ *
+ * WHAT THIS DOES NOT REOPEN is the exploit the rest of this file closes. A
+ * village that requires even one module still needs every required module
+ * recorded by the server, one at a time, and a member still cannot hand over a
+ * finished set.
  */
 export function trainingIsComplete(
   moduleIds: readonly string[],
   completed: readonly string[],
 ): boolean {
-  if (moduleIds.length === 0) return false;
+  if (moduleIds.length === 0) return true;
   const done = new Set(completed);
   return moduleIds.every((id) => done.has(id));
 }

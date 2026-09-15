@@ -29,8 +29,9 @@ import { describe, expect, it } from "vitest";
 import {
   ADVISORY,
   AUTO_EXECUTE_SUBJECTS_KEY,
-  DEFAULT_TERM_CYCLES,
   HIGHEST_TIER_KEY,
+  beingVotedOutAt,
+  votedOutSentence,
   REASON_MAX,
   REASON_NOTICE,
   VETO_TEXT_COLUMNS,
@@ -54,8 +55,11 @@ import {
   STEWARD_SUBJECTS_KEY,
   STEWARD_VETO,
   VETO_HOURS_KEY,
+  CONSENT_NOTICE_HOURS_KEY,
+  everyStewardSaidYes,
 } from "./stewardship";
 import { emailCadenceFor, resolveNotifyPrefs } from "./notify";
+import type { CarriedUnseating } from "../repos/stewardshipBallots";
 import { capabilityDecision } from "../../shared/capabilities";
 import { NOTIFICATION_KINDS } from "../../shared/notificationKinds";
 import { badgeProblem } from "./badges";
@@ -121,6 +125,7 @@ describe("what a steward may NEVER stop, however the list is set", () => {
     expect(keyIsVetoLocked(STEWARD_COUNCIL_KEY)).toBe(true);
     expect(keyIsVetoLocked(VETO_HOURS_KEY)).toBe(true);
     expect(keyIsVetoLocked(HIGHEST_TIER_KEY)).toBe(true);
+    expect(keyIsVetoLocked(CONSENT_NOTICE_HOURS_KEY), "a limit on the window is a limit on the seat").toBe(true);
   });
 
   it("leaves every other setting exactly where it was", () => {
@@ -443,9 +448,6 @@ describe("a term is an instant from the clock, never a season", () => {
     }
   });
 
-  it("runs for three cycles by default, which is a season's worth of moons", () => {
-    expect(DEFAULT_TERM_CYCLES).toBe(3);
-  });
 });
 
 describe("the seat is the village's, and no admin route may give or take it", () => {
@@ -668,5 +670,50 @@ describe("where this lane's free text lives", () => {
       "ballots.veto_reason",
       "mechanics_proposals.veto_reason",
     ]);
+  });
+});
+
+describe("a veto cast while its steward was being voted out says so (Rye, 2026-09-14)", () => {
+  const ROLES = new Set(["steward"]);
+  const unseat = (over: Partial<CarriedUnseating> = {}): CarriedUnseating => ({
+    ballotId: "bal-out",
+    roleId: "steward",
+    closedAt: new Date("2026-09-10T00:00:00Z"),
+    landsAt: new Date("2026-09-13T00:00:00Z"),
+    ...over,
+  });
+
+  it("marks a veto between the unseat carrying and it landing, and names when it lands", () => {
+    const m = beingVotedOutAt([unseat()], ROLES, new Date("2026-09-11T12:00:00Z"));
+    expect(m).toEqual({ unseatBallotId: "bal-out", landsAt: "2026-09-13T00:00:00.000Z" });
+    expect(votedOutSentence("Wren", m!.landsAt)).toContain("lands on 2026-09-13");
+  });
+
+  it("does not mark a veto before the unseat carried, or from the moment it lands", () => {
+    expect(beingVotedOutAt([unseat()], ROLES, new Date("2026-09-09T23:59:59Z"))).toBeNull();
+    // The landing instant is the seat ending, so a veto then is no longer the seat's to mark.
+    expect(beingVotedOutAt([unseat()], ROLES, new Date("2026-09-13T00:00:00Z"))).toBeNull();
+  });
+
+  it("counts only a seat that carries the veto, and only an unseat that waits a window", () => {
+    expect(beingVotedOutAt([unseat({ roleId: "gardener" })], ROLES, new Date("2026-09-11T00:00:00Z"))).toBeNull();
+    expect(beingVotedOutAt([unseat({ landsAt: null })], ROLES, new Date("2026-09-11T00:00:00Z"))).toBeNull();
+    expect(beingVotedOutAt([unseat({ closedAt: null })], ROLES, new Date("2026-09-11T00:00:00Z"))).toBeNull();
+  });
+});
+
+describe("every steward said yes (Rye, 2026-09-14)", () => {
+  const yes = (userId: string) => ({ userId, choice: "yes" });
+
+  it("is never true over zero stewards, which is the dangerous case", () => {
+    expect(everyStewardSaidYes([], [])).toBe(false);
+    expect(everyStewardSaidYes([], [yes("u-a"), yes("u-b")])).toBe(false);
+  });
+
+  it("needs an explicit yes from every seat, and nothing else counts", () => {
+    expect(everyStewardSaidYes(["s1", "s2"], [yes("s1"), yes("s2"), yes("u-a")])).toBe(true);
+    expect(everyStewardSaidYes(["s1", "s2"], [yes("s1")]), "a missing vote").toBe(false);
+    expect(everyStewardSaidYes(["s1", "s2"], [yes("s1"), { userId: "s2", choice: "abstain" }]), "an abstention").toBe(false);
+    expect(everyStewardSaidYes(["s1", "s2"], [yes("s1"), { userId: "s2", choice: "no" }]), "a no").toBe(false);
   });
 });

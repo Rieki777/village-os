@@ -66,6 +66,7 @@ import { register as registerPulseRoutes } from "./routes/pulse";
 import { register as registerPlayersRoutes } from "./routes/players";
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerOrgRoutes } from "./routes/org";
+import { register as registerSeasonRoutes } from "./routes/seasons";
 import { register as registerReviewRoutes } from "./routes/review";
 import { register as registerHoldersRoutes } from "./routes/holders";
 import { register as registerErasureQueueRoutes } from "./routes/erasureQueue";
@@ -81,7 +82,12 @@ import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader
 import { applyChangeSet, applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
 import { landingRow } from "./lib/applyDue";
 import { notifyRollRows, type RollNotice } from "./lib/ballotNotices";
-import { forgetStewardActs, holdingHasLapsed, runTermWatch, setVetoWindowCheck, stewardMailRefusal } from "./lib/stewardship";
+import { runSeasonReminders } from "./lib/seasonReminders";
+import { forgetStewardActs, holdingHasLapsed, recordTermStarted, runTermWatch, setVetoWindowCheck, STEWARD_VETO, stewardMailRefusal, termWatchLookaheadDays } from "./lib/stewardship";
+import { freezeSeatTerm } from "./repos/ballotSeatTerms";
+import { termForCarriedSeat } from "./lib/seatTermLanding";
+import { raisedHandTerm } from "./lib/raisedHandTerm";
+import { resolveSeatTerm, type SeatCalendar } from "../shared/seatTerms";
 import { decideRoleCapabilities, stewardSeatRefusal } from "./lib/roleGrants";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
 import { type ConsentActor, register as registerQuestClaimRoutes } from "./routes/questClaims";
@@ -1261,6 +1267,7 @@ const roleHoldersRepo = dbCollection<RoleHolderRow>(getPool(), {
     // become permanent. The isExample line two specs up records the same trap.
     { js: "termEndsAt", db: "term_ends_at", kind: "time" },
     { js: "seasonId", db: "season_id" },
+    { js: "termFollowsSeason", db: "term_follows_season", kind: "bool" },
   ],
 });
 // Each document carries its REAL default; absent rows read as the default and
@@ -2803,7 +2810,7 @@ type RoleDef = {
   minStage?: string | null;
   order?: number;
 };
-type RoleHolderRow = { id: string; roleId: string; userId: string; grantedBy?: string; grantedAt: string; termEndsAt?: string | null; seasonId?: string | null };
+type RoleHolderRow = { id: string; roleId: string; userId: string; grantedBy?: string; grantedAt: string; termEndsAt?: string | null; seasonId?: string | null; termFollowsSeason?: boolean };
 
 function loadRoles(): RoleDef[] {
   return rolesRepo.all();
@@ -3544,7 +3551,7 @@ function daysBetween(fromISO: string, toISO: string): number {
  *  season object, so existing data/season.json keeps working after deploy. */
 function normalizeSeasonConfig(raw: any): { seasons: any[]; cadence: string; timezone: string } {
   const def = GAME_CONFIG.season;
-  if (raw && Array.isArray(raw.seasons)) {
+  if (raw && Array.isArray(raw.seasons) && raw.seasons.length > 0) { // an EMPTY list is the platform default's sentinel for "derive", handled at the bottom; every seat's term (0199) needs a season to end with
     return {
       seasons: raw.seasons.map((s: any, i: number) => ({
         id: s.id || `season-${i + 1}`,
@@ -3641,6 +3648,7 @@ function seasonState() {
   };
 }
 setSeasonWindowReader(() => { const s = seasonState(); return { currentId: s.current?.id ?? null, endsAt: seasonEndInstant(s.current?.endsOn, s.timezone), configuredCount: s.seasons.length }; }); // windows lane (19E): the season-shaped window reads the village's own list through here
+const seatCalendar = (): SeatCalendar => { const s = seasonState(); return { seasons: s.seasons, currentSeasonId: s.current?.id ?? null, timezone: s.timezone }; }; // 0199: what every seat's term is decided against (shared/seatTerms.ts)
 
 
 // Safe user shape for API responses: strips the password hash and fills every
@@ -5455,29 +5463,16 @@ async function startServer() {
   });
 
   /**
-   * Terms: tell the HOLDER once, and make an empty seat loud where a carried
-   * decision is actually waiting on it.
-   *
-   * The body is `runTermWatch` in server/lib/stewardship.ts, which sweeps both
-   * planes: org-chart seatings, which carry no permissions and revoke nothing,
-   * and permission holdings, where a term genuinely ends the powers (0171).
-   * One notification per row per event, through stable dedupe keys, because a
-   * mandate nobody has acted on is a governance problem a weekly ping does not
-   * solve. Member holders only; a documented holder is a name on a card.
-   *
-   * AGENTS ARE EXCLUDED, inherited (0142). An agent is a documented holder, so
-   * the `holderKind !== "member"` filter inside `runTermWatch` already drops
-   * it, and that is the behaviour to keep: a term end is a date the village
-   * agreed to revisit an arrangement with a person, and an agent's seating has
-   * nobody to have that conversation with. server/lib/calendarProviders.ts
-   * filters its twin for the same reason.
+   * Terms: tell the HOLDER once, one cycle before the term ends, and make a
+   * stopped calendar loud. The body and its reasoning, agents included, are
+   * `runTermWatch` in server/lib/stewardship.ts.
    */
   registerJob("term-watch", 24 * 60 * 60 * 1000, async () => {
     const r = await runTermWatch({
       pool: getPool(),
       notify,
       notifyAdmins,
-      seatings: await expiringSeatings(getPool(), lapseContext(), 14),
+      seatings: await expiringSeatings(getPool(), lapseContext(), termWatchLookaheadDays()),
       season: seasonState(),
     });
     if (r.holdersTold > 0) console.log(`[org] ${r.holdersTold} holder(s) told their term is ending or has ended`);
@@ -5494,6 +5489,12 @@ async function startServer() {
       allEnded: !!ss.needsNextSeason && ss.seasons.length > 0,
     });
     if (gap) console.warn(`[org] ${gap}`);
+  });
+
+  // Season-end reminders to the whole village: `runSeasonReminders` in server/lib/seasonReminders.ts.
+  registerJob("season-reminders", 12 * 60 * 60 * 1000, async () => {
+    const r = await runSeasonReminders({ season: seasonState(), members: await members.all(), isAdmin: (u) => adminReaches(u?.role), notify });
+    return r.due ? `${r.told} of ${r.recipients} told, ${r.due.daysLeft} day(s) before ${r.due.seasonId} turns` : undefined;
   });
 
   /**
@@ -10406,12 +10407,14 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // stewards' inbox for a role that will be deleted on retirement, leaving
     // the member's application pointing at nothing.
     if (role.isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
+    const term = raisedHandTerm(req.body?.termEndsOn, seatCalendar()); // 0199: the end date the hand asks for, shown in the submissions inbox
+    if (!term.ok) return res.status(term.status).json(term.body);
     const entry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       type: "role-application",
       status: "new",
       rewarded: false,
-      data: { roleId: role.id, roleName: role.name, note: String(req.body?.note ?? "").slice(0, 2000), email: user.email, name: user.name },
+      data: { roleId: role.id, roleName: role.name, note: String(req.body?.note ?? "").slice(0, 2000), email: user.email, name: user.name, ...term.data },
       userId: user.id,
       userName: user.name,
       submittedAt: new Date().toISOString(),
@@ -19511,7 +19514,7 @@ ${inner}
    * /api/game/quests/:id/claim reads them. A promise route that invented its
    * own permission check would be a second gate.
    */
-  app.post("/api/map/promise", async (req, res) => {
+  app.post("/api/map/promise", async (req, res) => { // limit-ok: a signed-out caller is answered reason "anonymous" before any work (a 200 the map reads, so no 401 for the gate to see); it read as guarded only because an unrelated `reply` helper's span in this file borrowed a 401
     const kind = req.body?.kind;
     const mapKey = sanitiseMapKey(req.body?.id);
     const on = req.body?.on === true;
@@ -19682,47 +19685,15 @@ ${inner}
     getPool,
   });
 
-  // Public: the computed season state (current picked by date — never stale).
-  app.get("/api/season", async (_req, res) => {
-    res.json(seasonState());
+  // The season list and its save, which moves every seat that ends with its season (server/routes/seasons.ts).
+  registerSeasonRoutes(app, {
+    isAdmin, adminActor, getPool, notify, seasonState, getSeasonConfig, normalizeSeasonConfig, seasonRepo, addActivity, loadRoles,
+    permissionHoldings: loadRoleHolders,
+    writePermissionTerms: (moves) => withRoleHolderLock(async () => {
+      const to = new Map(moves.map((m) => [m.id, m.to.toISOString()]));
+      await roleHoldersRepo.replaceAll(loadRoleHolders().map((h) => (to.has(h.id) ? { ...h, termEndsAt: to.get(h.id)! } : h)));
+    }),
   });
-
-  // Admin: the whole season list + cadence + timezone.
-  app.get("/api/admin/seasons", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const cfg = getSeasonConfig();
-    const state = seasonState();
-    const last = [...cfg.seasons].sort((a, b) => (a.endsOn ?? "").localeCompare(b.endsOn ?? "")).pop();
-    res.json({
-      ...cfg,
-      currentId: state.current?.id ?? null,
-      needsNextSeason: state.needsNextSeason,
-      suggestion: suggestNextSeasonDates(cfg.cadence, last?.endsOn ?? ""),
-    });
-  });
-
-  app.put("/api/admin/seasons", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    if (!req.body || typeof req.body !== "object") return res.status(400).json({ error: "Body required" });
-    const before = seasonState().current?.id ?? null;
-    const next = normalizeSeasonConfig(req.body);
-    await seasonRepo.put(next);
-    const after = seasonState();
-    if (after.current && after.current.id !== before) {
-      await addActivity("season", `The season has turned: ${after.current.name}`, { actorUserId: adminActor(req)?.id, entityType: "season" });
-    }
-    res.json({ success: true, ...after });
-  });
-
-  /*
-   * `PUT /api/admin/season` used to sit here: the single-season save from
-   * before a village could hold more than one. It was kept "so nothing that
-   * still points here breaks", and nothing pointed here. The Season tab has
-   * used the plural `PUT /api/admin/seasons` above since multi-season
-   * shipped, and the singular was reachable only over curl while carrying
-   * its own overwrite semantics for the same rows. Two writers of one
-   * document, one of them with no door, is the shape this round removed.
-   */
 
   // The quest board, the share card, crews, the admin CRUD and the two steps
   // a member takes through a quest, all thirteen registered at exactly the
@@ -23035,6 +23006,8 @@ ${inner}
         }
       }
 
+      const term = await termForCarriedSeat(getPool(), b.id, seatCalendar(), ((role.capabilities ?? []) as string[]).includes(STEWARD_VETO));
+      if (!term.ok) { out.held = term.held; await notifyAdmins("governance", `A carried seating could not land: ${b.title}`, `bal:${b.id}:seat-held`); return out; }
       let seatedRowId: string | null = null;
       await withRoleHolderLock(async () => {
         const holders = loadRoleHolders();
@@ -23058,7 +23031,7 @@ ${inner}
            * that cannot tell them apart must say it cannot rather than guess.
            */
           grantedBy: b.id,
-          grantedAt: new Date().toISOString(),
+          grantedAt: new Date().toISOString(), termEndsAt: term.endsAt.toISOString(), seasonId: term.seasonId, termFollowsSeason: term.followsSeason,
         };
         holders.push(row);
         seatedRowId = row.id;
@@ -23072,12 +23045,13 @@ ${inner}
         userId: b.openedBy,
         type: "governance",
         title: `The village carried this: ${b.title}`,
-        body: `${firstName(member.name)} sits in ${who} from today.`,
+        body: `${firstName(member.name)} sits in ${who} from today until ${term.endsOn}.`,
         link: ballotLink(b),
         actorUserId: actorId,
         dedupeKey: `bal:${b.id}:seated`,
       });
       if (seatedRowId) {
+        await recordTermStarted(getPool(), { roleId: role.id, userId: member.id, termEndsAt: term.endsAt, seasonId: term.seasonId });
         await notify({
           userId: member.id,
           type: "role_appointed",
@@ -23394,7 +23368,7 @@ ${inner}
     vetoHours: () => numberVar("governance.veto_hours"),
     autoApplyEnabled: () => boolVar("governance.auto_apply_enabled"),
     stewardCouncil: () => boolVar("governance.steward_council"),
-    stewardVetoTiers: () => stringVar("governance.steward_veto_tiers"),
+    stewardVetoTiers: () => stringVar("governance.steward_veto_tiers"), consentNoticeHours: () => numberVar("governance.consent_notice_hours"),
     nextBoundaryAfter: (after: Date) => activeClock().nextBoundaryAfter(after),
     cycleNumberAt: (at: Date) => activeClock().cycleNumberAt(at),
     landingExpiryCycles: () => numberVar("governance.landing_expiry_cycles"),
@@ -25649,6 +25623,8 @@ ${inner}
     const setup = await roleBallotSetup();
     if (setup.tokenProblem) return res.status(409).json({ error: setup.tokenProblem });
 
+    const term = resolveSeatTerm({ requestedEndsOn: req.body?.termEndsOn, calendar: seatCalendar(), capAtSeasonEnd: ((role.capabilities ?? []) as string[]).includes(STEWARD_VETO), now: new Date(), startsNoEarlierThan: new Date(Date.now() + setup.durationDays * 86400000) });
+    if (!term.ok) return res.status(409).json({ error: term.error, code: term.code });
     const can = roleConsequences(role);
     const who = role.name ?? roleId;
     const title = `${who}: the village asks ${firstName(member.name)} to sit in it`;
@@ -25669,6 +25645,8 @@ ${inner}
       "",
       reason,
       "",
+      `## How long`, "",
+      `${term.followsSeason ? `Until the season ends on ${term.endsOn}, and if the season's end date moves, this seat moves with it.` : `Until ${term.endsOn}.`} When the term ends the seat ends, and the village can seat them again.`, ...(term.caution ? ["", term.caution] : []), "",
       `## Taking it back`,
       "",
       `The village can vote this seat back at any time, and that vote is an ordinary one.`,
@@ -25681,6 +25659,7 @@ ${inner}
 
     const result = await openBallot(getPool(), {
       subjectType: "role_seat",
+      onOpen: (conn, ballotId) => freezeSeatTerm(conn, ballotId, { endsAt: term.endsAt, seasonId: term.seasonId, followsSeason: term.followsSeason }),
       subjectRef,
       title,
       docMarkdown: doc,
@@ -26596,7 +26575,7 @@ ${inner}
   // gates. NOT under /api/admin: a steward who is not an admin is exactly who
   // this is for, so it is capability-gated all the way down.
   registerReviewRoutes(app, {
-    isAdmin, authedUser, guardCapability, mayAct, adminActor, getPool, members, questsRepo,
+    isAdmin, authedUser, guardCapability, mayAct, adminActor, getPool, members, questsRepo, circlesRepo,
   });
   registerHoldersRoutes(app, { guardCapability, getPool });
   registerErasureQueueRoutes(app, { guardCapability, getPool, erasureDeps });
@@ -26836,6 +26815,8 @@ ${inner}
     // concurrent appointments cannot erase each other; the pulse line and the
     // notification (which can sit on an SMTP round trip) run AFTER the write,
     // so a failed write never announces an appointment that did not happen.
+    const term = action === "add" ? resolveSeatTerm({ requestedEndsOn: req.body?.termEndsOn, calendar: seatCalendar(), capAtSeasonEnd: (((role as any).capabilities ?? []) as string[]).includes(STEWARD_VETO), now: new Date() }) : null;
+    if (term && !term.ok) return res.status(409).json({ error: term.error, code: term.code });
     let appointedHolderId: string | null = null;
     const finalHolders = await withRoleHolderLock(async () => {
       let holders = loadRoleHolders();
@@ -26847,7 +26828,7 @@ ${inner}
             userId,
             // S1 made this a real person instead of the string "admin".
             grantedBy: appointer ?? "admin",
-            grantedAt: new Date().toISOString(),
+            grantedAt: new Date().toISOString(), ...(term?.ok ? { termEndsAt: term.endsAt.toISOString(), seasonId: term.seasonId, termFollowsSeason: term.followsSeason } : {}),
           };
           holders.push(row);
           appointedHolderId = row.id;

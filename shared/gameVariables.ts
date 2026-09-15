@@ -414,6 +414,27 @@ export const VARIABLES: VariableDef[] = [
       { value: "never", label: "Never", hint: "Seats end only on their own term date, or when somebody steps down." },
     ],
   },
+  {
+    /*
+     * Rye, 2026-09-14: "the 3 changes per account seems to be a broken limit!
+     * Let's definitely make this a setting and set it to much higher as the
+     * beginnings will all have massive changes like this to get a village up."
+     *
+     * It replaced `max(3, activeMembers * 3)`, which gave a village of two
+     * accounts a limit of six and blocked twelve lines of an eighteen-seat
+     * first import. Read through `draftChangeCap` in server/lib/orgDrafts.ts.
+     */
+    key: "org.proposal_change_limit",
+    category: "Progression",
+    label: "Most changes one outside batch can propose",
+    description:
+      "How many seats one batch from an outside service can put into a single draft. A village's first import is often its whole structure arriving at once, so the limit starts high. Nothing publishes on a batch's say-so: a steward still reads every line and accepts it before any of it becomes the chart. Lower it once the village is built and imports settle into small changes. A draft somebody builds by hand is never held to it.",
+    type: "integer",
+    default: "500",
+    min: 1,
+    max: 10000,
+    unit: "changes",
+  },
 
   // ── Quests: how work becomes recognition ──────────────────────────────────
   {
@@ -664,6 +685,25 @@ export const VARIABLES: VariableDef[] = [
     type: "integer",
     default: "72",
     min: 72,
+    max: 720,
+    unit: "hours",
+  },
+  // Rye, 2026-09-14: "if all stewards already voted yes, then there is no veto
+  // window needed", and "It's also the villages countdown (they share it)". So
+  // consent removes the veto and shortens the wait to this notice. It defaults
+  // to a day, not to zero: the countdown is the village's notice as well as the
+  // stewards' door. Veto-locked (`CONSENT_NOTICE_HOURS_KEY` in
+  // server/lib/stewardship.ts) for the same reason the window length is.
+  {
+    key: "governance.consent_notice_hours",
+    category: "Governance",
+    label: "How long a change waits when every steward already said yes",
+    criticality: "constitutional",
+    description:
+      "When every seated steward votes yes on a decision, nobody is left to stop it, so it does not need the whole steward window. It still waits this many hours after the vote closes, because the countdown is the village's notice that a change is coming. It only ever shortens the wait: a number above the steward window counts as the steward window. A village with no seated stewards never gets this, because nobody said yes. Zero lets a change land as soon as the vote closes whenever every steward agrees.",
+    type: "integer",
+    default: "24",
+    min: 0,
     max: 720,
     unit: "hours",
   },

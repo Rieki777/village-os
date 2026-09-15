@@ -28,6 +28,7 @@
  */
 import { useState } from "react";
 import { useSeatWord } from "@/lib/gameApi";
+import SeatTermField from "./SeatTermField";
 
 const inputCls = "border border-gray-200 rounded-lg px-2 py-1.5 text-sm";
 
@@ -51,13 +52,16 @@ export function SeatSomebody({
   const seatWord = useSeatWord();
   const [who, setWho] = useState("");
   const [agentName, setAgentName] = useState("");
+  /* Every seat has a term (0199). Empty sends no date: the seat ends with the season. */
+  const [termEndsOn, setTermEndsOn] = useState("");
   const seatingAnAgent = who === AGENT;
   const ready = seatingAnAgent ? agentName.trim().length > 0 : who.length > 0;
 
   const seat = async () => {
+    const term = termEndsOn ? { termEndsOn } : {};
     const body = seatingAnAgent
-      ? { isAgent: true, displayName: agentName.trim(), agentSlug: agentName.trim() }
-      : { userId: who };
+      ? { isAgent: true, displayName: agentName.trim(), agentSlug: agentName.trim(), ...term }
+      : { userId: who, ...term };
     const ok = await call(`/admin/org/roles/${roleId}/holders`, body);
     // Held rather than assumed. The control says a seating landed only when the
     // response said so, which is the whole of what the save-honesty rule asks.
@@ -68,6 +72,7 @@ export function SeatSomebody({
     onSeated(seatingAnAgent ? "Agent seated" : "Seated");
     setWho("");
     setAgentName("");
+    setTermEndsOn("");
   };
 
   return (
@@ -95,6 +100,18 @@ export function SeatSomebody({
           />
         </label>
       )}
+      <SeatTermField
+        value={termEndsOn}
+        onChange={setTermEndsOn}
+        label="Ends on (optional)"
+        look={{
+          label: "block text-xs text-muted-foreground",
+          input: `${inputCls} mt-1`,
+          line: "text-xs text-muted-foreground",
+          caution: "text-xs text-amber-700",
+          refusal: "text-xs text-red-600",
+        }}
+      />
       <button
         className="text-sm bg-teal-deep text-white rounded-lg px-3 py-2 font-medium disabled:opacity-40"
         disabled={!ready}

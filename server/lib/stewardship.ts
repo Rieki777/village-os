@@ -91,12 +91,14 @@
  * deliberately does not strip powers on its own: every permission role in
  * every existing village would silently disarm at the next season turn.
  *
- * THE TERM IS AN INSTANT FROM THE CLOCK, NEVER A SEASON. Seasons are an
- * ungoverned admin list; entries can be open-ended and their dates run out,
- * and the audit of 2026-09-03 found that a term hung on that list is a term
- * that never comes due. `termEndsAtFromCycles` computes the instant from the
- * lunar clock instead, and `seatCatalystsAsStewards` refuses to seat anybody
- * against an open-ended season rather than writing a term nothing will end.
+ * THE TERM IS AN INSTANT, AND BY DEFAULT IT IS THE SEASON'S END. Seasons are
+ * an admin list; entries can be open-ended and their dates run out, and the
+ * audit of 2026-09-03 found that a term hung on that list is a term that never
+ * comes due. Rye ruled on 2026-09-14 that seats end with the season all the
+ * same, so the season's end is resolved to an instant when a seat is made
+ * (shared/seatTerms.ts), `seatCatalystsAsStewards` refuses to seat anybody
+ * against an open-ended season, and a later edit to the season moves the seat
+ * (server/lib/seatTermLanding.ts) without ever making it indefinite.
  *
  * ── WHERE THE STATEMENTS LIVE, AND WHY THEY LEFT ───────────────────────────
  *
@@ -135,6 +137,7 @@ import type { Criticality } from "../../shared/governanceEngine";
 import type { Capability } from "../../shared/capabilities";
 import { kindOfSet, kindOfSubject, type GovernanceKind } from "../../shared/governanceKinds";
 import { cycleBoundsFor, cycleStartMs } from "../../shared/lunar";
+import { clockFor, type CycleClock } from "../../shared/cycleClock";
 import {
   blankVetoActReason,
   blankVetoActReasonsBy,
@@ -163,7 +166,9 @@ import {
 import {
   blankBallotVetoReason,
   blankBallotVetoReasonsBy,
+  carriedUnseatingsOf,
   subjectTypesOnBallots,
+  type CarriedUnseating,
 } from "../repos/stewardshipBallots";
 import { catalystUserIds } from "../repos/users";
 import { moveCapabilityToVillage } from "./capabilityHolding";
@@ -212,6 +217,8 @@ export const AUTO_EXECUTE_SUBJECTS_KEY = "governance.auto_execute_subjects";
  */
 export const VETO_HOURS_KEY = "governance.veto_hours";
 export const HIGHEST_TIER_KEY = "governance.highest_tier";
+/** How long a change waits when every steward already said yes (2026-09-14). A limit on the window, so veto-locked. */
+export const CONSENT_NOTICE_HOURS_KEY = "governance.consent_notice_hours";
 
 /**
  * THE VETO MAP: the two settings that say what the seat may stop.
@@ -262,6 +269,7 @@ export const VETO_LOCKED_KEYS: readonly string[] = [
   STEWARD_COUNCIL_KEY,
   VETO_HOURS_KEY,
   HIGHEST_TIER_KEY,
+  CONSENT_NOTICE_HOURS_KEY,
 ];
 
 /**
@@ -297,6 +305,32 @@ export function tierIsInStewardReach(tier: Criticality, raw: unknown): boolean {
 /** True when changing this setting is outside every steward's reach. */
 export function keyIsVetoLocked(key: string): boolean {
   return VETO_LOCKED_KEYS.includes(String(key));
+}
+
+/**
+ * DID EVERY SEATED STEWARD SAY YES? The mirror of the steward's blocking no.
+ *
+ * Rye, 2026-09-14: "if all stewards already voted yes, then there is no veto
+ * window needed". The same set `stewardNoVote` reads, at the same moment, looking
+ * for every yes where that one looks for any no, so the two can never disagree
+ * about who a steward is.
+ *
+ * ZERO STEWARDS IS NEVER CONSENT. `every` over an empty list is true, and
+ * `governance.steward_veto_tiers` calls a village with nobody able to stop
+ * anything "a healthy village and not a broken one", so the empty set is an
+ * ordinary case. Read without this guard, every such village would silently
+ * lose its window on every decision.
+ *
+ * An abstention, a missing vote or a no keeps the full window. Only an explicit
+ * yes from every seat counts.
+ */
+export function everyStewardSaidYes(
+  seatedUserIds: readonly string[],
+  votes: readonly { userId: string; choice: string }[],
+): boolean {
+  if (seatedUserIds.length === 0) return false;
+  const yes = new Set(votes.filter((v) => v.choice === "yes").map((v) => v.userId));
+  return seatedUserIds.every((id) => yes.has(id));
 }
 
 /**
@@ -926,7 +960,9 @@ export function holdingHasLapsed(
 /**
  * A term's end, as an instant, computed from the cycle clock.
  *
- * THE ONE NAMED HELPER, and everything that stamps a term goes through it.
+ * A helper for terms counted in moons. Seat terms are decided in
+ * shared/seatTerms.ts since 0199, and end with the season by default; this
+ * stays for the callers that still measure in cycles.
  * The clock lane owns `CycleClock` and will own `termEndAfter`; until that
  * merges, this reads `shared/lunar.ts` directly and is the single place that
  * has to change when it does.
@@ -951,8 +987,6 @@ export function termEndsAtFromCycles(cycles: number, from: Date = new Date()): D
   return new Date(Math.ceil(cycleStartMs(here.cycleNumber + n)));
 }
 
-/** How many cycles a fresh steward seat runs for before the village re-seats. */
-export const DEFAULT_TERM_CYCLES = 3;
 
 /**
  * Every role that carries the veto, read from the roles table.
@@ -969,6 +1003,51 @@ export async function rolesCarryingVeto(pool: Pool): Promise<Map<string, string>
     if (roleCapabilityList(r.capabilities).includes(STEWARD_VETO)) out.set(r.id, String(r.name ?? r.id));
   }
   return out;
+}
+
+/**
+ * WAS THIS STEWARD BEING VOTED OUT WHEN THEY ACTED?
+ *
+ * Rye, 2026-09-14: a steward the village has voted out keeps the veto through
+ * the unseat vote's window. A vote-out that switched the veto off at once would
+ * be the way around the veto: take the steward's seat first, then pass what
+ * they would have stopped. What the village gets instead is the mark. A veto
+ * cast between the unseat vote carrying and it landing says so, beside the
+ * steward's name and the reason they had to give.
+ *
+ * Derived, never stored, and still true a year later: an unseat vote's close
+ * and landing instants do not move once it has carried, so asking after it
+ * landed gives the same answer about the moment of the veto. The one input that
+ * can move is which roles carry the veto, which is read as it stands now.
+ */
+export interface BeingVotedOut {
+  unseatBallotId: string;
+  /** When the unseat lands, as an ISO instant. */
+  landsAt: string;
+}
+
+export function beingVotedOutAt(
+  unseatings: readonly CarriedUnseating[],
+  vetoRoleIds: ReadonlySet<string>,
+  at: Date,
+): BeingVotedOut | null {
+  for (const u of unseatings) {
+    if (!vetoRoleIds.has(u.roleId) || !u.closedAt || !u.landsAt) continue;
+    if (u.closedAt.getTime() <= at.getTime() && at.getTime() < u.landsAt.getTime()) {
+      return { unseatBallotId: u.ballotId, landsAt: u.landsAt.toISOString() };
+    }
+  }
+  return null;
+}
+
+export async function beingVotedOut(pool: Pool, userId: string, at: Date): Promise<BeingVotedOut | null> {
+  const [unseatings, roles] = await Promise.all([carriedUnseatingsOf(pool, userId), rolesCarryingVeto(pool)]);
+  return beingVotedOutAt(unseatings, new Set(roles.keys()), at);
+}
+
+/** The sentence a veto carries when its steward was being voted out. */
+export function votedOutSentence(firstName: string, landsAtIso: string): string {
+  return `${firstName} was being voted out when they cast this: the village had carried the vote to take their seat back, and it lands on ${landsAtIso.slice(0, 10)}.`;
 }
 
 /**
@@ -1346,8 +1425,12 @@ export interface SeasonTurn {
   currentSeasonId: string | null;
   /** True when the running season has no end date at all. */
   openEnded?: boolean;
-  /** How many cycles the term runs. Defaults to DEFAULT_TERM_CYCLES. */
-  termCycles?: number;
+  /**
+   * The instant the running season ends (0199). A steward's seat resets each
+   * season at the latest, so the launch seats the catalysts exactly that long.
+   * Absent means no season end is known, and nobody is seated.
+   */
+  seasonEndsAt?: Date | null;
   /** The instant the term is measured from. Defaults to now. */
   now?: Date;
 }
@@ -1383,11 +1466,14 @@ export interface SeatingReport {
  * an act of virtue. Nobody has to decide they are ready to give up power; they
  * have to be re-granted it.
  *
- * THE TERM IS COMPUTED FROM THE CLOCK, NOT FROM THE SEASON. The audit of
- * 2026-09-03 traced the old path: the term was "the next season turn", seasons
- * are an ungoverned admin list, both shipped entries end on one date, and a
- * founding season is documented as open-ended. A term hung on that list never
- * comes due, and the term is the only backstop on a seat that can veto.
+ * THE TERM IS THE SEASON'S END, RESOLVED TO AN INSTANT. Rye, 2026-09-14: a
+ * steward's seat resets each season at the latest. The audit of 2026-09-03
+ * found the old season-shaped term never came due, because seasons are an
+ * admin list, both shipped entries ended on one date, and a founding season is
+ * documented as open-ended. So the caller hands in the season's end as an
+ * instant, the seat stores that instant, and a later edit to the season moves
+ * it through `restampSeatsToCalendar` (server/lib/seatTermLanding.ts) without
+ * ever making it indefinite.
  *
  * AND IT REFUSES AN OPEN-ENDED SEASON outright, rather than seating anybody
  * against a calendar that will not turn. A village whose season has no end has
@@ -1417,7 +1503,7 @@ export async function seatCatalystsAsStewards(
   turn: SeasonTurn = { currentSeasonId: null },
 ): Promise<SeatingReport> {
   const now = turn.now ?? new Date();
-  const termDate = termEndsAtFromCycles(turn.termCycles ?? DEFAULT_TERM_CYCLES, now);
+  const termDate = turn.seasonEndsAt ?? null;
   const base: SeatingReport = {
     ok: true,
     roleCreated: false,
@@ -1425,17 +1511,19 @@ export async function seatCatalystsAsStewards(
     holdingMoved: false,
     seated: [],
     alreadySeated: [],
-    termEndsAt: termDate.toISOString(),
+    termEndsAt: termDate ? termDate.toISOString() : null,
   };
 
-  if (turn.openEnded) {
+  if (turn.openEnded || !termDate || termDate.getTime() <= now.getTime()) {
     return {
       ...base,
       ok: false,
       termEndsAt: null,
-      error:
-        "This village's season has no end date, so a steward's term would have nothing to end it. " +
-        "Give the season an end, or start the next one, and seat the stewards after that.",
+      error: turn.openEnded
+        ? "This village's season has no end date, so a steward's term would have nothing to end it. " +
+          "Give the season an end, or start the next one, and seat the stewards after that."
+        : "No running season has an end date ahead of today, so a steward's term would have nothing to end it. " +
+          "Start the season in Admin with its end date, and seat the stewards after that.",
     };
   }
 
@@ -1523,6 +1611,7 @@ export async function seatCatalystsAsStewards(
       grantedBy: launchBallotId,
       termEndsAt: termDate,
       seasonId: turn.currentSeasonId,
+      termFollowsSeason: true,
     });
     await recordTermStarted(pool, {
       roleId: STEWARD_ROLE_ID,
@@ -1628,22 +1717,93 @@ export interface ExpiringHolding {
 }
 
 /**
+ * The clock this village keeps, read through the variables cache.
+ *
+ * The twin of `activeClock` in server/lib/gratitude-cycles.ts, restated here
+ * rather than imported because that module drags the whole settlement in, and
+ * the term watch only needs to know where a cycle begins.
+ */
+export function villageClock(): CycleClock {
+  return clockFor(stringVar("cycle.mode"));
+}
+
+/**
+ * THE TERM WARNING OPENS ONE CYCLE BEFORE THE TERM ENDS.
+ *
+ * Rye, 2026-09-14: warn a holder one lunar cycle before their term ends. It
+ * used to be a flat 14 days, which is half a moon, and a village that re-seats
+ * by vote needs a whole cycle to open a ballot, let it run, and close it.
+ *
+ * MEASURED WITH THE VILLAGE'S OWN CLOCK, never with a day count. Terms are
+ * stamped on a cycle boundary (`termEndsAtFromCycles`), so the warning for a
+ * term ending at the boundary that opens cycle N opens at the boundary that
+ * opened cycle N-1: the new moon before, on the lunar clock, or the first of
+ * the month before, on the calendar clock. A lunation runs anywhere from
+ * about 29.3 to 29.8 days, so "30 days" would be wrong in both directions.
+ *
+ * A term that does not sit on a boundary (a date somebody typed on an
+ * org-chart seating) keeps its offset into its cycle and moves back one cycle.
+ * When the cycle before is shorter than that offset (the 31st of March has no
+ * 31st of February), the warning opens at the start of the term's own cycle,
+ * which is still at least one whole cycle before the term ends.
+ *
+ * PURE. The clock is an argument so a test can hold both clocks.
+ */
+export function termWarningOpensAt(termEndsAt: Date, clock: CycleClock): Date {
+  const n = clock.cycleNumberAt(termEndsAt);
+  const ownStart = clock.startOf(n).getTime();
+  const offset = Math.max(0, termEndsAt.getTime() - ownStart);
+  return new Date(Math.min(clock.startOf(n - 1).getTime() + offset, ownStart));
+}
+
+/** True once the warning for a term ending at `termEndsAt` is due. */
+export function termWarningDue(termEndsAt: Date, now: Date, clock: CycleClock): boolean {
+  return now.getTime() >= termWarningOpensAt(termEndsAt, clock).getTime();
+}
+
+/**
+ * How far ahead the term watch has to LOOK so no due warning is missed.
+ *
+ * A warning due now belongs to a term ending no later than the cycle after
+ * this one, so two boundaries ahead covers it; a third absorbs the fractional
+ * millisecond a lunar boundary can sit on. This only bounds the query: the
+ * rows it returns are filtered through `termWarningDue`, which decides.
+ */
+export function termWatchHorizon(now: Date, clock: CycleClock): Date {
+  return clock.startOf(clock.cycleNumberAt(now) + 3);
+}
+
+/** The same horizon in whole days, for `expiringSeatings`, which counts in days. */
+export function termWatchLookaheadDays(now: Date = new Date(), clock: CycleClock = villageClock()): number {
+  return Math.max(1, Math.ceil((termWatchHorizon(now, clock).getTime() - now.getTime()) / 86400000));
+}
+
+/**
  * Permission-plane holdings whose term has run out or is about to.
  *
  * The sibling of `expiringSeatings` in server/lib/orgChart.ts, which asks the
  * same question of the org chart. Two planes, two queries, on purpose: they
  * hold different rows and only one of them carries powers.
+ *
+ * `within` is a number of days or an instant. Left out, it is the term
+ * watch's own horizon on the village clock, so no caller inherits a day count.
  */
 export async function expiringHoldings(
   pool: Pool,
-  withinDays = 14,
+  within?: number | Date,
   now: Date = new Date(),
 ): Promise<ExpiringHolding[]> {
   // The window is the JOB'S policy and stays here; the statement takes the
   // instant it produces. See `holdingsEndingBy` in
   // server/repos/permissionHoldings.ts for why already-ended holdings are in
   // the answer rather than filtered out of it.
-  const rows = await holdingsEndingBy(pool, new Date(now.getTime() + withinDays * 86400000));
+  const cutoff =
+    within instanceof Date
+      ? within
+      : typeof within === "number"
+        ? new Date(now.getTime() + within * 86400000)
+        : termWatchHorizon(now, villageClock());
+  const rows = await holdingsEndingBy(pool, cutoff);
   return rows.map((r) => {
     const ends = r.termEndsAt instanceof Date ? r.termEndsAt : new Date(String(r.termEndsAt));
     return {
@@ -1670,8 +1830,15 @@ export interface TermWatchDeps {
     dedupeKey: string;
   }): Promise<{ fresh: boolean }>;
   notifyAdmins(type: string, title: string, dedupeKey: string, link?: string): Promise<void>;
-  /** Org-chart seatings ending soon, already computed by the caller. */
-  seatings: Array<{ id: string; holderKind: string; userId: string | null; roleName: string; daysLeft: number | null; lapsed?: boolean }>;
+  /**
+   * Org-chart seatings ending soon, already computed by the caller over
+   * `termWatchLookaheadDays`. A seating that has not lapsed is told only when
+   * its `termEndsAt` says the one-cycle warning is due; with no date there is
+   * nothing to count down to, so it is not told.
+   */
+  seatings: Array<{ id: string; holderKind: string; userId: string | null; roleName: string; daysLeft: number | null; lapsed?: boolean; termEndsAt?: Date | string | null }>;
+  /** The village clock. Defaults to the live `cycle.mode`; tests hand one in. */
+  clock?: CycleClock;
   /**
    * The season payload, or undefined when the caller could not read one.
    * `undefined` and `{ current: null }` are DIFFERENT ANSWERS and the report
@@ -1711,6 +1878,19 @@ export interface TermWatchReport {
  *
  * "No season is running" and "this sweep could not read the calendar" are
  * different sentences, and both are said out loud.
+ *
+ * ONE NOTIFICATION PER ROW PER EVENT, through stable dedupe keys, because a
+ * mandate nobody has acted on is a governance problem a weekly ping does not
+ * solve. The two planes stay separate sweeps: org-chart seatings carry no
+ * permissions and revoke nothing, while a permission holding's term genuinely
+ * ends the powers (0171).
+ *
+ * MEMBER HOLDERS ONLY, AND AGENTS ARE EXCLUDED, inherited (0142). An agent is
+ * a documented holder, so the `holderKind !== "member"` filter below already
+ * drops it, and that is the behaviour to keep: a term end is a date the
+ * village agreed to revisit an arrangement with a person, and an agent's
+ * seating has nobody to have that conversation with.
+ * server/lib/calendarProviders.ts filters its twin for the same reason.
  */
 export async function runTermWatch(deps: TermWatchDeps): Promise<TermWatchReport> {
   const now = deps.now ?? new Date();
@@ -1731,12 +1911,30 @@ export async function runTermWatch(deps: TermWatchDeps): Promise<TermWatchReport
     ok: true,
   };
 
+  // One cycle ahead, on the village's own clock (`termWarningOpensAt`).
+  const clock = deps.clock ?? villageClock();
+  const due = (ends: Date | string | null | undefined): boolean => {
+    if (!ends) return false;
+    const at = ends instanceof Date ? ends : new Date(String(ends));
+    return !Number.isNaN(at.getTime()) && termWarningDue(at, now, clock);
+  };
+
+  /*
+   * THE RENEWAL, and what it cannot be yet. Rye, 2026-09-14: a term is never
+   * extended automatically, and there is no limit on repeat terms, so the
+   * warning says both. The link is `/roles` because no screen in the client
+   * opens a seat vote (`POST /api/governance/role-seats`) yet; when one lands,
+   * this link is the single place to point it at. The dedupe keys keep their
+   * shape, one warning per holding.
+   */
+
   // Plane one: org-chart seatings. This plane carries no capabilities, so its
   // copy stays about the mandate and says so rather than making a claim about
   // powers that would be false one plane over.
   for (const a of deps.seatings) {
     if (a.holderKind !== "member" || !a.userId) continue;
     const ended = !!a.lapsed;
+    if (!ended && !due(a.termEndsAt)) continue;
     const r = await deps.notify({
       userId: a.userId,
       type: "term_expiring",
@@ -1745,7 +1943,7 @@ export async function runTermWatch(deps: TermWatchDeps): Promise<TermWatchReport
         : `Your term on ${a.roleName} ends in ${a.daysLeft} day(s)`,
       body: ended
         ? "The agreement to keep holding this seat unasked has run out. This seat carries no permissions of its own, so nothing has been switched off, and it is the moment to say whether you want to carry on."
-        : "This is the nudge to say whether you want to carry on, while there is still time to arrange it.",
+        : "This is the nudge to say whether you want to carry on, while there is a whole cycle left to arrange it. Nothing renews on its own, and there is no limit on terms, so the village can seat you again.",
       link: "/roles",
       dedupeKey: `${ended ? "term-ended" : "term-soon"}:${a.id}`,
     });
@@ -1755,7 +1953,8 @@ export async function runTermWatch(deps: TermWatchDeps): Promise<TermWatchReport
   // Plane two: permission holdings. Here a term really does end the powers,
   // so the copy says it plainly. The founder: "If they're not voted back in
   // then they expire when they expire!"
-  for (const h of await expiringHoldings(deps.pool, 14, now)) {
+  for (const h of await expiringHoldings(deps.pool, termWatchHorizon(now, clock), now)) {
+    if (!h.ended && !due(h.termEndsAt)) continue;
     if (h.ended) report.lapsed += 1;
     const r = await deps.notify({
       userId: h.userId,
@@ -1765,7 +1964,7 @@ export async function runTermWatch(deps: TermWatchDeps): Promise<TermWatchReport
         : `Your term as ${h.roleName} ends in ${h.daysLeft} day(s)`,
       body: h.ended
         ? "The seat has ended, and the powers that came with it have ended with it. Nothing was taken from you by anybody; the term simply reached its date. The village seats you again if it wants you to carry on."
-        : "When the date arrives the seat ends, and the powers that came with it end too. Nothing renews on its own.",
+        : "When the date arrives the seat ends, and the powers that came with it end too. Nothing renews on its own. There is no limit on terms, so the village can vote to seat you again before the date.",
       link: "/roles",
       dedupeKey: `${h.ended ? "perm-term-ended" : "perm-term-soon"}:${h.id}`,
     });
@@ -1784,7 +1983,8 @@ export async function runTermWatch(deps: TermWatchDeps): Promise<TermWatchReport
         ? "No season is running, and every term is measured against the calendar"
         : "The calendar could not be read, and every term is measured against it",
       `season-stopped:${now.toISOString().slice(0, 10)}`,
-      "/admin?tab=seasons",
+      // `season` is the admin tab that holds the dates. `seasons` named no tab.
+      "/admin?tab=season",
     );
   }
 

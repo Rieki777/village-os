@@ -151,6 +151,18 @@ export interface AppDeps {
   milestonesRepo: DbCollection<Row>;
 
   /**
+   * The village's circles, as the admin circle routes write them.
+   *
+   * `all()` answers from the cache, and the cache is current for every write
+   * that goes through this repository: `insert` updates it in the same
+   * transaction, so a circle an admin made a moment ago is in the next read.
+   * Writers that go around it with raw SQL reload it afterwards: the boot
+   * backfill, the season roll, and standing-example seeding and retirement.
+   * Read it once per request and hand the list on.
+   */
+  circlesRepo: DbCollection<Row>;
+
+  /**
    * The people. MySQL-authoritative, `all()` answers in join order.
    *
    * A wide entry, so it earns a second look in review the way `getPool` does:
@@ -272,8 +284,12 @@ export interface AppDeps {
    */
   questConsentRecipients(): Promise<string[]>;
 
-  /** The season banner payload. Extracted routes read `current` from it. */
-  seasonState(): { current: any };
+  /**
+   * The season banner payload. Extracted routes read `current` from it, and
+   * since 0199 the whole dated list and the zone too, because a seat's term is
+   * decided against them (shared/seatTerms.ts).
+   */
+  seasonState(): { current: any; seasons: any[]; timezone: string };
 
   /** The pattern the running season names, or null. Most villages: null. */
   currentPatternId(): string | null;

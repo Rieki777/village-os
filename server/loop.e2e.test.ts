@@ -397,7 +397,8 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const profile = await api("GET", "/api/profile", undefined, idlerToken);
     expect(profile.json.recognitionBalance).toBe(0);
 
-    // Declining is still allowed from any state, so stale claims can be cleared.
+    // Declining is still allowed before any consent, from claimed as well as
+    // submitted, so stale claims can be cleared.
     const declined = await api(
       "POST",
       `/api/admin/quest-claims/${claim.json.id}/consent`,

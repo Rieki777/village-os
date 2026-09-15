@@ -1,4 +1,5 @@
 import { Sun, Sunrise } from "lucide-react";
+import { Link } from "wouter";
 import { useSeason } from "@/lib/gameApi";
 
 /** The season strap. The server decides which season is current from today's
@@ -34,6 +35,12 @@ export default function SeasonBanner() {
   if (!active.name) return null;
   const goals = (active.goals ?? []).filter((g) => g.text.trim());
   const met = goals.filter((g) => g.done).length;
+  // `daysLeft` is null for an open-ended season, and `null <= 14` is true in
+  // JavaScript, so the reminder asks for a real number first. Two weeks is the
+  // same window the season-end notifications open on
+  // (server/lib/seasonReminders.ts).
+  const daysLeft = season.daysLeft;
+  const turningSoon = daysLeft != null && daysLeft > 0 && daysLeft <= 14;
 
   return (
     <section className="bg-teal-band text-white py-4">
@@ -47,9 +54,18 @@ export default function SeasonBanner() {
             {met} of {goals.length} season goal{goals.length === 1 ? "" : "s"} met
           </span>
         )}
-        {season.daysLeft > 0 && (
+        {daysLeft != null && daysLeft > 0 && (
           <span className="text-white text-xs">
-            {season.daysLeft} day{season.daysLeft === 1 ? "" : "s"} until the season turns
+            {daysLeft} day{daysLeft === 1 ? "" : "s"} until the season turns
+          </span>
+        )}
+        {turningSoon && (
+          <span className="basis-full text-amber-on-band text-sm">
+            Before the season turns, run the end-of-season governance: record what this season did, and seat
+            people for the next season.{" "}
+            <Link href="/seasonal-festivals" className="underline font-medium">
+              See the season
+            </Link>
           </span>
         )}
       </div>
