@@ -83,6 +83,9 @@ export const SOURCES = [
   // walking it quietly, which is what turned a silent omission into a message
   // naming the file.
   "shared/needs.ts",
+  // Added with the settlement ballot: `shared/ballotSubjects.ts` imports the
+  // subject constant from here, so the registry now reaches it transitively.
+  "shared/moonSettlement.ts",
 ];
 
 /** The one file the walk starts from. Everything else is discovered. */

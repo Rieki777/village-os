@@ -16,8 +16,21 @@
  * enough for daily work (a job runs when DUE, not N ms after boot).
  *
  * WHAT THIS HOST WILL NEVER DO — written down so nobody "helpfully" adds it:
- *  - It does NOT close gratitude cycles. Settlement releases value and is an
- *    explicitly human, admin-triggered act (POST /api/admin/cycles/close).
+ *  - It does NOT close gratitude cycles. Settlement releases value and no job
+ *    here may release value. There are exactly two ways a moon is settled and
+ *    a person is in both of them: a founder pressing Close
+ *    (POST /api/admin/cycles/close), or the village passing a ballot.
+ *
+ *    The `moon-proposal` job is not an exception to this and must not be read
+ *    as one. Its whole power is to ASK: it notices a lunation ended, writes
+ *    down what each member would receive, and OPENS A BALLOT. It cannot close
+ *    a cycle, it cannot post to the ledger, and it never decides. The
+ *    settlement itself runs from the closer registered for `cycle_settlement`,
+ *    which the landing routine calls only after the village has voted the
+ *    decision through and the steward's window has run. See
+ *    shared/moonSettlement.ts for the ruling this keeps (Rye, 2026-09-05:
+ *    every human is in charge of minting value, and the foundation for
+ *    automating it later must not be automation today).
  *  - It does NOT roll seasons. Season rollover is compute-on-read by design;
  *    migrating it here would re-introduce the stale-banner bug it fixed.
  */
