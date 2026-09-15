@@ -8,6 +8,8 @@ import {
   CAUTION_MOONS,
   cautionLine,
   civilDateInstant,
+  RECORD_LIMIT,
+  RECORD_LIMIT_DATE,
   resolveSeatTerm,
   restampsFor,
   type SeatCalendar,
@@ -232,5 +234,54 @@ describe("the calendar and the seats talk: restampsFor", () => {
       seasons: SOLAR.seasons.map((s) => (s.id === "summer-2026" ? { ...s, endsOn: "2026-10-01" } : s)),
     };
     expect(restampsFor([ended], summerMoved, NOW)).toEqual([]);
+  });
+});
+
+describe("a term the record can hold: MySQL 8 TIMESTAMP ends in January 2038", () => {
+  // These dates never reach a database. They are inputs to a pure rule whose
+  // whole job is to stop them reaching one.
+  it("is the TIMESTAMP ceiling, and the date it names fits under it in every zone", () => {
+    expect(RECORD_LIMIT.toISOString()).toBe("2038-01-19T03:14:07.000Z");
+    for (const tz of ["Pacific/Kiritimati", "UTC", "Etc/GMT+12"]) {
+      expect(civilDateInstant(RECORD_LIMIT_DATE, tz)!.getTime(), tz).toBeLessThanOrEqual(RECORD_LIMIT.getTime());
+    }
+  });
+
+  it("refuses a requested date past it in words, and accepts the last date it names", () => {
+    const late = resolveSeatTerm({ requestedEndsOn: "2038-02-01", calendar: SOLAR, capAtSeasonEnd: false, now: NOW });
+    expect(late.ok || late.code).toBe("past_record_limit");
+    if (!late.ok) expect(late.error).toContain(RECORD_LIMIT_DATE);
+    expect(resolveSeatTerm({ requestedEndsOn: RECORD_LIMIT_DATE, calendar: SOLAR, capAtSeasonEnd: false, now: NOW }).ok).toBe(true);
+    // West of UTC the village's midnight on the 19th is already past the ceiling.
+    const west = resolveSeatTerm({
+      requestedEndsOn: "2038-01-19",
+      calendar: { ...SOLAR, timezone: "America/Los_Angeles" },
+      capAtSeasonEnd: false,
+      now: NOW,
+    });
+    expect(west.ok || west.code).toBe("past_record_limit");
+  });
+
+  it("refuses a season end past it when no date is asked, and the seat can still take its own date", () => {
+    const farSeason: SeatCalendar = {
+      timezone: "UTC",
+      currentSeasonId: "long",
+      seasons: [{ id: "long", startsOn: "2026-09-01", endsOn: "2038-03-20" }],
+    };
+    const t = resolveSeatTerm({ calendar: farSeason, capAtSeasonEnd: false, now: NOW });
+    expect(t.ok || t.code).toBe("past_record_limit");
+    if (!t.ok) expect(t.error).toContain("its own earlier end date");
+    expect(resolveSeatTerm({ calendar: farSeason, capAtSeasonEnd: true, now: NOW }).ok || "refused", "a steward's default too").toBe("refused");
+    expect(resolveSeatTerm({ requestedEndsOn: "2027-03-01", calendar: farSeason, capAtSeasonEnd: false, now: NOW }).ok).toBe(true);
+    expect(resolveSeatTerm({ requestedEndsOn: "2027-03-01", calendar: farSeason, capAtSeasonEnd: true, now: NOW }).ok).toBe(true);
+  });
+
+  it("leaves a following seat on its last date when its season moves past it", () => {
+    const holding = { id: "rh-far", seasonId: "autumn-2026", termEndsAt: new Date("2026-12-21T00:00:00Z"), followsSeason: true };
+    const movedPast: SeatCalendar = {
+      ...SOLAR,
+      seasons: SOLAR.seasons.map((s) => (s.id === "autumn-2026" ? { ...s, endsOn: "2038-06-01" } : s)),
+    };
+    expect(restampsFor([holding], movedPast, NOW)).toEqual([]);
   });
 });
