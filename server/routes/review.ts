@@ -83,13 +83,16 @@ import {
 } from "../lib/externalProposals";
 import {
   addChange,
+  blockedLinesOf,
   createDraft,
   draftChangeCap,
   listDrafts,
+  loadPreviewContext,
   openDraftCap,
   previewDraft,
+  stuckQueueDrafts,
   withdrawDraft,
-  type PreviewLine,
+  type BlockedLine,
 } from "../lib/orgDrafts";
 import { readProposedSeats, type LiveCircle } from "../lib/proposedSeats";
 import {
@@ -121,16 +124,6 @@ interface IgnoredKeys {
   keys: string[];
 }
 
-/** One change in the draft that cannot apply: what it would do, and why it cannot. */
-interface BlockedLine {
-  reads: string;
-  blocked: string;
-}
-
-/** The blocked lines of a preview, in the shape the review page reads. */
-function blockedLinesOf(lines: PreviewLine[]): BlockedLine[] {
-  return lines.filter((l) => l.blocked).map((l) => ({ reads: l.reads, blocked: String(l.blocked) }));
-}
 
 /*
  * WHAT A PROPOSAL MAY SAY ABOUT A SEAT lives in server/lib/proposedSeats.ts:
@@ -233,11 +226,12 @@ export function register(app: Express, deps: Deps): void {
   app.get("/api/review/queue", async (req, res) => {
     if (!(await guardCapability(req, res, "intake.moderate"))) return;
     const pool = getPool();
-    const [proposals, quests, drops, drafts] = await Promise.all([
+    const [proposals, quests, drops, drafts, previewContext] = await Promise.all([
       proposalQueue(pool, "proposed"),
       questProposalQueue(pool, "proposed"),
       recentDrops(pool, 30),
       listDrafts(pool),
+      loadPreviewContext(pool),
     ]);
 
     const batches = new Map<string, ReturnType<typeof toCard>[]>();
@@ -245,17 +239,9 @@ export function register(app: Express, deps: Deps): void {
       batches.set(p.batchId, [...(batches.get(p.batchId) ?? []), toCard(p)]);
     }
 
-    // Open, made by this queue (only its accept sets a source proposal), and
-    // blocked. Bounded by openDraftCap, so the previews stay few.
-    const cap = draftChangeCap(await activeMembers());
-    const stuckDrafts: { draftId: string; blocked: number; blockedLines: BlockedLine[] }[] = [];
-    for (const d of drafts) {
-      if (d.status !== "open" || !d.sourceProposalId) continue;
-      const preview = await previewDraft(pool, d.id, cap);
-      if (preview.blocked > 0) {
-        stuckDrafts.push({ draftId: d.id, blocked: preview.blocked, blockedLines: blockedLinesOf(preview.lines) });
-      }
-    }
+    // Every open draft this queue made that is blocked, previewed against the
+    // one read above, and listed even when its preview throws (stuckQueueDrafts).
+    const stuckDrafts = stuckQueueDrafts(drafts, previewContext, draftChangeCap(await activeMembers()));
 
     res.json({
       batches: Array.from(batches.entries()).map(([batchId, items]) => ({

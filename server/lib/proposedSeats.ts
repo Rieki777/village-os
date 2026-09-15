@@ -143,12 +143,68 @@ const givesACircle = (key: string, v: unknown): boolean =>
  */
 const LIST_MARKER = /^(?:(?:\d{1,3}[.)]|[-*•])\s+)+/;
 
+/** A numbered marker later in the text: " 2. ", " 3) ". */
+const INLINE_MARKER = /\s\d{1,3}[.)]\s/;
+
 /**
- * Where one sentence ends and the next starts: a period, whitespace, a capital.
- * Not after a lone capital ("J. Ames", "U.S. Army"), a number of up to three
- * digits ("1. Show up"), or a short title ("Dr. Ames").
+ * An item without its leading markers, unless a numbered marker follows later
+ * in it. "1. Keep the site. 2. Update it." with its line breaks lost is one
+ * item, and stripping only the "1." published it counting from 2.
  */
-const SENTENCE_BREAK = /(?<!\b(?:[A-Z]|\d{1,3}|Dr|Mr|Mrs|Ms|St|Jr|Sr|Mt|No|vs|etc|e\.g|i\.e))\.\s+(?=[A-Z])/;
+function stripMarkers(s: string): string {
+  const rest = s.replace(LIST_MARKER, "");
+  return INLINE_MARKER.test(rest) ? s : rest;
+}
+
+/*
+ * Letters are spelled as ranges, accented Latin included ("gestión", "Pérez"),
+ * because the server's compile target predates the regex flag for Unicode
+ * letter classes.
+ */
+
+/** A candidate sentence end: a period, whitespace, a capital. `splitSentences` decides. */
+const SENTENCE_END = /\.\s+(?=[A-ZÀ-ÖØ-Þ])/g;
+
+/** An ordinary lowercase word, hyphens allowed inside: "logged", "one-pager". */
+const PLAIN_WORD = /^[a-zß-öø-ÿ][a-zß-öø-ÿ-]*[a-zß-öø-ÿ]$/;
+
+/** Lowercase words that are abbreviations, and a capital after them starts no sentence. */
+const LOWERCASE_ABBREVIATIONS = new Set([
+  "etc", "vs", "approx", "aprox", "incl", "excl", "esp", "min", "max", "no", "nos", "tel", "ext", "cf", "ca", "pp",
+]);
+
+/** A quote mark, or an apostrophe with no letter on one side of it ("parcel's" is not a quote). */
+const QUOTE = /["“”«»„]|(?<![A-Za-zÀ-ÖØ-öø-ÿ])['‘’]|['‘’](?![A-Za-zÀ-ÖØ-öø-ÿ])/;
+
+/**
+ * A run of sentences as separate duties, or the whole string as one.
+ *
+ * ONLY WHERE THE WORD BEFORE THE PERIOD IS AN ORDINARY LOWERCASE WORD. The
+ * first version split at any period and a capital, minus a short list of
+ * titles, and every title the list lacked cut a name off its duty: "with Lic.
+ * Mora" became "with Lic" and "Mora", and "Ing.", "Sra.", "Prof.", "Co.",
+ * "Mon." and "7 a.m. Monday" did the same. Lists of exceptions never end, so
+ * the rule is turned round. A capitalised word, an initial, a number, a word
+ * with a period inside it ("a.m", "U.S"), or a closing bracket before the
+ * period keeps the text together. So does any quote mark, since a quoted motto
+ * can hold two sentences. Leaving a paragraph whole is the old behaviour and
+ * the safer mistake: the steward splits it in the draft, and nothing is cut.
+ */
+function splitSentences(v: string): string[] {
+  if (QUOTE.test(v)) return [v];
+  const parts: string[] = [];
+  const ends = new RegExp(SENTENCE_END.source, "g");
+  let from = 0;
+  let m: RegExpExecArray | null;
+  while ((m = ends.exec(v)) !== null) {
+    const word = /\S+$/.exec(v.slice(from, m.index))?.[0] ?? "";
+    if (!PLAIN_WORD.test(word) || LOWERCASE_ABBREVIATIONS.has(word)) continue;
+    parts.push(v.slice(from, m.index));
+    from = m.index + m[0].length;
+  }
+  parts.push(v.slice(from));
+  return parts;
+}
 
 export interface CircleProblem {
   /**
@@ -197,18 +253,22 @@ const namesACircle = (v: unknown): boolean =>
  * A string is split on ";" and on newlines, each part trimmed, its leading list
  * markers ("1. ", "- ") dropped, one trailing period dropped, and empty parts
  * dropped. A string that holds a ";" or a newline is split on those ONLY, so a
- * duty written as two sentences inside such a list stays one duty.
+ * duty written as two sentences inside such a list stays one duty. A line
+ * break at either end separates nothing, so it does not count: a pasted run of
+ * sentences ending in a newline split one way, and the same text without it
+ * split another.
  *
  * A string with neither is split at sentence ends. The first real batch sent
  * three seats that way, each a run of separate duties ("Send the one-pager.
  * Track the replies. Book the call."), and every one published as a single
  * paragraph under "Answerable for". No ";"-separated item in that batch held a
  * second sentence, so the duty-with-two-sentences case this used to protect did
- * not occur where the list shape was known. See SENTENCE_BREAK for what it will
- * not split after.
+ * not occur where the list shape was known. `splitSentences` says where it
+ * will split, which is narrower than every period.
  *
  * An array passes through with items trimmed, leading list markers dropped, and
- * null or blank items dropped.
+ * null or blank items dropped. A leading marker stays on an item, string or
+ * array, that has another numbered marker later in it (`stripMarkers`).
  * An array holding an object or a nested list is `undefined` as a whole, since
  * keeping the text items would publish a list with duties quietly missing.
  * `null` passes through as `null`. Anything else is `undefined`, which the
@@ -218,8 +278,9 @@ const namesACircle = (v: unknown): boolean =>
 export function normaliseAccountabilities(v: unknown): string[] | null | undefined {
   if (v === null) return null;
   if (typeof v === "string") {
-    return (/[;\r\n]/.test(v) ? v.split(/[;\r\n]+/) : v.split(SENTENCE_BREAK))
-      .map((s) => s.trim().replace(LIST_MARKER, "").replace(/\.$/, "").trim())
+    const text = v.trim();
+    return (/[;\r\n]/.test(text) ? text.split(/[;\r\n]+/) : splitSentences(text))
+      .map((s) => stripMarkers(s.trim()).replace(/\.$/, "").trim())
       .filter((s) => s !== "");
   }
   if (Array.isArray(v)) {
@@ -228,7 +289,7 @@ export function normaliseAccountabilities(v: unknown): string[] | null | undefin
     }
     return v
       .filter(carries)
-      .map((s) => String(s).trim().replace(LIST_MARKER, "").trim())
+      .map((s) => stripMarkers(String(s).trim()).trim())
       .filter((s) => s !== "");
   }
   return undefined;

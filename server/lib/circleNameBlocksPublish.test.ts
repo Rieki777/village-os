@@ -18,7 +18,17 @@
 import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 import mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
-import { addChange, createDraft, previewDraft, publishDraft, type DraftOp } from "./orgDrafts";
+import {
+  addChange,
+  createDraft,
+  listDrafts,
+  loadPreviewContext,
+  previewDraft,
+  publishDraft,
+  stuckQueueDrafts,
+  type Draft,
+  type DraftOp,
+} from "./orgDrafts";
 import { normaliseProposedSeat, type LiveCircle } from "./proposedSeats";
 
 const configured = testDbConfigured();
@@ -155,6 +165,75 @@ describe.skipIf(!configured)("a circle given by a name this village cannot place
     }
   });
 
+  it("lists every bad field of a hand-built seat in one preview, where the first hid the rest", async () => {
+    const id = await draftWith(
+      [{ op: "create_seat", orgRoleId: "cnb-many", payload: { name: "Cook", aim: { text: "Feed" }, domain: ["a", "b"], recruiting: "yes" } }],
+      null,
+    );
+    const reason = String((await previewDraft(pool, id, 99)).lines[0].blocked);
+    expect(reason).toContain("This seat's aim is not text");
+    expect(reason).toContain("This seat's domain is not text");
+    expect(reason).toContain("Recruiting is true or false");
+  });
+
+  it("blocks an object where a value belongs, where converting it threw and took the preview down", async () => {
+    // `String({ toString: 0 })` throws. These arrive exactly so from JSON.
+    const hostile = () => JSON.parse('{"toString":0,"valueOf":0}');
+    const cases: [string, Record<string, unknown>, string][] = [
+      ["cnb-h-crit", { name: "Crit Seat", criticality: hostile() }, "Criticality is normal or high"],
+      ["cnb-h-seats", { name: "Seats Seat", seats: hostile() }, "A seat holds between 1 and 50 people"],
+      ["cnb-h-circle", { name: "Circle Seat", circleId: hostile() }, "That circle does not exist"],
+      ["cnb-h-name", { name: hostile() }, "This seat's name is not text"],
+      ["cnb-h-matches", { name: "Match Seat", circleName: "Nowhere Circle", circleMatches: hostile() }, 'There is no circle called "Nowhere Circle"'],
+    ];
+    for (const [seatId, payload, sentence] of cases) {
+      const id = await draftWith([{ op: "create_seat", orgRoleId: seatId, payload }]);
+      const preview = await previewDraft(pool, id, 99);
+      expect(preview.lines[0].blocked, seatId).toContain(sentence);
+      expect((await publishDraft(pool, id, "u-steward", 99)).ok, seatId).toBe(false);
+    }
+    await pool.query("INSERT INTO org_roles (id, name, seats) VALUES ('cnb-existing', 'Existing Seat', 1)"); // module-review-ok: a fixture on the scratch schema this suite provisioned
+    const edit = await draftWith([{ op: "update_seat", orgRoleId: "cnb-existing", payload: { seats: hostile() } }]);
+    expect((await previewDraft(pool, edit, 99)).lines[0].blocked).toBe("A seat holds between 1 and 50 people");
+  });
+
+  it("lists the queue's stuck drafts from one read of seats and circles, and a draft whose preview throws", async () => {
+    const blockedA = await draftWith([{ op: "create_seat", orgRoleId: "cnb-sa", payload: { name: "Stuck A", circleName: "Nowhere Circle", circleMatches: 0 } }]);
+    const blockedB = await draftWith([{ op: "create_seat", orgRoleId: "cnb-sb", payload: { name: "Stuck B", seats: 400 } }]);
+    const clean = await draftWith([{ op: "create_seat", orgRoleId: "cnb-sc", payload: { name: "Clean Seat" } }]);
+    const byHand = await draftWith([{ op: "create_seat", orgRoleId: "cnb-sd", payload: { name: "" } }], null);
+
+    let queries = 0;
+    const counting = new Proxy(pool, {
+      get: (target, prop) => {
+        const v = Reflect.get(target, prop, target);
+        if (prop !== "query") return typeof v === "function" ? v.bind(target) : v;
+        return (...args: unknown[]) => {
+          queries += 1;
+          return (v as (...a: unknown[]) => unknown).apply(target, args);
+        };
+      },
+    }) as mysql.Pool;
+    const drafts = await listDrafts(pool);
+    const context = await loadPreviewContext(counting);
+    expect(queries).toBe(2);
+
+    const stuck = stuckQueueDrafts(drafts, context, 99);
+    const ids = stuck.map((d) => d.draftId);
+    expect(ids).toContain(blockedA);
+    expect(ids).toContain(blockedB);
+    expect(ids).not.toContain(clean);
+    // Made by a person, so no proposal goes back and it is not the queue's to list.
+    expect(ids).not.toContain(byHand);
+    expect(queries).toBe(2);
+
+    // A draft whose preview throws is listed with its withdraw, and the rest still are.
+    const broken = drafts.map((d) => (d.id === blockedA ? ({ ...d, changes: undefined } as unknown as Draft) : d));
+    const listed = stuckQueueDrafts(broken, context, 99);
+    expect(listed.find((d) => d.draftId === blockedA)?.blockedLines[0].blocked).toContain("could not be previewed");
+    expect(listed.map((d) => d.draftId)).toContain(blockedB);
+  });
+
   it("publishes a vendor's recruiting \"yes\" as recruiting, read by the normaliser", async () => {
     const seat = normaliseProposedSeat({ role_name: "Recruiter", recruiting: "yes", aim: "Find people" }, await liveCircles());
     const id = await draftWith([{ op: "create_seat", orgRoleId: "cnb-recruits", payload: seat.payload }]);
@@ -232,6 +311,10 @@ describe.skipIf(!configured)("a circle given by a name this village cannot place
     expect(collision, reason).toBeGreaterThanOrEqual(0);
     expect(reason.indexOf('There is no circle called "Nowhere Circle" yet'), reason).toBeGreaterThan(collision);
     expect(reason).toContain("reject this one or give it a name of its own");
+    // One recovery. Asking for the circle as well sent a steward to an admin
+    // for a circle made for a seat they then rejected, and said withdraw twice.
+    expect(reason).not.toContain("Ask an admin to create it");
+    expect(reason.match(/withdraw/gi), reason).toHaveLength(1);
 
     // An unknown circle id no longer overwrites an id collision.
     const both = await draftWith([

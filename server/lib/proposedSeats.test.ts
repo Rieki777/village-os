@@ -361,6 +361,62 @@ describe("accountabilities", () => {
     ]);
   });
 
+  it("never cuts a name off its duty after a title the split has never heard of", () => {
+    // The first split refused only a short list of English titles, so every
+    // other honorific cut the duty in two: "with Lic" and "Mora".
+    expect(normaliseAccountabilities("Coordinate the outside agents with Lic. Mora. Get the reservation agreement signed.")).toEqual([
+      "Coordinate the outside agents with Lic. Mora. Get the reservation agreement signed",
+    ]);
+    expect(normaliseAccountabilities("Book the notary (Licda. Mora handles Lot 5). Assemble the closing binder.")).toEqual([
+      "Book the notary (Licda. Mora handles Lot 5). Assemble the closing binder",
+    ]);
+    expect(normaliseAccountabilities("Work with Ing. Solano on the water concession. Chase counsel.")).toEqual([
+      "Work with Ing. Solano on the water concession",
+      "Chase counsel",
+    ]);
+    for (const title of ["Sra.", "Dra.", "Arq.", "Prof.", "Rev.", "Capt.", "Fr.", "the Exec.", "the Asst.", "the Dept."]) {
+      const duty = `Meet ${title} Vargas monthly`;
+      expect(normaliseAccountabilities(`${duty}. File the minutes.`), title).toEqual([duty, "File the minutes"]);
+    }
+  });
+
+  it("keeps a quoted motto whole, and a time, a weekday, a company and a volume inside their duty", () => {
+    expect(normaliseAccountabilities("Uphold the motto 'Land first. People always.' in every decision. Train new members.")).toEqual([
+      "Uphold the motto 'Land first. People always.' in every decision. Train new members",
+    ]);
+    expect(normaliseAccountabilities('Enforce the rule "No dogs. No fires." at camp. Report breaches.')).toEqual([
+      'Enforce the rule "No dogs. No fires." at camp. Report breaches',
+    ]);
+    expect(normaliseAccountabilities("Open the gate at 7 a.m. Monday to Friday. Lock it at dusk.")).toEqual([
+      "Open the gate at 7 a.m. Monday to Friday. Lock it at dusk",
+    ]);
+    expect(normaliseAccountabilities("Water the beds Mon. Wed. and Fri. mornings. Weed on weekends.")).toEqual([
+      "Water the beds Mon. Wed. and Fri. mornings",
+      "Weed on weekends",
+    ]);
+    expect(normaliseAccountabilities("Pay invoices to Acme Co. Ltd. within 30 days. Reconcile monthly.")).toEqual([
+      "Pay invoices to Acme Co. Ltd. within 30 days",
+      "Reconcile monthly",
+    ]);
+    expect(normaliseAccountabilities("Keep Vol. II of the ledger current. Archive Vol. I.")).toEqual([
+      "Keep Vol. II of the ledger current",
+      "Archive Vol. I",
+    ]);
+  });
+
+  it("keeps the first number on a numbered list that lost its line breaks, and splits a run that ends in a newline", () => {
+    const inline = normaliseAccountabilities("1. Maintain the site. 2. Update it. 3. Report.");
+    expect(inline).toEqual(["1. Maintain the site. 2. Update it. 3. Report"]);
+    expect(normaliseAccountabilities(inline)).toEqual(inline);
+    for (const end of ["\n", "\r\n", " \n "]) {
+      expect(normaliseAccountabilities(`Send the one-pager. Track the replies. Book the call.${end}`), JSON.stringify(end)).toEqual([
+        "Send the one-pager",
+        "Track the replies",
+        "Book the call",
+      ]);
+    }
+  });
+
   it("carries null, and reports a value it cannot use instead of losing it at publish", () => {
     expect(normaliseAccountabilities(null)).toBeNull();
     const r = normaliseProposedSeat({ name: "N", accountabilities: 42 }, CIRCLES);

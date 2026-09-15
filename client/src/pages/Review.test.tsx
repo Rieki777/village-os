@@ -310,6 +310,33 @@ describe("what the review page says after an accept", () => {
     expect(screen.getAllByText("Withdraw that draft")).toHaveLength(1);
   });
 
+  it("reads the queue again when a withdraw is refused, so a draft somebody else withdrew loses its card", async () => {
+    // Two stewards, one stuck draft. The other steward withdrew it first, so
+    // this click is refused, and the card used to stay with a button that
+    // could never work until the page was reloaded by hand.
+    let refused = false;
+    const d9 = { draftId: "d9", blocked: 1, blockedLines: [{ reads: 'Create the seat "Mill Warden"', blocked: REASON }] };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: { method?: string }) => {
+        if (init?.method === "POST" && url === "/api/review/drafts/d9/withdraw") {
+          refused = true;
+          return {
+            ok: false,
+            status: 409,
+            json: async () => ({ error: "This draft is withdrawn, and only an open draft can be withdrawn" }),
+          };
+        }
+        return { ok: true, status: 200, json: async () => ({ ...QUEUE, stuckDrafts: refused ? [] : [d9] }) };
+      }),
+    );
+    renderReview();
+    expect(await screen.findByText(/"Milling Circle" yet/)).toBeTruthy();
+    fireEvent.click(screen.getByText("Withdraw that draft"));
+    await waitFor(() => expect(screen.queryByText(/"Milling Circle" yet/)).toBeNull());
+    expect(screen.queryByText("Withdraw that draft")).toBeNull();
+  });
+
   it("says what to do about fields left out, and offers the withdraw when nothing blocked", async () => {
     routes({
       "POST /api/review/proposals/p1/accept": {

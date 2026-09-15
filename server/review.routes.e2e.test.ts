@@ -495,5 +495,25 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
     expect(lone.json.blockedLines[0].blocked).toContain('There is no circle called "Kiln Circle" yet');
     expect(lone.json.ignored).toEqual([]);
     expect((await stuckOn()).map((d) => d.draftId)).toContain(lone.json.createdRef);
+
+    // AN OBJECT WHERE A VALUE BELONGS. Converting it threw inside the preview:
+    // the accept answered with an error after writing its draft, and from then
+    // on every read of this queue failed, the draft's withdraw with it.
+    const hostile = await landProposal(pool, {
+      villageId: "v1",
+      moduleId: "saberra",
+      batchId: "batch-vendor-hostile",
+      kind: "role.proposed",
+      sourceRef: "record-hostile",
+      quote: "The record describes the seat Gate Keeper.",
+      payload: { role_name: "Gate Keeper", criticality: { toString: 0 }, seat_count: { valueOf: 0, toString: 0 } },
+    });
+    expect(hostile.ok, JSON.stringify(hostile)).toBe(true);
+    const taken = await call("POST", `/api/review/proposals/${hostile.ok ? hostile.id : ""}/accept`, {}, kiraToken);
+    expect(taken.status, taken.text).toBe(200);
+    expect(taken.json.blocked).toBe(1);
+    expect(taken.json.blockedLines[0].blocked).toContain("Criticality is normal or high");
+    expect(taken.json.blockedLines[0].blocked).toContain("A seat holds between 1 and 50 people");
+    expect((await stuckOn()).map((d) => d.draftId)).toContain(taken.json.createdRef);
   });
 });

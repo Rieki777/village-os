@@ -465,8 +465,20 @@ export async function addChange(
  * ones the steward never read. Withdrawing reopens exactly this draft's
  * proposals, so that is what it says. A draft a person made has no proposals
  * to reopen, so its sentence says to make it again.
+ *
+ * `withRecovery: false` STATES THE PROBLEM AND ASKS FOR NOTHING. A seat line
+ * that already carries another reason (a taken name, a bad seat count) gave
+ * two recoveries joined into one sentence: withdraw and rename, then ask an
+ * admin for a circle and withdraw again. A steward who followed the last one
+ * got a live circle made for a seat they then rejected. So the circle's own
+ * recovery waits until it is the only thing left in the way, which the next
+ * preview after the other fix will say.
  */
-function circleNameBlock(payload: Record<string, any> | null | undefined, fromQueue: boolean): string | null {
+function circleNameBlock(
+  payload: Record<string, any> | null | undefined,
+  fromQueue: boolean,
+  withRecovery = true,
+): string | null {
   if (hasCircleId(payload?.circleId)) return null;
   const circleName = typeof payload?.circleName === "string" ? payload.circleName.trim() : "";
   const unread: string[] = Array.isArray(payload?.circleUnread)
@@ -477,20 +489,20 @@ function circleNameBlock(payload: Record<string, any> | null | undefined, fromQu
     : "then withdraw this draft and make it again";
   if (circleName === "" && unread.length) {
     const keys = unread.map((k) => `"${k}"`).join(", ");
+    const fact = `This seat gave its circle under ${keys} in a form this village cannot read`;
+    if (!withRecovery) return fact;
     return fromQueue
-      ? `This seat gave its circle under ${keys} in a form this village cannot read. Withdraw this draft. ` +
+      ? `${fact}. Withdraw this draft. ` +
           `Its proposals go back in the review queue, where you can write the circle's name under "circle" and accept again`
-      : `This seat gave its circle under ${keys} in a form this village cannot read. ` +
-          `Withdraw this draft and make it again with the circle's id under "circleId"`;
+      : `${fact}. Withdraw this draft and make it again with the circle's id under "circleId"`;
   }
   if (circleName === "") return null;
-  if (Number(payload?.circleMatches) > 1) {
-    return (
-      `More than one circle answers to "${circleName}". Ask an admin to give those circles distinct names ` +
-      `and aliases, ${after}`
-    );
+  if (primitiveNumber(payload?.circleMatches) > 1) {
+    const fact = `More than one circle answers to "${circleName}"`;
+    return withRecovery ? `${fact}. Ask an admin to give those circles distinct names and aliases, ${after}` : fact;
   }
-  return `There is no circle called "${circleName}" yet. Ask an admin to create it, ${after}`;
+  const fact = `There is no circle called "${circleName}" yet`;
+  return withRecovery ? `${fact}. Ask an admin to create it, ${after}` : fact;
 }
 
 /**
@@ -500,6 +512,25 @@ function circleNameBlock(payload: Record<string, any> | null | undefined, fromQu
  */
 function hasCircleId(v: unknown): boolean {
   return v !== undefined && v !== null && v !== "";
+}
+
+/**
+ * A JSON primitive as text, and null for an object or a list.
+ *
+ * THE PREVIEW NEVER CONVERTS AN OBJECT. `String({ toString: 0 })` and
+ * `Number({ valueOf: 0, toString: 0 })` both THROW, and a payload carries
+ * whatever JSON a vendor or a steward's edit sent. A throw here took down the
+ * accept that wrote the draft and then every read of the review queue, which
+ * previews each open draft it made, so the draft's only withdraw never
+ * rendered. An object reads as no value, and each check below blocks on that.
+ */
+function primitiveText(v: unknown): string | null {
+  return typeof v === "string" || typeof v === "number" || typeof v === "boolean" ? String(v) : null;
+}
+
+/** `Number()` for a JSON primitive, and NaN for an object or a list. See `primitiveText`. */
+function primitiveNumber(v: unknown): number {
+  return typeof v === "string" || typeof v === "number" || typeof v === "boolean" ? Number(v) : NaN;
 }
 
 /** Seat fields the INSERT and UPDATE write as text, with the words a steward uses for them. */
@@ -515,19 +546,25 @@ const SEAT_TEXT_FIELDS: Record<string, string> = {
  * publish back on a column count, and `recruiting: "yes"` publishes as not
  * recruiting. The normaliser keeps these out of a proposal; this keeps them
  * out of any draft, including one built by hand.
+ *
+ * EVERY BAD FIELD, IN ONE LIST. It returned the first, so a hand-built seat
+ * with a bad aim, a bad domain and a bad recruiting flag took three rounds of
+ * fix and preview to hear about all three. `create_seat` lists them all;
+ * `update_seat` keeps its one-reason line and reads the first.
  */
-function seatShapeBlock(payload: Record<string, any> | null | undefined): string | null {
+function seatShapeBlocks(payload: Record<string, any> | null | undefined): string[] {
+  const out: string[] = [];
   for (const [key, words] of Object.entries(SEAT_TEXT_FIELDS)) {
     const v = payload?.[key];
     if (v !== undefined && v !== null && typeof v !== "string" && typeof v !== "number") {
-      return `This seat's ${words} is not text, so the chart cannot hold it`;
+      out.push(`This seat's ${words} is not text, so the chart cannot hold it`);
     }
   }
   const r = payload?.recruiting;
   if (r !== undefined && r !== null && !([true, false, 0, 1, "0", "1"] as unknown[]).includes(r)) {
-    return "Recruiting is true or false";
+    out.push("Recruiting is true or false");
   }
-  return null;
+  return out;
 }
 
 export interface PreviewLine {
@@ -559,14 +596,38 @@ export async function previewDraft(
   const drafts = await listDrafts(pool);
   const draft = drafts.find((d) => d.id === draftId);
   if (!draft) return { lines: [], blocked: 0 };
+  return previewLoadedDraft(draft, await loadPreviewContext(pool), changeCap);
+}
 
+/** The seats and circles a preview checks a draft against, read once. */
+export interface PreviewContext {
+  roles: any[];
+  circleIds: Set<string>;
+}
+
+export async function loadPreviewContext(pool: Pool): Promise<PreviewContext> {
   const [roles]: any = await pool.query("SELECT id, name, is_example, active FROM org_roles");
-  const byId = new Map((roles as any[]).map((r) => [String(r.id), r]));
   const [circles]: any = await pool.query("SELECT id FROM circles WHERE is_example = 0");
-  const circleIds = new Set((circles as any[]).map((c) => String(c.id)));
+  return { roles: roles as any[], circleIds: new Set((circles as any[]).map((c) => String(c.id))) };
+}
+
+/**
+ * `previewDraft` for a draft already read, against a context already read.
+ *
+ * No pool. The review queue previews every open draft it made on each load,
+ * and each preview used to read the whole draft history, the seats and the
+ * circles again, one draft after another, on every click on that page.
+ */
+export function previewLoadedDraft(
+  draft: Draft,
+  context: PreviewContext,
+  changeCap?: number | null,
+): { lines: PreviewLine[]; blocked: number } {
+  const { roles, circleIds } = context;
+  const byId = new Map(roles.map((r) => [String(r.id), r]));
   // Live seat names, lowercased, for the duplicate-structure check below.
   const liveNames = new Map<string, string>();
-  for (const r of roles as any[]) {
+  for (const r of roles) {
     if (r.is_example || !r.active) continue;
     liveNames.set(String(r.name ?? "").trim().toLowerCase(), String(r.id));
   }
@@ -585,7 +646,7 @@ export async function previewDraft(
   let index = 0;
   for (const c of draft.changes) {
     const existing = byId.get(c.orgRoleId);
-    const name = existing?.name ?? c.payload?.name ?? c.orgRoleId;
+    const name = existing?.name ?? primitiveText(c.payload?.name) ?? c.orgRoleId;
     let blocked: string | null = null;
     let reads = "";
     index += 1;
@@ -623,7 +684,7 @@ export async function previewDraft(
     }
 
     if (c.op === "create_seat") {
-      reads = `Create the seat "${c.payload?.name ?? c.orgRoleId}"`;
+      reads = `Create the seat "${primitiveText(c.payload?.name) ?? c.orgRoleId}"`;
       /*
        * ── EVERY REASON, AND THE CIRCLE LAST ───────────────────────────────
        *
@@ -638,8 +699,7 @@ export async function previewDraft(
        */
       const reasons: string[] = [];
       if (existing) reasons.push("A seat with that id already exists");
-      const shape = seatShapeBlock(c.payload);
-      if (shape) reasons.push(shape);
+      reasons.push(...seatShapeBlocks(c.payload));
       /*
        * ── THE SHAPE RULES, which the old block list did not have ──────────
        *
@@ -660,7 +720,8 @@ export async function previewDraft(
       const rawName = c.payload?.name;
       // A name that is not text already has its reason above, and has no name to check.
       const nameIsText = rawName === undefined || rawName === null || typeof rawName === "string" || typeof rawName === "number";
-      const proposed = String(rawName ?? "").trim();
+      // Converted only when it is text, since String() on some objects throws (primitiveText).
+      const proposed = nameIsText ? String(rawName ?? "").trim() : "";
       if (nameIsText && proposed === "") reasons.push("A seat needs a name");
       else if (nameIsText && proposed.length > 120) reasons.push("That seat name is longer than a seat name can be");
       else if (nameIsText && liveNames.has(proposed.toLowerCase())) {
@@ -673,19 +734,21 @@ export async function previewDraft(
       }
       const seats = c.payload?.seats;
       if (seats !== undefined && seats !== null) {
-        const n = Number(seats);
+        const n = primitiveNumber(seats);
         if (!Number.isInteger(n) || n < 1 || n > 50) reasons.push("A seat holds between 1 and 50 people");
       }
       const crit = c.payload?.criticality;
-      if (crit !== undefined && crit !== null && !["normal", "high"].includes(String(crit))) {
+      if (crit !== undefined && crit !== null && !["normal", "high"].includes(primitiveText(crit) ?? "")) {
         reasons.push("Criticality is normal or high");
       }
       // The circle last, so whoever reads this line learns first whether the
       // seat could publish at all before anybody is asked to make a circle.
-      if (hasCircleId(c.payload?.circleId) && !circleIds.has(String(c.payload.circleId))) {
+      // For the same reason, a line that already has a reason states the
+      // circle's problem without asking anybody to make one (circleNameBlock).
+      if (hasCircleId(c.payload?.circleId) && !circleIds.has(primitiveText(c.payload.circleId) ?? "")) {
         reasons.push("That circle does not exist. A draft cannot create circles");
       } else {
-        const circle = circleNameBlock(c.payload, fromQueue);
+        const circle = circleNameBlock(c.payload, fromQueue, reasons.length === 0);
         if (circle) reasons.push(circle);
       }
       blocked = reasons.length ? reasons.join(". ") : null;
@@ -698,7 +761,7 @@ export async function previewDraft(
       if (c.op === "update_seat") {
         reads = `Edit ${name}`;
         if (!blocked) blocked = circleNameBlock(c.payload, fromQueue);
-        if (!blocked) blocked = seatShapeBlock(c.payload);
+        if (!blocked) blocked = seatShapeBlocks(c.payload)[0] ?? null;
         // A change naming nothing this village can apply is not a change. It
         // previewed as "Edit <seat>", applied as an UPDATE with an empty SET
         // list, and left a reader believing something happened.
@@ -708,20 +771,77 @@ export async function previewDraft(
         }
         const n2 = c.payload?.seats;
         if (!blocked && n2 !== undefined && n2 !== null) {
-          const v = Number(n2);
+          const v = primitiveNumber(n2);
           if (!Number.isInteger(v) || v < 1 || v > 50) blocked = "A seat holds between 1 and 50 people";
         }
-        if (!blocked && hasCircleId(c.payload?.circleId) && !circleIds.has(String(c.payload.circleId))) {
+        if (!blocked && hasCircleId(c.payload?.circleId) && !circleIds.has(primitiveText(c.payload.circleId) ?? "")) {
           blocked = "That circle does not exist. A draft cannot create circles";
         }
       }
       if (c.op === "rest_seat") reads = `Rest ${name}, so it stops appearing on the chart`;
-      if (c.op === "seat_holder") reads = `Put ${c.payload?.displayName ?? "a member"} in ${name}`;
+      if (c.op === "seat_holder") reads = `Put ${primitiveText(c.payload?.displayName) ?? "a member"} in ${name}`;
       if (c.op === "end_holding") reads = `End a holding on ${name}`;
     }
     lines.push({ changeId: c.id, op: c.op, orgRoleId: c.orgRoleId, reads, blocked });
   }
   return { lines, blocked: lines.filter((l) => l.blocked).length };
+}
+
+/** One change in a draft that cannot apply: what it would do, and why it cannot. */
+export interface BlockedLine {
+  reads: string;
+  blocked: string;
+}
+
+/** The blocked lines of a preview, in the shape the review page reads. */
+export function blockedLinesOf(lines: PreviewLine[]): BlockedLine[] {
+  return lines.filter((l) => l.blocked).map((l) => ({ reads: l.reads, blocked: String(l.blocked) }));
+}
+
+export interface StuckDraft {
+  draftId: string;
+  blocked: number;
+  blockedLines: BlockedLine[];
+}
+
+/**
+ * The open drafts the review queue made that cannot publish, each with its reasons.
+ *
+ * ONE DRAFT THAT CANNOT BE PREVIEWED IS LISTED, AND NEVER TAKES THE QUEUE DOWN.
+ * The queue read previews every such draft, and one preview that threw used to
+ * fail the whole read: no batch, no quest, and no withdraw card for the draft
+ * that caused it, so the steward's only way out was somebody with a console.
+ * A draft whose preview throws is listed as stuck, so its withdraw renders.
+ */
+export function stuckQueueDrafts(
+  drafts: readonly Draft[],
+  context: PreviewContext,
+  changeCap?: number | null,
+): StuckDraft[] {
+  const out: StuckDraft[] = [];
+  for (const d of drafts) {
+    // Open, and made by the queue: only its accept sets a source proposal.
+    if (d.status !== "open" || !d.sourceProposalId) continue;
+    let preview: { lines: PreviewLine[]; blocked: number };
+    try {
+      preview = previewLoadedDraft(d, context, changeCap);
+    } catch {
+      out.push({
+        draftId: d.id,
+        blocked: 1,
+        blockedLines: [
+          {
+            reads: "This draft",
+            blocked:
+              "This draft could not be previewed, so it cannot publish. Withdraw it, and its proposals go back in the review queue",
+          },
+        ],
+      });
+      continue;
+    }
+    if (preview.blocked > 0) out.push({ draftId: d.id, blocked: preview.blocked, blockedLines: blockedLinesOf(preview.lines) });
+  }
+  return out;
 }
 
 /**

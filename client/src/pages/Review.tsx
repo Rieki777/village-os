@@ -475,6 +475,11 @@ export default function Review() {
       const d = res ? await res.json().catch(() => ({})) : {};
       if (!res || !res.ok) {
         toast.error((d as { error?: string })?.error ?? "That draft could not be withdrawn");
+        // The server answered, so read the queue again. A refusal usually means
+        // another steward withdrew or published this draft already, and the
+        // queue's list is what clears a card whose button can never work and
+        // shows the proposals that came back.
+        if (res) await load();
         return;
       }
       const n = (d as { reopened?: number }).reopened ?? 0;
