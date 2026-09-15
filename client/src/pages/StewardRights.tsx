@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { useVillageName } from "@/hooks/useVillageName";
 import { useTokenName, useValueTokenName } from "@/hooks/useTokenNames";
+import { useValueConversion } from "@/lib/moneyClaims";
 import {
   Users,
   Heart,
@@ -17,9 +18,17 @@ import {
   Crown,
 } from "lucide-react";
 
-// A function of the live value-token name (Admin → Tokens): a fork's rename
-// reaches the recognition card without a code change.
-const RIGHTS = (tokenName: string, valueName: string, villageName: string) => [
+/*
+ * A function of the live value-token name (Admin → Tokens): a fork's rename
+ * reaches the recognition card without a code change. And now of the
+ * conversion sentence, for the same reason: this card said "As {village}
+ * grows, {value} convert to cash, equity, or community currency" as compiled
+ * copy and nothing in the product converts anything. Founder ruling,
+ * 2026-09-03: real, off platform, on-platform process unbuilt, and his words
+ * to write. It comes from `money.valueConversion` and a village that has
+ * published none says nothing here. See lib/moneyClaims.ts.
+ */
+const RIGHTS = (tokenName: string, valueName: string, villageName: string, conversionNote: string) => [
   {
     icon: Users,
     title: "Voice in Governance",
@@ -30,7 +39,7 @@ const RIGHTS = (tokenName: string, valueName: string, villageName: string) => [
     icon: Heart,
     title: `Earn ${tokenName} for Your Contribution`,
     description:
-      `Every role you hold, every quest you complete, and every meaningful act of stewardship earns you ${tokenName}: the recognition signal, with no financial value of its own. Each cycle the community shares a real pool of ${valueName} across everyone's ${tokenName}, so appreciation decides where value flows. As ${villageName} grows, ${valueName} convert to cash, equity, or community currency. Your effort builds real wealth.`,
+      `Every role you hold, every quest you complete, and every meaningful act of stewardship earns you ${tokenName}: the recognition signal, with no financial value of its own. Each cycle the community shares a real pool of ${valueName} across everyone's ${tokenName}, so appreciation decides where value flows.${conversionNote ? ` ${conversionNote}` : ""} Your effort builds real wealth.`,
   },
   {
     icon: Star,
@@ -122,6 +131,7 @@ export default function StewardRights() {
   const valueName = useValueTokenName();
   const tokenName = useTokenName("Recognition");
   const villageName = useVillageName();
+  const conversionNote = useValueConversion({ village: villageName, value: valueName });
   const progression = PROGRESSION(tokenName);
   return (
     <Layout>
@@ -204,7 +214,7 @@ export default function StewardRights() {
             </p>
           </div>
           <div className="grid md:grid-cols-2 gap-6">
-            {RIGHTS(tokenName, valueName, villageName).map((right, i) => {
+            {RIGHTS(tokenName, valueName, villageName, conversionNote).map((right, i) => {
               const Icon = right.icon;
               return (
                 <motion.div

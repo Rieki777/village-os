@@ -39,14 +39,14 @@ import type express from "express";
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { markAdminGate } from "../lib/adminGate";
-import { mintForConfirmedClaim } from "../lib/economy";
+import { mintForConfirmedClaim, toLedgerUnits } from "../lib/economy";
 import { recordEvent } from "../lib/events";
 import { EXAMPLE_REFUSAL_BODY, isExampleRow } from "../lib/examples";
 import { issuanceRefusal } from "../lib/gameStart";
-import { memberAccount, postTransferOn, RECOGNITION_FAUCET } from "../lib/ledger";
+import { memberAccount, PLATFORM_TOKEN, postTransferOn, RECOGNITION_FAUCET } from "../lib/ledger";
 import { effectiveLifecycle } from "../lib/modules";
 import { rewardMultiplierFor } from "../lib/seasonPatterns";
-import { mintStayCredits } from "../lib/stays";
+import { mintStayCredits, STAY_CREDIT } from "../lib/stays";
 import { boolVar, numberVar, stringVar } from "../lib/variables";
 import type { ClaimRecord } from "../repos/quests";
 import { describeRange, parseRewardRange } from "../../shared/questRewards";
@@ -437,7 +437,9 @@ export function register(app: Express, deps: Deps): void {
         const credit = await postTransferOn(conn, {
           from: RECOGNITION_FAUCET,
           to: memberAccount(claim.userId),
-          amount: payout,
+          // MINOR units, which is `postTransfer`'s contract; `payout` is the
+          // human reward the quest names.
+          amount: toLedgerUnits(PLATFORM_TOKEN, payout),
           source: "quest_consent",
           sourceRef: claim.id,
           description:
@@ -505,7 +507,9 @@ export function register(app: Express, deps: Deps): void {
       if (stayReward > 0) {
         const stayCredit = await mintStayCredits(getPool(), {
           userId: consented.userId,
-          amount: stayReward,
+          // MINOR units: `mintStayCredits` takes the ledger's number and says
+          // the callers holding a human one convert at their own boundary.
+          amount: toLedgerUnits(STAY_CREDIT, stayReward),
           source: "quest_stay_reward",
           sourceRef: consented.id,
           description: `Work exchange: ${consented.questTitle}`,

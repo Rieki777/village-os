@@ -92,17 +92,36 @@ export default function Library() {
           {user && data?.mine && (
             <div className="bg-card border border-border rounded-xl p-5">
               <p className="text-sm text-foreground">
-                {/* Library credits carry decimals 0 today, so this reads
-                    exactly as it always has. It goes through the shared
-                    formatter anyway: on the day every token moves to 4
-                    decimals, a surface that never divides is wrong by
-                    10,000x, and the ones that were "fine" are the ones
-                    nobody thinks to check. See client/src/lib/tokenAmount.ts. */}
+                {/* Library credits are a credit token, so since the
+                    2026-09-04 scale ruling they carry two decimals and this
+                    number MUST be divided. It goes through the shared
+                    formatter, which is what stops this surface and the
+                    ledger disagreeing at any scale. See
+                    client/src/lib/tokenAmount.ts. */}
                 Your credits: <span className="font-bold">{formatTokenAmount(Number(data.mine.balance ?? 0), Number(data.mine.balanceDecimals ?? 0))}</span>
+                {Number(data.mine.lockedUnits ?? 0) > 0 && (
+                  <span className="text-muted-foreground">
+                    {" "}to spend, {formatTokenAmount(Number(data.mine.totalUnits ?? 0), Number(data.mine.balanceDecimals ?? 0))} to your name
+                  </span>
+                )}
                 {data.mine.strikes > 0 && (
                   <span className="text-xs text-amber-700 ml-2">({data.mine.strikes} no-show{data.mine.strikes > 1 ? "s" : ""} on record)</span>
                 )}
               </p>
+              {/* WHY THE TWO NUMBERS DIFFER, one line per thing holding a
+                  deposit. The sentence is the founder's and the server builds
+                  it, because the refusal a member meets at the Borrow button
+                  has to say the same words as the balance above it and two
+                  copies of a sentence are two sentences. */}
+              {(data.mine.locks ?? []).length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {(data.mine.locks ?? []).map((l: any) => (
+                    <li key={l.ref} className="text-sm text-muted-foreground">
+                      {formatTokenAmount(Number(l.heldUnits ?? 0), Number(data.mine.balanceDecimals ?? 0))} {l.sentence}
+                    </li>
+                  ))}
+                </ul>
+              )}
               {liveLoans.length > 0 && (
                 <div className="mt-3 space-y-2 border-t border-border pt-3">
                   {liveLoans.map((l: any) => (

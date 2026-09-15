@@ -1,6 +1,30 @@
+import fs from "node:fs";
 import path from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
+
+/**
+ * Every lane worktree on this machine junctions `node_modules` to one shared
+ * store, so vite resolves the `dotenv/config` setup file to a realpath OUTSIDE
+ * the worktree root, and its default `server.fs.allow` boundary refuses to
+ * serve it under the jsdom environment. The file exists and Node reads it fine;
+ * only vite's boundary objects, and it objects for EVERY client test in that
+ * worktree, including ones nobody touched. Two lanes lost time to it on the
+ * same night and each built a private config instead of changing this shared
+ * file, which is the right instinct and the wrong outcome.
+ *
+ * Allowing the store's realpath costs an ordinary checkout nothing: there the
+ * realpath IS the directory already allowed, so this resolves to a duplicate.
+ * `realpathSync` is guarded because a fresh clone runs this config before
+ * anything is installed.
+ */
+const moduleStore = (() => {
+  try {
+    return fs.realpathSync(path.resolve(import.meta.dirname, "node_modules"));
+  } catch {
+    return null;
+  }
+})();
 
 /**
  * Amora had vitest installed and zero tests. This config exists to make the
@@ -38,6 +62,13 @@ export default defineConfig({
       "@": path.resolve(import.meta.dirname, "client", "src"),
       "@shared": path.resolve(import.meta.dirname, "shared"),
       "@assets": path.resolve(import.meta.dirname, "attached_assets"),
+    },
+  },
+  // See the note on `moduleStore` above: this is what lets a junctioned lane
+  // worktree run client tests at all.
+  server: {
+    fs: {
+      allow: [path.resolve(import.meta.dirname), ...(moduleStore ? [moduleStore] : [])],
     },
   },
   test: {

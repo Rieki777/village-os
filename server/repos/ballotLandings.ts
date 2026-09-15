@@ -196,6 +196,22 @@ export async function markLandingNotApplicable(pool: Pool, ballotId: string): Pr
 /**
  * Stop a decision inside its window, and answer whether a row actually moved.
  *
+ * A STOPPED DECISION READS AS FAILED, BECAUSE IT DID NOT PASS. Rye's ruling,
+ * 2026-09-08: "all vetoed proposals need to clearly show that they didn't pass
+ * and failed", so the state switches from passed to failed. This is the twin of
+ * the write `routeOutcome` makes for a steward who votes no while the ballot is
+ * still open; both stop the same decision for the same reason, and only one of
+ * them used to say so in the column every payload and tally reads. The circle
+ * bonus gate maps `passed` to a yes, so a vetoed completion vote came back to it
+ * as a YES with nothing listed as blocking.
+ *
+ * `outcome_note` is left alone on purpose. There the ballot never carried and
+ * the note IS the outcome; here it carried and was then stopped, so overwriting
+ * the note would erase why the village said yes to duplicate `veto_reason`.
+ * Every reader finds a stopped decision by `vetoed_at` or `landing_status`, and
+ * every landing predicate already required `vetoed_at IS NULL`, so this changes
+ * what a reader is TOLD and opens no door.
+ *
  * The WHERE is the last guard and not the rule: every reason a veto can be
  * refused is decided before this is called and phrased for the steward there.
  * What these two clauses stop is the pair that only a race can produce, a
@@ -207,7 +223,7 @@ export async function recordVetoOnBallot(
   input: { ballotId: string; at: Date; stewardId: string; reason: string },
 ): Promise<number> {
   const [res] = await pool.query<ResultSetHeader>(
-    "UPDATE ballots SET vetoed_at = ?, vetoed_by = ?, veto_reason = ?, landing_status = 'vetoed' " +
+    "UPDATE ballots SET status = 'failed', vetoed_at = ?, vetoed_by = ?, veto_reason = ?, landing_status = 'vetoed' " +
       "WHERE id = ? AND vetoed_at IS NULL AND landing_status = 'pending'",
     [sqlInstant(input.at), input.stewardId, input.reason, input.ballotId],
   );

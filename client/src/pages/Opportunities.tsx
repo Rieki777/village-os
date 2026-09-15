@@ -1,6 +1,8 @@
 import Layout from "@/components/Layout";
 import { useVillageLinks } from "@/lib/gameApi";
 import { useVillageName } from "@/hooks/useVillageName";
+import { useVillageContent } from "@/hooks/useVillageContent";
+import { type MoneyContent } from "@/lib/moneyClaims";
 import { useTokenName } from "@/hooks/useTokenNames";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
@@ -18,12 +20,34 @@ import {
   Leaf
 } from "lucide-react";
 
+/*
+ * EIGHT CAPITAL FIGURES LEFT THIS FILE (founder ruling, 2026-09-03).
+ *
+ * Every card carried an `investment:` range as a module constant, from
+ * "$100K - $300K" to "$5M - $10M", and this page fetched nothing at all. So
+ * every village that deploys this platform published eight capital
+ * requirements about ventures it has not costed, in dollars it may not use,
+ * under its own name, with no screen anywhere that could change one of them.
+ * The founder confirmed the figures are real and current FOR THIS VILLAGE,
+ * which is exactly why they cannot stay compiled into platform code.
+ *
+ * Same answer as the housing tiers (0131) and the land figures (`landFacts`
+ * in server/index.ts): the range comes from `money.ventureInvestment` in the
+ * runtime content document, keyed by the `key` below, and it is free text so a
+ * village writes its own currency, its own separator and "under valuation" if
+ * that is the truth. NO RANGE MEANS NO LINE: the card still publishes, because
+ * meaning to build a retreat centre is a real fact even when its cost is not
+ * settled yet, and a blank slot or a zero would be a claim nobody made.
+ *
+ * `key` is the storage contract and the title is not. A village renaming the
+ * café keeps the figure it typed.
+ */
 const opportunities = [
   {
+    key: "retreat-center",
     title: "Retreat Center",
     description: "A 120-150 key wellness retreat facility offering transformational experiences, workshops, and healing programs.",
     icon: Tent,
-    investment: "$5M - $10M",
     status: "Planning",
     details: [
       "120-150 guest rooms",
@@ -33,10 +57,10 @@ const opportunities = [
     ],
   },
   {
+    key: "health-wellness",
     title: "Health & Wellness Center",
     description: "Integrative health services combining traditional and alternative medicine for residents and visitors.",
     icon: Stethoscope,
-    investment: "$500K - $1.5M",
     status: "Planning",
     details: [
       "Primary care services",
@@ -46,10 +70,10 @@ const opportunities = [
     ],
   },
   {
+    key: "cafe-restaurant",
     title: "Café & Restaurant",
     description: "Farm-to-table dining experience showcasing local and organic produce from our regenerative farms.",
     icon: Coffee,
-    investment: "$200K - $500K",
     status: "Planning",
     details: [
       "Organic menu",
@@ -59,10 +83,10 @@ const opportunities = [
     ],
   },
   {
+    key: "artisan-market",
     title: "Artisan Market",
     description: "A marketplace for local crafts, produce, and goods created by community members and regional artisans.",
     icon: Store,
-    investment: "$100K - $300K",
     status: "Future",
     details: [
       "Local crafts and art",
@@ -72,10 +96,10 @@ const opportunities = [
     ],
   },
   {
+    key: "learning-center",
     title: "Learning Center",
     description: "Educational programs for children and adults, including a forest school and skill-sharing workshops.",
     icon: GraduationCap,
-    investment: "$300K - $800K",
     status: "Future",
     details: [
       "Forest school",
@@ -85,10 +109,10 @@ const opportunities = [
     ],
   },
   {
+    key: "fitness-recreation",
     title: "Fitness & Recreation",
     description: "Fitness facilities and outdoor recreation programs for residents and retreat guests.",
     icon: Dumbbell,
-    investment: "$150K - $400K",
     status: "Future",
     details: [
       "Yoga studio",
@@ -98,10 +122,10 @@ const opportunities = [
     ],
   },
   {
+    key: "art-culture",
     title: "Art & Culture Hub",
     description: "A creative space for artists, musicians, and cultural programs that enrich community life.",
     icon: Palette,
-    investment: "$200K - $500K",
     status: "Future",
     details: [
       "Artist studios",
@@ -111,10 +135,10 @@ const opportunities = [
     ],
   },
   {
+    key: "regenerative-agriculture",
     title: "Regenerative Agriculture",
     description: "Farming operations that produce food for the community while regenerating the land.",
     icon: Leaf,
-    investment: "$100K - $300K",
     status: "Active",
     details: [
       "Organic vegetables",
@@ -136,6 +160,9 @@ export default function Opportunities() {
   const { eventsUrl } = useVillageLinks();
   const villageName = useVillageName();
   const tokenName = useTokenName("Recognition");
+  const { content: money } = useVillageContent<MoneyContent>("money");
+  // Whitespace is not a figure: a founder who clears a field publishes nothing.
+  const investmentFor = (key: string) => money?.ventureInvestment?.[key]?.trim() || "";
   return (
     <Layout>
       {/* Hero */}
@@ -186,10 +213,12 @@ export default function Opportunities() {
                 <p className="text-muted-foreground mb-4">
                   {opp.description}
                 </p>
-                <div className="mb-4">
-                  <span className="text-sm font-medium text-foreground">Investment Range: </span>
-                  <span className="text-sm text-teal-light font-semibold">{opp.investment}</span>
-                </div>
+                {investmentFor(opp.key) && (
+                  <div className="mb-4">
+                    <span className="text-sm font-medium text-foreground">Investment Range: </span>
+                    <span className="text-sm text-teal-light font-semibold">{investmentFor(opp.key)}</span>
+                  </div>
+                )}
                 <ul className="space-y-2">
                   {opp.details.map((detail) => (
                     <li key={detail} className="flex items-center gap-2 text-sm text-muted-foreground">

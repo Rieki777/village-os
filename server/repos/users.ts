@@ -300,3 +300,34 @@ export async function catalystUserIds(pool: Pool): Promise<string[]> {
   );
   return rows.map((r) => String(r.id));
 }
+
+/**
+ * Lock one member's row FOR UPDATE, ON THE CALLER'S CONNECTION.
+ *
+ * A `PoolConnection` and never a pool: the lock is only worth anything inside
+ * the transaction the caller opened and will commit or roll back, and a pool
+ * would take it on a fresh connection and release it at once. Its caller is
+ * `requestRedemption` (server/lib/redemptionStore.ts), which serialises two
+ * redemptions by one member on this row. The rows come back as the driver
+ * returned them, so an empty array means there is no such member.
+ */
+export async function lockUserRowForUpdate(conn: PoolConnection, id: string): Promise<RowDataPacket[]> {
+  const [who] = await conn.query<RowDataPacket[]>("SELECT `id` FROM `users` WHERE `id` = ? FOR UPDATE", [
+    id,
+  ]);
+  return who;
+}
+
+/**
+ * The ids of every real member: not anonymised, not an example row.
+ *
+ * The roster the health snapshot's allowance total is taken over
+ * (`snapshotAllowance`, server/lib/health.ts). Unordered, as it always was;
+ * its caller only sums over it and counts it.
+ */
+export async function realMemberIdRows(pool: Pool): Promise<RowDataPacket[]> {
+  const [roster] = await pool.query<RowDataPacket[]>(
+    "SELECT id FROM users WHERE email NOT LIKE '%anonymized.invalid' AND is_example = 0",
+  );
+  return roster;
+}

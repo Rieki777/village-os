@@ -3,8 +3,10 @@ import { altOr, useBrandImages, useVillageLinks } from "@/lib/gameApi";
 import WhyCostaRica from "@/components/WhyCostaRica";
 import FaqSection from "@/components/FaqSection";
 import { useVillageContent } from "@/hooks/useVillageContent";
+import { type MoneyContent } from "@/lib/moneyClaims";
 import { useVillageName } from "@/hooks/useVillageName";
 import { useTokenName } from "@/hooks/useTokenNames";
+import { readStoredJson, writeStoredJson } from "@/lib/safeStorage";
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
@@ -108,7 +110,25 @@ const buildJourneySteps = (villageName: string) => [
     id: "deposit",
     stage: "Deposit",
     title: "Put Down a Deposit on Your Future Home",
-    description: "Secure your future home with a fully refundable deposit, from $5k to $20k+ depending on the home type you're reserving. This holds your place and starts the real conversation.",
+    /*
+     * THE RANGE IS NOT WRITTEN HERE ANY MORE (founder ruling, 2026-09-03).
+     *
+     * This sentence said "from $5k to $20k+ depending on the home type you're
+     * reserving" as a module constant, and the bullet below repeated it. Every
+     * village that deploys this platform therefore published one village's
+     * dollar figures under its own name, to prospective residents, with no
+     * screen anywhere that could change either of them. Same defect the
+     * housing tiers had (0131) and the land figures had (`landFacts` in
+     * server/index.ts), so it takes the same answer.
+     *
+     * `{range}` is filled at render from `money.depositRange` in the runtime
+     * content document, and the comma in front of it is supplied by the code,
+     * so a founder types the clause and nothing else. A village that has
+     * written nothing publishes NO figure and the sentence closes after
+     * "deposit": an empty setting and a real zero are different facts, and a
+     * placeholder is the defect this change removes.
+     */
+    description: "Secure your future home with a fully refundable deposit{range}. This holds your place and starts the real conversation.",
     icon: Wallet,
     // Slice 1 of the reservation flow (0077). This stage carried "#" since it
     // was written, so both of Housing.tsx's CTAs pointed at a step that went
@@ -118,7 +138,12 @@ const buildJourneySteps = (villageName: string) => [
     link: "/reserve",
     linkText: "Reserve Your Home",
     external: false,
-    details: ["Fully refundable deposit", "$5k-$20k+ depending on home type", "Reserves your future home", "Priority on your chosen lot"]
+    // The short form of the same figure. It is SPLICED IN at render from
+    // `money.depositSummary` when a village has written one, and simply
+    // absent when it has not. Two fields for one fact because the sentence
+    // and the bullet were worded differently before this change and the
+    // ruling was to move the figures, never to reword them.
+    details: ["Fully refundable deposit", "Reserves your future home", "Priority on your chosen lot"]
   },
   {
     id: "background",
@@ -206,11 +231,32 @@ const buildJourneySteps = (villageName: string) => [
   },
 ];
 
+/*
+ * THE TENURE TITLES, AND WHAT THEY ARE NOT (founder ruling, 2026-09-03).
+ *
+ * Guardian at 7 years, Elder at 21, Sage at 49. Nothing in the product
+ * implements any of it: no capability, no role, no ledger entry and no query
+ * anywhere reads a member's years. The founder's ruling is that the titles and
+ * the years STAY and the page says plainly what they are, which is
+ * recognition. A village may later decide to attach real powers to them, and
+ * the section below says that too.
+ *
+ * THE RIGHTS OF NATURE IS NOT ON THIS LADDER ANY MORE. The Sage entry used to
+ * call that member the "Rights of Nature voice", which would leave nature
+ * unable to speak until a village's forty-ninth year. Who speaks for nature is
+ * a separate design and deliberately not answered here; this file's job was to
+ * stop answering it wrongly.
+ *
+ * It also has to sit beside the standing economics ruling that voice follows
+ * CONTRIBUTION, with roles as a recurring contribution type. So nothing in
+ * this section may say or imply that years alone grow anybody's voice, and the
+ * heading that did say so ("Growing Your Voice") is gone.
+ */
 const residentProgression = [
   { level: "Resident", description: "Your arrival, you've made the village your home", icon: Home },
   { level: "Guardian", description: "Deep roots, steward of community traditions", icon: Shield, years: "7 years" },
   { level: "Elder", description: "Village wisdom keeper, mentor to new residents", icon: Users, years: "21 years" },
-  { level: "Sage", description: "Intergenerational bridge, Rights of Nature voice", icon: Crown, years: "49 years" },
+  { level: "Sage", description: "Intergenerational bridge, keeper of the village's longest memory", icon: Crown, years: "49 years" },
 ];
 
 interface VillageDues {
@@ -236,8 +282,11 @@ export default function ResidentJourney() {
   const [expandedStep, setExpandedStep] = useState<string | null>("community-call");
   const [dues, setDues] = useState<VillageDues | null>(null);
   const { content: legal } = useVillageContent<LegalContent>("legal");
+  const { content: money } = useVillageContent<MoneyContent>("money");
   const transferNote = legal?.landShareTransferNote?.trim();
   const backgroundCheckNote = legal?.membership?.backgroundCheckNote?.trim();
+  const depositRange = money?.depositRange?.trim();
+  const depositSummary = money?.depositSummary?.trim();
   // This village's own destinations. Blank hides the control below.
   const { eventsUrl } = useVillageLinks();
   const steps = journeySteps.map((step) => {
@@ -252,13 +301,27 @@ export default function ResidentJourney() {
           : `${step.description}.`,
       };
     }
+    if (step.id === "deposit") {
+      // The comma belongs to the code, so a founder types the clause alone
+      // and an unwritten range leaves no punctuation behind it.
+      const details = [...step.details];
+      if (depositSummary) details.splice(1, 0, depositSummary);
+      return {
+        ...step,
+        description: step.description.replace(/\{range\}/g, depositRange ? `, ${depositRange}` : ""),
+        details,
+      };
+    }
     return step;
   });
 
   useEffect(() => {
-    const saved = localStorage.getItem("amora-resident-progress");
-    if (saved) {
-      setCompletedSteps(JSON.parse(saved));
+    // A blocked store threw here, and a half-written value threw one line
+    // later: JSON.parse had no guard either. Both now read as no progress,
+    // which costs a visitor their ticks and never the page.
+    const saved = readStoredJson("local", "amora-resident-progress");
+    if (saved.status === "value" && Array.isArray(saved.value)) {
+      setCompletedSteps(saved.value.filter((v): v is string => typeof v === "string"));
     }
     fetch("/api/settings")
       .then((r) => (r.ok ? r.json() : null))
@@ -271,7 +334,7 @@ export default function ResidentJourney() {
       ? completedSteps.filter(id => id !== stepId)
       : [...completedSteps, stepId];
     setCompletedSteps(newCompleted);
-    localStorage.setItem("amora-resident-progress", JSON.stringify(newCompleted));
+    writeStoredJson("local", "amora-resident-progress", newCompleted);
   };
 
   const progress = (completedSteps.length / journeySteps.length) * 100;
@@ -571,11 +634,13 @@ export default function ResidentJourney() {
             viewport={{ once: true }}
           >
             <h2 className="font-display text-3xl md:text-4xl font-semibold mb-4">
-              Growing Your Voice
+              Titles for Time Here
             </h2>
             <p className="text-white/70 max-w-2xl mx-auto">
-              {villageName} is governed most by those who participate. As you invest more years 
-              in the community, your voice in governance grows.
+              {villageName} marks long presence with a title. These titles are honorary: they
+              carry no voice in governance and no rights today. Voice comes from what you
+              contribute, and a village may decide later to attach powers of its own to these
+              titles.
             </p>
           </motion.div>
 

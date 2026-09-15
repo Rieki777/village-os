@@ -77,6 +77,40 @@ export const HEALTH_METRICS: HealthMetricDef[] = [
     description: "Distinct recipients of recognition this cycle.",
     doughnut: { ring: "foundation", shareOf: "members_total", floor: 0.25 },
   },
+
+  // ── R9 (2026-09-03): the allowance a village left unused ──────────────────
+  // Three figures, one sentence. An allowance is COMPUTED and never stored
+  // (`allowanceFor`, server/lib/economy.ts), so what a member could have given
+  // is only knowable while they still hold the stage they held that lunation.
+  // Recomputing this later reads the stage somebody holds TODAY, which shows
+  // every member who has climbed a rung a number that was never true, and
+  // shows it to them as a reproach. So it is frozen at close like every other
+  // snapshot, and it is a VILLAGE figure: `health_snapshots` holds one value
+  // per (cycle, metric) and no per-member row belongs in it.
+  {
+    key: "gratitude_allowance_total",
+    kind: "snapshot",
+    label: "Recognition the village could give",
+    unit: "tokens",
+    description:
+      "Summed over every member the roster counted at close: the base sending allowance times the stage multiplier that member held at that moment. Figures are in the recognition token, in its minor units, which is whole Gratitude at the shipped 0 decimals. Computed when the cycle closed and never recomputed.",
+  },
+  {
+    key: "gratitude_allowance_given",
+    kind: "snapshot",
+    label: "Recognition the village gave",
+    unit: "tokens",
+    description:
+      "What was actually given against that allowance this lunation: the acknowledgments and hearts the counted roster sent inside the cycle window, less the reversals of them inside the same window. This is the arithmetic that charges one member's allowance, summed over the village. Same token and units as the total, computed at close and never recomputed.",
+  },
+  {
+    key: "gratitude_allowance_unspent",
+    kind: "snapshot",
+    label: "Recognition allowance unspent",
+    unit: "tokens",
+    description:
+      "The total less what was given, floored at zero. Unspent allowance does not carry over, so this is what the village let go this lunation. Same token and units as the total, computed at close and never recomputed. A village figure, with no per-member breakdown anywhere.",
+  },
   {
     key: "quests_consented_cycle",
     kind: "snapshot",

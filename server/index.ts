@@ -48,7 +48,7 @@ import {
   WIRED_BUT_HELD_BACK,
   type PowerHolder,
 } from "./lib/capabilityRegistry";
-import { allVariables, boolVar, loadVariables, numberVar, rawValue, setVariable, storedOverride, stringVar } from "./lib/variables";
+import { allVariables, boolVar, loadVariables, numberVar, rawValue, setVariable, storedOverride, stringVar, wireVariableGuard } from "./lib/variables";
 import { memberJoined } from "./lib/arrival";
 import { climbLadder, freezeStandingAboveTheDoor, questsThatCarriedPastTheDoor, type LadderStage } from "./lib/admission";
 import { adminGateWasConsulted, markAdminGate } from "./lib/adminGate";
@@ -68,6 +68,9 @@ import { register as registerReviewRoutes } from "./routes/review";
 import { register as registerHoldersRoutes } from "./routes/holders";
 import { register as registerErasureQueueRoutes } from "./routes/erasureQueue";
 import { register as registerFailedActionsRoutes } from "./routes/failedActions";
+import { register as registerCircleBurnRoutes } from "./routes/circleBurn";
+import { register as registerCircleBonusGateRoutes } from "./routes/circleBonusGate";
+import { budgetDeleteProblem, circleDeleteProblem, onCircleStatusChange, treasuryFacts, register as registerCircleTreasuryRoutes } from "./routes/circleTreasury";
 import { register as registerGovernanceWeightRoutes } from "./routes/governanceWeights";
 import { register as registerGovernanceWizardRoutes } from "./routes/governanceWizard";
 import { register as registerDelegationRoutes } from "./routes/delegation";
@@ -77,7 +80,8 @@ import { register as registerGovernanceLandingRoutes } from "./routes/governance
 import { applyDueGovernance, autoSettleExpired, digestComposerFor, itemKindsOf, markNotApplicable, overrideDials, routeOutcome, runVetoWatch, vetoWindowOn, type CloseRouting, type LandingDeps, type SubjectCloser } from "./lib/applyDue";
 import { register as registerGovernanceModeRoutes } from "./routes/governanceMode";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
-import { applyChangeSet, applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
+import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
+import { landWeightMode } from "./lib/landingRefusal";
 import { landingRow } from "./lib/applyDue";
 import { notifyRollRows, type RollNotice } from "./lib/ballotNotices";
 import { isPresentMember, presenceTest } from "./lib/memberPresence";
@@ -103,6 +107,10 @@ import { register as registerStaysRoutes } from "./routes/stays";
 import { register as registerSitePullRoutes } from "./routes/sitePull";
 import { register as registerBrandPreviewRoutes } from "./routes/brandPreview";
 import { register as registerBrandUploadRoutes } from "./routes/brandUploads";
+import { register as registerNeedsRoutes } from "./routes/needs";
+import { register as registerDryRunRoutes } from "./routes/dryRun";
+import { register as registerRedemptionRoutes } from "./routes/redemption";
+import { expireRedemptions, retiredSupply } from "./lib/redemptionStore";
 import { register as registerFeedbackRoutes } from "./routes/feedback";
 import { register as registerCharacterPortraitRoutes } from "./routes/characterPortraits";
 import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
@@ -291,6 +299,7 @@ import {
   VILLAGE_LAUNCH,
 } from "../shared/ballotSubjects";
 import { timingOf } from "../shared/governanceKinds";
+import { CURRENCY_DECIMALS, WHOLE_UNITS } from "../shared/tokenScale";
 /** The two dials a started Game answers for itself, through a governance_mode ballot. */
 const WEIGHT_KEYS_AFTER_START = new Set(["governance.weight_mode", "governance.weight_token"]);
 import { isMintRuleKey, parseMintRuleKey } from "../shared/mintRuleKeys";
@@ -299,7 +308,7 @@ import {
   tokenNameClash, slugFreezeRefusal,
   RECOGNITION_FAUCET,
   balanceOf,
-  balancesFor, PLATFORM_TOKEN,
+  balancesFor, PLATFORM_TOKEN, postPaymentReversalLeg,
   checkLedgerInvariants,
   CYCLE_POOL_FAUCET,
   entriesForMember,
@@ -316,7 +325,7 @@ import {
   hasBeenPaidByVillage,
   paidByVillageMany,
 } from "./lib/ledger";
-import type { TransferGuard } from "./lib/ledger";
+import { capRefusal, mintCapGuard, mintCycleStart, readCycleIssuance } from "./lib/mintCap";
 import {
   mayToggleTransferable,
   priceRefusal,
@@ -325,12 +334,12 @@ import {
   spendSurfacesFor,
 } from "./lib/spending";
 import { seatChargeFor, seatEscrowDrift, seatPriceFor, settleFinishedSeats } from "./lib/eventSeats";
-import { allowanceFor, applyMintRuleChanges, canConfirm, checkIn, cycleWindow, economyReady, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, runSettlement, startEconomyEpoch, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
+import { allowanceFor, applyMintRuleChanges, canConfirm, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, runSettlement, startEconomyEpoch, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
 import { addCharacter, avatarFor, listArchetypes, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
 import { loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
 import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requestVoiceClaim, settleVoiceClaim } from "./lib/voiceClaim";
-import { defaultSeasonsFor, seasonRunningProblem, suggestNextSeasonDates } from "./lib/seasonCalendar";
+import { normalizeSeasonConfig, seasonRunningProblem } from "./lib/seasonCalendar";
 import { completionsFor, completionsForMany, gatingModuleIds, trainingIsComplete, trainingProgress } from "./lib/trainingRecord";
 import { starterTrainingModules } from "./lib/trainingStarter";
 import { respondToTerminalError, installCrashHandlers, installShutdownHandlers, reachedSomebody, reportError, reportErrorWithin, wireErrorReporting } from "./lib/errors";
@@ -357,6 +366,7 @@ import {
   DEFAULT_EXIT_POLICY,
   EXIT_POLICY_TERMS,
   blankTerms,
+  exitLeverRefusal,
   normalizeExitPolicy,
   platformDefaultTerms,
   withPolicyDefaults,
@@ -397,7 +407,7 @@ import {
   libraryItemById,
   libraryItems,
   libraryLoanById,
-  libraryOpenState,
+  libraryHoldingsFor, libraryOpenState,
   loansForUser,
   markPickedUp,
   markReturned,
@@ -468,7 +478,6 @@ import {
   type NotifyDeps,
 } from "./lib/notify";
 import { registerJob, registeredJobs, startScheduler } from "./lib/scheduler";
-import { dryRun, MAX_MOONS } from "./lib/dryRun";
 import { cyclePoolProblem } from "./lib/cyclePool";
 import { onReplyCreated, onThreadCreated, processMentions, subscribe } from "./lib/forum";
 import { auditLastMessageAt } from "./lib/messaging";
@@ -3545,57 +3554,7 @@ function daysBetween(fromISO: string, toISO: string): number {
   return Math.round((b - a) / 86400000);
 }
 
-/** Accepts either the new {seasons,cadence,timezone} shape or a single legacy
- *  season object, so existing data/season.json keeps working after deploy. */
-function normalizeSeasonConfig(raw: any): { seasons: any[]; cadence: string; timezone: string } {
-  const def = GAME_CONFIG.season;
-  if (raw && Array.isArray(raw.seasons) && raw.seasons.length > 0) { // an EMPTY list is the platform default's sentinel for "derive", handled at the bottom; every seat's term (0199) needs a season to end with
-    return {
-      seasons: raw.seasons.map((s: any, i: number) => ({
-        id: s.id || `season-${i + 1}`,
-        name: s.name ?? "",
-        theme: s.theme ?? "",
-        focus: s.focus ?? "",
-        startsOn: s.startsOn ?? "",
-        endsOn: s.endsOn ?? "",
-        // 0050. This normaliser rebuilds every season from a FIXED field list
-        // and runs on read as well as write, so a field missing from here is
-        // a field the village can never store: without this line the pattern
-        // id was silently dropped on every save AND every load, and the whole
-        // season-pattern system resolved to "no pattern running".
-        patternId: s.patternId ?? "",
-        goals: Array.isArray(s.goals)
-          ? s.goals.map((g: any) => ({ text: String(g?.text ?? ""), done: !!g?.done }))
-          : [],
-      })),
-      cadence: raw.cadence ?? def.cadence,
-      timezone: raw.timezone ?? def.timezone,
-    };
-  }
-  // Legacy single-season file: lift it into a one-item list.
-  if (raw && typeof raw === "object" && raw.name) {
-    return {
-      seasons: [{
-        id: "season-1",
-        name: raw.name, theme: raw.theme ?? "", focus: raw.focus ?? "",
-        startsOn: raw.startsOn ?? "", endsOn: raw.endsOn ?? "",
-        goals: Array.isArray(raw.goals) ? raw.goals : [],
-      }],
-      cadence: def.cadence,
-      timezone: def.timezone,
-    };
-  }
-  // A village that has written nothing gets a list DERIVED from its cadence
-  // and timezone, relative to today. The platform used to seed two hard-dated
-  // seasons that both ended 2026-12-21, so every fork provisioned after that
-  // date had no current season on any date and no seat term could come due.
-  return {
-    seasons: (def.seasons.length ? def.seasons : defaultSeasonsFor(def.cadence, def.timezone)) as any[],
-    cadence: def.cadence,
-    timezone: def.timezone,
-  };
-}
-
+// `normalizeSeasonConfig` lives in server/lib/seasonCalendar.ts, with the store rule.
 function getSeasonConfig() {
   return normalizeSeasonConfig(seasonRepo.get());
 }
@@ -4086,7 +4045,7 @@ function stayPostingHooks() {
         dedupeKey: `stay:${stay.id}:lowbal:${today}`,
       });
     },
-    onStopped: async (stay: { id: string; userId: string }, balance: number) => {
+    onStopped: async (stay: { id: string; userId: string; rateSnapshotToken?: string }, balance: number) => {
       await notify({
         userId: stay.userId,
         type: "stays",
@@ -4095,7 +4054,7 @@ function stayPostingHooks() {
         link: "/stay",
         dedupeKey: `stay:${stay.id}:stopped:${today}`,
       });
-      await notifyAdmins("stays", `A stay is past its grace window (balance ${balance})`, `stay:${stay.id}:stopped:${today}`);
+      await notifyAdmins("stays", `A stay is past its grace window (balance ${fromLedgerUnits(stay.rateSnapshotToken ?? STAY_CREDIT, balance)})`, `stay:${stay.id}:stopped:${today}`);
     },
   };
 }
@@ -4638,7 +4597,7 @@ async function applyAcceptReward(
     const credit = await postTransfer(getPool(), {
       from: RECOGNITION_FAUCET,
       to: memberAccount(match.id),
-      amount,
+      amount: toLedgerUnits(PLATFORM_TOKEN, amount),
       source: "proposal_accepted",
       sourceRef: entry.id,
       description: "Work With Us proposal accepted",
@@ -5297,6 +5256,13 @@ async function startServer() {
       (f.skipped.length ? `, ${f.skipped.length} stuck and reported` : "");
   }
   registerJob("exchange-reconcile", 60 * 60 * 1000, runExchangeReconcile);
+  // An unanswered redemption ends itself and the held tokens go back in full,
+  // through the same door a human uses, so an expiry is never a second way to
+  // move value. `redemption.expires_after_days` at 0 means never expire.
+  registerJob("redemption-reap", 60 * 60 * 1000, async () => {
+    const n = await expireRedemptions(getPool());
+    return n ? `${n} redemption(s) expired and released` : "nothing expired";
+  });
   // S66: feedback relay — every 15 minutes, while the village keeps it on.
   // The hub being down costs nothing but a log line; rows wait their turn.
   registerJob("feedback-relay", 15 * 60 * 1000, async () => {
@@ -5396,7 +5362,7 @@ async function startServer() {
    */
   registerJob("seat-fee-settle", 6 * 60 * 60 * 1000, async () => {
     const r = await settleFinishedSeats(getPool());
-    if (r.settled) console.log(`[seats] ${r.settled} seat fee(s) settled to the treasury, ${r.amount} total`);
+    if (r.settled) console.log(`[seats] ${r.settled} seat fee(s) settled to the treasury, ${r.amount} minor units summed across every token`);
   });
 
   async function runLibrarySweep(): Promise<{ settled: number; overdue: number; stalled: number }> {
@@ -5828,6 +5794,7 @@ async function startServer() {
       return decodeToken(AUTH_TOKEN_SECRET, header.slice(7))?.userId ?? null;
     },
   });
+  wireVariableGuard((key, value, alongside) => exitLeverRefusal(key, value, exitPolicyRepo.get(), rawValue, alongside));
   initModuleUsage(getPool());
 
   // S30/S33/S37: open-state lives on the server (it needs the pool); the
@@ -6133,7 +6100,7 @@ async function startServer() {
     } else if (row.token_slug && row.token_amount && row.user_id) {
       const r = await postTransfer(pool, {
         from: TREASURY, to: memberAccount(String(row.user_id)),
-        tokenType: String(row.token_slug), amount: Number(row.token_amount),
+        tokenType: String(row.token_slug), amount: toLedgerUnits(String(row.token_slug), Number(row.token_amount)),
         source: "product_grant", sourceRef: purchaseId,
         description: `${row.product_name}, receipt #${row.receipt_no}`,
         idempotencyKey: `pp:${purchaseId}:grant:${periodKey}`,
@@ -6224,13 +6191,12 @@ async function startServer() {
       // MECHANICAL: claw back exactly what that period granted, negative
       // balances included — the same posture as stays. Humans told after.
       if (wasDelivered && row.token_slug && row.token_amount && row.user_id) {
-        const claw = await postTransfer(pool, {
+        const claw = await postPaymentReversalLeg(pool, {
           from: memberAccount(String(row.user_id)), to: TREASURY,
-          tokenType: String(row.token_slug), amount: Number(row.token_amount),
-          source: "payment_reversal", sourceRef: purchaseId,
+          tokenType: String(row.token_slug), amount: toLedgerUnits(String(row.token_slug), Number(row.token_amount)),
+          sourceRef: purchaseId,
           description: `Reversal: ${row.product_name} (${periodKey})`,
           idempotencyKey: `pp:${purchaseId}:reversal:${periodKey}`,
-          allowNegative: true,
         });
         // Checked, like stays and exchange do. Reporting a clawback that
         // never posted is worse than failing: the humans stand down.
@@ -6279,7 +6245,7 @@ async function startServer() {
       if (!r.ok) throw new Error(r.error ?? "stay credit mint failed");
       await notify({
         userId: String(p.user_id), type: "stays",
-        title: `${p.credits_granted} stay credit(s) arrived, see you soon`,
+        title: `${fromLedgerUnits(STAY_CREDIT, Number(p.credits_granted))} stay credit(s) arrived, see you soon`,
         link: "/stay", dedupeKey: `ord:${orderId}:notify`,
       });
     },
@@ -6313,16 +6279,14 @@ async function startServer() {
         );
         return;
       }
-      const claw = await postTransfer(pool, {
+      const claw = await postPaymentReversalLeg(pool, {
         from: memberAccount(String(p.user_id)),
         to: MINT_FAUCET,
         tokenType: STAY_CREDIT,
         amount: Number(p.credits_granted),
-        source: "payment_reversal",
         sourceRef: orderId,
         description: refund ? "Refund: credits reversed" : "Dispute: credits reversed",
         idempotencyKey: `ord:${orderId}:reversal-leg1`,
-        allowNegative: true,
       });
       if (!claw.ok) throw new Error(claw.error ?? "reversal leg failed");
       await pool.query("UPDATE stay_purchases SET status = ? WHERE id = ?", [refund ? "refunded" : "disputed", orderId]);
@@ -6377,16 +6341,14 @@ async function startServer() {
         );
         return;
       }
-      const claw = await postTransfer(pool, {
+      const claw = await postPaymentReversalLeg(pool, {
         from: memberAccount(String(order.user_id)),
         to: TREASURY,
         tokenType: String(order.token_slug),
-        amount: Number(order.quantity),
-        source: "payment_reversal",
+        amount: toLedgerUnits(String(order.token_slug), Number(order.quantity)),
         sourceRef: orderId,
         description: refund ? "Refund: tokens returned to stock" : "Dispute: tokens returned to stock",
         idempotencyKey: `ord:${orderId}:reversal-leg1`,
-        allowNegative: true,
       });
       if (!claw.ok) throw new Error(claw.error ?? "reversal leg failed");
       await pool.query("UPDATE exchange_orders SET status = ? WHERE id = ? AND kind = 'fiat_purchase'", [refund ? "refunded" : "disputed", orderId]);
@@ -10286,7 +10248,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     }
     // isExample is pinned exactly like id: a request body may not forge the
     // flag onto a real row, nor strip it off an example to launder it.
-    const merged = { ...all[idx], ...req.body, id: all[idx].id, isExample: all[idx].isExample };
+    const wasStatus = String((all[idx] as any).status ?? "active"), merged = { ...all[idx], ...req.body, id: all[idx].id, isExample: all[idx].isExample }; // 0200: the status is read BEFORE the merge overwrites it
     // An alias maps to exactly ONE circle: reject collisions with any other
     // circle's name or aliases — a quest resolving two ways is a data bug.
     const aliases: string[] = Array.isArray(merged.aliases) ? merged.aliases.map((a: any) => String(a)) : [];
@@ -10303,7 +10265,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     if (merged.parentCircleId === merged.id) return res.status(400).json({ error: "A circle cannot parent itself" });
     all[idx] = { ...merged, aliases };
     await circlesRepo.replaceAll(all);
-    res.json(all[idx]);
+    res.json({ ...all[idx], ...(await onCircleStatusChange(getPool(), all[idx], wasStatus, adminActor(req)?.id ?? null, listBudgets)) });
   });
 
   app.delete("/api/admin/circles/:id", async (req, res) => {
@@ -10324,6 +10286,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     if (stillHere) {
       return res.status(409).json({ error: `${stillHere} seat(s) still orbit this circle, reassign them first` });
     }
+    const stranded = await circleDeleteProblem(getPool(), String(req.params.id), await listBudgets(getPool()), circlesRepo);
+    if (stranded) return res.status(409).json({ error: stranded });
     const remaining = circlesRepo.all().filter((c: any) => c.id !== req.params.id);
     if (remaining.length === circlesRepo.all().length) return res.status(404).json({ error: "Not found" });
     await circlesRepo.replaceAll(remaining);
@@ -11965,7 +11929,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // their ledger later.
     res.json({
       success: true, status: outcome.status, goingCount: outcome.goingCount,
-      charged: outcome.charged ?? 0,
+      charged: outcome.tokenType ? fromLedgerUnits(outcome.tokenType, outcome.charged ?? 0) : 0,
       tokenName: outcome.tokenType ? (tokenDef(outcome.tokenType)?.name ?? outcome.tokenType) : null,
     });
   });
@@ -11992,7 +11956,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     const back = removed ? await seatChargeFor(getPool(), req.params.id, user.id, occ) : null;
     res.json({
       success: true, removed,
-      refunded: back?.status === "released" ? back.amount : 0,
+      refunded: back?.status === "released" ? fromLedgerUnits(back.tokenType, back.amount) : 0,
       tokenName: back ? (tokenDef(back.tokenType)?.name ?? back.tokenType) : null,
     });
   });
@@ -12042,7 +12006,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     }
     res.json({
       success: true, position: outcome.position, waiting: outcome.waiting,
-      charged: outcome.charged ?? 0,
+      charged: outcome.tokenType ? fromLedgerUnits(outcome.tokenType, outcome.charged ?? 0) : 0,
       tokenName: outcome.tokenType ? (tokenDef(outcome.tokenType)?.name ?? outcome.tokenType) : null,
     });
   });
@@ -12059,7 +12023,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     const back = removed ? await seatChargeFor(getPool(), req.params.id, user.id, occ) : null;
     res.json({
       success: true, removed,
-      refunded: back?.status === "released" ? back.amount : 0,
+      refunded: back?.status === "released" ? fromLedgerUnits(back.tokenType, back.amount) : 0,
       tokenName: back ? (tokenDef(back.tokenType)?.name ?? back.tokenType) : null,
     });
   });
@@ -12809,84 +12773,14 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const actor = (await authedUser(req))?.id ?? adminActor(req)?.id ?? null;
     if (!actor) return res.status(401).json({ error: "auth_required", message: "Confirming a launch step needs a named admin" });
-    const r = await confirmManual(getPool(), String(req.body?.id ?? ""), actor, req.body?.done !== false);
+    const r = await confirmManual(getPool(), String(req.body?.id ?? ""), actor, req.body?.done);
     if (!r.ok) return res.status(400).json({ error: r.error });
     void recordEvent(getPool(), {
-      kind: "audit", text: `launch:confirm:${req.body?.id}:${req.body?.done !== false ? "done" : "retracted"}`,
+      kind: "audit", text: `launch:confirm:${req.body?.id}:${r.answer}`,
       actorUserId: actor, entityType: "launch", entityRef: String(req.body?.id ?? ""), audience: "admin",
     });
     const fresh = await launchStatus(getPool(), launchDeps);
     res.json({ success: true, status: { ...fresh, gameStart: await readGameStart(getPool()), vote: await launchVoteFacts() } });
-  });
-
-  /**
-   * THE TEST RUN (R86). Turn the village's cycles over quickly and see what
-   * the settings do, in the last moment before the launch ballot.
-   *
-   * READS ONLY, and that is the whole design. `server/lib/dryRun.ts` carries
-   * the reasoning; the short version is that R81 puts all minting behind
-   * governance and R67 shuts issuance until the launch vote carries, so a run
-   * that wrote would either meet the gate and teach the founder nothing, or
-   * route around the gate and remove it. This route reads five facts and hands
-   * them to a function that takes no pool.
-   *
-   * It is allowed on a village that has ALREADY started its Game, deliberately.
-   * There is no accident available: nothing here can write, so a founder
-   * checking what a dial change would do to next season is welcome to it. The
-   * report says which of the two villages it was looking at.
-   */
-  app.post("/api/admin/dry-run", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-
-    // A length the caller asked for, or a refusal. A silent clamp would answer
-    // a question nobody put, and the number is on the report.
-    const asked = Number(req.body?.moons);
-    if (!Number.isFinite(asked) || !Number.isInteger(asked) || asked < 1 || asked > MAX_MOONS) {
-      return res.status(400).json({
-        error: "bad_request",
-        message: `A test run covers between 1 and ${MAX_MOONS} moons. You asked for ${req.body?.moons}.`,
-      });
-    }
-
-    const start = await readGameStart(getPool());
-    const [seats] = await getPool().query<any[]>(
-      "SELECT COUNT(*) AS n FROM `org_role_assignments` " +
-        "WHERE `active_holder_key` IS NOT NULL AND `holder_kind` = 'member' AND `user_id` IS NOT NULL AND `is_example` = 0",
-    );
-    const [ruleRows] = await getPool().query<any[]>(
-      "SELECT * FROM `mint_rules` WHERE `village_id` = ? ORDER BY `trigger`, `token_slug`",
-      [villageId()],
-    );
-
-    const report = dryRun(
-      {
-        gameStarted: start.started,
-        startedAt: start.startedAt,
-        seatCount: Number(seats[0]?.n ?? 0),
-        rules: ruleRows.map((r) => ({
-          id: String(r.id),
-          trigger: String(r.trigger),
-          tokenSlug: String(r.token_slug),
-          amount: r.amount === null || r.amount === undefined ? null : Number(r.amount),
-          ceiling: Number(r.ceiling ?? 0),
-          enabled: !!r.enabled,
-          effectiveFromCycle: Number(r.effective_from_cycle ?? 0),
-          pending:
-            r.pending_from_cycle === null || r.pending_from_cycle === undefined
-              ? null
-              : {
-                  amount: r.pending_amount === null || r.pending_amount === undefined ? null : Number(r.pending_amount),
-                  ceiling: Number(r.pending_ceiling ?? 0),
-                  enabled: !!r.pending_enabled,
-                  fromCycle: Number(r.pending_from_cycle),
-                },
-        })),
-        jobs: registeredJobs(),
-        modulesOff: MODULES.filter((m) => effectiveLifecycle(m.id) === "off").map((m) => ({ id: m.id, name: m.name })),
-      },
-      { moons: asked, moonOneCycle: await moonOneCycle(getPool()) },
-    );
-    res.json(report);
   });
 
   /**
@@ -12964,7 +12858,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
         recurring: p.recurring, provider: p.provider,
         zeffyUrl: p.provider === "zeffy" ? p.zeffy_url : undefined,
         manualInstructions: p.provider === "manual" ? p.manual_instructions : undefined,
-        grantsToken: p.token_slug ? { slug: p.token_slug, amount: p.token_amount, name: tokenDef(p.token_slug)?.name ?? p.token_slug, decimals: tokenDef(p.token_slug)?.decimals ?? 0 } : null,
+        grantsToken: p.token_slug ? { slug: p.token_slug, amount: toLedgerUnits(String(p.token_slug), Number(p.token_amount)), name: tokenDef(p.token_slug)?.name ?? p.token_slug, decimals: tokenDef(p.token_slug)?.decimals ?? 0 } : null,
       })),
       stripeConfigured: stripeConfigured(),
     });
@@ -14994,9 +14888,10 @@ Send an empty drafts array when you are still listening. A role payload is {name
       return res.status(409).json({ error: `This exit is ${exit.status}` });
     }
     const result = await sweepBalances(getPool(), { exitId: exit.id, userId: exit.userId });
+    if (result.refusal) return res.status(409).json({ error: result.refusal });
     await getPool().query(
       "UPDATE exits SET status = 'settling', resolution = CONCAT(COALESCE(resolution,''), ?) WHERE id = ?",
-      [`\n[${new Date().toISOString().slice(0, 10)}] balances swept: ${JSON.stringify(result.swept)}`, exit.id],
+      [result.note, exit.id],
     );
     res.json({ success: true, ...result });
   });
@@ -15090,6 +14985,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
   app.use("/api/resources", requireModule("resources"));
   app.use("/api/admin/resources", requireModule("resources"));
+  registerCircleBurnRoutes(app, { getPool, authedUser, circlesRepo, seasonState });
+  registerCircleBonusGateRoutes(app, { getPool, authedUser, circlesRepo, seasonState });
 
   /** The resources module's config, defaults filled. */
   function resourcesConfig(): { requestCategory: string; measuredVisibleTo: string; labels: Record<string, string> } {
@@ -15384,6 +15281,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       vocab: vocabulary(resourcesConfig().labels),
       config: resourcesConfig(),
       defaultUnit: resourcesDefaultUnit(),
+      tokens: allTokens().map((t) => ({ slug: t.slug, name: t.name, decimals: t.decimals })), // every `token:<slug>` a unit may name, with its scale: an amountMinor here is minor units AT that scale, both ways
       circles: circles.map((c: any) => ({ id: c.id, name: c.name })),
       seats: orgRoles
         .filter((r) => r.active && !r.isExample)
@@ -15497,10 +15395,13 @@ Send an empty drafts array when you are still listening. A role payload is {name
     // 0103: ACT. A DELETE carries no body, so the hatch is the header.
     const { ctx: actCtx, verdict } = await resourcesDeclareAct(req, declareCtx);
     if (!mayDeclareResources(budget.circleId, actCtx)) return refuseDeclare(res, verdict);
+    const stranded = await budgetDeleteProblem(getPool(), budget, budgets, circlesRepo);
+    if (stranded) return res.status(409).json({ error: stranded });
     await deleteBudget(getPool(), budget.id, adminActor(req)?.id ?? user?.id ?? null);
     res.json({ success: true });
   });
 
+  registerCircleTreasuryRoutes(app, { getPool, authedUser, members, circlesRepo, seasonState, mayDeclare, declareCtxFor: async (req) => (await resourcesDeclareAct(req, (await resourcesViewerFor(req)).declareCtx)).ctx });
   app.use("/api/health", requireModule("health"));
   app.use("/api/admin/health", requireModule("health"));
 
@@ -15808,7 +15709,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
        * and not a name worth inventing.
        */
       tokenNames: Object.fromEntries(Object.keys(ledger).map((s) => [s, tokenDef(s)?.name ?? s])),
-      tokenDecimals: Object.fromEntries(Object.keys(ledger).map((s) => [s, tokenDef(s)?.decimals ?? 0])), // THE SCALE OF EACH OF THOSE NUMBERS. `ledger` is the INT column verbatim, so it is MINOR units: Voice at decimals 3 ships 10000 for a member who earned 10, and this payload handed that straight to a card that printed it while their profile chip, off loadStanding, said 10 in the same second. Divide at the render site, through client/src/lib/tokenAmount.ts, which carries the why and why it has to land BEFORE every token moves to 4 decimals.
+      tokenDecimals: Object.fromEntries(Object.keys(ledger).map((s) => [s, tokenDef(s)?.decimals ?? 0])), // THE SCALE OF EACH OF THOSE NUMBERS. `ledger` is the INT column verbatim, so it is MINOR units: Voice at decimals 2 ships 1000 for a member who earned 10, and this payload handed that straight to a card that printed it while their profile chip, off loadStanding, said 10 in the same second. Divide at the render site, through client/src/lib/tokenAmount.ts, which carries the why. Since the 2026-09-04 scale ruling four of the seven tokens carry two decimals, so this is the ordinary case and no longer one token's exception.
       wallet: { address: user.walletAddress ?? null, verifiedAt: user.walletVerifiedAt ?? null },
       onchain,
       economicsEnabled,
@@ -15855,7 +15756,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const refusal = sendRefusal(slug);
     if (refusal) return res.status(400).json({ error: refusal });
 
-    const n = Math.trunc(Number(amount) || 0);
+    const n = Math.trunc(Number(amount) || 0); // ALREADY MINOR: `SendTokensCard.tsx` converts with `toMinorUnits` beside the input that shows the scale, so a `toLedgerUnits` here would post ten thousand times what was typed
     if (n <= 0) return res.status(400).json({ error: "How much are you sending?" });
 
     /*
@@ -15948,7 +15849,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       sent: n,
       tokenName: tokenDef(slug)?.name ?? slug,
       to: recipient.name ?? null,
-      balance: await balanceOf(getPool(), memberAccount(user.id), slug),
+      balance: await balanceOf(getPool(), memberAccount(user.id), slug), balanceDecimals: tokenDef(slug)?.decimals ?? 0, // minor units + scale
     });
   });
 
@@ -15967,7 +15868,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       const stage = stageIndex(await stageOf(viewer));
       const roles = roleIdsFor(viewer.id);
       mine = {
-        balance: await balanceOf(getPool(), memberAccount(viewer.id), LIBRARY_CREDIT), balanceDecimals: tokenDef(LIBRARY_CREDIT)?.decimals ?? 0, // minor units + scale
+        ...(await libraryHoldingsFor(getPool(), viewer.id)), // spendable + locked + total (minor units + scale), and one entry per item holding a deposit
         loans: await loansForUser(getPool(), viewer.id),
         strikes: await noShowStrikes(getPool(), viewer.id),
         eligible: Object.fromEntries(items.map((i) => {
@@ -15989,9 +15890,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
   app.post("/api/library/items/:id/reserve", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to borrow" });
-    if (await overLimit(`library-reserve:${user.id}`, Math.max(1, numberVar("library.reserve_daily_cap")), 24 * 60 * 60 * 1000)) {
-      return res.status(429).json({ error: "Ten reservations in a day is plenty" });
-    }
+    const reserveCap = Math.max(1, numberVar("library.reserve_daily_cap"));
+    const overReserveCap = await overLimit(`library-reserve:${user.id}`, reserveCap, 24 * 60 * 60 * 1000);
+    if (overReserveCap) return res.status(429).json({ error: `${reserveCap} ${reserveCap === 1 ? "reservation" : "reservations"} in a day is plenty` });
     const item = await libraryItemById(getPool(), req.params.id);
     if (!item) return res.status(404).json({ error: "No such item" });
     // Borrowing an example would escrow real credits against a shelf that does
@@ -16059,7 +15960,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       loans,
       reconciliation: await escrowReconciliation(getPool()),
       supply: await supplyVsBacking(getPool()),
-      poolBalance: await balanceOf(getPool(), "sys:library-pool", LIBRARY_CREDIT),
+      poolBalance: fromLedgerUnits(LIBRARY_CREDIT, await balanceOf(getPool(), "sys:library-pool", LIBRARY_CREDIT)),
       disputeDeadlineDays: numberVar("library.dispute_deadline_days"),
     });
   });
@@ -16282,7 +16183,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       from: amount > 0 ? LIBRARY_MINT : memberAccount(String(userId)),
       to: amount > 0 ? memberAccount(String(userId)) : LIBRARY_SINK,
       tokenType: LIBRARY_CREDIT,
-      amount: Math.abs(amount),
+      amount: toLedgerUnits(LIBRARY_CREDIT, Math.abs(amount)),
       source: amount > 0 ? "library_manual" : "library_burn",
       sourceRef: id,
       description: String(note ?? "Manual adjustment").slice(0, 255),
@@ -16396,7 +16297,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
             swap.myPairs.push({
               payToken: from.tokenSlug, payTokenName: tokenDef(from.tokenSlug)?.name ?? from.tokenSlug,
               receiveToken: to.tokenSlug, receiveTokenName: tokenDef(to.tokenSlug)?.name ?? to.tokenSlug,
-              yourBalance: held[from.tokenSlug] ?? 0,
+              yourBalance: fromLedgerUnits(from.tokenSlug, held[from.tokenSlug] ?? 0),
             });
           }
         }
@@ -16964,53 +16865,20 @@ Send an empty drafts array when you are still listening. A role payload is {name
   });
 
   /**
-   * THE PER-CYCLE MINT CAP, ENFORCED WHERE IT CANNOT BE RACED.
+   * The cap's own arithmetic lives in `server/lib/mintCap.ts`, with the
+   * ruling it enforces written beside it: the cap bounds ALL ISSUANCE of a
+   * token in a cycle, by every door, NET of what came back to the faucet
+   * inside the same cycle. Nine doors write `sys:mint` and three of them meet
+   * `mintCapGuard`; the counter has always seen all nine, and what it grew
+   * was a subtraction, because `spendSinkFor("stay-credit")` is that same
+   * faucet and a spent credit was being counted as a second issue.
    *
-   * Two doors mint from `sys:mint` — stocking the treasury and hand-minting to
-   * a member — and both used to read the cycle's running total, compare it,
-   * and then post several awaits later. Two admins clicking at once both read
-   * the same stale total, both decide there is room, and both post: the cap is
-   * exceeded while every individual request looks lawful, and nothing
-   * downstream notices because conservation still holds.
-   *
-   * "Caps fail closed" is a platform invariant, so this runs as a ledger guard
-   * instead — inside the transaction, after `sys:mint` and the destination are
-   * locked FOR UPDATE. Any two mints of the same token contend on the same
-   * `sys:mint` row, so they serialise, and the second one counts the first
-   * one's committed row. Deciding and writing become one step.
-   *
-   * The same guard covers both doors on purpose: two doors with one cap.
+   * The pre-flights below are a courtesy: they turn a bare refusal into a 409
+   * carrying numbers. `mintCapGuard` inside the transfer's own lock is the
+   * enforcement, and both read the same figure through `readCycleIssuance`.
    */
-  function mintCapGuard(slug: string, amt: number): TransferGuard {
-    const cap = toLedgerUnits(slug, numberVar("ledger.admin_mint_cycle_cap")); // dial is WHOLE tokens
-    const since = new Date(currentCycle().startsAt);
-    return async (conn) => {
-      // Re-read the cap inside the guard: an admin may have lowered it
-      // between the request arriving and the lock being granted, and the
-      // lower number is the one the village decided on.
-      if (cap <= 0) return "Minting is disabled (ledger.admin_mint_cycle_cap is 0)";
-      const [[row]] = await conn.query<any[]>(
-        "SELECT COALESCE(SUM(amount), 0) AS minted FROM token_ledger " +
-          "WHERE from_account = 'sys:mint' AND token_type = ? AND at >= ?",
-        [slug, since],
-      );
-      const minted = Number(row?.minted ?? 0);
-      if (minted + amt > cap) {
-        return `This would exceed the per-cycle mint cap: ${fromLedgerUnits(slug, minted)} of ${fromLedgerUnits(slug, cap)} ${slug} already minted this lunation`;
-      }
-      return null;
-    };
-  }
-
-  /** What the cap has left, for the pre-flight refusals and the response. */
-  async function mintedThisCycle(slug: string): Promise<number> {
-    const [[row]] = await getPool().query<any[]>(
-      "SELECT COALESCE(SUM(amount), 0) AS minted FROM token_ledger " +
-        "WHERE from_account = 'sys:mint' AND token_type = ? AND at >= ?",
-      [slug, new Date(currentCycle().startsAt)],
-    );
-    return Number(row?.minted ?? 0);
-  }
+  const issuedThisCycle = async (slug: string) =>
+    readCycleIssuance(getPool(), slug, mintCycleStart());
 
   /**
    * 0106: what is already asked for and waiting for a second steward.
@@ -17108,15 +16976,21 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const notForSale = purchaseProblem(slug);
     if (notForSale) return res.status(409).json({ error: notForSale });
     if (amt < 1) return res.status(400).json({ error: "A positive amount is required" });
-    const cap = toLedgerUnits(slug, numberVar("ledger.admin_mint_cycle_cap")); // dial is WHOLE tokens
+    // The dial is WHOLE tokens, and this pre-flight weighs it in whole tokens:
+    // `minted` below is `fromLedgerUnits(issuance.net)` and `amt` is what the
+    // steward typed, so both sides of the comparison are the same unit. The
+    // conversion happens on the LEDGER side here and on the DIAL side inside
+    // `mintCapGuard`, which is the enforcement and counts in minor units.
+    const cap = numberVar("ledger.admin_mint_cycle_cap");
     if (cap <= 0) return res.status(403).json({ error: "Minting is disabled (ledger.admin_mint_cycle_cap is 0)" });
     // A courteous pre-flight so the admin gets a 409 with numbers instead of
     // a bare refusal. It is NOT the enforcement — the guard below is.
-    const minted = await mintedThisCycle(slug);
+    const issuance = await issuedThisCycle(slug);
+    const minted = fromLedgerUnits(slug, issuance.net);
     if (minted + amt > cap) {
       return res.status(409).json({
-        error: `This would exceed the per-cycle mint cap: ${fromLedgerUnits(slug, minted)} of ${fromLedgerUnits(slug, cap)} ${slug} already minted this lunation`,
-        minted: fromLedgerUnits(slug, minted), cap: fromLedgerUnits(slug, cap), remaining: fromLedgerUnits(slug, Math.max(0, cap - minted)),
+        error: capRefusal(slug, cap, issuance),
+        minted, cap, remaining: Math.max(0, cap - minted),
       });
     }
     const actor = (await authedUser(req))?.id ?? adminActor(req)?.id ?? null;
@@ -17124,7 +16998,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       from: MINT_FAUCET,
       to: TREASURY,
       tokenType: slug,
-      amount: amt,
+      amount: toLedgerUnits(slug, amt),
       source: "exchange_stock",
       sourceRef: actor ?? undefined,
       description: `Treasury stocked for the exchange`,
@@ -17133,13 +17007,13 @@ Send an empty drafts array when you are still listening. A role payload is {name
       idempotencyKey: String(req.body?.requestId ?? "").trim()
         ? `xstock:${slug}:${String(req.body.requestId).trim().slice(0, 60)}`
         : `xstock-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    }, mintCapGuard(slug, amt));
+    }, mintCapGuard(slug, toLedgerUnits(slug, amt)));
     if (!r.ok) return res.status(r.error?.includes("mint cap") ? 409 : 400).json({ error: r.error });
     void recordEvent(getPool(), {
       kind: "audit", text: `exchange:stock:${amt}:${slug}`,
       actorUserId: actor, entityType: "token", entityRef: slug, audience: "admin",
     });
-    res.json({ success: true, treasuryBalance: r.toBalance, remaining: cap - minted - amt });
+    res.json({ success: true, treasuryBalance: fromLedgerUnits(slug, r.toBalance), remaining: cap - minted - amt });
   });
 
   // â”€â”€ S9: the token registry and ledger as admin surfaces â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€─
@@ -17155,8 +17029,15 @@ Send an empty drafts array when you are still listening. A role payload is {name
     for (const r of issuance) {
       (byToken[r.token_type] ??= {})[r.account_id] = Number(r.issued);
     }
+    /*
+     * RETIRED SITS BESIDE ISSUANCE AND IS NEVER NETTED INTO IT. `sys:redeemed`
+     * is not a faucet, so every `issued` figure above still reads what it did:
+     * released to date. Printing both is the honest form, and netting them
+     * silently is the change of meaning `spendSinkFor` refuses in writing.
+     */
+    const [retired, t] = await Promise.all([retiredSupply(getPool()), treasuryFacts(getPool(), await listBudgets(getPool()), allTokens().map((x) => x.slug), effectiveLifecycle("resources") !== "off")]); // 0200: treasuryHeld is a THIRD fact, netted into neither
     res.json({
-      tokens: allTokens().map((t) => ({ ...t, issuedBy: byToken[t.slug] ?? {} })),
+      tokens: allTokens().map((x) => ({ ...x, issuedBy: byToken[x.slug] ?? {}, retired: retired[x.slug] ?? 0, treasuryHeld: t.byToken[x.slug] })),
       mintCapPerCycle: numberVar("ledger.admin_mint_cycle_cap"),
     });
   });
@@ -17204,6 +17085,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
       kind: cleanKind,
       governance: "platform",
       transferable: wantsSending,
+      // Credit is currency-like from birth (stays.ts, library.ts). Voice kind stays whole: only Village Voice wanes.
+      decimals: cleanKind === "credit" ? CURRENCY_DECIMALS : WHOLE_UNITS,
     });
     // The village minting its own token is the moment the example market has
     // done its job: real tokens replace the demonstration.
@@ -17296,7 +17179,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const slug = String(req.params.slug);
     const { toUserId, amount, reason } = req.body ?? {};
-    const amt = Math.trunc(Number(amount) || 0);
+    const amt = Number(amount) || 0; // HUMAN, as typed. Finer than the token holds is refused below, never truncated: 2.5 once minted 2 and said "Minted"
     const def = tokenDef(slug);
     if (!def) return res.status(404).json({ error: `unknown token "${slug}"` });
     // Same rule as stocking: a hand-mint is a real ledger row against a slug
@@ -17305,7 +17188,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (def.governance !== "platform") {
       return res.status(400).json({ error: `${slug} is issued on Hypha and cannot be minted here` });
     }
-    if (!toUserId || amt <= 0) return res.status(400).json({ error: "toUserId and a positive amount are required" });
+    if (!toUserId || !Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: "toUserId and a positive amount are required" });
+    if (finerThanScale(amt, def.decimals)) return res.status(400).json({ error: `${def.name} ${def.decimals > 0 ? `goes to ${def.decimals} decimal places` : "is minted in whole amounts"}, so ${amt} cannot be minted exactly. Nothing was minted` });
     if (!String(reason ?? "").trim()) {
       return res.status(400).json({ error: "A reason is required. Every hand-mint must explain itself" });
     }
@@ -17340,20 +17224,28 @@ Send an empty drafts array when you are still listening. A role payload is {name
       });
     }
 
-    const cap = toLedgerUnits(slug, numberVar("ledger.admin_mint_cycle_cap")); // dial is WHOLE tokens
+    // The dial is WHOLE tokens, and this pre-flight weighs it in whole tokens:
+    // `minted` below is `fromLedgerUnits(issuance.net)` and `amt` is what the
+    // steward typed, so both sides of the comparison are the same unit. The
+    // conversion happens on the LEDGER side here and on the DIAL side inside
+    // `mintCapGuard`, which is the enforcement and counts in minor units.
+    const cap = numberVar("ledger.admin_mint_cycle_cap");
     if (cap <= 0) return res.status(403).json({ error: "Manual minting is disabled (ledger.admin_mint_cycle_cap is 0)" });
     // Pre-flight for a readable refusal; the guard on the post is the rule.
     // A grant already waiting for a second steward is spoken for and counts
     // here, or a hundred requests just under the cap would hold a hundred
     // times it (`pendingMints`).
-    const minted = await mintedThisCycle(slug);
+    const issuance = await issuedThisCycle(slug);
+    const minted = fromLedgerUnits(slug, issuance.net);
     const waiting = await pendingMints(slug);
     if (minted + waiting + amt > cap) {
       return res.status(409).json({
-        error: `This would exceed the per-cycle mint cap: ${fromLedgerUnits(slug, minted)} of ${fromLedgerUnits(slug, cap)} ${slug} already minted this lunation` +
-          (waiting > 0 ? `, and ${fromLedgerUnits(slug, waiting)} more is waiting for a second steward` : ""),
-        minted: fromLedgerUnits(slug, minted), waiting: fromLedgerUnits(slug, waiting),
-        cap: fromLedgerUnits(slug, cap), remaining: fromLedgerUnits(slug, Math.max(0, cap - minted - waiting)),
+        error: capRefusal(slug, cap, issuance) +
+          (waiting > 0 ? `, and ${waiting} more is waiting for a second steward` : ""),
+        minted,
+        waiting,
+        cap,
+        remaining: Math.max(0, cap - minted - waiting),
       });
     }
 
@@ -17371,8 +17263,16 @@ Send an empty drafts array when you are still listening. A role payload is {name
      * every one of them back from the row. An approval that does not pin the
      * amount is an approval of nothing.
      */
-    const threshold = toLedgerUnits(slug, cosignOver()); // dial is WHOLE tokens
+    // WHOLE TOKENS on both sides. `amt` is what the steward typed and the
+    // dial is a whole-token figure, so they are weighed as they are; the
+    // only conversion on this route is `toLedgerUnits(slug, amt)` at the
+    // post. Scaling the dial up to meet a ledger amount is right only on a
+    // route that takes ledger amounts, and this one does not: it would
+    // raise the co-sign threshold by the token's scale, which is a
+    // governance weakening wearing a units fix.
+    const threshold = cosignOver();
     if (threshold > 0 && amt > threshold) {
+      if (!Number.isInteger(amt)) return res.status(400).json({ error: `${amt} ${def.name} is over the ${threshold} a steward may grant alone, and a grant that waits for a second steward is recorded in whole ${def.name}. Ask for a whole amount. Nothing was recorded` }); // admin_mint_requests.amount is BIGINT
       const requestId = `amr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       await getPool().query(
         "INSERT INTO admin_mint_requests (id, token_slug, to_user_id, amount, reason, requested_by, status) " +
@@ -17402,14 +17302,14 @@ Send an empty drafts array when you are still listening. A role payload is {name
       from: "sys:mint",
       to: memberAccount(target.id),
       tokenType: slug,
-      amount: amt,
+      amount: toLedgerUnits(slug, amt),
       source: "admin_mint",
       sourceRef: adminActor(req)?.id,
       description: String(reason).trim().slice(0, 500),
       idempotencyKey: String(req.body?.requestId ?? "").trim()
         ? `admin_mint:${slug}:${String(req.body.requestId).trim().slice(0, 60)}`
         : `admin_mint:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    }, mintCapGuard(slug, amt));
+    }, mintCapGuard(slug, toLedgerUnits(slug, amt)));
     if (!r.ok) return res.status(r.error?.includes("mint cap") ? 409 : 400).json({ error: r.error });
     // Recognition minted by hand still updates the profile's cached balance.
     if (slug === "gratitude") {
@@ -17514,7 +17414,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
         error: "This grant pays the steward who asked for it. It cannot be signed",
       });
     }
-    const cap = toLedgerUnits(request.tokenSlug, numberVar("ledger.admin_mint_cycle_cap"));
+    const cap = numberVar("ledger.admin_mint_cycle_cap"); // whole tokens, and only weighed against 0 here
     if (cap <= 0) return res.status(403).json({ error: "Manual minting is disabled (ledger.admin_mint_cycle_cap is 0)" });
 
     /*
@@ -17540,12 +17440,12 @@ Send an empty drafts array when you are still listening. A role payload is {name
       from: "sys:mint",
       to: memberAccount(target.id),
       tokenType: request.tokenSlug,
-      amount: request.amount,
+      amount: toLedgerUnits(request.tokenSlug, request.amount),
       source: "admin_mint",
       sourceRef: request.id,
       description: request.reason.slice(0, 500),
       idempotencyKey: `admin_mint:req:${request.id}`,
-    }, mintCapGuard(request.tokenSlug, request.amount));
+    }, mintCapGuard(request.tokenSlug, toLedgerUnits(request.tokenSlug, request.amount)));
     if (!r.ok) {
       await getPool().query(
         "UPDATE admin_mint_requests SET status = 'pending', decided_by = NULL, decided_at = NULL WHERE id = ?",
@@ -19033,6 +18933,9 @@ ${inner}
   registerMilestonesRoutes(app, { isAdmin, guardCapability, milestonesRepo });
   registerLandRoutes(app, { isAdmin, authedUser, guardCapability, getPool, uploadsDir: UPLOADS_DIR });
   registerBrandPreviewRoutes(app, { isAdmin, getPool, brandRepo });
+  registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
+  registerDryRunRoutes(app, { authedUser, isAdmin, overLimit, getPool });
+  registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit });
 
   // â”€â”€ Project Settings (village dues + other editable numbers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -19719,7 +19622,7 @@ ${inner}
 
   // The season list and its save, which moves every seat that ends with its season (server/routes/seasons.ts).
   registerSeasonRoutes(app, {
-    isAdmin, adminActor, getPool, notify, seasonState, getSeasonConfig, normalizeSeasonConfig, seasonRepo, addActivity, loadRoles,
+    isAdmin, adminActor, getPool, notify, seasonState, getSeasonConfig, seasonRepo, addActivity, loadRoles,
     permissionHoldings: loadRoleHolders,
     writePermissionTerms: (moves) => withRoleHolderLock(async () => {
       const to = new Map(moves.map((m) => [m.id, m.to.toISOString()]));
@@ -20531,7 +20434,7 @@ ${inner}
             from: CYCLE_POOL_FAUCET,
             to: memberAccount(d.userId),
             tokenType: (d as any).poolToken ?? poolToken,
-            amount: share,
+            amount: toLedgerUnits((d as any).poolToken ?? poolToken, share),
             source: "gratitude_pool",
             sourceRef: cycle.id,
             description: `Cycle pool share: ${d.received} recognition from ${d.distinctSenders} ${d.distinctSenders === 1 ? "person" : "people"}`,
@@ -20595,7 +20498,7 @@ ${inner}
           cycleNumber: cycle.cycleNumber,
           startsAt: String(cycle.startsAt),
           endsAt: String(cycle.endsAt),
-        }, eligible);
+        }, eligible, { stageMultiplierFor: stageMultiplierById });
         // H7: with this lunation frozen, compare it to the one before and
         // tell the stewards what moved. Runs INSIDE the same try as the
         // snapshot on purpose — an alert failure must never unclose a
@@ -21291,18 +21194,14 @@ ${inner}
     if (req.params.key === "economy.hypha_space" && String(raw).trim()) {
       const verdict = checkVoiceSecret();
       if (!verdict.ok && verdict.fatal) {
-        return res.status(409).json({
-          error: `${verdict.error} Fix the secret on the deployment before naming a space, or the server will refuse to start.`,
-        });
+        return res.status(409).json({ error: `${verdict.error} Fix the secret on the deployment before naming a space, or the server will refuse to start.` });
       }
       const slug = String(raw).trim();
       // varchar(120) in `voice_claims`.`hypha_space` (0072). The registry's text
       // validator allows 255, so without this a slug between the two saves
       // cleanly here and then fails the claim INSERT under strict mode, which
       // is a refusal the member meets and the admin never sees.
-      if (slug.length > 120) {
-        return res.status(400).json({ error: "A Hypha space slug cannot be longer than 120 characters." });
-      }
+      if (slug.length > 120) return res.status(400).json({ error: "A Hypha space slug cannot be longer than 120 characters." });
     }
 
     const result = await setVariable(getPool(), req.params.key, String(raw));
@@ -21526,7 +21425,7 @@ ${inner}
       // and the `denied` field is on a payload `client/src/pages/GameMechanics.tsx`
       // reads, which belongs to another lane. Removing it is that lane's call.
       isDeniable("mechanics.propose") && (ctx.badgeDenies ?? []).includes("mechanics.propose"),
-      Number(user.recognitionBalance ?? 0),
+      fromLedgerUnits(PLATFORM_TOKEN, Number(user.recognitionBalance ?? 0)),
       Math.max(0, numberVar("governance.hypha_threshold")),
       ctx.isAdmin,
     );
@@ -22019,7 +21918,7 @@ ${inner}
     }
     if (result.failed.length > 0) {
       return res.status(409).json({
-        error: "Nothing could be applied. The registry has moved since the vote",
+        error: "Some of these changes could not be applied, so the proposal is not recorded as applied. The registry has moved since the vote",
         applied: result.applied, failed: result.failed,
       });
     }
@@ -22409,9 +22308,8 @@ ${inner}
         const applyResult = await applyMechanicsProposal(fresh, actorId);
         out.applied = applyResult.applied;
         if (applyResult.refusal) {
-          out.held = applyResult.refusal.sentence;
           await notifyAdmins("governance", `A carried proposal could not land: ${fresh.title}`, `gmp:${fresh.id}:apply-failed`);
-          return out;
+          throw new Error(applyResult.refusal.sentence);
         }
         /*
          * A CARRIED MINTING CHANGE IS QUEUED, AND THE CARD HAS TO SAY SO.
@@ -22433,6 +22331,7 @@ ${inner}
             `A ballot-passed proposal could not fully apply: ${fresh.title} (${applyResult.failed.length} change(s) refused)`,
             `gmp:${fresh.id}:apply-failed`,
           );
+          throw new Error(applyResult.failed.map((f) => `${f.key}: ${f.problem}`).join("; "));
         }
         return out;
       },
@@ -23333,7 +23232,7 @@ ${inner}
      */
     [GOVERNANCE_MODE]: twoPhase(async (b, outcome, outcomeNote, actorId) => {
       const out: CloseRouting = { applied: [], held: null, proposerTold: b.openedBy };
-      const [mode, token] = String(b.subjectRef).split("@");
+      const [mode] = String(b.subjectRef).split("@");
       if (outcome !== "passed") {
         await notify({
           userId: b.openedBy, type: "governance",
@@ -23345,16 +23244,12 @@ ${inner}
         });
         return out;
       }
-      const result = await applyChangeSet(changesetDeps(), {
-        ballotId: b.id,
-        proposalRef: `bal:${b.id}`,
-        actor: actorId,
-        changes: [{ kind: "mode_switch", to: mode, ...(token ? { weightToken: token } : {}) } as any],
+      // Throws unless the whole switch landed, so applyDue records the sentence
+      // and never marks this landing applied (server/lib/landingRefusal.ts).
+      const result = await landWeightMode(changesetDeps(), b, actorId).catch(async (e) => {
+        await notifyAdmins("governance", `A carried change to how votes are weighed could not land: ${b.title}`, `bal:${b.id}:mode-apply-failed`);
+        throw e;
       });
-      if (result.refusal) {
-        out.held = result.refusal.sentence;
-        return out;
-      }
       out.applied = result.applied;
       await addActivity("governance", `The village changed how it weighs a vote: ${b.title}`, {
         actorUserId: actorId, entityType: "ballot", entityRef: b.id,
@@ -25867,9 +25762,9 @@ ${inner}
         hyphaThreshold: numberVar("governance.hypha_threshold"),
         sensingDays: numberVar("governance.sensing_days"),
       },
-      quests: {
-        consentCapMode: stringVar("quest.consent_cap_mode"),
-      },
+      quests: { consentCapMode: stringVar("quest.consent_cap_mode"), consentCapMultiplier: numberVar("quest.consent_cap_multiplier") },
+      // The rung that opens buying, so /wallet names the village's own rung.
+      exchange: { buyOpensAt: stringVar("progression.unlock.exchange.buy") },
       tokens: {
         // Addresses are public on-chain data; the RPC endpoint is not exposed.
         equity: { ...GAME_CONFIG.currency.equity, address: stringVar("tokens.equity_address") },

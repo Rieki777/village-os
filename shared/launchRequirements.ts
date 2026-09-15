@@ -72,6 +72,21 @@ export interface LaunchRequirement {
   appliesWhenModule?: string | string[];
   /** Docs anchor in FORK_RUNBOOK.md for the long-form instructions. */
   runbookAnchor?: string;
+  /**
+   * A REQUIREMENT A FOUNDER MAY ANSWER BY DECLINING, and the answer counts.
+   *
+   * Rye, on the village-wide issuance cap: "they can opt to not set a cap at
+   * that moment." So one item on this list has a second real answer, and
+   * declining it satisfies the item the way doing it does.
+   *
+   * IT IS A FLAG ON THE REQUIREMENT AND NEVER A GENERAL POWER, which is the
+   * whole point of putting it here. If declining were something an admin could
+   * do to any row, a village could decline "Give every admin their own login"
+   * and reach `readyToLaunch` with the platform's oldest debt untouched.
+   * `confirmManual` in server/lib/launch.ts refuses a decline on any row that
+   * does not carry this, so the registry decides and nothing else can.
+   */
+  declinable?: boolean;
 }
 
 /**
@@ -280,6 +295,36 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
     checkKey: "pool-token-spendable",
     fixAt: "/admin?tab=tokens",
     fixLabel: "Open the token registry",
+  },
+
+  {
+    id: "issuance-cap",
+    group: "modules",
+    title: "Decide this village's issuance cap",
+    /*
+     * RYE'S RULING, AND WHY IT IS BLOCKING. "the initial village wide issuance
+     * needs to be added to the flow founders are going through, and they can
+     * opt to not set a cap at that moment. So, It's critical this is added to
+     * the Journey to launch process."
+     *
+     * Blocking is what makes the second answer real. On a recommended row,
+     * declining and never looking are the same outcome: the item stays amber
+     * and the launch vote opens either way, so "you may decline" would be a
+     * sentence with no mechanism behind it. Blocking means the founder has to
+     * ANSWER, and either answer opens the vote. That is the difference between
+     * a choice and a step somebody skipped.
+     *
+     * DECLINING DOES NOT UNCAP ANYTHING. The platform's own number keeps
+     * binding every door, which is the other half of the ruling: the
+     * village-wide cap binds as it does today. What a founder declines is
+     * naming a number of their own, at this moment.
+     */
+    why: "Every door that brings tokens into existence spends one number, per token, per lunar cycle: hand-mints, co-signed grants, treasury stocking, circle treasuries, stay-credit comps, purchases and what a work-exchange quest releases. Decide it now, while nothing has been issued and the number costs nothing to change. You can also decline and keep the platform's, which is a decision this journey records with your name on it.",
+    severity: "blocking",
+    checkKey: "decide:issuance-cap",
+    declinable: true,
+    fixAt: "/admin?tab=variables",
+    fixLabel: "Open the game variables",
   },
 
   // ── Reach: the real-world acts only a human can do ───────────────────────

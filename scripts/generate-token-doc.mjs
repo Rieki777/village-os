@@ -725,15 +725,83 @@ export function stringConst(root, relFile, name) {
   return literalOf(init, abs);
 }
 
-/** A `new Set([...])` assigned to a top-level const. */
+/**
+ * A KEYSTONE SET, read for the value it holds rather than the shape it is
+ * written in, in exactly one of two documented forms:
+ *
+ *     new Set(["a", "b"])        every element a plain string literal
+ *     frozenSet(["a", "b"])      the same, through the helper that seals it
+ *
+ * and NOTHING ELSE.
+ *
+ * WHY THIS IS STRICT NOW. It used to walk the initialiser and take the FIRST
+ * array literal it found, which reads the shape of the SOURCE TEXT rather than
+ * the value the program holds. An adversary pass drove three widenings of
+ * `ALLOW_NEGATIVE_SOURCES` straight past this reader, past docs/TOKENS.md, and
+ * past docs/ECONOMICS.md, all three green:
+ *
+ *     new Set([...3...].concat(["spend"]))
+ *     new Set(process.env.NODE_ENV === "test" ? [...3...] : [...4...])
+ *     new Set([...3...].filter((s) => s !== "reversal"))
+ *
+ * Only an honest four-literal edit was ever caught. The third of those also
+ * walks past `server/payments.test.ts`, which compares the set inside a process
+ * that identifies itself as the test environment and therefore cannot see an
+ * environment-keyed ternary at all. `ALLOW_NEGATIVE_SOURCES` decides which
+ * sources may drive a member's balance below zero and its own comment calls it
+ * "static ON PURPOSE", so this was the mechanism by which the keystone gets
+ * widened in production with every gate green.
+ *
+ * A reader that accepts a FAMILY of shapes can be walked past. A reader that
+ * accepts a fixed list of shapes can only be walked past by changing the
+ * shape, which is a diff somebody reviews. So a third form is a deliberate
+ * one-line addition here, never something this function infers.
+ *
+ * `frozenSet` is the second form because the keystone lane is sealing these
+ * sets against runtime mutation: it returns a Set whose add, delete and clear
+ * throw. The wrapper changes what the value can DO and not what it IS, so the
+ * list is read the same way out of both.
+ */
 export function setConst(root, relFile, name) {
   const abs = path.join(root, relFile);
   const init = constInit(abs, name);
   if (!init) fail(`token-doc: ${relFile} no longer exports ${name}`);
-  let arr;
-  eachChild(init, (n) => { if (ts.isArrayLiteralExpression(n) && !arr) arr = n; });
-  if (!arr) fail(`token-doc: ${name} in ${relFile} is not a set built from an array literal`);
-  return arr.elements.map((e) => literalOf(e, abs));
+
+  const shown = init.getText().replace(/\s+/g, " ").slice(0, 160);
+  const refuse = (why) =>
+    fail(
+      `token-doc: ${name} in ${relFile} is ${why}, and this reader accepts exactly two shapes:\n` +
+        `    new Set(["a", "b"])\n` +
+        `    frozenSet(["a", "b"])\n` +
+        `  every element a plain string literal. It found:\n    ${shown}\n` +
+        "  This set decides real behaviour and is published as a list of values. A declaration whose " +
+        "value cannot be read off the source text (a .concat, a .filter, an environment-keyed " +
+        "ternary) makes both token documents state a list the program does not hold. If a new form " +
+        "is deliberate, teach this reader that one form.",
+    );
+
+  let args;
+  if (ts.isNewExpression(init) && ts.isIdentifier(init.expression) && init.expression.text === "Set") {
+    args = init.arguments ?? [];
+  } else if (ts.isCallExpression(init) && ts.isIdentifier(init.expression) && init.expression.text === "frozenSet") {
+    args = init.arguments ?? [];
+  } else {
+    refuse("neither a `new Set(...)` nor a `frozenSet(...)`");
+  }
+
+  if (args.length !== 1) refuse(`built from ${args.length} argument(s) rather than exactly one`);
+  const arr = args[0];
+  if (!ts.isArrayLiteralExpression(arr)) refuse("built from something other than a plain array literal");
+
+  const out = [];
+  for (const el of arr.elements) {
+    if (!ts.isStringLiteral(el) && !ts.isNoSubstitutionTemplateLiteral(el)) {
+      refuse(`built from an array holding \`${el.getText().replace(/\s+/g, " ").slice(0, 60)}\`, which is not a plain string literal`);
+    }
+    out.push(el.text);
+  }
+  if (!out.length) refuse("an empty set, which no keystone set is");
+  return out;
 }
 
 /** The mint rules a fresh village is seeded with. */
@@ -1353,30 +1421,39 @@ export function render(f) {
       "claim anyone has to trust.",
   );
   p();
-  // One plain sentence per excepted source, and the build stops if a new one
-  // is added without one. The count and the list are both read from the code,
-  // so the paragraph cannot say "two" while the set holds three; the GLOSS is
-  // the part a human has to write, and the failure is what makes them.
-  const negGloss = {
+  // The count, the list and the reasons are all DERIVED. This sentence typed
+  // "Two sources" and "Both are" until `reversal` joined the set on 2026-09-03,
+  // and a hand-typed number inside a generated document is the exact failure
+  // this generator exists to prevent. "Each is" replaces "Both are" so the
+  // shape holds at two entries or at ten.
+  //
+  // AND A NEW SOURCE WITH NO SENTENCE STOPS THE BUILD. The count and the list
+  // read themselves out of the code; the GLOSS is the one part a human has to
+  // write, so a source arriving without one fails here instead of reaching a
+  // village as a bare slug in a paragraph about their own money.
+  const negReason = {
     stay_night: "a stay burnt inside its grace window",
-    payment_reversal: "the reversal leg after a refund",
-    reversal: "a correction clawing back value the member had already spent",
+    payment_reversal: "the leg after a payment refund",
+    reversal: "the clawback a reversal posts against value a member already spent",
   };
-  const negMissing = f.allowNegative.filter((s) => !negGloss[s]);
+  const negMissing = f.allowNegative.filter((s) => !negReason[s]);
   if (negMissing.length) {
     fail(
       `token-doc: ALLOW_NEGATIVE_SOURCES gained ${negMissing.join(", ")} with no plain sentence. ` +
-        "Add one to negGloss in this generator, so the document says what the exception is for.",
+        "Add one to negReason in this generator, so the document says what the exception is for.",
     );
   }
-  const negJoin = (parts) =>
-    parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : (parts[0] ?? "");
-  const negWord = ["No", "One", "Two", "Three", "Four", "Five"][f.allowNegative.length] ?? String(f.allowNegative.length);
-  const negVerb = f.allowNegative.length === 1 ? "source is" : "sources are";
+  const andList = (items) =>
+    items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+  const negCount = f.allowNegative.length;
+  const negWords = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
+  const negCounted = `${negWords[negCount] ?? negCount} source${negCount === 1 ? " is" : "s are"}`;
   p(
-    `An ordinary account cannot go below zero. ${negWord} ${negVerb} excepted today, in \`ALLOW_NEGATIVE_SOURCES\`: ` +
-      `${negJoin(f.allowNegative.map((s) => `\`${s}\``))}. Each is an honest state rather than a convenience: ` +
-      `${negJoin(f.allowNegative.map((s) => negGloss[s]))}.`,
+    `An ordinary account cannot go below zero. ${negCounted} excepted today, in \`ALLOW_NEGATIVE_SOURCES\`: ` +
+      `${andList(f.allowNegative.map((s) => `\`${s}\``))}. Each is an honest state rather than a convenience: ` +
+      `${andList(
+        f.allowNegative.map((s) => negReason[s] ?? `a \`${s}\` posting, which the ledger records instead of refusing`),
+      )}.`,
   );
   p();
   p(

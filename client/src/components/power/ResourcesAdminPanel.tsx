@@ -13,8 +13,10 @@
  * tabs are not filtered by module lifecycle; the off state is handled
  * here, in words.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { exponentOf, formatMoney } from "@shared/money";
+import { finerThanScale } from "@shared/tokenScale";
+import { formatTokenAmount } from "@/lib/tokenAmount";
 import { ResourcesRoutingEditor } from "@/components/admin/ModuleConfigPanels";
 
 interface Rule {
@@ -45,7 +47,19 @@ interface Budget {
   id: string;
   circleId: string;
   seasonId: string | null;
+  /** The SEASON cap. */
   amountMinor: number;
+  /** The CYCLE cap (0206). Null means the village set none. */
+  cycleAmountMinor: number | null;
+  /**
+   * WHICH MODEL THIS CIRCLE RUNS ON (0200). A cap permits and holds nothing; a
+   * treasury is real tokens the circle owns and keeps across a period.
+   */
+  mode: "cap" | "treasury";
+  /** A change to that model, queued for a period boundary. It has not happened. */
+  pending: { mode: "cap" | "treasury"; from: string; by: string | null; at: string | null } | null;
+  /** What the treasury held when the circle last went dormant, or null. */
+  dormant: { heldMinor: number; at: string; destination: string } | null;
   unit: string;
   note: string | null;
 }
@@ -61,6 +75,8 @@ interface AdminPayload {
   };
   config: { requestCategory: string; measuredVisibleTo: string; labels: Record<string, string> };
   defaultUnit: string;
+  /** Every registry token, with the scale its `token:<slug>` amounts are minor units at. */
+  tokens?: TokenScale[];
   circles: Array<{ id: string; name: string }>;
   seats: Array<{ id: string; name: string; circleId: string | null }>;
   measured: {
@@ -69,22 +85,68 @@ interface AdminPayload {
   } | null;
 }
 
+interface TokenScale {
+  slug: string;
+  name: string;
+  decimals: number;
+}
+
 function isIso(unit: string): boolean {
   return /^[A-Z]{3}$/.test(unit);
 }
 
-function money(amountMinor: number, unit: string): string {
-  if (isIso(unit)) return formatMoney(amountMinor, unit);
-  return `${amountMinor} ${unit.replace(/^token:/, "")}`;
+const TOKEN_UNIT = /^token:(.+)$/;
+
+/**
+ * HOW MANY DECIMAL PLACES A UNIT'S MINOR UNITS CARRY, OR NULL FOR "NOT KNOWN".
+ *
+ * Every `amountMinor` this panel reads or sends is minor units at the unit's
+ * real scale: Intl's exponent for a currency, the registry's `decimals` for
+ * `token:<slug>`. The server posts treasury amounts straight to the ledger and
+ * formats rules and budgets with the registry scale (`amountWords`,
+ * server/lib/resources.ts). This panel used 0 digits for every token, so a
+ * steward typing 60 on a two-decimal token minted 0.60, and a treasury holding
+ * 125.50 read as 12550.
+ *
+ * NULL IS A REFUSAL, NEVER A ZERO. A token missing from the payload's registry
+ * has a scale this page cannot see, and guessing 0 is exactly the defect above.
+ * A unit that is neither shape reads 0: the server refuses that unit by name
+ * whatever the amount, so no scale can make it post.
+ */
+function digitsFor(unit: string, tokens: TokenScale[] | undefined): number | null {
+  if (isIso(unit)) return exponentOf(unit);
+  const m = TOKEN_UNIT.exec(unit);
+  if (!m) return 0;
+  const t = tokens?.find((x) => x.slug === m[1]);
+  const d = Number(t?.decimals);
+  return t && Number.isInteger(d) && d >= 0 ? d : null;
 }
 
-/** Major-unit text to minor units for the unit's own exponent. */
-function toMinor(text: string, unit: string): number {
-  const major = Number(text);
-  if (!Number.isFinite(major) || major <= 0) return 0;
-  const digits = isIso(unit) ? exponentOf(unit) : 0;
-  return Math.round(major * Math.pow(10, digits));
+function moneyAt(amountMinor: number, unit: string, tokens: TokenScale[] | undefined): string {
+  if (isIso(unit)) return formatMoney(amountMinor, unit);
+  const slug = unit.replace(/^token:/, "");
+  const digits = digitsFor(unit, tokens);
+  if (digits === null) return `${amountMinor} ${slug} in its smallest unit, because this page could not read its scale`;
+  return `${formatTokenAmount(amountMinor, digits)} ${slug}`;
 }
+
+/**
+ * One submission's idempotency id.
+ *
+ * The ledger key the server builds from `requestId` is what dedupes, so the id
+ * has to name ONE SUBMISSION: the same on a double click or a retry, different
+ * the next time a steward funds the same amount for the same reason. It was
+ * built from the amount and the note, so next month's identical funding and a
+ * second identical payment were both answered `duplicate: true` and moved
+ * nothing, while this panel said "funded" and "Paid".
+ */
+function newRequestId(): string {
+  const uuid = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto?.randomUUID?.();
+  return uuid ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+/** What a steward reads when the server already had this exact submission. */
+const ALREADY_RECORDED = "This exact request was already recorded, so nothing new moved.";
 
 const EMPTY_RULE = {
   scope: "circle",
@@ -99,7 +161,14 @@ const EMPTY_RULE = {
 };
 
 const EMPTY_SOURCE = { name: "", kind: "donations", sharePct: "", amountPerYear: "", unit: "", note: "" };
-const EMPTY_BUDGET = { circleId: "", seasonId: "", amount: "", unit: "", note: "" };
+const EMPTY_BUDGET = { circleId: "", seasonId: "", amount: "", cycleAmount: "", unit: "", note: "", mode: "cap" };
+
+/**
+ * One row's treasury inputs. Kept per budget so two rows cannot share a draft.
+ * `requestId` is minted on every edit (see `setDraft`), so it names what is in
+ * the boxes when the button is pressed.
+ */
+const EMPTY_MOVE = { amount: "", toUserId: "", note: "", requestId: "" };
 
 export default function ResourcesAdminPanel({ password }: { password: string }) {
   const auth = { Authorization: `Bearer ${password}` };
@@ -112,6 +181,17 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [source, setSource] = useState({ ...EMPTY_SOURCE });
   const [budget, setBudget] = useState({ ...EMPTY_BUDGET });
+  const [move, setMove] = useState<Record<string, typeof EMPTY_MOVE>>({});
+  /** A row's request id before anybody has typed in it. See `idFor`. */
+  const untouchedIds = useRef<Record<string, string>>({});
+  /**
+   * What each treasury holds, keyed by BUDGET id.
+   *
+   * Its own fetch, because the balance belongs to the treasury domain and the
+   * declaration payload belongs to the resources module. One owner per
+   * surface is what stops a lane widening somebody else's response.
+   */
+  const [treasuries, setTreasuries] = useState<Record<string, { account: string; balanceMinor: number; slug: string }>>({});
   const [labelDraft, setLabelDraft] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
@@ -127,6 +207,12 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
     const d = (await res.json()) as AdminPayload;
     setModuleOff(false);
     setData(d);
+    // A treasury balance is a separate read and a FAILED one leaves the map
+    // empty rather than showing a zero: an empty state and a real zero are
+    // different facts, and the row prints "not read" for the first.
+    const held = await fetch("/api/admin/resources/treasuries", { headers: auth });
+    setTreasuries(held.ok ? ((await held.json())?.treasuries ?? {}) : {});
+
     setLabelDraft(d.config.labels ?? {});
     setRule((r) => ({ ...r, unit: r.unit || d.defaultUnit, scopeId: r.scopeId || (d.circles[0]?.id ?? "") }));
     setSource((s) => ({ ...s, unit: s.unit || d.defaultUnit }));
@@ -142,7 +228,8 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
     load();
   }, [load]);
 
-  const act = async (route: string, method: string, body?: unknown) => {
+  /** The answer's body on success (so a caller can read `duplicate`), or null. */
+  const act = async (route: string, method: string, body?: unknown): Promise<Record<string, any> | null> => {
     setProblem(null);
     setNote(null);
     const res = await fetch(route, {
@@ -153,18 +240,42 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
     const json = await res.json().catch(() => null);
     if (!res.ok) {
       setProblem(String(json?.error ?? "That did not go through"));
-      return false;
+      return null;
     }
     await load();
-    return true;
+    return json ?? {};
+  };
+
+  /**
+   * Typed major units into minor units at the unit's REAL scale, or null after
+   * saying why nothing was sent. Blank, zero and junk come back as 0 so the
+   * server's own sentence answers them, which is what they always did.
+   */
+  const minorOrRefuse = (text: string, unit: string): number | null => {
+    const digits = digitsFor(unit, data?.tokens);
+    if (digits === null) {
+      setNote(null);
+      setProblem(`This page could not read how many decimal places ${unit} carries, so it sent nothing. Reload the page. If this stays, that token is missing from the registry.`);
+      return null;
+    }
+    const major = Number(text);
+    if (!Number.isFinite(major) || major <= 0) return 0;
+    if (finerThanScale(major, digits)) {
+      setNote(null);
+      setProblem(`${unit} goes to ${digits} decimal places, so ${text} cannot be sent exactly. Nothing was sent.`);
+      return null;
+    }
+    return Math.round(major * 10 ** digits);
   };
 
   const saveRule = async () => {
+    const amountMinor = minorOrRefuse(rule.amount, rule.unit.trim());
+    if (amountMinor === null) return;
     const ok = await act("/api/admin/resources/rules", "POST", {
       id: editingRuleId ?? undefined,
       scope: rule.scope,
       scopeId: rule.scopeId,
-      amountMinor: toMinor(rule.amount, rule.unit.trim()),
+      amountMinor,
       unit: rule.unit.trim(),
       approval: rule.approval,
       approvalNote: rule.approvalNote.trim() || undefined,
@@ -180,7 +291,9 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
   };
 
   const saveSource = async () => {
-    const amountMinorPerYear = source.amountPerYear.trim() ? toMinor(source.amountPerYear, source.unit.trim()) : null;
+    const perYear = source.amountPerYear.trim() ? minorOrRefuse(source.amountPerYear, source.unit.trim()) : 0;
+    if (perYear === null) return;
+    const amountMinorPerYear = source.amountPerYear.trim() ? perYear : null;
     const ok = await act("/api/admin/resources/sources", "POST", {
       name: source.name,
       kind: source.kind,
@@ -196,17 +309,136 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
   };
 
   const saveBudget = async () => {
+    const amountMinor = minorOrRefuse(budget.amount, budget.unit.trim());
+    if (amountMinor === null) return;
+    // Blank leaves the cycle cap unset. "0" is a real cap and means zero.
+    const cycleAmountMinor = budget.cycleAmount.trim() === "" ? null : minorOrRefuse(budget.cycleAmount, budget.unit.trim());
+    if (budget.cycleAmount.trim() !== "" && cycleAmountMinor === null) return;
     const ok = await act("/api/admin/resources/budgets", "POST", {
       circleId: budget.circleId,
       seasonId: budget.seasonId.trim() || undefined,
-      amountMinor: toMinor(budget.amount, budget.unit.trim()),
+      amountMinor,
+      cycleAmountMinor,
       unit: budget.unit.trim(),
       note: budget.note.trim() || undefined,
+      // A mode is a STARTING CONDITION and only reaches the INSERT. Changing
+      // the model of a budget that already exists waits for a period boundary
+      // and goes through the schedule control below.
+      mode: budget.mode,
     });
     if (ok) {
       setBudget({ ...EMPTY_BUDGET, unit: data?.defaultUnit ?? "", circleId: data?.circles?.[0]?.id ?? "" });
       setNote("The budget is written.");
     }
+  };
+
+  /** The draft for one budget row's treasury moves. */
+  const draft = (id: string) => move[id] ?? EMPTY_MOVE;
+  /**
+   * EVERY EDIT IS A NEW SUBMISSION, so every edit mints a new `requestId`.
+   * Pressing the button twice, or again after a failure, without touching the
+   * boxes sends the same id and the ledger dedupes it. Clearing the boxes after
+   * a success is an edit too, so the next identical funding is a new one.
+   */
+  const setDraft = (id: string, patch: Partial<Omit<typeof EMPTY_MOVE, "requestId">>) =>
+    setMove((m) => ({ ...m, [id]: { ...(m[id] ?? EMPTY_MOVE), ...patch, requestId: newRequestId() } }));
+  /**
+   * THE REQUEST ID A ROW'S BUTTON SENDS. The draft's, once anybody has typed.
+   *
+   * "Hand it back" works with every box blank, so a row nobody has touched
+   * still needs one id per submission. It lives in a ref and not in state
+   * because a ref is written at once: two clicks landing before a re-render
+   * read the same id and the ledger dedupes the second.
+   */
+  const idFor = (id: string): string => {
+    const drafted = move[id]?.requestId;
+    if (drafted) return drafted;
+    if (!untouchedIds.current[id]) untouchedIds.current[id] = newRequestId();
+    return untouchedIds.current[id]!;
+  };
+
+  /**
+   * SCHEDULE A MODE CHANGE. It lands at the period boundary and never now, so
+   * the button says what will happen and the answer says when.
+   */
+  const scheduleMode = async (b: Budget) => {
+    const asked = (b.pending?.mode ?? b.mode) === "treasury" ? "cap" : "treasury";
+    const res = await fetch(`/api/admin/resources/budgets/${b.id}/mode`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...auth },
+      body: JSON.stringify({ mode: asked }),
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      setProblem(String(json?.error ?? json?.message ?? "That did not go through"));
+      return;
+    }
+    setNote(String(json?.message ?? "The change is queued."));
+    await load();
+  };
+
+  /** MINT INTO A TREASURY. This is issuance and the village's cap binds it. */
+  const fundTreasury = async (b: Budget) => {
+    const d = draft(b.id);
+    const amountMinor = minorOrRefuse(d.amount, b.unit);
+    if (amountMinor === null) return;
+    const answer = await act(`/api/admin/resources/budgets/${b.id}/fund`, "POST", {
+      amountMinor,
+      note: d.note.trim() || "Funding the circle's treasury",
+      requestId: idFor(b.id),
+    });
+    if (answer) {
+      setDraft(b.id, { amount: "" });
+      setNote(answer.duplicate
+        ? ALREADY_RECORDED
+        : "The treasury is funded. Those tokens are minted, so they spent the village's issuance room for this cycle.");
+    }
+  };
+
+  /** PAY SOMEBODY FROM A TREASURY. This moves tokens that already exist. */
+  const spendTreasury = async (b: Budget) => {
+    const d = draft(b.id);
+    const amountMinor = minorOrRefuse(d.amount, b.unit);
+    if (amountMinor === null) return;
+    const answer = await act(`/api/admin/resources/budgets/${b.id}/spend`, "POST", {
+      toUserId: d.toUserId.trim(),
+      amountMinor,
+      note: d.note.trim() || "Paid from the circle's treasury",
+      requestId: idFor(b.id),
+    });
+    if (answer) {
+      setDraft(b.id, { amount: "", toUserId: "" });
+      setNote(answer.duplicate
+        ? ALREADY_RECORDED
+        : "Paid. A treasury spend moves tokens the circle already holds, so the village's issuance cap did not move.");
+    }
+  };
+
+  /** HAND A TREASURY BACK. The issuance room comes back with the tokens. */
+  const returnTreasury = async (b: Budget) => {
+    const d = draft(b.id);
+    const asked = d.amount.trim() ? minorOrRefuse(d.amount, b.unit) : undefined;
+    if (asked === null) return;
+    const res = await fetch(`/api/admin/resources/budgets/${b.id}/return`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...auth },
+      body: JSON.stringify({
+        amountMinor: asked,
+        note: d.note.trim() || "Handed back to the village",
+        // The same one-request-per-submission id as fund and spend. It sent
+        // none, so the server keyed each press on the clock and a double click
+        // handed back twice.
+        requestId: idFor(b.id),
+      }),
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      setProblem(String(json?.error ?? "That did not go through"));
+      return;
+    }
+    setDraft(b.id, { amount: "" });
+    setNote(json?.duplicate ? ALREADY_RECORDED : String(json?.message ?? "Handed back."));
+    await load();
   };
 
   const saveLabels = async () => {
@@ -236,6 +468,8 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
     return <p className="text-sm text-muted-foreground">{problem ?? "Reading the declarations…"}</p>;
   }
 
+  /** Minor units at the unit's real scale, into what a steward reads. */
+  const money = (amountMinor: number, unit: string) => moneyAt(amountMinor, unit, data.tokens);
   const circleName = (id: string) => data.circles.find((c) => c.id === id)?.name ?? id;
   const seatName = (id: string) => data.seats.find((s) => s.id === id)?.name ?? id;
   const scopeName = (r: Rule) => (r.scope === "circle" ? circleName(r.scopeId) : seatName(r.scopeId));
@@ -285,10 +519,13 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
                     className="text-xs text-teal-deep font-medium"
                     onClick={() => {
                       setEditingRuleId(r.id);
+                      // The same scale both ways. An unreadable one leaves the
+                      // box blank, so the save stays disabled.
+                      const digits = digitsFor(r.unit, data.tokens);
                       setRule({
                         scope: r.scope,
                         scopeId: r.scopeId,
-                        amount: String(r.amountMinor / Math.pow(10, isIso(r.unit) ? exponentOf(r.unit) : 0)),
+                        amount: digits === null ? "" : formatTokenAmount(r.amountMinor, digits),
                         unit: r.unit,
                         approval: r.approval,
                         approvalNote: r.approvalNote ?? "",
@@ -453,14 +690,92 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
         {data.budgets.length > 0 && (
           <div className="space-y-1.5">
             {data.budgets.map((b) => (
-              <div key={b.id} className="flex items-center justify-between gap-2 text-sm bg-muted/40 rounded-lg px-3 py-2">
-                <span className="text-foreground/90">
-                  <span className="font-semibold">{circleName(b.circleId)}</span> holds {money(b.amountMinor, b.unit)}
-                  {b.seasonId ? ` for season ${b.seasonId}` : " as a standing envelope"}
-                </span>
-                <button type="button" className="text-xs text-red-600 font-medium shrink-0" onClick={() => act(`/api/admin/resources/budgets/${b.id}`, "DELETE")}>
-                  Remove
-                </button>
+              <div key={b.id} className="space-y-2 text-sm bg-muted/40 rounded-lg px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-foreground/90">
+                    {b.mode === "treasury" ? (
+                      <>
+                        <span className="font-semibold">{circleName(b.circleId)}</span> holds a treasury of{" "}
+                        {treasuries[b.id] ? money(treasuries[b.id]!.balanceMinor, b.unit) : "an amount this page could not read"}.
+                        It keeps whatever it does not spend.
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-semibold">{circleName(b.circleId)}</span> may issue up to {money(b.amountMinor, b.unit)}
+                        {b.seasonId ? ` in season ${b.seasonId}` : " a season"}
+                        {b.cycleAmountMinor === null
+                          ? ", with no cap on any one cycle"
+                          : `, and up to ${money(b.cycleAmountMinor, b.unit)} in any one cycle`}
+                      </>
+                    )}
+                  </span>
+                  <button type="button" className="text-xs text-red-600 font-medium shrink-0" onClick={() => act(`/api/admin/resources/budgets/${b.id}`, "DELETE")}>
+                    Remove
+                  </button>
+                </div>
+
+                {b.dormant && (
+                  <p className="text-xs text-muted-foreground">
+                    This circle went dormant on {b.dormant.at.slice(0, 10)} and its treasury of{" "}
+                    {money(b.dormant.heldMinor, b.unit)} was{" "}
+                    {b.dormant.destination === "retired" ? "retired, so those tokens are gone" : "returned to the village treasury"}.
+                    Funding it again is a new mint, so it meets the village's issuance cap for the cycle it happens in.
+                  </p>
+                )}
+
+                {b.pending ? (
+                  <p className="text-xs text-muted-foreground">
+                    Queued: this circle moves to a {b.pending.mode === "treasury" ? "treasury" : "spending cap"} on{" "}
+                    {b.pending.from.slice(0, 10)}. It finishes this period on the model it started with.{" "}
+                    <button type="button" className="underline font-medium" onClick={() => act(`/api/admin/resources/budgets/${b.id}/mode`, "DELETE")}>
+                      Withdraw that
+                    </button>
+                  </p>
+                ) : (
+                  <button type="button" className="text-xs underline font-medium text-foreground/80" onClick={() => scheduleMode(b)}>
+                    {b.mode === "treasury" ? "Move to a spending cap next period" : "Move to a treasury next period"}
+                  </button>
+                )}
+
+                {b.mode === "treasury" && (
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    <input
+                      className={input}
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder={`Amount in ${b.unit}`}
+                      value={draft(b.id).amount}
+                      onChange={(e) => setDraft(b.id, { amount: e.target.value })}
+                    />
+                    <input
+                      className={input}
+                      placeholder="Member id, to pay somebody"
+                      value={draft(b.id).toUserId}
+                      onChange={(e) => setDraft(b.id, { toUserId: e.target.value })}
+                    />
+                    <input
+                      className={input}
+                      placeholder="Why"
+                      value={draft(b.id).note}
+                      onChange={(e) => setDraft(b.id, { note: e.target.value })}
+                    />
+                    <button type="button" className={button} disabled={!draft(b.id).amount} onClick={() => fundTreasury(b)}>
+                      Mint into it
+                    </button>
+                    <button
+                      type="button"
+                      className={button}
+                      disabled={!draft(b.id).amount || !draft(b.id).toUserId.trim()}
+                      onClick={() => spendTreasury(b)}
+                    >
+                      Pay from it
+                    </button>
+                    <button type="button" className={button} onClick={() => returnTreasury(b)}>
+                      Hand it back
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -479,14 +794,30 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
             <input className={input} value={budget.seasonId} onChange={(e) => setBudget({ ...budget, seasonId: e.target.value })} />
           </label>
           <label className={label}>
-            Amount (major units)
+            Most it may issue in a season (major units)
             <input className={input} type="number" min="0" step="any" value={budget.amount} onChange={(e) => setBudget({ ...budget, amount: e.target.value })} />
+          </label>
+          <label className={label}>
+            Most it may issue in one cycle (blank for no cycle cap, 0 for none at all)
+            <input className={input} type="number" min="0" step="any" value={budget.cycleAmount} onChange={(e) => setBudget({ ...budget, cycleAmount: e.target.value })} />
           </label>
           <label className={label}>
             Unit
             <input className={input} value={budget.unit} onChange={(e) => setBudget({ ...budget, unit: e.target.value })} />
           </label>
+          <label className={label}>
+            How this circle runs
+            <select className={input} value={budget.mode} onChange={(e) => setBudget({ ...budget, mode: e.target.value })}>
+              <option value="cap">A spending cap: it may issue up to the amounts above and holds nothing</option>
+              <option value="treasury">A treasury: mint it tokens up front and it keeps what it does not spend</option>
+            </select>
+          </label>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Choose per circle. Some circles can run on a cap while others hold a treasury, in the same season. Changing
+          the model of a budget that already exists waits for the next period, so a circle finishes its season on the
+          model it started with.
+        </p>
         <button type="button" className={button} disabled={!budget.circleId || !budget.amount} onClick={saveBudget}>
           Declare the budget
         </button>
@@ -540,7 +871,9 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
               .filter((t) => t.direction === "in")
               .map((t) => (
                 <p key={`${t.account}-${t.tokenType}`}>
-                  {t.account.replace(/^sys:/, "")}: {t.total} {t.tokenType} across {t.count} move{t.count === 1 ? "" : "s"}
+                  {/* `total` is SUM(token_ledger.amount), MINOR units, so it
+                      reads at the token's scale like every other amount here. */}
+                  {t.account.replace(/^sys:/, "")}: {money(t.total, `token:${t.tokenType}`)} across {t.count} move{t.count === 1 ? "" : "s"}
                 </p>
               ))}
           </div>

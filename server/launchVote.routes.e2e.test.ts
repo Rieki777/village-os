@@ -264,6 +264,21 @@ beforeAll(async () => {
     body: { id: "backups-drilled", done: true },
   });
   expect(backups.status, JSON.stringify(backups.json)).toBe(200);
+
+  /*
+   * THE FOUNDER'S ANSWER ABOUT THE VILLAGE-WIDE ISSUANCE CAP, WHICH IS NEW AND
+   * BLOCKS THE VOTE UNTIL IT IS GIVEN.
+   *
+   * Rye ruled that founders are asked for the cap on this journey and "can opt
+   * to not set a cap at that moment". This village declines, which is the
+   * second real answer: it names no number of its own and the platform's cap
+   * keeps binding every door. The row is BLOCKING precisely so that declining
+   * and never looking cannot be the same outcome, so a setup that greens the
+   * checklist has to answer it, exactly as a founder does.
+   */
+  expect((await call("POST", "/api/admin/launch/confirm", {
+    body: { id: "issuance-cap", done: "declined" },
+  })).status).toBe(200);
 }, 240_000);
 
 afterAll(async () => {

@@ -3,6 +3,8 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { KeyRound, CheckCircle2 } from "lucide-react";
 import { TOKEN_KEY } from "@/lib/gameApi";
+import { writeStored } from "@/lib/safeStorage";
+import { PASSWORD_SET_STORAGE_BLOCKED, sessionWriteRefused } from "@/lib/signInStorage";
 
 /**
  * Claim an account by setting its password (S1). Reached from the founder
@@ -38,7 +40,15 @@ export default function SetPassword() {
       // a fork's rename will reach it; the moment it does, a hand-typed copy
       // writes a key nothing reads and the member is signed out holding a
       // password that was set correctly.
-      localStorage.setItem(TOKEN_KEY, data.token);
+      // The password IS set by the time this runs, so a blocked store here
+      // used to report "the link may have expired" over a change that landed.
+      // Its own sentence says the password is saved and then says what the
+      // browser is doing (client/src/lib/signInStorage.ts).
+      if (sessionWriteRefused(writeStored("local", TOKEN_KEY, data.token))) {
+        setError(PASSWORD_SET_STORAGE_BLOCKED);
+        setBusy(false);
+        return;
+      }
       setDone(true);
       // Admins land on the admin panel; everyone else on their profile. This
       // route is a member-reachable password reset now, and sending an

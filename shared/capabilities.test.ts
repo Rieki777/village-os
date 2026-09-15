@@ -289,10 +289,14 @@ describe("capability labels", () => {
  *
  * The founder's ruling, in his words: "denying a voice is not a power anyone
  * should hold", and "when voice is earned it should never be force taken
- * away". Waning is the one thing that survives it: a rule under which unused
- * voice decays over time is legitimate and belongs to Hypha, for villages
- * that want professional governance. An ACT by which one party strips
- * another's earned voice is not legitimate at any tier, held by anybody.
+ * away". Waning is the one thing that survives it: a rule under which voice
+ * decays over time is legitimate. As of R3 (2026-09-03) waning lives in this
+ * platform as well as on Hypha, as a published percentage posted to
+ * `sys:voice-decay` at every cycle close, uniform over every holder and
+ * naming nobody in any row it writes. The word "unused" that used to sit in
+ * this paragraph was never in the ruling and is gone. An ACT by which one
+ * party strips another's earned voice is not legitimate at any tier, held by
+ * anybody, and no dial the village can turn is able to name one member.
  *
  * Before this, `denies` on a warning badge could name any of the platform's
  * capability keys, and the deny sat at step 2 of the gate ahead of role and

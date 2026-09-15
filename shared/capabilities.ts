@@ -82,6 +82,23 @@ export type Capability =
   // sentence "the village's ____ look after that", and it covers a real
   // refusal rather than a button.
   | "quest.approve" // put a proposed quest on the board, with what it pays
+  // ── The redemption key (0201) ────────────────────────────────────────────
+  //
+  // A member asks for their tokens to become something real off the platform,
+  // and somebody has to say that it happened before the tokens are destroyed.
+  // The founder's words are "confirmed by a steward or a vote (if no stewards
+  // are in a role)", and this key is how the first half of that sentence is
+  // executed. There is no `isSteward()` in this codebase: the word is prose for
+  // an admin or founder role check, and the vacancy question in the second half
+  // is spelled four different ways in four places with no shared helper.
+  //
+  // A key asks neither question. A village that wants its Steward Circle to
+  // confirm redemptions grants this to that role; a village that has granted it
+  // to nobody falls through the one gate to admin, which is the behaviour the
+  // default describes. So "steward" comes to mean whatever this village has
+  // decided it means, and there is no vacancy to detect, only a key nobody was
+  // given.
+  | "redemption.confirm" // agree that a member was paid, and destroy their tokens
   /*
    * The steward's veto, and the reason it has to carry.
    *
@@ -137,6 +154,7 @@ export const ALL_CAPABILITIES: Capability[] = [
   "story.tell",
   "dial.set",
   "quest.approve",
+  "redemption.confirm",
   "steward.veto",
 ];
 
@@ -191,6 +209,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "story.tell": "Say what the village is, in public, in its own words",
   "dial.set": "Turn the village's own dials",
   "quest.approve": "Put a proposed quest on the board and set what it pays",
+  "redemption.confirm": "Confirm that a member was paid, and destroy the tokens they redeemed",
   "steward.veto": "Stop a carried decision inside its window, and say why",
 };
 
@@ -354,6 +373,11 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   // route asks `guardCapability`, so the escape hatch and the public record
   // this column promises are both really there.
   "quest.approve": true,
+  // Confirming a redemption destroys somebody's tokens on the strength of a
+  // payment the platform cannot see, so it is exactly the sort of power a
+  // village hands to a named circle. Its two routes ask `guardCapability`, so
+  // the escape hatch and the public record this column promises are both there.
+  "redemption.confirm": true,
   "library.keep": true,
   "story.tell": true,
   "org.seat": true,
@@ -466,11 +490,20 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * should hold", and "when voice is earned it should never be force taken
  * away". One thing survives it and it is the whole of the design space here:
  *
- *   WANING IS NOT REMOVAL. A rule under which unused voice decays over time
- *   is legitimate, and it belongs to Hypha, which villages that want to run
- *   governance professionally are encouraged to use. An ACT by which one
- *   party strips another's earned voice is not legitimate, at any tier, held
- *   by anybody.
+ *   WANING IS NOT REMOVAL. A rule under which voice decays over time is
+ *   legitimate. An ACT by which one party strips another's earned voice is
+ *   not legitimate, at any tier, held by anybody.
+ *
+ * WANING NOW LIVES HERE TOO, and this paragraph is a correction. It used to
+ * say waning "belongs to Hypha", and it used to say UNUSED voice, which is a
+ * qualifier the ruling as quoted never carried. R3 (2026-09-03) built waning
+ * into this platform: `economy.voice_decay_pct` wanes every member's Voice by
+ * a published percentage at each cycle close, uniformly, into
+ * `sys:voice-decay`. A village that governs on Hypha can still run the rule
+ * there. None of that touches the ruling above, and the difference is the
+ * whole of it: waning is a rate the village published and voted, it reaches
+ * every holder the same way, no row it writes names an actor, and nothing in
+ * it can be pointed at one member. Stripping is an act aimed at a person.
  *
  * Until this map existed, `denies` could name any key in ALL_CAPABILITIES,
  * and the deny sits at step 2 of the gate ahead of role and stage. So a
@@ -617,6 +650,11 @@ export const DENIABLE: Record<Capability, boolean> = {
   // earned as a say in a decision the village makes, which is the line R65 and
   // R66 draw.
   "quest.approve": true,
+  // A job, on the same line R65 and R66 draw. Taking it off somebody stops
+  // them signing off other people's payouts; it takes away nothing they earned
+  // as a say in what the village decides, and nothing at all about their own
+  // right to ask to redeem.
+  "redemption.confirm": true,
   "library.keep": true,
   "story.tell": true,
   "dial.set": true,
