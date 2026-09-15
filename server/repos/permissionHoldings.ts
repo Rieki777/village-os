@@ -193,12 +193,14 @@ export async function insertHoldingIfAbsent(
     grantedBy: string;
     termEndsAt: Date | null;
     seasonId: string | null;
+    /** 0199: true when the term is the season's end and moves with it. */
+    termFollowsSeason?: boolean;
   },
 ): Promise<void> {
   await pool.query(
-    "INSERT INTO role_holders (id, role_id, user_id, granted_by, term_ends_at, season_id) VALUES (?,?,?,?,?,?) " +
+    "INSERT INTO role_holders (id, role_id, user_id, granted_by, term_ends_at, season_id, term_follows_season) VALUES (?,?,?,?,?,?,?) " +
       "ON DUPLICATE KEY UPDATE role_id = role_id",
-    [input.id, input.roleId, input.userId, input.grantedBy, input.termEndsAt, input.seasonId],
+    [input.id, input.roleId, input.userId, input.grantedBy, input.termEndsAt, input.seasonId, input.termFollowsSeason ? 1 : 0],
   );
 }
 

@@ -17,6 +17,8 @@ import { resolutionLine } from "@/lib/reportFeedback";
 import { ALL_CAPABILITIES, isDeniable } from "@shared/capabilities";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import { SeatSomebody } from "@/components/power/SeatSomebody";
+import { AppointToRole } from "@/components/admin/AppointToRole";
+import { RAISED_HAND_TERM_KEYS, RaisedHandTerm } from "@/components/admin/RaisedHandTerm";
 import Celebration from "@/components/natural/Celebration";
 import { useMomentWindow } from "@/components/natural/moments";
 import { playMoment } from "@/lib/sound";
@@ -982,10 +984,11 @@ function SubmissionsTab({ password }: { password: string }) {
                       </span>
                     )}
                   </div>
+                  {s.type === "role-application" && <RaisedHandTerm data={s.data} />}
                   <table className="w-full text-sm">
                     <tbody>
                       {Object.entries(s.data)
-                        .filter(([k]) => k !== "attachmentName")
+                        .filter(([k]) => k !== "attachmentName" && !(s.type === "role-application" && RAISED_HAND_TERM_KEYS.includes(k)))
                         .map(([k, v]) => (
                         <tr key={k} className="border-b border-gray-100 last:border-0">
                           <td className="py-1.5 pr-4 font-medium text-gray-600 capitalize w-1/4 align-top">
@@ -2029,6 +2032,8 @@ interface TrainingModule {
   type: string;
   url: string;
   order: number;
+  /** 0197. Required modules gate the Participant rung; optional ones do not. */
+  mandatory?: boolean;
 }
 
 const TRAINING_TYPES = ["Video", "Article", "Practice", "Workshop", "Live Session"];
@@ -2060,7 +2065,7 @@ function TrainingModulesTab({ password }: { password: string }) {
 
   const startNew = () => {
     setEditingId("new");
-    setDraft({ title: "", description: "", type: "Video", url: "", order: mods.length + 1 });
+    setDraft({ title: "", description: "", type: "Video", url: "", mandatory: true, order: mods.length + 1 });
   };
 
   const cancelEdit = () => { setEditingId(null); setDraft({}); };
@@ -2161,6 +2166,22 @@ function TrainingModulesTab({ password }: { password: string }) {
             onChange={(e) => setDraft({ ...draft, order: parseInt(e.target.value) || 0 })}
             className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep/40"
           />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-500 block mb-1">Required to climb</label>
+          {/* The one lever that turns the Participant rung on and off. A member
+              states for themselves what they have finished; the REQUIRED ones
+              are what moves them onto the next rung. Absent reads as required,
+              which is what every module shipped before 0197 is. */}
+          <label className="flex min-h-11 items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={draft.mandatory !== false}
+              onChange={(e) => setDraft({ ...draft, mandatory: e.target.checked })}
+              className="h-4 w-4 rounded border-gray-300"
+            />
+            Finishing this one is required
+          </label>
         </div>
       </div>
       <div className="flex gap-2">
@@ -3514,7 +3535,6 @@ function GameRolesTab({ password }: { password: string }) {
   const [roles, setRoles] = useState<any[]>([]);
   const [players, setPlayers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [picking, setPicking] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -3533,22 +3553,23 @@ function GameRolesTab({ password }: { password: string }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const change = async (roleId: string, userId: string, action: "add" | "remove") => {
+  // `termEndsOn` empty sends no date: the seat ends with the season (0199).
+  const change = async (roleId: string, userId: string, action: "add" | "remove", termEndsOn = ""): Promise<boolean> => {
     try {
       const res = await fetch(`${API_BASE}/admin/roles/${roleId}/holders`, {
         method: "POST",
         headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ userId, action }),
+        body: JSON.stringify({ userId, action, ...(termEndsOn ? { termEndsOn } : {}) }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(refusal(data, "failed"));
       toast.success(action === "add" ? "Appointed" : "Removed");
-      setPicking((prev) => ({ ...prev, [roleId]: "" }));
       load();
+      return true;
     } catch (e: any) {
-      // The stage-floor refusal comes back with the member's name and the
-      // stage the role asks for — show it verbatim, it is written for humans.
+      // The stage-floor and term refusals come back as sentences written for humans; show them verbatim.
       toast.error(e?.message || "Change failed");
+      return false;
     }
   };
 
@@ -3602,25 +3623,7 @@ function GameRolesTab({ password }: { password: string }) {
                     </button>
                   </span>
                 ))}
-                <select
-                  value={picking[r.id] ?? ""}
-                  onChange={(e) => setPicking((prev) => ({ ...prev, [r.id]: e.target.value }))}
-                  className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
-                >
-                  <option value="">Appoint a member…</option>
-                  {players
-                    .filter((p) => !(r.holders ?? []).some((h: any) => h.userId === p.id))
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}{p.handle ? ` (@${p.handle})` : ""}</option>
-                    ))}
-                </select>
-                <button
-                  onClick={() => picking[r.id] && change(r.id, picking[r.id], "add")}
-                  disabled={!picking[r.id]}
-                  className="text-xs bg-teal-deep text-white rounded-lg px-3 py-1.5 font-medium disabled:opacity-40"
-                >
-                  Appoint
-                </button>
+                <AppointToRole role={r} players={players} onAppoint={(userId, termEndsOn) => change(r.id, userId, "add", termEndsOn)} />
               </div>
             </div>
           ))}

@@ -124,6 +124,8 @@ export interface LandingRow {
   timing: ProposalTiming;
   /** True when no steward may stop this one, window or no window. */
   vetoLocked: boolean;
+  /** True when the lock is every steward's yes (`veto_locked = 2`, 2026-09-14). */
+  lockedByConsent: boolean;
   /** Set when the row reached passed with its instant already behind it. */
   lateSettledAt: Date | null;
 }
@@ -155,7 +157,8 @@ export async function landingRowOf(pool: Pool, ballotId: string): Promise<Landin
     landingStatus: String(r.landing_status),
     status: String(r.status),
     timing: timingOf(r.timing),
-    vetoLocked: Number(r.veto_locked ?? 0) === 1,
+    vetoLocked: Number(r.veto_locked ?? 0) !== 0,
+    lockedByConsent: Number(r.veto_locked ?? 0) === 2,
     lateSettledAt: asDate(r.late_settled_at),
   };
 }
@@ -163,13 +166,20 @@ export async function landingRowOf(pool: Pool, ballotId: string): Promise<Landin
 /**
  * Write the landing instant and the window onto the ballot.
  *
+ * `veto_locked` holds 0 (a steward may stop it), 1 (a carve-out: nobody may)
+ * or 2 (every steward already said yes, Rye 2026-09-14). Every reader of the
+ * FACT asks `!== 0`; only the countdown's sentence reads which one. Reusing the
+ * column keeps the reason frozen at close with no migration, and a previous
+ * release reading a 2 treats the row as stoppable, which costs nothing when
+ * every steward has already said yes.
+ *
  * `landsAt` null is the advisory and the executes-at-close shape: the two
  * instant columns take NULL together, because a row with one of them set and
  * the other clear is a countdown nobody can read.
  */
 export async function stampBallotLanding(
   pool: Pool,
-  input: { ballotId: string; landsAt: Date | null; landingStatus: string; vetoLocked: 0 | 1 },
+  input: { ballotId: string; landsAt: Date | null; landingStatus: string; vetoLocked: 0 | 1 | 2 },
 ): Promise<void> {
   const at = input.landsAt ? sqlInstant(input.landsAt) : null;
   await pool.query(
@@ -380,7 +390,7 @@ export async function countUnfinishedBefore(pool: Pool, boundary: Date): Promise
  */
 export async function vetoLockedOn(pool: Pool, ballotId: string): Promise<boolean> {
   const [rows] = await pool.query<RowDataPacket[]>("SELECT veto_locked FROM ballots WHERE id = ?", [ballotId]);
-  return Number(rows[0]?.veto_locked ?? 0) === 1;
+  return Number(rows[0]?.veto_locked ?? 0) !== 0;
 }
 
 /** A window still open, as the veto watch reads it. */

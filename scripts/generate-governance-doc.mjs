@@ -1804,6 +1804,10 @@ const KNOWN_DIALS = [
   "governance.veto_hours",
   "governance.steward_council",
   "governance.highest_tier",
+  // Rye, 2026-09-14: when every seated steward already voted yes the veto is
+  // gone and the wait shortens to this notice, because the countdown is the
+  // village's as well as the stewards'. Clamped to veto_hours, veto-locked.
+  "governance.consent_notice_hours",
   // The two Rye ruled on 2026-09-04, which together decide what the seat can
   // actually stop. `steward_subjects` above names WHICH KINDS are in reach;
   // this one names WHICH SIZES, and a veto needs both. It ships narrower than
@@ -1846,7 +1850,6 @@ const KNOWN_DIALS = [
   // The two that arrived with 19G: whose weight the quorum counts.
   "governance.nonhuman_in_quorum",
   "governance.absent_cycles",
-  "membership.vouch_threshold",
 ];
 
 export function dialCoverageProblem(keys, known = KNOWN_DIALS) {
@@ -2378,7 +2381,11 @@ const RULINGS = [
       "cycle of the active clock, the last N days of every season, or a shape the village writes. All of them ship always " +
       "open. This supersedes the 2026-08-31 line that proposals are never gated by the calendar: a village may gate them " +
       "now, and always open stays a choice. The countdown reads one instant through one helper, so no surface can show a " +
-      "deadline the engine does not enforce.",
+      "deadline the engine does not enforce. Since 2026-09-14 that countdown is on the decision page itself, one clock for " +
+      "the village and the stewards together, and a carried decision reads as not yet in effect until it lands. A decision " +
+      "every seated steward voted yes on can no longer be stopped and waits only `governance.consent_notice_hours` after " +
+      "the close (a day by default, never longer than the steward window), while a village with no seated stewards keeps " +
+      "the whole window.",
   },
   {
     id: 30,

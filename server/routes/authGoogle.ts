@@ -58,6 +58,11 @@ export interface GoogleAuthDeps {
   overLimit(bucket: string, max: number, windowMs: number): Promise<boolean>;
   clientIp(req: Request): string;
   recordAudit(text: string, userId: string): void;
+  /**
+   * A brand-new member arrived through Google. The host records the join AND
+   * greets whoever greets (`memberJoined` in server/lib/arrival.ts), exactly as
+   * the email door does. Called without waiting, so it must never reject.
+   */
   onMemberJoined(user: any): void;
 }
 
