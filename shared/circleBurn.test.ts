@@ -78,6 +78,37 @@ function metered(over: Partial<MeteredReading> = {}): MeteredReading {
 // ── The rate, and what it says when there is nothing to say ─────────────────
 
 describe("the burn rate", () => {
+  it("runs the elapsed time to the instant when the window's end is a DERIVED horizon already passed", () => {
+    /*
+     * B4 on #243. An open-ended season's `endsAt` is a stand-in one year after
+     * it began. For a season older than that, the stand-in is behind `at`, and
+     * the rate used to divide spend summed up to `at` by time elapsed only up to
+     * the stand-in: here 20000 over 10 days read as 2000 a day when 20 days had
+     * passed, which is double the real rate.
+     */
+    const derived: WindowRef = {
+      id: "founding",
+      startsAt: new Date(START).toISOString(),
+      endsAt: new Date(START + 10 * DAY).toISOString(),
+      endsDeclared: false,
+    };
+    const c = cap({ scope: "season", window: derived, spentMinor: 20_000, atMs: START + 20 * DAY });
+    expect(c.perDayMinor).toBeCloseTo(1000, 6);
+    // The projection runs to the instant too, so it never reads below what is already spent.
+    expect(c.projectedMinor).toBe(20_000);
+    expect(c.exhaustsAt).toBeNull();
+    // An exhausted season with no declared end names no date for its room coming back.
+    const spentOut = readCap({
+      scope: "season", window: derived, capMinor: 20_000, spentMinor: 20_000, atMs: START + 20 * DAY, askMinor: 0,
+    });
+    const said = burnSentence(metered({ season: spentOut, binds: "season" }), WORDS);
+    expect(said).toContain("until the next season begins");
+    expect(said).not.toContain(derived.endsAt.slice(0, 10));
+    // A declared end still bounds the clock exactly as it always did.
+    const declared = cap({ scope: "season", window: { ...derived, endsDeclared: true }, spentMinor: 20_000, atMs: START + 20 * DAY });
+    expect(declared.perDayMinor).toBeCloseTo(2000, 6);
+  });
+
   it("is taken over the window's own elapsed time, so it shares the cap's denominator", () => {
     // 20000 minor over ten elapsed days of a thirty-day window.
     const c = cap({ spentMinor: 20_000, atMs: START + 10 * DAY });

@@ -396,6 +396,14 @@ export interface SpendTreasuryInput {
   note: string;
   idempotencyKey: string;
   permit: TreasuryPermit;
+  /**
+   * Whether `toUserId` is a member of this village who can be paid. REQUIRED,
+   * for the reason `permit` is: `postTransferOn` creates whatever `mem:<id>` it
+   * is handed, so a mistyped payee posted real tokens to an account no member
+   * will ever open, and nothing listed them afterwards. The caller supplies the
+   * lookup because this file reads no users table.
+   */
+  memberExists: (userId: string) => Promise<boolean> | boolean;
 }
 
 /**
@@ -433,9 +441,19 @@ export async function spendTreasury(
   if (units <= 0) return { ok: false, error: "A spend is a positive number of minor units" };
   if (!String(input.toUserId ?? "").trim()) return { ok: false, error: "A spend names who is paid" };
 
+  const payee = String(input.toUserId);
+  if (!(await input.memberExists(payee))) {
+    return {
+      ok: false,
+      error:
+        `No member of this village has the id ${JSON.stringify(payee.slice(0, 64))}, so nothing ` +
+        "was paid. The ledger would have opened an account for that id that no member holds",
+    };
+  }
+
   const r = await postTransfer(pool, {
     from: circleTreasuryAccount(input.circleId),
-    to: memberAccount(String(input.toUserId)),
+    to: memberAccount(payee),
     tokenType: input.tokenSlug,
     amount: units,
     source: TREASURY_SPEND_SOURCE,
@@ -562,19 +580,22 @@ export interface DormancySweep {
  * tokens in the account, which is the stranding this whole file exists to
  * prevent, arriving through the idempotency key.
  *
- * So the key carries the circle, the token, the DAY and the AMOUNT. A retried
- * status write repeats all four and posts once, which is the case that
- * actually happens. A second dormancy on a later day, or on the same day with
- * a different balance, differs and posts.
+ * So the key carries the circle, the token, the DAY, the AMOUNT and the
+ * account's LEDGER ROW COUNT (`dormancySweepKey`). Two sweeps that both read
+ * the same balance and the same rows before either posts are one sweep racing
+ * itself, and the second is a duplicate. A second dormancy on a later day, or
+ * with a different balance, differs and posts.
  *
- * WHAT IS LEFT, STATED RATHER THAN HIDDEN: a circle that goes dormant, is
- * revived, is funded to EXACTLY the same amount and goes dormant again ON THE
- * SAME DAY writes one row and leaves the second balance in the account. That
- * case is indistinguishable from a retry by anything the ledger records, and
- * it is why `dormantHoldings` exists and is reported by name: the net catches
- * what the key cannot.
+ * THE ROW COUNT CLOSED THE CASE THIS PARAGRAPH USED TO CONCEDE. A circle that
+ * went dormant, was revived, was funded to EXACTLY the same amount and went
+ * dormant again on the same day keyed identically to the first sweep, so the
+ * ledger turned the second posting away as a repeat, the tokens stayed, and
+ * the sweep still recorded and reported the balance as moved (B7 on #243).
+ * Every posting in between adds a row to the account, so that second sweep
+ * now reads a different count and posts. And a sweep the ledger does call a
+ * duplicate moves nothing, so it records nothing and reports nothing.
  *
- * Width: 24 + 40 + 1 + 31 + 1 + 10 + 1 + 20 is 128 against the 160
+ * Width: 24 + 40 + 1 + 31 + 1 + 10 + 1 + 20 + 1 + 20 is 149 against the 160
  * `token_ledger.idempotency_key` holds, so the circle id is clipped at 40 the
  * way every other composite key here clips.
  *
@@ -601,7 +622,6 @@ export async function sweepDormantCircle(
     ? "master_treasury"
     : "retired";
   const to = destination === "master_treasury" ? TREASURY : REDEEMED;
-  const day = at.toISOString().slice(0, 10);
 
   const out: DormancySweep[] = [];
   for (const b of input.budgets) {
@@ -633,14 +653,19 @@ export async function sweepDormantCircle(
               */
             ? "Circle went dormant: what it held returned to the village"
             : "Circle went dormant: what it held was retired",
-        idempotencyKey:
-          `circle_treasury:dormant:${input.circleId.slice(0, 40)}:${tokenSlug}:${day}:${held.balanceMinor}`,
+        idempotencyKey: dormancySweepKey(input.circleId, tokenSlug, at, held.balanceMinor, held.rows),
       });
       duplicate = !!r.duplicate;
       if (!r.ok) error = r.error;
     }
 
-    if (!error) {
+    /*
+     * A DUPLICATE MOVED NOTHING, SO IT RECORDS NOTHING AND REPORTS NOTHING.
+     * This used to write `dormant_held_minor` and report `movedMinor` from the
+     * balance it read, whether or not the posting happened, so a sweep the
+     * ledger turned away as a repeat still told the steward tokens had left.
+     */
+    if (!error && !duplicate) {
       await pool.query( // module-review-ok: circle_budgets is one of the resources module's three declaration tables, whose one enumerable home is this SQL (the structureRead pattern server/lib/resources.ts records); no cache sits above it
         "UPDATE circle_budgets SET dormant_held_minor = ?, dormant_at = ?, dormant_to = ? WHERE id = ?",
         [held.balanceMinor, at, destination, b.id],
@@ -650,7 +675,7 @@ export async function sweepDormantCircle(
       circleId: input.circleId,
       budgetId: b.id,
       tokenSlug,
-      movedMinor: error ? 0 : held.balanceMinor,
+      movedMinor: error || duplicate ? 0 : held.balanceMinor,
       destination,
       duplicate,
       ...(error ? { error } : {}),
@@ -692,6 +717,101 @@ export function revivalNote(
     "the cycle it happens in. A cycle whose room is already spent cannot fund it until the " +
     "next one."
   );
+}
+
+/**
+ * The idempotency key for one dormancy sweep of one token. See the header of
+ * `sweepDormantCircle` for why each part is there. Exported so a test can
+ * stand a real duplicate up against the key the sweep will build.
+ */
+export function dormancySweepKey(
+  circleId: string,
+  tokenSlug: string,
+  at: Date,
+  balanceMinor: number,
+  accountRows: number,
+): string {
+  const day = at.toISOString().slice(0, 10);
+  return `circle_treasury:dormant:${circleId.slice(0, 40)}:${tokenSlug}:${day}:${balanceMinor}:${accountRows}`;
+}
+
+// ── Deleting what a treasury hangs off ──────────────────────────────────────
+
+/**
+ * WHY A BUDGET CANNOT BE DELETED YET, IN WORDS, OR NULL WHEN IT CAN.
+ *
+ * A treasury account belongs to a circle and a token, and a budget row is the
+ * only thing that reaches it: every door in server/routes/circleTreasury.ts,
+ * the return door included, is `/budgets/:id/...`, and `treasuryStandings`
+ * enumerates through the rows. Deleting the last budget that names a funded
+ * account therefore left real tokens in `sys:circle:<id>` with no door to
+ * return them through and no list to find them on (B5 on #243).
+ *
+ * So the delete is refused while that account holds a positive balance AND no
+ * other budget of the same circle names the same token. The second half is
+ * what keeps the refusal honest: a circle with a budget per season in one
+ * token keeps one account, and deleting last season's row strands nothing
+ * while this season's row can still return it. The read is `treasuryHoldings`,
+ * the one every other treasury figure uses.
+ */
+export async function budgetDeleteProblem(
+  conn: Pool | PoolConnection,
+  budget: { id: string; circleId: string; unit: string },
+  allBudgets: ReadonlyArray<{ id: string; circleId: string; unit: string }>,
+  circlesRepo: { all(): unknown[] },
+): Promise<string | null> {
+  const slug = treasuryTokenFor(budget.unit);
+  if (!slug || treasuryAccountProblem(budget.circleId)) return null;
+  const sibling = allBudgets.some(
+    (b) => b.id !== budget.id && b.circleId === budget.circleId && treasuryTokenFor(b.unit) === slug,
+  );
+  if (sibling) return null;
+  const held = await treasuryHoldings(conn, budget.circleId, slug);
+  if (held.balanceMinor <= 0) return null;
+  return (
+    `${nameOfCircle(circlesRepo, budget.circleId)} still holds ` +
+    `${fromLedgerUnits(slug, held.balanceMinor)} ${slug} in its treasury, and this budget is ` +
+    "the last one that can reach it. Return the balance to the village first, then delete the budget"
+  );
+}
+
+/**
+ * WHY A CIRCLE CANNOT BE DELETED YET, IN WORDS, OR NULL WHEN IT CAN.
+ *
+ * The same stranding one level up. A deleted circle's budget rows are left
+ * behind naming nobody, and its treasuries go with them into a place no steward
+ * is shown. Refused while any of its treasuries holds a positive balance, one
+ * `treasuryHoldings` read per token its budgets name, and every holding is
+ * named so the steward knows what to return.
+ */
+export async function circleDeleteProblem(
+  conn: Pool | PoolConnection,
+  circleId: string,
+  allBudgets: ReadonlyArray<{ circleId: string; unit: string }>,
+  circlesRepo: { all(): unknown[] },
+): Promise<string | null> {
+  if (treasuryAccountProblem(circleId)) return null;
+  const slugs = new Set<string>();
+  for (const b of allBudgets) {
+    if (b.circleId !== circleId) continue;
+    const slug = treasuryTokenFor(b.unit);
+    if (slug) slugs.add(slug);
+  }
+  const holding: string[] = [];
+  for (const slug of Array.from(slugs).sort()) {
+    const held = await treasuryHoldings(conn, circleId, slug);
+    if (held.balanceMinor > 0) holding.push(`${fromLedgerUnits(slug, held.balanceMinor)} ${slug}`);
+  }
+  if (holding.length === 0) return null;
+  return (
+    `${nameOfCircle(circlesRepo, circleId)} still holds ${holding.join(" and ")} in its treasury. ` +
+    "Return the balance to the village first, then delete the circle"
+  );
+}
+
+function nameOfCircle(circlesRepo: { all(): unknown[] }, id: string): string {
+  const found = (circlesRepo.all() as Array<{ id?: string; name?: string }>).find((c) => c?.id === id);
+  return String(found?.name ?? id);
 }
 
 // ── What the room went on, when there is none left ──────────────────────────

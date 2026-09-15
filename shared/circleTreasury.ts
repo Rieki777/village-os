@@ -87,6 +87,8 @@ export interface PeriodBounds {
   id: string;
   startsAt: string;
   endsAt: string;
+  /** False when `endsAt` is a derived horizon. `WindowRef.endsDeclared`, same meaning. */
+  endsDeclared?: boolean;
 }
 
 /**
@@ -135,14 +137,29 @@ export interface ModeSchedule {
  * Both windows are already computed by the burn meter for the same instant, so
  * this takes them as arguments and derives nothing itself. That keeps one
  * definition of a cycle and one of a season in this codebase.
+ *
+ * ── A SEASON END COUNTS ONLY WHEN SOMEBODY DECLARED IT AND IT IS AHEAD ─────
+ *
+ * An open-ended season has no end, and `seasonWindowAt` fills `endsAt` with a
+ * derived horizon one year after it began so the burn projection has a
+ * denominator. This function used to take any parseable `endsAt`, so a season
+ * open longer than a year queued the change at an instant already behind
+ * `at`: `modeAt` answered the new mode at once and the sentence named a
+ * boundary that had passed. So the season end is used only when
+ * `endsDeclared` is exactly true AND it lies after `at`. Anything else takes
+ * the cycle boundary, which is always ahead of the instant it was computed
+ * for, and the sentence says "next cycle boundary" so it promises no season.
+ * A missing flag fails toward the cycle: the one production caller passes a
+ * `seasonWindowAt` result, which always carries it.
  */
 export function modeChangeSchedule(
   season: PeriodBounds | null,
   cycle: PeriodBounds,
+  at: Date,
 ): ModeSchedule {
-  if (season) {
+  if (season && season.endsDeclared === true) {
     const ends = Date.parse(season.endsAt);
-    if (Number.isFinite(ends)) return { from: season.endsAt, boundary: "season" };
+    if (Number.isFinite(ends) && ends > at.getTime()) return { from: season.endsAt, boundary: "season" };
   }
   return { from: cycle.endsAt, boundary: "cycle" };
 }
