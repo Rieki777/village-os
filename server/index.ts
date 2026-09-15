@@ -13241,6 +13241,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
         contributorsCount: d.contributorsCount,
         imageUrl: d.imageUrl,
         isDemo: d.isDemo,
+        hubContract: d.hubContract,
         reachable: true,
         stale: served.stale,
         lastSyncAt: served.lastSyncAt,
