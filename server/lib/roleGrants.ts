@@ -44,7 +44,26 @@
  */
 import { applyEscalationChoices, computeEscalations } from "./drafts";
 import { ALL_CAPABILITIES, type Capability } from "../../shared/capabilities";
-import { STEWARD_VETO, roleCapabilityList } from "./stewardship";
+import { STEWARD_VETO, holdingHasLapsed, roleCapabilityList } from "./stewardship";
+
+/**
+ * How many people hold a role right now, counted the way the gate counts.
+ *
+ * `roleCapabilitiesFor` in server/index.ts gives a member a role's powers only
+ * while `holdingHasLapsed` says their seat has not run out, so a row whose term
+ * has ended is nobody. `GET /api/roles` serves a raw row count, which is right
+ * for "seats filled" on a public page and wrong for the question the handover
+ * tab asks: can anybody act through this role today. Served on
+ * `GET /api/admin/capabilities/holding` so the tab warns about an empty role
+ * from the same number the gate would use (Rye, 2026-09-14).
+ */
+export function liveHolderCount(
+  holders: ReadonlyArray<Parameters<typeof holdingHasLapsed>[0] & { roleId: string }>,
+  roleId: string,
+  now: Date = new Date(),
+): number {
+  return holders.filter((h) => h.roleId === roleId && !holdingHasLapsed(h, now)).length;
+}
 
 /** A refusal a route can send straight back: a status and a body. */
 export interface RouteRefusal {
@@ -146,13 +165,22 @@ export function decideRoleCapabilities(input: {
     // sentences, and change nothing. The same warn-and-proceed shape the badge
     // kind change uses, for the same reason: what may never happen is the
     // change landing silently.
+    //
+    // THE SENTENCE NAMES NO CONTROL. It used to end "Tick the ones you mean
+    // and send them back", copied from the draft review screen, which has a
+    // checkbox per escalation. This route's only caller in the client is the
+    // handover tab, which asks in an OK/Cancel box with nothing to tick, and
+    // it printed the sentence there verbatim (seen on live, 2026-09-14). A
+    // refusal body is read by whatever client sent the request, so it states
+    // the fact and what the request needs (`grantedEscalations`, one key per
+    // power), and each client asks in words that fit its own buttons.
     return {
       refusal: {
         status: 409,
         body: {
           error:
-            `This would be the first role in the village to carry ${refused.length === 1 ? "a power" : "powers"} nothing else grants. ` +
-            "Tick the ones you mean and send them back.",
+            `This would be the first role in the village to carry ${refused.length === 1 ? "a power" : "powers"} nothing else grants, so nothing has changed yet. ` +
+            "Each one lands only once it is confirmed by name.",
           escalations: escalations.map((e) => ({ capability: e.capability, consequence: e.consequence })),
           requiresConfirmation: true,
         },

@@ -1,5 +1,5 @@
 /**
- * The handover tab, moved out of client/src/pages/Admin.tsx unchanged.
+ * The handover tab, moved out of client/src/pages/Admin.tsx.
  *
  * Measured before the move, not guessed: of the 44 tab components in that
  * file this one referenced the fewest things defined alongside it (API_BASE,
@@ -9,13 +9,51 @@
  * baseline would otherwise treat a new file as new debt. So it goes first: it
  * proves the shape at the lowest risk to everything else.
  *
- * Everything below this comment is byte-for-byte what Admin.tsx held, with
- * `export default` added to the declaration. No behaviour changed.
+ * It moved byte-for-byte. It has grown three things since, all from Rye's
+ * walk of the live panel on 2026-09-14, and each is explained where it lives:
+ * the empty-role warning (`nobodyHolds`), the confirmation before a power
+ * crosses (`HandOverDialog`), and the escalation question in `grant`.
+ *
+ * NEW COLOUR HERE IS FIXED LIGHT, by ruling. The admin panel is a light-only
+ * workspace, so the warning and the dialog pair fixed text with fixed
+ * surfaces (`bg-white`, `text-gray-*`, amber). The older cards above them
+ * still carry semantic tokens and were left as they were.
  */
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { Link } from "wouter";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+/**
+ * NOBODY HOLDS THIS ROLE YET.
+ *
+ * Rye, 2026-09-14: a power may go to a role nobody holds, in preparation for
+ * someone holding it, and the panel should say so. The server allows it and
+ * this keeps it allowed. The warning is a sentence beside the control and
+ * never a gate.
+ *
+ * ONLY A SERVED NUMBER COUNTS. `holderCount` comes from
+ * `GET /api/admin/capabilities/holding`, counted the way the capability gate
+ * counts (`liveHolderCount` in server/lib/roleGrants.ts: a seat whose term has
+ * lapsed is nobody). The roles list the panel already had cannot answer this,
+ * and a server that predates the field sends nothing at all. Nothing is not
+ * zero, so a missing count shows no warning: a false "nobody holds this" on a
+ * seat somebody is sitting in would teach an admin to skip the true ones.
+ */
+function nobodyHolds(role: { holderCount?: unknown } | null | undefined): boolean {
+  return typeof role?.holderCount === "number" && role.holderCount === 0;
+}
+
+const emptyRoleWarning = (roleName: string) =>
+  `Nobody holds ${roleName} yet. The power waits there until someone is appointed.`;
 
 /**
  * THE HANDOVER (0098): what this village looks after, and how a power moves.
@@ -36,6 +74,8 @@ export default function HandoverTab({ password }: { password: string }) {
   const [data, setData] = useState<any>(null);
   const [picking, setPicking] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState("");
+  /** The power and role waiting on "is the village ready". Null when nothing is being asked. */
+  const [confirming, setConfirming] = useState<{ capability: string; roleId: string } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -61,14 +101,30 @@ export default function HandoverTab({ password }: { password: string }) {
       });
       let d = await res.json();
       if (res.status === 409 && d?.requiresConfirmation) {
-        const lines = (d.escalations ?? []).map((e: any) => `Anyone in it could ${e.consequence}.`).join("\n");
-        if (!window.confirm(`${d.error}\n\n${lines}`)) { setBusy(""); return; }
+        /*
+         * THE QUESTION IS WRITTEN FOR THE BOX IT APPEARS IN.
+         *
+         * This used to print the server's sentence, which ended "Tick the
+         * ones you mean and send them back", inside an OK/Cancel box with
+         * nothing to tick. The sentence came from the draft review screen,
+         * which does have checkboxes. The server now states the fact and
+         * names no control, and this box says what its own two buttons do.
+         */
+        const esc: Array<{ capability: string; consequence: string }> = d.escalations ?? [];
+        const one = esc.length === 1;
+        const question = [
+          `No other role in the village carries ${one ? "this power" : "these powers"}, so ${role.name} would be the first.`,
+          esc.map((e) => `Anyone in it could ${e.consequence}.`).join("\n"),
+          nobodyHolds(role) ? emptyRoleWarning(role.name) : "",
+          `OK gives ${role.name} ${one ? "the power" : "all of them"}. Cancel leaves the role as it is.`,
+        ].filter(Boolean).join("\n\n");
+        if (!window.confirm(question)) { setBusy(""); return; }
         res = await fetch(`${API_BASE}/admin/roles/${roleId}/capabilities`, {
           method: "PUT",
           headers: authHeaders(password, { "Content-Type": "application/json" }),
           body: JSON.stringify({
             capabilities: next,
-            grantedEscalations: (d.escalations ?? []).map((e: any) => e.capability),
+            grantedEscalations: esc.map((e) => e.capability),
           }),
         });
         d = await res.json();
@@ -80,8 +136,9 @@ export default function HandoverTab({ password }: { password: string }) {
     setBusy("");
   };
 
-  /** Hand the power to the village. */
+  /** Hand the power to the village. Reached only through `HandOverDialog`. */
   const handOver = async (capability: string, roleId: string) => {
+    setConfirming(null);
     setBusy(capability);
     try {
       const res = await fetch(`${API_BASE}/admin/capabilities/${encodeURIComponent(capability)}/holding`, {
@@ -134,6 +191,7 @@ export default function HandoverTab({ password }: { password: string }) {
         const holdingRole = p.heldBy ? roles.find((r) => r.id === p.heldBy.roleId) : null;
         const canHold = roles.filter((r) => !r.isExample && (r.capabilities ?? []).includes(p.capability));
         const chosen = picking[p.capability] ?? "";
+        const chosenRole = chosen ? roles.find((r) => r.id === chosen) : null;
         return (
           <div key={p.capability} className="rounded-xl border border-border bg-card p-5">
             <div className="flex items-start justify-between gap-4">
@@ -194,17 +252,116 @@ export default function HandoverTab({ password }: { password: string }) {
                     <button
                       className="text-sm px-3 py-1 rounded bg-primary text-primary-foreground"
                       disabled={busy === p.capability}
-                      onClick={() => handOver(p.capability, chosen)}
+                      onClick={() => setConfirming({ capability: p.capability, roleId: chosen })}
                     >
                       Hand it to the village
                     </button>
                   )}
                 </div>
+                {chosenRole && nobodyHolds(chosenRole) && (
+                  <p className="text-sm rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+                    {emptyRoleWarning(chosenRole.name)}
+                  </p>
+                )}
               </div>
             )}
           </div>
         );
       })}
+
+      <HandOverDialog
+        power={confirming ? (data?.powers ?? []).find((p: any) => p.capability === confirming.capability) ?? null : null}
+        role={confirming ? roles.find((r) => r.id === confirming.roleId) ?? null : null}
+        busy={!!confirming && busy === confirming.capability}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => { if (confirming) handOver(confirming.capability, confirming.roleId); }}
+      />
     </div>
+  );
+}
+
+/**
+ * ARE YOU SURE THE VILLAGE IS READY TO HOLD THIS POWER.
+ *
+ * Rye, 2026-09-14: "Hand it to the village" sat one click from the step that
+ * stops the admin short-circuit, as the filled primary button, in the same
+ * picker that a moment earlier offered the grant. Nothing asked. Now the
+ * button only opens this, and the PUT is sent from the confirm button inside
+ * it and from nowhere else. Cancel, Escape and the overlay all close it
+ * having sent nothing.
+ *
+ * WHAT IT SAYS is what changes, as facts: who will hold the power, that being
+ * an admin stops passing for it, and that reaching past it afterwards is a
+ * break-glass the village reads about. When the role has nobody in it, it
+ * says that too, because that is the day the break-glass is the only way in.
+ *
+ * The shared Radix dialog, for the reason InvoluntaryExitDialog gives: it
+ * traps focus, closes on Escape and hands focus back. Colours are fixed
+ * light, overriding the primitive's themed surface, by the admin ruling.
+ */
+function HandOverDialog({
+  power,
+  role,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  power: { title?: string; consequence?: string } | null;
+  role: { id: string; name?: string; holderCount?: number } | null;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const open = !!power && !!role;
+  const roleName = role?.name ?? role?.id ?? "";
+  return (
+    <Dialog open={open} onOpenChange={(next) => { if (!next) onCancel(); }}>
+      <DialogContent className="max-w-lg bg-white text-gray-900 border-gray-200">
+        <DialogHeader>
+          <DialogTitle className="text-gray-900">Is the village ready to hold this power?</DialogTitle>
+          <DialogDescription className="text-gray-600">
+            {power?.title}. Whoever holds it can {power?.consequence}.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 text-sm text-gray-700">
+          <p>
+            {roleName} will hold it. From then on, being an admin no longer passes for
+            this power. Whoever sits in {roleName} acts on their own account.
+          </p>
+          <p>
+            If an admin reaches past it afterwards, that is a break-glass: the village
+            feed carries a line naming that admin and this power, and whoever holds it
+            is told.
+          </p>
+          {nobodyHolds(role) && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+              Nobody holds {roleName} yet. Until someone is appointed, the only way
+              anyone can use this power is a break-glass.
+            </p>
+          )}
+          <p className="text-gray-500">
+            You can bring it back to the admin panel from this tab later, and the
+            village sees that on its feed too.
+          </p>
+        </div>
+        <DialogFooter>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="text-sm rounded-lg px-4 py-2 border border-gray-300 text-gray-700"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onConfirm}
+            className="text-sm rounded-lg px-4 py-2 font-medium bg-teal-deep text-white disabled:opacity-40"
+          >
+            Yes, hand it over
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
