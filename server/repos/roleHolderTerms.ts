@@ -209,3 +209,16 @@ export async function closeTerm(
     termId,
   ]);
 }
+
+/**
+ * Move the end of the OPEN term on a seat, because its season moved (0199).
+ *
+ * Only the open row. A closed term is history, and an admin editing the
+ * calendar rewrites what a seat will do, never what it did.
+ */
+export async function restampOpenTerm(pool: Pool, roleId: string, userId: string, termEndsAt: Date): Promise<void> {
+  await pool.query(
+    "UPDATE role_holder_terms SET term_ends_at = ? WHERE role_id = ? AND user_id = ? AND ended_at IS NULL",
+    [termEndsAt, roleId, userId],
+  );
+}

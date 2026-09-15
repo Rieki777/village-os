@@ -22,7 +22,7 @@
  */
 import { useEffect, useState } from "react";
 import { authToken } from "@/lib/gameApi";
-import { formatTokenAmount } from "@/lib/tokenAmount";
+import { formatHumanAmount } from "@/lib/tokenAmount";
 import { ClipboardCheck } from "lucide-react";
 
 const headers = (): Record<string, string> => {
@@ -128,7 +128,7 @@ export default function RedemptionQueue() {
           <p className="text-sm text-foreground">
             <span className="font-semibold">{r.memberName}</span> asked for{" "}
             <span className="font-semibold">
-              {formatTokenAmount(r.amount, 0)} {r.tokenName}
+              {formatHumanAmount(r.amount)} {r.tokenName}
             </span>{" "}
             to become {r.askedFor}, on {day(r.openedAt)}.
             {r.expiresAt ? ` It runs out on ${day(r.expiresAt)}.` : ""}

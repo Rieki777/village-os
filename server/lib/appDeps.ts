@@ -151,6 +151,18 @@ export interface AppDeps {
   milestonesRepo: DbCollection<Row>;
 
   /**
+   * The village's circles, as the admin circle routes write them.
+   *
+   * `all()` answers from the cache, and the cache is current for every write
+   * that goes through this repository: `insert` updates it in the same
+   * transaction, so a circle an admin made a moment ago is in the next read.
+   * Writers that go around it with raw SQL reload it afterwards: the boot
+   * backfill, the season roll, and standing-example seeding and retirement.
+   * Read it once per request and hand the list on.
+   */
+  circlesRepo: DbCollection<Row>;
+
+  /**
    * The people. MySQL-authoritative, `all()` answers in join order.
    *
    * A wide entry, so it earns a second look in review the way `getPool` does:
@@ -158,6 +170,14 @@ export interface AppDeps {
    * write any of them. Take it only for a domain whose subject IS the roster.
    */
   members: UsersRepo;
+
+  /**
+   * Is this member record a present person: not an example, not a tombstone,
+   * and holding a password or a verified Google link. The ONE predicate for a
+   * roll or a roster, bound to the session secret (server/lib/memberPresence.ts).
+   * Never filter on `passwordHash` for this: a Google member has none.
+   */
+  isPresent(member: any): boolean;
 
   /**
    * The safe shape of a member record for an API response.
@@ -226,7 +246,7 @@ export interface AppDeps {
   // work exists to shrink, and would leave server/index.ts and the route
   // module importing each other. Passing keeps the arrow pointing one way.
 
-  /** The stage a member has actually reached, given their consented quests. */
+  /** The stage a member has actually reached, given their counts. Nothing above Member without an admission: lib/admission.ts. */
   /**
    * PURE and synchronous, so a caller that already holds its values pays
    * nothing. `trainingDone` is the SERVER's record of completed modules and
@@ -272,8 +292,12 @@ export interface AppDeps {
    */
   questConsentRecipients(): Promise<string[]>;
 
-  /** The season banner payload. Extracted routes read `current` from it. */
-  seasonState(): { current: any };
+  /**
+   * The season banner payload. Extracted routes read `current` from it, and
+   * since 0199 the whole dated list and the zone too, because a seat's term is
+   * decided against them (shared/seatTerms.ts).
+   */
+  seasonState(): { current: any; seasons: any[]; timezone: string };
 
   /** The pattern the running season names, or null. Most villages: null. */
   currentPatternId(): string | null;

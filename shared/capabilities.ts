@@ -53,6 +53,7 @@ export type Capability =
   | "org.declare" // declare how the village and its circles hold power (0083)
   | "ballot.vote" // cast a vote on an on-site ballot (round 5 governance engine)
   | "member.vouch" // vouch for an applicant at the membrane (round 5)
+  | "member.superVouch" // admit a member outright when the village cannot reach its bar
   // ── The five handover keys (0098) ────────────────────────────────────────
   //
   // 159 admin write routes had no capability behind them and no key that
@@ -145,6 +146,7 @@ export const ALL_CAPABILITIES: Capability[] = [
   "org.declare",
   "ballot.vote",
   "member.vouch",
+  "member.superVouch",
   "org.seat",
   "org.seatAgent",
   "intake.moderate",
@@ -199,6 +201,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "org.declare": "Declare how the village holds power",
   "ballot.vote": "Cast a vote on a ballot",
   "member.vouch": "Vouch for an applicant",
+  "member.superVouch": "Admit a member outright",
   "org.seat": "Seat and unseat the holders of the village's seats",
   "org.seatAgent": "Seat and unseat the software agents that hold seats",
   "intake.moderate": "Work the village's queues and act on what gets reported",
@@ -471,9 +474,13 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   // something request-shaped is the ballot engine's own work, not a gate
   // swap, and it belongs to the lane that owns the snapshot.
   "ballot.vote": false,
-  // Declared in the round 5 capability set and gated by nothing at all: the
-  // membrane's vouching step does not exist, so there is no power here yet.
+  // The membrane's vouching step EXISTS now (server/routes/vouches.ts), and
+  // this stays false for the reason the roll builder gives above rather than
+  // for the reason this comment used to give.
   "member.vouch": false,
+  // Admitting somebody outright, which bypasses the bar the village set for
+  // itself. Everything true of the vouch above is more true of this.
+  "member.superVouch": false,
 };
 
 /**
@@ -541,10 +548,13 @@ export const DENIABLE: Record<Capability, boolean> = {
   // Vouching for an applicant at the membrane. It is a member's say in the
   // village's decision about who joins, it is earned by climbing to
   // contributor, and it is spoken as themselves rather than as a seat. That
-  // is a voice in a decision by every part of the definition. Gated by
-  // nothing today, because the membrane's vouching step does not exist yet,
-  // which makes this the cheapest possible moment to close the door.
+  // is a voice in a decision by every part of the definition. The door was
+  // closed before the step was built, which was the cheapest possible moment;
+  // the step is built now and the door stays shut.
   "member.vouch": false,
+  // And the steward's override, which is the same say exercised alone. A seat
+  // may hold it; software speaking as that seat may not.
+  "member.superVouch": false,
   /*
    * Proposing a change to the Game's own rules. The founder ruled on this one
    * in round 7, and the reason is that it is the say itself, one step
@@ -682,6 +692,8 @@ export type CapabilitySource =
   | "admin-override"
   | "denied by warning badge"
   | "role"
+  /** Held because a GREATER key the actor holds already carries this one. */
+  | "carried by a greater key"
   | "badge"
   | "stage"
   | "not granted";
@@ -765,6 +777,50 @@ export interface CapabilityDecision {
  * commit later: a gate that can lock an operator out of a live village must
  * never exist without its escape hatch.
  */
+/**
+ * KEYS THAT CARRY OTHER KEYS, because holding the greater already means holding
+ * the lesser and pretending otherwise produces an absurdity.
+ *
+ * ── THE ONE ENTRY, AND WHY IT IS NOT SEEDING ────────────────────────────────
+ *
+ * Rye ruled on 2026-09-08 that founders and stewards may ALWAYS vouch, so a
+ * village always has a path to admit its next member. Founders are covered
+ * already: `member.vouch` is not village-held, so the admin short-circuit above
+ * passes them. Stewards hold `member.superVouch`, which admits a member
+ * OUTRIGHT, and it would be ridiculous for somebody who can do that to be
+ * refused the smaller act of adding one vouch.
+ *
+ * The obvious fix is to seed `member.vouch` onto the steward circle, and it is
+ * a trap: `POST /api/governance/role-seats` refuses to seat anybody into a role
+ * carrying that key, because it comes from the stage ladder and seating must
+ * not hand it out. A steward circle carrying it would become permanently
+ * unseatable, so the power would exist and reach nobody.
+ *
+ * ── WHY IT LIVES IN THE GATE ────────────────────────────────────────────────
+ *
+ * Because there is ONE gate. Expressing "a super vouch carries a vouch" in the
+ * route that happens to need it would be gating somewhere else, and the next
+ * surface asking the same question would get a different answer.
+ *
+ * ── WHAT IT DELIBERATELY DOES NOT DO ────────────────────────────────────────
+ *
+ * It does not chain. A key carries the keys named here and not whatever those
+ * carry in turn, so nobody can compose a path to a power the village never
+ * meant to hand over. If a chain is ever wanted it should be written down as a
+ * chain, on purpose, by somebody who has thought about the far end of it.
+ *
+ * It also runs AFTER the deny step, so a warning badge still stops a steward.
+ * A carried key is a convenience, never an override.
+ */
+const CARRIES: Partial<Record<Capability, readonly Capability[]>> = {
+  "member.superVouch": ["member.vouch"],
+};
+
+/** Does anything the actor holds carry `cap`? */
+function carriedBy(held: readonly string[], cap: Capability): boolean {
+  return held.some((k) => (CARRIES[k as Capability] ?? []).includes(cap));
+}
+
 export function capabilityDecision(cap: Capability, ctx: CapabilityCtx): CapabilityDecision {
   const villageHolds = isVillageHeld(cap, ctx.villageHeld);
   if (ctx.isAdmin && !villageHolds) {
@@ -783,6 +839,8 @@ export function capabilityDecision(cap: Capability, ctx: CapabilityCtx): Capabil
     return decided(false, "denied by warning badge");
   }
   if (ctx.roleCapabilities.includes(cap)) return decided(true, "role");
+  // A greater key the actor already holds may carry this one. See CARRIES.
+  if (carriedBy(ctx.roleCapabilities, cap)) return decided(true, "carried by a greater key");
   if ((ctx.badgeCapabilities ?? []).includes(cap)) return decided(true, "badge");
   const unlockStage = ctx.stageUnlockOverrides?.[cap] ?? STAGE_UNLOCKS[cap];
   if (unlockStage && unlockStage !== "none") {

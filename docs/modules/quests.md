@@ -2,13 +2,14 @@
 
 Provenance: platform
 
-<!-- describes: server/routes/quests.ts server/repos/quests.ts server/index.ts shared/modules.ts shared/gameVariables.ts shared/questRewards.ts client/src/pages/Admin.tsx client/src/pages/QuestDetail.tsx client/src/components/QuestActions.tsx server/lib/capabilityRegistry.ts server/lib/crews.ts server/lib/questProposals.ts server/lib/calendarProviders.ts -->
+<!-- describes: server/routes/quests.ts server/routes/questClaims.ts server/repos/quests.ts server/index.ts shared/modules.ts shared/gameVariables.ts shared/questRewards.ts client/src/pages/Admin.tsx client/src/pages/QuestDetail.tsx client/src/components/QuestActions.tsx server/lib/capabilityRegistry.ts server/lib/crews.ts server/lib/questProposals.ts server/lib/calendarProviders.ts -->
 
 > The contribution board. A quest is posted by an admin or by a `quest.approve` holder, claimed by
 > a member, submitted with evidence, and consented to by somebody who is not the claimant. Consent
 > is the one step that releases value. The board and the two member steps live in
-> `server/routes/quests.ts`; the consent route, the queue and the gate helpers live in
-> `server/index.ts`. The tables have three homes: `server/repos/quests.ts` holds `quests` and
+> `server/routes/quests.ts`; the consent route and the queue live in `server/routes/questClaims.ts`,
+> and the consent gate they ask, `consentActor`, stays in `server/index.ts`. The tables have three
+> homes: `server/repos/quests.ts` holds `quests` and
 > `quest_claims`, `server/lib/crews.ts` holds the two crew tables, and `server/lib/questProposals.ts`
 > holds `quest_proposals`. It shipped in the first migration and fourteen more have extended it.
 
@@ -118,6 +119,12 @@ own settle-first design. What is genuinely left broken is the dead link, and the
 the counters that join `quests` (`fieldCounts`, `recentConsented`, which drop the row) and the ones
 that do not (`consentedCount`, the badge metric, which keep it).
 
+The settle-first count itself runs inside `questsRepo.remove`, under the quest's row lock, which is
+the lock `openClaim` takes. It used to run in the route, through a plain read several awaits before
+the delete, and a claim taken in between was left pointing at a quest that no longer existed. Now a
+claim that lands first is counted and refuses the delete, and one that arrives after finds the quest
+gone.
+
 **`quest_crews`** and **`quest_crew_members`** (0067). A crew is a named group walking one quest.
 The roster lives here rather than on `conversation_members` because messaging ships off and quests
 cannot, so a crew has to be whole on a village that has never opened a chat room. `invite_code` is
@@ -170,9 +177,9 @@ that file alphabetically would make `field` a quest id that does not exist.
 | `POST /api/crews/:id/leave` | signed-in member | Leaving the crew also leaves its conversation, where messaging is on. |
 | `POST /api/admin/quests` | `isAdmin` | Off-site image URLs refused: a poster comes through the village's own upload. |
 | `PUT /api/admin/quests/:id` | `isAdmin` | Refuses an example row, so an example cannot be edited into real work. |
-| `DELETE /api/admin/quests/:id` | `isAdmin` | Refuses an example row, and refuses with 409 while any claim on it is `claimed` or `submitted`. |
+| `DELETE /api/admin/quests/:id` | `isAdmin` | Refuses an example row, and refuses with 409 while any claim on it is `claimed` or `submitted`, counted under the quest's row lock. |
 | `POST /api/game/quests/:id/claim` | signed-in member | Enforces `min_stage` and `requires_role`, refuses an example, refuses a closed quest, refuses a second non-declined claim (under the quest's row lock, via `claimsRepo.openClaim`). |
-| `POST /api/game/quests/:id/submit` | signed-in member | Needs a link or a note. Accepts a second submit on an already-submitted claim. Notifies everyone who may consent. |
+| `POST /api/game/quests/:id/submit` | signed-in member | Needs a link or a note. Accepts a second submit on an already-submitted claim, and refuses with 409 a claim a steward resolved first (`claimsRepo.submitOnce`, under the claim's row lock). Notifies everyone who may consent, and nobody on a refusal. |
 | `PUT /api/game/quest-claims/:id/confidence` | the claim's holder | Only while the claim is `claimed` or `submitted`. Only `at_risk` and `stuck` ring a bell. |
 | `GET /api/admin/quest-claims` | `mayStillSee("quest.consent")` | A read, so it asks the see-path and never `mayAct`. There is no break-glass on a GET. |
 | `POST /api/admin/quest-claims/:id/consent` | `mayAct("quest.consent")` | The whole of Mechanics below. |
@@ -284,7 +291,8 @@ what runs first:
 3. Example refusal, on the approve branch only. Declining an example claim stays legal, because a
    stranded claim has to be clearable and a decline creates nothing.
 4. Self-consent, unless the solo-founder window is open.
-5. The decline branch returns here.
+5. The decline branch returns here, through `claimsRepo.declineOnce`: from `claimed` or
+   `submitted` only, under the claim's row lock, and a resolved claim is refused with 409.
 6. `granted <= 0` is refused unless `quest.allow_zero_consent` is on.
 7. If the cap mode is not `unlimited` and the label is unreadable, 409.
 8. The cap comparison itself.
@@ -308,9 +316,9 @@ The first gap was that `claimsRepo.update` committed on its own connection and o
 `postTransfer` run. A post that failed for any reason the launch-vote check did not already catch
 answered `500` over a claim permanently marked `consented`, with the member credited nothing and
 nothing in the product able to retry it: `quest.require_submission_before_consent` refuses a
-re-consent on a claim that is no longer `submitted`, and no route reverts a consented claim
-(`claimsRepo.remove` deletes only `status = 'claimed'`). A refused post now rolls the flip back
-with it and answers `409` saying nothing was recorded, so consenting again is a real retry.
+re-consent on a claim that is no longer `submitted`, and `claimsRepo.remove` deletes only
+`status = 'claimed'`. A refused post now rolls the flip back with it and answers `409` saying
+nothing was recorded, so consenting again is a real retry.
 
 The second gap was concurrent stewards. The handler read the claim with `claimsRepo.byId`, a plain
 SELECT taking no lock, ran every check, and only then called `claimsRepo.update`, which took
@@ -323,6 +331,20 @@ loser with the status it actually found, which the route turns into a `409`. Bot
 concurrently against a real MySQL in `server/repos/questClaimConcurrency.test.ts`; that file's
 header records what the pre-fix algorithm produced under the same driver (five duplicate claim rows
 from five taps, and a row saying 90 by one steward over a ledger that moved 60 for another).
+
+**The two doors beside consent take the same compare-and-set.** The decline branch and
+`POST /api/game/quests/:id/submit` used to write through a generic `claimsRepo.update` that locked
+the row and then wrote over whatever it found. So a steward whose queue page predated a colleague's
+consent could decline work already witnessed and paid: the posting stood, the member's consented
+count fell, and because a declined claim frees the quest, the member could claim it again and be
+consented under a second `quest_consent:<claimId>` key. And a member correcting their evidence while
+a steward consented wrote `submitted` back over the consented claim, returning it to the queue for a
+second consent to record a new figure and witness over a posting the ledger would answer
+`duplicate: true`. `declineOnce` and `submitOnce` now move a claim only from `claimed` or
+`submitted`, re-read under the row lock, and the routes answer `409` with the status they found.
+`ClaimsRepo` has no generic `update` any more, so a new door has to name the statuses it may start
+from. Both doors, and the quest delete, are driven through their real handlers with the other actor
+committed inside the gap in `server/routes/questClaimTransitions.test.ts`.
 
 Note what a warmed connection pool has to do with any of this: mysql2 opens connections lazily, so
 an unwarmed fan-out is serialised by the driver and every one of these races is invisible. The same
@@ -647,7 +669,8 @@ row is refused outright, because deleting examples one at a time empties the boa
 tombstone: `refreshRowPresence` runs at boot, on a seed and on a retirement, so the explanatory
 banner would sit over nothing until the next restart. "Clear examples" in Admin is the supported
 path. A quest with any `claimed` or `submitted` claim is refused with a count and a settle-first
-sentence, because badges and health both still join against the quest row and deleting it strands
+sentence (counted under the quest's row lock, see Data model), because badges and health both still
+join against the quest row and deleting it strands
 the work. Everything else deletes and writes an audit event, including a quest whose only claims
 are `consented` or `declined`: those rows survive with nothing to point at. See the `quest_claims`
 entry in Data model for what that costs.

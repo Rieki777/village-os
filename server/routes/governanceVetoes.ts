@@ -59,6 +59,7 @@ import type { AppDeps } from "../lib/appDeps";
 import { ballotById } from "../lib/ballots";
 import { changeSetOf, recordVeto as stopTheLanding } from "../lib/applyDue";
 import {
+  beingVotedOut,
   mayVeto,
   recordNoObjection,
   recordVeto,
@@ -71,6 +72,7 @@ import {
   vetoWindowIsKnown,
   vetoWindowVerdict,
   vetoesFor,
+  votedOutSentence,
   REASON_NOTICE,
   STEWARD_COUNCIL_KEY,
   STEWARD_SUBJECTS_KEY,
@@ -134,6 +136,12 @@ export function register(app: Express, deps: Deps): void {
     return Promise.all(
       rows.map(async (r) => {
         const who = await members.byId(r.decidedBy);
+        // Rye, 2026-09-14: a veto cast while its steward was being voted out says so.
+        const decided = r.decidedAt ? new Date(r.decidedAt) : null;
+        const votedOut =
+          r.act === "veto" && decided && !Number.isNaN(decided.getTime())
+            ? await beingVotedOut(getPool(), r.decidedBy, decided)
+            : null;
         return {
           id: r.id,
           act: r.act,
@@ -143,6 +151,10 @@ export function register(app: Express, deps: Deps): void {
           decidedAt: r.decidedAt,
           decidedBy: who ? firstName(who.name) : "A departed member",
           decidedByUserId: r.decidedBy,
+          beingVotedOut: votedOut,
+          beingVotedOutSentence: votedOut
+            ? votedOutSentence(who ? firstName(who.name) : "This steward", votedOut.landsAt)
+            : null,
         };
       }),
     );
@@ -219,12 +231,13 @@ export function register(app: Express, deps: Deps): void {
     // The proposer hears it from the person, not from a status change. The
     // proposal goes back to them with its backers, the way a missed quorum
     // already does, so a veto is the start of another turn and not an end.
+    const departing = await beingVotedOut(getPool(), user.id, new Date());
     if (ballot.openedBy && ballot.openedBy !== user.id) {
       await notify({
         userId: ballot.openedBy,
         type: "ballot_vetoed",
         title: `A steward stopped ${ballot.title}`,
-        body: reason,
+        body: departing ? `${votedOutSentence(firstName(user.name), departing.landsAt)}\n\n${reason}` : reason,
         link: `/decisions/${ballot.id}`,
         dedupeKey: `bal:${ballot.id}:vetoed:${user.id}`,
       });
@@ -237,6 +250,7 @@ export function register(app: Express, deps: Deps): void {
       stands: standing.stands,
       stopped,
       unstoppable,
+      beingVotedOut: departing,
       standing: {
         vetoes: standing.vetoes,
         needed: standing.needed,

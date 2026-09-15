@@ -1,6 +1,6 @@
 # Capabilities
 
-Every capability key the platform knows about, what each one lets a member do, and the order the one gate resolves them in. 33 keys, 7 steps.
+Every capability key the platform knows about, what each one lets a member do, and the order the one gate resolves them in. 34 keys, 8 steps.
 
 There is ONE capability gate, `capabilityDecision()` in `shared/capabilities.ts`, and every permission answer in the product comes through it. The order it resolves in IS the policy: it decides whether a warning badge's deny survives an appointment, and whether an administrator still outranks a village on a power that village has taken over.
 
@@ -25,7 +25,7 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 The gate takes a capability key and a member's context, and returns an answer with the step that decided it. The steps below are read out of `capabilityDecision()` in the order that function tests them. The FIRST step whose condition holds is the answer, and nothing below it is consulted.
 
-In one line: `admin` then `admin-override` then `denied by warning badge` then `role` then `badge` then `stage` then `not granted`.
+In one line: `admin` then `admin-override` then `denied by warning badge` then `role` then `carried by a greater key` then `badge` then `stage` then `not granted`.
 
 | Step | Decides | Answer | The condition, as the code writes it |
 | --- | --- | --- | --- |
@@ -33,9 +33,10 @@ In one line: `admin` then `admin-override` then `denied by warning badge` then `
 | 2 | `admin-override` | allowed | `ctx.isAdmin && villageHolds && ctx.adminOverride === true` |
 | 3 | `denied by warning badge` | refused | `isDeniable(cap) && (ctx.badgeDenies ?? []).includes(cap)` |
 | 4 | `role` | allowed | `ctx.roleCapabilities.includes(cap)` |
-| 5 | `badge` | allowed | `(ctx.badgeCapabilities ?? []).includes(cap)` |
-| 6 | `stage` | allowed | `unlockStage && unlockStage !== "none"` and `needed >= 0 && ctx.stageIndex >= needed` |
-| 7 | `not granted` | refused | nothing above it decided |
+| 5 | `carried by a greater key` | allowed | `carriedBy(ctx.roleCapabilities, cap)` |
+| 6 | `badge` | allowed | `(ctx.badgeCapabilities ?? []).includes(cap)` |
+| 7 | `stage` | allowed | `unlockStage && unlockStage !== "none"` and `needed >= 0 && ctx.stageIndex >= needed` |
+| 8 | `not granted` | refused | nothing above it decided |
 
 **1. `admin`.** The deployment operator, on a key the village does NOT hold. It is the first thing the gate reads, so on those keys an admin passes whatever any badge, role or rung says.
 
@@ -53,15 +54,19 @@ A warning a role trivially overrides is not a warning. The deny reaches only the
 
 The member holds a role whose `capabilities` list carries this key. A treasurer is a treasurer however many quests they have done, which is why this path exists beside the ladder.
 
-**5. `badge`.** A badge the member earned or was granted. It beats the ladder, and it loses to a role and to a deny.
+**5. `carried by a greater key`.** A key the member already holds that CARRIES this one. It sits directly under the role step and above badges, so it beats the ladder and it loses to a deny on a deniable key.
+
+One key can make another absurd to refuse. A steward holding `member.superVouch` can admit a member outright, so declining them the smaller act of adding a single vouch would be nonsense, and Rye ruled that stewards may always vouch so a village always has a path to its next member. The alternative was to seat `member.vouch` on the steward circle, and that is a trap: seating into a role carrying that key is refused, so the circle would have become permanently unseatable. Carrying does not chain, so a key carries what it names and never what those carry in turn.
+
+**6. `badge`.** A badge the member earned or was granted. It beats the ladder, and it loses to a role and to a deny.
 
 The grant half of the badge system. It is how a founder hands out a power that nobody should reach by climbing, the Cartographer badge over the village map being the worked example.
 
-**6. `stage`.** The ladder everyone climbs. It is the last thing consulted, so every path above it can open a door earlier.
+**7. `stage`.** The ladder everyone climbs. It is the last thing consulted, so every path above it can open a door earlier.
 
 The member's computed stage is at or past the rung `STAGE_UNLOCKS` names. A village moves any rung with the `progression.unlock.*` variables, and the value `none` closes the stage path for that key entirely, leaving roles and badges as the way in.
 
-**7. `not granted`.** Nothing granted it. The gate refuses, and the refusal is the answer callers act on.
+**8. `not granted`.** Nothing granted it. The gate refuses, and the refusal is the answer callers act on.
 
 This is the honest default. A key absent from `STAGE_UNLOCKS`, held by no role and carried by no badge, lands here for everybody who is not an admin.
 
@@ -85,7 +90,7 @@ These rows are not a description of the order. They are answers: the generator c
 
 ## Every capability key
 
-33 keys. `ALL_CAPABILITIES` is a flat list, so they are grouped here by the prefix each key carries in its own name, in the order the list gives them: `quest`, `forum`, `proposal`, `map`, `feed`, `stay`, `exchange`, `health`, `message`, `mechanics`, `event`, `org`, `ballot`, `member`, `intake`, `library`, `story`, `dial`, `redemption`, `steward`.
+34 keys. `ALL_CAPABILITIES` is a flat list, so they are grouped here by the prefix each key carries in its own name, in the order the list gives them: `quest`, `forum`, `proposal`, `map`, `feed`, `stay`, `exchange`, `health`, `message`, `mechanics`, `event`, `org`, `ballot`, `member`, `intake`, `library`, `story`, `dial`, `redemption`, `steward`.
 
 Three columns need a word before the tables:
 
@@ -189,6 +194,7 @@ Three columns need a word before the tables:
 | Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
 | --- | --- | --- | --- | --- | --- |
 | `member.vouch` | Vouch for an applicant | no | no | `contributor` (rung 6 of 12) | Governance |
+| `member.superVouch` | Admit a member outright | no | no | no rung | no module |
 
 ### `intake`
 
@@ -228,13 +234,13 @@ Three columns need a word before the tables:
 
 ## The voices
 
-4 of the 33 keys may never be taken away by a warning badge: `mechanics.propose`, `ballot.vote`, `member.vouch` and `steward.veto`. Each is a member's own say in a decision the village makes. The gate ignores a deny naming one of them, the badge validator refuses to save one, and a migration cleared the ones already stored. Three locks on the same door, because a hand-written UPDATE is invisible to code review by definition and a stored row outlives the admin who wrote it.
+5 of the 34 keys may never be taken away by a warning badge: `mechanics.propose`, `ballot.vote`, `member.vouch`, `member.superVouch` and `steward.veto`. Each is a member's own say in a decision the village makes. The gate ignores a deny naming one of them, the badge validator refuses to save one, and a migration cleared the ones already stored. Three locks on the same door, because a hand-written UPDATE is invisible to code review by definition and a stored row outlives the admin who wrote it.
 
 The rule underneath: waning is not removal. A rule under which unused voice decays over time is legitimate. An act by which one party strips another's earned voice is not, at any tier, held by anybody.
 
 ## The keys a village can take off the admin panel
 
-19 of the 33 keys are marked transferable: `quest.consent`, `forum.moderate`, `proposal.decide`, `map.publish`, `map.curatePhotos`, `feed.announce`, `exchange.manage`, `health.record`, `event.manage`, `org.declare`, `org.seat`, `org.seatAgent`, `intake.moderate`, `library.keep`, `story.tell`, `dial.set`, `quest.approve`, `redemption.confirm` and `steward.veto`.
+19 of the 34 keys are marked transferable: `quest.consent`, `forum.moderate`, `proposal.decide`, `map.publish`, `map.curatePhotos`, `feed.announce`, `exchange.manage`, `health.record`, `event.manage`, `org.declare`, `org.seat`, `org.seatAgent`, `intake.moderate`, `library.keep`, `story.tell`, `dial.set`, `quest.approve`, `redemption.confirm` and `steward.veto`.
 
 A key is only marked transferable once every route that REFUSES on it asks the gate in a shape that can carry the break-glass and write the public record. A ceiling an operator cannot climb over is not a ceiling, it is an outage. The keys left out are of two kinds: personal acts, where there is nobody for the key to move to, and keys nothing refuses on yet, where a promise that an admin must reach past the village in the open would have nothing under it.
 
@@ -256,7 +262,7 @@ A module's `capabilities` array in `shared/modules.ts` is what that module ADDS 
 | Village Calendar | `events` | `event.rsvp`, `event.manage` |
 | Governance | `governance` | `ballot.vote`, `member.vouch` |
 
-13 keys are declared by no module: `map.edit`, `map.publish`, `mechanics.propose`, `org.declare`, `org.seat`, `org.seatAgent`, `intake.moderate`, `library.keep`, `story.tell`, `dial.set`, `quest.approve`, `redemption.confirm` and `steward.veto`. That is a fact about the registry and never a sign the key is dead. A key reaches the gate from any route that asks for it, and the admin surfaces the handover keys cover sit outside every module.
+14 keys are declared by no module: `map.edit`, `map.publish`, `mechanics.propose`, `org.declare`, `member.superVouch`, `org.seat`, `org.seatAgent`, `intake.moderate`, `library.keep`, `story.tell`, `dial.set`, `quest.approve`, `redemption.confirm` and `steward.veto`. That is a fact about the registry and never a sign the key is dead. A key reaches the gate from any route that asks for it, and the admin surfaces the handover keys cover sit outside every module.
 
 ## Machine-readable
 
@@ -265,12 +271,12 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
 ```json
 {
   "counts": {
-    "keys": 33,
-    "steps": 7,
-    "voices": 4,
+    "keys": 34,
+    "steps": 8,
+    "voices": 5,
     "villageHoldable": 19,
     "climbable": 13,
-    "undeclared": 13
+    "undeclared": 14
   },
   "resolutionOrder": [
     {
@@ -307,6 +313,14 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
     },
     {
       "step": 5,
+      "source": "carried by a greater key",
+      "allowed": true,
+      "conditions": [
+        "carriedBy(ctx.roleCapabilities, cap)"
+      ]
+    },
+    {
+      "step": 6,
       "source": "badge",
       "allowed": true,
       "conditions": [
@@ -314,7 +328,7 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
       ]
     },
     {
-      "step": 6,
+      "step": 7,
       "source": "stage",
       "allowed": true,
       "conditions": [
@@ -323,7 +337,7 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
       ]
     },
     {
-      "step": 7,
+      "step": 8,
       "source": "not granted",
       "allowed": false,
       "conditions": []
@@ -585,6 +599,15 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
       "modules": [
         "governance"
       ]
+    },
+    {
+      "key": "member.superVouch",
+      "label": "Admit a member outright",
+      "deniable": false,
+      "transferable": false,
+      "stageUnlock": null,
+      "stageRung": null,
+      "modules": []
     },
     {
       "key": "org.seat",

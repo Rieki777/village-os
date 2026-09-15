@@ -22,24 +22,25 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 166 open and 35 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 168 open and 35 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 175 of them as soon as it is saved, and 26 of them at the next cycle close.
+Each dial also says WHEN a change lands. 177 of them as soon as it is saved, and 26 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-201 dials in 31 categories. 118 carry a minimum and a maximum. By type: 88 integer, 14 decimal, 17 percentage, 23 boolean, 28 choice, 31 text.
+203 dials in 32 categories. 119 carry a minimum and a maximum. By type: 89 integer, 14 decimal, 17 percentage, 23 boolean, 28 choice, 32 text.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
+| Membership | 2 | 2 | 0 |
 | Gratitude | 9 | 9 | 0 |
 | Ledger | 8 | 6 | 2 |
 | The Mint | 6 | 5 | 1 |
@@ -78,6 +79,8 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 
 | Dial | Key | Category | Type | Default | Who may change it |
 | --- | --- | --- | --- | --- | --- |
+| Vouches that admit a member | `membership.vouches_required` | Membership | integer | `3` | the whole village |
+| The seat that greets a new arrival | `arrival.greeter_role` | Membership | text | blank | the whole village |
 | Base sending allowance per cycle | `gratitude.base_budget` | Gratitude | integer | `105` | the whole village |
 | Value pool distributed at each cycle close | `gratitude.pool_per_cycle` | Gratitude | integer | `1000` | the whole village |
 | Which token the pool pays | `gratitude.pool_token` | Gratitude | text | `credits` | the whole village |
@@ -102,6 +105,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | How much Voice wanes each cycle | `economy.voice_decay_pct` | The Mint | percentage | `1` | the whole village |
 | Which Voice wanes | `economy.voice_decay_basis` | The Mint | choice | `all` | the whole village |
 | How often every seat reopens | `org.reassignment_cadence` | Progression | choice | `season_turn` | the whole village |
+| Most changes one outside batch can propose | `org.proposal_change_limit` | Progression | integer | `500` | the whole village |
 | Sending-budget multiplier: Visitor | `progression.multiplier.visitor` | Progression | decimal | `0` | the whole village |
 | Sending-budget multiplier: Guest | `progression.multiplier.guest` | Progression | decimal | `1` | the whole village |
 | Sending-budget multiplier: Immersant | `progression.multiplier.immersant` | Progression | decimal | `1` | the whole village |
@@ -114,7 +118,6 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Sending-budget multiplier: Role Holder | `progression.multiplier.role-holder` | Progression | decimal | `3` | the whole village |
 | Sending-budget multiplier: Guide | `progression.multiplier.guide` | Progression | decimal | `4` | the whole village |
 | Sending-budget multiplier: Sage | `progression.multiplier.sage` | Progression | decimal | `5` | the whole village |
-| Consented quests to reach Contributor | `progression.quests_for.contributor` | Progression | integer | `1` | the whole village |
 | Consented quests to reach Quest Seeker | `progression.quests_for.quest-seeker` | Progression | integer | `3` | the whole village |
 | Stage that unlocks: forum.post | `progression.unlock.forum.post` | Progression | choice | `member` | the whole village |
 | Stage that unlocks: proposal.open | `progression.unlock.proposal.open` | Progression | choice | `co-creator` | the whole village |
@@ -146,6 +149,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Payouts above this wait three days before they are sent | `governance.payout_delay_over` | Governance | integer | `1000` | the whole village |
 | A veto needs a majority of the stewards | `governance.steward_council` | Governance | boolean | `false` | the whole village |
 | How long a steward has to stop a change | `governance.veto_hours` | Governance | integer | `72` | the whole village |
+| How long a change waits when every steward already said yes | `governance.consent_notice_hours` | Governance | integer | `24` | the whole village |
 | Cycles a passed decision waits before it is written off | `governance.landing_expiry_cycles` | Governance | integer | `3` | the whole village |
 | Cooldown after a governed rule change | `governance.change_cooldown_days` | Governance | integer | `0` | the whole village |
 | When a change to the Game Mechanics can go to the vote | `governance.window_changeset` | Governance | text | `always_open` | the whole village |
@@ -176,7 +180,6 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Minting rule changes: unity floor | `governance.subject_mint_rule_unity_pct` | Governance | percentage | `0` | the whole village |
 | Seats speaking for other beings count toward quorum | `governance.nonhuman_in_quorum` | Governance | boolean | `false` | the whole village |
 | Cycles of silence before a seat leaves the count | `governance.absent_cycles` | Governance | integer | `3` | the whole village |
-| Vouches to admit a member | `membership.vouch_threshold` | Governance | integer | `0` | the whole village |
 | Equity token contract address on Base | `tokens.equity_address` | Tokens | text | blank | the founder or an admin |
 | Governance token contract address on Base | `tokens.voice_address` | Tokens | text | blank | the founder or an admin |
 | Show the economics section | `tokens.show_economics_section` | Tokens | boolean | `false` | the whole village |
@@ -279,6 +282,39 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Share of members a need aims to reach when nobody said otherwise | `needs.default_breadth_pct` | Needs | integer | `100` | the whole village |
 | Smallest count of members that may be shown | `needs.aggregate_floor` | Needs | integer | `3` | the whole village |
 | Whether saying what the village is for is asked before launch | `needs.launch_requirement` | Needs | choice | `recommended` | the whole village |
+
+## Membership
+
+2 dials. 2 for the whole village.
+
+### Vouches that admit a member
+
+How many people have to say they know somebody before that person becomes a member. The default matches how a village starts: it launches when a founder brings two more and all three carry the launch, which leaves exactly the vouchers the fourth member needs, so this number is read from the launch bar itself. A vouch cannot be taken back, so this bar is only ever crossed forwards. 0 turns vouching off: no number of vouches admits anybody, and a steward's super vouch is how people are admitted. Raise it and a young village may not be able to admit anybody at all, which is what the steward override exists for.
+
+| Fact | Value |
+| --- | --- |
+| Key | `membership.vouches_required` |
+| Type | integer, a whole number |
+| Default | `3` |
+| Range | 0 to 20 |
+| Counted in | vouches |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
+
+### The seat that greets a new arrival
+
+The role whose holders are told the moment somebody joins. Greeting belongs to a seat, so the village re-seats it each season and the message follows with nobody editing a setting. Leave it empty and the founders hear it, which is also what happens when the seat is named and nobody is sitting in it: a village that has not built its org chart yet, and one whose greeter stepped down last week, both still find out that a person arrived. Paste the role id from the org chart.
+
+| Fact | Value |
+| --- | --- |
+| Key | `arrival.greeter_role` |
+| Type | text, free text |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## Gratitude
 
@@ -666,6 +702,21 @@ What it may be set to:
 - `annual` Once a year. One reopening a year, whatever the seasons did.
 - `never` Never. Seats end only on their own term date, or when somebody steps down.
 
+### Most changes one outside batch can propose
+
+How many seats one batch from an outside service can put into a single draft. A village's first import is often its whole structure arriving at once, so the limit starts high. Nothing publishes on a batch's say-so: a steward still reads every line and accepts it before any of it becomes the chart. Lower it once the village is built and imports settle into small changes. A draft somebody builds by hand is never held to it.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.proposal_change_limit` |
+| Type | integer, a whole number |
+| Default | `500` |
+| Range | 1 to 10000 |
+| Counted in | changes |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
 ### Sending-budget multiplier: Visitor
 
 Multiplies the base Gratitude sending allowance for members at the Visitor stage, so a member here gives this many times 'Base sending allowance per cycle' each cycle. Set it to 0 and members at this stage cannot send yet. It moves the per-person ceiling too, because that is a share of the allowance this produces. Works with: 'Base sending allowance per cycle' and 'Share of an allowance any one person can receive', both under Gratitude.
@@ -844,21 +895,6 @@ Multiplies the base Gratitude sending allowance for members at the Sage stage, s
 | Counted in | x base budget |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
-| What it costs to change | a routine vote |
-
-### Consented quests to reach Contributor
-
-How many consented quests advance a member to the Contributor stage. Raising it never demotes anyone retroactively on its own: stages are recomputed from live counts.
-
-| Fact | Value |
-| --- | --- |
-| Key | `progression.quests_for.contributor` |
-| Type | integer, a whole number |
-| Default | `1` |
-| Range | 1 to 1000 |
-| Counted in | consented quests |
-| Who may change it | the whole village |
-| A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
 ### Consented quests to reach Quest Seeker
@@ -1530,6 +1566,21 @@ A change to the Game that the village has passed does not take effect straight a
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a constitutional vote, at the highest bar the village has set |
 
+### How long a change waits when every steward already said yes
+
+When every seated steward votes yes on a decision, nobody is left to stop it, so it does not need the whole steward window. It still waits this many hours after the vote closes, because the countdown is the village's notice that a change is coming. It only ever shortens the wait: a number above the steward window counts as the steward window. A village with no seated stewards never gets this, because nobody said yes. Zero lets a change land as soon as the vote closes whenever every steward agrees.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.consent_notice_hours` |
+| Type | integer, a whole number |
+| Default | `24` |
+| Range | 0 to 720 |
+| Counted in | hours |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
+
 ### Cycles a passed decision waits before it is written off
 
 A decision the village passed is stamped with the instant it takes effect. If it is still sitting there this many cycles after that instant, it is closed and the village is told. The door back is to withdraw and rewrite it, which keeps everybody who backed it. Set it higher for a village that turns the automatic landing off for long stretches.
@@ -1985,21 +2036,6 @@ When seats speaking for other beings do count toward quorum, this is how many cy
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a constitutional vote, at the highest bar the village has set |
-
-### Vouches to admit a member
-
-How many standing members must vouch for an applicant before membership completes on its own. 0 keeps vouching off and admission stays whatever your current process is. Vouching comes from contributors and up, a member may never vouch for themself, and every vouch is on the record.
-
-| Fact | Value |
-| --- | --- |
-| Key | `membership.vouch_threshold` |
-| Type | integer, a whole number |
-| Default | `0` |
-| Range | 0 to 20 |
-| Counted in | vouches |
-| Who may change it | the whole village |
-| A change takes effect | as soon as it is saved |
-| What it costs to change | a structural vote, at a higher bar |
 
 ## Tokens
 
@@ -3481,7 +3517,7 @@ How long after a member opens their exit before an admin may settle their balanc
 
 ### What happens to Voice at a departure
 
-Voice is the one holding that is also standing in the village, so it gets its own answer. Forfeit is what happens today. Keep is refused while a resolved exit turns the account into a tombstone, and the refusal says when it becomes available. Convert needs a rate under it, and a conversion at zero is refused as well. Works with: 'Share of Voice a leaver keeps' and 'Credits per Voice when converting'.
+Voice is the one holding that is also standing in the village, so it gets its own answer. Forfeit is what happens today. Keep is refused while a resolved exit turns the account into a tombstone, and the refusal says when it becomes available. Convert needs a rate under it and a share of Voice the leaver keeps, because only that share converts, so convert with a rate of 0 or a share of 0 is refused as well. Works with: 'Share of Voice a leaver keeps' and 'Credits per Voice when converting'.
 
 | Fact | Value |
 | --- | --- |
@@ -3601,7 +3637,7 @@ How much of the village a need is meant to cover when it is adopted without a fi
 
 ### Smallest count of members that may be shown
 
-The smallest number of members whose answers may appear as a count anywhere in the village. Under it the village sees nothing at all, because in a small place a count of one is a name and a count of two is a name and a guess. 3 is the floor the aggregate keeps and the number the member's own needs card prints into the sentence that says when a count appears. Raise it in a village where people know each other well enough for four to be identifiable.
+The smallest number of answers on one need that may appear as a count anywhere in the village. Below it the counts are withheld, and a need the village never adopted is left off the list entirely, so one member's answer cannot put a need only they named in front of everybody. 3 is where the platform starts, and the member's own needs card prints this number into the sentence that says when a count appears. What the floor does is keep a small count out of casual reading. It cannot stop inference: anyone who already knows how the other members answered on a need can subtract those answers from the total and learn the rest, so at a floor of 3, knowing two answers is enough to learn the third. Raise it where members know enough of each other's answers for that to matter.
 
 | Fact | Value |
 | --- | --- |

@@ -14,8 +14,21 @@
  * `server/lib/eventSeats.ts` and a dozen more read the table too. None of
  * those moved here.
  *
+ * The burn-down register's reason for a repo module is that a table's readers
+ * stay ENUMERABLE. For `token_ledger` that is not yet true and this file does
+ * not pretend otherwise. Every write runs inside the transaction `postTransfer`
+ * opens, on the connection that holds the account locks, and a statement whose
+ * correctness depends on the CALLER's connection cannot become a function that
+ * takes a pool. `tokenBalances.ts` says the same about `balanceOf` and
+ * `recomputeBalance`.
+ *
  * What is here: single statements that were already standalone, moved
- * verbatim, one function each, handing back what the driver handed back.
+ * verbatim, one function each, handing back what the driver handed back. And,
+ * at the bottom, the two paid-by-village READS (`receivedFromVillage`,
+ * `accountsReceivedFromVillage`), which run outside any transaction and decide
+ * a standing, the Contributor rung, rather than whether a movement may proceed.
+ * They were added to ledger.ts first and moved here before landing, so the
+ * register did not grow for them.
  *
  * ── TWO FUNCTIONS TAKE A CONNECTION, AND WHY THAT MATTERS ────────────────
  *
@@ -26,6 +39,23 @@
  * passes that same connection straight through and the read stays inside the
  * transaction. Neither statement takes a lock of its own. Every other function
  * here takes a pool, as the statement it replaced did.
+ *
+ * ── THE PAID-BY-VILLAGE READS: THE ACCOUNT SCHEME IS THE CALLER'S TO SAY ────
+ *
+ * Both queries tell a member's account from the village's by its prefix. The
+ * prefix arrives as an argument instead of being typed here, because
+ * `memberAccount` in server/lib/ledger.ts is where accounts are named, and a
+ * second spelling of it in this file would be a second home for one fact with
+ * nothing forcing the two to agree.
+ *
+ * ── AND WHY THE MOVEMENT HAPPENED IS PART OF THE QUESTION ───────────────────
+ *
+ * Who paid and in which token is not enough. A guest who buys stay credits with
+ * a card receives a village token from a village account, and has not brought
+ * the village anything. The caller passes the `source` values that count, from
+ * server/lib/contributionPay.ts, which is where that decision is made and where
+ * a new source has to be decided on. The from side still matters beside it: a
+ * gift from a neighbour is not the village paying, whatever it is labelled.
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 
@@ -266,11 +296,155 @@ export async function reversalMirrorRows(
   return rows;
 }
 
-/** Whether a key already exists, for the collation clash check. */
+/**
+ * `reversalMirrorRows` as a LOCKING read, on the caller's connection, for the
+ * one path whose snapshot may be older than its account locks: the clawback
+ * law inside a transaction somebody else opened (`postTransferOn`,
+ * server/lib/ledger.ts). A plain read there misses a mirror another connection
+ * committed after that snapshot, and a second mirror of one posting under a
+ * different village segment then lands. `LOCK IN SHARE MODE` for the reasons
+ * measured at `keyClashRows`. Why the other posting paths keep the plain read
+ * is measured at `clawbackRefusal`.
+ */
+export async function lockedReversalMirrorRows(
+  conn: PoolConnection,
+  toAccount: string,
+  tokenType: string,
+  fromAccount: string,
+  amount: number,
+): Promise<RowDataPacket[]> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    "SELECT `idempotency_key` FROM `token_ledger` " +
+      "WHERE `to_account` = ? AND `token_type` = ? AND `from_account` = ? AND `amount` = ? " +
+      "AND CAST(`source` AS BINARY) = 'reversal' LOCK IN SHARE MODE",
+    [toAccount, tokenType, fromAccount, amount],
+  );
+  return rows;
+}
+
+/**
+ * What one account held of one token going into an instant, read off the rows
+ * posted BEFORE it: credits minus debits, as one row with a `held` column.
+ *
+ * `decayVoice` (server/lib/economy.ts) reads this at the moon's opening, so a
+ * waning acts on what a member carried into the moon and never on whatever a
+ * payout during the moon made of their balance. Its caller holds the reasons.
+ *
+ * `UNIX_TIMESTAMP(at) < ?` and never `at < ?` with a Date: a `timestamp`
+ * column is compared in the SESSION zone, and a pool without `SET time_zone`
+ * shifts that comparison by the database host's offset. Epoch seconds are the
+ * same number in every zone. The two account indexes (`token_ledger_to_idx`,
+ * `token_ledger_from_idx`) narrow each sum to one account's rows first.
+ */
+export async function heldBeforeRows(
+  conn: Pool | PoolConnection,
+  accountId: string,
+  tokenType: string,
+  beforeEpochSeconds: number,
+): Promise<RowDataPacket[]> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    "SELECT " +
+      "COALESCE((SELECT SUM(`amount`) FROM `token_ledger` " +
+      "WHERE `to_account` = ? AND `token_type` = ? AND UNIX_TIMESTAMP(`at`) < ?), 0) - " +
+      "COALESCE((SELECT SUM(`amount`) FROM `token_ledger` " +
+      "WHERE `from_account` = ? AND `token_type` = ? AND UNIX_TIMESTAMP(`at`) < ?), 0) AS held",
+    [accountId, tokenType, beforeEpochSeconds, accountId, tokenType, beforeEpochSeconds],
+  );
+  return rows;
+}
+
+/**
+ * Whether a key already exists, for the collation clash check, and one of the
+ * two reads in this block that take a lock (`lockedReversalMirrorRows` is the
+ * other).
+ *
+ * Its caller (`postTransferOn`, server/lib/ledger.ts) reaches it after an
+ * INSERT failed on the unique index, inside a transaction it may not own. A
+ * plain SELECT there is a consistent read: under REPEATABLE READ it answers
+ * from the snapshot the transaction took at its first plain read, so a
+ * colliding key committed after that moment is invisible, `stored` comes back
+ * null, and the member who was never paid is reported as a duplicate.
+ *
+ * `LOCK IN SHARE MODE` and not `FOR UPDATE`, measured on MariaDB 12.3.2
+ * against a key committed after the reader's snapshot:
+ *
+ *   plain SELECT          misses it, snapshot isolation on or off
+ *   LOCK IN SHARE MODE    returns it, snapshot isolation on or off
+ *   FOR UPDATE            returns it with snapshot isolation off, and raises
+ *                         ER_CHECKREAD with MariaDB's default of on
+ *
+ * and two transactions replaying the same key at once: both INSERTs already
+ * hold a shared lock on the duplicate record, so `FOR UPDATE` upgrades and
+ * deadlocks one of them, while the shared read returns both. MySQL 8 accepts
+ * `LOCK IN SHARE MODE` as its older spelling of `FOR SHARE`, and a locking
+ * read there always returns the latest committed row.
+ */
 export async function keyClashRows(conn: Pool | PoolConnection, key: string): Promise<RowDataPacket[]> {
   const [rows] = await conn.query<RowDataPacket[]>(
-    "SELECT idempotency_key FROM token_ledger WHERE idempotency_key = ? LIMIT 1",
+    "SELECT idempotency_key FROM token_ledger WHERE idempotency_key = ? LIMIT 1 LOCK IN SHARE MODE",
     [key],
   );
   return rows;
+}
+
+/*
+ * The paid-by-village reads: has the village ever paid this account for
+ * something the person brought it. The header says why the member prefix and
+ * the counted sources arrive as arguments.
+ */
+/** `prefix%` for LIKE, with LIKE's own wildcards in the prefix taken literally. */
+const startsWith = (prefix: string): string => `${prefix.replace(/[\\%_]/g, "\\$&")}%`;
+
+const placeholders = (values: readonly unknown[]): string => values.map(() => "?").join(",");
+
+/**
+ * Whether `accountId` has ever received a positive amount of one of
+ * `tokenSlugs`, for one of `sources`, from an account whose id does not start
+ * with `memberPrefix`.
+ *
+ * An empty slug or source list answers false without asking, because `IN ()` is
+ * a syntax error, and a village that counts nothing has paid nobody.
+ */
+export async function receivedFromVillage(
+  pool: Pool,
+  accountId: string,
+  tokenSlugs: readonly string[],
+  sources: readonly string[],
+  memberPrefix: string,
+): Promise<boolean> {
+  if (tokenSlugs.length === 0 || sources.length === 0) return false;
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT 1 FROM token_ledger WHERE to_account = ? AND amount > 0 " +
+      `AND token_type IN (${placeholders(tokenSlugs)}) ` +
+      `AND source IN (${placeholders(sources)}) ` +
+      "AND from_account NOT LIKE ? LIMIT 1",
+    [accountId, ...tokenSlugs, ...sources, startsWith(memberPrefix)],
+  );
+  return rows.length > 0;
+}
+
+/**
+ * The same question for many accounts in one query. Returns the ACCOUNT ids
+ * that have been paid; mapping back to members is the caller's, for the same
+ * reason the prefix is.
+ */
+export async function accountsReceivedFromVillage(
+  pool: Pool,
+  accountIds: readonly string[],
+  tokenSlugs: readonly string[],
+  sources: readonly string[],
+  memberPrefix: string,
+): Promise<Set<string>> {
+  const paid = new Set<string>();
+  if (accountIds.length === 0 || tokenSlugs.length === 0 || sources.length === 0) return paid;
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT DISTINCT to_account FROM token_ledger " +
+      `WHERE to_account IN (${placeholders(accountIds)}) AND amount > 0 ` +
+      `AND token_type IN (${placeholders(tokenSlugs)}) ` +
+      `AND source IN (${placeholders(sources)}) ` +
+      "AND from_account NOT LIKE ?",
+    [...accountIds, ...tokenSlugs, ...sources, startsWith(memberPrefix)],
+  );
+  for (const r of rows) paid.add(String(r.to_account));
+  return paid;
 }

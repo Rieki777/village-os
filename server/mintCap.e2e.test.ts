@@ -49,7 +49,7 @@ const DIST = path.resolve(process.cwd(), "dist/index.js");
  * that proves it is clear; it sat above every window in the tree when this
  * was written, and the gate says so on the day you run it.
  */
-const PORT = 31602 + (process.pid % 400);
+const PORT = 4402 + (process.pid % 400);
 const BASE = `http://127.0.0.1:${PORT}`;
 const ADMIN = "MintCap123!";
 const PASSWORD = "OraMintCap123!";

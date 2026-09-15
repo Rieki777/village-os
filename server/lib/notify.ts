@@ -134,6 +134,28 @@ const STEWARD_WINDOW_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * THE NOTICES THE DAILY EMAIL CAP MAY NOT DROP.
+ *
+ * The three steward window notices, for the reason written in
+ * `maybeEmailImmediate`, and the season-end reminders
+ * (server/lib/seasonReminders.ts). Rye asked on 2026-09-14 for "lots of
+ * warnings across the village" before a season turns, and the cap fires on
+ * exactly the members busiest that day, who are the ones most likely to be
+ * holding seats the next season needs filled. It is four notices a season,
+ * each dated, so it is not the volume a cap exists to stop.
+ *
+ * THE CAP ONLY. Unlike the steward notices, a season reminder still rides the
+ * member's governance preference and the global `emailsOff` switch: nobody
+ * seated them into anything, so their silence is theirs to choose.
+ */
+const CLEARS_DAILY_CAP: ReadonlySet<string> = new Set([...Array.from(STEWARD_WINDOW_TYPES), "season_ending"]);
+
+/** True for a type whose immediate email is sent even over the daily cap. */
+export function clearsDailyEmailCap(type: string): boolean {
+  return CLEARS_DAILY_CAP.has(type);
+}
+
+/**
  * The refusal that keeps the pin honest lives beside the seat it is about:
  * `stewardMailRefusal` in server/lib/stewardship.ts, called by the preference
  * route before it writes.
@@ -187,6 +209,10 @@ export function emailCadenceFor(type: string, p: NotifyPrefs): "immediate" | "da
     // The calendar the terms hang on. Governance, because that is what it is
     // about: a stopped season is a steward's mandate that cannot end.
     case "season":
+    // The season is about to turn and the village has governance to run
+    // before it does. Same family, same preference; it clears the daily cap
+    // (`clearsDailyEmailCap`) and nothing else.
+    case "season_ending":
       return p.governanceEmail;
     // A lunation's pool landed in somebody's wallet. Fixed daily for the
     // same reason stage_advanced is: welcome, never urgent, and nobody is
@@ -248,6 +274,13 @@ export interface NotifyDeps {
   /** Absolute origin for links in emails, e.g. https://amora.regencivics.earth */
   origin(): string;
   projectName(): string;
+  /**
+   * Is this recipient a present person. The host binds the ONE predicate
+   * (server/lib/memberPresence.ts) to its session secret and hands it over, so
+   * a tombstone or an unclaimed account gets no mail and no bell, and a member
+   * who signs in with Google and has no password still does.
+   */
+  isPresent(member: any): boolean;
 }
 
 export interface NotifyResult {
@@ -307,7 +340,7 @@ function emailShell(projectName: string, inner: string): string {
 
 async function maybeEmailImmediate(deps: NotifyDeps, n: NotifyInput & { id: string }) {
   const user = await deps.memberById(n.userId);
-  if (!user?.email || !user.passwordHash) return; // tombstones and claim-pending accounts get no email
+  if (!user?.email || !deps.isPresent(user)) return; // tombstones and unclaimed accounts get no email
   const prefs = resolveNotifyPrefs(user.prefs);
   if (emailCadenceFor(n.type, prefs) !== "immediate") return;
   /*
@@ -325,7 +358,7 @@ async function maybeEmailImmediate(deps: NotifyDeps, n: NotifyInput & { id: stri
    * cannot extend, and a dropped one cannot be caught up by tomorrow's digest
    * because the thing it warned about has already happened.
    */
-  if (!STEWARD_WINDOW_TYPES.has(n.type) && !(await underDailyCap(deps.pool, n.userId))) return;
+  if (!clearsDailyEmailCap(n.type) && !(await underDailyCap(deps.pool, n.userId))) return;
 
   const url = deps.origin() + (n.link ?? "/profile");
   await deps.sendEmail({
@@ -366,7 +399,7 @@ export async function runNotificationDigest(deps: NotifyDeps): Promise<{ users: 
   let included = 0;
   for (const [userId, list] of Array.from(byUser.entries())) {
     const user = await deps.memberById(userId);
-    if (!user?.email || !user.passwordHash) continue;
+    if (!user?.email || !deps.isPresent(user)) continue;
     const prefs = resolveNotifyPrefs(user.prefs);
     if (prefs.emailsOff) continue;
     const daily = list.filter((r) => emailCadenceFor(String(r.type), prefs) === "daily");
@@ -470,7 +503,7 @@ export async function runWeeklyBrief(deps: NotifyDeps, opts: RunWeeklyBriefOpts)
     if (!inserted.fresh) continue;
     summary.fresh += 1;
 
-    if (!prefs.emailsOff && user.email && user.passwordHash && (await underDailyCap(deps.pool, user.id))) {
+    if (!prefs.emailsOff && user.email && deps.isPresent(user) && (await underDailyCap(deps.pool, user.id))) {
       try {
         await deps.sendEmail({
           to: [user.email],

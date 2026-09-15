@@ -54,7 +54,7 @@ import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { recordEvent } from "../lib/events";
 import { allTokens, tokenDef } from "../lib/ledger";
-import { cycleWindow, fromLedgerUnits, toLedgerUnits } from "../lib/economy";
+import { cycleWindow, decimalsFor, finerThanScale, fromLedgerUnits, toLedgerUnits } from "../lib/economy";
 import { isListedForTrade } from "../lib/exchange";
 import { openExitFor } from "../lib/exit";
 import {
@@ -80,7 +80,7 @@ import {
 import { balanceOf, memberAccount } from "../lib/ledger";
 import { numberVar, stringVar } from "../lib/variables";
 
-type Deps = Pick<AppDeps, "authedUser" | "getPool" | "guardCapability" | "members" | "notify">;
+type Deps = Pick<AppDeps, "authedUser" | "getPool" | "guardCapability" | "members" | "notify" | "overLimit">;
 
 /** What one redemption looks like to a person, with every amount human. */
 function forReading(row: {
@@ -117,7 +117,7 @@ function forReading(row: {
 }
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, getPool, guardCapability, members, notify } = deps;
+  const { authedUser, getPool, guardCapability, members, notify, overLimit } = deps;
 
   /**
    * What this member has open, what they may ask for, and what is held.
@@ -166,6 +166,12 @@ export function register(app: Express, deps: Deps): void {
   app.post("/api/redemptions", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
+    // Bounded like the wallet send, per member per day. Every ask opens a
+    // SERIALIZABLE transaction holding the member's row, so pressing it in a
+    // loop is cost the village cannot refuse even when every ask is refused.
+    if (await overLimit(`redemption-open:${user.id}`, 30, 24 * 60 * 60 * 1000)) {
+      return res.status(429).json({ error: "You have asked to redeem many times today. Try again tomorrow." });
+    }
     const body = req.body ?? {};
     const slug = String(body.token ?? body.tokenSlug ?? "").trim().toLowerCase();
     const asked = Number(body.amount);
@@ -177,12 +183,18 @@ export function register(app: Express, deps: Deps): void {
      * not 100 in binary), so at 0 decimals a member asking for 1.5 credits
      * would silently redeem 2 and be told nothing. Converting and converting
      * back is the cheap exact test, and it costs the member one sentence
-     * instead of half a token.
+     * instead of half a token. `finerThanScale` is that test, shared with the
+     * hand-mint route so the two doors agree on what "too fine" means.
      */
     const units = toLedgerUnits(slug, asked);
-    if (tokenDef(slug) && fromLedgerUnits(slug, units) !== asked) {
+    if (tokenDef(slug) && finerThanScale(asked, decimalsFor(slug))) {
+      // Worded from the token's own scale: "whole" is wrong on a token that
+      // carries two decimal places, and it was the only sentence a member got.
+      const places = decimalsFor(slug);
       return res.status(400).json({
-        error: `Ask for ${tokenDef(slug)?.name ?? slug} in whole positive amounts.`,
+        error: places > 0
+          ? `Ask for ${tokenDef(slug)?.name ?? slug} in positive amounts with at most ${places} decimal places.`
+          : `Ask for ${tokenDef(slug)?.name ?? slug} in whole positive amounts.`,
       });
     }
     const pool = getPool();

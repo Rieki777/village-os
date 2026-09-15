@@ -48,7 +48,9 @@ import {
   WIRED_BUT_HELD_BACK,
   type PowerHolder,
 } from "./lib/capabilityRegistry";
-import { allVariables, boolVar, numberVar, rawValue, setVariable, stringVar, wireVariableGuard } from "./lib/variables";
+import { allVariables, boolVar, loadVariables, numberVar, rawValue, setVariable, storedOverride, stringVar, wireVariableGuard } from "./lib/variables";
+import { memberJoined } from "./lib/arrival";
+import { climbLadder, freezeStandingAboveTheDoor, questsThatCarriedPastTheDoor, type LadderStage } from "./lib/admission";
 import { adminGateWasConsulted, markAdminGate } from "./lib/adminGate";
 import { type FaqPathway, register as registerFaqRoutes } from "./routes/faqs";
 import { register as registerGratitudeVoiceRoutes } from "./routes/gratitudeVoices";
@@ -61,12 +63,13 @@ import { register as registerPulseRoutes } from "./routes/pulse";
 import { register as registerPlayersRoutes } from "./routes/players";
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerOrgRoutes } from "./routes/org";
+import { register as registerSeasonRoutes } from "./routes/seasons";
 import { register as registerReviewRoutes } from "./routes/review";
 import { register as registerHoldersRoutes } from "./routes/holders";
 import { register as registerErasureQueueRoutes } from "./routes/erasureQueue";
 import { register as registerCircleBurnRoutes } from "./routes/circleBurn";
 import { register as registerCircleBonusGateRoutes } from "./routes/circleBonusGate";
-import { onCircleStatusChange, treasuryFacts, register as registerCircleTreasuryRoutes } from "./routes/circleTreasury";
+import { budgetDeleteProblem, circleDeleteProblem, onCircleStatusChange, treasuryFacts, register as registerCircleTreasuryRoutes } from "./routes/circleTreasury";
 import { register as registerGovernanceWeightRoutes } from "./routes/governanceWeights";
 import { register as registerGovernanceWizardRoutes } from "./routes/governanceWizard";
 import { register as registerDelegationRoutes } from "./routes/delegation";
@@ -76,17 +79,25 @@ import { register as registerGovernanceLandingRoutes } from "./routes/governance
 import { applyDueGovernance, autoSettleExpired, digestComposerFor, itemKindsOf, markNotApplicable, overrideDials, routeOutcome, runVetoWatch, vetoWindowOn, type CloseRouting, type LandingDeps, type SubjectCloser } from "./lib/applyDue";
 import { register as registerGovernanceModeRoutes } from "./routes/governanceMode";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
-import { applyChangeSet, applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
+import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
+import { landWeightMode } from "./lib/landingRefusal";
 import { landingRow } from "./lib/applyDue";
 import { notifyRollRows, type RollNotice } from "./lib/ballotNotices";
-import { forgetStewardActs, holdingHasLapsed, runTermWatch, setVetoWindowCheck, stewardMailRefusal } from "./lib/stewardship";
-import { decideRoleCapabilities, stewardSeatRefusal } from "./lib/roleGrants";
+import { isPresentMember, presenceTest } from "./lib/memberPresence";
+import { runSeasonReminders } from "./lib/seasonReminders";
+import { forgetStewardActs, holdingHasLapsed, recordTermStarted, runTermWatch, setVetoWindowCheck, STEWARD_VETO, stewardMailRefusal, termWatchLookaheadDays } from "./lib/stewardship";
+import { freezeSeatTerm } from "./repos/ballotSeatTerms";
+import { termForCarriedSeat } from "./lib/seatTermLanding";
+import { raisedHandTerm } from "./lib/raisedHandTerm";
+import { resolveSeatTerm, type SeatCalendar } from "../shared/seatTerms";
+import { decideRoleCapabilities, liveHolderCount, stewardSeatRefusal } from "./lib/roleGrants";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
 import { type ConsentActor, register as registerQuestClaimRoutes } from "./routes/questClaims";
 import { register as registerHousingRoutes } from "./routes/housing";
 import { register as registerJourneyRoutes } from "./routes/journey";
 import { register as registerProfileRoutes } from "./routes/profile";
 import { register as registerPathLadderRoutes } from "./routes/pathLadders";
+import { register as registerVouchRoutes } from "./routes/vouches";
 import { register as registerPlacesRoutes } from "./routes/places";
 import { register as registerMapSceneRoutes } from "./routes/mapScene";
 import { register as registerBadgesRoutes } from "./routes/badges";
@@ -208,7 +219,6 @@ import {
   updateIntent,
   type IntentsDeps,
 } from "./lib/intents";
-import { forgetMemberNeeds } from "./lib/needs";
 import { ensureSky, mirrorCalendarSources } from "./lib/calendarProviders";
 import { listMonthNames, lunarSummaryFor, namesForHemisphere, setMonthName } from "./lib/lunarTable";
 import { buildIcs, feedTokenStatus, looksLikeFeedToken, mintFeedToken, resolveFeedToken, revokeFeedTokens } from "./lib/icsFeed";
@@ -288,6 +298,7 @@ import {
   VILLAGE_LAUNCH,
 } from "../shared/ballotSubjects";
 import { timingOf } from "../shared/governanceKinds";
+import { CURRENCY_DECIMALS, WHOLE_UNITS } from "../shared/tokenScale";
 /** The two dials a started Game answers for itself, through a governance_mode ballot. */
 const WEIGHT_KEYS_AFTER_START = new Set(["governance.weight_mode", "governance.weight_token"]);
 import { isMintRuleKey, parseMintRuleKey } from "../shared/mintRuleKeys";
@@ -309,6 +320,9 @@ import {
   registerToken,
   tokenDef,
   TREASURY,
+  contributionTokens,
+  hasBeenPaidByVillage,
+  paidByVillageMany,
 } from "./lib/ledger";
 import { capRefusal, mintCapGuard, mintCycleStart, readCycleIssuance } from "./lib/mintCap";
 import {
@@ -319,13 +333,14 @@ import {
   spendSurfacesFor,
 } from "./lib/spending";
 import { seatChargeFor, seatEscrowDrift, seatPriceFor, settleFinishedSeats } from "./lib/eventSeats";
-import { allowanceFor, applyMintRuleChanges, canConfirm, checkIn, cycleWindow, economyReady, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, runSettlement, startEconomyEpoch, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
+import { allowanceFor, applyMintRuleChanges, canConfirm, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, runSettlement, startEconomyEpoch, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
 import { addCharacter, avatarFor, listArchetypes, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
 import { loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
 import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requestVoiceClaim, settleVoiceClaim } from "./lib/voiceClaim";
-import { defaultSeasonsFor, seasonRunningProblem, suggestNextSeasonDates } from "./lib/seasonCalendar";
-import { completionsFor, completionsForMany, trainingIsComplete } from "./lib/trainingRecord";
+import { normalizeSeasonConfig, seasonRunningProblem } from "./lib/seasonCalendar";
+import { completionsFor, completionsForMany, gatingModuleIds, trainingIsComplete, trainingProgress } from "./lib/trainingRecord";
+import { starterTrainingModules } from "./lib/trainingStarter";
 import { respondToTerminalError, installCrashHandlers, installShutdownHandlers, reachedSomebody, reportError, reportErrorWithin, wireErrorReporting } from "./lib/errors";
 import {
   STAY_CREDIT,
@@ -743,7 +758,6 @@ import { applyPending, connect as dbConnect } from "./db/migrate";
 import { startMaintenanceServer } from "./db/maintenanceMode";
 import { alignTableCollations } from "./db/collation";
 import { dbCollection, dbDocument } from "./repos/store-db";
-import { loadVariables } from "./lib/variables";
 import {
   activeClock,
   assertCycleSettingsRead,
@@ -1062,58 +1076,8 @@ const DEFAULT_SETTINGS = {
   },
 };
 
-/**
- * The starter training list a fresh deployment gets, once, when the table is
- * empty. Two of these descriptions named Amora outright, so every village that
- * installed this platform opened its training page and read another village's
- * name back at itself on day one. A FUNCTION rather than a const because the
- * name is read at seed time from the merged config (brand overlay over the
- * gameConfig default), which is not known at module load.
- *
- * Only the identity moved. The practices are the platform's opinion about what
- * a village should learn first and they stay exactly as written.
- */
-function defaultTrainingModules() {
-  const village = mergedConfig().project.name;
-  return [
-  {
-    id: "nvc-intro",
-    title: "Introduction to Nonviolent Communication",
-    description:
-      `The foundation of how we talk to each other at ${village}. Learn the four components of NVC and why they matter.`,
-    type: "Video",
-    url: "",
-    order: 1,
-  },
-  {
-    id: "authentic-relating",
-    title: "Authentic Relating Practices",
-    description:
-      "Games and practices for deeper, more honest connection with the people around you.",
-    type: "Practice",
-    url: "",
-    order: 2,
-  },
-  {
-    id: "consent-decisions",
-    title: "Consent-Based Decision Making",
-    description:
-      `How ${village} makes decisions together: the difference between consensus and consent, and why it matters.`,
-    type: "Article",
-    url: "",
-    order: 3,
-  },
-  {
-    id: "circle-facilitation",
-    title: "Circle Facilitation Basics",
-    description:
-      "How to hold and participate in a circle meeting. The roles, the rhythms, and the practices.",
-    type: "Workshop",
-    url: "",
-    order: 4,
-  },
-  ];
-}
+/** The starter training list, read with this village's name. See server/lib/trainingStarter.ts. */
+const defaultTrainingModules = () => starterTrainingModules(mergedConfig().project.name);
 
 const FORM_TYPE_TO_PATHWAY: Record<string, "investor" | "steward" | "resident" | "prosperity"> = {
   investor: "investor",
@@ -1238,6 +1202,7 @@ const trainingRepo = dbCollection(getPool(), {
     { js: "description", db: "description" },
     { js: "type", db: "type" },
     { js: "url", db: "url" },
+    { js: "mandatory", db: "mandatory", kind: "bool" }, // 0197, see gatingModuleIds
     { js: "order", db: "sort_order", kind: "int" },
   ],
 });
@@ -1308,6 +1273,7 @@ const roleHoldersRepo = dbCollection<RoleHolderRow>(getPool(), {
     // become permanent. The isExample line two specs up records the same trap.
     { js: "termEndsAt", db: "term_ends_at", kind: "time" },
     { js: "seasonId", db: "season_id" },
+    { js: "termFollowsSeason", db: "term_follows_season", kind: "bool" },
   ],
 });
 // Each document carries its REAL default; absent rows read as the default and
@@ -1881,6 +1847,11 @@ async function ensureDataFiles() {
   await runOnce("founding-team-in-progress", markFoundingTeamInProgress);
   await runOnce("backfill-member-handles", backfillMemberHandles);
   await runOnce("membership-grants-from-email-match", freezeEmailMatchedMemberships);
+  await runOnce("standing-above-the-door-2026-09-14", () => freezeStandingAboveTheDoor({
+    stages: GAME_CONFIG.stages, everyone: () => members.all(), consentedCounts: () => claimsRepo.consentedCounts(), log: (line) => console.log(line),
+    questBar: questsThatCarriedPastTheDoor(storedOverride("progression.quests_for.contributor"), numberVar("progression.quests_for.quest-seeker")),
+    admit: (id) => members.update(id, (m: any) => { m.membershipGranted = true; }),
+  }));
   await runOnce("org-chart-2026-08", applyOrgChartRefresh);
   await runOnce("voice-sweep-2026-08-01", applyVoiceSweepToSeededRows);
   await runOnce("voice-sweep-2026-08-01-part-2", applyVoiceSweepToSeededDocuments);
@@ -2845,7 +2816,7 @@ type RoleDef = {
   minStage?: string | null;
   order?: number;
 };
-type RoleHolderRow = { id: string; roleId: string; userId: string; grantedBy?: string; grantedAt: string; termEndsAt?: string | null; seasonId?: string | null };
+type RoleHolderRow = { id: string; roleId: string; userId: string; grantedBy?: string; grantedAt: string; termEndsAt?: string | null; seasonId?: string | null; termFollowsSeason?: boolean };
 
 function loadRoles(): RoleDef[] {
   return rolesRepo.all();
@@ -3582,57 +3553,7 @@ function daysBetween(fromISO: string, toISO: string): number {
   return Math.round((b - a) / 86400000);
 }
 
-/** Accepts either the new {seasons,cadence,timezone} shape or a single legacy
- *  season object, so existing data/season.json keeps working after deploy. */
-function normalizeSeasonConfig(raw: any): { seasons: any[]; cadence: string; timezone: string } {
-  const def = GAME_CONFIG.season;
-  if (raw && Array.isArray(raw.seasons) && raw.seasons.length > 0) {
-    return {
-      seasons: raw.seasons.map((s: any, i: number) => ({
-        id: s.id || `season-${i + 1}`,
-        name: s.name ?? "",
-        theme: s.theme ?? "",
-        focus: s.focus ?? "",
-        startsOn: s.startsOn ?? "",
-        endsOn: s.endsOn ?? "",
-        // 0050. This normaliser rebuilds every season from a FIXED field list
-        // and runs on read as well as write, so a field missing from here is
-        // a field the village can never store: without this line the pattern
-        // id was silently dropped on every save AND every load, and the whole
-        // season-pattern system resolved to "no pattern running".
-        patternId: s.patternId ?? "",
-        goals: Array.isArray(s.goals)
-          ? s.goals.map((g: any) => ({ text: String(g?.text ?? ""), done: !!g?.done }))
-          : [],
-      })),
-      cadence: raw.cadence ?? def.cadence,
-      timezone: raw.timezone ?? def.timezone,
-    };
-  }
-  // Legacy single-season file: lift it into a one-item list.
-  if (raw && typeof raw === "object" && raw.name) {
-    return {
-      seasons: [{
-        id: "season-1",
-        name: raw.name, theme: raw.theme ?? "", focus: raw.focus ?? "",
-        startsOn: raw.startsOn ?? "", endsOn: raw.endsOn ?? "",
-        goals: Array.isArray(raw.goals) ? raw.goals : [],
-      }],
-      cadence: def.cadence,
-      timezone: def.timezone,
-    };
-  }
-  // Written nothing, OR WRITTEN AN EMPTY LIST, gets a list DERIVED from the
-  // cadence and timezone. The default document IS the empty list and `get()`
-  // returns it when no row exists, so the length test above is what makes this
-  // branch reachable: without it no fresh village had a season on any date.
-  return {
-    seasons: (def.seasons.length ? def.seasons : defaultSeasonsFor(raw?.cadence ?? def.cadence, raw?.timezone ?? def.timezone)) as any[],
-    cadence: raw?.cadence ?? def.cadence,
-    timezone: raw?.timezone ?? def.timezone,
-  };
-}
-
+// `normalizeSeasonConfig` lives in server/lib/seasonCalendar.ts, with the store rule.
 function getSeasonConfig() {
   return normalizeSeasonConfig(seasonRepo.get());
 }
@@ -3683,6 +3604,7 @@ function seasonState() {
   };
 }
 setSeasonWindowReader(() => { const s = seasonState(); return { currentId: s.current?.id ?? null, endsAt: seasonEndInstant(s.current?.endsOn, s.timezone), configuredCount: s.seasons.length }; }); // windows lane (19E): the season-shaped window reads the village's own list through here
+const seatCalendar = (): SeatCalendar => { const s = seasonState(); return { seasons: s.seasons, currentSeasonId: s.current?.id ?? null, timezone: s.timezone }; }; // 0199: what every seat's term is decided against (shared/seatTerms.ts)
 
 
 // Safe user shape for API responses: strips the password hash and fills every
@@ -3794,33 +3716,27 @@ function hasMembership(user: any): boolean {
  */
 /** Server-recorded completions against the live catalogue. See lib/trainingRecord.ts. */
 const trainingDoneHere = (done: readonly string[]): boolean =>
-  trainingIsComplete(trainingRepo.all().map((m: any) => String(m.id)), done);
+  trainingIsComplete(gatingModuleIds(trainingRepo.all()), done);
 
-function computeStage(user: any, consentedQuests: number, trainingDone: readonly string[]): string {
-  let earned = GAME_CONFIG.stages[0].id;
-  const grantedIdx = user.stageGranted ? stageIndex(user.stageGranted) : -1;
-  for (const stage of GAME_CONFIG.stages) {
-    const idx = stageIndex(stage.id);
-    let ok = false;
-    switch (stage.rule.type) {
-      case "default": ok = true; break;
-      case "account": ok = true; break; // having a user record implies an account
-      case "training-complete": ok = trainingDoneHere(trainingDone); break;
-      case "membership": ok = hasMembership(user); break;
-      // The threshold reads the registry (progression.quests_for.<stage>,
-      // default = the config min), so climbing speed is village-tunable.
-      case "quests": ok = consentedQuests >= Math.max(1, numberVar(`progression.quests_for.${stage.id}`)); break;
-      case "granted": ok = grantedIdx >= idx; break;
-    }
-    if (ok && idx > stageIndex(earned)) earned = stage.id;
+/** Each rung's own rule, from one member's counts. The door above Member and every grant are `climbLadder`'s (lib/admission.ts). */
+const rungRule = (user: any, consentedQuests: number, trainingDone: readonly string[], paidByVillage: boolean) => (stage: LadderStage): boolean => {
+  switch (stage.rule.type) {
+    case "default": case "account": return true; // having a user record implies an account
+    case "training-complete": return trainingDoneHere(trainingDone);
+    case "membership": return hasMembership(user);
+    case "quests": return consentedQuests >= Math.max(1, numberVar(`progression.quests_for.${stage.id}`)); // the registry's, so speed is tunable
+    case "tokens": return paidByVillage; // ever paid BY THE VILLAGE; see hasBeenPaidByVillage
+    default: return false;
   }
-  if (grantedIdx > stageIndex(earned)) earned = user.stageGranted;
-  return earned;
+};
+
+function computeStage(user: any, consentedQuests: number, trainingDone: readonly string[], paidByVillage = false): string {
+  return climbLadder(GAME_CONFIG.stages, user, rungRule(user, consentedQuests, trainingDone, paidByVillage));
 }
 
 /** The one-member form: fetch the consented count, then compute. */
 async function stageOf(user: any): Promise<string> {
-  return computeStage(user, await claimsRepo.consentedCount(user.id), await completionsFor(getPool(), user.id));
+  return computeStage(user, await claimsRepo.consentedCount(user.id), await completionsFor(getPool(), user.id), await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()));
 }
 
 /**
@@ -3929,6 +3845,7 @@ const notifyDeps: NotifyDeps = {
   // The spine's contract wants `Promise<void>`; the sender now reports what it
   // did, and this caller has no use for the report.
   sendEmail: async (opts) => { await sendResendEmail(opts); },
+  isPresent: presenceTest(AUTH_TOKEN_SECRET),
   origin: deploymentOrigin,
   projectName: () => mergedConfig().project.name,
 };
@@ -5510,29 +5427,16 @@ async function startServer() {
   });
 
   /**
-   * Terms: tell the HOLDER once, and make an empty seat loud where a carried
-   * decision is actually waiting on it.
-   *
-   * The body is `runTermWatch` in server/lib/stewardship.ts, which sweeps both
-   * planes: org-chart seatings, which carry no permissions and revoke nothing,
-   * and permission holdings, where a term genuinely ends the powers (0171).
-   * One notification per row per event, through stable dedupe keys, because a
-   * mandate nobody has acted on is a governance problem a weekly ping does not
-   * solve. Member holders only; a documented holder is a name on a card.
-   *
-   * AGENTS ARE EXCLUDED, inherited (0142). An agent is a documented holder, so
-   * the `holderKind !== "member"` filter inside `runTermWatch` already drops
-   * it, and that is the behaviour to keep: a term end is a date the village
-   * agreed to revisit an arrangement with a person, and an agent's seating has
-   * nobody to have that conversation with. server/lib/calendarProviders.ts
-   * filters its twin for the same reason.
+   * Terms: tell the HOLDER once, one cycle before the term ends, and make a
+   * stopped calendar loud. The body and its reasoning, agents included, are
+   * `runTermWatch` in server/lib/stewardship.ts.
    */
   registerJob("term-watch", 24 * 60 * 60 * 1000, async () => {
     const r = await runTermWatch({
       pool: getPool(),
       notify,
       notifyAdmins,
-      seatings: await expiringSeatings(getPool(), lapseContext(), 14),
+      seatings: await expiringSeatings(getPool(), lapseContext(), termWatchLookaheadDays()),
       season: seasonState(),
     });
     if (r.holdersTold > 0) console.log(`[org] ${r.holdersTold} holder(s) told their term is ending or has ended`);
@@ -5549,6 +5453,12 @@ async function startServer() {
       allEnded: !!ss.needsNextSeason && ss.seasons.length > 0,
     });
     if (gap) console.warn(`[org] ${gap}`);
+  });
+
+  // Season-end reminders to the whole village: `runSeasonReminders` in server/lib/seasonReminders.ts.
+  registerJob("season-reminders", 12 * 60 * 60 * 1000, async () => {
+    const r = await runSeasonReminders({ season: seasonState(), members: await members.all(), isPresent: notifyDeps.isPresent, isAdmin: (u) => adminReaches(u?.role), notify });
+    return r.due ? `${r.told} of ${r.recipients} told, ${r.due.daysLeft} day(s) before ${r.due.seasonId} turns` : undefined;
   });
 
   /**
@@ -5883,7 +5793,7 @@ async function startServer() {
       return decodeToken(AUTH_TOKEN_SECRET, header.slice(7))?.userId ?? null;
     },
   });
-  wireVariableGuard((key, value) => exitLeverRefusal(key, value, exitPolicyRepo.get(), rawValue));
+  wireVariableGuard((key, value, alongside) => exitLeverRefusal(key, value, exitPolicyRepo.get(), rawValue, alongside));
   initModuleUsage(getPool());
 
   // S30/S33/S37: open-state lives on the server (it needs the pool); the
@@ -6007,7 +5917,7 @@ async function startServer() {
     }
     const exchangeCfg = (moduleConfig("exchange") as any) ?? {};
     const adminsWithPasswords = (await members.all()).filter(
-      (u: any) => (u.role === "admin" || u.role === "founder") && u.passwordHash,
+      (u: any) => (u.role === "admin" || u.role === "founder") && isPresentMember(u, AUTH_TOKEN_SECRET),
     );
     const swapWarnings = await assertSwapFirewalls(getPool(), {
       tradingEnabled: !!exchangeCfg.tradingEnabled,
@@ -8149,7 +8059,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       avatar: null,
     };
     await members.add(user);
-    await addActivity("join", `${firstName(name)} stepped into the village as a Guest`, { actorUserId: userId, entityType: "user", entityRef: userId });
+    await joined({ id: userId, name, handle: user.handle });
     const token = encodeToken(AUTH_TOKEN_SECRET, userId, email);
     res.json({ success: true, token, user: publicUser(user) });
   });
@@ -8385,6 +8295,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     projectName: () => mergedConfig().project.name,
     recordAudit: recordAuthAudit,
   });
+  const joined = (u: { id: string; name: string; handle: string }) => memberJoined(u, { addActivity, firstName, greeterRoleId: () => stringVar("arrival.greeter_role"), seats: loadRoleHolders, everyone: () => members.all(), notify });
   registerGoogleAuthRoutes(app, {
     authSecret: AUTH_TOKEN_SECRET,
     availability: googleSignInAvailability,
@@ -8395,11 +8306,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     overLimit,
     clientIp,
     recordAudit: recordAuthAudit,
-    onMemberJoined: (user) => {
-      void addActivity("join", `${firstName(user.name)} stepped into the village as a Guest`, {
-        actorUserId: user.id, entityType: "user", entityRef: user.id,
-      });
-    },
+    onMemberJoined: (user) => void joined(user), // every door in records the join and greets: register calls joined too
   });
 
   /**
@@ -9044,7 +8951,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // Funds-bearing modules refuse to enable while no per-admin identity with
     // a real credential exists (invariants #11-#12).
     const adminsWithPasswords = (await members.all()).filter(
-      (u: any) => (u.role === "admin" || u.role === "founder") && u.passwordHash,
+      (u: any) => (u.role === "admin" || u.role === "founder") && isPresentMember(u, AUTH_TOKEN_SECRET),
     );
     const result = await setModuleLifecycle(
       req.params.id,
@@ -9203,6 +9110,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // ONE query for the whole roll. A per-member read inside the loop would be
     // the N+1 the consented counts above already go out of their way to avoid.
     const trained = await completionsForMany(getPool(), (all as any[]).map((u) => String(u.id)));
+    // Third read of the same shape, and for the same reason as the two above.
+    const paid = await paidByVillageMany(getPool(), (all as any[]).map((u) => String(u.id)), contributionTokens());
     const memberIdx = stageIndex("member");
     const eligible = new Set<string>();
     for (const u of all as any[]) {
@@ -9211,7 +9120,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       if (u.isExample) continue;
       const count = consented.get(u.id) ?? 0;
       const done = trained.get(String(u.id)) ?? [];
-      if (count >= 1 || stageIndex(computeStage(u, count, done)) >= memberIdx) eligible.add(u.id);
+      if (count >= 1 || stageIndex(computeStage(u, count, done, paid.has(String(u.id)))) >= memberIdx) eligible.add(u.id);
     }
     return eligible;
   }
@@ -10376,6 +10285,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     if (stillHere) {
       return res.status(409).json({ error: `${stillHere} seat(s) still orbit this circle, reassign them first` });
     }
+    const stranded = await circleDeleteProblem(getPool(), String(req.params.id), await listBudgets(getPool()), circlesRepo);
+    if (stranded) return res.status(409).json({ error: stranded });
     const remaining = circlesRepo.all().filter((c: any) => c.id !== req.params.id);
     if (remaining.length === circlesRepo.all().length) return res.status(404).json({ error: "Not found" });
     await circlesRepo.replaceAll(remaining);
@@ -10490,12 +10401,14 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // stewards' inbox for a role that will be deleted on retirement, leaving
     // the member's application pointing at nothing.
     if (role.isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
+    const term = raisedHandTerm(req.body?.termEndsOn, seatCalendar()); // 0199: the end date the hand asks for, shown in the submissions inbox
+    if (!term.ok) return res.status(term.status).json(term.body);
     const entry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       type: "role-application",
       status: "new",
       rewarded: false,
-      data: { roleId: role.id, roleName: role.name, note: String(req.body?.note ?? "").slice(0, 2000), email: user.email, name: user.name },
+      data: { roleId: role.id, roleName: role.name, note: String(req.body?.note ?? "").slice(0, 2000), email: user.email, name: user.name, ...term.data },
       userId: user.id,
       userName: user.name,
       submittedAt: new Date().toISOString(),
@@ -10830,6 +10743,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
         }
       },
       noteUsage: (call, userId) => noteAssistantUsage("introductions", DEFAULT_ASSISTANT_MODEL, call, userId),
+      isPresent: notifyDeps.isPresent,
       // The 0081 posture: a deterministic run is still a row, so the metric
       // COUNT(*) WHERE mode='introductions' AND path <> 'deterministic' has a
       // denominator anyone can check later.
@@ -10936,7 +10850,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
   /** The open board. Signed out sees public rows; signed in adds members rows. */
   app.get("/api/intents/board", async (req, res) => {
     const user = await authedUser(req);
-    res.json({ board: await listBoard(getPool(), user?.id ?? null) });
+    res.json({ board: await listBoard(getPool(), user?.id ?? null, notifyDeps.isPresent) });
   });
 
   /** "You could offer…" chips, computed on read, never stored. */
@@ -11398,7 +11312,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
 
     const all = await members.all();
     const recipients = (all as any[]).filter(
-      (u) => u.passwordHash && !String(u.email ?? "").endsWith("@anonymized.invalid"),
+      (u) => isPresentMember(u, AUTH_TOKEN_SECRET),
     );
     const projectName = mergedConfig().project.name;
     const summary = await runWeeklyBrief(notifyDeps, {
@@ -12565,7 +12479,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     checks: {
       "admin-identities": async () => {
         const admins = (await members.all()).filter(
-          (u: any) => (u.role === "admin" || u.role === "founder") && u.passwordHash,
+          (u: any) => (u.role === "admin" || u.role === "founder") && isPresentMember(u, AUTH_TOKEN_SECRET),
         );
         return admins.length > 0
           ? {
@@ -12580,7 +12494,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
           : { state: "missing" as const, detail: "No per-admin identities yet. The shared password cannot attribute or revoke anyone" };
       },
       "founder-appointed": async () => {
-        const founders = (await members.all()).filter((u: any) => u.role === "founder" && u.passwordHash);
+        const founders = (await members.all()).filter((u: any) => u.role === "founder" && isPresentMember(u, AUTH_TOKEN_SECRET));
         if (founders.length > 0) {
           return { state: "ok" as const, detail: `Founder: ${founders.map((f: any) => f.name ?? f.handle ?? f.id).slice(0, 3).join(", ")}` };
         }
@@ -12943,7 +12857,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
         recurring: p.recurring, provider: p.provider,
         zeffyUrl: p.provider === "zeffy" ? p.zeffy_url : undefined,
         manualInstructions: p.provider === "manual" ? p.manual_instructions : undefined,
-        grantsToken: p.token_slug ? { slug: p.token_slug, amount: p.token_amount, name: tokenDef(p.token_slug)?.name ?? p.token_slug, decimals: tokenDef(p.token_slug)?.decimals ?? 0 } : null,
+        grantsToken: p.token_slug ? { slug: p.token_slug, amount: toLedgerUnits(String(p.token_slug), Number(p.token_amount)), name: tokenDef(p.token_slug)?.name ?? p.token_slug, decimals: tokenDef(p.token_slug)?.decimals ?? 0 } : null,
       })),
       stripeConfigured: stripeConfigured(),
     });
@@ -13696,10 +13610,10 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
           heldBy: h ? { roleId: h.holderRoleId, roleName: h.holderRoleName, movedAt: h.movedAt, byBallot: !!h.movedByBallotId } : null,
         };
       }),
-      // Roles and what each already carries, so the panel can say which ones
-      // could hold a power today without a second edit first.
+      // Roles, what each carries, and how many hold each as the gate counts them (lapsed terms
+      // out), so the panel can say who could hold a power today and warn when nobody holds a role.
       roles: rolesRepo.all().map((r: any) => ({
-        id: r.id, name: r.name ?? r.id, capabilities: (r.capabilities ?? []) as string[], isExample: !!r.isExample,
+        id: r.id, name: r.name ?? r.id, capabilities: (r.capabilities ?? []) as string[], isExample: !!r.isExample, holderCount: liveHolderCount(loadRoleHolders(), r.id),
       })),
       notYetWired: NOT_YET_WIRED,
     });
@@ -15366,6 +15280,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       vocab: vocabulary(resourcesConfig().labels),
       config: resourcesConfig(),
       defaultUnit: resourcesDefaultUnit(),
+      tokens: allTokens().map((t) => ({ slug: t.slug, name: t.name, decimals: t.decimals })), // every `token:<slug>` a unit may name, with its scale: an amountMinor here is minor units AT that scale, both ways
       circles: circles.map((c: any) => ({ id: c.id, name: c.name })),
       seats: orgRoles
         .filter((r) => r.active && !r.isExample)
@@ -15479,11 +15394,13 @@ Send an empty drafts array when you are still listening. A role payload is {name
     // 0103: ACT. A DELETE carries no body, so the hatch is the header.
     const { ctx: actCtx, verdict } = await resourcesDeclareAct(req, declareCtx);
     if (!mayDeclareResources(budget.circleId, actCtx)) return refuseDeclare(res, verdict);
+    const stranded = await budgetDeleteProblem(getPool(), budget, budgets, circlesRepo);
+    if (stranded) return res.status(409).json({ error: stranded });
     await deleteBudget(getPool(), budget.id, adminActor(req)?.id ?? user?.id ?? null);
     res.json({ success: true });
   });
 
-  registerCircleTreasuryRoutes(app, { getPool, authedUser, circlesRepo, seasonState, mayDeclare, declareCtxFor: async (req) => (await resourcesDeclareAct(req, (await resourcesViewerFor(req)).declareCtx)).ctx });
+  registerCircleTreasuryRoutes(app, { getPool, authedUser, members, circlesRepo, seasonState, mayDeclare, declareCtxFor: async (req) => (await resourcesDeclareAct(req, (await resourcesViewerFor(req)).declareCtx)).ctx });
   app.use("/api/health", requireModule("health"));
   app.use("/api/admin/health", requireModule("health"));
 
@@ -17167,6 +17084,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
       kind: cleanKind,
       governance: "platform",
       transferable: wantsSending,
+      // Credit is currency-like from birth (stays.ts, library.ts). Voice kind stays whole: only Village Voice wanes.
+      decimals: cleanKind === "credit" ? CURRENCY_DECIMALS : WHOLE_UNITS,
     });
     // The village minting its own token is the moment the example market has
     // done its job: real tokens replace the demonstration.
@@ -17259,7 +17178,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const slug = String(req.params.slug);
     const { toUserId, amount, reason } = req.body ?? {};
-    const amt = Math.trunc(Number(amount) || 0);
+    const amt = Number(amount) || 0; // HUMAN, as typed. Finer than the token holds is refused below, never truncated: 2.5 once minted 2 and said "Minted"
     const def = tokenDef(slug);
     if (!def) return res.status(404).json({ error: `unknown token "${slug}"` });
     // Same rule as stocking: a hand-mint is a real ledger row against a slug
@@ -17268,7 +17187,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (def.governance !== "platform") {
       return res.status(400).json({ error: `${slug} is issued on Hypha and cannot be minted here` });
     }
-    if (!toUserId || amt <= 0) return res.status(400).json({ error: "toUserId and a positive amount are required" });
+    if (!toUserId || !Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: "toUserId and a positive amount are required" });
+    if (finerThanScale(amt, def.decimals)) return res.status(400).json({ error: `${def.name} ${def.decimals > 0 ? `goes to ${def.decimals} decimal places` : "is minted in whole amounts"}, so ${amt} cannot be minted exactly. Nothing was minted` });
     if (!String(reason ?? "").trim()) {
       return res.status(400).json({ error: "A reason is required. Every hand-mint must explain itself" });
     }
@@ -17351,6 +17271,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     // governance weakening wearing a units fix.
     const threshold = cosignOver();
     if (threshold > 0 && amt > threshold) {
+      if (!Number.isInteger(amt)) return res.status(400).json({ error: `${amt} ${def.name} is over the ${threshold} a steward may grant alone, and a grant that waits for a second steward is recorded in whole ${def.name}. Ask for a whole amount. Nothing was recorded` }); // admin_mint_requests.amount is BIGINT
       const requestId = `amr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       await getPool().query(
         "INSERT INTO admin_mint_requests (id, token_slug, to_user_id, amount, reason, requested_by, status) " +
@@ -17867,6 +17788,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   // because it answers only to the account behind the token, and derived from
   // live rows on every read so a rung falls with nothing written anywhere.
   registerPathLadderRoutes(app, { authedUser, getPool, lapseContext });
+  registerVouchRoutes(app, { authedUser, getPool, members, guardCapability, stageOf, recordStageEvent });
 
   // Journey to Launch: the founding team's own tracker, read and written
   // through the admin gate. Registered at exactly the point it used to sit.
@@ -18135,14 +18057,14 @@ Send an empty drafts array when you are still listening. A role payload is {name
     },
   };
 
-  app.post("/api/assistant/proposal", async (req, res) => {
+  app.post("/api/assistant/proposal", async (req, res) => { // limit-ok: bounded two calls down, in callAssistant (server/lib/assistant.ts), 30 an hour per IP then this mode's day budget, before any provider call; a refusal that bought nothing writes no usage row
     const kind = String(req.body?.kind ?? "work-with-us");
     if (!PROPOSAL_KINDS[kind]) return res.status(400).json({ error: "unknown proposal kind" });
     return handleProposalAssistant(req, res, kind);
   });
 
   // Kept so the existing Work With Us page keeps working unchanged.
-  app.post("/api/assistant/work-with-us", async (req, res) => handleProposalAssistant(req, res, "work-with-us"));
+  app.post("/api/assistant/work-with-us", async (req, res) => handleProposalAssistant(req, res, "work-with-us")); // limit-ok: same engine as /api/assistant/proposal, bounded in callAssistant (30 an hour per IP, then the mode's day budget)
 
   async function handleProposalAssistant(req: express.Request, res: express.Response, kind: string) {
     // Every guard (key, per-IP burst, this mode's day) lives in callAssistant
@@ -18447,7 +18369,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     next();
   };
 
-  app.post("/api/admin/investor-docs/upload", adminOnly, upload.single("file"), async (req, res) => {
+  app.post("/api/admin/investor-docs/upload", adminOnly, upload.single("file"), async (req, res) => { // limit-ok: adminOnly is mounted as middleware (a reference, not a call the gate can see) and answers 401 before multer writes a byte
     if (!req.file) {
       return res.status(400).json({ error: "Missing file" });
     }
@@ -19012,7 +18934,7 @@ ${inner}
   registerBrandPreviewRoutes(app, { isAdmin, getPool, brandRepo });
   registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
   registerDryRunRoutes(app, { authedUser, isAdmin, overLimit, getPool });
-  registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify });
+  registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit });
 
   // â”€â”€ Project Settings (village dues + other editable numbers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -19526,7 +19448,7 @@ ${inner}
    * /api/game/quests/:id/claim reads them. A promise route that invented its
    * own permission check would be a second gate.
    */
-  app.post("/api/map/promise", async (req, res) => {
+  app.post("/api/map/promise", async (req, res) => { // limit-ok: a signed-out caller is answered reason "anonymous" before any work (a 200 the map reads, so no 401 for the gate to see); it read as guarded only because an unrelated `reply` helper's span in this file borrowed a 401
     const kind = req.body?.kind;
     const mapKey = sanitiseMapKey(req.body?.id);
     const on = req.body?.on === true;
@@ -19697,47 +19619,15 @@ ${inner}
     getPool,
   });
 
-  // Public: the computed season state (current picked by date — never stale).
-  app.get("/api/season", async (_req, res) => {
-    res.json(seasonState());
+  // The season list and its save, which moves every seat that ends with its season (server/routes/seasons.ts).
+  registerSeasonRoutes(app, {
+    isAdmin, adminActor, getPool, notify, seasonState, getSeasonConfig, seasonRepo, addActivity, loadRoles,
+    permissionHoldings: loadRoleHolders,
+    writePermissionTerms: (moves) => withRoleHolderLock(async () => {
+      const to = new Map(moves.map((m) => [m.id, m.to.toISOString()]));
+      await roleHoldersRepo.replaceAll(loadRoleHolders().map((h) => (to.has(h.id) ? { ...h, termEndsAt: to.get(h.id)! } : h)));
+    }),
   });
-
-  // Admin: the whole season list + cadence + timezone.
-  app.get("/api/admin/seasons", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const cfg = getSeasonConfig();
-    const state = seasonState();
-    const last = [...cfg.seasons].sort((a, b) => (a.endsOn ?? "").localeCompare(b.endsOn ?? "")).pop();
-    res.json({
-      ...cfg,
-      currentId: state.current?.id ?? null,
-      needsNextSeason: state.needsNextSeason,
-      suggestion: suggestNextSeasonDates(cfg.cadence, last?.endsOn ?? ""),
-    });
-  });
-
-  app.put("/api/admin/seasons", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    if (!req.body || typeof req.body !== "object") return res.status(400).json({ error: "Body required" });
-    const before = seasonState().current?.id ?? null;
-    const next = normalizeSeasonConfig(req.body);
-    await seasonRepo.put(next);
-    const after = seasonState();
-    if (after.current && after.current.id !== before) {
-      await addActivity("season", `The season has turned: ${after.current.name}`, { actorUserId: adminActor(req)?.id, entityType: "season" });
-    }
-    res.json({ success: true, ...after });
-  });
-
-  /*
-   * `PUT /api/admin/season` used to sit here: the single-season save from
-   * before a village could hold more than one. It was kept "so nothing that
-   * still points here breaks", and nothing pointed here. The Season tab has
-   * used the plural `PUT /api/admin/seasons` above since multi-season
-   * shipped, and the singular was reachable only over curl while carrying
-   * its own overwrite semantics for the same rows. Two writers of one
-   * document, one of them with no door, is the shape this round removed.
-   */
 
   // The quest board, the share card, crews, the admin CRUD and the two steps
   // a member takes through a quest, all thirteen registered at exactly the
@@ -19837,7 +19727,7 @@ ${inner}
     // single query stageOf was already paying.
     const consentedQuests = await claimsRepo.consentedCount(user.id);
     const trained = await completionsFor(getPool(), user.id);
-    const stageId = computeStage(user, consentedQuests, trained);
+    const stageId = computeStage(user, consentedQuests, trained, await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()));
     const claims = await claimsRepo.forUser(user.id);
     const ctx = await capabilityCtx(user);
     // What each consented quest actually paid. `amount` is what the witness
@@ -19879,7 +19769,7 @@ ${inner}
       ),
       journeys: user.journeys ?? {},
       membership: hasMembership(user),
-      trainingComplete: trainingDoneHere(trained),
+      trainingComplete: trainingDoneHere(trained), training: trainingProgress(trainingRepo.all(), trained), // done/required, mandatory only
       // The third rule type as a number, beside the two booleans that were
       // already here. With the ladder now carrying its rules, these three
       // fields are everything a reader needs to evaluate any rung except
@@ -20742,7 +20632,7 @@ ${inner}
     // Same substitution as /api/game/me, same single query: the count the
     // ladder measures is kept instead of collapsed into a stage id.
     const consentedQuests = await claimsRepo.consentedCount(user.id);
-    const stageId = computeStage(user, consentedQuests, await completionsFor(getPool(), user.id));
+    const stageId = computeStage(user, consentedQuests, await completionsFor(getPool(), user.id), await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()));
     const ctx = await capabilityCtx(user);
     res.json({
       stage: servedStage(stageId),
@@ -22027,7 +21917,7 @@ ${inner}
     }
     if (result.failed.length > 0) {
       return res.status(409).json({
-        error: "Nothing could be applied. The registry has moved since the vote",
+        error: "Some of these changes could not be applied, so the proposal is not recorded as applied. The registry has moved since the vote",
         applied: result.applied, failed: result.failed,
       });
     }
@@ -22285,26 +22175,20 @@ ${inner}
    * key no deny reaches and the gate ignores one. Nothing about this function
    * changed; what changed is the answer the gate gives it.
    *
-   * WHO LEAVING TAKES OUT OF THE POOL, WHICH IS THE OTHER HALF AND IS
-   * LEGITIMATE. The `passwordHash` filter is doing that work and it is
-   * load-bearing rather than a tidy-up: `anonymizeMember` clears the hash when
-   * a member leaves through either door (`DELETE /api/admin/players/:id` or
-   * `POST /api/profile/delete-account`), so a departed member is not a
-   * candidate for any roll built afterwards. That matters because quorum is
-   * measured against `ballots.total_weight`, the sum of the roll frozen at
-   * open: a departed member left in the pool would count toward quorum
-   * forever and every proposal would get harder to pass as the village aged.
-   * `seatRecord.routes.e2e.test.ts` measures the drop against a control.
+   * WHO IS IN THE POOL: `isPresentMember` (server/lib/memberPresence.ts), and it
+   * is load-bearing. A departed member is a tombstone and drops out of every
+   * roll built afterwards, which matters because quorum is measured against the
+   * roll frozen at open (`seatRecord.routes.e2e.test.ts`). This filtered on
+   * `passwordHash` until 2026-09-14, which also dropped every member who joins
+   * through Google (`googleMemberVote.routes.e2e.test.ts`).
    *
    * The gap that is NOT covered: a member who stops taking part but keeps
    * their account is still in the pool, because "left the village" has no
    * representation here other than deleting the account. Confirming a
    * departure by vote is a separate piece of work.
-   *
-   * Example users are excluded: they are content, never people.
    */
   async function buildElectorate(): Promise<Array<{ userId: string; weight: number }>> {
-    const candidates = (await members.all()).filter((u: any) => !isExampleUser(u) && u.passwordHash);
+    const candidates = (await members.all()).filter((u: any) => isPresentMember(u, AUTH_TOKEN_SECRET));
     const eligible: any[] = [];
     for (const u of candidates) {
       const ctx = await capabilityCtx(u);
@@ -22423,9 +22307,8 @@ ${inner}
         const applyResult = await applyMechanicsProposal(fresh, actorId);
         out.applied = applyResult.applied;
         if (applyResult.refusal) {
-          out.held = applyResult.refusal.sentence;
           await notifyAdmins("governance", `A carried proposal could not land: ${fresh.title}`, `gmp:${fresh.id}:apply-failed`);
-          return out;
+          throw new Error(applyResult.refusal.sentence);
         }
         /*
          * A CARRIED MINTING CHANGE IS QUEUED, AND THE CARD HAS TO SAY SO.
@@ -22447,6 +22330,7 @@ ${inner}
             `A ballot-passed proposal could not fully apply: ${fresh.title} (${applyResult.failed.length} change(s) refused)`,
             `gmp:${fresh.id}:apply-failed`,
           );
+          throw new Error(applyResult.failed.map((f) => `${f.key}: ${f.problem}`).join("; "));
         }
         return out;
       },
@@ -23046,6 +22930,8 @@ ${inner}
         }
       }
 
+      const term = await termForCarriedSeat(getPool(), b.id, seatCalendar(), ((role.capabilities ?? []) as string[]).includes(STEWARD_VETO));
+      if (!term.ok) { out.held = term.held; await notifyAdmins("governance", `A carried seating could not land: ${b.title}`, `bal:${b.id}:seat-held`); return out; }
       let seatedRowId: string | null = null;
       await withRoleHolderLock(async () => {
         const holders = loadRoleHolders();
@@ -23069,7 +22955,7 @@ ${inner}
            * that cannot tell them apart must say it cannot rather than guess.
            */
           grantedBy: b.id,
-          grantedAt: new Date().toISOString(),
+          grantedAt: new Date().toISOString(), termEndsAt: term.endsAt.toISOString(), seasonId: term.seasonId, termFollowsSeason: term.followsSeason,
         };
         holders.push(row);
         seatedRowId = row.id;
@@ -23083,12 +22969,13 @@ ${inner}
         userId: b.openedBy,
         type: "governance",
         title: `The village carried this: ${b.title}`,
-        body: `${firstName(member.name)} sits in ${who} from today.`,
+        body: `${firstName(member.name)} sits in ${who} from today until ${term.endsOn}.`,
         link: ballotLink(b),
         actorUserId: actorId,
         dedupeKey: `bal:${b.id}:seated`,
       });
       if (seatedRowId) {
+        await recordTermStarted(getPool(), { roleId: role.id, userId: member.id, termEndsAt: term.endsAt, seasonId: term.seasonId });
         await notify({
           userId: member.id,
           type: "role_appointed",
@@ -23344,7 +23231,7 @@ ${inner}
      */
     [GOVERNANCE_MODE]: twoPhase(async (b, outcome, outcomeNote, actorId) => {
       const out: CloseRouting = { applied: [], held: null, proposerTold: b.openedBy };
-      const [mode, token] = String(b.subjectRef).split("@");
+      const [mode] = String(b.subjectRef).split("@");
       if (outcome !== "passed") {
         await notify({
           userId: b.openedBy, type: "governance",
@@ -23356,16 +23243,12 @@ ${inner}
         });
         return out;
       }
-      const result = await applyChangeSet(changesetDeps(), {
-        ballotId: b.id,
-        proposalRef: `bal:${b.id}`,
-        actor: actorId,
-        changes: [{ kind: "mode_switch", to: mode, ...(token ? { weightToken: token } : {}) } as any],
+      // Throws unless the whole switch landed, so applyDue records the sentence
+      // and never marks this landing applied (server/lib/landingRefusal.ts).
+      const result = await landWeightMode(changesetDeps(), b, actorId).catch(async (e) => {
+        await notifyAdmins("governance", `A carried change to how votes are weighed could not land: ${b.title}`, `bal:${b.id}:mode-apply-failed`);
+        throw e;
       });
-      if (result.refusal) {
-        out.held = result.refusal.sentence;
-        return out;
-      }
       out.applied = result.applied;
       await addActivity("governance", `The village changed how it weighs a vote: ${b.title}`, {
         actorUserId: actorId, entityType: "ballot", entityRef: b.id,
@@ -23405,7 +23288,7 @@ ${inner}
     vetoHours: () => numberVar("governance.veto_hours"),
     autoApplyEnabled: () => boolVar("governance.auto_apply_enabled"),
     stewardCouncil: () => boolVar("governance.steward_council"),
-    stewardVetoTiers: () => stringVar("governance.steward_veto_tiers"),
+    stewardVetoTiers: () => stringVar("governance.steward_veto_tiers"), consentNoticeHours: () => numberVar("governance.consent_notice_hours"),
     nextBoundaryAfter: (after: Date) => activeClock().nextBoundaryAfter(after),
     cycleNumberAt: (at: Date) => activeClock().cycleNumberAt(at),
     landingExpiryCycles: () => numberVar("governance.landing_expiry_cycles"),
@@ -25615,7 +25498,7 @@ ${inner}
       return res.status(409).json({ error: "That is one of the platform's example roles, not one of this village's. Declare a role of your own first." });
     }
     const carried = ((role.capabilities ?? []) as string[]).filter((c) =>
-      ["ballot.vote", "member.vouch"].includes(c),
+      ["ballot.vote", "member.vouch"].includes(c), // superVouch absent: SUPER_VOUCH_PLACEMENT
     );
     if (carried.length) {
       return res.status(409).json({
@@ -25660,6 +25543,8 @@ ${inner}
     const setup = await roleBallotSetup();
     if (setup.tokenProblem) return res.status(409).json({ error: setup.tokenProblem });
 
+    const term = resolveSeatTerm({ requestedEndsOn: req.body?.termEndsOn, calendar: seatCalendar(), capAtSeasonEnd: ((role.capabilities ?? []) as string[]).includes(STEWARD_VETO), now: new Date(), startsNoEarlierThan: new Date(Date.now() + setup.durationDays * 86400000) });
+    if (!term.ok) return res.status(409).json({ error: term.error, code: term.code });
     const can = roleConsequences(role);
     const who = role.name ?? roleId;
     const title = `${who}: the village asks ${firstName(member.name)} to sit in it`;
@@ -25680,6 +25565,8 @@ ${inner}
       "",
       reason,
       "",
+      `## How long`, "",
+      `${term.followsSeason ? `Until the season ends on ${term.endsOn}, and if the season's end date moves, this seat moves with it.` : `Until ${term.endsOn}.`} When the term ends the seat ends, and the village can seat them again.`, ...(term.caution ? ["", term.caution] : []), "",
       `## Taking it back`,
       "",
       `The village can vote this seat back at any time, and that vote is an ordinary one.`,
@@ -25692,6 +25579,7 @@ ${inner}
 
     const result = await openBallot(getPool(), {
       subjectType: "role_seat",
+      onOpen: (conn, ballotId) => freezeSeatTerm(conn, ballotId, { endsAt: term.endsAt, seasonId: term.seasonId, followsSeason: term.followsSeason }),
       subjectRef,
       title,
       docMarkdown: doc,
@@ -25836,7 +25724,7 @@ ${inner}
   // requireModule("governance") mounted above. Express matches in
   // registration order.
   registerGovernanceWeightRoutes(app, {
-    isAdmin, authedUser, adminActor, getPool, members, firstName, notify, weightModeNow,
+    isAdmin, authedUser, adminActor, getPool, members, firstName, notify, weightModeNow, isPresent: notifyDeps.isPresent,
   });
   registerGovernanceWizardRoutes(app, { authedUser, getPool, capabilityCtx, weightModeNow });
   registerDelegationRoutes(app, { authedUser, getPool, capabilityCtx, members, firstName });
@@ -26607,7 +26495,7 @@ ${inner}
   // gates. NOT under /api/admin: a steward who is not an admin is exactly who
   // this is for, so it is capability-gated all the way down.
   registerReviewRoutes(app, {
-    isAdmin, authedUser, guardCapability, mayAct, adminActor, getPool, members, questsRepo,
+    isAdmin, authedUser, guardCapability, mayAct, adminActor, getPool, members, questsRepo, circlesRepo,
   });
   registerHoldersRoutes(app, { guardCapability, getPool });
   registerErasureQueueRoutes(app, { guardCapability, getPool, erasureDeps });
@@ -26847,6 +26735,8 @@ ${inner}
     // concurrent appointments cannot erase each other; the pulse line and the
     // notification (which can sit on an SMTP round trip) run AFTER the write,
     // so a failed write never announces an appointment that did not happen.
+    const term = action === "add" ? resolveSeatTerm({ requestedEndsOn: req.body?.termEndsOn, calendar: seatCalendar(), capAtSeasonEnd: (((role as any).capabilities ?? []) as string[]).includes(STEWARD_VETO), now: new Date() }) : null;
+    if (term && !term.ok) return res.status(409).json({ error: term.error, code: term.code });
     let appointedHolderId: string | null = null;
     const finalHolders = await withRoleHolderLock(async () => {
       let holders = loadRoleHolders();
@@ -26858,7 +26748,7 @@ ${inner}
             userId,
             // S1 made this a real person instead of the string "admin".
             grantedBy: appointer ?? "admin",
-            grantedAt: new Date().toISOString(),
+            grantedAt: new Date().toISOString(), ...(term?.ok ? { termEndsAt: term.endsAt.toISOString(), seasonId: term.seasonId, termFollowsSeason: term.followsSeason } : {}),
           };
           holders.push(row);
           appointedHolderId = row.id;

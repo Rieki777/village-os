@@ -11,7 +11,7 @@
  * applied, unique per provision. No TEST_DATABASE_URL and the suite skips
  * loudly rather than passing hollowly.
  */
-import { describe, expect, it, beforeAll, beforeEach, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, beforeEach, afterAll, vi } from "vitest";
 import mysql from "mysql2/promise";
 import {
   allowanceFor,
@@ -2599,13 +2599,24 @@ describe.skipIf(!configured)("the village economy engine", () => {
       );
     });
 
-    /** A member holding `units` minor units of Voice, issued from the faucet. */
-    async function holding(id: string, units: number): Promise<string> {
+    /**
+     * A member holding `units` minor units of Voice, issued from the faucet.
+     *
+     * CARRIED INTO THE MOON BY DEFAULT. Waning acts on what a member held when
+     * the cycle opened, read off the rows posted before it, so a seed posted
+     * "now" is a payout received DURING the moon and wanes nothing this moon.
+     * The seed row is therefore moved to a day before the current cycle opened,
+     * which is the only way a test can hold Voice going in without waiting a
+     * moon. `duringMoon` leaves it where it landed. `FROM_UNIXTIME` because the
+     * column is a `timestamp` and epoch seconds are the same in every zone.
+     */
+    async function holding(id: string, units: number, opts: { duringMoon?: boolean } = {}): Promise<string> {
       await dpool.query(
         "INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x') " +
           "ON DUPLICATE KEY UPDATE `name` = VALUES(`name`)",
         [id, id, `${id}@examples.invalid`],
       );
+      const key = `test.waning.seed:${id}:${++seedNo}`;
       const r = await mint(dpool, {
         toUserId: id,
         tokenSlug: VILLAGE_VOICE,
@@ -2614,10 +2625,45 @@ describe.skipIf(!configured)("the village economy engine", () => {
         source: "role_cycle",
         sourceRef: id,
         description: "seeded for a waning test",
-        idempotencyKey: `test.waning.seed:${id}:${++seedNo}`,
+        idempotencyKey: key,
       });
       expect(r.ok, `seeding ${id}`).toBe(true);
+      if (!opts.duringMoon) {
+        const carriedIn = Math.floor(cycleWindow(new Date()).startsAt.getTime() / 1000) - 24 * 60 * 60;
+        await dpool.query(
+          "UPDATE `token_ledger` SET `at` = FROM_UNIXTIME(?) WHERE `idempotency_key` = ?", // module-review-ok: test fixture in the S5 scratch schema, backdating a seed row so it was held going into the moon
+          [carriedIn, key],
+        );
+      }
       return id;
+    }
+
+    /** Every waning leg taken from one member, off the rows themselves. */
+    async function wanedFrom(userId: string): Promise<number[]> {
+      const [rows] = await dpool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "SELECT `amount` FROM `token_ledger` WHERE `source` = 'voice_decay' AND `from_account` = ? AND `token_type` = ?",
+        [memberAccount(userId), VILLAGE_VOICE],
+      );
+      return rows.map((row) => Number(row.amount));
+    }
+
+    /** A live seat for one member, and the rule that pays a seat 50 Voice a moon. */
+    async function seated(id: string): Promise<void> {
+      await dpool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT IGNORE INTO `mint_rules` (`id`, `village_id`, `trigger`, `token_slug`, `amount`, `ceiling`, `recipient`, `enabled`) " +
+          "VALUES ('decay-seat-rule', ?, 'role.cycle', ?, 50, 200, 'holder', 1)",
+        [villageId(), VILLAGE_VOICE],
+      );
+      await dpool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x') " +
+          "ON DUPLICATE KEY UPDATE `name` = VALUES(`name`)",
+        [id, id, `${id}@examples.invalid`],
+      );
+      await dpool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT IGNORE INTO `org_role_assignments` " +
+          "(`id`, `org_role_id`, `holder_kind`, `user_id`, `holder_key`, `is_example`) VALUES (?,?,'member',?,?,0)",
+        [`seat-${id}`, `role-${id}`, id, id],
+      );
     }
 
     /** Conservation, read the way the boot invariant reads it. */
@@ -2799,26 +2845,107 @@ describe.skipIf(!configured)("the village economy engine", () => {
       expect(await voiceSum()).toBe(0);
     });
 
-    it("MEASURED: a member who held nothing at the moon's first ask wanes on what it paid them", async () => {
+    it("wanes nothing from a member who carried nothing in and was paid during the moon, however often the job asks", async () => {
       /*
-       * NOT a proof that this is right, only a record of what it does.
-       *
-       * The job asks hourly and a member holding nothing is not in the read,
-       * so no key is written for them. Paid later in the same moon, the next
-       * ask finds a positive balance and wanes one percent of it. It happens
-       * once in a member's life and closing it would mean posting a ledger row
-       * of zero, which `postTransfer` refuses. If the founder decides a new
-       * member's first moon should be untouched, this test is where that
-       * decision changes.
+       * THE DEFECT THIS REPLACES. This test used to be called "MEASURED" and
+       * asserted 49500: the job asks hourly, a member holding nothing got no
+       * key on the first ask, and the second ask waned one percent of what
+       * the moon had just paid them. That happened every moon, not once in a
+       * life. The base is now what they carried in, which here is nothing.
        */
       const at = new Date();
       const firstAsk = await runSettlement(dpool, at);
       expect(firstAsk.decay.holders).toBe(0);
 
-      const u = await holding("wane-latecomer", 50000);
-      const secondAsk = await runSettlement(dpool, at);
-      expect(secondAsk.decay.holders).toBe(1);
-      expect(await balanceOf(dpool, memberAccount(u), VILLAGE_VOICE)).toBe(49500);
+      const u = await holding("wane-latecomer", 50000, { duringMoon: true });
+      for (let ask = 2; ask <= 4; ask += 1) {
+        const out = await runSettlement(dpool, at);
+        expect(out.decay.holders, `ask ${ask}`).toBe(0);
+        expect(out.decay.total, `ask ${ask}`).toBe(0);
+      }
+      expect(await wanedFrom(u)).toEqual([]);
+      expect(await balanceOf(dpool, memberAccount(u), VILLAGE_VOICE)).toBe(50000);
+      expect(await balanceOf(dpool, VOICE_DECAY, VILLAGE_VOICE)).toBe(0);
+      expect(await voiceSum()).toBe(0);
+    });
+
+    it("wanes nothing all moon from a member below the floor going in, whatever they are paid after", async () => {
+      // 50 minor units floors to nothing at one percent, so the first ask
+      // counts them as too small and writes no key. A payout later in the moon
+      // used to make the next ask wane one percent of it.
+      const u = await holding("wane-below-floor", 50);
+      const at = new Date();
+      const firstAsk = await runSettlement(dpool, at);
+      expect(firstAsk.decay.skippedTooSmall).toBe(1);
+      expect(firstAsk.decay.holders).toBe(0);
+
+      await holding(u, 50000, { duringMoon: true });
+      for (let ask = 2; ask <= 4; ask += 1) {
+        const out = await runSettlement(dpool, at);
+        expect(out.decay.holders, `ask ${ask}`).toBe(0);
+        expect(out.decay.total, `ask ${ask}`).toBe(0);
+        expect(out.decay.skippedTooSmall, `ask ${ask}`).toBe(1);
+      }
+      expect(await wanedFrom(u)).toEqual([]);
+      expect(await balanceOf(dpool, memberAccount(u), VILLAGE_VOICE)).toBe(50050);
+      expect(await voiceSum()).toBe(0);
+    });
+
+    it("does not wane a seat payout the first run made when a second run asks in the same moon", async () => {
+      const fresh = "wane-seat-fresh";
+      const carried = "wane-seat-carried";
+      await seated(fresh);
+      await seated(carried);
+      await holding(carried, 5000);
+      const seat = 50 * 10 ** VOICE_DECIMALS;
+      const at = new Date();
+      try {
+        const firstRun = await runSettlement(dpool, at);
+        expect(firstRun.stewardsThanked).toBeGreaterThanOrEqual(2);
+        // The carried member wanes on the 5000 they brought in, before and
+        // regardless of the seat. The fresh member brought nothing.
+        expect(firstRun.decay.total).toBe(50);
+
+        for (let ask = 2; ask <= 3; ask += 1) {
+          const out = await runSettlement(dpool, at);
+          expect(out.decay.holders, `ask ${ask}`).toBe(0);
+          expect(out.decay.total, `ask ${ask}`).toBe(0);
+        }
+        expect(await wanedFrom(fresh)).toEqual([]);
+        expect(await wanedFrom(carried)).toEqual([50]);
+        expect(await balanceOf(dpool, memberAccount(fresh), VILLAGE_VOICE)).toBe(seat);
+        expect(await balanceOf(dpool, memberAccount(carried), VILLAGE_VOICE)).toBe(4950 + seat);
+        expect(await balanceOf(dpool, VOICE_DECAY, VILLAGE_VOICE)).toBe(50);
+        expect(await voiceSum()).toBe(0);
+      } finally {
+        await dpool.query("DELETE FROM `org_role_assignments` WHERE `id` IN (?, ?)", [ // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+          `seat-${fresh}`,
+          `seat-${carried}`,
+        ]);
+      }
+    });
+
+    it("wanes a member above the floor going in exactly once, on what they carried in, over any number of asks", async () => {
+      const u = await holding("wane-once", 5000);
+      // Paid BEFORE the moon's first ask as well as between asks: the first
+      // hourly run lands up to an hour after the cycle opens, and a payout in
+      // that hour is still not part of the base.
+      await holding(u, 20000, { duringMoon: true });
+      const at = new Date();
+      const totals: number[] = [];
+      for (let ask = 1; ask <= 5; ask += 1) {
+        const out = await runSettlement(dpool, at);
+        totals.push(out.decay.total);
+        if (ask === 2) await holding(u, 7000, { duringMoon: true });
+        expect(await voiceSum(), `ask ${ask}`).toBe(0);
+      }
+      // One percent of 5000, once. Not of 25000, and never a second time.
+      expect(totals).toEqual([50, 0, 0, 0, 0]);
+      expect(await wanedFrom(u)).toEqual([50]);
+      expect(await balanceOf(dpool, memberAccount(u), VILLAGE_VOICE)).toBe(5000 - 50 + 20000 + 7000);
+      expect(await balanceOf(dpool, VOICE_DECAY, VILLAGE_VOICE)).toBe(50);
+      const books = await checkLedgerInvariants(dpool);
+      expect(books.problems).toEqual([]);
     });
 
     it("leaves a member who is in the middle of leaving alone, and says how many", async () => {
@@ -3270,6 +3397,30 @@ describe.skipIf(!configured)("the village economy engine", () => {
       // stop putting a green badge over a rule that pays nobody.
       expect(card?.problem).toMatch(/ceiling is 0/);
       expect(card?.pays).toEqual({ units: 0, ceilingUnits: 0, decimals: 0 });
+    });
+
+    it("logs a seat rule its ceiling refuses, the way every other unpayable seat rule is logged", async () => {
+      // THE GAP. The settlement filter put a ceiling refusal straight onto
+      // `out.unpayable` and never into the list `reportUnpayable` prints, so a
+      // seat rule at a ceiling of zero paid nobody every moon and no log line
+      // anywhere said so. Observed on the console, where that report goes.
+      await atScale(0);
+      await setSeatRule(25, 0);
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const out = await runSettlement(pool);
+        // Carried home once, not twice, now that it travels with the others.
+        const said = out.unpayable.filter((x) => x.token === TOKEN);
+        expect(said).toHaveLength(1);
+        expect(said[0].reason).toMatch(/ceiling is 0/);
+        const lines = errors.mock.calls.map((call) => call.map(String).join(" "));
+        const logged = lines.filter(
+          (line) => line.includes(`the rule on "${TOKEN}" paid nobody`) && /ceiling is 0/.test(line),
+        );
+        expect(logged).toHaveLength(1);
+      } finally {
+        errors.mockRestore();
+      }
     });
 
     it("carries the scale for the one shipped token that has one, which is live today", async () => {

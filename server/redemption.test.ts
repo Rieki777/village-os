@@ -85,7 +85,7 @@ import {
 } from "./lib/ledger";
 import { loadVariables, setVariable } from "./lib/variables";
 import { chargeForPlace } from "./lib/eventSeats";
-import { createExit, exitSplitPolicy, sweepBalances } from "./lib/exit";
+import { blockingStates, createExit, exitOpenState, exitSplitPolicy, sweepBalances } from "./lib/exit";
 import {
   REDEEMED,
   REDEMPTION_HOLD,
@@ -466,6 +466,105 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
     if (!second.ok) expect(second.error).toContain("which is what this village allows");
   });
 
+  it(
+    "opens exactly one of six simultaneous asks under a cap of one",
+    async () => {
+      // D2-4. The cap was counted outside the transaction, so asks arriving
+      // together each read zero and each passed.
+      //
+      // WHAT THIS CASE CAN AND CANNOT SEE, measured. On local MariaDB 11.8 the
+      // five losers die at the INSERT with the engine's own snapshot check
+      // ("Record has changed since last read"), with or without the cap check,
+      // so this burst stays green on that engine even with the fix removed.
+      // MySQL 8 has no such check. The case below stages the same race in a
+      // fixed order, and that one fails without the fix on either engine.
+      const wren = await makeMember("rd-cap-race");
+      await giveCredits(wren, 500);
+      await setVariable(pool, "redemption.per_member_per_cycle", "1");
+      const outs = await Promise.all(Array.from({ length: 6 }, () => ask(wren, 10)));
+      const said = JSON.stringify(outs.map((o) => (o.ok ? "opened" : `${o.status}: ${o.error.slice(0, 80)}`)));
+      const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "SELECT COUNT(*) n FROM `redemptions` WHERE `user_id` = ?",
+        [wren],
+      );
+      expect(Number(rows[0].n), `rows written for one member under a cap of one; the asks answered ${said}`).toBe(1);
+      expect(outs.filter((o) => o.ok), said).toHaveLength(1);
+      expect(await balanceOf(pool, REDEMPTION_HOLD, CREDITS)).toBe(toLedgerUnits(CREDITS, 10));
+      expect(await balanceOf(pool, memberAccount(wren), CREDITS)).toBe(toLedgerUnits(CREDITS, 490));
+      expect(await conservation(CREDITS)).toBe(0);
+    },
+    DB_HEAVY,
+  );
+
+  it(
+    "refuses the second of two asks that both read the cap before either committed",
+    async () => {
+      /*
+       * THE RACE, IN A FIXED ORDER. Ask B reads the per-cycle count (outside
+       * any transaction) and then waits at its connection; only then does ask
+       * A take its connection, open, commit and post its hold; only after A
+       * has returned does B open its transaction. So B's outside count is
+       * stale and no engine snapshot is older than A's commit: whatever stops
+       * B's row is the cap, decided inside B's lock. Each ask gets a pool whose
+       * `getConnection` waits on a gate and is otherwise the same pool.
+       */
+      const wren = await makeMember("rd-cap-order");
+      await giveCredits(wren, 500);
+      await setVariable(pool, "redemption.per_member_per_cycle", "1");
+      let bReady!: () => void;
+      let aDone!: () => void;
+      const bAtConnection = new Promise<void>((r) => (bReady = r));
+      const aReturned = new Promise<void>((r) => (aDone = r));
+      const gated = (before: () => Promise<void>) =>
+        new Proxy(pool, {
+          get(target, prop) {
+            if (prop === "getConnection") {
+              return async () => {
+                await before();
+                return target.getConnection();
+              };
+            }
+            const v = Reflect.get(target, prop, target);
+            return typeof v === "function" ? v.bind(target) : v;
+          },
+        }) as typeof pool;
+      const input = {
+        userId: wren,
+        tokenSlug: CREDITS,
+        amountUnits: toLedgerUnits(CREDITS, 10),
+        askedFor: "a bicycle",
+        exitOpen: false,
+        cycleStart: cycleWindow().startsAt,
+      };
+      let bWaited = false;
+      const b = requestRedemption(
+        gated(async () => {
+          if (bWaited) return;
+          bWaited = true;
+          bReady();
+          await aReturned;
+        }),
+        input,
+      );
+      const a = requestRedemption(gated(() => bAtConnection), input).finally(() => aDone());
+      const [aOut, bOut] = await Promise.all([a, b]);
+      expect(aOut.ok, JSON.stringify(aOut)).toBe(true);
+      expect(bOut.ok, JSON.stringify(bOut)).toBe(false);
+      if (!bOut.ok) {
+        expect(bOut.status).toBe(409);
+        expect(bOut.error).toContain("which is what this village allows");
+      }
+      const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "SELECT COUNT(*) n FROM `redemptions` WHERE `user_id` = ?",
+        [wren],
+      );
+      expect(Number(rows[0].n)).toBe(1);
+      expect(await balanceOf(pool, REDEMPTION_HOLD, CREDITS)).toBe(toLedgerUnits(CREDITS, 10));
+      expect(await conservation(CREDITS)).toBe(0);
+    },
+    DB_HEAVY,
+  );
+
   // ── The lock, against the paths that can reach it ────────────────────────
 
   it("refuses the ledger's own overdraft test, which is where all sixteen call sites arrive", async () => {
@@ -522,10 +621,19 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
     expect(await conservation(CREDITS)).toBe(0);
   });
 
-  it("leaves held tokens out of the exit sweep, driven through sweepBalances itself", async () => {
+  it("holds a departure while a redemption is open, and settles all of it once withdrawn", async () => {
+    /*
+     * D2-5. The sweep used to run around the hold: 200 free credits went and
+     * the 300 held stayed in the hold account. A refusal or an expiry after
+     * that handed the 300 back to an account whose sweep key was already used,
+     * so nothing ever settled them, and resolve would tombstone the account
+     * with them in it.
+     */
     const wren = await makeMember("rd-exit");
     await giveCredits(wren, 500);
-    expect((await ask(wren, 300)).ok).toBe(true);
+    const asked = await ask(wren, 300);
+    expect(asked.ok).toBe(true);
+    if (!asked.ok) return;
     const opened = await createExit(pool, {
       userId: wren,
       kind: "voluntary",
@@ -534,16 +642,29 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
     });
     expect(opened.ok).toBe(true);
     if (!opened.ok) return;
-    const swept = await sweepBalances(pool, {
-      exitId: opened.exit.id,
-      userId: wren,
-      policy: { ...exitSplitPolicy(), coolingDays: 0, keepPct: { credit: 0, voice: 0, recognition: 0, equity: 0 } },
-    });
-    expect(swept.refusal).toBeNull();
-    // 200 was free and went; the 300 held against the redemption never appears
-    // in `balancesFor(mem:...)`, which is the only thing the sweep walks.
-    expect(swept.swept[CREDITS] ?? 0).toBe(200);
+    const policy = { ...exitSplitPolicy(), coolingDays: 0, keepPct: { credit: 0, voice: 0, recognition: 0, equity: 0 } };
+
+    // Resolve reads this list, as do both tombstone doors.
+    const blocking = blockingStates(await exitOpenState(pool, wren, []));
+    const redemptions = blocking.find((s) => s.domain === "redemptions");
+    expect(redemptions?.count).toBe(1);
+    expect(redemptions?.description).toContain("1 open redemption(s)");
+
+    // Settle waits too, and moves nothing while it waits.
+    const held = await sweepBalances(pool, { exitId: opened.exit.id, userId: wren, policy });
+    expect(held.refusal).toBe("This member has 1 open redemption(s). Each is withdrawn, confirmed or refused before their balances settle.");
+    expect(held.swept).toEqual({});
+    expect(await balanceOf(pool, memberAccount(wren), CREDITS)).toBe(toLedgerUnits(CREDITS, 200));
     expect(await balanceOf(pool, REDEMPTION_HOLD, CREDITS)).toBe(toLedgerUnits(CREDITS, 300));
+
+    // The member withdraws. The domain clears and the whole 500 settles.
+    expect((await settleRedemption(pool, { id: asked.row.id, to: "withdrawn", actorUserId: wren, note: "" })).ok).toBe(true);
+    expect(blockingStates(await exitOpenState(pool, wren, [])).map((s) => s.domain)).not.toContain("redemptions");
+    const swept = await sweepBalances(pool, { exitId: opened.exit.id, userId: wren, policy });
+    expect(swept.refusal).toBeNull();
+    expect(swept.swept[CREDITS]).toBe(500);
+    expect(await balanceOf(pool, memberAccount(wren), CREDITS)).toBe(0);
+    expect(await balanceOf(pool, REDEMPTION_HOLD, CREDITS)).toBe(0);
     expect(await conservation(CREDITS)).toBe(0);
   });
 
@@ -705,6 +826,71 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
       ]);
       expect(both.filter((r) => r.ok)).toHaveLength(1);
       expect(await balanceOf(pool, memberAccount(wren), CREDITS)).toBe(toLedgerUnits(CREDITS, 500));
+      expect(await conservation(CREDITS)).toBe(0);
+    },
+    DB_HEAVY,
+  );
+
+  it(
+    "keeps a confirmation whose burn posted even when the commit's answer was lost",
+    async () => {
+      /*
+       * D2-6. The burn COMMITS and then the driver throws, which is a
+       * connection lost between the server applying the commit and the answer
+       * arriving. The confirmation used to be un-claimed on that throw, and a
+       * withdrawal could then reverse a hold that was already destroyed.
+       */
+      const wren = await makeMember("rd-lost-ack");
+      await giveCredits(wren, 500);
+      const out = await ask(wren, 300);
+      expect(out.ok).toBe(true);
+      if (!out.ok) return;
+      let armed = true;
+      const lossy = new Proxy(pool, {
+        get(target, prop) {
+          if (prop === "getConnection") {
+            return async () => {
+              const conn = await target.getConnection();
+              return new Proxy(conn, {
+                get(c, p) {
+                  if (p === "commit") {
+                    return async () => {
+                      await c.commit();
+                      if (armed) {
+                        armed = false;
+                        throw Object.assign(new Error("Connection lost: the server closed the connection."), {
+                          code: "PROTOCOL_CONNECTION_LOST",
+                        });
+                      }
+                    };
+                  }
+                  const v = Reflect.get(c, p, c);
+                  return typeof v === "function" ? v.bind(c) : v;
+                },
+              });
+            };
+          }
+          const v = Reflect.get(target, prop, target);
+          return typeof v === "function" ? v.bind(target) : v;
+        },
+      }) as typeof pool;
+
+      const done = await settleRedemption(lossy, {
+        id: out.row.id,
+        to: "confirmed",
+        actorUserId: "rd-steward",
+        note: "handed over on Tuesday",
+      });
+      expect(armed, "the lost acknowledgement must really have been staged").toBe(false);
+      expect(done.ok, JSON.stringify(done)).toBe(true);
+      expect((await redemptionById(pool, out.row.id))?.state).toBe("confirmed");
+      expect(await balanceOf(pool, REDEEMED, CREDITS)).toBe(toLedgerUnits(CREDITS, 300));
+
+      // And nothing comes back out of it afterwards.
+      const late = await settleRedemption(pool, { id: out.row.id, to: "withdrawn", actorUserId: wren, note: "" });
+      expect(late.ok).toBe(false);
+      expect(await balanceOf(pool, memberAccount(wren), CREDITS)).toBe(toLedgerUnits(CREDITS, 200));
+      expect(await balanceOf(pool, REDEMPTION_HOLD, CREDITS)).toBe(0);
       expect(await conservation(CREDITS)).toBe(0);
     },
     DB_HEAVY,

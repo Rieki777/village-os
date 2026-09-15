@@ -167,6 +167,29 @@ describe("VariablesTab", () => {
     expect(screen.queryByPlaceholderText("Exact on-chain token name")).toBeNull();
   });
 
+  it("opens at the one dial a deep link names, scrolled to and marked, and marks no other", async () => {
+    // The review queue's "Change the limit" sends an admin here with
+    // ?variable=<key>. A link that opened the tab at its top would leave them
+    // searching a list of two hundred dials for the one they were sent to.
+    const scrolled = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrolled;
+    window.history.pushState({}, "", "/admin?tab=variables&variable=gratitude.cap");
+    try {
+      render(<VariablesTab password="secret" />);
+      const named = (await screen.findByText("Gratitude cap")).closest("[id]") as HTMLElement;
+      expect(named.id).toBe("variable-gratitude.cap");
+      expect(named.getAttribute("aria-current")).toBe("true");
+      const other = screen.getByText("Agreement needed").closest("[id]") as HTMLElement;
+      expect(other.getAttribute("aria-current")).toBeNull();
+      expect(scrolled).toHaveBeenCalled();
+      expect(scrolled.mock.contexts[0]).toBe(named);
+    } finally {
+      Element.prototype.scrollIntoView = original;
+      window.history.pushState({}, "", "/");
+    }
+  });
+
   it("still says what the screen is for when the server refuses the load", async () => {
     vi.stubGlobal(
       "fetch",

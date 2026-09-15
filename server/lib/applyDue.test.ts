@@ -40,6 +40,7 @@ import {
   recordVeto,
   routeOutcome,
   stampLanding,
+  stewardConsentAtClose,
   stewardNoVote,
   unfinishedLandings,
   type CloseRouting,
@@ -275,6 +276,61 @@ describe.skipIf(!configured)("the two clocks, at the close", () => {
     const landing = landingOf(deps(), { ballot: closed.ballot! });
     const fromClose = new Date(new Date(closed.ballot!.closesAt).getTime() + FAR_MOON_DAYS * 24 * HOUR);
     expect(landing.landsAt!.toISOString()).toBe(fromClose.toISOString());
+  });
+});
+
+describe.skipIf(!configured)("every steward already said yes (Rye, 2026-09-14)", () => {
+  /*
+   * A new moon one hour after the close, so the steward window is the later of
+   * the two clocks and consent has something to shorten. With the far moon the
+   * boundary wins and consent changes nothing, which the pure tests prove.
+   */
+  const consentDeps = () =>
+    deps({ consentNoticeHours: () => 24, nextBoundaryAfter: (after: Date) => new Date(after.getTime() + HOUR) });
+  const lagFrom = (closesAt: string, landsAt: Date | null | undefined) =>
+    landsAt ? Math.round((landsAt.getTime() - new Date(closesAt).getTime()) / HOUR) : null;
+
+  it("lands on the notice when every steward said yes, and keeps today's instant when one abstained", async () => {
+    await seatSteward("u-steward");
+    await seatSteward("u-steward2");
+    const agreed = await openOne();
+    const abstained = await openOne();
+    const closedA = await carry(agreed, [["u-a", "yes"], ["u-b", "yes"], ["u-steward", "yes"], ["u-steward2", "yes"]]);
+    const cast = await castVote(pool, abstained.id, "u-steward2", "abstain");
+    if (!cast.ok) throw new Error(`vote refused: ${cast.error}`);
+    const closedB = await carry(abstained, [["u-a", "yes"], ["u-b", "yes"], ["u-steward", "yes"]]);
+
+    expect(await stewardConsentAtClose(consentDeps(), closedA.ballot!)).toBe(true);
+    expect(await stewardConsentAtClose(consentDeps(), closedB.ballot!)).toBe(false);
+    await routeOutcome(consentDeps(), closedA.ballot!, "passed", "carried", "u-a");
+    await routeOutcome(consentDeps(), closedB.ballot!, "passed", "carried", "u-a");
+    const rowA = await landingRow(pool, agreed.id);
+    const rowB = await landingRow(pool, abstained.id);
+
+    // The landing instant itself, asserted apart from anything downstream of it.
+    expect(lagFrom(closedA.ballot!.closesAt, rowA?.landsAt), "consent: the notice").toBe(24);
+    expect(lagFrom(closedB.ballot!.closesAt, rowB?.landsAt), "one abstention: the whole window").toBe(72);
+    expect(rowA?.lockedByConsent).toBe(true);
+    expect(rowA?.vetoLocked, "nobody can stop what every steward agreed to").toBe(true);
+    expect(rowB?.vetoLocked).toBe(false);
+  });
+
+  it("changes nothing in a village with no seated stewards, however the roll voted", async () => {
+    const b = await openOne();
+    const closed = await carry(b, [["u-a", "yes"], ["u-b", "yes"], ["u-steward", "yes"]]);
+    expect(await stewardConsentAtClose(consentDeps(), closed.ballot!)).toBe(false);
+    await routeOutcome(consentDeps(), closed.ballot!, "passed", "carried", "u-a");
+    const row = await landingRow(pool, b.id);
+    expect(lagFrom(closed.ballot!.closesAt, row?.landsAt)).toBe(72);
+    expect(row?.vetoLocked).toBe(false);
+  });
+
+  it("reads the same seat set as the steward's no: a lapsed holding is not a seat", async () => {
+    await seatSteward("u-steward");
+    await seatSteward("u-steward2", new Date(Date.now() - 24 * HOUR));
+    const b = await openOne();
+    const closed = await carry(b, [["u-a", "yes"], ["u-b", "yes"], ["u-steward", "yes"]]);
+    expect(await stewardConsentAtClose(consentDeps(), closed.ballot!)).toBe(true);
   });
 });
 

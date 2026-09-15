@@ -31,7 +31,10 @@ import {
   stepAtIndex,
   walkFor,
 } from "./wizardWalk";
-import { WIZARD_TYPES as SERVER_WIZARD_TYPES } from "../../../../server/lib/proposalDrafts";
+import {
+  CONDUCTABLE_TYPES as SERVER_CONDUCTABLE_TYPES,
+  WIZARD_TYPES as SERVER_WIZARD_TYPES,
+} from "../../../../server/lib/proposalDrafts";
 import { MINT_RULE, SUBJECT_THRESHOLDS, VILLAGE_LAUNCH } from "../../../../shared/ballotSubjects";
 
 /** Answers that satisfy every validator a type declares, built from the config
@@ -210,5 +213,42 @@ describe("validation across the whole walk", () => {
     expect(problemsFor("role_application", { ...answers, commitmentPct: -1 })).toHaveLength(1);
     expect(problemsFor("role_application", { ...answers, commitmentPct: 0 })).toEqual([]);
     expect(problemsFor("role_application", { ...answers, commitmentPct: 100 })).toEqual([]);
+  });
+});
+
+/**
+ * SEATING SOMEBODY BY VOTE, WITH THE TERM THEY WOULD SIT FOR.
+ *
+ * Rye, 2026-09-14: every seat has a term, and a seat with no date asked ends
+ * with the season. The wizard type is the first screen that opens a seat vote,
+ * so the contract with `POST /api/governance/role-seats` is pinned here.
+ */
+describe("the seat vote", () => {
+  const cfg = typeConfig("role_seat")!;
+  const base = { userId: "u-1", roleId: "role-water", reason: "She has kept the spring running for three seasons now." };
+
+  it("publishes to the route that opens a seat vote, and the server can conduct it", () => {
+    expect(cfg.publish.path).toBe("/api/governance/role-seats");
+    expect(SERVER_CONDUCTABLE_TYPES).toContain("role_seat");
+    expect(cfg.opensVote).toBe(true);
+    expect(subjectNoun("role_seat")).toBe("Who sits in a role");
+  });
+
+  it("sends an end date only when one was picked, so a blank one ends with the season", () => {
+    expect(cfg.publish.body(base)).toEqual(base);
+    expect(cfg.publish.body({ ...base, termEndsOn: "  " })).toEqual(base);
+    expect(cfg.publish.body({ ...base, termEndsOn: "2027-03-21" })).toEqual({ ...base, termEndsOn: "2027-03-21" });
+  });
+
+  it("asks the end date on the terms step, tied to the role a steward's cap is read from", () => {
+    const terms = fieldsFor("role_seat", "terms");
+    expect(terms.map((f) => [f.key, f.kind, f.roleKey])).toEqual([["termEndsOn", "seatTerm", "roleId"]]);
+    // Optional: an empty date is the season's end, and never a problem.
+    expect(problemsFor("role_seat", { ...base, termEndsOn: "" })).toEqual([]);
+  });
+
+  it("asks for the reason the route asks for, at the length it asks for", () => {
+    const short = problemsFor("role_seat", { ...base, reason: "x".repeat(39) });
+    expect(short.map((p) => p.field)).toEqual(["reason"]);
   });
 });
