@@ -9,6 +9,7 @@ import {
   CLOSE_CONSEQUENCES, closeReport, settlementBlocked, settlementIntent,
   type OpenCycle, type PendingSettlement,
 } from "@/lib/settlement";
+import { settlementRefusalWarning } from "@shared/moonSettlement";
 import {
   canAct, DISCLOSURE_NOTE, emptyQueueLine, reportedLine, reportPlace,
   type MessageReport, type ReportStatus,
@@ -8285,6 +8286,10 @@ function CyclesTab({ password }: { password: string }) {
    */
   const [harvest, setHarvest] = useState(0);
   const harvesting = useMomentWindow(harvest);
+  /** The moon proposer's own answer, kept verbatim. See the panel below. */
+  const [proposal, setProposal] = useState<{ why: string; ballotId?: string } | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [landing, setLanding] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -8312,6 +8317,57 @@ function CyclesTab({ password }: { password: string }) {
   const blocked = settlementBlocked(pending);
   const due = pending?.due ?? [];
   const poolName = pending?.pool.tokenName ?? "";
+
+  /**
+   * Ask the village about the next moon that can be asked about.
+   *
+   * A refusal here is a 200 carrying `posted: false`, because "nothing needed
+   * asking" is an answer and not a failure. Only a transport or auth error
+   * reaches the toast.
+   */
+  const askTheVillage = async () => {
+    setAsking(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/cycles/settlement-proposal`, {
+        method: "POST",
+        headers: authHeaders(password, { "Content-Type": "application/json" }),
+        body: JSON.stringify({}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(refusal(data, "The village could not be asked."));
+      setProposal({ why: String(data?.why ?? ""), ballotId: data?.ballotId ? String(data.ballotId) : undefined });
+      await load();
+    } catch (e: any) {
+      toast.error(e?.message || "The village could not be asked.");
+    } finally {
+      setAsking(false);
+    }
+  };
+
+  /** Land every decision whose window has run, and settle nothing on the way. */
+  const landDue = async () => {
+    setLanding(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/governance/land-due`, {
+        method: "POST",
+        headers: authHeaders(password, { "Content-Type": "application/json" }),
+        body: JSON.stringify({}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(refusal(data, "Nothing could be landed."));
+      const l = data?.landing ?? {};
+      setProposal({
+        why: l.ran
+          ? `${Number(l.due ?? 0)} decision(s) were due and ${Number(l.landed ?? 0)} landed.`
+          : String(l.why ?? "The landing did not run."),
+      });
+      await load();
+    } catch (e: any) {
+      toast.error(e?.message || "Nothing could be landed.");
+    } finally {
+      setLanding(false);
+    }
+  };
 
   const settle = async () => {
     setClosing(true);
@@ -8440,6 +8496,65 @@ function CyclesTab({ password }: { password: string }) {
             </div>
           </div>
 
+          {/*
+            THE OTHER WAY A MOON GETS SETTLED, and the founder is owed a door to it.
+
+            By default this village does not settle by the button above. The moon
+            proposer notices a lunation ended, freezes exactly what each member
+            would receive, and puts it to the village as a vote; the value moves
+            when the village passes it. That runs hourly on its own, so this panel
+            is not how it ordinarily happens.
+
+            It is here for the two cases the machine deliberately will not handle.
+            A settlement the village voted DOWN is never re-posted by a job, and a
+            moon nobody answered twice stops being asked about — both so that a
+            machine cannot wear a village down by asking again until it wins.
+            Getting past either of those is a decision, so it takes a person, and
+            this is the person pressing.
+
+            The answer is the server's own sentence, always. "The village is
+            already voting on cycle 331" is a better thing to show a founder than
+            a spinner and a guess, and it is the same sentence the job logs.
+          */}
+          <div className="border border-gray-200 rounded-xl p-4">
+            <p className="text-xs text-gray-500 uppercase tracking-wide">The village's own settlement</p>
+            <p className="text-sm text-gray-600 mt-2">
+              When this village settles by vote, the moon posts the proposal on its own and the
+              value moves once the village passes it and the steward's window has run. Use these
+              only to get past a moon the village voted down, or one nobody answered.
+            </p>
+            <div className="flex flex-wrap gap-2 mt-3">
+              <button
+                onClick={() => void askTheVillage()}
+                disabled={asking}
+                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {asking ? "Asking…" : "Ask the village now"}
+              </button>
+              <button
+                onClick={() => void landDue()}
+                disabled={landing}
+                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {landing ? "Landing…" : "Land what the village has decided"}
+              </button>
+            </div>
+            {proposal && (
+              <p className="text-sm text-gray-700 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 mt-3">
+                {proposal.why}
+                {proposal.ballotId && (
+                  <>
+                    {" "}
+                    <a href={`/decisions/${proposal.ballotId}`} className="underline">
+                      Read the decision
+                    </a>
+                    .
+                  </>
+                )}
+              </p>
+            )}
+          </div>
+
           <div>
             <h3 className="font-semibold text-gray-900 mb-2">What a close would settle</h3>
             {due.length === 0 ? (
@@ -8462,6 +8577,17 @@ function CyclesTab({ password }: { password: string }) {
                         {day(c.startsAt)} to {day(c.endsAt)} · {c.recipients} {c.recipients === 1 ? "member" : "members"} · {c.credited.toLocaleString()} {c.token}
                       </p>
                     </div>
+                    {/*
+                      A FOUNDER MAY OVERRULE THE VILLAGE HERE, AND NEVER BY ACCIDENT.
+                      Rye, 2026-09-14: closing a moon the village voted down still
+                      pays its split, and this card says so before the press. It
+                      warns and blocks nothing.
+                    */}
+                    {c.villageRefused && (
+                      <p className="text-sm font-medium text-red-800 bg-red-50 border-b border-red-200 px-4 py-2">
+                        {settlementRefusalWarning(c.villageRefused)}
+                      </p>
+                    )}
                     {c.fromPersistedSplit && (
                       <p className="text-xs text-amber-800 bg-amber-50 border-b border-amber-200 px-4 py-2">
                         An earlier close already wrote this split. A retry pays from that record,
