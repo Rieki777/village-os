@@ -22,26 +22,26 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 169 open and 35 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 171 open and 35 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 178 of them as soon as it is saved, and 26 of them at the next cycle close.
+Each dial also says WHEN a change lands. 180 of them as soon as it is saved, and 26 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-204 dials in 32 categories. 119 carry a minimum and a maximum. By type: 89 integer, 14 decimal, 17 percentage, 24 boolean, 28 choice, 32 text.
+206 dials in 32 categories. 120 carry a minimum and a maximum. By type: 90 integer, 14 decimal, 17 percentage, 24 boolean, 29 choice, 32 text.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
 | Membership | 3 | 3 | 0 |
-| Gratitude | 9 | 9 | 0 |
+| Gratitude | 11 | 11 | 0 |
 | Ledger | 8 | 6 | 2 |
 | The Mint | 6 | 5 | 1 |
 | Progression | 28 | 28 | 0 |
@@ -88,6 +88,8 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Full sends per cycle | `gratitude.full_sends_per_cycle` | Gratitude | integer | `7` | the whole village |
 | Require a message with every acknowledgment | `gratitude.require_message` | Gratitude | boolean | `true` | the whole village |
 | The rhythm the village keeps time by | `cycle.mode` | Gratitude | choice | `lunar` | the whole village |
+| How the end of a moon comes to a decision | `cycle.settlement_mode` | Gratitude | choice | `proposal` | the whole village |
+| How long the village has to answer a settlement | `cycle.settlement_vote_days` | Gratitude | integer | `3` | the whole village |
 | Gratitude each heart sends | `feed.heart_amount` | Gratitude | integer | `1` | the whole village |
 | Hearts one member can tap for another per cycle | `feed.max_hearts_per_recipient_per_cycle` | Gratitude | integer | `5` | the whole village |
 | Recognition for an accepted Work With Us proposal | `gratitude.proposal_accept_award` | Gratitude | integer | `100` | the whole village |
@@ -333,7 +335,7 @@ The role whose holders are told the moment somebody joins. Greeting belongs to a
 
 ## Gratitude
 
-9 dials. 9 for the whole village.
+11 dials. 11 for the whole village.
 
 ### Base sending allowance per cycle
 
@@ -426,6 +428,39 @@ What it may be set to:
 
 - `lunar` The moon. New moon to new moon, about 29.5 days. Boundaries come from a checked-in table of true new moons.
 - `calendar` The calendar month. First of the month to first of the month, UTC. Cycles carry ids like month-2026-09.
+
+### How the end of a moon comes to a decision
+
+What happens when a moon ends and its value is waiting to be released. On 'The village votes', which is the default, the platform notices the moon ended, works out exactly what each member would receive, writes that split down and opens a ballot on it; the value moves only if the village passes it, and it pays precisely the amounts the ballot showed even if a setting changes while the vote is open. On 'A founder settles by hand', no ballot is opened and the moon waits for somebody to press Close on the Cycles desk, which is how every village worked before this dial existed. Neither setting lets the platform release value on its own. A moon the village votes down stays open and no value moves; a moon nobody votes on is asked once more and then waits for a person. Works with: 'How long the village has to answer a settlement' below, and 'Cycle pool size' under Gratitude, which is the value being decided.
+
+| Fact | Value |
+| --- | --- |
+| Key | `cycle.settlement_mode` |
+| Type | choice, one of a fixed list |
+| Default | `proposal` |
+| Range | one of the choices below |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
+
+What it may be set to:
+
+- `proposal` The village votes. The moon's split is frozen and put to a ballot. Passing it releases exactly the amounts shown.
+- `manual` A founder settles by hand. No ballot is opened. The moon waits for the Close button on the Cycles desk.
+
+### How long the village has to answer a settlement
+
+How many days a settlement ballot stays open. It is held under a moon on purpose: a window longer than a cycle means each moon's vote is still running when the next moon's opens, and a village would be answering two settlements at once with no way to tell them apart. Only read when 'How the end of a moon comes to a decision' is set to 'The village votes'. Works with: 'How the end of a moon comes to a decision' above.
+
+| Fact | Value |
+| --- | --- |
+| Key | `cycle.settlement_vote_days` |
+| Type | integer, a whole number |
+| Default | `3` |
+| Range | 1 to 21 |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Gratitude each heart sends
 
@@ -3693,6 +3728,7 @@ The generator reads these and fails loudly if any of them moves:
 - `shared/gameConfig.ts`
 - `shared/gameVariables.ts`
 - `shared/governanceEngine.ts`
+- `shared/moonSettlement.ts`
 - `shared/needs.ts`
 - `shared/villageMoon.ts`
 
