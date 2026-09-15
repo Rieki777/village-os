@@ -182,8 +182,13 @@ export function register(app: Express, deps: Deps): void {
      */
     const units = toLedgerUnits(slug, asked);
     if (tokenDef(slug) && finerThanScale(asked, decimalsFor(slug))) {
+      // Worded from the token's own scale: "whole" is wrong on a token that
+      // carries two decimal places, and it was the only sentence a member got.
+      const places = decimalsFor(slug);
       return res.status(400).json({
-        error: `Ask for ${tokenDef(slug)?.name ?? slug} in whole positive amounts.`,
+        error: places > 0
+          ? `Ask for ${tokenDef(slug)?.name ?? slug} in positive amounts with at most ${places} decimal places.`
+          : `Ask for ${tokenDef(slug)?.name ?? slug} in whole positive amounts.`,
       });
     }
     const pool = getPool();
