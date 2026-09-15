@@ -2959,8 +2959,8 @@ refuses first if Ash and Wren are the same person.
 | # | Posted by | From | To | Token | Amount | Source | Idempotency key |
 |---|---|---|---|---|---|---|---|
 | 1 | the consent route | `sys:gratitude-pool` | `mem:<wren>` | `gratitude` | the consented amount, lifted by any standing badge multiplier (1 by default) and never past a top: the range's top under `posted`, the bonus ceiling under `capped`, the advertised top under `unlimited` | `quest_consent` | `quest_consent:<claimId>` |
-| 2 | `mintForConfirmedClaim` | `sys:voice-mint` | `mem:<wren>` | `village-voice` | **10000** (10) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:village-voice` |
-| 3 | `mintForConfirmedClaim` | `sys:cycle-pool` | `mem:<wren>` | `credits` | **25** (25) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:credits` |
+| 2 | `mintForConfirmedClaim` | `sys:voice-mint` | `mem:<wren>` | `village-voice` | **1000** (10) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:village-voice` |
+| 3 | `mintForConfirmedClaim` | `sys:cycle-pool` | `mem:<wren>` | `credits` | **2500** (25) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:credits` |
 
 Five things this table is showing:
 
@@ -2969,12 +2969,12 @@ Five things this table is showing:
   the gratitude slug (`if (r.tokenSlug === HEARTS) continue`) so one piece of work
   cannot pay twice. There is deliberately no seeded `quest.completed` gratitude
   rule: a disabled one would look like the obvious thing to switch on.
-- **Rows 2 and 3 end in the token slug.** That segment is appended at the call
-  site, not by `keys.questCompleted`. Without it the second rule would collide
-  with the first, read as a duplicate, and Wren would be quietly paid in one token
+- **Rows 2 and 3 end in the token slug.** `keys.questCompleted` builds that segment,
+  escaped like the rest of the key. Without it the second rule would collide with
+  the first, read as a duplicate, and Wren would be quietly paid in one token
   instead of two.
-- **10 becomes 10000 and 25 stays 25.** `toLedgerUnits` reads the token's own
-  `decimals`: 3 for Village Voice, 0 for credits.
+- **10 becomes 1000 and 25 becomes 2500.** `toLedgerUnits` reads the token's own
+  `decimals`, which is 2 for both Village Voice and credits since `0202`.
 - **Row 1 is awaited and rows 2 and 3 are not.** The consent route wraps
   `mintForConfirmedClaim` in a try/catch and does not fail the response on it. A
   quest that was witnessed and credited must not fail because a secondary mint had
@@ -2986,7 +2986,7 @@ Five things this table is showing:
   weight farmed through `quest.allow_zero_consent`. A stay-credit reward the quest
   itself carries still releases, keyed `queststay:<claimId>`.
 
-Wren's balances after: 25 credits, 10.000 voice, and whatever recognition the
+Wren's balances after: 25 credits, 10 voice, and whatever recognition the
 quest advertised.
 
 ### 15.3 Wren thanks Ash, 5 gratitude
