@@ -47,6 +47,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
 import { toast } from "sonner";
 import { Inbox } from "lucide-react";
+import { Link } from "wouter";
 
 interface ProposalCard {
   id: string;
@@ -71,6 +72,8 @@ interface Batch {
   batchId: string;
   moduleId: string | null;
   receivedAt: string | null;
+  /** Changes accepting the batch whole would propose. Null with no org proposals; absent from an older server. */
+  proposedChanges?: number | null;
   items: ProposalCard[];
 }
 
@@ -100,6 +103,30 @@ interface Queue {
   /** Open drafts this queue made that cannot publish. Absent from an older server. */
   stuckDrafts?: { draftId: string; blocked: number; blockedLines: unknown }[];
   counts: { proposals: number; quests: number };
+  /** `org.proposal_change_limit`, as the server reads it. Absent from an older server. */
+  proposalChangeLimit?: number;
+  /** Whether this reader can open the admin page where that limit is changed. */
+  mayChangeProposalLimit?: boolean;
+}
+
+/** Where an admin changes the limit: the Game Mechanics tab, opened at that one dial. */
+const CHANGE_LIMIT_HREF = "/admin?tab=variables&variable=org.proposal_change_limit";
+
+function changes(n: number): string {
+  return n === 1 ? "1 change" : `${n} changes`;
+}
+
+/**
+ * The limit a batch meets, said before anybody accepts it. Rye, 2026-09-14:
+ * "Definitely should show the batch limit with a button to go to that
+ * setting to change adjust it higher." A steward who cannot open that setting
+ * is told who can, and is offered no button that would go nowhere.
+ */
+function limitSentence(limit: number, proposed: number, mayChange: boolean): string {
+  const parts = [`This village accepts up to ${changes(limit)} from one outside batch. This batch proposes ${proposed}.`];
+  if (proposed > limit) parts.push(`Every change past the first ${limit} will be blocked.`);
+  if (!mayChange) parts.push("An admin can raise it.");
+  return parts.join(" ");
 }
 
 /** A draft that cannot publish: how many seats are blocked, and why each one is. */
@@ -800,6 +827,22 @@ export default function Review() {
               </h2>
               <p className="text-xs text-muted-foreground">Arrived {when(batch.receivedAt)}</p>
             </div>
+
+            {typeof batch.proposedChanges === "number" && typeof queue?.proposalChangeLimit === "number" && (
+              <div className="mt-3">
+                <p className="text-sm text-muted-foreground">
+                  {limitSentence(queue.proposalChangeLimit, batch.proposedChanges, queue.mayChangeProposalLimit === true)}
+                </p>
+                {queue.mayChangeProposalLimit === true && (
+                  <Link
+                    href={CHANGE_LIMIT_HREF}
+                    className="inline-flex items-center text-sm border border-border rounded-lg px-4 py-2 mt-3 min-h-[44px] font-medium"
+                  >
+                    Change the limit
+                  </Link>
+                )}
+              </div>
+            )}
 
             <div className="mt-4 space-y-4">
               {batch.items.map((item) => (
