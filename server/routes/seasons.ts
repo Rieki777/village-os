@@ -45,15 +45,19 @@ type Deps = Pick<AppDeps, "isAdmin" | "adminActor" | "getPool" | "notify"> & {
   loadRoles(): Array<{ id: string; name?: string }>;
   permissionHoldings: RestampDeps["permissionHoldings"];
   writePermissionTerms: RestampDeps["writePermissionTerms"];
+  /** When a seat vote opened now would land (`seatVoteLandsAt`, server/lib/seatTermLanding.ts). */
+  seatVoteLandsAt(): Date;
 };
 
 export function register(app: Express, deps: Deps): void {
   const { isAdmin, adminActor, getPool, notify, seasonState, getSeasonConfig, normalizeSeasonConfig, seasonRepo, addActivity, loadRoles } =
     deps;
 
-  // Public: the computed season state (current picked by date, never stale).
+  // Public: the computed season state (current picked by date, never stale),
+  // and when a seat vote opened now would land, so the seat form measures a
+  // voted seat's term from the same instant the vote route does.
   app.get("/api/season", async (_req, res) => {
-    res.json(seasonState());
+    res.json({ ...seasonState(), seatVoteLandsAt: deps.seatVoteLandsAt().toISOString() });
   });
 
   // Admin: the whole season list + cadence + timezone.
