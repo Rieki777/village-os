@@ -169,6 +169,97 @@ describe("the review queue tells three states apart", () => {
 });
 
 /**
+ * THE LIMIT A BATCH MEETS, SAID BEFORE ANYBODY ACCEPTS IT.
+ *
+ * Rye, 2026-09-14: "Definitely should show the batch limit with a button to go
+ * to that setting to change adjust it higher." The limit used to be three per
+ * account and appeared nowhere until a steward had accepted a batch and found
+ * most of it blocked. Each case below is a sentence or a door a steward needs
+ * before pressing accept, and the last is the door a steward must NOT be shown.
+ */
+describe("the change limit on a batch card", () => {
+  const seat = (id: string, name: string) => ({
+    id,
+    batchId: "b1",
+    moduleId: "vendor",
+    kind: "role.proposed",
+    payload: { name },
+    quote: null,
+    sourceRef: null,
+    sourceOccurredAt: null,
+    evidence: "absent",
+    audience: "steward",
+    trustTier: "extracted_unreviewed",
+    confidence: null,
+    significance: null,
+    subjectRef: null,
+    receivedAt: "2026-08-14T10:00:00.000Z",
+    correlationId: null,
+  });
+  const queueWith = (over: { limit: number; proposed: number | null; may: boolean }) => ({
+    ...EMPTY,
+    counts: { proposals: 1, quests: 0 },
+    batches: [
+      {
+        batchId: "b1",
+        moduleId: "vendor",
+        receivedAt: "2026-08-14T10:00:00.000Z",
+        proposedChanges: over.proposed,
+        items: [seat("p1", "Water Steward")],
+      },
+    ],
+    proposalChangeLimit: over.limit,
+    mayChangeProposalLimit: over.may,
+  });
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("names the village's limit and what this batch proposes, with nothing blocked under it", async () => {
+    answerWith(200, queueWith({ limit: 500, proposed: 18, may: false }));
+    renderReview();
+    expect(
+      await screen.findByText(/This village accepts up to 500 changes from one outside batch\. This batch proposes 18\./),
+    ).toBeTruthy();
+    expect(screen.queryByText(/will be blocked/)).toBeNull();
+  });
+
+  it("says the changes past the limit will be blocked when the batch proposes more", async () => {
+    answerWith(200, queueWith({ limit: 6, proposed: 18, may: false }));
+    renderReview();
+    expect(await screen.findByText(/This batch proposes 18\. Every change past the first 6 will be blocked\./)).toBeTruthy();
+  });
+
+  it("offers an admin the way to the setting, opened at that one dial", async () => {
+    answerWith(200, queueWith({ limit: 6, proposed: 18, may: true }));
+    renderReview();
+    const link = await screen.findByRole("link", { name: "Change the limit" });
+    expect(link.getAttribute("href")).toBe("/admin?tab=variables&variable=org.proposal_change_limit");
+    expect(screen.queryByText(/An admin can raise it/)).toBeNull();
+  });
+
+  it("tells a steward who is not an admin who can raise it, and shows them no button that goes nowhere", async () => {
+    answerWith(200, queueWith({ limit: 6, proposed: 18, may: false }));
+    renderReview();
+    expect(await screen.findByText(/Every change past the first 6 will be blocked\. An admin can raise it\./)).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Change the limit" })).toBeNull();
+    expect(screen.queryByText("Change the limit")).toBeNull();
+  });
+
+  it("says nothing about a limit on a batch that holds no org proposals", async () => {
+    answerWith(200, queueWith({ limit: 6, proposed: null, may: true }));
+    renderReview();
+    await screen.findByText(/Accept all 1, with my edits/i);
+    expect(screen.queryByText(/This village accepts up to/)).toBeNull();
+    expect(screen.queryByText("Change the limit")).toBeNull();
+  });
+});
+
+/**
  * WHAT AN ACCEPT SAYS AFTERWARDS, and when it stops saying it.
  *
  * Three defects, each a sentence that reached nobody or outlived its subject:

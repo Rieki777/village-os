@@ -22,28 +22,28 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 145 open and 33 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 146 open and 33 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 155 of them as soon as it is saved, and 23 of them at the next cycle close.
+Each dial also says WHEN a change lands. 156 of them as soon as it is saved, and 23 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-178 dials in 29 categories. 104 carry a minimum and a maximum. By type: 82 integer, 13 decimal, 10 percentage, 21 boolean, 22 choice, 30 text.
+179 dials in 29 categories. 105 carry a minimum and a maximum. By type: 83 integer, 13 decimal, 10 percentage, 21 boolean, 22 choice, 30 text.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
 | Gratitude | 9 | 9 | 0 |
 | Ledger | 2 | 2 | 0 |
 | The Mint | 4 | 3 | 1 |
-| Progression | 28 | 28 | 0 |
+| Progression | 29 | 29 | 0 |
 | Quests | 5 | 5 | 0 |
 | Governance | 43 | 39 | 4 |
 | Tokens | 4 | 1 | 3 |
@@ -92,6 +92,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | When each Claims Week begins | `economy.claims_week_starts` | The Mint | text | `03-21,06-21,09-23,12-21` | the whole village |
 | Your Hypha space | `economy.hypha_space` | The Mint | text | blank | the founder or an admin |
 | How often every seat reopens | `org.reassignment_cadence` | Progression | choice | `season_turn` | the whole village |
+| Most changes one outside batch can propose | `org.proposal_change_limit` | Progression | integer | `500` | the whole village |
 | Sending-budget multiplier: Visitor | `progression.multiplier.visitor` | Progression | decimal | `0` | the whole village |
 | Sending-budget multiplier: Guest | `progression.multiplier.guest` | Progression | decimal | `1` | the whole village |
 | Sending-budget multiplier: Immersant | `progression.multiplier.immersant` | Progression | decimal | `1` | the whole village |
@@ -494,7 +495,7 @@ The DHO slug that voice claims are raised into, from app.hypha.earth. Until this
 
 ## Progression
 
-28 dials. 28 for the whole village.
+29 dials. 29 for the whole village.
 
 ### How often every seat reopens
 
@@ -516,6 +517,21 @@ What it may be set to:
 - `pattern_change` When the season's shape changes. A founding season can run across several turns without reopening every seat each time.
 - `annual` Once a year. One reopening a year, whatever the seasons did.
 - `never` Never. Seats end only on their own term date, or when somebody steps down.
+
+### Most changes one outside batch can propose
+
+How many seats one batch from an outside service can put into a single draft. A village's first import is often its whole structure arriving at once, so the limit starts high. Nothing publishes on a batch's say-so: a steward still reads every line and accepts it before any of it becomes the chart. Lower it once the village is built and imports settle into small changes. A draft somebody builds by hand is never held to it.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.proposal_change_limit` |
+| Type | integer, a whole number |
+| Default | `500` |
+| Range | 1 to 10000 |
+| Counted in | changes |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ### Sending-budget multiplier: Visitor
 
