@@ -46,6 +46,7 @@
  * the other, and no surface should let a member read one number as the other.
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
+import { lostConcurrencyRace } from "../db/concurrency";
 import {
   mintRuleNumberProblem,
   mintRuleValueNumber,
@@ -65,6 +66,7 @@ import { moonOneCycle, villageMoonFor } from "./villageMoon";
 import { numberVar, stringVar } from "./variables";
 import {
   CLAWBACK_SOURCES,
+  lockLedgerAccounts,
   memberAccount,
   pairSiblingKey,
   postClawbackMirror,
@@ -1766,6 +1768,14 @@ export type GratitudeRowPost = (
   noteId: string,
 ) => Promise<{ ok: true; duplicate?: boolean; balance?: number } | { ok: false; error: string; status?: number }>;
 
+/**
+ * Locks the `post` will need, taken right after the giver's row and BEFORE the
+ * first plain read. Pass the ledger accounts the post writes (see
+ * `lockLedgerAccounts` in server/lib/ledger.ts for why the order matters on
+ * MariaDB 11.8 and later). Optional, like `post`.
+ */
+export type GratitudeRowLock = (conn: PoolConnection) => Promise<void>;
+
 export type GratitudeRowResult =
   | {
       ok: true;
@@ -1787,18 +1797,22 @@ export type GratitudeRowResult =
  * one written sentence, and the real error goes to the log where it is useful.
  */
 function unwritableGratitude(err: unknown): string {
-  const code = String((err as any)?.code ?? "");
   console.error("[gratitude] the write failed:", err);
-  if (code === "ER_LOCK_DEADLOCK" || code === "ER_LOCK_WAIT_TIMEOUT") {
+  if (isLockContention(err)) {
     return "The village was busy for a moment, so your thanks did not go through. Nothing was charged. Send it again.";
   }
   return "Your thanks could not be recorded, and nothing was charged. Try again in a moment.";
 }
 
-/** Deadlocks and lock-wait timeouts: the two an identical retry can heal. */
+/**
+ * A lost race that an identical retry can heal: a deadlock, a lock-wait
+ * timeout, or MariaDB's snapshot-isolation conflict. The list lives in
+ * `lostConcurrencyRace` (server/db/concurrency.ts). It was two codes spelled
+ * out here, and on MariaDB 12.3.2 that left 21 of 24 concurrent gives refused
+ * with the sentence for a failure nobody could fix by waiting.
+ */
 function isLockContention(err: unknown): boolean {
-  const code = String((err as any)?.code ?? "");
-  return code === "ER_LOCK_DEADLOCK" || code === "ER_LOCK_WAIT_TIMEOUT";
+  return lostConcurrencyRace(err);
 }
 
 /**
@@ -1831,6 +1845,7 @@ export async function writeGratitudeRow(
   stageMultiplier: number,
   guard: GratitudeRowGuard,
   post?: GratitudeRowPost,
+  lockFirst?: GratitudeRowLock,
 ): Promise<GratitudeRowResult> {
   /*
    * THE RETRY. A rolled-back transaction wrote nothing at all — no note, no
@@ -1841,7 +1856,7 @@ export async function writeGratitudeRow(
    */
   for (let attempt = 1; ; attempt++) {
     try {
-      return await writeGratitudeRowOnce(pool, input, stageMultiplier, guard, post);
+      return await writeGratitudeRowOnce(pool, input, stageMultiplier, guard, post, lockFirst);
     } catch (err) {
       if (!isLockContention(err) || attempt >= 3) {
         return { ok: false, error: unwritableGratitude(err) };
@@ -1857,6 +1872,7 @@ async function writeGratitudeRowOnce(
   stageMultiplier: number,
   guard: GratitudeRowGuard,
   post?: GratitudeRowPost,
+  lockFirst?: GratitudeRowLock,
 ): Promise<GratitudeRowResult> {
   const conn = await pool.getConnection();
   try {
@@ -1900,6 +1916,26 @@ async function writeGratitudeRowOnce(
       await conn.rollback();
       return { ok: false, error: "no such member" };
     }
+
+    /*
+     * THE LEDGER ROWS, BEFORE ANY PLAIN READ.
+     *
+     * The SUM below is this transaction's first plain read, and on MariaDB
+     * 11.8 and later that is the moment its read view is fixed. The post then
+     * locks the recognition faucet's row, which every giver in the village
+     * shares, and writes its balance. Taken in that order, every giver fixed
+     * its view first and queued second, so everyone behind the head of the
+     * queue found the faucet's balance moved since their view and failed with
+     * ER_CHECKREAD. A retry repeats the same order. Measured on MariaDB 12.3.2
+     * on 2026-09-14: 21 of 24 concurrent givers failed with no retry for that
+     * code, and still 12 of 24 with it.
+     *
+     * Locking the post's rows here, after the giver and before the SUM, fixes
+     * the view only once nobody else can move them. The lock order is the one
+     * the post already took (giver, then ledger accounts), only earlier, and
+     * MySQL 8 behaves identically either way.
+     */
+    if (lockFirst) await lockFirst(conn);
 
     /*
      * ONE READ OF THIS GIVER'S CYCLE, TWO LIMITS WEIGHED OFF IT.
@@ -2141,6 +2177,10 @@ export async function give(
       });
       if (!res.ok) return { ok: false, error: res.error ?? "the ledger refused the credit" };
       return { ok: true, duplicate: res.duplicate, balance: res.toBalance };
+    },
+    // The two rows the post above writes, locked before the first plain read.
+    async (conn) => {
+      await lockLedgerAccounts(conn, RECOGNITION_FAUCET, memberAccount(input.toUserId));
     },
   );
 
