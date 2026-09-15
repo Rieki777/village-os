@@ -1,5 +1,5 @@
 /**
- * The three `ballots` statements the stewardship lane makes.
+ * The four `ballots` statements the stewardship lane makes.
  *
  * ── THIS FILE IS NOT THE WHOLE OF THE BALLOTS TABLE, AND SAYS SO ────────────
  *
@@ -14,8 +14,10 @@
  * table it does not own.
  *
  * What this file IS is the enumerable home of the statements
- * `server/lib/stewardship.ts` makes against that table, which are three and
- * are unrelated to closing anything.
+ * `server/lib/stewardship.ts` makes against that table, which are four and
+ * are unrelated to closing anything. The fourth, `carriedUnseatingsOf`, finds
+ * the votes that took a member's seat back, so a veto can say whether its
+ * steward was being voted out when they cast it.
  *
  * ── TWO OF THE THREE ARE HALF OF A PROMISE ABOUT SOMEBODY'S WORDS ───────────
  *
@@ -91,6 +93,41 @@ export async function subjectTypesOnBallots(pool: Pool): Promise<string[]> {
  */
 export async function blankBallotVetoReason(pool: Pool, ballotId: string, stewardId: string): Promise<void> {
   await pool.query("UPDATE ballots SET veto_reason = '' WHERE id = ? AND vetoed_by = ?", [ballotId, stewardId]);
+}
+
+export interface CarriedUnseating {
+  ballotId: string;
+  roleId: string;
+  closedAt: Date | null;
+  landsAt: Date | null;
+}
+
+/**
+ * Every carried vote to take a seat back from one member, on any role.
+ *
+ * `role_unseat` freezes `subject_ref` as `userId@roleId`, so the member half is
+ * matched exactly with `SUBSTRING_INDEX` and never with LIKE, which would read
+ * an underscore in an id as a wildcard. Which of these were still waiting to
+ * land at a given moment is the caller's question (`beingVotedOutAt` in
+ * server/lib/stewardship.ts); the statement only finds them.
+ */
+export async function carriedUnseatingsOf(pool: Pool, userId: string): Promise<CarriedUnseating[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT id, subject_ref, closed_at, lands_at FROM ballots " +
+      "WHERE subject_type = 'role_unseat' AND status = 'passed' AND SUBSTRING_INDEX(subject_ref, '@', 1) = ?",
+    [userId],
+  );
+  const instant = (v: unknown): Date | null =>
+    v === null || v === undefined ? null : v instanceof Date ? v : new Date(String(v));
+  return rows.map((r) => {
+    const ref = String(r.subject_ref);
+    return {
+      ballotId: String(r.id),
+      roleId: ref.slice(ref.indexOf("@") + 1),
+      closedAt: instant(r.closed_at),
+      landsAt: instant(r.lands_at),
+    };
+  });
 }
 
 /**

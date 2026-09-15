@@ -319,6 +319,25 @@ describe("usePathLadders", () => {
     expect(result.current.particulars).toBeNull();
   });
 
+  it("reports a failed read as failed, so a claimed path does not go silent", async () => {
+    withTokenStore();
+    vi.stubGlobal("fetch", async () => {
+      throw new Error("offline");
+    });
+    const { result } = renderHook(() => usePathLadders(["steward"]));
+    await waitFor(() => expect(result.current.failed).toBe(true));
+    expect(result.current.ladders).toBeNull();
+    expect(result.current.particulars).toBeNull();
+  });
+
+  it("does not report a failure when the answer is fine", async () => {
+    withTokenStore();
+    vi.stubGlobal("fetch", async () => ({ ok: true, json: async () => ({ ladders: [], paths: {} }) }) as unknown as Response);
+    const { result } = renderHook(() => usePathLadders(["steward"]));
+    await waitFor(() => expect(result.current.ladders).toEqual([]));
+    expect(result.current.failed).toBe(false);
+  });
+
   /* The route refuses a stranger, so the call has to carry the token. */
   it("carries the bearer token", async () => {
     let auth: string | undefined;

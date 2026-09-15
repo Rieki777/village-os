@@ -83,6 +83,7 @@ import {
   type NodeKind,
 } from "../lib/orgRelations";
 import { captureIntoCurrentPattern } from "../lib/seasonPatterns";
+import { resolveSeatTerm } from "../../shared/seatTerms";
 
 type Deps = Pick<
   AppDeps,
@@ -227,8 +228,12 @@ export function register(app: Express, deps: Deps): void {
   app.post("/api/admin/org/drafts/:id/publish", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const actor = await authedUser(req);
-    const roster = ((await members.all()) as any[]).length;
-    const r = await publishDraft(getPool(), req.params.id, actor?.id ?? null, draftChangeCap(roster));
+    const season = seasonState();
+    const r = await publishDraft(getPool(), req.params.id, actor?.id ?? null, draftChangeCap(), {
+      seasons: season.seasons,
+      currentSeasonId: season.current?.id ?? null,
+      timezone: season.timezone,
+    });
     if (!r.ok) return res.status(409).json({ error: r.error });
     /*
      * TELL THE PEOPLE THE DRAFT SEATED.
@@ -548,40 +553,37 @@ export function register(app: Express, deps: Deps): void {
     if (role.isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
     const actor = await authedUser(req);
     /*
-     * THE TERM, WHICH THIS ROUTE HAS NEVER SENT.
+     * THE TERM, WHICH EVERY SEATING NOW CARRIES (0199).
      *
-     * `seatHolder` has taken `termEndsAt` and written the column since 0049,
-     * and this is the only route in the tree that seats anybody, so
-     * `term_ends_at` has been NULL on every seating every village has ever
-     * made. FOUR readers were dark the whole time: the amber term arc on the
-     * power map, the `seat-term` calendar source, the term branch of the
-     * `term-watch` job, and the term branch of `isLapsed`. One argument.
+     * This route once sent none, so `term_ends_at` was NULL on every seating
+     * and four readers were dark: the amber term arc on the power map, the
+     * `seat-term` calendar source, the term branch of `term-watch`, and the
+     * term branch of `isLapsed`. It then sent one only when asked, and a seat
+     * with no date asked had no end at all.
      *
-     * Read rather than passed through. A date this route cannot parse is a
-     * refusal with the sentence saying so, never a quiet null: a village that
-     * believes it wrote an end date onto a seat, over a row that holds none,
-     * is the shape where the product says something that did not happen.
-     * Left out stays left out, which is a seat held with no end date and is
-     * exactly what every seating on every deployment is today.
+     * Rye ruled on 2026-09-14 that no seat enters without a term, and that a
+     * seat with no date asked ends with the season. `resolveSeatTerm` in
+     * shared/seatTerms.ts decides it, and a date it cannot use is a refusal
+     * with the sentence saying why. `termEndsOn` is a civil date; `termEndsAt`
+     * is this route's older name for the same field and is still read.
      */
-    const askedTerm = req.body?.termEndsAt;
-    let termEndsAt: Date | null = null;
-    if (askedTerm !== undefined && askedTerm !== null && String(askedTerm).trim() !== "") {
-      const parsed = new Date(String(askedTerm));
-      if (Number.isNaN(parsed.getTime())) {
-        return res.status(400).json({
-          error: "That term end date could not be read. Send a date like 2027-03-01, or leave it out for a seat with no end date",
-        });
-      }
-      termEndsAt = parsed;
-    }
+    const askedTerm = req.body?.termEndsOn ?? req.body?.termEndsAt;
+    const season = seasonState();
+    const term = resolveSeatTerm({
+      requestedEndsOn: typeof askedTerm === "string" && /^\d{4}-\d{2}-\d{2}T/.test(askedTerm) ? askedTerm.slice(0, 10) : askedTerm,
+      calendar: { seasons: season.seasons, currentSeasonId: season.current?.id ?? null, timezone: season.timezone },
+      capAtSeasonEnd: false,
+      now: new Date(),
+    });
+    if (!term.ok) return res.status(term.code === "unreadable_date" ? 400 : 409).json({ error: term.error, code: term.code });
     const r = await seatHolder(getPool(), req.params.id, {
       userId: req.body?.userId ?? null,
       displayName: req.body?.displayName ?? null,
       focus: req.body?.focus ?? null,
       note: req.body?.note ?? null,
-      seasonId: seasonState().current?.id ?? null,
-      termEndsAt,
+      seasonId: term.seasonId,
+      termEndsAt: term.endsAt,
+      termFollowsSeason: term.followsSeason,
       grantedBy: actor?.id ?? null,
       // `seatHolder` refuses `isAgent` together with a `userId`, which is the
       // one refusal that keeps a seat-plane agent out of both the settlement

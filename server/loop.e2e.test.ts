@@ -2019,6 +2019,14 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const peerNow = await api("GET", "/api/admin/players", undefined, founderToken);
     const peerRow = peerNow.json.find((p: any) => p.id === peerId);
     expect(peerRow).toBeTruthy();
+    // Contact opens at Member, and the doer is a guest whose consented quest
+    // paid them. Pay lifts only somebody the village has let in
+    // (server/lib/admission.ts), so the village lets them in first, the way a
+    // steward does. Without this the opt-out refusal below would be the gate
+    // refusing a guest, and would prove nothing about the opt-out.
+    const letIn = await api("POST", `/api/members/${doerId}/super-vouch`, {}, founderToken);
+    expect(letIn.status, JSON.stringify(letIn.json)).toBe(200);
+    expect(letIn.json.admitted).toBe(true);
     await api("PUT", "/api/game/preferences", { contactable: false }, peerToken);
     const refused = await api("POST", "/api/map/contact", { toUserId: peerId, message: "hello" }, doerToken);
     expect(refused.status).toBe(403);

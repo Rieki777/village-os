@@ -14,6 +14,7 @@ import { useHypha } from "@/modules/ModuleProvider";
 import { authToken } from "@/lib/gameApi";
 import { ExampleChip } from "@/components/ExamplesBanner";
 import SeatHistory from "./SeatHistory";
+import SeatTermField from "./SeatTermField";
 import type { PowerCircle, PowerData, PowerHolder, PowerSeat } from "./types";
 import { daysUntil } from "./types";
 
@@ -103,6 +104,8 @@ export default function HolderCard({
   const [raising, setRaising] = useState(false);
   const [message, setMessage] = useState("");
   const [note, setNote] = useState("");
+  /** The end date the hand asks for; empty means "with the season" (0199). */
+  const [termEndsOn, setTermEndsOn] = useState("");
   const [status, setStatus] = useState("");
 
   // Selection changed: clear in-flight composer state so a half-written note
@@ -112,6 +115,7 @@ export default function HolderCard({
     setRaising(false);
     setMessage("");
     setNote("");
+    setTermEndsOn("");
     setStatus("");
   }, [seat.id]);
 
@@ -154,7 +158,7 @@ export default function HolderCard({
     fetch(`/api/map/roles/${seat.id}/raise-hand`, {
       method: "POST",
       headers: { ...headers(), "Content-Type": "application/json" },
-      body: JSON.stringify({ note }),
+      body: JSON.stringify({ note, ...(termEndsOn ? { termEndsOn } : {}) }),
     })
       .then(async (r) => {
         const d = await r.json();
@@ -162,6 +166,7 @@ export default function HolderCard({
         setStatus("Hand raised. The founding team will be in touch.");
         setRaising(false);
         setNote("");
+        setTermEndsOn("");
       })
       .catch((e) => setStatus(e.message));
   };
@@ -296,6 +301,10 @@ export default function HolderCard({
               placeholder="Why this role calls to you (optional)"
               className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background"
             />
+            {/* Every seat has a term (0199). The hand carries the one asked
+                for, and the sentence says when the seat would end before the
+                hand goes up. */}
+            <SeatTermField value={termEndsOn} onChange={setTermEndsOn} label="End date for your seat (optional)" />
             <div className="flex gap-2">
               <button type="button" onClick={raiseHand} className="text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium">
                 Raise my hand
