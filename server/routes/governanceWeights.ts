@@ -49,10 +49,11 @@ type Deps = Pick<
   | "firstName"
   | "notify"
   | "weightModeNow"
+  | "isPresent"
 >;
 
 export function register(app: Express, deps: Deps): void {
-  const { isAdmin, authedUser, adminActor, getPool, members, firstName, notify, weightModeNow } = deps;
+  const { isAdmin, authedUser, adminActor, getPool, members, firstName, notify, weightModeNow, isPresent } = deps;
 
   /**
    * AFTER THE BIRTHING, EVERY MEMBER'S WEIGHT IS THE VILLAGE'S TO SET.
@@ -106,7 +107,7 @@ export function register(app: Express, deps: Deps): void {
     });
   });
 
-  /** The allocation surface: every real member with their current weight. */
+  /** The allocation surface: every present member (memberPresence.ts) with their current weight. */
   app.get("/api/admin/governance/weights", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const snapshot = weightModeNow();
@@ -116,7 +117,7 @@ export function register(app: Express, deps: Deps): void {
     // read after a save as it was on the read before it.
     const rows = sortMembersByName(
       ((await members.all()) as any[])
-        .filter((u) => !isExampleUser(u) && u.passwordHash)
+        .filter((u) => isPresent(u))
         .map((u) => ({
           id: String(u.id),
           name: String(u.name),

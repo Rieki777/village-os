@@ -80,13 +80,14 @@ import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader
 import { applyChangeSet, applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
 import { landingRow } from "./lib/applyDue";
 import { notifyRollRows, type RollNotice } from "./lib/ballotNotices";
+import { isPresentMember, presenceTest } from "./lib/memberPresence";
 import { runSeasonReminders } from "./lib/seasonReminders";
 import { forgetStewardActs, holdingHasLapsed, recordTermStarted, runTermWatch, setVetoWindowCheck, STEWARD_VETO, stewardMailRefusal, termWatchLookaheadDays } from "./lib/stewardship";
 import { freezeSeatTerm } from "./repos/ballotSeatTerms";
 import { termForCarriedSeat } from "./lib/seatTermLanding";
 import { raisedHandTerm } from "./lib/raisedHandTerm";
 import { resolveSeatTerm, type SeatCalendar } from "../shared/seatTerms";
-import { decideRoleCapabilities, stewardSeatRefusal } from "./lib/roleGrants";
+import { decideRoleCapabilities, liveHolderCount, stewardSeatRefusal } from "./lib/roleGrants";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
 import { type ConsentActor, register as registerQuestClaimRoutes } from "./routes/questClaims";
 import { register as registerHousingRoutes } from "./routes/housing";
@@ -3886,6 +3887,7 @@ const notifyDeps: NotifyDeps = {
   // The spine's contract wants `Promise<void>`; the sender now reports what it
   // did, and this caller has no use for the report.
   sendEmail: async (opts) => { await sendResendEmail(opts); },
+  isPresent: presenceTest(AUTH_TOKEN_SECRET),
   origin: deploymentOrigin,
   projectName: () => mergedConfig().project.name,
 };
@@ -5490,7 +5492,7 @@ async function startServer() {
 
   // Season-end reminders to the whole village: `runSeasonReminders` in server/lib/seasonReminders.ts.
   registerJob("season-reminders", 12 * 60 * 60 * 1000, async () => {
-    const r = await runSeasonReminders({ season: seasonState(), members: await members.all(), isAdmin: (u) => adminReaches(u?.role), notify });
+    const r = await runSeasonReminders({ season: seasonState(), members: await members.all(), isPresent: notifyDeps.isPresent, isAdmin: (u) => adminReaches(u?.role), notify });
     return r.due ? `${r.told} of ${r.recipients} told, ${r.due.daysLeft} day(s) before ${r.due.seasonId} turns` : undefined;
   });
 
@@ -5949,7 +5951,7 @@ async function startServer() {
     }
     const exchangeCfg = (moduleConfig("exchange") as any) ?? {};
     const adminsWithPasswords = (await members.all()).filter(
-      (u: any) => (u.role === "admin" || u.role === "founder") && u.passwordHash,
+      (u: any) => (u.role === "admin" || u.role === "founder") && isPresentMember(u, AUTH_TOKEN_SECRET),
     );
     const swapWarnings = await assertSwapFirewalls(getPool(), {
       tradingEnabled: !!exchangeCfg.tradingEnabled,
@@ -8988,7 +8990,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // Funds-bearing modules refuse to enable while no per-admin identity with
     // a real credential exists (invariants #11-#12).
     const adminsWithPasswords = (await members.all()).filter(
-      (u: any) => (u.role === "admin" || u.role === "founder") && u.passwordHash,
+      (u: any) => (u.role === "admin" || u.role === "founder") && isPresentMember(u, AUTH_TOKEN_SECRET),
     );
     const result = await setModuleLifecycle(
       req.params.id,
@@ -10778,6 +10780,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
         }
       },
       noteUsage: (call, userId) => noteAssistantUsage("introductions", DEFAULT_ASSISTANT_MODEL, call, userId),
+      isPresent: notifyDeps.isPresent,
       // The 0081 posture: a deterministic run is still a row, so the metric
       // COUNT(*) WHERE mode='introductions' AND path <> 'deterministic' has a
       // denominator anyone can check later.
@@ -10884,7 +10887,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
   /** The open board. Signed out sees public rows; signed in adds members rows. */
   app.get("/api/intents/board", async (req, res) => {
     const user = await authedUser(req);
-    res.json({ board: await listBoard(getPool(), user?.id ?? null) });
+    res.json({ board: await listBoard(getPool(), user?.id ?? null, notifyDeps.isPresent) });
   });
 
   /** "You could offer…" chips, computed on read, never stored. */
@@ -11346,7 +11349,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
 
     const all = await members.all();
     const recipients = (all as any[]).filter(
-      (u) => u.passwordHash && !String(u.email ?? "").endsWith("@anonymized.invalid"),
+      (u) => isPresentMember(u, AUTH_TOKEN_SECRET),
     );
     const projectName = mergedConfig().project.name;
     const summary = await runWeeklyBrief(notifyDeps, {
@@ -12513,7 +12516,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     checks: {
       "admin-identities": async () => {
         const admins = (await members.all()).filter(
-          (u: any) => (u.role === "admin" || u.role === "founder") && u.passwordHash,
+          (u: any) => (u.role === "admin" || u.role === "founder") && isPresentMember(u, AUTH_TOKEN_SECRET),
         );
         return admins.length > 0
           ? {
@@ -12528,7 +12531,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
           : { state: "missing" as const, detail: "No per-admin identities yet. The shared password cannot attribute or revoke anyone" };
       },
       "founder-appointed": async () => {
-        const founders = (await members.all()).filter((u: any) => u.role === "founder" && u.passwordHash);
+        const founders = (await members.all()).filter((u: any) => u.role === "founder" && isPresentMember(u, AUTH_TOKEN_SECRET));
         if (founders.length > 0) {
           return { state: "ok" as const, detail: `Founder: ${founders.map((f: any) => f.name ?? f.handle ?? f.id).slice(0, 3).join(", ")}` };
         }
@@ -13714,10 +13717,10 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
           heldBy: h ? { roleId: h.holderRoleId, roleName: h.holderRoleName, movedAt: h.movedAt, byBallot: !!h.movedByBallotId } : null,
         };
       }),
-      // Roles and what each already carries, so the panel can say which ones
-      // could hold a power today without a second edit first.
+      // Roles, what each carries, and how many hold each as the gate counts them (lapsed terms
+      // out), so the panel can say who could hold a power today and warn when nobody holds a role.
       roles: rolesRepo.all().map((r: any) => ({
-        id: r.id, name: r.name ?? r.id, capabilities: (r.capabilities ?? []) as string[], isExample: !!r.isExample,
+        id: r.id, name: r.name ?? r.id, capabilities: (r.capabilities ?? []) as string[], isExample: !!r.isExample, holderCount: liveHolderCount(loadRoleHolders(), r.id),
       })),
       notYetWired: NOT_YET_WIRED,
     });
@@ -18155,14 +18158,14 @@ Send an empty drafts array when you are still listening. A role payload is {name
     },
   };
 
-  app.post("/api/assistant/proposal", async (req, res) => {
+  app.post("/api/assistant/proposal", async (req, res) => { // limit-ok: bounded two calls down, in callAssistant (server/lib/assistant.ts), 30 an hour per IP then this mode's day budget, before any provider call; a refusal that bought nothing writes no usage row
     const kind = String(req.body?.kind ?? "work-with-us");
     if (!PROPOSAL_KINDS[kind]) return res.status(400).json({ error: "unknown proposal kind" });
     return handleProposalAssistant(req, res, kind);
   });
 
   // Kept so the existing Work With Us page keeps working unchanged.
-  app.post("/api/assistant/work-with-us", async (req, res) => handleProposalAssistant(req, res, "work-with-us"));
+  app.post("/api/assistant/work-with-us", async (req, res) => handleProposalAssistant(req, res, "work-with-us")); // limit-ok: same engine as /api/assistant/proposal, bounded in callAssistant (30 an hour per IP, then the mode's day budget)
 
   async function handleProposalAssistant(req: express.Request, res: express.Response, kind: string) {
     // Every guard (key, per-IP burst, this mode's day) lives in callAssistant
@@ -18467,7 +18470,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     next();
   };
 
-  app.post("/api/admin/investor-docs/upload", adminOnly, upload.single("file"), async (req, res) => {
+  app.post("/api/admin/investor-docs/upload", adminOnly, upload.single("file"), async (req, res) => { // limit-ok: adminOnly is mounted as middleware (a reference, not a call the gate can see) and answers 401 before multer writes a byte
     if (!req.file) {
       return res.status(400).json({ error: "Missing file" });
     }
@@ -22274,26 +22277,20 @@ ${inner}
    * key no deny reaches and the gate ignores one. Nothing about this function
    * changed; what changed is the answer the gate gives it.
    *
-   * WHO LEAVING TAKES OUT OF THE POOL, WHICH IS THE OTHER HALF AND IS
-   * LEGITIMATE. The `passwordHash` filter is doing that work and it is
-   * load-bearing rather than a tidy-up: `anonymizeMember` clears the hash when
-   * a member leaves through either door (`DELETE /api/admin/players/:id` or
-   * `POST /api/profile/delete-account`), so a departed member is not a
-   * candidate for any roll built afterwards. That matters because quorum is
-   * measured against `ballots.total_weight`, the sum of the roll frozen at
-   * open: a departed member left in the pool would count toward quorum
-   * forever and every proposal would get harder to pass as the village aged.
-   * `seatRecord.routes.e2e.test.ts` measures the drop against a control.
+   * WHO IS IN THE POOL: `isPresentMember` (server/lib/memberPresence.ts), and it
+   * is load-bearing. A departed member is a tombstone and drops out of every
+   * roll built afterwards, which matters because quorum is measured against the
+   * roll frozen at open (`seatRecord.routes.e2e.test.ts`). This filtered on
+   * `passwordHash` until 2026-09-14, which also dropped every member who joins
+   * through Google (`googleMemberVote.routes.e2e.test.ts`).
    *
    * The gap that is NOT covered: a member who stops taking part but keeps
    * their account is still in the pool, because "left the village" has no
    * representation here other than deleting the account. Confirming a
    * departure by vote is a separate piece of work.
-   *
-   * Example users are excluded: they are content, never people.
    */
   async function buildElectorate(): Promise<Array<{ userId: string; weight: number }>> {
-    const candidates = (await members.all()).filter((u: any) => !isExampleUser(u) && u.passwordHash);
+    const candidates = (await members.all()).filter((u: any) => isPresentMember(u, AUTH_TOKEN_SECRET));
     const eligible: any[] = [];
     for (const u of candidates) {
       const ctx = await capabilityCtx(u);
@@ -25833,7 +25830,7 @@ ${inner}
   // requireModule("governance") mounted above. Express matches in
   // registration order.
   registerGovernanceWeightRoutes(app, {
-    isAdmin, authedUser, adminActor, getPool, members, firstName, notify, weightModeNow,
+    isAdmin, authedUser, adminActor, getPool, members, firstName, notify, weightModeNow, isPresent: notifyDeps.isPresent,
   });
   registerGovernanceWizardRoutes(app, { authedUser, getPool, capabilityCtx, weightModeNow });
   registerDelegationRoutes(app, { authedUser, getPool, capabilityCtx, members, firstName });

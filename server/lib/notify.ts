@@ -281,6 +281,13 @@ export interface NotifyDeps {
   /** Absolute origin for links in emails, e.g. https://amora.regencivics.earth */
   origin(): string;
   projectName(): string;
+  /**
+   * Is this recipient a present person. The host binds the ONE predicate
+   * (server/lib/memberPresence.ts) to its session secret and hands it over, so
+   * a tombstone or an unclaimed account gets no mail and no bell, and a member
+   * who signs in with Google and has no password still does.
+   */
+  isPresent(member: any): boolean;
 }
 
 export interface NotifyResult {
@@ -340,7 +347,7 @@ function emailShell(projectName: string, inner: string): string {
 
 async function maybeEmailImmediate(deps: NotifyDeps, n: NotifyInput & { id: string }) {
   const user = await deps.memberById(n.userId);
-  if (!user?.email || !user.passwordHash) return; // tombstones and claim-pending accounts get no email
+  if (!user?.email || !deps.isPresent(user)) return; // tombstones and unclaimed accounts get no email
   const prefs = resolveNotifyPrefs(user.prefs);
   if (emailCadenceFor(n.type, prefs) !== "immediate") return;
   /*
@@ -399,7 +406,7 @@ export async function runNotificationDigest(deps: NotifyDeps): Promise<{ users: 
   let included = 0;
   for (const [userId, list] of Array.from(byUser.entries())) {
     const user = await deps.memberById(userId);
-    if (!user?.email || !user.passwordHash) continue;
+    if (!user?.email || !deps.isPresent(user)) continue;
     const prefs = resolveNotifyPrefs(user.prefs);
     if (prefs.emailsOff) continue;
     const daily = list.filter((r) => emailCadenceFor(String(r.type), prefs) === "daily");
@@ -503,7 +510,7 @@ export async function runWeeklyBrief(deps: NotifyDeps, opts: RunWeeklyBriefOpts)
     if (!inserted.fresh) continue;
     summary.fresh += 1;
 
-    if (!prefs.emailsOff && user.email && user.passwordHash && (await underDailyCap(deps.pool, user.id))) {
+    if (!prefs.emailsOff && user.email && deps.isPresent(user) && (await underDailyCap(deps.pool, user.id))) {
       try {
         await deps.sendEmail({
           to: [user.email],

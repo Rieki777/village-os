@@ -39,6 +39,7 @@ import { indexDoc, tokenize, type Indexed } from "./knowledge";
 import { contactCountsToday, insertContactRequest } from "./map";
 import { openDirect } from "./messaging";
 import { recordEvent } from "./events";
+import type { PresenceFacts, PresenceTest } from "./memberPresence";
 
 // ── Row shapes ───────────────────────────────────────────────────────────────
 
@@ -144,6 +145,8 @@ export interface IntentsDeps {
       circleId: string | null;
     }>
   >;
+  /** Is an intent's owner a present person: the host's bound predicate (server/lib/memberPresence.ts). */
+  isPresent: PresenceTest;
   vars: {
     recipientDailyCap(): number;
     matchFloor(): number;
@@ -765,6 +768,38 @@ async function ownerFactsFor(pool: Pool, deps: Pick<IntentsDeps, "orgSeats">, us
   return out;
 }
 
+/**
+ * WHO AN INTENT'S OWNER MUST BE: a present person (server/lib/memberPresence.ts).
+ *
+ * These queries filtered on `password_hash <> ''`, which hid every member who
+ * joins through Google (an empty hash, by design) from the board and from
+ * matching. SQL cannot check a Google link's signature, so each query narrows
+ * to owners who COULD be present, a password or any link at all, selects the
+ * owner columns, and `isPresent` decides on the row.
+ */
+const OWNER_PRESENCE_COLUMNS =
+  "u.email AS owner_email, u.password_hash AS owner_password_hash, u.is_example AS owner_is_example, u.prefs AS owner_prefs";
+const OWNER_MAY_BE_PRESENT =
+  "u.is_example = 0 AND (u.password_hash <> '' OR JSON_CONTAINS_PATH(u.prefs, 'one', '$.googleLink'))";
+
+function ownerPresenceFacts(r: RowDataPacket): PresenceFacts {
+  let prefs: any = r.owner_prefs ?? {};
+  if (typeof prefs === "string") {
+    try {
+      prefs = JSON.parse(prefs);
+    } catch {
+      prefs = {};
+    }
+  }
+  return {
+    id: String(r.user_id ?? ""),
+    email: String(r.owner_email ?? ""),
+    passwordHash: String(r.owner_password_hash ?? ""),
+    isExample: Number(r.owner_is_example) === 1,
+    prefs,
+  };
+}
+
 /** True while the member's policy pauses them. */
 function pausedNow(policy: IntentPolicyRow | null): boolean {
   return !!policy?.pausedUntil && new Date(policy.pausedUntil).getTime() > Date.now();
@@ -783,13 +818,13 @@ function topicsAllow(policy: IntentPolicyRow | null, topics: string[]): boolean 
  */
 async function gatherCandidates(
   pool: Pool,
-  deps: Pick<IntentsDeps, "orgSeats">,
+  deps: Pick<IntentsDeps, "orgSeats" | "isPresent">,
   seekerIntent: IntentRow,
 ): Promise<{ seeker: SeekerInput; candidates: CandidateInput[] } | null> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT i.* FROM member_intents i JOIN users u ON u.id = i.user_id " +
+    `SELECT i.*, ${OWNER_PRESENCE_COLUMNS} FROM member_intents i JOIN users u ON u.id = i.user_id ` +
       "WHERE i.lifecycle = 'active' AND i.tier <> 'private' AND i.user_id <> ? " +
-      "AND u.is_example = 0 AND u.password_hash <> '' " +
+      `AND ${OWNER_MAY_BE_PRESENT} ` +
       "AND NOT EXISTS (SELECT 1 FROM intent_opportunities o WHERE (o.intent_a_id = i.id OR o.intent_b_id = i.id) " +
       "AND o.status IN ('proposed','a_accepted','b_accepted')) " +
       // A pair that has met before, whatever became of it, never re-proposes:
@@ -800,7 +835,7 @@ async function gatherCandidates(
       "ORDER BY i.updated_at DESC LIMIT 200",
     [seekerIntent.userId, seekerIntent.id, seekerIntent.id],
   );
-  const candidateIntents = rows.map(rowToIntent);
+  const candidateIntents = rows.filter((r) => deps.isPresent(ownerPresenceFacts(r))).map(rowToIntent);
   const owners = Array.from(new Set([seekerIntent.userId, ...candidateIntents.map((i) => i.userId)]));
   const facts = await ownerFactsFor(pool, deps, owners);
 
@@ -1306,15 +1341,15 @@ export interface BoardEntry {
  * added for signed-in viewers. First names only. Incognito and private rows
  * are excluded in the query itself, not filtered after.
  */
-export async function listBoard(pool: Pool, viewerId: string | null): Promise<BoardEntry[]> {
+export async function listBoard(pool: Pool, viewerId: string | null, isPresent: PresenceTest): Promise<BoardEntry[]> {
   const tiers = viewerId ? ["public", "members"] : ["public"];
   const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT i.*, u.name AS owner_name FROM member_intents i JOIN users u ON u.id = i.user_id " +
-      "WHERE i.lifecycle = 'active' AND i.tier IN (?) AND u.is_example = 0 AND u.password_hash <> '' " +
+    `SELECT i.*, u.name AS owner_name, ${OWNER_PRESENCE_COLUMNS} FROM member_intents i JOIN users u ON u.id = i.user_id ` +
+      `WHERE i.lifecycle = 'active' AND i.tier IN (?) AND ${OWNER_MAY_BE_PRESENT} ` +
       "ORDER BY i.created_at DESC LIMIT 100",
     [tiers],
   );
-  return rows.map((r) => {
+  return rows.filter((r) => isPresent(ownerPresenceFacts(r))).map((r) => {
     const intent = rowToIntent(r);
     return {
       id: intent.id,
@@ -1549,13 +1584,14 @@ export async function runIntentsSweep(pool: Pool, deps: IntentsDeps): Promise<Sw
   // The matching pass. One budget question for the whole run.
   const allowModel = !(await deps.budgetNearlySpent());
   const [poolRows] = await pool.query<RowDataPacket[]>(
-    "SELECT i.id FROM member_intents i JOIN users u ON u.id = i.user_id " +
-      "WHERE i.lifecycle = 'active' AND i.tier <> 'private' AND u.is_example = 0 AND u.password_hash <> '' " +
+    `SELECT i.id, i.user_id, ${OWNER_PRESENCE_COLUMNS} FROM member_intents i JOIN users u ON u.id = i.user_id ` +
+      `WHERE i.lifecycle = 'active' AND i.tier <> 'private' AND ${OWNER_MAY_BE_PRESENT} ` +
       "AND NOT EXISTS (SELECT 1 FROM intent_opportunities o WHERE (o.intent_a_id = i.id OR o.intent_b_id = i.id) " +
       "AND o.status IN ('proposed','a_accepted','b_accepted')) " +
       "ORDER BY i.updated_at ASC LIMIT 60",
   );
   for (const r of poolRows) {
+    if (!deps.isPresent(ownerPresenceFacts(r))) continue;
     const result = await matchIntent(pool, deps, String(r.id), { clientIp: "intents-sweep", allowModel });
     if (result.ran) summary.matchRuns += 1;
   }
