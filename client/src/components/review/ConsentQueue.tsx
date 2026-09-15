@@ -8,12 +8,13 @@
  * round. The only screen for it was `QuestClaimsTab` in Admin.tsx, behind
  * `AdminGate`, so a steward who was not an admin was rung by the submit bell to
  * a page that refused them. The governance lane's reading (2026-09-14) is that
- * consent's home is this page, beside the other things a steward decides.
+ * consent's home is this page, beside the other things a steward decides, and
+ * that tab is only a door to it now.
  *
  * ── THE BOX OPENS ON A NUMBER THE SERVER WILL TAKE ───────────────────────
  *
- * The admin panel's box opens at a hardcoded 50, and under the shipped `posted`
- * mode the first press on a quest paying 100 to 200 is a certain 409. Here each
+ * The admin panel's box opened at a hardcoded 50, and under the shipped `posted`
+ * mode the first press on a quest paying 100 to 200 was a certain 409. Here each
  * claim arrives with `bounds` (`consentBounds`, server/lib/questConsent.ts), the
  * box opens on its floor, and the button asks `canGrant`
  * (shared/questConsentBounds.ts) before anybody presses. The grid in
