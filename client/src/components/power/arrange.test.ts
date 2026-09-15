@@ -1,8 +1,9 @@
 /**
  * Arrange mode's pure half: what a drop does to the picture, when it is
- * refused, and the order publishing writes the moves in.
+ * refused, the order publishing writes the moves in, and what comes off the
+ * list when the published village changes under it.
  *
- * The case worth reading twice is the last describe block. A set of drops can
+ * The case worth reading twice is the publish-order block. A set of drops can
  * be a good final shape and still pass through a loop if written in the order
  * they were made, and the server checks a draft one move at a time. A drop that
  * the map accepted would then be refused at Publish, which reads as the map
@@ -10,7 +11,15 @@
  */
 import { describe, expect, it } from "vitest";
 import { parentingRefusal } from "@shared/circleView";
-import { addMove, describeMove, dropRefusal, publishOrder, withMoves, type PendingMove } from "./arrange";
+import {
+  addMove,
+  describeMove,
+  dropRefusal,
+  publishOrder,
+  settleAgainst,
+  withMoves,
+  type PendingMove,
+} from "./arrange";
 
 const c = (id: string, parentCircleId: string | null = null, extra: Record<string, unknown> = {}) => ({
   id,
@@ -110,5 +119,52 @@ describe("the order publishing writes the moves in", () => {
   it("keeps the order made when it is already clean", () => {
     const made: PendingMove[] = [{ circleId: "web", parentId: "care" }, { circleId: "care", parentId: null }];
     expect(publishOrder(village, made)).toEqual(made);
+  });
+});
+
+describe("a pending list when the published village changes under it", () => {
+  it("hands back the same list when every move still fits, so nothing re-renders", () => {
+    const moves: PendingMove[] = [{ circleId: "web", parentId: "care" }];
+    const r = settleAgainst(village, moves);
+    expect(r.kept).toBe(moves);
+    expect(r.dropped).toEqual([]);
+  });
+
+  it("takes off a move the village already made true, without calling it refused", () => {
+    // Somebody else, or an earlier publish, already put web inside care.
+    const now = withMoves(village, [{ circleId: "web", parentId: "care" }]);
+    const r = settleAgainst(now, [{ circleId: "web", parentId: "care" }]);
+    expect(r.kept).toEqual([]);
+    expect(r.dropped).toEqual([{ move: { circleId: "web", parentId: "care" }, words: null }]);
+  });
+
+  it("takes off a move that now closes a loop, in words, and keeps the rest in the order made", () => {
+    // Pending, both sound when dropped: art to the top, dev inside care. Then
+    // somebody puts care inside web, which sits inside dev, so dev inside care
+    // is a loop in any order, while art to the top is untouched by it.
+    const withArt = [...village, c("art", "gcc")];
+    const now = withMoves(withArt, [{ circleId: "care", parentId: "web" }]);
+    const made: PendingMove[] = [{ circleId: "art", parentId: null }, { circleId: "dev", parentId: "care" }];
+    const r = settleAgainst(now, made);
+    expect(r.kept).toEqual([{ circleId: "art", parentId: null }]);
+    expect(r.dropped).toHaveLength(1);
+    expect(r.dropped[0].move).toEqual({ circleId: "dev", parentId: "care" });
+    expect(r.dropped[0].words).toMatch(/^DEV moves inside CARE: .*already inside/);
+  });
+
+  it("keeps a move that only looked like a loop, because another move in the list undoes it", () => {
+    // care inside web puts dev inside care in a loop, but care to the top is in
+    // the same list, and publishing it first clears the way.
+    const now = withMoves(village, [{ circleId: "care", parentId: "web" }]);
+    const made: PendingMove[] = [{ circleId: "dev", parentId: "care" }, { circleId: "care", parentId: null }];
+    const r = settleAgainst(now, made);
+    expect(r.kept).toBe(made);
+  });
+
+  it("takes off a move whose circle has gone", () => {
+    const now = village.filter((x) => x.id !== "web");
+    const r = settleAgainst(now, [{ circleId: "web", parentId: "care" }, { circleId: "care", parentId: null }]);
+    expect(r.kept).toEqual([{ circleId: "care", parentId: null }]);
+    expect(r.dropped[0].words).toMatch(/no longer on the map/);
   });
 });

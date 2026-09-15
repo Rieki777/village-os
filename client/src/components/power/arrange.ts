@@ -9,9 +9,13 @@
  *
  * Every refusal comes from the SAME rules the server applies
  * (`parentingRefusal`, shared/circleView.ts), run against the picture AS THE
- * PENDING MOVES LEAVE IT. The map never lets a person drop a circle where
- * publishing would refuse it, and two drops that close a loop between them are
- * refused at the second drop, while somebody is looking, and not at Publish.
+ * PENDING MOVES LEAVE IT. Two drops that close a loop between them are refused
+ * at the second drop, while somebody is looking, and not at Publish.
+ *
+ * The published village can still change under a list that was sound when it
+ * was made: an Undo, another admin, a publish that already made a move true.
+ * `settleAgainst` takes those moves off again, so the list the bar offers to
+ * publish is always one that publishes.
  */
 import { parentingRefusal, type CircleLink } from "@shared/circleView";
 
@@ -67,8 +71,8 @@ export function addMove(live: Circle[], moves: PendingMove[], move: PendingMove)
  * perfectly good final shape and still loop part way if written in the order
  * they were made: X goes inside Y while Y is still inside X, and only the next
  * move takes Y out. So each step here takes the first remaining move that is
- * valid against the picture so far. If none is, the rest go in as made and the
- * server's preview says why, which is honest and not something a drop can reach.
+ * valid against the picture so far. If none is, the rest go in as made, and
+ * `settleAgainst` is what keeps such a list from ever reaching Publish.
  */
 export function publishOrder(live: Circle[], moves: PendingMove[]): PendingMove[] {
   const ordered: PendingMove[] = [];
@@ -82,6 +86,41 @@ export function publishOrder(live: Circle[], moves: PendingMove[]): PendingMove[
     picture = withMoves(picture, [next]);
   }
   return ordered;
+}
+
+/**
+ * The moves that still fit the published village, in the order they were made,
+ * and the ones that no longer do.
+ *
+ * Each move is checked in publish order against the picture the kept moves
+ * before it leave, the way the server applies a draft. A move the village has
+ * already made true comes off without words; a move that is now refused comes
+ * off with the refusal. When nothing comes off, the SAME array comes back, so a
+ * caller holding it in state does not re-render for nothing.
+ */
+export function settleAgainst(
+  live: Circle[],
+  moves: PendingMove[],
+): { kept: PendingMove[]; dropped: Array<{ move: PendingMove; words: string | null }> } {
+  const keep = new Set<PendingMove>();
+  const dropped: Array<{ move: PendingMove; words: string | null }> = [];
+  const applied: PendingMove[] = [];
+  for (const m of publishOrder(live, moves)) {
+    const circle = live.find((c) => c.id === m.circleId);
+    if (circle && (circle.parentCircleId ?? null) === m.parentId) {
+      dropped.push({ move: m, words: null });
+      continue;
+    }
+    const refused = dropRefusal(live, applied, m.circleId, m.parentId);
+    if (refused) {
+      dropped.push({ move: m, words: `${describeMove(live, m)}: ${refused}` });
+      continue;
+    }
+    applied.push(m);
+    keep.add(m);
+  }
+  if (!dropped.length) return { kept: moves, dropped };
+  return { kept: moves.filter((m) => keep.has(m)), dropped };
 }
 
 /** A move in the words the Arrange bar lists it in. */

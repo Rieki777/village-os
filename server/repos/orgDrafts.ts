@@ -49,7 +49,7 @@
  * statements live here, while the JSON policy they serve stays beside the
  * code that decides those shapes.
  */
-import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 
 /**
  * One column, and it is the only one either statement here needs.
@@ -130,4 +130,31 @@ export async function rewriteDraftChangePeople(
     "UPDATE org_draft_changes SET payload = ?, before_json = ? WHERE id = ?",
     [payload, beforeJson, changeId],
   );
+}
+
+/*
+ * WHERE EVERY CIRCLE SITS, for a draft preview that moves circles (0208).
+ *
+ * Read on the connection the caller passes. Inside a publish that is the
+ * connection of the transaction itself, so the preview checks the very rows
+ * the moves then change.
+ */
+export async function readCirclesForPreview(conn: Pool | PoolConnection): Promise<any[]> {
+  const [rows]: any = await conn.query("SELECT id, name, parent_circle_id, is_example FROM circles");
+  return rows as any[];
+}
+
+/*
+ * THE CIRCLES COUNTER, LOCKED FIRST in every publish and every revert.
+ *
+ * A circle form save (replaceAll in server/repos/store-db.ts) takes this row
+ * FOR UPDATE before it touches a circle, while a draft moving a circle took the
+ * circle row first and this counter after. Those two orders deadlock together,
+ * and one admin is shown a raw MySQL error. Taking the counter first gives both
+ * writers one order: a form saved at the same moment waits for the publish,
+ * and every read the publish makes after this sees what that save committed. A
+ * draft with no move in it pays one small locking read.
+ */
+export async function lockCirclesCounter(conn: PoolConnection): Promise<void> {
+  await conn.query("SELECT version FROM collection_versions WHERE collection = ? FOR UPDATE", ["circles"]);
 }

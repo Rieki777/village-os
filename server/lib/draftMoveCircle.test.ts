@@ -11,7 +11,10 @@
  *     at preview. No single-row check can see that, and a loop drew an empty
  *     map;
  *   - revert puts a circle back where it sat, and refuses when putting it back
- *     would now close a loop because the village moved on after the publish.
+ *     would now close a loop, when the circle has moved again since (undoing
+ *     would throw that later move away), or when the circle is gone;
+ *   - a circle whose id is as long as an id can be still fits in a change,
+ *     because the change names it with a prefix.
  *
  * No TEST_DATABASE_URL and the suite skips loudly (harness rule).
  */
@@ -152,5 +155,45 @@ describe.skipIf(!configured)("a draft that moves circles", () => {
     expect(r.ok).toBe(false);
     expect(!r.ok && r.error).toContain("cannot be undone");
     expect(await parentOf("web"), "a refused revert writes nothing").toBeNull();
+  });
+
+  it("refuses to undo a move when the circle has moved again since, and writes nothing", async () => {
+    // Published: the Web Guild into the General Circle. Then a later draft, or
+    // the admin form, moves it on to the top of the village. Putting it "back"
+    // inside Development would throw that later move away while the later
+    // draft went on saying it was published.
+    const id = await draftOf([["web", "gcc"]]);
+    expect((await publishDraft(pool, id, "u-steward")).ok).toBe(true);
+    await pool.query("UPDATE circles SET parent_circle_id = NULL WHERE id = ?", ["web"]); // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
+
+    const r = await revertDraft(pool, id);
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.error).toContain("moved again");
+    expect(await parentOf("web"), "a refused revert writes nothing").toBeNull();
+  });
+
+  it("refuses to undo a move whose circle is gone", async () => {
+    const id = await draftOf([["web", "gcc"]]);
+    expect((await publishDraft(pool, id, "u-steward")).ok).toBe(true);
+    await pool.query("DELETE FROM circles WHERE id = ?", ["web"]); // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
+
+    const r = await revertDraft(pool, id);
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.error).toContain("no longer in the village");
+  });
+
+  it("moves a circle whose id is as long as an id can be", async () => {
+    // A circle id is cut at 64 characters, and a change names it as
+    // circle:<id>, which is 71. The seat column was 64 wide and refused it.
+    const longId = "a-very-long-circle-name-that-fills-every-character-an-id-can-hold".slice(0, 64);
+    expect(longId).toHaveLength(64);
+    await pool.query( // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
+      "INSERT INTO circles (id, name, parent_circle_id, is_example, status, sort_order) VALUES (?, ?, NULL, 0, ?, 5)",
+      [longId, "A Very Long Circle", "active"],
+    );
+    const id = await draftOf([[longId, "gcc"]]);
+    const r = await publishDraft(pool, id, "u-steward");
+    expect(r.ok, !r.ok ? r.error : "").toBe(true);
+    expect(await parentOf(longId)).toBe("gcc");
   });
 });

@@ -36,7 +36,7 @@
  * is lossy, and an archive may not be.
  */
 import type { Pool, PoolConnection } from "mysql2/promise";
-import { draftChangesNamingPeople, draftStatus, rewriteDraftChangePeople, withdrawDraftRow } from "../repos/orgDrafts";
+import { draftChangesNamingPeople, draftStatus, lockCirclesCounter, readCirclesForPreview, rewriteDraftChangePeople, withdrawDraftRow } from "../repos/orgDrafts";
 import { stageIndex } from "../../shared/gameConfig";
 import { numberVar } from "./variables";
 import { documentedKey, listOrgAssignments, listOrgRoles, peopleOnly, seatHolder, seatState, type LapseContext, type OrgAssignment } from "./orgChart";
@@ -765,7 +765,7 @@ export interface PreviewContext {
 
 export async function loadPreviewContext(pool: Pool | PoolConnection): Promise<PreviewContext> {
   const [roles]: any = await pool.query("SELECT id, name, is_example, active FROM org_roles");
-  const [circles]: any = await pool.query("SELECT id, name, parent_circle_id, is_example FROM circles");
+  const circles = await readCirclesForPreview(pool);
   const all = (circles as any[]).map((c) => ({
     id: String(c.id),
     name: String(c.name ?? c.id),
@@ -1073,6 +1073,8 @@ export async function publishDraft(
   const conn: PoolConnection = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    // The circles counter first, in the order a circle form takes it (see lockCirclesCounter).
+    await lockCirclesCounter(conn);
 
     // READ INSIDE THE TRANSACTION. These used to run on the pool before
     // `beginTransaction`, so the seats the preview approved and the draft
@@ -1307,6 +1309,7 @@ export async function revertDraft(
   const conn: PoolConnection = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    await lockCirclesCounter(conn);
     // Where every circle sits NOW, and its name for a refusal. Undoing a move is
     // itself a move, and the village may have changed since the publish: if the
     // old parent now sits inside the moved circle, putting it back closes a loop.
@@ -1321,6 +1324,19 @@ export async function revertDraft(
         if (c.beforeJson) {
           const circleId = c.orgRoleId.slice("circle:".length);
           const back = c.beforeJson.parent_circle_id ? String(c.beforeJson.parent_circle_id) : null;
+          /*
+           * UNDO ONLY WHAT IS STILL THERE. If the circle has moved again since
+           * this draft put it somewhere, putting it "back" would silently throw
+           * that later move away, and the later draft would go on saying it was
+           * published. The same when the circle is gone.
+           */
+          const current = nowCircles.find((x) => x.id === circleId);
+          const placed =
+            typeof c.payload?.parentCircleId === "string" && c.payload.parentCircleId ? String(c.payload.parentCircleId) : null;
+          if (!current) throw new Error(`This move cannot be undone: the circle "${circleId}" is no longer in the village.`);
+          if (current.parentCircleId !== placed) {
+            throw new Error(`This move cannot be undone as things stand. "${current.name}" has moved again since, and undoing this would throw that later move away.`);
+          }
           const refused = parentingRefusal(nowCircles, circleId, back);
           if (refused) throw new Error(`This move cannot be undone as things stand. ${refused.message}`);
           await conn.query("UPDATE circles SET parent_circle_id = ? WHERE id = ?", [back, circleId]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo

@@ -1,7 +1,7 @@
 /**
- * ARRANGE MODE'S HANDS: a pointer drag and a keyboard equal, both ending in
- * one call, `land`, which asks the same question publishing will ask before it
- * records anything.
+ * ARRANGE MODE'S HANDS: a pointer drag, a keyboard equal and a picker, all
+ * ending in one call, `land`, which asks the same question publishing will ask
+ * before it records anything.
  *
  * HIT-TESTING IS THE BROWSER'S. What sits under a pointer comes from
  * `document.elementsFromPoint`, never from geometry done here. The browser
@@ -18,15 +18,20 @@
  * to rearrange inside it, which keeps every drop target few and large.
  *
  * MOUSE AND PEN ONLY FOR THE DRAG. One finger on a phone is the page's scroll
- * and two are the map's pinch, so a touch drag is left alone. The keyboard path
- * works wherever there is a keyboard: M picks a focused circle up, M on another
- * circle puts it inside, Shift and M puts it at the top of the village, Escape
- * puts it down.
+ * and two are the map's pinch, so a touch drag is left alone.
+ *
+ * THE KEYBOARD PATH LIVES IN THE MAP. M (matched by its key position as well,
+ * so it works on any layout) picks a focused circle up, M on another circle
+ * puts it inside, Shift and M puts it at the top of the village, and Escape
+ * puts it down. Focus leaving the map puts it down too, so no key pressed
+ * elsewhere on the page can land it somewhere unseen. The bar's picker is the
+ * path that needs no shortcut at all, for a screen reader in browse mode.
  *
  * A DRAG IS NOT A CLICK. PowerMap flies into a circle on click, and its
  * backdrop steps out a level. A press that travelled far enough to be a drag
  * swallows the one click the browser sends after it, wherever that click lands,
- * so landing a circle never also moves the camera.
+ * so landing a circle never also moves the camera. Escape during a drag cancels
+ * it, and the release that follows lands nothing.
  *
  * THE LISTENERS SIT ON THE DOCUMENT AND THE WINDOW, IN THE CAPTURE PHASE, and
  * find the map through `svgRef` at the moment of each event. Capture, because a
@@ -34,9 +39,14 @@
  * native event at React's root, before a bubbling document listener hears it.
  * Late-bound, because the map unmounts in list mode and mounts again after, and
  * a listener bound to the first SVG would be deaf on the second.
+ *
+ * THE PUBLISHED VILLAGE CAN CHANGE UNDER THE LIST: an Undo, another admin, a
+ * publish that already made a move true. Whatever no longer fits comes off
+ * (`settleAgainst`), in words, so the picture never draws a shape the list
+ * cannot publish.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { addMove, dropRefusal, withMoves, type PendingMove } from "./arrange";
+import { addMove, dropRefusal, settleAgainst, withMoves, type PendingMove } from "./arrange";
 
 type Circle = { id: string; name: string; parentCircleId?: string | null; isExample?: boolean };
 
@@ -53,20 +63,25 @@ export interface Arrange {
   refusal: string | null;
   /** The sentence the Arrange bar reads out. */
   status: string;
+  /** Record a move by name, as the picker does. It meets the same refusals a drop does. */
+  propose(circleId: string, parentId: string | null): void;
   /** Forget every move and anything being carried. */
   clear(): void;
-  /** Forget the moves a publish just made true, keeping any made while it ran. */
-  settle(published: PendingMove[]): void;
+  /** Forget the moves a publish just made true, or that no longer fit. */
+  settle(done: PendingMove[]): void;
 }
 
 const circleOf = (el: Element | null): string | null =>
   el?.closest?.("[data-circle-id]")?.getAttribute("data-circle-id") ?? null;
+
+const PUT_DOWN = "Put down where it was.";
 
 export function useArrange({
   on,
   svgRef,
   live,
 }: {
+  /** False in list mode and while a publish is in flight: no gesture is heard. */
   on: boolean;
   svgRef: RefObject<SVGSVGElement | null>;
   /** The circles as PUBLISHED. The picture with moves applied is derived from these. */
@@ -78,8 +93,8 @@ export function useArrange({
   const [note, setNote] = useState("");
 
   // The document listeners are bound once per mode change and read the newest values here.
-  const now = useRef({ moves, picked, live });
-  now.current = { moves, picked, live };
+  const now = useRef({ moves, picked, live, on });
+  now.current = { moves, picked, live, on };
 
   const putDown = useCallback(() => {
     setPicked(null);
@@ -106,6 +121,14 @@ export function useArrange({
     );
   }, []);
 
+  const propose = useCallback(
+    (circleId: string, parentId: string | null) => {
+      if (!now.current.on) return;
+      land(circleId, parentId ?? "");
+    },
+    [land],
+  );
+
   const clear = useCallback(() => {
     setMoves([]);
     setPicked(null);
@@ -113,15 +136,28 @@ export function useArrange({
     setNote("");
   }, []);
 
-  const settle = useCallback((published: PendingMove[]) => {
-    setMoves((m) => m.filter((x) => !published.some((p) => p.circleId === x.circleId && p.parentId === x.parentId)));
+  const settle = useCallback((done: PendingMove[]) => {
+    setMoves((m) => m.filter((x) => !done.some((p) => p.circleId === x.circleId && p.parentId === x.parentId)));
     setNote("");
   }, []);
 
-  // Leaving arrange mode puts down anything being carried. The moves stay.
+  // Leaving arrange mode, or starting a publish, puts down anything being carried. The moves stay.
   useEffect(() => {
     if (!on) putDown();
   }, [on, putDown]);
+
+  // The published village changed under the list: take off whatever no longer fits.
+  useEffect(() => {
+    if (!live) return;
+    const { kept, dropped } = settleAgainst(live, now.current.moves);
+    if (!dropped.length) return;
+    setMoves(kept);
+    const words = dropped.map((d) => d.words).filter((w): w is string => !!w);
+    // While a publish runs the bar says what happened, so this stays quiet then.
+    if (words.length && now.current.on) {
+      setNote(`${words.join(" ")} The village changed, so ${words.length === 1 ? "that move is" : "those moves are"} off the list.`);
+    }
+  }, [live]);
 
   useEffect(() => {
     if (!on) return;
@@ -140,7 +176,7 @@ export function useArrange({
       return "";
     };
 
-    let press: { id: string; x: number; y: number; dragging: boolean } | null = null;
+    let press: { id: string; x: number; y: number; dragging: boolean; cancelled: boolean } | null = null;
     let swallowClick = false;
 
     const endPress = () => {
@@ -152,8 +188,24 @@ export function useArrange({
       press = null;
     };
 
+    /** The press ended where no pointerup reaches: a cancelled pointer, a release this page never heard, or the window losing focus. */
+    const onAbandon = () => {
+      const putBack = !!press?.dragging && !press.cancelled;
+      endPress();
+      if (putBack) {
+        putDown();
+        setNote(PUT_DOWN);
+      }
+    };
+
     const onMove = (e: PointerEvent) => {
       if (!press) return;
+      // No primary button is held, so the release happened somewhere this page never heard it.
+      if ((e.buttons & 1) === 0) {
+        onAbandon();
+        return;
+      }
+      if (press.cancelled) return;
       if (!press.dragging) {
         if (Math.hypot(e.clientX - press.x, e.clientY - press.y) < DRAG_PX) return;
         press.dragging = true;
@@ -173,20 +225,14 @@ export function useArrange({
       window.setTimeout(() => {
         swallowClick = false;
       }, 0);
+      if (p.cancelled) return; // Escape already put it down, and the release lands nothing
       const where = under(e.clientX, e.clientY);
       if (where === null || where === p.id) {
         putDown();
-        setNote("Put down where it was.");
+        setNote(PUT_DOWN);
         return;
       }
       land(p.id, where);
-    };
-
-    /** The press ended somewhere no pointerup reaches: a cancelled pointer, or the window losing focus. */
-    const onAbandon = () => {
-      const wasDragging = press?.dragging;
-      endPress();
-      if (wasDragging) putDown();
     };
 
     const onDown = (e: PointerEvent) => {
@@ -194,7 +240,7 @@ export function useArrange({
       if (press || e.button !== 0 || e.pointerType === "touch" || !svg || !svg.contains(e.target as Node)) return;
       const id = circleOf(e.target as Element);
       if (!id) return;
-      press = { id, x: e.clientX, y: e.clientY, dragging: false };
+      press = { id, x: e.clientX, y: e.clientY, dragging: false, cancelled: false };
       window.addEventListener("pointermove", onMove, true);
       window.addEventListener("pointerup", onUp, true);
       window.addEventListener("pointercancel", onAbandon, true);
@@ -210,11 +256,21 @@ export function useArrange({
 
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // A mouse drag in flight: Escape cancels it wherever focus happens to be.
+      if (e.key === "Escape" && press?.dragging && !press.cancelled) {
+        e.preventDefault();
+        e.stopPropagation();
+        press.cancelled = true;
+        putDown();
+        setNote(PUT_DOWN);
+        return;
+      }
       const t = e.target as HTMLElement | null;
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
       const svg = map();
-      const inMap = !!svg && svg.contains(document.activeElement);
-      const focused = inMap ? circleOf(document.activeElement) : null;
+      // Every other key belongs to whatever has focus, unless focus is in the map.
+      if (!svg || !svg.contains(document.activeElement)) return;
+      const focused = circleOf(document.activeElement);
       const carrying = now.current.picked;
       if (e.key === "Escape") {
         if (!carrying) return;
@@ -222,11 +278,10 @@ export function useArrange({
         e.preventDefault();
         e.stopPropagation();
         putDown();
-        setNote("Put down where it was.");
+        setNote(PUT_DOWN);
         return;
       }
-      if (e.key !== "m" && e.key !== "M") return;
-      if (!carrying && !inMap) return;
+      if (!(e.code === "KeyM" || e.key === "m" || e.key === "M")) return;
       e.preventDefault();
       if (!carrying) {
         if (!focused) {
@@ -243,7 +298,7 @@ export function useArrange({
       }
       if (!focused || focused === carrying) {
         putDown();
-        setNote("Put down where it was.");
+        setNote(PUT_DOWN);
         return;
       }
       land(carrying, focused);
@@ -252,20 +307,33 @@ export function useArrange({
     const onFocusIn = (e: FocusEvent) => {
       const svg = map();
       const carrying = now.current.picked;
-      if (!carrying || !svg || !svg.contains(e.target as Node)) return;
+      if (!carrying || press?.dragging || !svg || !svg.contains(e.target as Node)) return;
       const id = circleOf(e.target as Element);
       setTarget(id && id !== carrying ? id : null);
+    };
+
+    const onFocusOut = (e: FocusEvent) => {
+      const svg = map();
+      const carrying = now.current.picked;
+      if (!carrying || press?.dragging || !svg || !svg.contains(e.target as Node)) return;
+      const next = e.relatedTarget as Node | null;
+      if (next && svg.contains(next)) return;
+      // Focus left the map with a circle in hand.
+      putDown();
+      setNote(PUT_DOWN);
     };
 
     document.addEventListener("pointerdown", onDown, true);
     window.addEventListener("click", onClick, true);
     document.addEventListener("keydown", onKey, true);
     document.addEventListener("focusin", onFocusIn, true);
+    document.addEventListener("focusout", onFocusOut, true);
     return () => {
       document.removeEventListener("pointerdown", onDown, true);
       window.removeEventListener("click", onClick, true);
       document.removeEventListener("keydown", onKey, true);
       document.removeEventListener("focusin", onFocusIn, true);
+      document.removeEventListener("focusout", onFocusOut, true);
       endPress();
     };
   }, [on, svgRef, land, putDown]);
@@ -289,5 +357,5 @@ export function useArrange({
     }
   }
 
-  return { moves, picked, target, refusal, status, clear, settle };
+  return { moves, picked, target, refusal, status, propose, clear, settle };
 }

@@ -10,6 +10,10 @@
  * A REFUSED LANDING IS NEVER COLOUR ALONE. It draws dotted and thin where an
  * accepted one draws solid and heavy, the same rule the seat glyphs follow, so
  * the difference survives greyscale and a reader who does not see the hue.
+ *
+ * A LANDING IS DRAWN ONLY WHILE SOMETHING IS CARRIED. A drag that Escape put
+ * down still moves the pointer across circles, and a ring there would promise a
+ * drop that is not going to happen.
  */
 import type { NestedLayout } from "@shared/mapLayout";
 import { MAP_CHROME } from "@shared/circleView";
@@ -29,8 +33,8 @@ export default function ArrangeLens({
 }) {
   const at = (id: string) => layout.circles.find((c) => c.id === id) ?? null;
   const carried = picked ? at(picked) : null;
-  const into = target ? at(target) : null;
-  const toTop = target === "";
+  const into = picked && target ? at(target) : null;
+  const toTop = !!picked && target === "";
   const landing = refused
     ? { stroke: MAP_CHROME.inkDim, strokeWidth: 2, strokeDasharray: "2 5" }
     : { stroke: MAP_CHROME.ring, strokeWidth: 4, strokeDasharray: undefined };

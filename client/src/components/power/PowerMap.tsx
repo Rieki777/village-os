@@ -83,6 +83,7 @@ export default function PowerMap({
   svgRef,
   maxDepth,
   compact,
+  arrangeHint,
 }: {
   data: PowerData;
   layout: NestedLayout;
@@ -100,6 +101,8 @@ export default function PowerMap({
   lenses?: ReactNode;
   /** The page exports SVG/PNG from this element (spec 14). */
   svgRef?: RefObject<SVGSVGElement | null>;
+  /** While arranging: how to pick a circle up, read out on every circle that takes a keypress. */
+  arrangeHint?: string;
   /*
    * ONE LEVEL AT A TIME, WHICH IS WHAT A PHONE HAS ROOM FOR.
    *
@@ -244,7 +247,9 @@ export default function PowerMap({
     const at = sibs.indexOf(id);
     if (at === -1 || sibs.length < 2) return;
     const next = sibs[(at + dir + sibs.length) % sibs.length];
-    (document.getElementById(`power-node-${next}`) as unknown as SVGGElement | null)?.focus?.();
+    // Looked up inside THIS map. The phone map is mounted too, hidden, with the same
+    // ids, and a document-wide lookup found its node first, so arrows did nothing here.
+    (svgEl?.querySelector(`[id="power-node-${next}"]`) as SVGGElement | null)?.focus?.();
   };
 
   const morph = reduced ? { duration: 0 } : { type: "spring" as const, stiffness: 90, damping: 18 };
@@ -554,7 +559,7 @@ export default function PowerMap({
                 tabIndex={interactive ? 0 : -1}
                 aria-label={`${c?.name ?? pos.id}${forming ? ", still forming" : ""}${
                   isFocus ? ". You are inside it; press Enter or Escape to go out one level" : ". Press Enter to go inside"
-                }`}
+                }${arrangeHint && interactive ? `, or ${arrangeHint}` : ""}`}
                 onClick={(e: ReactMouseEvent) => {
                   e.stopPropagation();
                   // Tapping the FOCUSED ring goes out one level (spec 1).

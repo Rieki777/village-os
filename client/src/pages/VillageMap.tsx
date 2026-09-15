@@ -99,6 +99,8 @@ export default function VillageMap() {
   const [viewerIsAdmin, setViewerIsAdmin] = useState(false);
   const [walkOpen, setWalkOpen] = useState(false);
   const [arranging, setArranging] = useState(false);
+  // A publish in flight: the gestures and the Arrange toggle wait for its answer.
+  const [publishing, setPublishing] = useState(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const vision = useVision(mode === "vision");
   const resourcesModule = useModule("resources");
@@ -110,7 +112,8 @@ export default function VillageMap() {
    * and the breadcrumb. `data` stays the published truth, which is what every
    * refusal and the Publish bar measure against.
    */
-  const arrange = useArrange({ on: arranging, svgRef, live: data?.circles ?? null });
+  // Off in list mode, where there is no map to arrange, and while a publish is in flight.
+  const arrange = useArrange({ on: arranging && !listMode && !publishing, svgRef, live: data?.circles ?? null });
   const shown = useMemo(
     () => (data && arranging && arrange.moves.length ? { ...data, circles: withMoves(data.circles, arrange.moves) } : data),
     [data, arranging, arrange.moves],
@@ -224,7 +227,8 @@ export default function VillageMap() {
    * what to) had no surface anywhere. This is the focus, read as a circle,
    * and it drives the inspector on both the standing panel and the sheet.
    */
-  const focusedCircle = focusId ? (data?.circles?.find((c) => c.id === focusId) ?? null) : null;
+  // The arranged picture, so the card and the canvas agree about where the focus sits.
+  const focusedCircle = focusId ? ((shown ?? data)?.circles?.find((c) => c.id === focusId) ?? null) : null;
 
   /*
    * HOW DEEP THE PHONE DRAWS.
@@ -427,13 +431,14 @@ export default function VillageMap() {
                     <button
                       type="button"
                       aria-pressed={arranging}
+                      disabled={publishing}
                       onClick={() => {
                         if (!arranging) setShapePreview(null);
                         setArranging((v) => !v);
                       }}
                       data-arrange-toggle
                       // A mouse, pen or trackpad, on a screen wide enough for the card beside the canvas, which holds the bar.
-                      className={`hidden md:any-pointer-fine:inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border ${
+                      className={`hidden md:any-pointer-fine:inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border disabled:opacity-40 ${
                         arranging ? "bg-teal-deep text-white border-teal-deep" : "bg-card text-muted-foreground border-border"
                       }`}
                     >
@@ -574,6 +579,7 @@ export default function VillageMap() {
                       pulseSeatId={pulseSeatId}
                       lenses={lensNodes}
                       svgRef={svgRef}
+                      arrangeHint={arranging && !publishing ? "press M to pick it up and move it" : undefined}
                     />
                   </div>
                   <aside data-scroll-contain className="w-80 shrink-0 bg-card border border-border rounded-2xl p-5 sticky top-24 max-h-[80vh] overflow-y-auto hidden md:block">
@@ -583,7 +589,10 @@ export default function VillageMap() {
                         live={data.circles}
                         moves={arrange.moves}
                         status={arrange.status}
+                        busy={publishing}
+                        onBusy={setPublishing}
                         reload={refetchMap}
+                        onPropose={arrange.propose}
                         onSettled={arrange.settle}
                         onDiscard={arrange.clear}
                       />
