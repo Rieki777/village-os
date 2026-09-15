@@ -104,6 +104,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { forgetStewardActs } from "./stewardship";
 import { eraseIntentsForMember } from "./intents";
+import { forgetMemberNeeds } from "./needs";
 import { isExampleUser } from "./examples";
 import { forgetMemberInProposals } from "./externalProposals";
 import { forgetMemberEverywhere, type ErasureOutcome } from "./memberDrivers";
@@ -475,6 +476,32 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
           u.walletAddress = null;
           u.walletVerifiedAt = null;
         });
+      },
+    },
+    {
+      /*
+       * member_needs (0205) tells its member "Only you can read this", so it
+       * leaves with them. A named step, so a resumed erasure knows whether it
+       * already ran.
+       *
+       * AFTER THE TOMBSTONE, because the tombstone is where the member's
+       * sessions die. `PUT /api/needs/mine` writes a row for anybody signed in,
+       * so a deletion that ran while a session still lived could be followed by
+       * a fresh answer, and a resume would skip the deletion as done and leave
+       * that answer standing for good. Run here, the delete comes after the
+       * last moment the member could write.
+       *
+       * RENAMED FROM "needs" ON PURPOSE. That name was recorded in
+       * `member_erasures.steps_done` when this step ran before the tombstone,
+       * so on an old record it means "deleted while the member could still
+       * write". Matching it here would let a resume skip exactly the case this
+       * move exists for. Under a new name an old record re-runs the delete,
+       * which is the safe direction the header of this list names, and the old
+       * name is never reused.
+       */
+      name: "needs-after-tombstone",
+      run: async () => {
+        await forgetMemberNeeds(pool, target.id);
       },
     },
     {

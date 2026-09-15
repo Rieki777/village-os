@@ -53,7 +53,22 @@ vi.mock("@/components/InfoTip", () => ({ default: () => null }));
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "usr-ora", name: "Ora" } }),
 }));
-vi.mock("@/lib/gameApi", () => ({ authToken: () => "a-session" }));
+/*
+ * `useGameConfig` IS A MERGE SEAM, and it is here for one line of Wallet.
+ *
+ * This file mocks `@/lib/gameApi` wholesale, so every export Wallet reaches
+ * for has to be listed. It listed one. The economics branch then gave Wallet
+ * `useGameConfig`, for the sentence that names the stage at which buying
+ * opens, and neither side could see the other: main had no such call and this
+ * branch had no such test.
+ *
+ * UNDEFINED IS THE HONEST STUB, not an invented config. It is what the real
+ * hook answers before the fetch lands, Wallet already reads it as
+ * `cfg?.stages ?? []`, and this file is about receipts rather than about
+ * stages. A fabricated stage list would make the sentence render a name no
+ * assertion here checks.
+ */
+vi.mock("@/lib/gameApi", () => ({ authToken: () => "a-session", useGameConfig: () => undefined }));
 vi.mock("@/components/Image", () => ({ Image: () => null }));
 vi.mock("@/components/ExamplesBanner", () => ({ ExamplesBanner: () => null }));
 vi.mock("@/components/ExampleRefusal", () => ({
@@ -78,6 +93,14 @@ afterEach(() => vi.unstubAllGlobals());
  * The village prices a room at three Cob Credits a night and the token carries
  * decimals 3, so `accommodation_prices.amount_minor` holds 3000. The member
  * holds twelve stay credits.
+ *
+ * THE PAYLOAD CARRIES THE RATE HUMAN, and this fixture used to say otherwise.
+ * `listAccommodations` sends `priceFromStored(...)`, so the wire holds 3 and
+ * not 3000, and a quest's `stayCreditReward` is stored human and sent as
+ * stored. The fixture once posted 3000 and 400 here, which is the shape the
+ * server stopped sending, so these cases were green on a page that printed a
+ * ten-credit night as 0.1 against the real payload. A stay's
+ * `rateSnapshotCredits` IS minor, and stays 3000 below.
  *
  * The two numbers on this page exist to be compared: "can I afford a night".
  * Before the fix the balance line divided and the rate did not, so the only
@@ -107,7 +130,7 @@ const STAYS = {
       isExample: false,
       prices: {
         "stay-credit": { guest: 2, member: 1 },
-        "cob-credit": { guest: 4500, member: 3000 },
+        "cob-credit": { guest: 4.5, member: 3 },
       },
     },
   ],
@@ -115,7 +138,7 @@ const STAYS = {
     balance: 12,
     balanceDecimals: 0,
     balances: {},
-    stays: [{ id: "s-1", status: "active", rateSnapshotToken: "cob-credit", rateSnapshotCredits: 3000, nightsRemaining: 2 }],
+    stays: [{ id: "s-1", status: "active", rateSnapshotToken: "cob-credit", rateSnapshotCredits: 3000, rateSnapshotDecimals: 3, nightsRemaining: 2 }],
   },
   earnQuests: [{ id: "q-1", title: "Plaster the north wall", stayCreditReward: 4, gratitude: null }],
   guestBookingEnabled: true,
@@ -126,14 +149,14 @@ const STAYS = {
 describe("/stay prints a nightly rate in the units the balance above it is in", () => {
   beforeEach(() => vi.stubGlobal("fetch", answering(STAYS)));
 
-  it("divides the village-token rate rather than printing the ledger row", async () => {
+  it("prints the village-token rate the route sends, at its scale and undivided", async () => {
     render(<Router><Stay /></Router>);
-    // 3000 minor units at decimals 3 is three Cob Credits a night.
-    await waitFor(() => expect(screen.getByText(/3 Cob Credit\/night/)).toBeInTheDocument());
-    // The pre-fix render. It is asserted absent rather than merely "not
-    // expected": 3000 is exactly what the raw row prints, so its absence is
-    // the whole claim of this test.
+    // The route sends 3, already human, for a token at decimals 3.
+    await waitFor(() => expect(screen.getByText(/· 3 Cob Credit\/night/)).toBeInTheDocument());
+    // Both wrong renders, asserted absent: the raw row, and the second
+    // division that 3 at decimals 3 turns into.
     expect(screen.queryByText(/3000 Cob Credit/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/0\.003 Cob Credit/)).not.toBeInTheDocument();
   });
 
   it("names the token from the payload's own registry and not from the slug", async () => {
@@ -148,6 +171,26 @@ describe("/stay prints a nightly rate in the units the balance above it is in", 
     // divide by 3 and not by the balance line's 0.
     await waitFor(() => expect(screen.getByText(/Your stay is active at/)).toBeInTheDocument());
     expect(screen.getByText(/Your stay is active at/).textContent).toContain("3 credit(s)/night");
+  });
+
+  it("reads a stay's rate at the scale sent with it, even when no room still posts that token", async () => {
+    // `priceTokens` lists the tokens rooms post TODAY. This stay was activated
+    // in a token no room prices any more, so only `rateSnapshotDecimals`
+    // knows that its 850 minor units are 8.5.
+    vi.stubGlobal(
+      "fetch",
+      answering({
+        ...STAYS,
+        mine: {
+          ...STAYS.mine,
+          stays: [{ id: "s-2", status: "active", rateSnapshotToken: "retired-credit", rateSnapshotCredits: 850, rateSnapshotDecimals: 2, nightsRemaining: 1 }],
+        },
+      }),
+    );
+    render(<Router><Stay /></Router>);
+    await waitFor(() => expect(screen.getByText(/Your stay is active at/)).toBeInTheDocument());
+    expect(screen.getByText(/Your stay is active at/).textContent).toContain("at 8.5 credit(s)/night");
+    expect(screen.getByText(/Your stay is active at/).textContent).not.toContain("850");
   });
 });
 
@@ -175,35 +218,41 @@ const STAYS_SCALED = {
     {
       ...STAYS.accommodations[0],
       prices: {
-        "stay-credit": { guest: 250, member: 150 },
-        "cob-credit": { guest: 4500, member: 3000 },
+        // HUMAN, as `priceFromStored` sends them: a credit and a half, two and a half.
+        "stay-credit": { guest: 2.5, member: 1.5 },
+        "cob-credit": { guest: 4.5, member: 3 },
       },
     },
   ],
+  // MINOR, as the ledger holds it: 1200 at decimals 2 is twelve.
   mine: { ...STAYS.mine, balance: 1200, balanceDecimals: 2 },
-  earnQuests: [{ id: "q-1", title: "Plaster the north wall", stayCreditReward: 400, gratitude: null }],
+  // HUMAN, as the quest row stores it.
+  earnQuests: [{ id: "q-1", title: "Plaster the north wall", stayCreditReward: 4, gratitude: null }],
 };
 
 describe("/stay reads the scale it is sent, on every line and not just one", () => {
   beforeEach(() => vi.stubGlobal("fetch", answering(STAYS_SCALED)));
 
-  it("divides the credit rate and both tier lines", async () => {
+  it("prints the credit rate and both tier lines as sent, at the credit's scale", async () => {
     render(<Router><Stay /></Router>);
-    // 150 minor units at decimals 2 is one and a half credits for a member.
-    await waitFor(() => expect(screen.getByText(/1.5/)).toBeInTheDocument());
+    // The route sends 1.5, already human, for a member.
+    await waitFor(() => expect(screen.getByText(/1\.5/)).toBeInTheDocument());
     // The other tier, on the line below, which a visitor and a member both see.
-    expect(screen.getByText(/Visitors pay 2.5 credit\(s\)\/night\./)).toBeInTheDocument();
-    expect(screen.queryByText(/Visitors pay 250/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Visitors pay 2\.5 credit\(s\)\/night\./)).toBeInTheDocument();
+    // A second division turns 2.5 at decimals 2 into 0.03 (or 0.02).
+    expect(screen.queryByText(/Visitors pay 0\.0/)).not.toBeInTheDocument();
   });
 
-  it("divides the work-exchange reward against the token it is paid in", async () => {
+  it("prints the work-exchange reward as stored, never divided", async () => {
     render(<Router><Stay /></Router>);
     await waitFor(() => expect(screen.getByText(/Plaster the north wall/)).toBeInTheDocument());
     // The title sits in its own span inside the link; the reward is the link's
     // next text node, so the assertion has to be on the row and not the span.
     const row = screen.getByText(/Plaster the north wall/).closest("a");
-    expect(row?.textContent).toContain("4 stay credit(s) on consent");
-    expect(row?.textContent).not.toContain("400 stay credit");
+    // Anchored on the colon: "0.04 stay credit(s)" CONTAINS "4 stay credit(s)",
+    // so an unanchored match would pass on the divided render.
+    expect(row?.textContent).toContain(": 4 stay credit(s) on consent");
+    expect(row?.textContent).not.toContain("0.04 stay credit");
   });
 });
 

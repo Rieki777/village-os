@@ -22,6 +22,7 @@
  */
 import { useEffect, useState } from "react";
 import { gameFetch } from "@/lib/gameApi";
+import { readStoredJson, removeStored, writeStoredJson } from "@/lib/safeStorage";
 
 interface ExamplesState {
   modules: string[];
@@ -76,33 +77,25 @@ export const RETIRES_WITH: Record<string, string[]> = {
 const HINT_KEY = "examples-showing";
 
 function loadHint(): ExamplesState | null {
-  try {
-    const raw = sessionStorage.getItem(HINT_KEY);
-    if (!raw) return null;
-    const d = JSON.parse(raw);
-    if (!Array.isArray(d?.modules)) return null;
-    return {
-      modules: d.modules.map(String),
-      triggers: d.triggers && typeof d.triggers === "object" ? d.triggers : {},
-    };
-  } catch {
-    return null;
-  }
+  const stored = readStoredJson("session", HINT_KEY);
+  if (stored.status !== "value") return null;
+  const d = stored.value as { modules?: unknown; triggers?: unknown } | null;
+  if (!d || !Array.isArray(d.modules)) return null;
+  return {
+    modules: d.modules.map(String),
+    triggers:
+      d.triggers && typeof d.triggers === "object" ? (d.triggers as Record<string, string>) : {},
+  };
 }
 
 function saveHint(s: ExamplesState): void {
-  try {
-    sessionStorage.setItem(HINT_KEY, JSON.stringify(s));
-  } catch {
-    // Storage can be denied outright (private mode, a locked-down browser).
-    // A missing hint costs one layout shift, so it is never worth throwing.
-  }
+  // Storage can be denied outright (private mode, a locked-down browser).
+  // A missing hint costs one layout shift, so it is never worth throwing.
+  writeStoredJson("session", HINT_KEY, s);
 }
 
 function clearHint(): void {
-  try {
-    sessionStorage.removeItem(HINT_KEY);
-  } catch { /* see saveHint */ }
+  removeStored("session", HINT_KEY);
 }
 
 const hint = loadHint();

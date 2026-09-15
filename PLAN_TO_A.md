@@ -12,7 +12,7 @@ Graded 2026-09-03 against `main`. Grades in brackets are the challenger's.
 
 | Dimension | Now | Target | Blocking |
 |---|---|---|---|
-| Economy | B- | A- | 4 defects, 3 in flight |
+| Economy | B- | A- | 4 defects, 3 in flight. Claimed 2026-09-03 by the economics session on `wt/econ` (reverse(), the ECONOMICS.md pipeline, the dry-run economics model, then the decimals sweep) |
 | Governance | B+ (B-) | A- | 1 critical, plus what is built vs written |
 | Security | A- | A | narrow |
 | Tests & CI | A- (B+) | A | 2 critical |

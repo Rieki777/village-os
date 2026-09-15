@@ -439,6 +439,7 @@ export const MODULES: ModuleDef[] = [
       "gratitude.full_sends_per_cycle",
       "gratitude.pool_per_cycle",
       "gratitude.pool_token",
+      "gratitude.proposal_accept_award",
     ],
     // Cycle close and the settlement preview hang off /api/admin/cycles, which
     // this list forgot. Inert while gratitude is core and nothing is above

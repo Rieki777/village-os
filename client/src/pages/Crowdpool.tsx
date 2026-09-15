@@ -14,7 +14,7 @@ import { authToken } from "@/lib/gameApi";
 import { ExampleChip } from "@/components/ExamplesBanner";
 import { Users } from "lucide-react";
 import InfoTip from "@/components/InfoTip";
-import { CrowdpoolStyles, MiniRing, money, phaseLabel, timeAgo } from "@/components/crowdpool/PoolPieces";
+import { CrowdpoolStyles, MiniRing, PLEDGED_FLOOR_TIP, phaseLabel, pooledLine, timeAgo } from "@/components/crowdpool/PoolPieces";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 
 const headers = (): Record<string, string> => {
@@ -109,7 +109,9 @@ export default function Crowdpool() {
                     </h2>
                     <p className="text-xs mt-0.5 cp-smallcaps">{phaseLabel(c.status ?? "active", c.percentPledged ?? 0)}</p>
                     <p className="text-sm mt-1.5" style={{ color: "#e4d3ae" }}>
-                      {money(c.pledgedTotal ?? 0, c.currency ?? "USD")} of {money(c.totalValue ?? 0, c.currency ?? "USD")} pooled
+                      {/* The floor qualifier lives in `pooledLine` so this card
+                          and the campaign page cannot drift apart on it. */}
+                      {pooledLine(c.pledgedTotal ?? 0, c.totalValue ?? 0, c.currency ?? "USD")} pooled
                       {typeof c.daysRemaining === "number" && c.daysRemaining > 0
                         ? `, ${c.daysRemaining} ${c.daysRemaining === 1 ? "day" : "days"} left`
                         : ""}

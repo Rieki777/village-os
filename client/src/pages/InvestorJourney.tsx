@@ -4,6 +4,7 @@ import WhyCostaRica from "@/components/WhyCostaRica";
 import FaqSection from "@/components/FaqSection";
 import { useVillageName } from "@/hooks/useVillageName";
 import InvestorSummary from "@/components/InvestorSummary";
+import { readStoredJson, writeStoredJson } from "@/lib/safeStorage";
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
@@ -219,9 +220,12 @@ export default function InvestorJourney() {
 
   // Load progress from localStorage
   useEffect(() => {
-    const saved = localStorage.getItem("amora-investor-progress");
-    if (saved) {
-      setCompletedSteps(JSON.parse(saved));
+    // A blocked store threw here, and a half-written value threw one line
+    // later: JSON.parse had no guard either. Both now read as no progress,
+    // which costs a visitor their ticks and never the page.
+    const saved = readStoredJson("local", "amora-investor-progress");
+    if (saved.status === "value" && Array.isArray(saved.value)) {
+      setCompletedSteps(saved.value.filter((v): v is string => typeof v === "string"));
     }
   }, []);
 
@@ -231,7 +235,7 @@ export default function InvestorJourney() {
       ? completedSteps.filter(id => id !== stepId)
       : [...completedSteps, stepId];
     setCompletedSteps(newCompleted);
-    localStorage.setItem("amora-investor-progress", JSON.stringify(newCompleted));
+    writeStoredJson("local", "amora-investor-progress", newCompleted);
   };
 
   const progress = (completedSteps.length / journeySteps.length) * 100;

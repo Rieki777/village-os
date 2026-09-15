@@ -34,11 +34,11 @@ export default function SendTokensCard() {
   /**
    * The scale of those balances, per token, from the same payload.
    *
-   * `d.ledger` is MINOR units. Nothing sendable carries decimals today, since
-   * Village Voice is non-transferable and never reaches this select, so the
-   * line below has never been wrong. It would be wrong the first afternoon a
-   * village makes a decimal token transferable, and it will be wrong for every
-   * token on the day they all move to 4 decimals. See
+   * `d.ledger` is MINOR units, and since the 2026-09-04 scale ruling every
+   * credit token carries two decimals, so a sendable token with a scale is the
+   * ordinary case and no longer the exotic one. The amount a member types is
+   * multiplied back up before it is sent, so what this card displays and what
+   * its request body carries are the same quantity. See
    * client/src/lib/tokenAmount.ts.
    */
   const [tokenDecimals, setTokenDecimals] = useState<Record<string, number>>({});

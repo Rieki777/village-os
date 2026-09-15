@@ -20,6 +20,10 @@ import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 import { DAILY_EMAIL_CAP, insertNotification, type NotifyDeps } from "./lib/notify";
 import { numberVar } from "./lib/variables";
 import { runSeasonReminders } from "./lib/seasonReminders";
+import { presenceTest } from "./lib/memberPresence";
+
+/** The host's bound presence predicate, as server/index.ts hands it in. */
+const isPresent = presenceTest("season-reminders-db-test-secret");
 
 const configured = testDbConfigured();
 if (!configured) {
@@ -53,6 +57,7 @@ function deps(sent: string[], prefs: unknown): NotifyDeps {
     },
     origin: () => "https://example.test",
     projectName: () => "Test village",
+    isPresent,
   };
 }
 
@@ -127,8 +132,8 @@ describe.skipIf(!configured)("the daily cap and the season-end reminder", () => 
     const season = { current: { id: "spring-2026", name: "Spring", endsOn: "2026-10-01" }, today: "2026-09-17" };
     const isAdmin = (u: Record<string, any>) => u.role === "admin" || u.role === "founder";
 
-    const first = await runSeasonReminders({ season, members, isAdmin, notify });
-    const second = await runSeasonReminders({ season, members, isAdmin, notify });
+    const first = await runSeasonReminders({ season, members, isPresent, isAdmin, notify });
+    const second = await runSeasonReminders({ season, members, isPresent, isAdmin, notify });
     expect(first).toMatchObject({ recipients: 2, told: 2 });
     expect(second.told, "a second sweep inserts nothing").toBe(0);
 

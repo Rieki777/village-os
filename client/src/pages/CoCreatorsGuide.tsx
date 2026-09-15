@@ -3,6 +3,7 @@ import { useHypha } from "@/modules/ModuleProvider";
 import { useVillageLinks } from "@/lib/gameApi";
 import { useVillageName } from "@/hooks/useVillageName";
 import { useTokenName, useValueTokenName } from "@/hooks/useTokenNames";
+import { useValueConversion } from "@/lib/moneyClaims";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import {
@@ -106,8 +107,8 @@ const buildHyphaActions = (villageName: string, tokenName: string) => [
   },
 ];
 
-// A function of both live token names (Admin → Tokens), so a rename reaches every card below.
-const recognitionItems = (tokenName: string, valueName: string, villageName: string) => ({
+// A function of the live token names AND of the conversion sentence (lib/moneyClaims.ts), so a rename and a correction both reach every card.
+const recognitionItems = (tokenName: string, valueName: string, villageName: string, conversionNote: string) => ({
   earn: [
     { label: "Quests", range: `40-300 ${tokenName}` },
     { label: "Circle Roles", range: "200-500/month" },
@@ -124,7 +125,7 @@ const recognitionItems = (tokenName: string, valueName: string, villageName: str
     `Each cycle, a real pool of ${valueName} is shared across everyone's ${tokenName}`,
     "Village dues & utilities",
     "Cafe & shop services",
-    `Future: ${valueName} convert to cash or equity as ${villageName} matures`,
+    ...(conversionNote ? [conversionNote] : []),
   ],
 });
 
@@ -256,7 +257,8 @@ export default function CoCreatorsGuide() {
   const cards = ctaCards
     .map((card) => (card.external ? { ...card, href: eventsUrl } : card))
     .filter((card) => card.href);
-  const recognition = recognitionItems(tokenName, valueName, villageName);
+  const conversionNote = useValueConversion({ village: villageName, value: valueName });
+  const recognition = recognitionItems(tokenName, valueName, villageName, conversionNote);
   const scrollToSection = (sectionId: string) => {
     const element = document.getElementById(sectionId);
     if (element) {
@@ -483,11 +485,9 @@ export default function CoCreatorsGuide() {
                 The {tokenName} Economy
               </h2>
               <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-                Two tokens, two jobs. The work, time, and resources you contribute to
-                {villageName} are acknowledged in {tokenName}, the recognition signal, which carries
-                no financial value of its own. {valueName} are the tracked value: each cycle the community shares a
-                real pool of {valueName} across everyone's {tokenName}, and as {villageName} matures they
-                can convert to cash, equity, or community currency.
+                Two tokens, two jobs. The work, time, and resources you contribute to {villageName} are acknowledged in
+                {tokenName}, the recognition signal, which carries no financial value of its own. {valueName} are the tracked
+                value: each cycle the community shares a real pool of {valueName} across everyone's {tokenName}.{conversionNote ? ` ${conversionNote}` : ""}
               </p>
             </div>
 

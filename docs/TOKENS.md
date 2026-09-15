@@ -26,10 +26,10 @@ There is no timestamp and no author line, on purpose. Both would change on every
 | Token | Slug | Kind | Governed by | Decimals | Members may send it | Arrives from |
 | --- | --- | --- | --- | --- | --- | --- |
 | Gratitude | `gratitude` | recognition | this village | 0 | no | `drizzle/0006_token_registry.sql` |
-| Village Credits | `credits` | credit | this village | 0 | yes | `drizzle/0007_village_credits_token.sql` |
-| Library Credits | `library-credit` | credit | this village | 0 | no | `server/lib/library.ts` at boot |
-| Stay Credits | `stay-credit` | credit | this village | 0 | no | `server/lib/stays.ts` at boot |
-| Village Voice | `village-voice` | voice | this village | 3 | no | `server/lib/economy.ts` at boot |
+| Village Credits | `credits` | credit | this village | 2 | yes | `drizzle/0007_village_credits_token.sql` |
+| Library Credits | `library-credit` | credit | this village | 2 | no | `server/lib/library.ts` at boot |
+| Stay Credits | `stay-credit` | credit | this village | 2 | no | `server/lib/stays.ts` at boot |
+| Village Voice | `village-voice` | voice | this village | 2 | no | `server/lib/economy.ts` at boot |
 | Village Equity | `equity` | equity | Hypha, on Base | 0 | no | `drizzle/0124_the_equity_token_names_no_village.sql` |
 | Voice | `voice` | voice | Hypha, on Base | 0 | no | `drizzle/0006_token_registry.sql` |
 
@@ -66,7 +66,7 @@ The village's own money. It is what the cycle pool shares out when a moon closes
 | Slug | `credits` |
 | Kind | credit |
 | Who governs it | this village, which mints it and moves it |
-| Decimals | 0 |
+| Decimals | 2 |
 | Arrives from | `drizzle/0007_village_credits_token.sql`, when the database is migrated |
 | Issued out of | `sys:cycle-pool` |
 | A mint rule can pay it | yes |
@@ -86,7 +86,7 @@ A deposit against the village's shelves, issued by the library module against wh
 | Slug | `library-credit` |
 | Kind | credit |
 | Who governs it | this village, which mints it and moves it |
-| Decimals | 0 |
+| Decimals | 2 |
 | Arrives from | `server/lib/library.ts`, at the first server start (`ensureLibraryToken()`) |
 | Issued out of | `sys:library-mint` |
 | A mint rule can pay it | yes |
@@ -106,7 +106,7 @@ A claim on a night in one of the village's rooms, issued by the stays module aga
 | Slug | `stay-credit` |
 | Kind | credit |
 | Who governs it | this village, which mints it and moves it |
-| Decimals | 0 |
+| Decimals | 2 |
 | Arrives from | `server/lib/stays.ts`, at the first server start (`ensureStayToken()`) |
 | Issued out of | `sys:mint` |
 | A mint rule can pay it | yes |
@@ -126,7 +126,7 @@ Earned say. It accrues here as work is confirmed and seats are held, and a membe
 | Slug | `village-voice` |
 | Kind | voice |
 | Who governs it | this village, which mints it and moves it |
-| Decimals | 3 |
+| Decimals | 2 |
 | Arrives from | `server/lib/economy.ts`, at the first server start (`ensureVoiceToken()`) |
 | Issued out of | `sys:voice-mint` |
 | A mint rule can pay it | yes |
@@ -226,7 +226,7 @@ One more way value enters, outside the rule engine: an administrator can stock t
 
 The ledger is double-entry. Every movement is a transfer from one account to another, and for every token the balances of all accounts add up to zero. Faucet accounts are allowed to run negative, and a faucet's negative balance is that token's issued supply. That is what makes issuance a number anyone can check rather than a claim anyone has to trust.
 
-An ordinary account cannot go below zero. Three sources are excepted today, in `ALLOW_NEGATIVE_SOURCES`: `stay_night`, `payment_reversal` and `reversal`. Each is an honest state rather than a convenience: a stay burnt inside its grace window, the reversal leg after a refund and a correction clawing back value the member had already spent.
+An ordinary account cannot go below zero. Three sources are excepted today, in `ALLOW_NEGATIVE_SOURCES`: `stay_night`, `payment_reversal` and `reversal`. Each is an honest state rather than a convenience: a stay burnt inside its grace window, the leg after a payment refund and the clawback a reversal posts against value a member already spent.
 
 There is no setting for how far a balance may go below zero. Ruling 2 below describes the one the founder asked for, and the generator stops the build if a dial that looks like one ever appears, so this sentence cannot go stale quietly.
 
@@ -358,7 +358,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
       "name": "Village Credits",
       "kind": "credit",
       "governance": "platform",
-      "decimals": 0,
+      "decimals": 2,
       "transferable": true,
       "active": true,
       "sendableBetweenMembers": true,
@@ -393,7 +393,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
       "name": "Library Credits",
       "kind": "credit",
       "governance": "platform",
-      "decimals": 0,
+      "decimals": 2,
       "transferable": false,
       "active": true,
       "sendableBetweenMembers": false,
@@ -413,7 +413,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
       "name": "Stay Credits",
       "kind": "credit",
       "governance": "platform",
-      "decimals": 0,
+      "decimals": 2,
       "transferable": false,
       "active": true,
       "sendableBetweenMembers": false,
@@ -433,7 +433,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
       "name": "Village Voice",
       "kind": "voice",
       "governance": "platform",
-      "decimals": 3,
+      "decimals": 2,
       "transferable": false,
       "active": true,
       "sendableBetweenMembers": false,
@@ -534,7 +534,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
       "default": "gratitude"
     },
     "ledger.admin_mint_cycle_cap": {
-      "label": "Admin mint cap per cycle",
+      "label": "Issuance cap per lunar cycle",
       "default": "10000"
     },
     "economy.voice_claim_threshold": {
@@ -586,6 +586,6 @@ The generator reads these and fails loudly if any of them moves:
 
 It also walks every `.ts` file under `server/` looking for a token registered at first start. Each one has to sit inside a function named `ensure…Token`, and a call anywhere else stops the build asking which kind it is. That is what stops a new module registering a token the document never mentions.
 
-The seeded rows are produced by applying every token statement in `drizzle/` in migration order, rather than by reading the INSERTs alone. Two later migrations sweep the `transferable` column, and reading only the INSERTs would report recognition as sendable, which it has not been since `0092_token_sinks.sql`. The migrations that write the registry today: `drizzle/0006_token_registry.sql`, `drizzle/0007_village_credits_token.sql`, `drizzle/0047_example_market.sql`, `drizzle/0071_economy_core.sql`, `drizzle/0092_token_sinks.sql`, `drizzle/0124_the_equity_token_names_no_village.sql (read through a token-doc directive)`.
+The seeded rows are produced by applying every token statement in `drizzle/` in migration order, rather than by reading the INSERTs alone. Two later migrations sweep the `transferable` column, and reading only the INSERTs would report recognition as sendable, which it has not been since `0092_token_sinks.sql`. The migrations that write the registry today: `drizzle/0006_token_registry.sql`, `drizzle/0007_village_credits_token.sql`, `drizzle/0047_example_market.sql`, `drizzle/0071_economy_core.sql`, `drizzle/0092_token_sinks.sql`, `drizzle/0124_the_equity_token_names_no_village.sql (read through a token-doc directive)`, `drizzle/0202_a_village_spends_its_credits_in_hundredths.sql (read through a token-doc directive)`, `drizzle/0202_a_village_spends_its_credits_in_hundredths.sql`.
 
 `server/db/tokenDoc.test.ts` runs every migration against a real MySQL and asserts the rows this generator computed are the rows the database actually holds, and that the faucet, sink and sending answers here match what the server's own functions return. The generator being wrong is a red test, not a quiet paragraph.

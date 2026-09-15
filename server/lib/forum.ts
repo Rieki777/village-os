@@ -97,7 +97,7 @@ export async function processMentions(
   const notified = new Set<string>();
   for (const handle of parseMentions(input.body)) {
     const target = await deps.memberByHandle(handle);
-    if (!target || target.id === input.actor.id || !target.passwordHash) continue;
+    if (!target || target.id === input.actor.id || !deps.isPresent(target)) continue;
     if (!(await freshMention(deps.pool, input.sourceType, input.sourceId, target.id))) continue;
     await insertNotification(deps, {
       userId: target.id,
@@ -159,7 +159,7 @@ export async function onReplyCreated(
     );
     for (const targetId of directTargets) {
       const target = await deps.memberById(targetId);
-      if (!target || !target.passwordHash) continue;
+      if (!target || !deps.isPresent(target)) continue;
       await insertNotification(deps, {
         userId: targetId,
         type: "forum_reply",

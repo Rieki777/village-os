@@ -24,6 +24,18 @@
  * mint rules in place, and queues a rule change, so the run has something to
  * find. `stateIsOn` below asserts that before any of it is believed.
  *
+ * ── THE DOOR MOVED (R12) ────────────────────────────────────────────────────
+ *
+ * Rye: "any member as all members may suggest upgrades and will need to run
+ * models and tests." The route is `POST /api/dry-run` and it answers any
+ * signed-in member. `POST /api/admin/dry-run` is DELETED, and one case here
+ * knocks on it and expects a 404, because a door left standing beside a new
+ * one is a second gate to keep in step.
+ *
+ * So the harm sentence above gains a clause: the run that leaves every table
+ * as it found it is now a MEMBER's run, and the founder's copy is the one that
+ * carries the queued rule change. Both are asserted below.
+ *
  * Boots the BUILT `dist/index.js` against a throwaway schema, so run
  * `pnpm build` first or you are testing stale code. Skips loudly without
  * TEST_DATABASE_URL.
@@ -37,6 +49,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, type TestDb, E2E_BOOT_DEADLINE_MS, waitForPortFree } from "./db/testDb";
 import { cycleBoundsFor } from "../shared/lunar";
 import { villageMoonLabel } from "../shared/villageMoon";
+import { RUNS_PER_WINDOW } from "./routes/dryRun";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -287,7 +300,7 @@ describe.skipIf(!DB_CONFIGURED)("the test run before launch", () => {
     expect(Number(rules[0].n), "the village has enabled mint rules").toBeGreaterThan(0);
 
     // The feed is on, so the run measures a village where hearts are sendable.
-    const r = await call("POST", "/api/admin/dry-run", { body: { moons: 3 } });
+    const r = await call("POST", "/api/dry-run", { body: { moons: 3 } });
     expect(r.status).toBe(200);
     expect(
       r.json.runFindings.some((f: any) => f.area === "gratitude"),
@@ -326,17 +339,46 @@ describe.skipIf(!DB_CONFIGURED)("the test run before launch", () => {
   });
 
   it("refuses a stranger", async () => {
-    const r = await call("POST", "/api/admin/dry-run", { token: null, body: { moons: 3 } });
+    const r = await call("POST", "/api/dry-run", { token: null, body: { moons: 3 } });
     expect(r.status).toBe(401);
   });
 
-  it("refuses a signed-in member who is not an admin", async () => {
-    const r = await call("POST", "/api/admin/dry-run", { token: wrenToken, body: { moons: 3 } });
-    expect(r.status).toBe(401);
+  /*
+   * R12, AND THE WHOLE REASON THIS ROUTE MOVED. "Any member as all members may
+   * suggest upgrades and will need to run models and tests." This case used to
+   * assert the opposite: that a signed-in member got 401. It is inverted here
+   * on purpose, and the inversion is the change.
+   */
+  it("answers any signed-in member, and leaves the queued change out of their copy", async () => {
+    const r = await call("POST", "/api/dry-run", { token: wrenToken, body: { moons: 3 } });
+    expect(r.status, JSON.stringify(r.json)).toBe(200);
+    expect(r.json.turns).toHaveLength(3);
+    expect(r.json.isolation).toMatch(/wrote nothing/i);
+    // The fixture queues a change on the seat rule for the moon after this
+    // run starts, and the founder's copy names it. A member's does not.
+    expect(
+      r.json.turns.some((t: any) => t.findings.some((f: any) => f.area === "rules")),
+      "a member reads no queued change",
+    ).toBe(false);
+    expect(JSON.stringify(r.json)).not.toContain("20 becomes 45");
+    // Every moon settles at the amount the rule carries today.
+    for (const t of r.json.turns) {
+      const paid = t.findings.find(
+        (f: any) => f.area === "settlement" && f.outcome === "issued" && String(f.sentence).includes("Gratitude"),
+      );
+      expect(paid?.sentence, `moon ${t.cycleNumber}`).toContain("20 Gratitude");
+    }
+  });
+
+  it("has no admin door left to knock on", async () => {
+    const gone = await call("POST", "/api/admin/dry-run", { body: { moons: 3 } });
+    expect(gone.status, "the admin path is deleted, not kept beside the new one").toBe(404);
+    const strangerAtTheOldDoor = await call("POST", "/api/admin/dry-run", { token: null, body: { moons: 3 } });
+    expect(strangerAtTheOldDoor.status).toBe(404);
   });
 
   it("runs, and says what it was measuring", async () => {
-    const r = await call("POST", "/api/admin/dry-run", { body: { moons: 12 } });
+    const r = await call("POST", "/api/dry-run", { body: { moons: 12 } });
     expect(r.status, JSON.stringify(r.json)).toBe(200);
     expect(r.json.moons).toBe(12);
     expect(r.json.turns).toHaveLength(12);
@@ -362,7 +404,7 @@ describe.skipIf(!DB_CONFIGURED)("the test run before launch", () => {
    * that contract a type cannot hold.
    */
   it("sends every field the launch page renders", async () => {
-    const r = await call("POST", "/api/admin/dry-run", { body: { moons: 6 } });
+    const r = await call("POST", "/api/dry-run", { body: { moons: 6 } });
     expect(r.status).toBe(200);
     for (const field of ["moons", "spanDays", "isolation", "gameStarted"]) {
       expect(r.json[field], `${field} is missing from the payload`).toBeDefined();
@@ -401,7 +443,7 @@ describe.skipIf(!DB_CONFIGURED)("the test run before launch", () => {
    * that an absent one arrives as an honest absence and never as Moon 0.
    */
   it("gives every turn a village moon, and gives an unlaunched village no number in it", async () => {
-    const r = await call("POST", "/api/admin/dry-run", { body: { moons: 6 } });
+    const r = await call("POST", "/api/dry-run", { body: { moons: 6 } });
     expect(r.status).toBe(200);
     for (const t of r.json.turns) {
       expect(t.moon, "the card reads t.moon by name").toBeTruthy();
@@ -417,9 +459,16 @@ describe.skipIf(!DB_CONFIGURED)("the test run before launch", () => {
     }
   });
 
+  /*
+   * DRIVEN BY THE MEMBER, because the member is the caller that is new. It is
+   * one handler and one function either way, so the founder's run has the same
+   * property; the risk this file has to answer is that opening the door let a
+   * write in behind it.
+   */
+
   it("THE LEDGER IS UNCHANGED, and so is every other append-only table", async () => {
     const before = await fingerprint();
-    const r = await call("POST", "/api/admin/dry-run", { body: { moons: 36 } });
+    const r = await call("POST", "/api/dry-run", { token: wrenToken, body: { moons: 36 } });
     expect(r.status, JSON.stringify(r.json)).toBe(200);
     // A run that computed nothing would also leave the ledger alone, so prove
     // it computed something first.
@@ -436,7 +485,7 @@ describe.skipIf(!DB_CONFIGURED)("the test run before launch", () => {
     const beforeRun = await tryToIssue("before the test run");
     expect(beforeRun.status, "a village that has not started refuses issuance").toBeGreaterThanOrEqual(400);
 
-    await call("POST", "/api/admin/dry-run", { body: { moons: 24 } });
+    await call("POST", "/api/dry-run", { body: { moons: 24 } });
 
     const afterRun = await tryToIssue("after the test run");
     expect(afterRun.status, "and it still refuses afterwards").toBeGreaterThanOrEqual(400);
@@ -444,21 +493,78 @@ describe.skipIf(!DB_CONFIGURED)("the test run before launch", () => {
   });
 
   it("refuses a length nobody asked for rather than inventing one", async () => {
-    const tooMany = await call("POST", "/api/admin/dry-run", { body: { moons: 5000 } });
+    const tooMany = await call("POST", "/api/dry-run", { body: { moons: 5000 } });
     expect(tooMany.status).toBe(400);
-    const zero = await call("POST", "/api/admin/dry-run", { body: { moons: 0 } });
+    const zero = await call("POST", "/api/dry-run", { body: { moons: 0 } });
     expect(zero.status).toBe(400);
   });
 
   it("carries the refusals a founder needs, never only the successes", async () => {
     // A rule that pays nothing is the silent misconfiguration this exists for.
     await pool.query("UPDATE mint_rules SET amount = NULL WHERE `trigger` = 'role.cycle' AND token_slug = 'gratitude'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-    const r = await call("POST", "/api/admin/dry-run", { body: { moons: 6 } });
+    const r = await call("POST", "/api/dry-run", { body: { moons: 6 } });
     expect(r.status).toBe(200);
     const refusals = r.json.refusals ?? [];
     expect(refusals.length, "the run reported at least one refusal").toBeGreaterThan(0);
     expect(JSON.stringify(refusals)).toMatch(/pays nothing|reads its amount/i);
     // Put it back so a later read of this schema is not confused by it.
     await pool.query("UPDATE mint_rules SET amount = 20 WHERE `trigger` = 'role.cycle' AND token_slug = 'gratitude'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+  });
+
+  /*
+   * R11 HELD, READ FROM THE LAUNCH STATUS ITSELF.
+   *
+   * `launchVoteBlocked` counts open blocking requirements and has never read
+   * the dry run (server/lib/launch.ts). Opening the run to the roll is exactly
+   * the change that could quietly wire the two together, so the assertion is
+   * an outcome: the founder reads the launch status, a MEMBER runs the longest
+   * test the village allows, and the status is identical afterwards, down to
+   * every item's state.
+   */
+  it("a member's run moves nothing on the launch checklist", async () => {
+    const shape = (j: any) => JSON.stringify({
+      blockingOpen: j?.blockingOpen,
+      recommendedOpen: j?.recommendedOpen,
+      launchedAt: j?.launchedAt ?? null,
+      items: (j?.items ?? []).map((i: any) => [i.id, i.state, i.severity]),
+      voteBlocked: j?.vote?.blocked ?? null,
+    });
+    const before = await call("GET", "/api/admin/launch");
+    expect(before.status).toBe(200);
+    const run = await call("POST", "/api/dry-run", { token: wrenToken, body: { moons: 40 } });
+    expect(run.status, JSON.stringify(run.json)).toBe(200);
+    // The run had something to say, so this is not a comparison of two nothings.
+    expect(run.json.turns).toHaveLength(40);
+    const after = await call("GET", "/api/admin/launch");
+    expect(shape(after.json)).toBe(shape(before.json));
+  });
+
+  /*
+   * THE PER-PERSON BUDGET, against the real MySQL-backed limiter.
+   *
+   * Two members registered here and nowhere else, because the ceiling has to
+   * be reached and every other case in this file would have to fit under
+   * whatever was left. `RUNS_PER_WINDOW` is imported from the route module
+   * instead of retyped: a test carrying its own copy of the number keeps
+   * passing on the day the number moves.
+   */
+  it("stops one member at their hourly ceiling and leaves the next member alone", async () => {
+    const heavy = await register("Bramble Vane", "bramble");
+    const light = await register("Rowan Pike", "rowan");
+
+    for (let i = 0; i < RUNS_PER_WINDOW; i++) {
+      const ok = await call("POST", "/api/dry-run", { token: heavy.token, body: { moons: 1 } });
+      expect(ok.status, `run ${i + 1} of ${RUNS_PER_WINDOW} is inside the budget`).toBe(200);
+    }
+
+    const over = await call("POST", "/api/dry-run", { token: heavy.token, body: { moons: 1 } });
+    expect(over.status).toBe(429);
+    expect(over.json.error).toBe("too_many");
+    expect(String(over.json.message), "the refusal is a sentence").toContain(String(RUNS_PER_WINDOW));
+    expect(String(over.json.message)).toMatch(/hour/i);
+
+    // A second member has spent nothing, so the bucket is keyed on the person.
+    const fresh = await call("POST", "/api/dry-run", { token: light.token, body: { moons: 1 } });
+    expect(fresh.status, "one member's ceiling is not the village's").toBe(200);
   });
 });

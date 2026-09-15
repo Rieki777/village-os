@@ -126,6 +126,51 @@ async function auditRowCount(text: string, waitMs = 10_000): Promise<number> {
   }
 }
 
+/**
+ * A TOKEN'S SCALE, READ OFF THE REGISTRY THE BOOT JUST MIGRATED, NEVER TYPED.
+ *
+ * `0202` moved every platform credit token and Village Voice to two decimals,
+ * and this file was written when credits carried none. The repair is not to
+ * correct 1000 to 100000: a corrected literal is a literal that goes wrong
+ * again the next time the scale is ruled on, and it has been ruled on twice in
+ * one week. So the expectations below say the HUMAN number times whatever the
+ * registry holds, and a later move to four decimals cannot re-red this file.
+ *
+ * READ LAZILY, because `stay-credit` and `library-credit` do not exist at boot:
+ * `ensureStayToken` and `ensureLibraryToken` register them the first time a
+ * village needs one. A miss is therefore not cached, or the first caller would
+ * pin a scale of 1 for the rest of the run.
+ *
+ * ── AND THERE IS NO SINGLE MULTIPLIER FOR THIS FILE ────────────────────────
+ *
+ * The doors disagree about units on purpose, so each assertion has to be read
+ * against the door it goes through and not against a uniform scale:
+ *
+ *   HUMAN   the cycle-close report (`credited`, `poolCredited`), the stays
+ *           catalogue's `prices`, the redemption and mint routes, which take a
+ *           human number and convert once on the way in.
+ *   MINOR   `/api/game/ledger` balances and entries, `/api/admin/economy`
+ *           supply, `/api/exchange`, `stays.rate_snapshot_credits`, and
+ *           `/api/wallet/send`, which takes minor because the client converts
+ *           before it posts and the route refuses to convert twice.
+ *
+ * That distinction is load-bearing rather than pedantic. A sibling lane found
+ * an assertion expecting a send of 500 to be REFUSED: 500 reached the send
+ * route as five credits, five were affordable, the send succeeded, and the
+ * assertion passed anyway. The door the whole hold design exists to shut was
+ * reporting itself open.
+ */
+const scaleCache = new Map<string, number>();
+async function scale(slug: string): Promise<number> {
+  const hit = scaleCache.get(slug);
+  if (hit !== undefined) return hit;
+  const [rows] = await testDb.conn.query<any[]>("SELECT `decimals` FROM `tokens` WHERE `slug` = ?", [slug]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+  if (!rows.length) return 1; // not registered yet: do not cache the miss
+  const v = 10 ** Number(rows[0].decimals ?? 0);
+  scaleCache.set(slug, v);
+  return v;
+}
+
 beforeAll(async () => {
   if (!DB_CONFIGURED) return;
   if (!fs.existsSync(DIST)) {
@@ -483,6 +528,15 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // Exactly 5, the amount just sent, to a peer registered three lines above
     // with no other source of recognition. A floor here passes on a double
     // credit, which is the one arithmetic error that matters on a balance.
+    //
+    // 5 LEDGER UNITS, which is 5 Gratitude only while that token carries
+    // `decimals 0`, and this suite runs the seeded registry so it does. The
+    // number is deliberately NOT derived here: `toLedgerUnits` imported into
+    // this file would read the registry of the TEST process, which is cold and
+    // is not the registry the server subprocess loaded, so a derivation would
+    // be a confident statement about the wrong process. The suite that asks
+    // this question at four decimals is `server/economy.test.ts`, against the
+    // engine directly. (sweep lane F)
     expect(peerProfile.json.recognitionBalance, "exactly what was sent, once").toBe(5);
   });
 
@@ -621,11 +675,14 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // and the recognition (signal) balance did NOT change at close.
     const peerLedger = await api("GET", "/api/game/ledger", undefined, peerToken);
     expect(peerLedger.status).toBe(200);
-    expect(peerLedger.json.balances.credits?.balance).toBe(1000);
+    // MINOR from here down. The two figures above are the cycle-close report,
+    // which speaks whole credits, and they are the same thousand.
+    const credit = await scale("credits");
+    expect(peerLedger.json.balances.credits?.balance).toBe(1000 * credit);
     const poolEntry = peerLedger.json.entries.find((e: any) => e.source === "gratitude_pool");
     expect(poolEntry).toBeTruthy();
     expect(poolEntry.tokenType).toBe("credits");
-    expect(poolEntry.amount).toBe(1000);
+    expect(poolEntry.amount).toBe(1000 * credit);
 
     // Idempotent: closing again settles nothing further AND credits nothing
     // further — the pool cannot double-pay.
@@ -634,7 +691,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(again.json.cycles.map((c: any) => c.cycleNumber)).not.toContain(prevNumber);
     expect(again.json.poolCredited).toBe(0);
     const peerAfter = await api("GET", "/api/game/ledger", undefined, peerToken);
-    expect(peerAfter.json.balances.credits?.balance).toBe(1000);
+    expect(peerAfter.json.balances.credits?.balance).toBe(1000 * credit);
 
     // And the preview agrees with the deed: the settled lunation drops off
     // the due list, so the desk offers a second press nothing to promise.
@@ -1313,7 +1370,9 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       founderToken,
     );
     expect(first.status).toBe(200);
-    expect(first.json.toBalance).toBe(9000);
+    // `toBalance` is the recipient's MINOR balance, and `stay-credits` is a credit token,
+    // so it is born at the currency scale (feea3d2). `remaining` stays human, like the cap.
+    expect(first.json.toBalance).toBe(9000 * (await scale("stay-credits")));
     expect(first.json.remaining).toBe(1000);
 
     const overflow = await api(
@@ -1327,7 +1386,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
 
     // The mint landed in the member's own ledger view, in the new token.
     const ledger = await api("GET", "/api/game/ledger", undefined, peerToken);
-    expect(ledger.json.balances["stay-credits"]?.balance).toBe(9000);
+    expect(ledger.json.balances["stay-credits"]?.balance).toBe(9000 * (await scale("stay-credits")));
 
     // And the audit trail names the mint: exactly one row for the 9000 that
     // landed, none for the 1001 that was refused (the cap answers before any
@@ -1361,7 +1420,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const mintRow = rec.json.systemAccounts.find(
       (s: any) => s.id === "sys:mint" && s.tokenType === "stay-credits",
     );
-    expect(mintRow?.issuedToDate).toBe(9000);
+    expect(mintRow?.issuedToDate).toBe(9000 * (await scale("stay-credits")));
     const poolRow = rec.json.systemAccounts.find(
       (s: any) => s.id === "sys:cycle-pool" && s.tokenType === "credits",
     );
@@ -1390,8 +1449,10 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
         .map((s: any) => [String(s.source), Number(s.issued)]),
     );
     // The cycle pool released the whole default pool at close, as asserted
-    // above in the settlement case.
-    expect(credits.gratitude_pool).toBe(1000);
+    // above in the settlement case. This door reports MINOR, and the close
+    // report that stated the same thousand reports whole credits.
+    const credit = await scale("credits");
+    expect(credits.gratitude_pool).toBe(1000 * credit);
     // THREE confirmed contributions at the seeded 25, and it used to read 50.
     //
     // The missing 25 was not a rounding choice, it was the bug: this suite
@@ -1407,13 +1468,13 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // engine, it was right about an engine that was wrong, so nothing in this
     // file ever looked like it needed checking. Boot now starts the clock. See
     // `startEconomyEpoch` and `server/lib/economyEpoch.test.ts`.
-    expect(credits.quest_consent).toBe(75);
+    expect(credits.quest_consent).toBe(75 * credit);
     // And nothing else issued a credit: the total over the faucet equals the
     // two sources named, so a third channel appearing fails here.
     expect(poolRow?.issuedToDate).toBe(
       Object.values(credits).reduce((n, v) => n + v, 0),
     );
-    expect(poolRow?.issuedToDate).toBe(1075);
+    expect(poolRow?.issuedToDate).toBe(1075 * credit);
   });
 
   it("S13: modules ship OFF, lifecycle guards hold, and preview never leaks", async () => {
@@ -2259,6 +2320,10 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const selfHeart = await api("POST", `/api/feed/threads/${micro.json.id}/heart`, {}, peerToken);
     expect(selfHeart.status).toBe(400);
     // The value is real: the peer's ledger carries a heart_received transfer.
+    // `amount` is the LEDGER's own unit; `feed.heart_amount` is 1 Gratitude and
+    // the row reads 1 because the token carries `decimals 0` here. See the note
+    // at the acknowledgement assertion above for why this is not derived.
+    // (sweep lane F)
     const peerLedger = await api("GET", "/api/game/ledger", undefined, peerToken);
     expect(peerLedger.json.entries.some((e: any) => e.source === "heart_received" && e.amount === 1)).toBe(true);
     const refreshed = await api("GET", "/api/feed", undefined, doerToken);
@@ -2364,9 +2429,25 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // ── The signed settlement path. No Stripe key in this environment, so the
     // pending order is planted directly; the WEBHOOK is what's under test. ──
     const orderId = "sp-loop-1";
+    /*
+     * `credits_granted` is MINOR units, the same unit as the ledger leg it
+     * produces. Both writers derive it from `priceFor`, which stores minor
+     * since the price route converts on write, and all three readers (the
+     * settle mint, this file's refund debit and the chargeback clawback) post
+     * it back UNCONVERTED. So the fixture has to CARRY the scale: this row is
+     * written straight into the column, not through the price route that
+     * converts, and ten whole stay-credits is `10 * scale`. It used to be a
+     * bare 10, correct only while the token carried no decimals; after `0202`
+     * a bare 10 buys a tenth of a credit against a rate of 2, the guest can
+     * afford no nights at all, and the failure surfaces two hundred lines
+     * later as "posted 2, expected 3" with nothing pointing back here.
+     *
+     * `amount_minor` is FIAT cents and has nothing to do with the token scale.
+     */
+    const stayCredit = await scale("stay-credit");
     await testDb.conn.query(
       "INSERT INTO stay_purchases (id, user_id, accommodation_id, nights, amount_minor, credits_granted, provider, status) VALUES (?,?,?,?,?,?,'stripe','pending')",
-      [orderId, guestId, accId, 5, 25000, 10],
+      [orderId, guestId, accId, 5, 25000, 10 * stayCredit],
     );
     const settleEvent = {
       id: "evt_loop_settle_1",
@@ -2399,7 +2480,23 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
 
     // Properly signed: settles, mints, records the fiat charge.
     expect((await webhook(settleEvent)).status).toBe(200);
-    expect((await api("GET", "/api/game/ledger", undefined, guestToken)).json.balances["stay-credit"]?.balance).toBe(10);
+    expect((await api("GET", "/api/game/ledger", undefined, guestToken)).json.balances["stay-credit"]?.balance).toBe(10 * stayCredit);
+    /*
+     * THE GRANT IS THE COLUMN, exactly. Asked as an identity and not as a
+     * literal, so it stays true whatever `tokens.decimals` says and goes red
+     * the moment the settle handler converts one side and not the other. A
+     * literal here would be a decimals-0 coincidence wearing an assertion's
+     * clothes, which is what every existing stay-credit test in this file is.
+     */
+    const [[granted]] = await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT credits_granted FROM stay_purchases WHERE id = ?",
+      [orderId],
+    );
+    const [[mintLeg]] = await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT amount FROM token_ledger WHERE idempotency_key = ?",
+      [`ord:${orderId}:leg1`],
+    );
+    expect(Number(mintLeg.amount)).toBe(Number(granted.credits_granted));
 
     // Idempotent three ways: same event id → absorbed at the event level;
     // fresh event id for the same order → absorbed by the ledger leg key.
@@ -2407,12 +2504,15 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(replay.status).toBe(200);
     expect(replay.json.duplicate).toBe(true);
     expect((await webhook({ ...settleEvent, id: "evt_loop_settle_2" })).status).toBe(200);
-    expect((await api("GET", "/api/game/ledger", undefined, guestToken)).json.balances["stay-credit"]?.balance).toBe(10);
+    expect((await api("GET", "/api/game/ledger", undefined, guestToken)).json.balances["stay-credit"]?.balance).toBe(10 * stayCredit);
 
     // ── Activation snapshots rate + audience (a guest books at 2/night). ──
     const activated = await api("POST", `/api/admin/stays/${stayId}/activate`, {}, founderToken);
     expect(activated.status).toBe(200);
-    expect(activated.json.rateSnapshotCredits).toBe(2);
+    // MINOR, unlike the catalogue's `prices` above, which said the same 2 a
+    // night in whole credits. `server/lib/stays.ts` posts this column
+    // unconverted, so it is the ledger's unit.
+    expect(activated.json.rateSnapshotCredits).toBe(2 * stayCredit);
     expect(activated.json.audienceSnapshot).toBe("guest");
 
     /*
@@ -2448,7 +2548,8 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(posted.json.posted).toBe(3);
     expect((await api("POST", "/api/admin/stays/post-nights", {}, founderToken)).json.posted).toBe(0);
     const mineNow = await api("GET", "/api/stays", undefined, guestToken);
-    expect(mineNow.json.mine.balance).toBe(4); // 10 - 3 nights × 2
+    // MINOR, the same unit as the rate it is divided by two lines down.
+    expect(mineNow.json.mine.balance).toBe(4 * stayCredit); // 10 - 3 nights x 2
     // Look the stay up by id. Indexing [0] made this a coin flip: two stays for one
     // guest booked in the same second tie on created_at, so the order was undefined.
     const mineRow = mineNow.json.mine.stays.find((r: any) => r.id === stayId);
@@ -2462,7 +2563,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(grace.json.posted).toBe(4);
     expect(grace.json.stopped).toBe(1);
     const inDebt = await api("GET", "/api/stays", undefined, guestToken);
-    expect(inDebt.json.mine.balance).toBe(-4);
+    expect(inDebt.json.mine.balance).toBe(-4 * stayCredit);
     const debtRow = inDebt.json.mine.stays.find((r: any) => r.id === stayId);
     expect(debtRow?.status).toBe("active"); // never auto-ended
     // The economy still verifies: this negative is LEGAL (stay_night grace).
@@ -2477,7 +2578,19 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       data: { object: { id: "dp_loop_1", payment_intent: "pi_loop_1" } },
     });
     expect(dispute.status).toBe(200);
-    expect((await api("GET", "/api/game/ledger", undefined, guestToken)).json.balances["stay-credit"]?.balance).toBe(-14); // -4 - 10
+    expect((await api("GET", "/api/game/ledger", undefined, guestToken)).json.balances["stay-credit"]?.balance).toBe(-14 * stayCredit); // -4 - 10
+    /*
+     * AND THE CLAWBACK REVERSES THE SAME NUMBER, under the key the admin
+     * refund route shares with it. An asymmetric units fix here takes back a
+     * ten-thousandth of what was granted and freezes that under a key no
+     * retry can correct, and `payment_reversal` is on ALLOW_NEGATIVE_SOURCES
+     * so nothing downstream refuses it.
+     */
+    const [[clawLeg]] = await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT amount FROM token_ledger WHERE idempotency_key = ?",
+      [`ord:${orderId}:reversal-leg1`],
+    );
+    expect(Number(clawLeg.amount)).toBe(Number(granted.credits_granted));
     const payAdmin = await api("GET", "/api/admin/payments", undefined, founderToken);
     const suspension = payAdmin.json.suspensions.find((s: any) => s.user_id === guestId && !s.lifted_at);
     expect(suspension).toBeTruthy();
@@ -2509,7 +2622,25 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const manual = await api("POST", "/api/admin/stays/purchases/manual",
       { userId: guestId, accommodationId: accId, nights: 2, amountMinor: 10000 }, founderToken);
     expect(manual.status).toBe(200);
-    expect(manual.json.creditsGranted).toBe(4); // 2 nights × guest rate 2, derived server-side
+    // HUMAN, and deliberately NOT scaled. `creditsGranted` is the receipt
+    // number: server/routes/stays.ts converts it with `fromLedgerUnits` on the
+    // way out while the ledger leg two lines down stays minor. Same name, two
+    // units, one route.
+    expect(manual.json.creditsGranted).toBe(4); // 2 nights x guest rate 2, derived server-side
+    /*
+     * `creditsGranted` in the RESPONSE is the receipt number, whole credits,
+     * which is why the literal above is right at any decimals. The column and
+     * the ledger leg behind it are minor, and they are equal to each other.
+     */
+    const [[manualRow]] = await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT credits_granted FROM stay_purchases WHERE id = ?",
+      [manual.json.id],
+    );
+    const [[manualLeg]] = await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT amount FROM token_ledger WHERE idempotency_key = ?",
+      [`ord:${manual.json.id}:leg1`],
+    );
+    expect(Number(manualLeg.amount)).toBe(Number(manualRow.credits_granted));
     await api("PUT", "/api/admin/variables/payments.purchase_limit_30d_usd", { value: "360" }, founderToken);
     // Counted so far: the $100 manual charge. The $250 Stripe charge was
     // REVERSED by the dispute and no longer counts — limits track money the
@@ -2592,8 +2723,21 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const consent = await api("POST", `/api/admin/quest-claims/${wClaim.json.id}/consent`, { approve: true, amount: 10 }, founderToken);
     expect(consent.status).toBe(200);
     const doerLedger = await api("GET", "/api/game/ledger", undefined, doerToken);
-    expect(doerLedger.json.balances["stay-credit"]?.balance).toBe(doerCreditsBefore + 3);
-    expect(doerLedger.json.entries.some((e: any) => e.source === "quest_stay_reward" && e.amount === 3)).toBe(true);
+    const questStayCredit = await scale("stay-credit");
+    expect(doerLedger.json.balances["stay-credit"]?.balance).toBe(doerCreditsBefore + 3 * questStayCredit);
+    /*
+     * `quests.stay_credit_reward` is a HUMAN number an admin typed on the quest
+     * form, and the release at `server/index.ts` hands it to `mintStayCredits`,
+     * whose contract is MINOR.
+     *
+     * THE HANDOFF THIS COMMENT USED TO FILE IS TAKEN. It said the conversion
+     * belonged to the index lane and that the literal was correct until the
+     * registry flipped. The registry has flipped, and the call now reads
+     * `toLedgerUnits(STAY_CREDIT, stayReward)`, so the leg is minor and the
+     * three whole credits an admin typed arrive as three whole credits. The
+     * expectation says so at whatever scale the registry holds.
+     */
+    expect(doerLedger.json.entries.some((e: any) => e.source === "quest_stay_reward" && e.amount === 3 * questStayCredit)).toBe(true);
     // And the earn path is visible on the stay page.
     const earn = await api("GET", "/api/stays", undefined, doerToken);
     expect(earn.json.earnQuests.some((q: any) => q.id === wq.json.id && q.stayCreditReward === 3)).toBe(true);
@@ -2601,7 +2745,10 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // Comp and adjust are ledgered, keyed admin acts; adjust refuses overdraft.
     const comp = await api("POST", "/api/admin/stays/comp", { userId: doerId, credits: 2, note: "Storm helper" }, founderToken);
     expect(comp.status).toBe(200);
-    expect(comp.json.balance).toBe(doerCreditsBefore + 5);
+    // The comp route TAKES whole credits and REPORTS the ledger's own minor
+    // balance, so only the right-hand side carries the scale. `credits: 2`
+    // above is untouched, and `doerCreditsBefore` was already read minor.
+    expect(comp.json.balance).toBe(doerCreditsBefore + 5 * questStayCredit);
     const overdraw = await api("POST", "/api/admin/stays/adjust", { userId: doerId, credits: -999, note: "typo" }, founderToken);
     expect(overdraw.status).toBe(409);
 
@@ -2709,10 +2856,22 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       data: { object: { id: "cs_xloop_1", payment_intent: "pi_xloop_1", metadata: { module: "exchange", orderId: "xo-loop-1" } } },
     };
     expect((await webhook(settle)).status).toBe(200);
+    // `/api/game/ledger` answers in MINOR units, so an assertion about it has
+    // to say which scale it means. Reading `decimals` off the registry states
+    // the arithmetic instead of restating a number the registry owns: at
+    // decimals 0 this is 30 and at 4 it is 300000, and the assertion is the
+    // same sentence either way.
+    const [[creditToken]] = await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT decimals FROM tokens WHERE slug = 'stay-credits'",
+    );
+    const creditScale = 10 ** Number(creditToken?.decimals ?? 0);
     const doerBal = await api("GET", "/api/game/ledger", undefined, doerToken);
-    expect(doerBal.json.balances["stay-credits"]?.balance).toBe(30);
-    expect(doerBal.json.entries.some((e: any) => e.source === "exchange_purchase" && e.amount === 30)).toBe(true);
+    expect(doerBal.json.balances["stay-credits"]?.balance).toBe(30 * creditScale);
+    expect(doerBal.json.entries.some((e: any) => e.source === "exchange_purchase" && e.amount === 30 * creditScale)).toBe(true);
     // Stock came DOWN — treasury sold what it held, minted nothing.
+    // `treasuryStock` answers in WHOLE tokens, which is what the buy guard,
+    // the market lens and this desk all compare against, so 470 is 470 at any
+    // decimals. It is deliberately NOT scaled here.
     const adminView = await api("GET", "/api/admin/exchange", undefined, founderToken);
     expect(adminView.json.stock["stay-credits"]).toBe(470);
     expect(adminView.json.orders.find((o: any) => o.id === "xo-loop-1").status).toBe("paid");
@@ -2876,7 +3035,21 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(intake1.status).toBe(200);
     expect(intake1.json.award).toBe(75);
     expect(intake1.json.pendingSecondSignoff).toBe(false);
-    expect((await api("GET", "/api/game/ledger", undefined, peerToken)).json.balances["library-credit"]?.balance).toBe(75);
+    /*
+     * `/api/game/ledger` returns `balance` as the RAW column, which is MINOR
+     * units, and ships `decimals` beside it for exactly this reason. Asserting
+     * the raw number pins the ledger's scale into the acceptance test: at
+     * decimals 0 a credit and a minor unit are the same integer, so every
+     * assertion below stayed green whether or not the library converted at its
+     * boundaries, and the suite was blind to a misvaluation of the whole scale
+     * factor. Divide by the scale the payload itself declares and the number
+     * asserted is the number a member is quoted, at any decimals.
+     */
+    const libraryCredits = async (token: string) => {
+      const row = (await api("GET", "/api/game/ledger", undefined, token)).json.balances["library-credit"];
+      return Number(row?.balance ?? 0) / 10 ** Number(row?.decimals ?? 0);
+    };
+    expect(await libraryCredits(peerToken)).toBe(75);
 
     // The per-member per-cycle cap is an AGGREGATE across donations.
     await api("PUT", "/api/admin/variables/library.intake_member_cycle_cap", { value: "100" }, founderToken);
@@ -2890,7 +3063,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const big = await api("POST", "/api/admin/library/intake", { name: "Chainsaw", appraisal: 300, donorUserId: peerId }, founderToken);
     expect(big.json.pendingSecondSignoff).toBe(true);
     expect(big.json.award).toBe(0);
-    expect((await api("GET", "/api/game/ledger", undefined, peerToken)).json.balances["library-credit"]?.balance).toBe(75);
+    expect(await libraryCredits(peerToken)).toBe(75);
     const selfApprove = await api("POST", `/api/admin/library/items/${big.json.itemId}/approve`, {}, founderToken);
     expect(selfApprove.status).toBe(409);
     expect(String(selfApprove.json.error)).toContain("SECOND");
@@ -2899,7 +3072,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(secondSig.status).toBe(200);
     expect(secondSig.json.award).toBe(225);
     await api("PUT", `/api/admin/users/${doerId}/role`, { role: "member" }, founderToken);
-    expect((await api("GET", "/api/game/ledger", undefined, peerToken)).json.balances["library-credit"]?.balance).toBe(300);
+    expect(await libraryCredits(peerToken)).toBe(300);
 
     // ── LOANS. Escrow is ceil(value × 25%); no credits, no loan — the
     // refusal names the deposit, and nothing here can go negative. ──
@@ -2917,7 +3090,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const reserved = await api("POST", `/api/library/items/${barrow.id}/reserve`, {}, peerToken);
     expect(reserved.status).toBe(200);
     expect(reserved.json.escrow).toBe(25);
-    expect((await api("GET", "/api/game/ledger", undefined, peerToken)).json.balances["library-credit"]?.balance).toBe(275);
+    expect(await libraryCredits(peerToken)).toBe(275);
     // The shelf shows one of everything: a second borrower waits.
     expect((await api("POST", `/api/library/items/${barrow.id}/reserve`, {}, doerToken)).status).toBe(409);
     // Open loans are open economic state: module-off refuses (invariant #13).
@@ -2935,7 +3108,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       (libBell.json.notifications ?? []).some((n: any) => n.type === "library" && String(n.title).includes("cancelled a reservation")),
       "a cancelled reservation reaches the stewards",
     ).toBe(true);
-    expect((await api("GET", "/api/game/ledger", undefined, peerToken)).json.balances["library-credit"]?.balance).toBe(300);
+    expect(await libraryCredits(peerToken)).toBe(300);
 
     // Full circle: reserve → pickup → return → settle closed with DEFAULT
     // fees: computed wear = 5% of 100 = 5, zero damage, 20 released.
@@ -2954,7 +3127,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(settled.json.wearFee).toBe(5);
     expect(settled.json.damageFee).toBe(0);
     expect(settled.json.released).toBe(20);
-    expect((await api("GET", "/api/game/ledger", undefined, peerToken)).json.balances["library-credit"]?.balance).toBe(295);
+    expect(await libraryCredits(peerToken)).toBe(295);
 
     // THE SINGLE TERMINAL: a second settle with a DIFFERENT story is refused
     // as already-settled, verifies the stored legs, and pays nothing twice.
@@ -2962,7 +3135,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       { outcome: "disputed", wearFee: 25, damageFee: 25 }, founderToken);
     expect(again.status).toBe(409);
     expect(again.json.outcome).toBe("closed"); // the stored story, not the racer's
-    expect((await api("GET", "/api/game/ledger", undefined, peerToken)).json.balances["library-credit"]?.balance).toBe(295);
+    expect(await libraryCredits(peerToken)).toBe(295);
     // The claim stamped the settled cycle in the same statement.
     const adminLoans = await api("GET", "/api/admin/library", undefined, founderToken);
     expect(String(adminLoans.json.loans.find((l: any) => l.id === loan2.json.loanId).settled_cycle_id)).toMatch(/^lunar-\d{6}$/);
@@ -3366,7 +3539,9 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const rec = await api("GET", "/api/admin/ledger/reconciliation", undefined, founderToken);
     expect(rec.json.invariants.ok).toBe(true);
     const exitAcct = rec.json.systemAccounts.find((s: any) => s.id === "sys:exit-settlement" && s.tokenType === "library-credit");
-    expect(exitAcct?.balance).toBe(30);
+    // MINOR. The reconciliation panel reports the ledger's own number, and
+    // `library-credit` is a platform credit token, so `0202` scaled it too.
+    expect(exitAcct?.balance).toBe(30 * (await scale("library-credit")));
 
     // A deployment can never strand itself: no exit opens on the last founder.
     expect((await api("POST", "/api/admin/exits", { userId: founderId }, founderToken)).status).toBe(409);
@@ -3869,7 +4044,17 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       headers: { "Content-Type": "application/json", "stripe-signature": `t=${at},v1=${createHmac("sha256", "whsec_looptest").update(`${at}.${seedPayload}`).digest("hex")}` },
       body: seedPayload,
     });
-    expect((await api("GET", "/api/game/ledger", undefined, peerToken)).json.balances["swap-a"]?.balance).toBe(100);
+    // Both sides of a swap can sit at different scales, so each token's own
+    // decimals are read and the assertions below state the human number times
+    // its own scale. At decimals 0 every number here is unchanged.
+    const [swapTokenRows] = await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT slug, decimals FROM tokens WHERE slug IN ('swap-a','swap-b')",
+    );
+    const scaleOf = (slug: string) =>
+      10 ** Number(swapTokenRows.find((t: any) => String(t.slug) === slug)?.decimals ?? 0);
+    const scaleA = scaleOf("swap-a");
+    const scaleB = scaleOf("swap-b");
+    expect((await api("GET", "/api/game/ledger", undefined, peerToken)).json.balances["swap-a"]?.balance).toBe(100 * scaleA);
 
     // ── THE QUOTE: receive-driven, and it shows its work. ──
     const quote = await api("POST", "/api/exchange/swap/quote", { payToken: "swap-a", receiveToken: "swap-b", receiveQuantity: 10 }, peerToken);
@@ -3907,8 +4092,8 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // Assert on the BODY so a refusal names itself instead of hiding as 409.
     expect(swap.json).toMatchObject({ success: true });
     const after = (await api("GET", "/api/game/ledger", undefined, peerToken)).json.balances;
-    expect(after["swap-a"].balance).toBe(96);
-    expect(after["swap-b"].balance).toBe(10);
+    expect(after["swap-a"].balance).toBe((100 - 4) * scaleA);
+    expect(after["swap-b"].balance).toBe(10 * scaleB);
     // Exactly two ledger rows, opposite directions across the treasury.
     const [legs] = await testDb.conn.query<any[]>(
       "SELECT from_account, to_account, token_type, amount FROM token_ledger WHERE source = 'exchange_swap' AND source_ref = ?",
@@ -3917,6 +4102,14 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(legs.length).toBe(2);
     expect(legs.filter((l: any) => l.to_account === "sys:treasury").length).toBe(1);
     expect(legs.filter((l: any) => l.from_account === "sys:treasury").length).toBe(1);
+    // WHAT EACH LEG ACTUALLY POSTED. Counting the rows and reading their
+    // directions leaves the amounts unchecked, which is the half a units bug
+    // lives in: two legs in the right directions carrying a ten-thousandth of
+    // the trade look exactly like this from a row count.
+    const payLeg = legs.find((l: any) => String(l.token_type) === "swap-a");
+    const receiveLeg = legs.find((l: any) => String(l.token_type) === "swap-b");
+    expect(Number(payLeg.amount)).toBe(4 * scaleA);
+    expect(Number(receiveLeg.amount)).toBe(10 * scaleB);
 
     // Replay of the SAME intent returns the SAME receipt and moves nothing.
     const replay = await api("POST", "/api/exchange/swap", {
@@ -3925,7 +4118,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(replay.status).toBe(200);
     expect(replay.json.replay).toBe(true);
     expect(replay.json.receiptNo).toBe(swap.json.receiptNo);
-    expect((await api("GET", "/api/game/ledger", undefined, peerToken)).json.balances["swap-b"].balance).toBe(10);
+    expect((await api("GET", "/api/game/ledger", undefined, peerToken)).json.balances["swap-b"].balance).toBe(10 * scaleB);
 
     // A quote that went stale is refused WITH the fresh one attached.
     await api("POST", "/api/admin/exchange/tokens/swap-b/price", { priceMinor: 220, note: "Wet-season adjustment" }, founderToken);
@@ -3953,6 +4146,12 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     }, peerToken);
     expect(capped.status).toBe(409);
     expect(capped.json.code).toBe("MEMBER_CAP");
+    // THE NUMBER, not only the code. The per-member allowance is 100 whole
+    // swap-b and 10 of them are spent, so 90 are left. A cap comparing a
+    // MINOR usage against a whole-token allowance would return the same code
+    // here and report 0 remaining, so the code alone cannot tell a binding
+    // cap from one that has stopped meaning anything.
+    expect(capped.json.remaining).toBe(90);
 
     // A halted token refuses both quote and execute, and resume needs words.
     expect((await api("POST", "/api/admin/exchange/tokens/swap-b/halt", { reason: "Checking the rate" }, founderToken)).status).toBe(200);
@@ -4159,8 +4358,13 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
      * "Includes 10000 Cob Credit" and has nothing to divide by.
      */
     const packRow = catalog.products.find((p: any) => p.id === pack.json.id);
-    expect(packRow.grantsToken.amount, "minor units, as the row stores them").toBe(5);
-    expect(packRow.grantsToken.decimals, "the scale that turns them into what a member reads").toBe(0);
+    // The row stores WHOLE tokens (the create route floors a human number and the grant
+    // converts it); the catalog ships them converted, beside `decimals`, so /contribute
+    // divides once and prints the 5 the pack grants.
+    expect(packRow.grantsToken.amount, "minor units, converted from the row's whole tokens").toBe(5 * (await scale("swap-b")));
+    expect(packRow.grantsToken.decimals, "the scale that turns them into what a member reads").toBe(
+      Math.round(Math.log10(await scale("swap-b"))),
+    );
     expect(typeof packRow.grantsToken.decimals).toBe("number");
     const donationId = donation.json.id;
     expect((await api("POST", `/api/products/${donationId}/checkout`, { amountMinor: 100 }, peerToken)).status).toBe(400);
@@ -4197,7 +4401,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(paid.status).toBe("paid");
     expect(Number(paid.periods_paid)).toBe(1);
     const afterBal = (await api("GET", "/api/game/ledger", undefined, peerToken)).json.balances["swap-b"].balance;
-    expect(afterBal).toBe(before + 5);
+    expect(afterBal).toBe(before + 5 * (await scale("swap-b")));
     const [grantLegs] = await testDb.conn.query<any[]>(
       "SELECT from_account FROM token_ledger WHERE source = 'product_grant' AND source_ref = ?", [purchaseRow.id],
     );
@@ -4357,7 +4561,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       data: { object: { id: "ch_1", payment_intent: "pi_sub_1" } },
     })).status).toBe(200);
     const balAfter = (await api("GET", "/api/game/ledger", undefined, peerToken)).json.balances["pack-tok"].balance;
-    expect(balBefore - balAfter).toBe(1); // one period's tokens, not two
+    expect(balBefore - balAfter).toBe(1 * (await scale("pack-tok"))); // one period's tokens, not two
     const [reversals] = await testDb.conn.query<any[]>(
       "SELECT idempotency_key FROM token_ledger WHERE source = 'payment_reversal' AND source_ref = ?", [subBuy.id],
     );
@@ -4647,8 +4851,10 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       "SELECT COALESCE(SUM(amount),0) AS n FROM token_ledger WHERE from_account = 'sys:mint' AND token_type = 'cap-tok'",
     );
     // The ledger is the witness. Before the guard this could reach 100.
-    expect(Number(minted.n)).toBeLessThanOrEqual(30);
-    expect(Number(minted.n)).toBe(accepted * 10);
+    // The ledger sums MINOR units; the cap (30) and each stocking (10) are human.
+    const capScale = await scale("cap-tok");
+    expect(Number(minted.n)).toBeLessThanOrEqual(30 * capScale);
+    expect(Number(minted.n)).toBe(accepted * 10 * capScale);
 
     // ── AN ABANDONED CHECKOUT MUST NOT HOLD SOMEONE IN THE VILLAGE. ──
     // A pending order blocks disabling the exchange AND blocks that member's

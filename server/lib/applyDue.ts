@@ -534,6 +534,8 @@ export async function recordVeto(
     };
   }
 
+  // A vetoed decision reads as failed (Rye, 2026-09-08). The write, and why
+  // `outcome_note` is deliberately left alone, live on `recordVetoOnBallot`.
   const moved = await recordVetoOnBallot(deps.pool, {
     ballotId: b.id,
     at,
