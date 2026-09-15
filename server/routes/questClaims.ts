@@ -284,32 +284,40 @@ export function register(app: Express, deps: Deps): void {
       });
     }
     if (approve === false) {
-      const declined = await claimsRepo.update(claim.id, (c) => {
-        c.status = "declined";
-        c.resolvedAt = new Date().toISOString();
-      });
-      if (declined) {
-        await notify({
-          userId: declined.userId,
-          type: "quest_declined",
-          title: `Your claim on "${declined.questTitle}" was released`,
-          body: "The claim was declined or cleared. The quest is open again.",
-          // The quest itself, not the board it sits on. A member reading this
-          // wants to see the thing they were working on.
-          link: `/quests/${declined.questId}`,
-          // The real actor, admin or steward: adminActor() only populates for
-          // password/admin callers, so a steward's decision was anonymous.
-          actorUserId: actor.userId,
-          dedupeKey: `quest:${declined.id}:declined`,
+      // From `claimed` or `submitted` only, under the claim's row lock. A stale
+      // claim still has to be clearable from either. A resolved one is refused:
+      // declining consented work left its payment standing and handed the quest
+      // back to be claimed and paid again. The account is on `declineOnce` in
+      // server/repos/quests.ts.
+      const outcome = await claimsRepo.declineOnce(claim.id, new Date().toISOString());
+      if (!outcome.ok) {
+        if (outcome.reason === "missing") return res.status(404).json({ error: "Not found" });
+        return res.status(409).json({
+          error: `Cannot decline a claim with status "${outcome.status}". It has already been resolved, so there is nothing left to hand back.`,
+          status: outcome.status,
         });
-        // The /api/admin audit middleware attributes isAdmin actors only, so
-        // a steward's decision would otherwise leave no trail at all.
-        if (!actor.isAdminActor) {
-          void recordEvent(getPool(), {
-            kind: "audit", text: `quest:declined:${declined.id}`,
-            actorUserId: actor.userId, entityType: "quest_claim", entityRef: declined.id, audience: "admin",
-          });
-        }
+      }
+      const declined = outcome.claim;
+      await notify({
+        userId: declined.userId,
+        type: "quest_declined",
+        title: `Your claim on "${declined.questTitle}" was released`,
+        body: "The claim was declined or cleared. The quest is open again.",
+        // The quest itself, not the board it sits on. A member reading this
+        // wants to see the thing they were working on.
+        link: `/quests/${declined.questId}`,
+        // The real actor, admin or steward: adminActor() only populates for
+        // password/admin callers, so a steward's decision was anonymous.
+        actorUserId: actor.userId,
+        dedupeKey: `quest:${declined.id}:declined`,
+      });
+      // The /api/admin audit middleware attributes isAdmin actors only, so
+      // a steward's decision would otherwise leave no trail at all.
+      if (!actor.isAdminActor) {
+        void recordEvent(getPool(), {
+          kind: "audit", text: `quest:declined:${declined.id}`,
+          actorUserId: actor.userId, entityType: "quest_claim", entityRef: declined.id, audience: "admin",
+        });
       }
       return res.json(declined);
     }
@@ -317,8 +325,9 @@ export function register(app: Express, deps: Deps): void {
     // Without this an admin could credit a quest that was claimed and never
     // done, which quietly breaks the one promise the recognition economy makes:
     // that credit lands after the work was shown and consented to. Declining
-    // stays legal from any state, since a stale claim needs clearing. The test
-    // itself moved DOWN into `consentOnce`, under the claim's row lock: read
+    // stays legal from `claimed` as well as `submitted`, since a stale claim
+    // needs clearing, and is refused once a claim is resolved. The test itself
+    // moved DOWN into `consentOnce`, under the claim's row lock: read
     // here it was a plain SELECT several awaits from the write it guarded, and
     // two stewards consenting at once both passed it.
     const consentableFrom: ClaimRecord["status"][] =
