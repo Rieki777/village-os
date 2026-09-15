@@ -545,6 +545,11 @@ export default function PowerMap({
                 pointerEvents={interactive ? undefined : "none"}
                 onMouseEnter={() => interactive && setHoverId(pos.id)}
                 onMouseLeave={() => setHoverId((h) => (h === pos.id ? null : h))}
+                // Arrange mode finds the circle under a pointer with
+                // `document.elementFromPoint`, which already accounts for the
+                // animated viewBox, the landscape widening, the pinch nudge and
+                // framer's transform. An id on the element is all it needs.
+                data-circle-id={pos.id}
                 role="button"
                 tabIndex={interactive ? 0 : -1}
                 aria-label={`${c?.name ?? pos.id}${forming ? ", still forming" : ""}${
