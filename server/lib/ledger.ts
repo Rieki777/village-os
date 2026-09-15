@@ -1046,6 +1046,13 @@ export async function postTransferOn(
        * key-shape bug the caller has to hear about rather than a payment to
        * skip. `keys` percent-encodes case and colons for exactly this
        * reason; this is the net under every hand-written key as well.
+       *
+       * The read back LOCKS (`keyClashRows`, LOCK IN SHARE MODE), for the
+       * reason the paragraph above gives for the balance read: it used to be
+       * a plain SELECT, and in a caller-owned transaction whose snapshot
+       * predates the colliding commit it returned nothing, so a collision was
+       * reported as `{ ok: true, duplicate: true }`. Why shared and not
+       * exclusive is measured at the function.
        */
       const clash = await keyClashRows(conn, input.idempotencyKey);
       const stored = clash[0] ? String(clash[0].idempotency_key) : null;
@@ -1715,7 +1722,9 @@ export async function checkLedgerInvariants(pool: Pool): Promise<InvariantReport
    * them. Sum those debits for this account and this token, and a balance
    * below their negation is illegal however it got there. A genuine -25
    * after a reversal of a spent 25 still passes, because 25 is exactly what
-   * the clawback took.
+   * the clawback took. It is a bound and not an attribution: a debit the
+   * balance fully covered at the time still counts toward it, so an unlawful
+   * debt smaller than the account's lifetime allow-negative debits passes.
    *
    * `CAST(t.source AS BINARY)` because the column's collation folds case and
    * pads spaces: `IN ('reversal', ...)` matched a `"REVERSAL"` row that the

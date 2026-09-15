@@ -38,6 +38,7 @@ import {
   postGraceNightBurn,
   postPaymentReversalLeg,
   postTransfer,
+  postTransferOn,
   postTransferPair,
   questCreditsFor,
   RECOGNITION_FAUCET,
@@ -776,6 +777,38 @@ describe.skipIf(!configured)("the MySQL token ledger", () => {
       });
       expect(replay.ok && replay.duplicate).toBe(true);
       expect(await balanceOf(pool, memberAccount("pad-one"), PLATFORM_TOKEN)).toBe(3);
+    });
+
+    it("refuses a collision committed after a caller-owned transaction took its snapshot", async () => {
+      // THE STALE SNAPSHOT. `postTransferOn` runs inside whatever transaction
+      // its caller opened. Here that transaction takes its read view FIRST,
+      // then a second connection commits `...usr-aB1`, then the case variant
+      // is posted on the first connection. The INSERT sees the committed row
+      // and fails as a duplicate; the read back used to be a plain SELECT,
+      // answered from the older snapshot, found nothing, and reported
+      // `{ ok: true, duplicate: true }` for a member who was never paid.
+      const conn = await pool.getConnection();
+      let second: Awaited<ReturnType<typeof postTransferOn>> | undefined;
+      try {
+        await conn.beginTransaction();
+        await conn.query("SELECT COUNT(*) FROM `token_ledger`"); // module-review-ok: opens this transaction's read view, which is the condition under test
+        const first = await postTransfer(pool, {
+          from: RECOGNITION_FAUCET, to: memberAccount("snap-one"), amount: 5,
+          source: "quest_consent", idempotencyKey: "quest.completed:local:snap:c:usr-aB1",
+        });
+        expect(first.ok && !first.duplicate).toBe(true);
+        second = await postTransferOn(conn, {
+          from: RECOGNITION_FAUCET, to: memberAccount("snap-two"), amount: 5,
+          source: "quest_consent", idempotencyKey: "quest.completed:local:snap:c:usr-Ab1",
+        });
+      } finally {
+        await conn.rollback();
+        conn.release();
+      }
+      expect({ ok: second?.ok, duplicate: second?.duplicate }).toEqual({ ok: false, duplicate: false });
+      expect(String(second?.error)).toContain("collides with the already-posted key");
+      expect(await balanceOf(pool, memberAccount("snap-two"), PLATFORM_TOKEN)).toBe(0);
+      expect(await balanceOf(pool, memberAccount("snap-one"), PLATFORM_TOKEN)).toBe(5);
     });
   });
 
