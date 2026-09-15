@@ -203,7 +203,9 @@ describe("PowerAffinityPanel", () => {
     }));
     render(<PowerAffinityPanel password="pw" castKey="" />);
 
-    expect((await screen.findByRole("alert")).textContent).toContain("Sign in as an admin");
+    expect((await screen.findByRole("status")).textContent).toContain("Sign in as an admin");
+    // Polite, so it never talks over the page it sits on, and never a second alert on it.
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByRole("table")).toBeNull();
   });
 });

@@ -239,8 +239,13 @@ export default function PowerAffinityPanel({
         you change one, it stays as you left it until you hand it back.
       </p>
 
+      {/* A STATUS, and never an alert. This panel sits low on a long setup page,
+          and an assertive alert announces over whatever the founder is doing
+          elsewhere on it. It also made this panel the page's second alert, which
+          is what turned Admin.fiatCurrency's refusal test red on #267: a page-wide
+          query for the one alert found two. */}
       {loadError ? (
-        <p role="alert" className="text-sm text-red-600 border border-red-200 rounded-lg p-3 mb-4">
+        <p role="status" className="text-sm text-red-600 border border-red-200 rounded-lg p-3 mb-4">
           {loadError}
         </p>
       ) : null}
