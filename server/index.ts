@@ -75,6 +75,7 @@ import { register as registerGovernanceWizardRoutes } from "./routes/governanceW
 import { register as registerDelegationRoutes } from "./routes/delegation";
 import { register as registerGovernanceVetoRoutes } from "./routes/governanceVetoes";
 import { register as registerGovernanceLandingRoutes } from "./routes/governanceLanding";
+import { registerMoonSettlementRoutes } from "./routes/moonSettlement";
 // The dispatcher lane: the landing path, the change-set executor and the roll notice.
 import { applyDueGovernance, autoSettleExpired, digestComposerFor, itemKindsOf, markNotApplicable, overrideDials, routeOutcome, runVetoWatch, vetoWindowOn, type CloseRouting, type LandingDeps, type SubjectCloser } from "./lib/applyDue";
 import { register as registerGovernanceModeRoutes } from "./routes/governanceMode";
@@ -773,6 +774,10 @@ import {
   type CycleRecord,
   type DistributionRecord,
 } from "./lib/gratitude-cycles";
+import { settleDueCycles, type SettlementDeps } from "./lib/cycleSettlement";
+import { MOON_PROPOSER, runMoonProposal, settlementCloser, type MoonProposalDeps } from "./lib/moonProposal";
+import { latestSettlementRefusals } from "./repos/settlementBallots";
+import { CYCLE_SETTLEMENT } from "../shared/moonSettlement";
 import { memberMoonFlows, moonOneCycle, withVillageMoons } from "./lib/villageMoon";
 
 const BCRYPT_SALT_ROUNDS = 10;
@@ -5503,6 +5508,17 @@ async function startServer() {
       });
     }
     for (const b of pastWindow) {
+      /*
+       * A BALLOT NOBODY OPENED HAS NOBODY TO TELL.
+       *
+       * A settlement ballot is opened by the moon, and `opened_by` carries a
+       * machine's name rather than a member's. Telling it that its window
+       * closed writes a notification row addressed to an account that cannot
+       * exist and that nobody can ever read. The ballot is not neglected:
+       * `autoSettleExpired` closes an expired window on the five-minute job,
+       * which is the same routine that would have closed it for a member.
+       */
+      if (b.openedBy === MOON_PROPOSER) continue;
       await notify({
         userId: b.openedBy,
         type: "ballot_expired",
@@ -5555,6 +5571,23 @@ async function startServer() {
       // mean the next tick picks up exactly where this one stopped.
       console.error("[economy] settlement failed:", err);
     }
+  });
+
+  /*
+   * THE MOON ASKS. IT DOES NOT DECIDE, AND IT DOES NOT PAY.
+   *
+   * The rule directly above — "Closing a gratitude cycle stays a human act, and
+   * the scheduler has been forbidden from doing it since it was written" — is
+   * untouched. This job cannot close a cycle and cannot move a token. Its whole
+   * power is to open a ballot, and the village settles the moon by passing it.
+   *
+   * Hourly, matching the settlement job beside it. A moon boundary is not an
+   * instant anybody is waiting on to the minute, and an hourly tick means a
+   * process restarted at any point in a cycle still asks.
+   */
+  registerJob("moon-proposal", 60 * 60 * 1000, async () => {
+    const r = await runMoonProposal(moonDeps());
+    return r.posted ? `asked the village about cycle ${r.cycleNumber} (${r.ballotId})` : r.why;
   });
 
   // GOVERNANCE LANDS ON ITS OWN CLOCK, outside the settlement job on purpose:
@@ -20280,6 +20313,11 @@ ${inner}
     const eligible = await eligibleSenderIds();
     const reversed = await gratitudeRepo.reversedIds();
 
+    // The village's latest settlement vote on each finished moon, when it said
+    // no. Close still pays that split (Rye, 2026-09-14), so the card warns first.
+    const refusals = unreadable
+      ? new Map()
+      : await latestSettlementRefusals(getPool(), dueCycles(cycles, entries, new Date()).map((c) => c.id));
     const due = (unreadable ? [] : dueCycles(cycles, entries, new Date())).map((cycle) => {
       const persisted = dists.filter((d) => d.cycleId === cycle.id);
       const totals = settleCycle(entries, cycle.id, eligible, reversed);
@@ -20311,6 +20349,7 @@ ${inner}
         // setting: that is the one the retry will actually pay.
         token: persisted.find((d) => d.poolToken)?.poolToken ?? poolToken,
         fromPersistedSplit: persisted.length > 0,
+        villageRefused: refusals.get(cycle.id) ?? null,
         shares: shares.sort((a, b) => b.credited - a.credited || b.received - a.received),
       };
     });
@@ -20345,238 +20384,28 @@ ${inner}
    */
   app.post("/api/admin/cycles/close", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-
-    /**
-     * The ReGen model (Rye directive, 2026-07-26; mechanics researched in
-     * FIXES_TO_MAKE_2026-07-17 §1.1a): recognition is the SIGNAL — sends stay
-     * exactly as they are, budgeted and public. VALUE arrives here, at close:
-     * an admin-sized pool of a separate platform token distributes to
-     * recipients in proportion to the recognition they received that cycle.
-     * Value pays exactly once, in exactly one token, at exactly one moment.
-     * Floors round in the pool's favor; the idempotency key makes any re-run
-     * credit nothing twice.
-     */
-    const poolSize = numberVar("gratitude.pool_per_cycle") as number;
-    const poolToken = String(stringVar("gratitude.pool_token"));
-    // Fail loud BEFORE closing anything: a misconfigured pool should stop
-    // the admin here, not half-settle a lunation. Same judgement the preview
-    // above prints, so the desk warns about it before the press.
-    const poolProblem = cyclePoolProblem(poolSize, poolToken);
-    if (poolProblem) return res.status(400).json({ error: poolProblem });
-
-    const cycles: CycleRecord[] = await cyclesRepo.all();
-    const entries: any[] = await gratitudeRepo.all();
     /*
-     * Fail loud on a cycle id nothing can read, in the same place and for the
-     * same reason the pool problem above fails loud: before anything settles.
+     * THE BODY OF THIS ROUTE NOW LIVES IN server/lib/cycleSettlement.ts.
      *
-     * This used to be a quiet skip. `settleCycle` filtered on an exact id and
-     * `dueCycles` dropped whatever `parseCycleId` could not read, so 30 of 130
-     * units left the totals without a word, every recipient under them was told
-     * a smaller number than they had earned, and their share of the pool was
-     * computed from it. A number that is wrong and says so can be fixed in an
-     * hour. A number that is wrong and looks right is wrong forever.
+     * It moved because a second caller arrived. A settlement ballot the village
+     * passes settles the same moon, and two routines that both decide what a
+     * moon is worth disagree eventually — the same rule the governance landing
+     * holds one routine for, one paragraph below. What the button does and what
+     * a passed vote does are now provably the same act.
+     *
+     * The governance landing stays HERE and is not part of settling: it is this
+     * route's own second errand, and calling it from inside the settlement
+     * would be re-entrant on the ballot path, where the settlement is already
+     * running inside the landing job.
      */
-    const unreadable = unreadableCycleProblem(entries);
-    if (unreadable) return res.status(400).json({ error: unreadable });
+    const result = await settleDueCycles(settlementDeps(), { actorUserId: adminActor(req)?.id ?? null });
+    if (!result.ok) return res.status(result.status).json({ error: result.error });
 
-    const due = dueCycles(cycles, entries, new Date());
-
-    const closed: CycleRecord[] = [];
-    let totalCredited = 0;
-    const eligible = await eligibleSenderIds();
-    // Read once for the whole loop, and read with the same repo call the
-    // preview above uses, so the numbers an admin read before pressing are the
-    // numbers this settles. A gift that was undone is not part of the moon.
-    const reversed = await gratitudeRepo.reversedIds();
-    for (const cycle of due) {
-      const totals = settleCycle(entries, cycle.id, eligible, reversed);
-      // Split by ELIGIBLE recognition, not the raw total: value follows the
-      // same Sybil filter the breadth metric answers to. `t.received` stays
-      // the honest figure for reporting.
-      const totalReceived = totals.reduce((n, t) => n + t.receivedEligible, 0);
-      // STICKY SPLIT: persist the WHOLE computed split before any value
-      // moves, then post from what was persisted. A close that failed
-      // half-way used to re-split a pool that was already partly out the
-      // door from LIVE data that had drifted — the ledger keys silently kept
-      // the first amounts while the report rows took the second, and the two
-      // never agreed again. The distributions repo is add-if-absent, so a
-      // retry finds the first run's basis and converges. (Rows now exist for
-      // a cycle that is not yet closed; every reader that must only see
-      // settled cycles filters on the cycle's closed status — the public
-      // report always did, and the badge breadth metric now does.)
-      for (const t of totals) {
-        // Pool share ∝ recognition received this lunation. floor() keeps the
-        // remainder in the pool rather than minting dust.
-        const credited = poolSize > 0 && totalReceived > 0
-          ? Math.floor((t.receivedEligible / totalReceived) * poolSize)
-          : 0;
-        await distributionsRepo.add({
-          id: `dist-${cycle.cycleNumber}-${t.userId}`,
-          cycleId: cycle.id,
-          userId: t.userId,
-          received: t.received,
-          receivedHearts: t.receivedHearts,
-          receivedAcks: t.receivedAcks,
-          distinctSenders: t.distinctSenders,
-          credited,
-          poolToken: poolSize > 0 ? poolToken : null,
-          createdAt: new Date().toISOString(),
-        } as DistributionRecord);
-      }
-      const persisted = (await distributionsRepo.all()).filter((d) => d.cycleId === cycle.id);
-      let cycleCredited = 0;
-      for (const d of persisted) {
-        const share = Number(d.credited ?? 0);
-        if (share > 0) {
-          // Value flows from the cycle-pool faucet (S7): the pool's negative
-          // balance is the total value ever released, in one query.
-          const r = await postTransfer(getPool(), {
-            from: CYCLE_POOL_FAUCET,
-            to: memberAccount(d.userId),
-            tokenType: (d as any).poolToken ?? poolToken,
-            amount: toLedgerUnits((d as any).poolToken ?? poolToken, share),
-            source: "gratitude_pool",
-            sourceRef: cycle.id,
-            description: `Cycle pool share: ${d.received} recognition from ${d.distinctSenders} ${d.distinctSenders === 1 ? "person" : "people"}`,
-            idempotencyKey: `gratitude_pool:${cycle.cycleNumber}:${d.userId}`,
-          });
-          if (!r.ok) {
-            return res.status(500).json({ error: `pool distribution failed: ${r.error}` });
-          }
-          if (!r.duplicate) { totalCredited += share; cycleCredited += share; }
-        }
-      }
-      const record: CycleRecord = { ...cycle, status: "closed", closedAt: new Date().toISOString() };
-      await cyclesRepo.upsert(record);
-      closed.push(record);
-
-      /*
-       * THE SETTLEMENT REACHES THE PEOPLE IT SETTLED FOR.
-       *
-       * A close moved real value into member wallets and told nobody. The
-       * activity line said "a lunar cycle closed, N members were
-       * acknowledged", which is the village hearing about it and not the
-       * member hearing what they got, and the wallet just quietly held more
-       * than it had.
-       *
-       * AFTER the upsert on purpose: this fires about a cycle that IS closed,
-       * and the distribution rows it reads were persisted before any value
-       * moved (the sticky split above). The dedupe key is per cycle per
-       * member, so a re-run of a partially settled close credits nothing
-       * twice and tells nobody twice either.
-       *
-       * Only members who actually received recognition. Somebody who received
-       * none is not owed a notice saying so.
-       */
-      for (const d of persisted) {
-        const received = Number(d.received ?? 0);
-        if (received <= 0) continue;
-        const share = Number(d.credited ?? 0);
-        const senders = Number(d.distinctSenders ?? 0);
-        const shareToken = (d as any).poolToken ?? poolToken;
-        await notify({
-          userId: d.userId,
-          type: "cycle_settled",
-          title:
-            share > 0
-              ? `Cycle ${cycle.cycleNumber} settled, and ${share} ${tokenDef(shareToken)?.name ?? shareToken} came to you`
-              : `Cycle ${cycle.cycleNumber} settled`,
-          body: `${received} recognition from ${senders} ${senders === 1 ? "person" : "people"} this lunation.`,
-          link: share > 0 ? "/wallet" : "/gratitude",
-          dedupeKey: `cycle:${cycle.id}:settled:${d.userId}`,
-        });
-      }
-
-      // S49: freeze this lunation's health snapshot IN the close — the only
-      // moment these point-in-time facts are true (F13: unrecoverable
-      // retroactively). NOT module-gated: collection is infrastructure,
-      // display is the module. Never fails the close; the UNIQUE key makes
-      // a crash-retry write nothing twice.
-      try {
-        await snapshotCycle(getPool(), {
-          id: cycle.id,
-          cycleNumber: cycle.cycleNumber,
-          startsAt: String(cycle.startsAt),
-          endsAt: String(cycle.endsAt),
-        }, eligible, { stageMultiplierFor: stageMultiplierById });
-        // H7: with this lunation frozen, compare it to the one before and
-        // tell the stewards what moved. Runs INSIDE the same try as the
-        // snapshot on purpose — an alert failure must never unclose a
-        // cycle, and an alert without its snapshot would be nonsense.
-        const pct = numberVar("health.alert_change_pct");
-        if (pct > 0) {
-          const alerts = await thresholdAlerts(getPool(), pct);
-          if (alerts.length > 0) {
-            const lines = alerts
-              .slice(0, 6)
-              .map((a) => `${a.label} ${a.direction} ${Math.abs(a.changePct)}% (${a.previous} → ${a.value})`);
-            await notifyAdmins(
-              "health",
-              `Lunation ${cycle.cycleNumber} moved: ${lines.join("; ")}`,
-              `health-alerts:${cycle.cycleNumber}`,
-            );
-            void recordEvent(getPool(), {
-              kind: "audit", text: `health:alerts:${cycle.cycleNumber}:${alerts.length}`,
-              entityType: "cycle", entityRef: cycle.id, audience: "admin",
-            });
-          }
-        }
-      } catch (e) {
-        console.error(`[health] snapshot failed for cycle ${cycle.cycleNumber} (close stands)`, e);
-        void recordEvent(getPool(), {
-          kind: "audit",
-          text: `health:snapshot-failed:${cycle.cycleNumber}`,
-          audience: "admin",
-        });
-      }
-      if (totals.length > 0) {
-        const poolNote = cycleCredited > 0
-          ? `. The cycle pool released ${cycleCredited} ${tokenDef(poolToken)?.name ?? poolToken}`
-          : "";
-        await addActivity(
-          "cycle",
-          `A lunar cycle closed: ${totals.length} ${totals.length === 1 ? "member was" : "members were"} acknowledged with ${mergedConfig().currency.nameLower}${poolNote}`,
-          { actorUserId: adminActor(req)?.id, entityType: "cycle", entityRef: cycle.id },
-        );
-      }
-    }
-    // S38: the earned-badge engine runs after settlement lands — new
-    // distributions may have moved a metric past a threshold. Keyed events
-    // make this a no-op when nothing changed; failures never unclose a cycle.
-    if (closed.length > 0 && effectiveLifecycle("badges") !== "off") {
-      try {
-        const evald = await evaluateEarnedBadges(getPool());
-        for (const t of evald.newTiers) {
-          const badge = await badgeById(getPool(), t.badgeId);
-          await notify({
-            userId: t.userId,
-            type: "badge",
-            title: t.tier > 1 ? `Badge upgraded: ${badge?.name ?? t.badgeId} ×${t.tier}` : `Badge earned: ${badge?.name ?? t.badgeId}`,
-            link: "/badges",
-            dedupeKey: `rule:${t.badgeId}:${t.userId}:tier-${t.tier}`,
-          });
-        }
-      } catch (e) {
-        console.error("[badges] post-close evaluation failed (cycle stays closed)", e);
-      }
-    }
-    /*
-     * GOVERNANCE LANDS THROUGH ONE ROUTINE, AND THIS IS ONE OF ITS TWO CALLERS.
-     *
-     * The block that used to sit here selected every passed proposal with no
-     * landing predicate and no veto join and applied whatever it found, beside
-     * an `applyDueGovernance` that had its own idea of what was due. Two
-     * routines that both decide that question disagree eventually, and the
-     * disagreement here is a change landing inside a steward's window. So the
-     * block is gone and the cycle close asks the one routine.
-     *
-     * The report says whether it RAN and how much was DUE, separately, because
-     * "nothing to apply" and "could not tell" look identical from a count.
-     */
     const landing = await applyDueGovernance(landingDeps());
     res.json({
-      closed: closed.length, cycles: closed, poolCredited: totalCredited,
+      closed: result.report.closed.length,
+      cycles: result.report.closed,
+      poolCredited: result.report.poolCredited,
       governanceApplied: landing.ran ? landing.landed : 0,
       governanceLanding: landing,
     });
@@ -20667,6 +20496,9 @@ ${inner}
     if (!user) return res.status(401).json({ error: "auth_required" });
     const log = await gratitudeRepo.all();
     const dists: DistributionRecord[] = await distributionsRepo.all();
+    // Moons that CLOSED. A split can sit frozen on an open moon while the village
+    // votes on it, and the comment above promises closed lunations only.
+    const closedCycleIds = new Set((await cyclesRepo.all()).filter((c) => c.status === "closed").map((c) => c.id));
     res.json({
       balance: user.recognitionBalance ?? 0,
       budget: await gratitudeBudget(user),
@@ -20675,7 +20507,7 @@ ${inner}
         sent: log.filter((g) => g.fromId === user.id).reduce((n, g) => n + (Number(g.amount) || 0), 0),
         distinctAcknowledgers: new Set(log.filter((g) => g.toId === user.id).map((g) => g.fromId)).size,
       },
-      byCycle: await memberMoonFlows(getPool(), dists, user.id),
+      byCycle: await memberMoonFlows(getPool(), dists, user.id, closedCycleIds),
     });
   });
 
@@ -22280,6 +22112,18 @@ ${inner}
 
   const SUBJECT_CLOSERS: Record<string, SubjectCloser> = {
     /*
+     * THE VILLAGE'S OWN SETTLEMENT (server/lib/moonProposal.ts).
+     *
+     * Its absence from this table is what made a settlement ballot impossible
+     * to open at all: `openBallot` refuses a binding ballot on a subject nobody
+     * can close, which is the fail-safe this feature had to be let through
+     * rather than around.
+     *
+     * `moonDeps` is passed as a FACTORY because it is declared below this
+     * literal and read at landing time, not at boot.
+     */
+    [CYCLE_SETTLEMENT]: settlementCloser(() => moonDeps()),
+    /*
      * Mechanics (GOV_DESIGN 2.6). Every step is a guarded update or an
      * idempotent apply, so a crash partway heals on the admin apply path
      * instead of corrupting.
@@ -23279,6 +23123,48 @@ ${inner}
    * is read straight off this table.
    */
   SUBJECT_CLOSERS[MINT_RULE] = SUBJECT_CLOSERS.mechanics;
+
+  /**
+   * WHAT SETTLING A MOON NEEDS that only this file can hand over: the four
+   * repositories, the Sybil filter, the two notice paths and the village's word
+   * for its currency. Everything else server/lib/cycleSettlement.ts imports for
+   * itself. Read fresh every call for the reason `landingDeps` is.
+   */
+  const settlementDeps = (): SettlementDeps => ({
+    getPool,
+    cyclesRepo,
+    gratitudeRepo,
+    distributionsRepo,
+    eligibleSenderIds,
+    // The stage each member held at close, for the three allowance snapshots.
+    stageMultiplierFor: stageMultiplierById,
+    notify: async (input) => { await notify(input); },
+    notifyAdmins: async (type, title, dedupeKey) => { await notifyAdmins(type, title, dedupeKey); },
+    currencyNameLower: () => mergedConfig().currency.nameLower,
+  });
+
+  /**
+   * The settlement's deps plus the three things only a BALLOT needs: the roll
+   * and dials, the names for the document, and the bell.
+   */
+  const moonDeps = (): MoonProposalDeps => ({
+    ...settlementDeps(),
+    ballotSetup: async () => {
+      const setup = await roleBallotSetup();
+      return {
+        method: setup.method,
+        dials: setup.dials,
+        snapshot: setup.snapshot,
+        electorate: setup.electorate,
+        tokenProblem: setup.tokenProblem,
+      };
+    },
+    memberNames: async () =>
+      new Map((await members.all()).map((u: any) => [String(u.id), firstName(u.name ?? "Member")])),
+    tellRoll: (ballot, title, body) =>
+      notifyRoll(ballot, { type: "ballot_opened", title, body, keySuffix: "opened" }),
+    governanceOn: () => effectiveLifecycle("governance") !== "off",
+  });
 
   /**
    * EVERYTHING THE LANDING PATH NEEDS, so the five-minute job, the cycle close,
@@ -25729,6 +25615,13 @@ ${inner}
   registerDelegationRoutes(app, { authedUser, getPool, capabilityCtx, members, firstName });
   registerGovernanceVetoRoutes(app, { authedUser, mayAct, isAdmin, getPool, members, firstName, notify });
   registerGovernanceLandingRoutes(app, { authedUser, mayAct, getPool, members, firstName, notify });
+  // The two founder doors onto the moon's settlement: ask the village now,
+  // and land what the village has already carried. server/routes/moonSettlement.ts.
+  registerMoonSettlementRoutes(app, {
+    isAdmin,
+    runProposal: () => runMoonProposal(moonDeps()),
+    landDue: () => applyDueGovernance(landingDeps()),
+  });
   registerGovernanceModeRoutes(app, { authedUser, getPool, capabilityCtx, firstName, weightModeNow, buildElectorate });
 
   /**

@@ -265,7 +265,10 @@ constant comes back.
 - Notifications: `server/lib/notify.ts` — `dedupe_key` NOT NULL + unique index; one stable
   key per (event, recipient); a retried insert is a no-op.
 - Scheduler: `registerJob()` (`server/lib/scheduler.ts`). Jobs never close gratitude
-  cycles — settlement releases value and is a human act.
+  cycles — settlement releases value and is a human act. `moon-proposal` is not an
+  exception: it may ASK (freeze a moon's split and open a `cycle_settlement` ballot)
+  and never decide; the value moves when the village passes the vote
+  (`shared/moonSettlement.ts`).
 - Payments: `server/lib/payments.ts` — HMAC over the **raw** body, event-level dedupe on
   `stripe_event_id`, reversals are mechanical claw-backs via registered handlers.
 - S62–S66: instance identity + `PLATFORM_VERSION` (`server/lib/identity.ts`; the

@@ -540,9 +540,13 @@ WHERE job = ? AND (last_run_at IS NULL OR last_run_at <= ?)` —
 `affectedRows` says who won. Restart-safe, multi-process-safe, runs when
 DUE not N ms after boot. **What it will never do, written down so nobody
 "helpfully" adds it**, in the file header: it does NOT close gratitude cycles
-(settlement releases value and is an explicit admin act, `POST
-/api/admin/cycles/close`), and it does NOT roll seasons (compute-on-read by
-design).
+(settlement releases value, and a person is in both of the two ways a moon is
+settled — a founder pressing `POST /api/admin/cycles/close`, or the village
+passing a `cycle_settlement` ballot), and it does NOT roll seasons
+(compute-on-read by design). The `moon-proposal` job is not an exception: it
+freezes what a moon settled to and OPENS THE BALLOT, and the settlement runs
+from the closer only once the village has voted it through and the steward's
+window has run (`shared/moonSettlement.ts`).
 
 The registry of jobs is the `registerJob` calls themselves, and it has grown
 faster than any list in this file could. Enumerate it:
@@ -1600,7 +1604,9 @@ fork, but drop the row deliberately when you do it.
 13. **Value rows are never deleted.** Deletion is anonymisation; the
     tombstone keeps conservation and settlements explicable.
 14. **Cycle close and season roll are never automated.** Releasing value is
-    a human act; the scheduler's charter says so in writing.
+    a human act; the scheduler's charter says so in writing. A job may put a
+    settlement to the village as a vote (`moon-proposal`), which moves the
+    human from one founder to the whole village and never removes them.
 15. **One gate, one ledger, one event spine, one scheduler, one webhook.**
     Any second mechanism for permissions, balances, history, cron or
     settlement is a bug by definition.

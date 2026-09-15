@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `fe23a9ff81bb1e54`, which regenerating reproduces.
+It describes the sources at fingerprint `4b849a7e7bdc66a0`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -200,10 +200,12 @@ What each kind of decision asks. A subject declares MINIMUMS and the village's o
 | `village_launch` | 100% | 100% | 3 | yes | `custom` | yes |
 | `mint_rule` | 0% | 50% | 0 | no | the village's own | yes |
 | `governance_mode` | 97% | 97% | 0 | no | `custom` | yes |
+| `cycle_settlement` | 0% | 0% | 0 | no | the village's own | yes |
 
 - `village_launch`: Starting the Game asks every member on the roll to vote yes. An abstention is not a yes, and a vote nobody cast is not a yes either.
 - `mint_rule`: This one changes what the village mints, so it asks for more than half the village's voting weight to take part. How much of that has to agree is the village's own setting.
 - `governance_mode`: This one changes how every vote in the village is counted, so it asks the constitutional bar: almost everybody present, and almost everybody in favour.
+- `cycle_settlement`: Settling a moon asks whatever this village asks of any decision. It happens every moon, so it is not priced above the village's own bar.
 
 Every other subject type keeps the village's own dials: `80% unity` and `20% quorum` on a fresh village, with no floor of its own.
 
@@ -223,6 +225,7 @@ What closing a decision DOES, per subject type, and the one place that question 
 
 | Subject type | What a passed vote changes | How it reaches its executor |
 | --- | --- | --- |
+| `cycle_settlement` | Settles a moon that has ended and releases its cycle pool, at exactly the amounts the ballot showed. | its own entry in the close dispatcher |
 | `mechanics` | Moves the village's own dials, through the one amendment ledger that records every move. | its own entry in the close dispatcher |
 | `power_transfer` | Moves a power from the admin panel to a role the village names. | its own entry in the close dispatcher |
 | `power_grant` | Gives a role a power it does not carry yet. | its own entry in the close dispatcher |
@@ -234,7 +237,7 @@ What closing a decision DOES, per subject type, and the one place that question 
 | `governance_mode` | Changes how one vote is weighed, and which token carries the weight when it is a token. | its own entry in the close dispatcher |
 | `mint_rule` | Changes what the village mints and on what terms. It shares the dial executor and carries a higher quorum floor. | the same executor as `mechanics`, one executor and two subject types |
 
-10 subject types execute something. Whether a member's vote BINDS is derived from this same table, so the word on the decision page and the behaviour at the close cannot come apart.
+11 subject types execute something. Whether a member's vote BINDS is derived from this same table, so the word on the decision page and the behaviour at the close cannot come apart.
 
 ## Two kinds of decision, and when each one happens
 
@@ -535,7 +538,7 @@ What is broken today, by name. A document that only described the parts that wor
 - **A stored reason on a no vote is shown to nobody.** The widget invites a member to say why and the reader that serves votes drops it.
 - **The module lifecycle is edited by hand**, so a village turns its own governance on through the admin panel and never through a vote.
 - **Four displays about the hub bridge are false.** The sync flag is never set true so the card always says pending, the space check idles on every delivery, an outcome's source is hardcoded, and the card credits a hub with issuing a secret it does not issue.
-- **Two schema comments have drifted.** The engine's own migration lists five subject types in the column comment where the dispatcher now executes 10, and a later migration's header names the number of the one before it. Neither is edited, because a shipped migration file is never edited; both are stated here instead.
+- **Two schema comments have drifted.** The engine's own migration lists five subject types in the column comment where the dispatcher now executes 11, and a later migration's header names the number of the one before it. Neither is edited, because a shipped migration file is never edited; both are stated here instead.
 
 ## What is staged
 
@@ -804,7 +807,7 @@ The case this answered: a proposal passes on the 20th of the moon, the steward i
 > Everything can be! But the more critical it is, the higher percentage of quorum you need (hard to get quorum) such that changing the most critical things would require a max high of 97% quorum where only 3% of the whole network would be able to not be informed and have 97% approval (max heights - we don't recommend more than those though they can exceed them (if they do we warn them) because the closer you get to 100% the chances of you getting a stalemate increase where the Game breaks even though a massive majority want to continue they can't because someone died suddenly or stopped playing the Game, etc.
 
 <!-- written by a person: ruling-21 -->
-Every setting carries a criticality tier now, defaulting to routine, and the tier sets both the quorum and the unity a change to it needs: routine asks nothing beyond the village's own dials, structural asks 80 unity and 50 quorum, and constitutional asks 97 and 97, which is the founder's own number. The tiers are themselves eight settings, and the 3 subject floors that used to live only in code are settings too. All ten are raise-only: the shipped number is a floor and a village may go above it and never below, because a village that can lower the bar for changing the bar has no bar. Any dial typed above 97 shows the stalemate warning in words while it is being typed, and the Birthing is the one subject exempt from it because it stays at 100 and 100 by rule. Still open: the founder's 2026-09-02 ruling that a threshold changes at its own current bar, which is a later lane.
+Every setting carries a criticality tier now, defaulting to routine, and the tier sets both the quorum and the unity a change to it needs: routine asks nothing beyond the village's own dials, structural asks 80 unity and 50 quorum, and constitutional asks 97 and 97, which is the founder's own number. The tiers are themselves eight settings, and the 4 subject floors that used to live only in code are settings too. All ten are raise-only: the shipped number is a floor and a village may go above it and never below, because a village that can lower the bar for changing the bar has no bar. Any dial typed above 97 shows the stalemate warning in words while it is being typed, and the Birthing is the one subject exempt from it because it stays at 100 and 100 by rule. Still open: the founder's 2026-09-02 ruling that a threshold changes at its own current bar, which is a later lane.
 
 ### 22. Who voted is visible, how they voted is hidden, and names appear after half
 
@@ -1032,7 +1035,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "fe23a9ff81bb1e54",
+  "commit": "4b849a7e7bdc66a0",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -1132,9 +1135,23 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "minYesHeads": null,
       "executesAtClose": true,
       "why": "This one changes how every vote in the village is counted, so it asks the constitutional bar: almost everybody present, and almost everybody in favour."
+    },
+    {
+      "subjectType": "cycle_settlement",
+      "minUnityPct": 0,
+      "minQuorumPct": 0,
+      "minElectorate": 0,
+      "everySeatWeighs": false,
+      "method": null,
+      "criticality": "routine",
+      "abstainPolicy": null,
+      "minYesHeads": null,
+      "executesAtClose": true,
+      "why": "Settling a moon asks whatever this village asks of any decision. It happens every moon, so it is not priced above the village's own bar."
     }
   ],
   "executingSubjectTypes": [
+    "cycle_settlement",
     "mechanics",
     "power_transfer",
     "power_grant",

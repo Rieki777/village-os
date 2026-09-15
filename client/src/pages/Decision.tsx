@@ -45,6 +45,7 @@ import VoteWidget from "@/components/governance/VoteWidget";
 import VoterRoll from "@/components/governance/VoterRoll";
 import WeightRecord from "@/components/governance/WeightRecord";
 import { subjectNoun } from "@/components/governance/wizardConfig";
+import { CYCLE_SETTLEMENT } from "@shared/moonSettlement";
 import { useCatalyst } from "@/lib/gameApi";
 import { weightText } from "@/components/governance/voteBars";
 import {
@@ -168,6 +169,21 @@ export default function Decision() {
   /** Votes discarded by the withdrawal that just happened, stated once. */
   const [withdrawn, setWithdrawn] = useState<number | null>(null);
   const [justClosed, setJustClosed] = useState<CloseResult | null>(null);
+  /*
+   * OPEN BY DEFAULT WHEN THE DOCUMENT IS THE DECISION.
+   *
+   * For every other subject this page tells a member what they are deciding
+   * before they reach this section: the title names the thing, the chip names
+   * the kind, and the change set is rendered above. The document is detail
+   * behind a decision the reader can already see, so collapsing it keeps a
+   * long page readable.
+   *
+   * A settlement has none of that. Its whole content is a list of people and
+   * the amounts they would receive, and it lives ONLY in this document. Behind
+   * a button, a member can reach the vote controls having read a title and no
+   * number at all, and cast a binding vote on where a moon's value goes without
+   * ever seeing where it goes. So this one opens.
+   */
   const [showDoc, setShowDoc] = useState(false);
 
   const load = useCallback(async () => {
@@ -177,6 +193,7 @@ export default function Decision() {
       setBallot(answer.data);
       // A carried decision counts down to its landing (Rye, 2026-09-14). Nothing else has one.
       if (answer.data.status === "passed") void fetchLanding(params.id).then((l) => setLanding(l.ok ? l.data : null));
+      if (answer.data.subjectType === CYCLE_SETTLEMENT) setShowDoc(true);
       setChronicle({
         appliedKeys: Array.isArray(answer.data.appliedKeys) ? answer.data.appliedKeys : [],
         priorAttempts: Array.isArray(answer.data.priorAttempts) ? answer.data.priorAttempts : [],

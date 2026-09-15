@@ -178,15 +178,26 @@ export async function withVillageMoons<T extends { cycleNumber: number }>(
   return rows.map((r) => ({ ...r, moon: villageMoonForCycle(Number(r.cycleNumber), anchor) }));
 }
 
-/** One member's settled moons, newest first, each labelled and none named by id. */
+/**
+ * One member's SETTLED moons, newest first, each labelled and none named by id.
+ *
+ * SETTLED IS A FILTER HERE, NOT AN ASSUMPTION. A distribution row used to exist
+ * only for a moon that had closed, give or take a close that failed halfway, so
+ * reading every row and calling them settled was nearly true. A moon can now be
+ * put to the village as a vote, and its split is frozen into these rows when the
+ * ballot opens (server/lib/cycleSettlement.ts). The moon stays open until the
+ * vote lands, which is days at the least and never at all if the village says
+ * no. `closedCycleIds` is required so a caller has to say which moons closed.
+ */
 export async function memberMoonFlows(
   pool: Pool,
   distributions: ReadonlyArray<{ userId: string; cycleId: string; received: number; distinctSenders: number }>,
   userId: string,
+  closedCycleIds: ReadonlySet<string>,
 ): Promise<Array<{ cycleId: string; received: number; distinctSenders: number; moon: VillageMoon | null }>> {
   const anchor = await moonOneCycle(pool);
   return distributions
-    .filter((d) => d.userId === userId)
+    .filter((d) => d.userId === userId && closedCycleIds.has(d.cycleId))
     // The stored id sorts chronologically because it is zero padded, which is
     // exactly what `formatCycleId` was padded FOR. Sorting by the ordinal
     // would sort a village's unnumbered moons into a heap.
