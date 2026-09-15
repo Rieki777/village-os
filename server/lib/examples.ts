@@ -35,6 +35,8 @@ import { realVoiceCount } from "./gratitudeVoices";
 import { stringVar } from "./variables";
 import { loadTokenRegistry } from "./ledger";
 import { badgeProblem } from "./badges";
+import { priceToStored, USD } from "./stays";
+import { CURRENCY_DECIMALS, WHOLE_UNITS } from "../../shared/tokenScale";
 
 export const EXAMPLE_REFUSAL =
   "This is a standing example. Publish your own to replace it.";
@@ -657,10 +659,22 @@ export async function seedExamples(
           active: a.active ? 1 : 0, sort_order: a.sortOrder, is_example: 1,
         });
         for (const [i, price] of (a.prices ?? []).entries()) {
+          /*
+           * A TOKEN PRICE IS SEEDED IN WHOLE CREDITS AND CONVERTED HERE, ONCE,
+           * through the same boundary the admin price form uses. The seed used
+           * to carry the stored number raw, which was only right while
+           * stay-credit sat at zero decimals: on a fresh village it is born at
+           * two, and a room seeded "3" read as three hundredths a night. A usd
+           * price is already cents. `amountMinor` on a token row is the old
+           * key and meant whole credits, so a fork's older seed still reads
+           * right rather than seeding a free room.
+           */
+          const isUsd = price.tokenType === USD;
+          const typed = isUsd ? price.amountMinor : (price.amount ?? price.amountMinor);
           n += await ins(p, "accommodation_prices", {
             id: `${a.id}-price-${i + 1}`, accommodation_id: a.id,
             token_type: price.tokenType, audience: price.audience,
-            amount_minor: price.amountMinor, active: 1, is_example: 1,
+            amount_minor: priceToStored(String(price.tokenType), Number(typed)), active: 1, is_example: 1,
           });
         }
       }
@@ -854,6 +868,10 @@ export async function seedExamples(
         n += await ins(p, "tokens", {
           slug: t.slug, name: t.name, kind: t.kind, governance: "platform",
           transferable: t.transferable ? 1 : 0, active: 1,
+          // A credit token is currency-like from the day it exists, the same
+          // rule stays.ts and library.ts state, so a fresh village's example
+          // matches a migrated one instead of sitting at the column default.
+          decimals: t.kind === "credit" ? CURRENCY_DECIMALS : WHOLE_UNITS,
           sort_order: t.sortOrder ?? 90, is_example: 1,
         });
       }

@@ -42,6 +42,7 @@ import {
   nightsRemaining,
   postNightsForStay,
   priceFromStored,
+  priceScaleRefusal,
   priceToStored,
   stayById,
 } from "./stays";
@@ -260,8 +261,17 @@ describe.skipIf(!configured)("a night paid in village credits", () => {
     expect(priceToStored("usd", 12_345)).toBe(12_345);
     expect(priceFromStored("usd", 12_345)).toBe(12_345);
 
-    // The whole-unit contract the route's own refusal states survives.
-    expect(priceToStored(CREDITS_4, 8.7)).toBe(80_000);
+    // EXACT at the token's scale. This line asserted 80_000 while
+    // `priceToStored` floored, which pinned the defect: a room could not post
+    // a fraction its token holds.
+    expect(priceToStored(CREDITS_4, 8.7)).toBe(87_000);
+
+    // Finer than the token holds is refused in words, before anything stores.
+    expect(priceScaleRefusal(CREDITS_4, 8.7)).toBeNull();
+    expect(priceScaleRefusal(CREDITS_4, 8.00005)).toMatch(/goes to 4 decimal places/);
+    expect(priceScaleRefusal(CREDITS, 2.5)).toMatch(/priced in whole amounts/);
+    expect(priceScaleRefusal("usd", 1234.5)).toMatch(/whole cents/);
+    expect(priceScaleRefusal("usd", 12_345)).toBeNull();
   });
 
   it("burns a four-decimal night at the LEDGER's scale, not the typed one", async () => {
@@ -279,7 +289,7 @@ describe.skipIf(!configured)("a night paid in village credits", () => {
     expect(await balanceOf(pool, TREASURY, CREDITS_4)).toBe(160_000);
 
     // Each posted leg is one night at the token's own scale.
-    const [legs] = await pool.query<any[]>(
+    const [legs] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT amount FROM token_ledger WHERE token_type = ? AND source = 'stay_night' AND from_account = ? ORDER BY idempotency_key",
       [CREDITS_4, memberAccount("u-6")],
     );
@@ -334,7 +344,7 @@ describe.skipIf(!configured)("a night paid in village credits", () => {
     });
     expect(r.ok).toBe(true);
     expect(await balanceOf(pool, memberAccount("u-8"), STAY_CREDIT)).toBe(40_000);
-    const [rows] = await pool.query<any[]>(
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT amount, to_account FROM token_ledger WHERE idempotency_key = ?",
       ["ord:sp-unit-1:leg1"],
     );

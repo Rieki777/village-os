@@ -630,12 +630,15 @@ export { CUSTOM_NEED_PREFIX };
  * the number it voted against.
  *
  * WHAT THE FLOOR IS FOR. The smallest number of answers on one need that may
- * be shown as a count. 3 is the smallest floor at which a count cannot be
- * read back to a person by elimination once two of three answers are known,
- * and it is a floor a village of thirteen can clear on a need only a few
- * people care about. A village where four people are identifiable to each
- * other raises it, and the raise now reaches the SQL and the sentence
- * together.
+ * be shown as a count. It keeps a small count out of casual reading, so a
+ * member glancing at the village's numbers never sees a 1 or a 2 that points
+ * at a person. IT DOES NOT STOP INFERENCE, and no floor can. At 3 answers,
+ * anybody who already knows how two of them went learns the third by
+ * subtraction, and at any floor somebody who knows all but one answer learns
+ * the last. 3 is a floor a village of thirteen can clear on a need only a few
+ * people care about. A village where members know enough of each other's
+ * answers for that subtraction to matter raises it, and the raise reaches the
+ * SQL and the sentence together.
  *
  * 1 IS THE SMALLEST FLOOR THE ENGINE HONOURS, and the registry agrees (min 1).
  * A floor of 0 would suppress nothing while claiming to suppress something,
@@ -848,11 +851,11 @@ export async function deleteMemberNeed(
  * nothing: it is one person's words about their own life, and there is no
  * accounting reason to keep a single one of them.
  *
- * WHERE THIS IS CALLED FROM. `anonymizeMember` in server/index.ts, which exit
- * resolve runs. That function sits inside the monolith, which is under a
- * no-net-lines ratchet this lane may not spend, so the call is a one-line
- * addition another hand makes beside `eraseIntentsForMember`. The function is
- * here, tested, and takes exactly the arguments that line would pass.
+ * WHERE THIS IS CALLED FROM. The `needs-after-tombstone` step of the sweep in
+ * server/lib/erasure.ts, which `anonymizeMember` runs from the start and
+ * `resumeErasure` runs when a steward finishes a sweep that stopped. It sits
+ * AFTER the tombstone, where the member's sessions die, so no answer saved
+ * through a still-live session can land behind the deletion.
  */
 export async function forgetMemberNeeds(pool: Pool, userId: string): Promise<number> {
   const uid = String(userId ?? "").trim();
@@ -888,22 +891,26 @@ export interface NeedAggregateRow {
  * Per need, how many members are at or above the target and how many below.
  *
  * THE FLOOR IS COUNTED IN ANSWERS ON THAT NEED, never in members on the roll.
- * A village of two hundred where three people answered about Love is exactly
- * the case the rule is for: the count is small, the answers are recent, and
- * two people who know they both answered can read the third off the total. So
- * the suppression asks the question the leak asks, which is how many answers
- * this number is made of.
+ * A village of two hundred where two people answered about Love has a count
+ * that points at a person however large the roll is. So the suppression asks
+ * how many answers this number is made of. WHAT IT CANNOT DO is stop
+ * subtraction: at the default floor of 3 the three answers are shown, and two
+ * people who know they both answered read the third off the total. The floor
+ * keeps a 1 or a 2 off the screen and promises nothing past that.
  *
- * A SUPPRESSED ROW IS STILL A ROW, carrying nulls and `suppressed: true`. An
- * absent row would say the need does not exist; a zero would say nobody is
- * struggling. Neither is what "too few answers to show" means, and a screen
- * that cannot tell the three apart prints a confident number about a village
- * it knows nothing about.
+ * A SUPPRESSED ROW IS STILL A ROW for a need in scope, carrying nulls and
+ * `suppressed: true`. An absent row would say the village never took the need
+ * on; a zero would say nobody is struggling. Neither is what "too few answers
+ * to show" means, and a screen that cannot tell the three apart prints a
+ * confident number about a village it knows nothing about.
  *
  * NEEDS WITH NO ANSWERS AT ALL still appear when they are in scope, with
  * `suppressed: true`, because the village asking and nobody answering is a
- * fact worth seeing. A need OUT of scope appears only once somebody has
- * answered on it, which is how a village hears about a need it never took on.
+ * fact worth seeing. A need OUT of scope appears only once its answers reach
+ * the floor, which is how a village hears about a need it never took on.
+ * Below the floor it has NO ROW, because for it the label is the leak: a
+ * custom key is one member's own words, and a suppressed row would print them
+ * to every member with only the numbers withheld.
  */
 export async function needsAggregate(
   pool: Pool,
@@ -940,6 +947,11 @@ export async function needsAggregate(
     }
     const answers = atOrAbove + below;
     const suppressed = answers < floor;
+    // THE LABEL IS THE LEAK for a need the village never named. A custom key
+    // is the member's own words, so a suppressed row for it would print them
+    // to every member with the counts nulled beside it. Below the floor an
+    // out-of-scope need has no row at all.
+    if (inScopeRow === null && suppressed) continue;
     out.push({
       needKey: key,
       label: inScopeRow?.label ?? needLabelFor(key, null),

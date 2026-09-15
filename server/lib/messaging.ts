@@ -823,9 +823,9 @@ export async function onMessageSent(deps: NotifyDeps, input: MessageNotifyInput)
     for (const r of rows) {
       const recipientId = String(r.user_id);
       const target = await deps.memberById(recipientId);
-      // Tombstoned and claim-pending accounts get no mail and no bell: a
+      // Tombstoned and unclaimed accounts get no mail and no bell: a
       // notification addressed to an account nobody can sign into is litter.
-      if (!target || !target.passwordHash) continue;
+      if (!target || !deps.isPresent(target)) continue;
       await insertNotification(deps, {
         userId: recipientId,
         type: "message",

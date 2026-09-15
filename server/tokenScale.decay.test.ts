@@ -25,7 +25,7 @@ import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 import { loadTokenRegistry, memberAccount, registerToken } from "./lib/ledger";
 import { loadVariables, numberVar, stringVar } from "./lib/variables";
 import { recordGameStart } from "./lib/gameStart";
-import { decayVoice, ensureVoiceToken, VILLAGE_VOICE, VOICE_DECAY, VOICE_MINT, mint } from "./lib/economy";
+import { cycleWindow, decayVoice, ensureVoiceToken, VILLAGE_VOICE, VOICE_DECAY, VOICE_MINT, mint } from "./lib/economy";
 import { CURRENCY_DECIMALS, VOICE_DECIMALS, decayFloorMinorUnits, decayUnits } from "../shared/tokenScale";
 
 const configured = testDbConfigured();
@@ -41,7 +41,7 @@ describe.skipIf(!configured)("waning reaches a small balance at two decimals", (
 
   /** Every waning leg in the ledger, which is the only record that counts. */
   const decayLegs = async (): Promise<Array<{ from: string; to: string; amount: number }>> => {
-    const [rows] = await pool.query<any[]>(
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT `from_account` AS f, `to_account` AS t, `amount` AS a FROM `token_ledger` " +
         "WHERE `token_type` = ? AND `source` = 'voice_decay'",
       [VILLAGE_VOICE],
@@ -58,11 +58,12 @@ describe.skipIf(!configured)("waning reaches a small balance at two decimals", (
 
   /** A member holding exactly `units` MINOR units of Voice, from the faucet. */
   const holding = async (id: string, units: number): Promise<string> => {
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT INTO `users` (`id`,`name`,`email`,`password_hash`) VALUES (?,?,?,'x') " +
         "ON DUPLICATE KEY UPDATE `name` = VALUES(`name`)",
       [id, id, `${id}@examples.invalid`],
     ); // module-review-ok: fixture against the S5 scratch schema
+    const key = `dec.scale.seed:${id}:${(seq += 1)}`;
     const r = await mint(pool, {
       toUserId: id,
       tokenSlug: VILLAGE_VOICE,
@@ -71,14 +72,23 @@ describe.skipIf(!configured)("waning reaches a small balance at two decimals", (
       source: "role_cycle",
       sourceRef: id,
       description: "seeded for a waning measurement",
-      idempotencyKey: `dec.scale.seed:${id}:${(seq += 1)}`,
+      idempotencyKey: key,
     });
     expect(r.ok, `seeding ${id}`).toBe(true);
+    // Carried INTO the moon: waning acts on what a member held when the cycle
+    // opened, so the seed row is moved to a day before it. Epoch seconds,
+    // because the column is a `timestamp` and this pool sets no session zone
+    // on every connection.
+    const carriedIn = Math.floor(cycleWindow(new Date()).startsAt.getTime() / 1000) - 24 * 60 * 60;
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "UPDATE `token_ledger` SET `at` = FROM_UNIXTIME(?) WHERE `idempotency_key` = ?", // module-review-ok: test fixture in the S5 scratch schema, backdating a seed row so it was held going into the moon
+      [carriedIn, key],
+    );
     return id;
   };
 
   const balance = async (account: string): Promise<number> => {
-    const [rows] = await pool.query<any[]>(
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COALESCE(`balance`,0) AS b FROM `token_balances` WHERE `account_id` = ? AND `token_type` = ?",
       [account, VILLAGE_VOICE],
     );
@@ -87,8 +97,8 @@ describe.skipIf(!configured)("waning reaches a small balance at two decimals", (
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 });
-    await pool.query("SET time_zone = '+00:00'");
+    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("SET time_zone = '+00:00'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await loadTokenRegistry(pool);
     await loadVariables(pool);
     await ensureVoiceToken(pool, "Village Voice");
@@ -219,7 +229,7 @@ describe.skipIf(!configured)("waning reaches a small balance at two decimals", (
     });
     await loadTokenRegistry(pool);
 
-    const [rows] = await pool.query<any[]>("SELECT `slug`, `kind`, `governance`, `decimals` FROM `tokens`");
+    const [rows] = await pool.query<any[]>("SELECT `slug`, `kind`, `governance`, `decimals` FROM `tokens`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(rows.length).toBeGreaterThan(0);
     for (const r of rows) {
       const slug = String(r.slug);

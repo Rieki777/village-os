@@ -379,7 +379,9 @@ export function redemptionRefusal(ask: RedeemAsk): string | null {
     return `You have opened ${ask.openedThisCycle} redemptions this moon, which is what this village allows. The count starts again at the new moon`;
   }
   if (!Number.isInteger(ask.amountUnits) || ask.amountUnits <= 0) {
-    return `Ask for ${def.name} in whole positive amounts`;
+    return def.decimals > 0
+      ? `Ask for ${def.name} in positive amounts with at most ${def.decimals} decimal places`
+      : `Ask for ${def.name} in whole positive amounts`;
   }
   if (ask.amountUnits > ask.balanceUnits) {
     /*

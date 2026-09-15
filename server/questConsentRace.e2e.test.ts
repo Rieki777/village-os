@@ -111,7 +111,7 @@ describe.skipIf(!DB_CONFIGURED)("one consent, one 200, and the claim agrees with
 
   /** What the ledger actually paid for this claim, in MINOR units. */
   const paidFor = async (claimId: string): Promise<number> => {
-    const [rows] = await testDb!.conn.query<any[]>(
+    const [rows] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT amount FROM token_ledger WHERE idempotency_key = ?",
       [`quest_consent:${claimId}`],
     );
@@ -121,7 +121,7 @@ describe.skipIf(!DB_CONFIGURED)("one consent, one 200, and the claim agrees with
 
   /** The claim row's own number, read straight off the table. */
   const claimAmount = async (claimId: string): Promise<number> => {
-    const [rows] = await testDb!.conn.query<any[]>(
+    const [rows] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT amount, status FROM quest_claims WHERE id = ?",
       [claimId],
     );
@@ -132,7 +132,7 @@ describe.skipIf(!DB_CONFIGURED)("one consent, one 200, and the claim agrees with
 
   /** How many times the village pulse says this quest was completed. */
   const pulseRows = async (questId: string): Promise<number> => {
-    const [rows] = await testDb!.conn.query<any[]>(
+    const [rows] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COUNT(*) AS n FROM health_events WHERE kind = 'quest' AND entity_ref = ?",
       [questId],
     );
@@ -221,7 +221,12 @@ describe.skipIf(!DB_CONFIGURED)("one consent, one 200, and the claim agrees with
       approve: true, amount: 90,
     }, founderToken);
     expect(second.status, `the second consent must refuse: ${second.text.slice(0, 300)}`).toBe(409);
-    expect(String(second.json?.error ?? "")).toContain("already consented");
+    // The STATUS, not a sentence, for the reason the case below gives. This
+    // line asserted the refusal sentence of the compare-and-swap this branch
+    // used to carry, which the merge with main replaced with #233 and its
+    // consentOnce: that refuses with a different sentence and reports the
+    // status of the claim beside it.
+    expect(second.json?.status, `the refusal names the status of the claim: ${second.text.slice(0, 300)}`).toBe("consented");
 
     // THE ASSERTION THE OLD CODE FAILED, in the units each side actually holds:
     // `quest_claims.amount` is the human number a witness typed and the ledger
@@ -281,7 +286,7 @@ describe.skipIf(!DB_CONFIGURED)("one consent, one 200, and the claim agrees with
 
     // THE MONEY, unchanged by the fix and asserted from the ledger. Two legs,
     // one claim, whatever the concurrency.
-    const [rows] = await testDb!.conn.query<any[]>(
+    const [rows] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT idempotency_key, token_type, amount FROM token_ledger WHERE idempotency_key IN (?, ?)",
       [`quest_consent:${claimId}`, `queststay:${claimId}`],
     );

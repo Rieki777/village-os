@@ -53,7 +53,7 @@ const PROBE_SOURCE = "probe_issue";
 describe.skipIf(!configured)("the faucet set the supply surfaces read", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 5 });
+    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 5 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await loadTokenRegistry(pool);
     await loadVariables(pool);
   });
@@ -68,16 +68,16 @@ describe.skipIf(!configured)("the faucet set the supply surfaces read", () => {
   });
 
   it("counts a sixth faucet in the public supply feed and in the admin breakdown", async () => {
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT IGNORE INTO `ledger_accounts` (`id`, `kind`, `user_id`, `label`, `faucet`) VALUES (?,?,?,?,1)",
       [PROBE_FAUCET, "system", null, "A faucet added after the lists were written"],
     );
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x') " +
         "ON DUPLICATE KEY UPDATE `name` = VALUES(`name`)",
       ["probe-holder", "Probe Holder", "probe-holder@examples.invalid"],
     );
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT IGNORE INTO `ledger_accounts` (`id`, `kind`, `user_id`, `label`, `faucet`) VALUES (?,?,?,?,0)",
       [memberAccount("probe-holder"), "member", "probe-holder", "Probe Holder"],
     );
@@ -139,7 +139,7 @@ describe.skipIf(!configured)("the faucet set the supply surfaces read", () => {
    * clears the flag on every account in this schema.
    */
   it("answers an empty supply rather than a SQL error when no account is a faucet", async () => {
-    await pool.query("UPDATE `ledger_accounts` SET `faucet` = 0");
+    await pool.query("UPDATE `ledger_accounts` SET `faucet` = 0"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(await faucetAccounts(pool)).toEqual([]);
     expect((await publicSupply(pool)).tokens).toEqual([]);
     expect((await mintView(pool)).supply).toEqual([]);

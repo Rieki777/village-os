@@ -80,7 +80,7 @@ describe.skipIf(!configured)("a village that voted its needs dials", () => {
    * both leave the table, then reload the cache the server reads.
    */
   const vote = async (key: string, value: string) => {
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT INTO `game_variables` (`config_key`, `value`, `value_type`) VALUES (?,?,'text') " +
         "ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)",
       [key, value],
@@ -90,7 +90,7 @@ describe.skipIf(!configured)("a village that voted its needs dials", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
   }, 180_000);
 
   afterAll(async () => {
@@ -99,9 +99,9 @@ describe.skipIf(!configured)("a village that voted its needs dials", () => {
   });
 
   beforeEach(async () => {
-    await pool.query("DELETE FROM `member_needs`");
-    await pool.query("DELETE FROM `need_links`");
-    await pool.query("DELETE FROM `village_needs`");
+    await pool.query("DELETE FROM `member_needs`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `need_links`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `village_needs`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
   });
 
   /**
@@ -110,7 +110,7 @@ describe.skipIf(!configured)("a village that voted its needs dials", () => {
    * default cases are reading the absence and never a zero somebody wrote.
    */
   afterEach(async () => {
-    await pool.query("DELETE FROM `game_variables` WHERE `config_key` LIKE 'needs.%'");
+    await pool.query("DELETE FROM `game_variables` WHERE `config_key` LIKE 'needs.%'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await loadVariables(pool);
   });
 
@@ -177,7 +177,7 @@ describe.skipIf(!configured)("a village that voted its needs dials", () => {
       await vote("needs.default_depth_target", "thriving");
       await upsertScopeNeed(pool, { needKey: "love" });
 
-      const [rows] = await pool.query<any[]>(
+      const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT `depth_target` FROM `village_needs` WHERE `need_key` = 'love'",
       );
       expect(rows[0].depth_target).toBe("thriving");
@@ -219,7 +219,7 @@ describe.skipIf(!configured)("a village that voted its needs dials", () => {
       await vote("needs.default_breadth_pct", "40");
       await upsertScopeNeed(pool, { needKey: "love" });
 
-      const [rows] = await pool.query<any[]>(
+      const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT `breadth_target_pct` FROM `village_needs` WHERE `need_key` = 'love'",
       );
       expect(Number(rows[0].breadth_target_pct)).toBe(40);

@@ -38,14 +38,20 @@ import {
   postGraceNightBurn,
   postPaymentReversalLeg,
   postTransfer,
+  postTransferOn,
   postTransferPair,
   questCreditsFor,
   RECOGNITION_FAUCET,
   refusalForMember,
   registerToken,
   tokenDef,
+  type TransferResult,
   TREASURY,
+  hasBeenPaidByVillage,
+  paidByVillageMany,
+  contributionTokens,
 } from "./lib/ledger";
+import { lockedBalanceRows } from "./repos/tokenBalances";
 import { repairTaintedListings } from "./lib/exchange";
 import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 
@@ -533,6 +539,152 @@ describe.skipIf(!configured)("the MySQL token ledger", () => {
     expect(theirs.get("claim-other-1")).toBe(7);
   });
 
+  /**
+   * THE CONTRIBUTOR RUNG'S QUESTION, which nothing tested before this.
+   *
+   * Rye redefined Contributor on 2026-09-08: the village has paid you. Changing
+   * the rule from "one consented quest" to "tokens" broke NOT ONE TEST, which is
+   * the whole reason these exist. A rung that opens `member.vouch` had no
+   * coverage at all, so any answer it gave would have looked correct.
+   */
+  describe("has the village ever paid this member", () => {
+  /*
+   * A post that did not land must SAY SO. The first version of these tests
+   * dropped the result, so a refused transfer left the member unpaid and the
+   * assertion below simply read false, naming nothing. Same lesson the
+   * save-honesty gate enforces on the client: hold the answer and read it.
+   */
+  const expectPosted = (r: { ok: boolean; error?: string }) => {
+    expect(r.error ?? "", `the ledger refused this post: ${r.error ?? ""}`).toBe("");
+    expect(r.ok).toBe(true);
+    return r;
+  };
+
+    it("says no to somebody the village has never paid", async () => {
+      expect(await hasBeenPaidByVillage(pool, "paid-none", contributionTokens())).toBe(false);
+    });
+
+    it("says yes once the village pays them, in a token that is not recognition", async () => {
+      expectPosted(await postTransfer(pool, {
+        from: CYCLE_POOL_FAUCET,
+        to: memberAccount("paid-one"),
+        amount: 25,
+        tokenType: "credits",
+        source: "quest_consent",
+        idempotencyKey: "paid-one-first",
+      }));
+      expect(await hasBeenPaidByVillage(pool, "paid-one", contributionTokens())).toBe(true);
+    });
+
+    it("STILL SAYS YES AFTER THEY SPEND IT, which is the point", async () => {
+      // Rye: spending what you earned does not undo having earned it. Reading a
+      // balance would demote somebody the moment they spent, and this rung opens
+      // the power to vouch a member in, so it would strip that from somebody who
+      // had already spoken for a neighbour.
+      expectPosted(await postTransfer(pool, {
+        from: memberAccount("paid-one"),
+        to: TREASURY,
+        amount: 25,
+        tokenType: "credits",
+        source: "exchange_purchase",
+        idempotencyKey: "paid-one-spent",
+      }));
+      expect(await balancesFor(pool, memberAccount("paid-one"))).toMatchObject({ credits: 0 });
+      expect(await hasBeenPaidByVillage(pool, "paid-one", contributionTokens())).toBe(true);
+    });
+
+    it("DOES NOT COUNT A COIN FROM A NEIGHBOUR, which is the collusion door", async () => {
+      // Both of Rye's examples are the village paying: rewarding work, and
+      // selling a stake. Counting peer transfers would let one member buy in,
+      // send a single credit to two friends, and manufacture three Contributors
+      // who could then vouch somebody straight through the membrane.
+      expectPosted(await postTransfer(pool, {
+        from: CYCLE_POOL_FAUCET,
+        to: memberAccount("paid-rich"),
+        amount: 10,
+        tokenType: "credits",
+        source: "exchange_purchase",
+        idempotencyKey: "rich-buys-in",
+      }));
+      expectPosted(await postTransfer(pool, {
+        from: memberAccount("paid-rich"),
+        to: memberAccount("paid-friend"),
+        amount: 5,
+        tokenType: "credits",
+        source: "gratitude_received",
+        idempotencyKey: "rich-gifts-friend",
+      }));
+      expect(await hasBeenPaidByVillage(pool, "paid-rich", contributionTokens())).toBe(true);
+      expect(await hasBeenPaidByVillage(pool, "paid-friend", contributionTokens())).toBe(false);
+    });
+
+    it("never counts recognition, because a thank-you is not a wage", async () => {
+      // Recognition is minted whenever anybody thanks anybody. If it counted, one
+      // tap would hand a stranger the power to admit members.
+      expect(contributionTokens()).not.toContain("gratitude");
+      expectPosted(await postTransfer(pool, {
+        from: RECOGNITION_FAUCET,
+        to: memberAccount("paid-thanked"),
+        amount: 100,
+        source: "gratitude_received",
+        idempotencyKey: "thanked-only",
+      }));
+      expect(await hasBeenPaidByVillage(pool, "paid-thanked", contributionTokens())).toBe(false);
+    });
+
+    it("DOES NOT COUNT BUYING YOUR OWN STAY, which the loop test caught", async () => {
+      // A guest who bought ten stay credits with a card had been "paid by the
+      // village" under the first version of this rule, became a Contributor,
+      // and booked their own room at the member price.
+      expectPosted(await postTransfer(pool, {
+        from: CYCLE_POOL_FAUCET,
+        to: memberAccount("paid-guest"),
+        amount: 10,
+        tokenType: "credits",
+        source: "stay_purchase",
+        idempotencyKey: "guest-buys-a-stay",
+      }));
+      expect(await hasBeenPaidByVillage(pool, "paid-guest", contributionTokens())).toBe(false);
+    });
+
+    it("does not count a swap, which only trades what somebody already held", async () => {
+      expectPosted(await postTransfer(pool, {
+        from: CYCLE_POOL_FAUCET,
+        to: memberAccount("paid-swapper"),
+        amount: 4,
+        tokenType: "credits",
+        source: "exchange_swap",
+        idempotencyKey: "swapper-swaps",
+      }));
+      expect(await hasBeenPaidByVillage(pool, "paid-swapper", contributionTokens())).toBe(false);
+    });
+
+    it("counts an item brought into the shared library, which is a resource contributed", async () => {
+      expectPosted(await postTransfer(pool, {
+        from: CYCLE_POOL_FAUCET,
+        to: memberAccount("paid-donor"),
+        amount: 3,
+        tokenType: "credits",
+        source: "library_intake",
+        idempotencyKey: "donor-brings-a-wheelbarrow",
+      }));
+      expect(await hasBeenPaidByVillage(pool, "paid-donor", contributionTokens())).toBe(true);
+    });
+
+    it("answers the whole roll in one query, and agrees with the single read", async () => {
+      const ids = ["paid-none", "paid-one", "paid-rich", "paid-friend", "paid-thanked", "paid-guest", "paid-swapper", "paid-donor"];
+      const many = await paidByVillageMany(pool, ids, contributionTokens());
+      for (const id of ids) {
+        expect(many.has(id)).toBe(await hasBeenPaidByVillage(pool, id, contributionTokens()));
+      }
+    });
+
+    it("asks nothing of the database when there is nothing to ask", async () => {
+      expect(await paidByVillageMany(pool, [], contributionTokens())).toEqual(new Set());
+      expect(await hasBeenPaidByVillage(pool, "paid-one", [])).toBe(false);
+    });
+  });
+
   /*
    * ── W3 adversary findings, closed here ────────────────────────────────────
    *
@@ -648,23 +800,23 @@ describe.skipIf(!configured)("the MySQL token ledger", () => {
       // adversary did and check the boot report, which is the surface that
       // was blind.
       const account = memberAccount("f13-sql");
-      await pool.query(
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "INSERT IGNORE INTO ledger_accounts (id, kind, user_id, label, faucet) VALUES (?,?,?,?,0)",
         [account, "member", "f13-sql", "f13-sql"],
       );
-      await pool.query(
-        "INSERT INTO token_ledger (id, from_account, to_account, token_type, amount, source, idempotency_key) VALUES " +
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO token_ledger (id, from_account, to_account, token_type, amount, source, idempotency_key) VALUES " + // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
           "('led-f13-tag', ?, ?, ?, 1, 'REVERSAL', 'f13-sql-tag')," +
           "('led-f13-hole', ?, ?, ?, 500, 'quest_consent', 'f13-sql-hole')",
         [account, TREASURY, PLATFORM_TOKEN, account, TREASURY, PLATFORM_TOKEN],
       );
-      await pool.query(
-        "INSERT INTO token_balances (account_id, token_type, balance) VALUES (?,?,-501) " +
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO token_balances (account_id, token_type, balance) VALUES (?,?,-501) " + // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
           "ON DUPLICATE KEY UPDATE balance = balance - 501",
         [account, PLATFORM_TOKEN],
       );
-      await pool.query(
-        "INSERT INTO token_balances (account_id, token_type, balance) VALUES (?,?,501) " +
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO token_balances (account_id, token_type, balance) VALUES (?,?,501) " + // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
           "ON DUPLICATE KEY UPDATE balance = balance + 501",
         [TREASURY, PLATFORM_TOKEN],
       );
@@ -676,9 +828,9 @@ describe.skipIf(!configured)("the MySQL token ledger", () => {
       // The `REVERSAL` row counts for nothing, so the whole -501 is unlawful.
       expect(mine[0]).toContain("only 0 of that is lawful");
 
-      await pool.query("DELETE FROM token_ledger WHERE id IN ('led-f13-tag','led-f13-hole')");
-      await pool.query("UPDATE token_balances SET balance = balance + 501 WHERE account_id = ? AND token_type = ?", [account, PLATFORM_TOKEN]);
-      await pool.query("UPDATE token_balances SET balance = balance - 501 WHERE account_id = ? AND token_type = ?", [TREASURY, PLATFORM_TOKEN]);
+      await pool.query("DELETE FROM token_ledger WHERE id IN ('led-f13-tag','led-f13-hole')"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("UPDATE token_balances SET balance = balance + 501 WHERE account_id = ? AND token_type = ?", [account, PLATFORM_TOKEN]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("UPDATE token_balances SET balance = balance - 501 WHERE account_id = ? AND token_type = ?", [TREASURY, PLATFORM_TOKEN]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       expect((await checkLedgerInvariants(pool)).ok).toBe(true);
     });
   });
@@ -777,6 +929,103 @@ describe.skipIf(!configured)("the MySQL token ledger", () => {
       expect(replay.ok && replay.duplicate).toBe(true);
       expect(await balanceOf(pool, memberAccount("pad-one"), PLATFORM_TOKEN)).toBe(3);
     });
+
+    it("refuses a collision committed after a caller-owned transaction took its snapshot", async () => {
+      // THE STALE SNAPSHOT. `postTransferOn` runs inside whatever transaction
+      // its caller opened. Here that transaction takes its read view FIRST,
+      // then a second connection commits `...usr-aB1`, then the case variant
+      // is posted on the first connection. The INSERT sees the committed row
+      // and fails as a duplicate; the read back used to be a plain SELECT,
+      // answered from the older snapshot, found nothing, and reported
+      // `{ ok: true, duplicate: true }` for a member who was never paid.
+      const conn = await pool.getConnection();
+      let second: Awaited<ReturnType<typeof postTransferOn>> | undefined;
+      try {
+        await conn.beginTransaction();
+        await conn.query("SELECT COUNT(*) FROM `token_ledger`"); // module-review-ok: opens this transaction's read view, which is the condition under test
+        const first = await postTransfer(pool, {
+          from: RECOGNITION_FAUCET, to: memberAccount("snap-one"), amount: 5,
+          source: "quest_consent", idempotencyKey: "quest.completed:local:snap:c:usr-aB1",
+        });
+        expect(first.ok && !first.duplicate).toBe(true);
+        second = await postTransferOn(conn, {
+          from: RECOGNITION_FAUCET, to: memberAccount("snap-two"), amount: 5,
+          source: "quest_consent", idempotencyKey: "quest.completed:local:snap:c:usr-Ab1",
+        });
+      } finally {
+        await conn.rollback();
+        conn.release();
+      }
+      expect({ ok: second?.ok, duplicate: second?.duplicate }).toEqual({ ok: false, duplicate: false });
+      expect(String(second?.error)).toContain("collides with the already-posted key");
+      expect(await balanceOf(pool, memberAccount("snap-two"), PLATFORM_TOKEN)).toBe(0);
+      expect(await balanceOf(pool, memberAccount("snap-one"), PLATFORM_TOKEN)).toBe(5);
+    });
+
+    /**
+     * THE TWIN, in the clawback law. Its "already mirrored" read (question 4)
+     * is the only thing that stops a second mirror under a different village
+     * segment, because that is a different key and the UNIQUE index cannot
+     * see it. The caller's transaction reads first, a second connection
+     * commits the first mirror, then the second mirror is posted on the
+     * caller's connection. A plain read answers from the older snapshot, sees
+     * no mirror, and claws the same 12 back twice.
+     *
+     * The connection sets MariaDB's `innodb_snapshot_isolation` off, which is
+     * how MySQL 8 behaves: a locking read returns the latest committed row.
+     * MySQL 8 has no such variable, so the statement fails there and changes
+     * nothing. With it ON, MariaDB's default, the posting throws ER_CHECKREAD
+     * both before this fix and after it (measured), so that setting cannot
+     * tell the fix from the defect and is not the one asserted here.
+     */
+    async function secondMirrorAfterSnapshot(tag: string) {
+      const u = memberAccount(`mirror-snap-${tag}`);
+      const original = `quest.completed:local:mirror-snap:c:${tag}`;
+      await postTransfer(pool, {
+        from: RECOGNITION_FAUCET, to: u, amount: 12, source: "quest_consent", idempotencyKey: original,
+      });
+      // Spare value, so the overdraft rule is not what stops the second one.
+      await postTransfer(pool, {
+        from: RECOGNITION_FAUCET, to: u, amount: 50, source: "quest_consent", idempotencyKey: `${original}:spare`,
+      });
+      const conn = await pool.getConnection();
+      let second: TransferResult | undefined;
+      let thrown: { code?: string } | undefined;
+      let heldUnderLock: number | undefined;
+      try {
+        await conn.query("SET SESSION innodb_snapshot_isolation = OFF").catch(() => undefined); // module-review-ok: a session setting on the test's own connection, no table read; MariaDB only, and it gives MySQL 8's locking-read behaviour
+        await conn.beginTransaction();
+        await conn.query("SELECT COUNT(*) FROM `token_ledger`"); // module-review-ok: opens this transaction's read view, which is the condition under test
+        const first = await postTransfer(pool, {
+          from: u, to: RECOGNITION_FAUCET, amount: 12, source: "reversal", idempotencyKey: `reversal:local:${original}`,
+        });
+        expect(first.ok && !first.duplicate).toBe(true);
+        try {
+          second = await postTransferOn(conn, {
+            from: u, to: RECOGNITION_FAUCET, amount: 12, source: "reversal", idempotencyKey: `reversal:elsewhere:${original}`,
+          });
+          // What committing this transaction would leave the member holding,
+          // read under a lock so it is not the snapshot's figure: 50 is one
+          // clawback, 38 is two.
+          heldUnderLock = Number((await lockedBalanceRows(conn, u, PLATFORM_TOKEN))[0]?.balance);
+        } catch (e) {
+          thrown = e as { code?: string };
+        }
+      } finally {
+        await conn.rollback().catch(() => undefined);
+        await conn.query("SET SESSION innodb_snapshot_isolation = DEFAULT").catch(() => undefined); // module-review-ok: puts the pooled connection's session setting back before it is released
+        conn.release();
+      }
+      return { second, thrown, heldUnderLock, after: await balanceOf(pool, u, PLATFORM_TOKEN) };
+    }
+
+    it("refuses a second mirror committed after a caller-owned transaction took its snapshot", async () => {
+      const r = await secondMirrorAfterSnapshot("locking");
+      expect(r.thrown).toBeUndefined();
+      expect({ ok: r.second?.ok, heldUnderLock: r.heldUnderLock }).toEqual({ ok: false, heldUnderLock: 50 });
+      expect(String(r.second?.error)).toContain("has already been reversed by");
+      expect(r.after).toBe(50);
+    });
   });
 
   describe("W3 F5: invariant 5 is bounded by what the allow-negative legs took", () => {
@@ -791,21 +1040,21 @@ describe.skipIf(!configured)("the MySQL token ledger", () => {
       rows: Array<{ id: string; amount: number; source: string; key: string }>,
     ) => {
       const account = memberAccount(member);
-      await pool.query(
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "INSERT IGNORE INTO ledger_accounts (id, kind, user_id, label, faucet) VALUES (?,?,?,?,0)",
         [account, "member", member, member],
       );
       let total = 0;
       for (const r of rows) {
-        await pool.query(
-          "INSERT INTO token_ledger (id, from_account, to_account, token_type, amount, source, idempotency_key) VALUES (?,?,?,?,?,?,?)",
+        await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+          "INSERT INTO token_ledger (id, from_account, to_account, token_type, amount, source, idempotency_key) VALUES (?,?,?,?,?,?,?)", // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
           [r.id, account, TREASURY, PLATFORM_TOKEN, r.amount, r.source, r.key],
         );
         total += r.amount;
       }
       for (const [acct, delta] of [[account, -total], [TREASURY, total]] as Array<[string, number]>) {
-        await pool.query(
-          "INSERT INTO token_balances (account_id, token_type, balance) VALUES (?,?,?) " +
+        await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+          "INSERT INTO token_balances (account_id, token_type, balance) VALUES (?,?,?) " + // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
             "ON DUPLICATE KEY UPDATE balance = balance + VALUES(balance)",
           [acct, PLATFORM_TOKEN, delta],
         );
@@ -813,9 +1062,9 @@ describe.skipIf(!configured)("the MySQL token ledger", () => {
       return account;
     };
     const unmanufacture = async (account: string, ids: string[], total: number) => {
-      await pool.query(`DELETE FROM token_ledger WHERE id IN (${ids.map(() => "?").join(",")})`, ids);
-      await pool.query("UPDATE token_balances SET balance = balance + ? WHERE account_id = ? AND token_type = ?", [total, account, PLATFORM_TOKEN]);
-      await pool.query("UPDATE token_balances SET balance = balance - ? WHERE account_id = ? AND token_type = ?", [total, TREASURY, PLATFORM_TOKEN]);
+      await pool.query(`DELETE FROM token_ledger WHERE id IN (${ids.map(() => "?").join(",")})`, ids); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("UPDATE token_balances SET balance = balance + ? WHERE account_id = ? AND token_type = ?", [total, account, PLATFORM_TOKEN]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("UPDATE token_balances SET balance = balance - ? WHERE account_id = ? AND token_type = ?", [total, TREASURY, PLATFORM_TOKEN]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     };
 
     it("reports a -99925 balance that one lawful 25 clawback used to excuse forever", async () => {
@@ -871,13 +1120,13 @@ describe.skipIf(!configured)("the MySQL token ledger", () => {
       // ADVERSARY B1/A8 held on the old code and must keep holding: the bound
       // is per (account, token), not per account.
       const account = memberAccount("b1-member");
-      await pool.query(
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "INSERT IGNORE INTO ledger_accounts (id, kind, user_id, label, faucet) VALUES (?,?,?,?,0)",
         [account, "member", "b1-member", "b1-member"],
       );
       await registerToken(pool, { slug: "b1-other", name: "B1 Other", kind: "credit", governance: "platform", transferable: false });
-      await pool.query(
-        "INSERT INTO token_ledger (id, from_account, to_account, token_type, amount, source, idempotency_key) VALUES " +
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO token_ledger (id, from_account, to_account, token_type, amount, source, idempotency_key) VALUES " + // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
           "('led-b1-lawful', ?, ?, ?, 50, 'reversal', 'reversal:local:b1-original')," +
           "('led-b1-other', ?, ?, 'b1-other', 5, 'quest_consent', 'b1-other-hole')",
         [account, TREASURY, PLATFORM_TOKEN, account, TREASURY],
@@ -887,8 +1136,8 @@ describe.skipIf(!configured)("the MySQL token ledger", () => {
         [account, "b1-other", -5], [TREASURY, "b1-other", 5],
       ];
       for (const [acct, token, delta] of moves) {
-        await pool.query(
-          "INSERT INTO token_balances (account_id, token_type, balance) VALUES (?,?,?) " +
+        await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+          "INSERT INTO token_balances (account_id, token_type, balance) VALUES (?,?,?) " + // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
             "ON DUPLICATE KEY UPDATE balance = balance + VALUES(balance)",
           [acct, token, delta],
         );
@@ -896,11 +1145,11 @@ describe.skipIf(!configured)("the MySQL token ledger", () => {
       const mine = (await checkLedgerInvariants(pool)).problems.filter((p) => p.includes(account));
       expect(mine.length).toBe(1);
       expect(mine[0]).toContain("b1-other");
-      await pool.query("DELETE FROM token_ledger WHERE id IN ('led-b1-lawful','led-b1-other')");
-      await pool.query("UPDATE token_balances SET balance = balance + 50 WHERE account_id = ? AND token_type = ?", [account, PLATFORM_TOKEN]);
-      await pool.query("UPDATE token_balances SET balance = balance - 50 WHERE account_id = ? AND token_type = ?", [TREASURY, PLATFORM_TOKEN]);
-      await pool.query("UPDATE token_balances SET balance = balance + 5 WHERE account_id = ? AND token_type = 'b1-other'", [account]);
-      await pool.query("UPDATE token_balances SET balance = balance - 5 WHERE account_id = ? AND token_type = 'b1-other'", [TREASURY]);
+      await pool.query("DELETE FROM token_ledger WHERE id IN ('led-b1-lawful','led-b1-other')"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("UPDATE token_balances SET balance = balance + 50 WHERE account_id = ? AND token_type = ?", [account, PLATFORM_TOKEN]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("UPDATE token_balances SET balance = balance - 50 WHERE account_id = ? AND token_type = ?", [TREASURY, PLATFORM_TOKEN]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("UPDATE token_balances SET balance = balance + 5 WHERE account_id = ? AND token_type = 'b1-other'", [account]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("UPDATE token_balances SET balance = balance - 5 WHERE account_id = ? AND token_type = 'b1-other'", [TREASURY]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       expect((await checkLedgerInvariants(pool)).ok).toBe(true);
     });
   });
@@ -1207,4 +1456,5 @@ describe("a ledger refusal, translated for the person who caused it", () => {
     expect(refusalForMember(undefined, ctx)).toBe("That send did not go through");
     expect(refusalForMember("", ctx)).toBe("That send did not go through");
   });
+
 });

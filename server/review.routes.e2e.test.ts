@@ -50,6 +50,7 @@ let testDb: TestDb | undefined;
 let dataDir = "";
 let pool: mysql.Pool;
 let founderToken = "";
+let founderId = "";
 
 // Kira is a plain member who will end up keeping the review queue with no
 // admin password anywhere in her requests. Otto holds nothing; he is the
@@ -135,20 +136,20 @@ beforeAll(async () => {
   const claim = decodeURIComponent(String(boot.json?.claimUrl ?? "").match(/token=([^&]+)/)?.[1] ?? "");
   const setPw = await call("POST", "/api/auth/set-password", { token: claim, password: "ReviewTest123!" }, "");
   founderToken = String(setPw.json?.token ?? "");
+  founderId = String(setPw.json?.user?.id ?? "");
   expect(founderToken, "founder must hold a session").toBeTruthy();
 
   const kira = await register("Kira Vance", "kira");
   kiraToken = kira.token; kiraId = kira.id;
   const otto = await register("Otto Brand", "otto");
   ottoToken = otto.token;
-  // Three more, so the roster carries the volume cap for a batch of twelve.
-  // `draftChangeCap` is `max(3, members * 3)`, and the cap is a real product
-  // rule: a village of two people being handed twelve new seats at once is
-  // exactly the aspirational structure it exists to refuse. A test that dodged
-  // it by removing the cap would be testing a different product.
-  for (const [name, slug] of [["Ada Wren", "ada"], ["Bel Cross", "bel"], ["Cass Moor", "cass"]]) {
-    await register(name, slug);
-  }
+  // NO MORE ACCOUNTS THAN THESE. This file used to register three extra
+  // members so the roster carried the change limit for a batch of twelve,
+  // because `draftChangeCap` was `max(3, members * 3)`. Rye ruled that limit
+  // broken on 2026-09-14: a village's beginning is one large import. The limit
+  // is now `org.proposal_change_limit`, shipping at 500, so a village of three
+  // accounts accepts twelve seats with nothing blocked, and the accept test
+  // below asserts exactly that.
 
   // Kira becomes a steward: the Steward Circle role gains intake.moderate, and
   // she is seated in it. No admin role anywhere on her account.
@@ -212,6 +213,39 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
     expect(batch.items[0].evidence).toBe("quoted");
     // Not stated is not zero.
     expect(batch.items[0].confidence).toBeNull();
+  });
+
+  it("says the village's change limit, what the batch proposes, and who may change the limit", async () => {
+    const LIMIT = "/api/admin/variables/org.proposal_change_limit";
+    const q = await call("GET", "/api/review/queue", undefined, kiraToken);
+    expect(q.status, q.text).toBe(200);
+    expect(q.json.proposalChangeLimit).toBe(500);
+    const batch = (q.json.batches ?? []).find((b: any) => b.batchId === BATCH);
+    expect(batch.proposedChanges).toBe(12);
+    // Kira keeps the queue and is no admin, so the admin page would refuse her.
+    expect(q.json.mayChangeProposalLimit).toBe(false);
+
+    // An admin who keeps the queue is offered the setting. The village holds
+    // intake.moderate through the Steward Circle, so the founder is seated in
+    // it the way Kira was; an admin does not pass a held key by being one.
+    expect(founderId, "set-password names the founder").toBeTruthy();
+    // The same Member-stage floor Kira was given: the seat asks for it, and a
+    // granted stage is a floor over the computed one, so it lowers nobody.
+    const staged = await call("PUT", `/api/admin/players/${founderId}/stage`, { stageId: "member" });
+    expect(staged.status, staged.text).toBe(200);
+    const seated = await call("POST", "/api/admin/roles/steward-circle/holders", { userId: founderId, action: "add" });
+    expect(seated.status, seated.text).toBe(200);
+    const asAdmin = await call("GET", "/api/review/queue");
+    expect(asAdmin.status, asAdmin.text).toBe(200);
+    expect(asAdmin.json.mayChangeProposalLimit).toBe(true);
+
+    // The village's tuned value is the one the queue says, over the default.
+    const tuned = await call("PUT", LIMIT, { value: "6" });
+    expect(tuned.status, tuned.text).toBe(200);
+    expect((await call("GET", "/api/review/queue", undefined, kiraToken)).json.proposalChangeLimit).toBe(6);
+    const restored = await call("PUT", LIMIT, { value: "500" });
+    expect(restored.status, restored.text).toBe(200);
+    expect((await call("GET", "/api/review/queue", undefined, kiraToken)).json.proposalChangeLimit).toBe(500);
   });
 
   it("REFUSES somebody without the capability, and never with an empty queue", async () => {
@@ -362,5 +396,158 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
     }, kiraToken);
     expect(r.status).not.toBe(200);
     expect([401, 403, 409]).toContain(r.status);
+  });
+
+  it("reads a vendor's own field names, places each seat by circle name, and names what it did not read", async () => {
+    // THE DEFECT. A real first batch spelled a seat's name `role_name`, its
+    // holder count `seat_count`, gave its circle by NAME, and sent its
+    // accountabilities as one string. The accept path copied canonical keys
+    // only and dropped the rest in silence, so every seat blocked as nameless.
+    const water = await call("POST", "/api/admin/circles", { name: "Springs & Wells", aliases: ["Water Care"] });
+    expect(water.status, water.text).toBe(200);
+    const waterId = String(water.json.id);
+
+    const SHAPED = "batch-vendor-shape";
+    const records: Record<string, unknown>[] = [
+      {
+        role_name: "Spring Keeper", aim: "The spring runs clean all year.", domain: null,
+        accountabilities: "Test the spring monthly; Keep the log.", circle: "springs & wells ", seat_count: 1, recruiting: true,
+      },
+      {
+        role_name: "Pipe Mender", aim: "No line stays broken for a week.", domain: "The water lines.",
+        accountabilities: "Walk the lines after rain\nCarry the repair kit", circle: "Water Care", seat_count: 2,
+        recruiting: false, vendor_rank: 3,
+        // A batch of three gives its draft no rationale, so this one is reported.
+        rationale: "The lines break every rain.",
+      },
+      {
+        role_name: "Mill Warden", aim: "The mill turns when the grain is in.", domain: "The mill.",
+        accountabilities: "Run the mill", circle: "Milling Circle", seat_count: 1, recruiting: false,
+      },
+    ];
+    const ids: string[] = [];
+    for (const [i, payload] of records.entries()) {
+      const r = await landProposal(pool, {
+        villageId: "v1",
+        moduleId: "saberra",
+        batchId: SHAPED,
+        kind: "role.proposed",
+        sourceRef: `record-${i + 1}`,
+        quote: `The record describes the seat ${String(payload.role_name)}.`,
+        payload,
+      });
+      expect(r.ok, `record ${i + 1} must land`).toBe(true);
+      if (r.ok) ids.push(r.id);
+    }
+
+    const payloadsByName = async (draftId: string): Promise<Record<string, Record<string, unknown>>> => {
+      const [rows] = await pool.query<any[]>( // module-review-ok: reading back the scratch schema this suite provisioned
+        "SELECT payload FROM org_draft_changes WHERE draft_id = ?", [draftId],
+      );
+      const out: Record<string, Record<string, unknown>> = {};
+      for (const row of rows) {
+        const p = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;
+        out[String(p.name)] = p;
+      }
+      return out;
+    };
+
+    const first = await call("POST", `/api/review/batches/${SHAPED}/accept`, {}, kiraToken);
+    expect(first.status, first.text).toBe(200);
+    expect(first.json.seats).toBe(3);
+    // One blocked, and only the one whose circle does not exist yet.
+    expect(first.json.blocked).toBe(1);
+    // Named, never dropped in silence. Sorted, because a JSON column may
+    // reorder an object's keys on the way back out.
+    expect(first.json.ignored).toHaveLength(1);
+    expect(first.json.ignored[0].proposalId).toBe(ids[1]);
+    expect([...first.json.ignored[0].keys].sort()).toEqual(["rationale", "vendor_rank"]);
+    // The reason itself reaches the steward, and it names the recovery walked below.
+    expect(first.json.blockedLines).toEqual([
+      { reads: 'Create the seat "Mill Warden"', blocked: expect.stringContaining('There is no circle called "Milling Circle" yet') },
+    ]);
+    expect(first.json.blockedLines[0].blocked).toContain("withdraw this draft. Its proposals go back in the review queue");
+
+    // The queue read lists that draft with its reasons, so a reload or a second
+    // blocked accept cannot leave it with no withdraw on any screen.
+    const stuckOn = async () => {
+      const q = await call("GET", "/api/review/queue", undefined, kiraToken);
+      expect(q.status, q.text).toBe(200);
+      return (q.json.stuckDrafts ?? []) as { draftId: string; blocked: number; blockedLines: unknown }[];
+    };
+    expect((await stuckOn()).find((d) => d.draftId === first.json.draftId)).toEqual({
+      draftId: first.json.draftId, blocked: 1, blockedLines: first.json.blockedLines,
+    });
+
+    const one = await payloadsByName(first.json.draftId);
+    expect(one["Spring Keeper"]).toMatchObject({
+      circleId: waterId, seats: 1, recruiting: true, accountabilities: ["Test the spring monthly", "Keep the log"],
+    });
+    expect(one["Pipe Mender"]).toMatchObject({
+      circleId: waterId, seats: 2, accountabilities: ["Walk the lines after rain", "Carry the repair kit"],
+    });
+    expect(one["Pipe Mender"]).not.toHaveProperty("vendor_rank");
+    expect(one["Mill Warden"]).not.toHaveProperty("circleId");
+    expect(one["Mill Warden"].circleName).toBe("Milling Circle");
+
+    // THE RECOVERY the blocked line asks for: an admin makes the circle, the
+    // steward withdraws, accepts again, and the reopened proposal is placed.
+    const mill = await call("POST", "/api/admin/circles", { name: "Milling Circle" });
+    expect(mill.status, mill.text).toBe(200);
+    const withdrawn = await call("POST", `/api/review/drafts/${first.json.draftId}/withdraw`, {}, kiraToken);
+    expect(withdrawn.status, withdrawn.text).toBe(200);
+    expect(withdrawn.json.reopened).toBe(3);
+    expect((await stuckOn()).map((d) => d.draftId)).not.toContain(first.json.draftId);
+
+    const again = await call("POST", `/api/review/batches/${SHAPED}/accept`, {}, kiraToken);
+    expect(again.status, again.text).toBe(200);
+    expect(again.json.blocked).toBe(0);
+    // A draft that can publish is not stuck.
+    expect((await stuckOn()).map((d) => d.draftId)).not.toContain(again.json.draftId);
+    const two = await payloadsByName(again.json.draftId);
+    expect(two["Mill Warden"]).toMatchObject({ circleId: String(mill.json.id) });
+    expect(two["Mill Warden"]).not.toHaveProperty("circleName");
+    expect(again.json.blockedLines).toEqual([]);
+
+    // ONE proposal through the single accept: it returns the blocked reason
+    // too, and a lone proposal's rationale names the draft, so it is read.
+    const out = await call("POST", `/api/review/drafts/${again.json.draftId}/withdraw`, {}, kiraToken);
+    expect(out.status, out.text).toBe(200);
+    const single = await landProposal(pool, {
+      villageId: "v1",
+      moduleId: "saberra",
+      batchId: "batch-vendor-single",
+      kind: "role.proposed",
+      sourceRef: "record-single",
+      quote: "The record describes the seat Kiln Tender.",
+      payload: { role_name: "Kiln Tender", circle: "Kiln Circle", rationale: "Somebody fires the kiln." },
+    });
+    expect(single.ok).toBe(true);
+    const lone = await call("POST", `/api/review/proposals/${single.ok ? single.id : ""}/accept`, {}, kiraToken);
+    expect(lone.status, lone.text).toBe(200);
+    expect(lone.json.blocked).toBe(1);
+    expect(lone.json.blockedLines[0].blocked).toContain('There is no circle called "Kiln Circle" yet');
+    expect(lone.json.ignored).toEqual([]);
+    expect((await stuckOn()).map((d) => d.draftId)).toContain(lone.json.createdRef);
+
+    // AN OBJECT WHERE A VALUE BELONGS. Converting it threw inside the preview:
+    // the accept answered with an error after writing its draft, and from then
+    // on every read of this queue failed, the draft's withdraw with it.
+    const hostile = await landProposal(pool, {
+      villageId: "v1",
+      moduleId: "saberra",
+      batchId: "batch-vendor-hostile",
+      kind: "role.proposed",
+      sourceRef: "record-hostile",
+      quote: "The record describes the seat Gate Keeper.",
+      payload: { role_name: "Gate Keeper", criticality: { toString: 0 }, seat_count: { valueOf: 0, toString: 0 } },
+    });
+    expect(hostile.ok, JSON.stringify(hostile)).toBe(true);
+    const taken = await call("POST", `/api/review/proposals/${hostile.ok ? hostile.id : ""}/accept`, {}, kiraToken);
+    expect(taken.status, taken.text).toBe(200);
+    expect(taken.json.blocked).toBe(1);
+    expect(taken.json.blockedLines[0].blocked).toContain("Criticality is normal or high");
+    expect(taken.json.blockedLines[0].blocked).toContain("A seat holds between 1 and 50 people");
+    expect((await stuckOn()).map((d) => d.draftId)).toContain(taken.json.createdRef);
   });
 });

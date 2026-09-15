@@ -42,7 +42,7 @@
  * same reason a member in grace on stay credits is.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
-import { fromLedgerUnits, toLedgerUnits } from "./economy";
+import { decimalsFor, finerThanScale, fromLedgerUnits, toLedgerUnits } from "./economy";
 import { CURRENCY_DECIMALS } from "../../shared/tokenScale";
 import { ledgerEntryExists, MINT_FAUCET, memberAccount, postGraceNightBurn, postTransfer, registerToken, tokenDef } from "./ledger";
 import { spendSinkFor } from "./spending";
@@ -99,8 +99,8 @@ export interface AccommodationRow {
   isExample: boolean;
   /**
    * Posted prices: { "stay-credit": {guest, member}, usd: {guest, member} }.
-   * usd is CENTS and every token is WHOLE units, which is what the two screens
-   * that read this already assume. The stored column is minor on both sides;
+   * usd is CENTS and every token is HUMAN units, fractions included (2.5 is two
+   * and a half credits), which is what the two screens that read this expect. The stored column is minor on both sides;
    * `priceFromStored` is the one place that difference lives.
    */
   prices: Record<string, { guest?: number; member?: number }>;
@@ -168,16 +168,50 @@ function rowToStay(r: RowDataPacket): StayRow {
  * the stop condition and the nights-left figure comparing a minor balance to a
  * human rate.
  *
- * `toLedgerUnits` and `fromLedgerUnits` read the registry at call time, so at
- * today's `decimals: 0` both functions are the identity and nothing moves. They
- * become load-bearing the day the registry flips, and the flip needs a backfill
- * of this column and of `stays.rate_snapshot_credits` for every non-usd row.
+ * `toLedgerUnits` and `fromLedgerUnits` read the registry at call time, and
+ * both are load-bearing now. Since 0202 every platform credit token, stay
+ * credits included, carries 2 decimals, so a token row here is scaled by 100
+ * on the way in and divided by 100 on the way out. Only a token still at
+ * `decimals: 0` passes through unchanged.
+ *
+ * 0202 needed no backfill of this column or of `stays.rate_snapshot_credits`,
+ * and that is a fact about 0202, not a rule: its guard refused to move any token
+ * that already stored an amount in either table (`accommodation_prices` and
+ * `stays` are both in its list), so every row it could have corrupted was
+ * proven absent first. A LATER change to a token's decimals rescales both
+ * columns, and needs that backfill or the same guard.
  */
 
-/** A posted price on its way IN: human for a token, cents for usd. */
+/**
+ * A posted price on its way IN: human for a token, cents for usd. EXACT.
+ *
+ * It floored, so 2.5 credits posted as 2 and a room could not ask for a
+ * fraction its token holds. It converts at the token's own scale now, and the
+ * route asks `priceScaleRefusal` first, so a price finer than the token holds is
+ * refused in words and never rounded here.
+ */
 export function priceToStored(tokenType: string, amount: number): number {
-  const whole = Math.floor(Number(amount) || 0);
-  return tokenType === USD ? whole : toLedgerUnits(tokenType, whole);
+  const n = Number(amount) || 0;
+  return tokenType === USD ? Math.round(n) : toLedgerUnits(tokenType, n);
+}
+
+/**
+ * Why a posted price cannot be stored exactly, or null when it can.
+ *
+ * `finerThanScale` is the same check the hand-mint and the redemption ask use.
+ * usd arrives as cents, so a usd amount must be a whole number of cents.
+ */
+export function priceScaleRefusal(tokenType: string, amount: number): string | null {
+  const n = Number(amount);
+  if (tokenType === USD) {
+    return finerThanScale(n, 0) ? `A dollar price is posted in whole cents, so ${n} cents cannot be posted exactly. Nothing was posted` : null;
+  }
+  const decimals = decimalsFor(tokenType);
+  if (!finerThanScale(n, decimals)) return null;
+  const name = tokenDef(tokenType)?.name ?? tokenType;
+  return decimals > 0
+    ? `${name} goes to ${decimals} decimal places, so a price of ${n} cannot be posted exactly. Nothing was posted`
+    : `${name} is priced in whole amounts, so a price of ${n} cannot be posted exactly. Nothing was posted`;
 }
 
 /** A stored price on its way OUT to a screen: the inverse of `priceToStored`. */
@@ -197,8 +231,8 @@ export async function listAccommodations(pool: Pool, opts?: { includeInactive?: 
     const acc = byAcc.get(String(p.accommodation_id)) ?? {};
     const tok = acc[String(p.token_type)] ?? {};
     // The catalog is a READING surface: Stay.tsx and the admin price form both
-    // treat a token price as a whole number of credits and only divide usd by
-    // 100. Handing them the stored minor number would also break the admin
+    // treat a token price as the human number of credits and only divide usd
+    // by 100. Handing them the stored minor number would also break the admin
     // form's round trip, which reads this map and posts it straight back.
     tok[p.audience as "guest" | "member"] = priceFromStored(String(p.token_type), Number(p.amount_minor));
     acc[String(p.token_type)] = tok;

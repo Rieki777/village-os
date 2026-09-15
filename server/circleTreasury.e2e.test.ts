@@ -66,6 +66,7 @@ let dataDir = "";
 const logs: string[] = [];
 
 let founderToken = "";
+let founderId = "";
 let memberId = "";
 /** `credits` carries decimals; read off the registry rather than assumed. */
 let scale = 1;
@@ -110,7 +111,7 @@ async function call(method: string, route: string, body?: unknown, token?: strin
 describe.skipIf(!DB_CONFIGURED)("a village runs caps and treasuries side by side", () => {
   /** One account's cached balance. Zero when it holds no row for this token. */
   const balanceOf = async (account: string): Promise<number> => {
-    const [[row]] = await testDb!.conn.query<any[]>(
+    const [[row]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COALESCE(SUM(balance), 0) AS n FROM token_balances WHERE account_id = ? AND token_type = ?",
       [account, TOKEN],
     );
@@ -119,7 +120,7 @@ describe.skipIf(!DB_CONFIGURED)("a village runs caps and treasuries side by side
 
   /** Per token, SUM(balance) over every account. Zero, always. */
   const conservation = async (): Promise<number> => {
-    const [[row]] = await testDb!.conn.query<any[]>(
+    const [[row]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COALESCE(SUM(balance), 0) AS n FROM token_balances WHERE token_type = ?",
       [TOKEN],
     );
@@ -217,7 +218,9 @@ describe.skipIf(!DB_CONFIGURED)("a village runs caps and treasuries side by side
     const claim = decodeURIComponent(String(boot.json?.claimUrl ?? "").match(/token=([^&]+)/)?.[1] ?? "");
     const setPw = await call("POST", "/api/auth/set-password", { token: claim, password: ADMIN }, null);
     founderToken = String(setPw.json?.token ?? "");
+    founderId = String(setPw.json?.user?.id ?? "");
     expect(founderToken, "the founder must hold a session").toBeTruthy();
+    expect(founderId, "and be named, so a spend to self can be asked for").toBeTruthy();
 
     const reg = await call("POST", "/api/auth/register", {
       name: "Wren", email: `wren-${PORT}@example.test`, password: PASSWORD, paths: ["resident"],
@@ -327,7 +330,7 @@ describe.skipIf(!DB_CONFIGURED)("a village runs caps and treasuries side by side
     expect(funded.json.balanceMinor).toBe(60 * scale);
 
     // In the circle's own account, read from the ledger and not from the reply.
-    const [[held]] = await testDb!.conn.query<any[]>(
+    const [[held]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT balance FROM token_balances WHERE account_id = ? AND token_type = ?",
       [`sys:circle:${kitchenId}`, TOKEN],
     );
@@ -390,7 +393,7 @@ describe.skipIf(!DB_CONFIGURED)("a village runs caps and treasuries side by side
     }, founderToken);
     expect(r.status, `pay: ${r.text.slice(0, 400)}`).toBe(409);
     expect(String(r.json?.error)).toContain("standing before a bonus");
-    const [[row]] = await testDb!.conn.query<any[]>(
+    const [[row]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COUNT(*) AS n FROM token_ledger WHERE source = 'circle_cap_bonus'",
     );
     expect(Number(row?.n ?? 0), "no bonus has ever been posted here").toBe(0);
@@ -410,7 +413,7 @@ describe.skipIf(!DB_CONFIGURED)("a village runs caps and treasuries side by side
     expect(await conservation()).toBe(0);
 
     // The member really was paid, read off the ledger.
-    const [[paid]] = await testDb!.conn.query<any[]>(
+    const [[paid]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT balance FROM token_balances WHERE account_id = ? AND token_type = ?",
       [`mem:${memberId}`, TOKEN],
     );
@@ -467,7 +470,7 @@ describe.skipIf(!DB_CONFIGURED)("a village runs caps and treasuries side by side
     // NOTHING WAS MINTED BY THE REFUSAL. The guard runs inside the transfer.
     expect((await guardView()).minted).toBe(room + 50);
     expect(await conservation()).toBe(0);
-    const [[none]] = await testDb!.conn.query<any[]>(
+    const [[none]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COALESCE(balance, 0) AS n FROM token_balances WHERE account_id = ? AND token_type = ?",
       [`sys:circle:${eleventhId}`, TOKEN],
     );
@@ -533,7 +536,7 @@ describe.skipIf(!DB_CONFIGURED)("a village runs caps and treasuries side by side
     expect(atBoundary.sentence).toContain("nothing has been minted into it yet");
 
     // The stored column is untouched, which is what "queued" means.
-    const [[row]] = await testDb!.conn.query<any[]>(
+    const [[row]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT mode, pending_mode FROM circle_budgets WHERE id = ?",
       [workshopBudget],
     );
@@ -593,7 +596,7 @@ describe.skipIf(!DB_CONFIGURED)("a village runs caps and treasuries side by side
     expect(dormant.json.treasurySwept[0].destination).toBe("master_treasury");
 
     // A DORMANT CIRCLE HOLDS NOTHING. That is the objection, answered.
-    const [[after]] = await testDb!.conn.query<any[]>(
+    const [[after]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COALESCE(balance, 0) AS n FROM token_balances WHERE account_id = ? AND token_type = ?",
       [`sys:circle:${sleepyId}`, TOKEN],
     );
@@ -653,7 +656,7 @@ describe.skipIf(!DB_CONFIGURED)("a village runs caps and treasuries side by side
     expect(credits.treasuryHeld.accountsHolding).toBeGreaterThan(1);
 
     // The figure is the sum of the real balances and nothing else.
-    const [[direct]] = await testDb!.conn.query<any[]>(
+    const [[direct]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COALESCE(SUM(balance), 0) AS n FROM token_balances " +
         "WHERE token_type = ? AND account_id LIKE 'sys:circle:%'",
       [TOKEN],
@@ -689,4 +692,170 @@ describe.skipIf(!DB_CONFIGURED)("a village runs caps and treasuries side by side
     // And a stranger gets nothing: what a circle HOLDS has no public tier.
     expect((await call("GET", "/api/resources/treasuries", undefined, null)).status).toBe(401);
   }, 60_000);
+
+  // ── 10. Who may move a circle's money, and what a delete may strand (#243) ─
+
+  /** Ledger rows carrying one idempotency key. Zero means nothing was posted. */
+  const rowsForKey = async (k: string): Promise<number> => {
+    const [[row]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT COUNT(*) AS n FROM token_ledger WHERE idempotency_key = ?",
+      [k],
+    );
+    return Number(row?.n ?? 0);
+  };
+  /** The key `movementKey` in server/routes/circleTreasury.ts builds for a requestId. */
+  const keyFor = (kind: string, budgetId: string, requestId: string) =>
+    `circle_treasury:${kind}:${budgetId.slice(0, 40)}:${requestId}`;
+
+  let seatToken = "";
+  let seatId = "";
+
+  it("REFUSES A CIRCLE'S SPEAKING SEAT ON /fund, and mints nothing (B1a)", async () => {
+    const reg = await call("POST", "/api/auth/register", {
+      name: "Sol", email: `sol-${PORT}@example.test`, password: PASSWORD, paths: ["resident"],
+    }, null);
+    expect(reg.status, `Sol must register: ${reg.text.slice(0, 200)}`).toBe(200);
+    seatToken = String(reg.json?.token ?? "");
+    seatId = String(reg.json?.user?.id ?? "");
+    expect(seatToken && seatId).toBeTruthy();
+
+    // Sol holds the Kitchen's speaking seat: the one door that makes a
+    // non-admin a declarer, for the Kitchen and nothing else (0083).
+    await testDb!.conn.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO org_roles (id, circle_id, name, seats, active, represents_circle) VALUES ('seat-kitchen-voice', ?, 'Kitchen voice', 1, 1, 1)",
+      [kitchenId],
+    );
+    await testDb!.conn.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO org_role_assignments (id, org_role_id, holder_kind, user_id, holder_key) VALUES ('asg-kitchen-sol', 'seat-kitchen-voice', 'member', ?, ?)",
+      [seatId, seatId],
+    );
+
+    const circle = `sys:circle:${kitchenId}`;
+    const before = await balanceOf(circle);
+    const minted = (await guardView()).minted;
+    const r = await call("POST", `/api/admin/resources/budgets/${kitchenBudget}/fund`, {
+      amountMinor: 5 * scale, note: "my own circle", requestId: "seat-fund",
+    }, seatToken);
+    expect(r.status, r.text.slice(0, 300)).toBe(403);
+    expect(String(r.json?.error)).toContain("takes admin or org.declare");
+    expect(await balanceOf(circle), "nothing was minted into the circle").toBe(before);
+    expect(await rowsForKey(keyFor("fund", kitchenBudget, "seat-fund"))).toBe(0);
+    expect((await guardView()).minted, "the village's issuance counter did not move").toBe(minted);
+
+    // THE CONTROL: the seat is a real declarer for its circle, so the refusal
+    // above is about minting and not about Sol. It can pay somebody else.
+    const paid = await call("POST", `/api/admin/resources/budgets/${kitchenBudget}/spend`, {
+      toUserId: memberId, amountMinor: 1 * scale, note: "Sol pays Wren", requestId: "seat-pays-wren",
+    }, seatToken);
+    expect(paid.status, paid.text.slice(0, 300)).toBe(200);
+    expect(await balanceOf(circle)).toBe(before - 1 * scale);
+    expect(await conservation()).toBe(0);
+  }, 90_000);
+
+  it("REFUSES A SPEND TO THE PERSON ASKING, whoever they are, and moves nothing (B1c)", async () => {
+    const circle = `sys:circle:${kitchenId}`;
+    const before = await balanceOf(circle);
+    const seatBefore = await balanceOf(`mem:${seatId}`);
+    const founderBefore = await balanceOf(`mem:${founderId}`);
+
+    const bySeat = await call("POST", `/api/admin/resources/budgets/${kitchenBudget}/spend`, {
+      toUserId: seatId, amountMinor: 2 * scale, note: "to me", requestId: "self-seat",
+    }, seatToken);
+    expect(bySeat.status, bySeat.text.slice(0, 300)).toBe(403);
+    expect(String(bySeat.json?.error)).toContain("cannot pay the person asking");
+
+    const byFounder = await call("POST", `/api/admin/resources/budgets/${kitchenBudget}/spend`, {
+      toUserId: founderId, amountMinor: 2 * scale, note: "to me", requestId: "self-founder",
+    }, founderToken);
+    expect(byFounder.status, byFounder.text.slice(0, 300)).toBe(403);
+    expect(String(byFounder.json?.error)).toContain("cannot pay the person asking");
+
+    expect(await balanceOf(circle)).toBe(before);
+    expect(await balanceOf(`mem:${seatId}`)).toBe(seatBefore);
+    expect(await balanceOf(`mem:${founderId}`)).toBe(founderBefore);
+    expect(await rowsForKey(keyFor("spend", kitchenBudget, "self-seat"))).toBe(0);
+    expect(await rowsForKey(keyFor("spend", kitchenBudget, "self-founder"))).toBe(0);
+  }, 60_000);
+
+  it("REFUSES A SPEND TO AN ID THAT NAMES NO MEMBER, and opens no account for it (B1d)", async () => {
+    const ghost = "usr-nobody-by-this-id";
+    const circle = `sys:circle:${kitchenId}`;
+    const before = await balanceOf(circle);
+    const r = await call("POST", `/api/admin/resources/budgets/${kitchenBudget}/spend`, {
+      toUserId: ghost, amountMinor: 1 * scale, note: "a typo", requestId: "ghost",
+    }, founderToken);
+    expect(r.status, r.text.slice(0, 300)).toBe(400);
+    expect(String(r.json?.error)).toContain("No member of this village");
+    expect(await balanceOf(circle)).toBe(before);
+    expect(await rowsForKey(keyFor("spend", kitchenBudget, "ghost"))).toBe(0);
+    const [[acct]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT COUNT(*) AS n FROM ledger_accounts WHERE id = ?",
+      [`mem:${ghost}`],
+    );
+    expect(Number(acct.n), "no account opened for an id no member holds").toBe(0);
+  }, 60_000);
+
+  it("REFUSES AN ADMIN FUNDING ABOVE THE CO-SIGN THRESHOLD, and posts nothing (B1b)", async () => {
+    await setVar("ledger.admin_mint_cosign_over", "50");
+    const circle = `sys:circle:${kitchenId}`;
+    const before = await balanceOf(circle);
+    const minted = (await guardView()).minted;
+
+    const over = await call("POST", `/api/admin/resources/budgets/${kitchenBudget}/fund`, {
+      amountMinor: 51 * scale, note: "over the line", requestId: "over-cosign",
+    }, founderToken);
+    expect(over.status, over.text.slice(0, 300)).toBe(403);
+    expect(String(over.json?.error)).toContain("second steward's co-sign");
+    expect(await balanceOf(circle), "no co-sign, no mint").toBe(before);
+    expect(await rowsForKey(keyFor("fund", kitchenBudget, "over-cosign"))).toBe(0);
+    expect((await guardView()).minted).toBe(minted);
+
+    // AT the threshold one steward still may, the same line the hand mint draws.
+    const at = await call("POST", `/api/admin/resources/budgets/${kitchenBudget}/fund`, {
+      amountMinor: 50 * scale, note: "at the line", requestId: "at-cosign",
+    }, founderToken);
+    expect(at.status, at.text.slice(0, 300)).toBe(200);
+    expect(await balanceOf(circle)).toBe(before + 50 * scale);
+    expect(await conservation()).toBe(0);
+    await setVar("ledger.admin_mint_cosign_over", "100");
+  }, 90_000);
+
+  it("REFUSES TO DELETE A BUDGET OR A CIRCLE whose treasury holds tokens, until it is returned (B5)", async () => {
+    const id = await makeCircle("The Keeper");
+    const budget = await makeBudget(id, "treasury");
+    const account = `sys:circle:${id}`;
+    expect((await call("POST", `/api/admin/resources/budgets/${budget}/fund`, {
+      amountMinor: 7 * scale, note: "its season", requestId: "keeper-1",
+    }, founderToken)).status).toBe(200);
+
+    const count = async (table: "circle_budgets" | "circles") => {
+      const [[row]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        `SELECT COUNT(*) AS n FROM ${table} WHERE id = ?`,
+        [table === "circles" ? id : budget],
+      );
+      return Number(row?.n ?? 0);
+    };
+
+    const delBudget = await call("DELETE", `/api/admin/resources/budgets/${budget}`, undefined, founderToken);
+    expect(delBudget.status, delBudget.text.slice(0, 300)).toBe(409);
+    expect(String(delBudget.json?.error)).toContain("Return the balance to the village first");
+    expect(await count("circle_budgets"), "the budget row is still there").toBe(1);
+
+    const delCircle = await call("DELETE", `/api/admin/circles/${id}`, undefined, founderToken);
+    expect(delCircle.status, delCircle.text.slice(0, 300)).toBe(409);
+    expect(String(delCircle.json?.error)).toContain("The Keeper still holds");
+    expect(await count("circles"), "the circle is still there").toBe(1);
+    expect(await balanceOf(account), "and so are its tokens, reachable").toBe(7 * scale);
+
+    // Handed back, and both deletes go through.
+    const back = await call("POST", `/api/admin/resources/budgets/${budget}/return`, {
+      note: "closing the circle", requestId: "keeper-back",
+    }, founderToken);
+    expect(back.status, back.text.slice(0, 300)).toBe(200);
+    expect(await balanceOf(account)).toBe(0);
+    expect((await call("DELETE", `/api/admin/resources/budgets/${budget}`, undefined, founderToken)).status).toBe(200);
+    expect((await call("DELETE", `/api/admin/circles/${id}`, undefined, founderToken)).status).toBe(200);
+    expect(await count("circles")).toBe(0);
+    expect(await conservation()).toBe(0);
+  }, 120_000);
 });

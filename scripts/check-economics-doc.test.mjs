@@ -35,6 +35,7 @@ import {
   frozenStringSet,
   verifyKeystoneSets,
   ROOT,
+  cell,
   endMarker,
   findRegion,
   invariantChecks,
@@ -726,6 +727,38 @@ check("PROSE: every count a region states equals the table it prints", () => {
     rows,
     `the triggers region says it builds ${stated[1]} keys and prints ${rows} rows`,
   );
+});
+
+check("a table cell holds ONE column whatever the value carries (CodeQL #429)", () => {
+  // The escaper used to handle the pipe alone. A value holding a backslash
+  // before a pipe then came out as an escaped backslash followed by a live
+  // pipe, and the cell it was protecting opened a new column. Markdown reads a
+  // pipe as escaped only when an ODD number of backslashes precede it, so the
+  // split below counts them rather than looking one character back.
+  const liveSplits = (row) => {
+    let n = 0;
+    for (let i = 0; i < row.length; i++) {
+      if (row[i] !== "|") continue;
+      let slashes = 0;
+      for (let j = i - 1; j >= 0 && row[j] === "\\"; j--) slashes++;
+      if (slashes % 2 === 0) n++;
+    }
+    return n;
+  };
+  for (const raw of ["a|b", "a\\|b", "a\\\\|b", "trailing\\", "two\nlines", "tab\there", 7]) {
+    const out = cell(raw);
+    assert.strictEqual(liveSplits(out), 0, `cell(${JSON.stringify(raw)}) left a live pipe: ${out}`);
+    assert.ok(!/[\r\n]/.test(out), `cell(${JSON.stringify(raw)}) kept a line break, which ends the row: ${JSON.stringify(out)}`);
+    // Undoing the escapes gives back the value with its whitespace collapsed,
+    // so nothing was dropped to reach a clean cell.
+    const unescaped = out.replace(/\\([\\|])/g, "$1");
+    assert.strictEqual(unescaped, String(raw).replace(/\s+/g, " "), `cell(${JSON.stringify(raw)}) lost content`);
+  }
+  // Positive control: the counter is not blind. A bare pipe and a pipe after an
+  // escaped backslash are both live.
+  assert.strictEqual(liveSplits("a|b"), 1);
+  assert.strictEqual(liveSplits("a\\\\|b"), 1);
+  assert.strictEqual(liveSplits("a\\|b"), 0);
 });
 
 check("FIXTURE: the real committed document matches the real code", () => {

@@ -168,7 +168,7 @@ describe.skipIf(!configured)("a departure on dials a village actually moved", ()
 
   /** Every posting one exit produced, in a stable order. */
   const rowsFor = async (exitId: string): Promise<any[]> => {
-    const [rows] = await pool.query<any[]>(
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT `from_account`, `to_account`, `token_type`, `amount`, `description`, `idempotency_key` " +
         "FROM `token_ledger` WHERE `source_ref` = ? ORDER BY `idempotency_key`",
       [exitId],
@@ -182,7 +182,7 @@ describe.skipIf(!configured)("a departure on dials a village actually moved", ()
    * unit shows up here whatever the two ends looked like.
    */
   const conserves = async (): Promise<void> => {
-    const [sums] = await pool.query<any[]>(
+    const [sums] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT `token_type`, SUM(`balance`) AS total FROM `token_balances` GROUP BY `token_type`",
     );
     for (const row of sums) {
@@ -214,7 +214,7 @@ describe.skipIf(!configured)("a departure on dials a village actually moved", ()
       decimals: 4,
     });
     await loadTokenRegistry(pool);
-    const [dec] = await pool.query<any[]>("SELECT `slug`, `decimals` FROM `tokens` WHERE `slug` IN (?, ?)", [WHOLE, VOICE]);
+    const [dec] = await pool.query<any[]>("SELECT `slug`, `decimals` FROM `tokens` WHERE `slug` IN (?, ?)", [WHOLE, VOICE]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     vDec = Number((dec as any[]).find((r) => String(r.slug) === VOICE)?.decimals ?? 0);
     wDec = Number((dec as any[]).find((r) => String(r.slug) === WHOLE)?.decimals ?? 0);
   });
@@ -451,6 +451,68 @@ describe.skipIf(!configured)("a departure on dials a village actually moved", ()
     expect(await balanceOf(pool, memberAccount(u), VOICE)).toBe(MINOR);
     expect(await balanceOf(pool, memberAccount(u), WHOLE)).toBe(0);
     expect(await rowsFor(exitId)).toEqual([]);
+    await conserves();
+  });
+
+  it("a conversion retried after a short treasury finishes the ORIGINAL split, never a re-split", async () => {
+    /*
+     * D2-1. Half the Voice is kept on convert, 1000 minor units are held, and
+     * the treasury cannot pay. The first settle posts the 500 remainder and the
+     * pair is refused, so 500 stay with the member. After funding, the retry
+     * must convert exactly those 500. Re-splitting them converted 250 and left
+     * 250 Voice in an account that becomes a tombstone.
+     */
+    const u = await member("exit-split-convert-retry");
+    const HELD = 1_000;
+    const SHARE = 500;
+    await give(memberAccount(u), VOICE, HELD);
+    const exitId = await openExit(u);
+    const treasury = await balanceOf(pool, TREASURY, WHOLE);
+    if (treasury > 0) {
+      const r = await postTransfer(pool, {
+        from: TREASURY, to: EXIT_SETTLEMENT, tokenType: WHOLE, amount: treasury,
+        source: "test_seed", idempotencyKey: `exit-split:drain:${++seq}`,
+      });
+      expect(r.ok, `drain: ${r.error}`).toBe(true);
+    }
+    const halfOnConvert = policy({
+      keepPct: { credit: 0, voice: 50, recognition: 0, equity: 0 },
+      voiceOnExit: "convert",
+      voiceConvertRate: "2.5",
+    });
+    const settlementBefore = await balanceOf(pool, EXIT_SETTLEMENT, VOICE);
+
+    const first = await sweepBalances(pool, { exitId, userId: u, policy: halfOnConvert });
+    expect(first.errors.length).toBe(1);
+    expect(first.errors[0]).toContain("insufficient");
+    expect(await balanceOf(pool, memberAccount(u), VOICE)).toBe(SHARE);
+    await appendNote(exitId, first.note);
+
+    const paid = convertedCredits(SHARE, 25, 10);
+    expect(paid, "the fixture must pay something at these scales").toBeGreaterThan(0);
+    await give(TREASURY, WHOLE, paid + 1_000);
+    const treasuryBefore = await balanceOf(pool, TREASURY, WHOLE);
+
+    const second = await sweepBalances(pool, { exitId, userId: u, policy: halfOnConvert });
+    expect(second.errors).toEqual([]);
+
+    // The member keeps nothing in Voice and exactly the share's credits.
+    expect(await balanceOf(pool, memberAccount(u), VOICE)).toBe(0);
+    expect(await balanceOf(pool, memberAccount(u), WHOLE)).toBe(paid);
+    expect((await balanceOf(pool, TREASURY, WHOLE)) - treasuryBefore).toBe(-paid);
+    expect((await balanceOf(pool, EXIT_SETTLEMENT, VOICE)) - settlementBefore).toBe(HELD);
+
+    // The ledger, key by key: one remainder, one converted share, one payment.
+    const rows = await rowsFor(exitId);
+    const byKey = Object.fromEntries(rows.map((r) => [r.idempotency_key, r.amount]));
+    expect(byKey).toEqual({
+      [`exit:${exitId}:sweep:${VOICE}`]: HELD - SHARE,
+      [`exit:${exitId}:convert:${VOICE}`]: SHARE,
+      [`exit:${exitId}:convert-credit:${VOICE}`]: paid,
+    });
+    const line = second.captured?.lines.find((l) => l.token === VOICE);
+    expect(line?.held).toBe(fromLedgerUnits(VOICE, HELD));
+    expect(line?.converted).toBe(fromLedgerUnits(WHOLE, paid));
     await conserves();
   });
 

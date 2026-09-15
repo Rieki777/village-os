@@ -31,7 +31,7 @@ import type { ModuleLifecycle } from "@shared/modules";
 import { ExampleChip, forgetExamplesCache } from "@/components/ExamplesBanner";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import { describeToken, tokenModule, tokenModuleIsOff, visibleTokens } from "@/components/admin/tokenCatalog";
-import { formatTokenAmount } from "@/lib/tokenAmount";
+import { formatTokenAmount, smallestUnit } from "@/lib/tokenAmount";
 
 /**
  * THE ONE PAGE WHERE A TOKEN IS NAMED.
@@ -186,12 +186,14 @@ export default function TokensTab({ password, lifecycles }: { password: string; 
         headers: authHeaders(password, { "Content-Type": "application/json" }),
         body: JSON.stringify({
           toUserId: mint.toUserId,
-          // WHOLE TOKENS, and the conversion is the ROUTE's. Two lanes fixed
-          // "a steward typed 10 Voice and minted a hundredth" at once, one
-          // here and one at `POST /api/admin/tokens/:slug/mint`, which now
-          // does `toLedgerUnits(slug, amt)` on the way in. Converting in both
-          // places multiplies twice, so the screen sends what was typed and
-          // every other caller of that route gets the same fix for free.
+          // HUMAN TOKENS, fractions included, and the conversion is the
+          // ROUTE's. Two lanes fixed "a steward typed 10 Voice and minted a
+          // hundredth" at once, one here and one at
+          // `POST /api/admin/tokens/:slug/mint`, which does
+          // `toLedgerUnits(slug, amt)` on the way in. Converting in both places
+          // multiplies twice, so the screen sends what was typed. The route
+          // refuses, in words, an amount finer than the token holds; it used to
+          // truncate 2.5 to 2 and this toast said "Minted".
           amount: Number(mint.amount),
           reason: mint.reason,
         }),
@@ -476,7 +478,7 @@ export default function TokensTab({ password, lifecycles }: { password: string; 
                 {players.map((p) => <option key={p.id} value={p.id}>{p.name}{p.handle ? ` (@${p.handle})` : ""}</option>)}
               </select>
               <input value={mint.amount} onChange={(e) => setMint({ ...mint, amount: e.target.value })}
-                placeholder="Amount" type="number" min="1" className="text-sm border border-gray-200 rounded-lg px-3 py-2 w-28" />
+                placeholder="Amount" type="number" min={smallestUnit(decimalsOfSlug(mint.slug))} step={smallestUnit(decimalsOfSlug(mint.slug))} className="text-sm border border-gray-200 rounded-lg px-3 py-2 w-28" />
               <input value={mint.reason} onChange={(e) => setMint({ ...mint, reason: e.target.value })}
                 placeholder="Reason (required)" className="text-sm border border-gray-200 rounded-lg px-3 py-2 flex-1 min-w-48" />
               <button onClick={doMint} disabled={!mint.slug || !mint.toUserId || !mint.amount || !mint.reason.trim()}

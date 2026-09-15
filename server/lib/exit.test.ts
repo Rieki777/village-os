@@ -144,7 +144,7 @@ describe.skipIf(!configured)("what a departing member's balance is worth, and in
 
   /** The exact integer that reached the ledger for one sweep leg. */
   const sweptRow = async (exitId: string, token: string): Promise<number | null> => {
-    const [rows] = await pool.query<any[]>(
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT `amount`, `to_account` FROM `token_ledger` WHERE `idempotency_key` = ?",
       [`exit:${exitId}:sweep:${token}`],
     );

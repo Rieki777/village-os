@@ -32,6 +32,7 @@ import { Plus, X } from "lucide-react";
 import InfoTip from "@/components/InfoTip";
 import type { FieldSpec } from "./wizardConfig";
 import { isSearchSource, loadPickOptions, searchMembers, type PickOption } from "./pickSources";
+import { SeatTermForRole, type SeatTermLook } from "@/components/power/SeatTermField";
 
 export interface MechanicsVariableLite {
   key: string;
@@ -49,6 +50,15 @@ export interface MechanicsVariableLite {
 const inputClass =
   "w-full min-h-[44px] rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep aria-[invalid=true]:border-coral";
 
+/** The wizard's look for a seat's end date: the same inputs as every other field. */
+const TERM_LOOK: SeatTermLook = {
+  label: "block text-sm font-semibold text-stone-900",
+  input: `mt-1 ${inputClass}`,
+  line: "text-xs text-stone-600 leading-relaxed",
+  caution: "text-sm font-medium text-amber-800 leading-relaxed",
+  refusal: "text-sm font-medium text-coral",
+};
+
 export default function WizardField({
   field,
   value,
@@ -56,12 +66,15 @@ export default function WizardField({
   onChange,
   /** The open dials, loaded once by the wizard and passed down. */
   dials,
+  /** Every answer so far, for a field whose meaning depends on another one. */
+  answers,
 }: {
   field: FieldSpec;
   value: unknown;
   problem?: string;
   onChange: (next: unknown) => void;
   dials?: MechanicsVariableLite[];
+  answers?: Record<string, unknown>;
 }) {
   const id = useId();
   const errorId = `${id}-problem`;
@@ -181,6 +194,22 @@ export default function WizardField({
         <div>
           {label}
           <input {...common} type="date" value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} />
+          {footer}
+        </div>
+      );
+
+    case "seatTerm":
+      return (
+        <div>
+          <SeatTermForRole
+            roleId={field.roleKey ? String(answers?.[field.roleKey] ?? "") : ""}
+            value={String(value ?? "")}
+            onChange={onChange}
+            inputId={id}
+            labelNode={label}
+            describedBy={describedBy}
+            look={TERM_LOOK}
+          />
           {footer}
         </div>
       );

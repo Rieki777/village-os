@@ -20,6 +20,9 @@
  * expiry so it lapses back rather than outliving the moment somebody meant it.
  */
 import type { Pool } from "mysql2/promise";
+import { applyCircleStatusChanges, type CircleStatusMove, type CircleStatusOutcome } from "./circleTreasury";
+import { listBudgets } from "./resources";
+import { circleStatusRows } from "../repos/circles";
 import {
   decidesByProblem,
   domainsProblem,
@@ -867,6 +870,8 @@ export async function seatHolder(
     note?: string | null;
     seasonId?: string | null;
     termEndsAt?: Date | null;
+    /** 0199: true when the term is the season's end and moves with it. */
+    termFollowsSeason?: boolean;
     grantedBy?: string | null;
     /** Seat a software agent. Never combined with a `userId`. */
     isAgent?: boolean;
@@ -916,8 +921,8 @@ export async function seatHolder(
   try {
     await pool.query(
       `INSERT INTO org_role_assignments
-         (id, org_role_id, holder_kind, user_id, display_name, holder_key, focus, note, season_id, term_ends_at, granted_by, is_agent)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+         (id, org_role_id, holder_kind, user_id, display_name, holder_key, focus, note, season_id, term_ends_at, granted_by, is_agent, term_follows_season)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         assignmentId,
         orgRoleId,
@@ -931,6 +936,7 @@ export async function seatHolder(
         h.termEndsAt ?? null,
         h.grantedBy ?? null,
         isAgent ? 1 : 0,
+        h.termFollowsSeason ? 1 : 0,
       ],
     );
     return { ok: true, assignmentId };
@@ -1093,6 +1099,13 @@ export interface BackfillReport {
   seatsWritten: number;
   holdersWritten: number;
   skipped: boolean;
+  /** What the treasury hook did for each existing circle whose status this backfill changed. */
+  treasury: CircleStatusOutcome[];
+  /**
+   * Circles this backfill CREATED. A new row has no previous status, so there
+   * is no transition to hand the hook, and none is run for it.
+   */
+  circlesCreated: string[];
 }
 
 /**
@@ -1137,7 +1150,10 @@ export async function backfillOrgChart(pool: Pool, input: BackfillInput): Promis
   const already = Number(existing[0]?.n ?? 0);
   const expected = (input.cards ?? []).length + ((input.corrections?.seats ?? []).filter((s: any) => s.isNew).length);
   if (already > 0 && already >= expected) {
-    return { circlesWritten: 0, councilsToForming: 0, seatsWritten: 0, holdersWritten: 0, skipped: true };
+    return {
+      circlesWritten: 0, councilsToForming: 0, seatsWritten: 0, holdersWritten: 0, skipped: true,
+      treasury: [], circlesCreated: [],
+    };
   }
 
   const corr = input.corrections ?? {};
@@ -1163,6 +1179,26 @@ export async function backfillOrgChart(pool: Pool, input: BackfillInput): Promis
       Number(c.sortOrder ?? 0),
     ];
   });
+  /*
+   * WHAT EVERY CIRCLE'S STATUS WAS BEFORE EITHER WRITE BELOW, read once.
+   *
+   * Both writes change `circles.status` with their own SQL: the upsert can set
+   * a circle dormant, and the councils pass moves circles to forming. Neither
+   * called the treasury hook, so a circle this backfill made dormant kept its
+   * treasury and got no dormant record, the same defect B3 on #243 closed in
+   * the season roll. The hook needs the status BEFORE the change, and neither
+   * statement can say what it overwrote, so it is read here first. A circle
+   * with no row yet is a fresh insert with no previous status.
+   */
+  const touchedIds = Array.from(new Set<string>([
+    ...(corr.circles ?? []).filter((c: any) => c?.id).map((c: any) => String(c.id)),
+    ...(corr.councilsToForming ?? []).filter(Boolean).map((id: any) => String(id)),
+  ]));
+  const statusBefore = new Map<string, { name: string; status: string }>();
+  for (const r of await circleStatusRows(pool, touchedIds)) {
+    statusBefore.set(String(r.id), { name: String(r.name ?? r.id), status: String(r.status) });
+  }
+
   if (circleRows.length) {
     await pool.query(
       `INSERT INTO circles (id, name, purpose, parent_circle_id, grown_from_org_role_id, icon, color, status, sort_order)
@@ -1189,6 +1225,37 @@ export async function backfillOrgChart(pool: Pool, input: BackfillInput): Promis
     );
     councilsToForming = Number(r?.affectedRows ?? 0);
   }
+
+  /*
+   * EVERY REAL TRANSITION GOES THROUGH THE HOOK, AFTER BOTH WRITES.
+   *
+   * A circle's status now is `forming` when the councils pass named it (that
+   * UPDATE moves any existing row that is not already forming), otherwise the
+   * status the upsert wrote, otherwise what it was. A circle both passes touch
+   * is handed over once, from where it started to where it ended: the hook's
+   * policy is about the state a circle lands in, and a circle that ends forming
+   * is not dormant whatever it passed through. A circle with no row before is
+   * reported in `circlesCreated` and not handed over, because a fresh insert
+   * has no previous status to compare against.
+   */
+  const upsertedStatus = new Map<string, { name: string; status: string }>();
+  for (const c of corr.circles ?? []) {
+    if (c?.id) upsertedStatus.set(String(c.id), { name: String(c.name ?? c.id), status: String(c.status ?? "active") });
+  }
+  const movedToForming = new Set<string>(councilIds.map((id: any) => String(id)));
+  const moves: CircleStatusMove[] = [];
+  const circlesCreated: string[] = [];
+  for (const id of touchedIds) {
+    const was = statusBefore.get(id);
+    const wrote = upsertedStatus.get(id);
+    if (!was) {
+      if (wrote) circlesCreated.push(id);
+      continue;
+    }
+    const now = movedToForming.has(id) ? "forming" : (wrote?.status ?? was.status);
+    if (now !== was.status) moves.push({ id, name: wrote?.name ?? was.name, from: was.status, to: now });
+  }
+  const treasury = await applyCircleStatusChanges(pool, moves, null, listBudgets);
 
   // ── Seats ────────────────────────────────────────────────────────────────
   // Every card becomes a seat. A card the corrections do not mention keeps
@@ -1294,7 +1361,10 @@ export async function backfillOrgChart(pool: Pool, input: BackfillInput): Promis
        ))`,
   );
 
-  return { circlesWritten, councilsToForming, seatsWritten, holdersWritten, skipped: false };
+  return {
+    circlesWritten, councilsToForming, seatsWritten, holdersWritten, skipped: false,
+    treasury, circlesCreated,
+  };
 }
 
 // ── Who may declare how power is held (0083, P10, N5) ───────────────────────

@@ -374,11 +374,11 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
       expect(Number(credits?.retired ?? 0)).toBe(500 * scale);
 
       // And the same two numbers straight out of the database.
-      const [[held]] = await testDb!.conn.query<any[]>(
+      const [[held]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT COALESCE(balance,0) AS n FROM token_balances WHERE account_id = 'sys:redemption-hold' AND token_type = ?",
         [CREDITS],
       );
-      const [[retired]] = await testDb!.conn.query<any[]>(
+      const [[retired]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT COALESCE(balance,0) AS n FROM token_balances WHERE account_id = 'sys:redeemed' AND token_type = ?",
         [CREDITS],
       );
@@ -389,7 +389,7 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
       // A second press destroys nothing.
       const again = await call("POST", `/api/redemptions/${id}/confirm`, { note: "again" }, founderToken);
       expect(again.status).toBe(409);
-      const [[still]] = await testDb!.conn.query<any[]>(
+      const [[still]] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT COALESCE(balance,0) AS n FROM token_balances WHERE account_id = 'sys:redeemed' AND token_type = ?",
         [CREDITS],
       );

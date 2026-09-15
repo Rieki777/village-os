@@ -206,13 +206,15 @@ permission model. An id the array does not contain returns `-1`, and every calle
 rung" rather than "rung zero", which is what keeps an unknown value from reading as the bottom of the
 ladder.
 
-**Six rule types, one of which is countable.** `default` and `account` are always true for anyone with a
+**Seven rule types, one of which is countable.** `default` and `account` are always true for anyone with a
 user record. `training-complete` reads `trainingRepo.all()` and requires EVERY training module row to be in
 `user.journeys.training`, returning false when the village has no modules at all. There is no draft state:
 `training_modules` carries `id`, `title`, `description`, `type`, `url` and `sort_order` and nothing else, so
 a POST to `/api/admin/training-modules` is live the moment it lands. `membership`
 reads `membershipGranted`. `quests` compares the consented-claim count against
-`progression.quests_for.<id>`. `granted` compares against `stage_granted`. `MaturityLadder` prints a
+`progression.quests_for.<id>`. `tokens` asks whether the village has ever paid the member for something they
+brought it (`hasBeenPaidByVillage`, over the sources `server/lib/contributionPay.ts` counts). `granted`
+compares against `stage_granted`. `MaturityLadder` prints a
 distance only for the `quests` rung, because that is the only one with a countable distance, and inventing
 "60% of the way to Member" for a rung that turns on a signature is the fabrication the path progress bars
 were deleted for.
@@ -221,6 +223,15 @@ were deleted for.
 answer to the grant if the grant is higher. A grant BELOW the earned stage does nothing. A grant naming a
 stage id the ladder does not contain resolves to `-1` and is silently ignored, with no error and no
 warning.
+
+**Nothing above Member without an admission.** A rung above `member` is reached only by somebody the village
+admitted: `membershipGranted`, or a `stage_granted` at `member` or above. `climbLadder` in
+`server/lib/admission.ts` holds that for every caller of `computeStage`, and
+`POST /api/members/:id/contributor` refuses somebody who has not been admitted. Before it, a guest the village
+paid stood at Contributor, on every ballot roll and able to vouch. The release that added it first ran
+`freezeStandingAboveTheDoor` once, keeping as an admission the standing the old ladder had given (one consented
+quest reached Contributor there), so nobody was demoted by it. A guest who had only been paid is not kept:
+pay was not a rung on that ladder.
 
 **Appointment beats the ladder, and `minStage` is checked at appointment time only.**
 `roleCapabilitiesFor` unions the `capabilities` arrays of every role the member holds, and hands that list
@@ -241,11 +252,13 @@ Participant rung is asserted by one POST. **No capability may ever be hung on `p
 `progression.unlock.*` dial.** Today it costs nothing, because `participant` carries multiplier 1 and opens
 no key; the warning is for the fork that moves a rung.
 
-**Two rungs are crossed with no record at all.** `recordStageEvent` has exactly two callers: the admin
-grant in `server/routes/players.ts`, and quest consent in `server/index.ts`. The `membership` rung is
-crossed by `PUT /api/admin/submissions/:id/status` when an accepted Love Letter sets `membershipGranted`,
-which is gated on `intake.moderate` and is the only writer of that flag; the `training-complete` rung is
-crossed by `POST /api/game/journey/sync`. Neither calls `recordStageEvent`. So the crossing into `member`,
+**Two rungs are crossed with no record at all.** `recordStageEvent` has three callers: the admin grant in
+`server/routes/players.ts`, quest consent in `server/routes/questClaims.ts`, and a steward naming a
+contributor in `server/routes/vouches.ts`. The `membership` rung is crossed whenever `membershipGranted` is
+set: by `PUT /api/admin/submissions/:id/status` when an accepted Love Letter names its signer (gated on
+`intake.moderate`), by the vouch routes in `server/routes/vouches.ts` when the bar is met or a steward vouches,
+and once each, at boot, by `freezeEmailMatchedMemberships` and `freezeStandingAboveTheDoor`. The
+`training-complete` rung is crossed by `POST /api/game/journey/sync`. None of those calls `recordStageEvent`. So the crossing into `member`,
 which opens nine of the thirteen stage unlocks, writes no `stage_events` row, no pulse line and no
 notification. The member is never told, and their profile history skips the rung entirely.
 
@@ -286,14 +299,15 @@ edits one. `docs/VARIABLES.md` is generated from the registry and carries all of
 descriptions; read it there rather than here, and note its own warning that a reader of the array literal
 alone would print a document missing a fifth of the registry.
 
-The **28th** row `docs/VARIABLES.md` files under the Progression category is `org.reassignment_cadence`, a
-hand-written def that belongs to the org chart's seat machinery and is read by `lapseContext`, not by
-anything in this module. Category is a display grouping, not ownership.
+Two of the rows `docs/VARIABLES.md` files under the Progression category are hand-written defs that belong
+to the org chart's machinery and are read by nothing in this module: `org.reassignment_cadence`, read by
+`lapseContext`, and `org.proposal_change_limit` (added 2026-09-14), read by `draftChangeCap` in
+`server/lib/orgDrafts.ts`. Category is a display grouping, not ownership.
 
 **Who may turn them, and this is the sharpest single fact about the module.** Every progression dial sits in
 the OPEN ring. `ringOf` returns `"open"` for all of them, because Progression is not one of the four
 `FOUNDER_CATEGORIES` and none of these keys is in `FOUNDER_KEYS`, which is why `docs/VARIABLES.md` prints
-"the whole village" on all 28 rows. The write door is `PUT /api/admin/variables/:key`, gated on `dial.set`
+"the whole village" on all 29 rows. The write door is `PUT /api/admin/variables/:key`, gated on `dial.set`
 through `mayAct`, and `dial.set` is TRANSFERABLE. So a village that takes `dial.set` can re-cut the
 permission ladder for everybody, all thirteen `progression.unlock.*` keys included, with no admin in the
 chain. The member-facing route to the same values is `POST /api/game/mechanics/proposals` plus either
@@ -533,7 +547,7 @@ paths change:
 ## Where to read next
 
 - `docs/CAPABILITIES.md` for the gate, all 31 keys and all 7 steps. Generated and checked.
-- `docs/VARIABLES.md` for the Progression category, all 28 rows with their founder-facing descriptions.
+- `docs/VARIABLES.md` for the Progression category, all 29 rows with their founder-facing descriptions.
 - `docs/MODULES.md` for this module's registry facts as the code declares them.
 - `docs/modules/module-framework.md` for what a module id, tier, lifecycle and data class mean.
 - `docs/modules/badges.md` for the grant and deny paths that sit above this ladder in the gate.

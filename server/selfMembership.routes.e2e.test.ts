@@ -426,3 +426,111 @@ describe.skipIf(!DB_CONFIGURED)("a submitted form cannot name its own type", () 
     expect(String(rows[0].user_id)).toBe(wrenId);
   });
 });
+
+/*
+ * A GUEST THE VILLAGE PAYS DOES NOT CLIMB PAST THE DOOR.
+ *
+ * The chain in the header, one rung higher. Contributor is the rung the village
+ * pays you onto and it sits above Member, and `computeStage` took the MAX of
+ * every satisfied rule without asking whether the person had been admitted. So
+ * one hand-mint put a guest on every roll and opened `member.vouch` for them,
+ * and a steward could name a guest a contributor to the same effect.
+ *
+ * The pay goes through the village's own mint route, the way a steward pays
+ * somebody, and every refusal is measured beside a member the same act lifts.
+ */
+describe.skipIf(!DB_CONFIGURED)("a guest the village pays does not climb past the door", () => {
+  let paxToken = "";
+  let paxId = "";
+
+  /** Pay one account through the village's hand-mint, under the second-steward threshold. */
+  async function payByTheVillage(userId: string): Promise<void> {
+    const paid = await call("POST", "/api/admin/tokens/stay-credit/mint", {
+      body: { toUserId: userId, amount: 5, reason: "Rebuilt the gate hinge by the well." },
+    });
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+  }
+
+  it("keeps a paid guest a Guest, while the same pay lifts a member to Contributor", async () => {
+    const pax = await register("Pax Merrow", "pax");
+    paxToken = pax.token;
+    paxId = pax.id;
+    const before = await onTheRoll();
+
+    await payByTheVillage(paxId);
+    await payByTheVillage(wrenId);
+
+    const paid = await standingOf(paxToken);
+    expect(paid.membership).toBe(false);
+    expect(paid.stage, "being paid is not being admitted").toBe("guest");
+    expect(paid.caps).not.toContain("ballot.vote");
+    expect(paid.caps).not.toContain("member.vouch");
+
+    // THE CONTROL, in the same case: Wren reached Member by a stage grant, and
+    // the same mint carries her to the rung that opens vouching.
+    const wren = await standingOf(wrenToken);
+    expect(wren.stage).toBe("contributor");
+    expect(wren.caps).toContain("member.vouch");
+
+    expect(await onTheRoll(), "a paid guest is not on the roll").toBe(before);
+  });
+
+  it("refuses to let a steward name a guest a contributor, and still names a member", async () => {
+    const refused = await call("POST", `/api/members/${paxId}/contributor`);
+    expect(refused.status, JSON.stringify(refused.json)).toBe(409);
+    expect(String(refused.json?.error ?? "")).toContain("not a member");
+    expect((await standingOf(paxToken)).stage, "the refusal wrote nothing").toBe("guest");
+
+    const named = await call("POST", `/api/members/${idaId}/contributor`);
+    expect(named.status, JSON.stringify(named.json)).toBe(200);
+    expect(named.json?.changed).toBe(true);
+    expect(named.json?.stage).toBe("contributor");
+  });
+
+  it("leaves a paid guest off the roll a ballot freezes, beside the members it does freeze", async () => {
+    /*
+     * THE GOVERNANCE HALF OF THE HOLE. A ballot freezes its roll into
+     * `ballot_electorate` from `buildElectorate` the moment it opens, and after
+     * that nothing about a member's standing reaches the vote. So the live count
+     * the first case measures is half the claim, and the snapshot is the other
+     * half. Opened here, after Pax was paid and before anybody lets Pax in, so a
+     * rung reached by pay alone would have put Pax on it.
+     */
+    const proposed = await call("POST", "/api/game/mechanics/proposals", {
+      body: {
+        title: "Raise the gratitude budget a little for the season",
+        rationale: "A real proposal is how a village freezes a roll, and the roll it freezes is what this case reads.",
+        changes: [{ key: "gratitude.base_budget", to: "110" }],
+      },
+    });
+    expect(proposed.status, JSON.stringify(proposed.json)).toBe(200);
+    const opened = await call("POST", `/api/governance/mechanics/${proposed.json?.id}/open-ballot`);
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    const ballotId = String(opened.json?.ballot?.id ?? "");
+    expect(ballotId, "the ballot opened").toBeTruthy();
+
+    const [rows] = await pool.query<any[]>("SELECT user_id FROM ballot_electorate WHERE ballot_id = ?", [ballotId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const frozen = rows.map((r) => String(r.user_id));
+    expect(frozen, "a paid guest who was never let in holds no vote").not.toContain(paxId);
+    // THE CONTROLS, in the same snapshot: a member placed by a stage grant and
+    // since paid, a member the 0058 freeze admitted, and one whose signed letter
+    // the village accepted.
+    for (const [who, id] of [["Wren", wrenId], ["Orla", orlaId], ["Mallory", malloryId]] as const) {
+      expect(frozen, `${who} is on the frozen roll`).toContain(id);
+    }
+    expect(Number(opened.json?.ballot?.electorateCount), "the ballot's count is the rows it froze").toBe(frozen.length);
+  });
+
+  it("opens once the village lets them in, and the pay they already had then counts", async () => {
+    const before = await onTheRoll();
+    const admitted = await call("POST", `/api/members/${paxId}/super-vouch`);
+    expect(admitted.status, JSON.stringify(admitted.json)).toBe(200);
+    expect(admitted.json?.admitted).toBe(true);
+
+    const pax = await standingOf(paxToken);
+    expect(pax.membership).toBe(true);
+    expect(pax.stage, "admitted, and already paid").toBe("contributor");
+    expect(pax.caps).toContain("member.vouch");
+    expect(await onTheRoll()).toBe(before + 1);
+  });
+});

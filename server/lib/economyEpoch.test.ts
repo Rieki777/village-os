@@ -57,18 +57,18 @@ let pool: mysql.Pool;
  * literals and why the literal is the wrong shape rather than the wrong value.
  */
 async function scaleOf(slug: string): Promise<number> {
-  const [rows] = await pool.query<any[]>("SELECT `decimals` FROM `tokens` WHERE `slug` = ?", [slug]);
+  const [rows] = await pool.query<any[]>("SELECT `decimals` FROM `tokens` WHERE `slug` = ?", [slug]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
   return 10 ** Number(rows[0]?.decimals ?? 0);
 }
 
 /** A member who can be paid. The mint needs a user row and a ledger account. */
 async function seatAMember(id: string): Promise<string> {
-  await pool.query(
+  await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x') " +
       "ON DUPLICATE KEY UPDATE `name` = VALUES(`name`)",
     [id, id, `${id}@examples.invalid`],
   );
-  await pool.query(
+  await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "INSERT IGNORE INTO `ledger_accounts` (`id`, `kind`, `user_id`, `label`, `faucet`) VALUES (?,?,?,?,0)",
     [memberAccount(id), "member", id, id],
   );
@@ -81,13 +81,13 @@ async function seatAMember(id: string): Promise<string> {
  */
 async function neverStarted(): Promise<void> {
   forgetEpoch();
-  await pool.query("DELETE FROM `app_config` WHERE `config_key` = 'economy-state'");
+  await pool.query("DELETE FROM `app_config` WHERE `config_key` = 'economy-state'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
 }
 
 describe.skipIf(!configured)("the first confirmed quest in a village's life", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 10 });
+    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 10 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await loadTokenRegistry(pool);
     await seedEconomy(pool, VILLAGE);
     await loadTokenRegistry(pool);

@@ -32,8 +32,16 @@
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { lostConcurrencyRace } from "../db/concurrency";
 import { balanceRowsFor } from "../repos/tokenBalances";
-import { accountEntryRows, idempotencyKeyRows, keysCollatingWith, questConsentCreditRows } from "../repos/tokenLedger";
+import { accountEntryRows, accountsReceivedFromVillage, idempotencyKeyRows, keysCollatingWith, questConsentCreditRows, receivedFromVillage } from "../repos/tokenLedger";
+import { contributionSources } from "./contributionPay";
 import { issuanceRefusal } from "./gameStart";
+import {
+  keyClashRows,
+  keyRowsWithSource,
+  lockedReversalMirrorRows,
+  postingRowForKey,
+  reversalMirrorRows,
+} from "../repos/tokenLedger";
 
 export type TokenType = string;
 
@@ -722,14 +730,24 @@ export async function pairSiblingKey(
   const m = /^(.*):leg([12])$/.exec(key);
   if (!m) return null;
   const sibling = `${m[1]}:leg${m[2] === "1" ? "2" : "1"}`;
-  const [rows] = await db.query<RowDataPacket[]>(
-    "SELECT `idempotency_key` FROM `token_ledger` WHERE `idempotency_key` = ? AND `source` = ? LIMIT 1",
-    [sibling, source],
-  );
+  const rows = await keyRowsWithSource(db, sibling, source);
   // Byte-exact, like every other key read here: the collation would happily
   // hand back a different key that merely collates equal.
   return rows.some((r) => String(r.idempotency_key) === sibling) ? sibling : null;
 }
+
+/**
+ * Who opened the transaction a posting runs in, which decides whether its
+ * REPEATABLE READ snapshot can be older than its account locks.
+ *
+ *   "after-account-locks"  this file opened it and locked the accounts before
+ *                          any plain read, so the snapshot is taken after
+ *                          every posting that needed those locks committed
+ *   "caller"               somebody else opened it and may already have read
+ *
+ * See `clawbackRefusal` for the one read this changes.
+ */
+type SnapshotOrigin = "after-account-locks" | "caller";
 
 /**
  * THE CLAWBACK LAW, WHERE THE CLAWBACK IS WRITTEN.
@@ -767,13 +785,49 @@ export async function pairSiblingKey(
  * the locks this function runs under, and the loser reads the winner's
  * committed row instead of the same stale answer.
  *
- * The reads are plain rather than `FOR UPDATE` ON PURPOSE. An exact-match
- * locking read on a UNIQUE index takes a GAP lock when the row is absent,
- * which would put a reversal in the way of unrelated postings whose keys
- * happen to sort nearby. What a stale snapshot can cost here is bounded and
- * one-directional: a just-committed original that this transaction cannot
- * yet see refuses a lawful reversal, which fails closed. A second mirror
- * cannot slip past, because it collides on the mirror key's own UNIQUE index.
+ * WHICH READ LOCKS, AND ONLY WHERE A SNAPSHOT CAN BE STALE.
+ *
+ * In a transaction this file opened (`postTransfer`, `postTransferPair`) the
+ * account locks are the first statement, and InnoDB takes the REPEATABLE READ
+ * snapshot at the first plain read, which comes after them (mysql2 sends a
+ * bare START TRANSACTION). A concurrent mirror of the same original needs
+ * the same two account locks, so it has committed before this snapshot exists
+ * and a plain read sees it. Measured on MariaDB 12.3.2: of two such
+ * transactions, the second saw the first one's mirror with a plain read.
+ *
+ * A transaction the CALLER opened (`postTransferOn`) may have read long before
+ * it got here. This paragraph used to end "A second mirror cannot slip past,
+ * because it collides on the mirror key's own UNIQUE index", which is true
+ * only of the same key: a second mirror under a different village segment is
+ * a different key, question 4 is the only thing that stops it, and a plain
+ * read answered from the older snapshot saw no mirror. Measured through
+ * `postTransferOn`: the same 12 clawed back twice, 38 left of 50. So on that
+ * path the mirror read locks (`lockedReversalMirrorRows`, LOCK IN SHARE MODE).
+ *
+ * IT DOES NOT LOCK EVERYWHERE, and that was measured too. Two concurrent
+ * reversals into accounts whose `token_ledger_to_idx` ranges are empty and
+ * adjacent each take a shared lock on the same gap, each then inserts into
+ * it, and one dies ER_LOCK_DEADLOCK; with plain reads both commit. That would
+ * be a new deadlock on every production clawback, bought against a staleness
+ * those paths cannot have. The lock order against the account locks does not
+ * change on the path that does lock: the range it scans belongs to `leg.to`,
+ * whose ledger_accounts row this transaction already holds, and every posting
+ * to that account takes that row before it touches `token_ledger`. The gap
+ * after the range is the one new thing it can block, which is the deadlock
+ * above, and a caller who owns the transaction owns that retry.
+ *
+ * On MariaDB with `innodb_snapshot_isolation` on (its default) that locking
+ * read raises ER_CHECKREAD for a mirror committed after the caller's snapshot
+ * instead of returning it. It throws out to the caller, who rolls back: loud,
+ * and nothing moved.
+ *
+ * The other two reads stay plain on both paths. A stale `postingRowForKey` can
+ * only miss a just-committed original, which refuses a lawful reversal and
+ * fails closed; ledger rows are never updated, so a row it does see is the
+ * row. A pair's two legs commit in one transaction, so a snapshot that sees
+ * the original sees its sibling, and `pairSiblingKey` cannot be stale in the
+ * direction that matters. An exact-match locking read on the UNIQUE index
+ * would also take a gap lock whenever the key is absent.
  *
  * `siblingMirroredHere` is the original key of the OTHER leg of the same
  * `postTransferPair` call, when that leg is also a mirror. Null everywhere
@@ -785,6 +839,7 @@ async function clawbackRefusal(
   tokenType: string,
   amount: number,
   siblingMirroredHere: string | null,
+  snapshot: SnapshotOrigin,
 ): Promise<string | null> {
   const original = originalKeyOf(leg.idempotencyKey);
   // `validateLeg` refuses a key that names no original before any of this
@@ -794,11 +849,7 @@ async function clawbackRefusal(
     return `a clawback mirror is keyed "reversal:<village>:<original key>" and ${JSON.stringify(leg.idempotencyKey.slice(0, 60))} names no original posting`;
   }
 
-  const [rows] = await conn.query<RowDataPacket[]>(
-    "SELECT `idempotency_key`, `source`, `from_account`, `to_account`, `token_type`, `amount` " +
-      "FROM `token_ledger` WHERE `idempotency_key` = ? LIMIT 1",
-    [original],
-  );
+  const rows = await postingRowForKey(conn, original);
   const row = rows[0];
   // BYTE-EXACT: `WHERE idempotency_key = ?` answers under a case-insensitive
   // PAD SPACE collation, so it happily returns a row whose key is NOT the one
@@ -847,12 +898,10 @@ async function clawbackRefusal(
    * original key can contain `%` (every builder percent-encodes) and a LIKE
    * over it would need escaping that a collation would then fold anyway.
    */
-  const [mirrors] = await conn.query<RowDataPacket[]>(
-    "SELECT `idempotency_key` FROM `token_ledger` " +
-      "WHERE `to_account` = ? AND `token_type` = ? AND `from_account` = ? AND `amount` = ? " +
-      "AND CAST(`source` AS BINARY) = 'reversal'",
-    [leg.to, tokenType, leg.from, amount],
-  );
+  const mirrors =
+    snapshot === "caller"
+      ? await lockedReversalMirrorRows(conn, leg.to, tokenType, leg.from, amount)
+      : await reversalMirrorRows(conn, leg.to, tokenType, leg.from, amount);
   const already = mirrors
     .map((r) => String(r.idempotency_key))
     .find((k) => k !== leg.idempotencyKey && originalKeyOf(k) === original);
@@ -923,6 +972,22 @@ export async function postTransferOn(
   conn: PoolConnection,
   input: TransferInput,
   guard?: TransferGuard,
+): Promise<TransferResult> {
+  // The caller opened this transaction and may have read before this call, so
+  // the clawback law cannot trust the snapshot. See `SnapshotOrigin`.
+  return postTransferInside(conn, input, guard, "caller");
+}
+
+/**
+ * `postTransferOn`'s body, told who opened the transaction. `postTransfer`
+ * passes "after-account-locks" because it opened the transaction itself and
+ * the account locks below are the first statement it runs.
+ */
+async function postTransferInside(
+  conn: PoolConnection,
+  input: TransferInput,
+  guard: TransferGuard | undefined,
+  snapshot: SnapshotOrigin,
 ): Promise<TransferResult> {
   const checked = validateLeg(input);
   if ("error" in checked) return { ok: false, duplicate: false, toBalance: 0, error: checked.error };
@@ -1002,7 +1067,7 @@ export async function postTransferOn(
   // The law, under the same lock, and NOT optional the way the veto above is.
   // A single leg mirrors nothing that has a sibling: that is question 5.
   if (input.source === "reversal") {
-    const refusal = await clawbackRefusal(conn, input, tokenType, amount, null);
+    const refusal = await clawbackRefusal(conn, input, tokenType, amount, null, snapshot);
     if (refusal) return { ok: false, duplicate: false, toBalance: 0, error: refusal };
   }
 
@@ -1052,11 +1117,15 @@ export async function postTransferOn(
        * key-shape bug the caller has to hear about rather than a payment to
        * skip. `keys` percent-encodes case and colons for exactly this
        * reason; this is the net under every hand-written key as well.
+       *
+       * The read back LOCKS (`keyClashRows`, LOCK IN SHARE MODE), for the
+       * reason the paragraph above gives for the balance read: it used to be
+       * a plain SELECT, and in a caller-owned transaction whose snapshot
+       * predates the colliding commit it returned nothing, so a collision was
+       * reported as `{ ok: true, duplicate: true }`. Why shared and not
+       * exclusive is measured at the function.
        */
-      const [clash] = await conn.query<RowDataPacket[]>(
-        "SELECT idempotency_key FROM token_ledger WHERE idempotency_key = ? LIMIT 1",
-        [input.idempotencyKey],
-      );
+      const clash = await keyClashRows(conn, input.idempotencyKey);
       const stored = clash[0] ? String(clash[0].idempotency_key) : null;
       if (stored !== null && stored !== input.idempotencyKey) {
         return {
@@ -1167,7 +1236,7 @@ export async function postTransfer(
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
-      const result = await postTransferOn(conn, input, guard);
+      const result = await postTransferInside(conn, input, guard, "after-account-locks");
       if (!result.ok) {
         await conn.rollback();
         return result;
@@ -1368,7 +1437,14 @@ async function postTransferPairOnce(
       if (legs[i].source !== "reversal") continue;
       const other = legs[1 - i];
       const neighbour = other.source === "reversal" ? originalKeyOf(other.idempotencyKey) : null;
-      const refusal = await clawbackRefusal(conn, legs[i], meta[i].tokenType, meta[i].amount, neighbour);
+      const refusal = await clawbackRefusal(
+        conn,
+        legs[i],
+        meta[i].tokenType,
+        meta[i].amount,
+        neighbour,
+        "after-account-locks",
+      );
       if (refusal) {
         await conn.rollback();
         return fail(refusal);
@@ -1754,7 +1830,9 @@ export async function checkLedgerInvariants(pool: Pool): Promise<InvariantReport
    * them. Sum those debits for this account and this token, and a balance
    * below their negation is illegal however it got there. A genuine -25
    * after a reversal of a spent 25 still passes, because 25 is exactly what
-   * the clawback took.
+   * the clawback took. It is a bound and not an attribution: a debit the
+   * balance fully covered at the time still counts toward it, so an unlawful
+   * debt smaller than the account's lifetime allow-negative debits passes.
    *
    * `CAST(t.source AS BINARY)` because the column's collation folds case and
    * pads spaces: `IN ('reversal', ...)` matched a `"REVERSAL"` row that the
@@ -1834,4 +1912,100 @@ export async function checkLedgerInvariants(pool: Pool): Promise<InvariantReport
   }
 
   return { ok: problems.length === 0, problems, uncredited };
+}
+
+/**
+ * HAS THE VILLAGE EVER PAID THIS MEMBER? The Contributor rung's whole question.
+ *
+ * Rye's ruling, 2026-09-08: contribution types stand on the same footing. Time,
+ * money, skills, knowledge and resources are one thing, so a member who has been
+ * paid for work and an investor who bought in have both contributed and both
+ * reach Contributor. "If they hold those tokens then that means they
+ * contributed and they're at that tier."
+ *
+ * ── EVER PAID, NEVER CURRENTLY HOLDS ────────────────────────────────────────
+ *
+ * Spending what you earned does not undo having earned it, and Rye said so
+ * outright. Reading a BALANCE would demote somebody the moment they spent their
+ * credits, and since Contributor is what opens `member.vouch`, it would strip
+ * the power to speak for a new member from somebody who had already spoken. The
+ * ledger keeps every leg, so this asks the history and not the total.
+ *
+ * ── FROM THE VILLAGE, NOT FROM A NEIGHBOUR ──────────────────────────────────
+ *
+ * Only `credit` tokens are transferable between members, and both of Rye's
+ * examples are the village paying somebody: rewarding work, and selling a stake.
+ * Neither is a peer handing over a coin.
+ *
+ * That distinction is load-bearing rather than tidy. Counting peer transfers
+ * would let one member buy in, send a single credit to each of two friends, and
+ * manufacture three Contributors who can then vouch somebody through the
+ * membrane. The bar is meant to be three people the village has actually paid.
+ *
+ * The test is the FROM side rather than a list of sources, so a source added
+ * next year is classified correctly without anybody remembering this function.
+ * A member account is `mem:<id>`; everything else is the village.
+ *
+ * ── AND NOT RECOGNITION, WHICH THE CALLER DECIDES ───────────────────────────
+ *
+ * The caller passes the slugs that count, because which tokens a village pays
+ * in is the village's own structure. What must never be in that list is a
+ * recognition token: recognition is minted whenever anybody thanks anybody, so
+ * counting it would mean one thank-you handed a stranger the power to vouch a
+ * member in. That is the membrane, opened by a tap.
+ */
+export async function hasBeenPaidByVillage(
+  pool: Pool,
+  userId: string,
+  tokenSlugs: readonly string[],
+): Promise<boolean> {
+  // The query lives in server/repos/tokenLedger.ts. What makes an account a
+  // member's is this file's to say, so the prefix travels with the call. Which
+  // movements are PAY is server/lib/contributionPay.ts's to say: a guest buying
+  // stay credits receives a village token from a village account, and that is
+  // not the village paying them for anything.
+  return receivedFromVillage(pool, memberAccount(userId), tokenSlugs, contributionSources(), memberAccount(""));
+}
+
+/**
+ * The slugs that count toward the Contributor rung: everything this village
+ * issues except recognition.
+ *
+ * Derived from the registry rather than configured, so a village that mints a
+ * new credit token gets it counted with no dial to remember. Recognition is
+ * excluded here, once, so no caller can forget to.
+ */
+export function contributionTokens(): string[] {
+  return Array.from(registry.values())
+    .filter((t) => t.kind !== "recognition")
+    .map((t) => t.slug);
+}
+
+/**
+ * The same question for a whole roll, in one query.
+ *
+ * The breadth metric walks every member and asks each one's stage. A per-member
+ * read inside that loop is the N+1 the consented counts and the training
+ * completions both already go out of their way to avoid, so this exists before
+ * anybody is tempted to add a third.
+ *
+ * An empty list of ids answers without asking, because `IN ()` is a syntax
+ * error rather than an empty result.
+ */
+export async function paidByVillageMany(
+  pool: Pool,
+  userIds: readonly string[],
+  tokenSlugs: readonly string[],
+): Promise<Set<string>> {
+  const paid = new Set<string>();
+  if (userIds.length === 0 || tokenSlugs.length === 0) return paid;
+  // Back from each account to the exact id the caller asked about, by lookup
+  // rather than by stripping a prefix off whatever the database returned.
+  const idByAccount = new Map(userIds.map((id) => [memberAccount(id), id] as const));
+  const accounts = await accountsReceivedFromVillage(pool, Array.from(idByAccount.keys()), tokenSlugs, contributionSources(), memberAccount(""));
+  accounts.forEach((account) => {
+    const id = idByAccount.get(account);
+    if (id !== undefined) paid.add(id);
+  });
+  return paid;
 }

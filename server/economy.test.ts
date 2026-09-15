@@ -11,7 +11,7 @@
  * applied, unique per provision. No TEST_DATABASE_URL and the suite skips
  * loudly rather than passing hollowly.
  */
-import { describe, expect, it, beforeAll, beforeEach, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, beforeEach, afterAll, vi } from "vitest";
 import mysql from "mysql2/promise";
 import {
   allowanceFor,
@@ -651,7 +651,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
    * witness that cannot contradict the code under test.
    */
   async function readRows<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
-    const [out] = await pool.query(sql, params);
+    const [out] = await pool.query(sql, params); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     return out as unknown as T[];
   }
 
@@ -1410,7 +1410,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
 
     /** The rule's live numbers, written straight, in force from cycle zero. */
     async function setRule(amount: number | null, ceiling: number): Promise<void> {
-      await pool.query(
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "INSERT INTO `mint_rules` (`id`, `village_id`, `trigger`, `token_slug`, `amount`, `ceiling`, `recipient`, `enabled`, `effective_from_cycle`) " +
           "VALUES (?,?,'quest.completed',?,?,?,'claimant',1,0) " +
           "ON DUPLICATE KEY UPDATE `amount` = VALUES(`amount`), `ceiling` = VALUES(`ceiling`), " +
@@ -1421,7 +1421,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
 
     /** What the ledger actually holds for this token, from the rows themselves. */
     async function posted(account: string): Promise<{ rows: number; units: number }> {
-      const [rows] = await pool.query<any[]>(
+      const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT COUNT(*) AS n, COALESCE(SUM(`amount`), 0) AS units FROM `token_ledger` " +
           "WHERE `to_account` = ? AND `token_type` = ?",
         [account, TOKEN],
@@ -1441,7 +1441,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
       // The block below deletes every rule in the village and counts what is
       // left, so this one takes its own row out rather than leaving a rule the
       // next reader has to account for.
-      await pool.query("DELETE FROM `mint_rules` WHERE `id` = ?", [RULE]);
+      await pool.query("DELETE FROM `mint_rules` WHERE `id` = ?", [RULE]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     });
 
     it("pays the ceiling, not the amount, when a rule was left above its own ceiling", async () => {
@@ -1479,7 +1479,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
       const nextMoon = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
       expect(await applyPendingRules(pool, nextMoon)).toBeGreaterThan(0);
 
-      const [rows] = await pool.query<any[]>(
+      const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT `amount`, `ceiling` FROM `mint_rules` WHERE `id` = ?",
         [RULE],
       );
@@ -1581,13 +1581,13 @@ describe.skipIf(!configured)("the village economy engine", () => {
       // and this schema carries no foreign keys, so inventing a seat title
       // here would only be scenery.
       const u = await makeMember("econ-ceil-seat");
-      await pool.query(
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "INSERT INTO `org_role_assignments` (`id`, `org_role_id`, `holder_kind`, `user_id`, `holder_key`, `is_example`) " +
           "VALUES ('seat-ceiling-test','role-ceiling-test','member',?,?,0) " +
           "ON DUPLICATE KEY UPDATE `user_id` = VALUES(`user_id`)",
         [u, u],
       );
-      await pool.query(
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "INSERT INTO `mint_rules` (`id`, `village_id`, `trigger`, `token_slug`, `amount`, `ceiling`, `recipient`, `enabled`, `effective_from_cycle`) " +
           "VALUES ('rule-ceiling-seat',?,'role.cycle',?,25,5,'holder',1,0) " +
           "ON DUPLICATE KEY UPDATE `amount` = 25, `ceiling` = 5, `enabled` = 1, `effective_from_cycle` = 0",
@@ -1597,8 +1597,8 @@ describe.skipIf(!configured)("the village economy engine", () => {
       expect(out.stewardsThanked).toBe(1);
       expect(await balanceOf(pool, memberAccount(u), TOKEN)).toBe(5);
       expect(await posted(memberAccount(u))).toEqual({ rows: 1, units: 5 });
-      await pool.query("DELETE FROM `mint_rules` WHERE `id` = 'rule-ceiling-seat'");
-      await pool.query("DELETE FROM `org_role_assignments` WHERE `id` = 'seat-ceiling-test'");
+      await pool.query("DELETE FROM `mint_rules` WHERE `id` = 'rule-ceiling-seat'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("DELETE FROM `org_role_assignments` WHERE `id` = 'seat-ceiling-test'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     });
 
     it("leaves the shipped default alone: eleven quests at 25 under a ceiling of 250 issue 275", async () => {
@@ -1722,7 +1722,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
   describe("W3 F2/F19: a reversal is decided by the row, not by the key's spelling", () => {
     /** Rows straight out of the database, and only the columns that decide. */
     const rowsOf = async (sql: string, params: unknown[] = []) => {
-      const [out] = await pool.query(sql, params);
+      const [out] = await pool.query(sql, params); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       return out as unknown as Array<Record<string, unknown>>;
     };
 
@@ -1889,14 +1889,14 @@ describe.skipIf(!configured)("the village economy engine", () => {
         toUserId: u, tokenSlug: CREDITS, amount: 40,
         from: CYCLE_POOL_FAUCET, source: "quest_consent", idempotencyKey: key,
       });
-      await pool.query(
-        "INSERT INTO `token_ledger` (`id`, `from_account`, `to_account`, `token_type`, `amount`, `source`, `idempotency_key`) " +
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO `token_ledger` (`id`, `from_account`, `to_account`, `token_type`, `amount`, `source`, `idempotency_key`) " + // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
           "VALUES ('led-f3-shape', ?, ?, ?, 1, 'reversal', ?)",
         [memberAccount(u), CYCLE_POOL_FAUCET, CREDITS, keys.reversal(villageId(), key)],
       );
       // Right key, right source, right direction, WRONG amount: 1 against 40.
       expect(await isReversed(pool, key)).toBe(false);
-      await pool.query("DELETE FROM `token_ledger` WHERE `id` = 'led-f3-shape'");
+      await pool.query("DELETE FROM `token_ledger` WHERE `id` = 'led-f3-shape'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       expect(await isReversed(pool, key)).toBe(false);
     });
   });
@@ -2053,7 +2053,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
       // The outcome the proof measured, now the other way round.
       expect(await balanceOf(pool, memberAccount(u), PAY)).toBe(0);
       expect(await balanceOf(pool, memberAccount(u), GET)).toBe(40);
-      const [ghostRows] = await pool.query<any[]>(
+      const [ghostRows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT COUNT(*) AS n FROM `token_ledger` WHERE `idempotency_key` = ?",
         [mirrorKey],
       );
@@ -2179,7 +2179,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
       const results = await Promise.all(Array.from({ length: 12 }, () => reverse(pool, key, { note: "at once" })));
       expect(results.filter((r) => r.ok).length).toBe(12);
       expect(results.filter((r) => r.ok && r.duplicate === false).length).toBe(1);
-      const [rows] = await pool.query<any[]>(
+      const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT COUNT(*) AS n FROM `token_ledger` WHERE `idempotency_key` = ?",
         [keys.reversal(villageId(), key)],
       );
@@ -2309,7 +2309,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
       expect(undoUndo.ok).toBe(false);
       expect(await isReversed(pool, ORIG)).toBe(true);
 
-      const [rows] = await pool.query<any[]>(
+      const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT COUNT(*) AS n FROM `token_ledger` WHERE `source_ref` = ? AND `source` = 'reversal'",
         [ORIG],
       );
@@ -2401,7 +2401,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
      * character, so the stored note ended in a black diamond nobody typed.
      */
     const stored = async (key: string): Promise<{ chars: number; hex: string }> => {
-      const [rows] = await pool.query<any[]>(
+      const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT CHAR_LENGTH(`description`) AS n, HEX(`description`) AS hex FROM `token_ledger` WHERE `idempotency_key` = ?",
         [key],
       );
@@ -2432,7 +2432,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
       expect(row.chars).toBeLessThanOrEqual(500);
       expect(row.hex).not.toContain("EFBFBD");
       // The clip is still marked, and the key still survives whole.
-      const [rows] = await pool.query<any[]>(
+      const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT `description` AS d FROM `token_ledger` WHERE `idempotency_key` = ?",
         [keys.reversal(villageId(), key)],
       );
@@ -2460,7 +2460,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
       expect(out.ok).toBe(true);
       expect(await balanceOf(pool, memberAccount(u), CREDITS)).toBe(0);
 
-      const [rows] = await pool.query(
+      const [rows] = await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT `description` FROM `token_ledger` WHERE `idempotency_key` = ?",
         [keys.reversal(villageId(), key)],
       );
@@ -2480,7 +2480,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
         from: CYCLE_POOL_FAUCET, source: "quest_consent", idempotencyKey: key,
       });
       await reverse(pool, key, { note: "withdrawn" });
-      const [rows] = await pool.query(
+      const [rows] = await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT `description` FROM `token_ledger` WHERE `idempotency_key` = ?",
         [keys.reversal(villageId(), key)],
       );
@@ -2575,7 +2575,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
 
     beforeAll(async () => {
       ddb = await provisionTestDb();
-      dpool = mysql.createPool({ uri: ddb.url, timezone: "Z", connectionLimit: 10 });
+      dpool = mysql.createPool({ uri: ddb.url, timezone: "Z", connectionLimit: 10 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       await loadTokenRegistry(dpool);
       await loadVariables(dpool);
       await ensureVoiceToken(dpool, "Village Voice");
@@ -2589,8 +2589,8 @@ describe.skipIf(!configured)("the village economy engine", () => {
     });
 
     beforeEach(async () => {
-      await dpool.query("DELETE FROM `token_ledger` WHERE `token_type` = ?", [VILLAGE_VOICE]);
-      await dpool.query("DELETE FROM `token_balances` WHERE `token_type` = ?", [VILLAGE_VOICE]);
+      await dpool.query("DELETE FROM `token_ledger` WHERE `token_type` = ?", [VILLAGE_VOICE]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await dpool.query("DELETE FROM `token_balances` WHERE `token_type` = ?", [VILLAGE_VOICE]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       await dpool.query("DELETE FROM `exits`");
       // One enabled rule, so `economyReady` is true, and DELIBERATELY not a
       // `role.cycle` one: that is the village shape the early-return trap
@@ -2603,13 +2603,24 @@ describe.skipIf(!configured)("the village economy engine", () => {
       );
     });
 
-    /** A member holding `units` minor units of Voice, issued from the faucet. */
-    async function holding(id: string, units: number): Promise<string> {
+    /**
+     * A member holding `units` minor units of Voice, issued from the faucet.
+     *
+     * CARRIED INTO THE MOON BY DEFAULT. Waning acts on what a member held when
+     * the cycle opened, read off the rows posted before it, so a seed posted
+     * "now" is a payout received DURING the moon and wanes nothing this moon.
+     * The seed row is therefore moved to a day before the current cycle opened,
+     * which is the only way a test can hold Voice going in without waiting a
+     * moon. `duringMoon` leaves it where it landed. `FROM_UNIXTIME` because the
+     * column is a `timestamp` and epoch seconds are the same in every zone.
+     */
+    async function holding(id: string, units: number, opts: { duringMoon?: boolean } = {}): Promise<string> {
       await dpool.query(
         "INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x') " +
           "ON DUPLICATE KEY UPDATE `name` = VALUES(`name`)",
         [id, id, `${id}@examples.invalid`],
       );
+      const key = `test.waning.seed:${id}:${++seedNo}`;
       const r = await mint(dpool, {
         toUserId: id,
         tokenSlug: VILLAGE_VOICE,
@@ -2618,10 +2629,45 @@ describe.skipIf(!configured)("the village economy engine", () => {
         source: "role_cycle",
         sourceRef: id,
         description: "seeded for a waning test",
-        idempotencyKey: `test.waning.seed:${id}:${++seedNo}`,
+        idempotencyKey: key,
       });
       expect(r.ok, `seeding ${id}`).toBe(true);
+      if (!opts.duringMoon) {
+        const carriedIn = Math.floor(cycleWindow(new Date()).startsAt.getTime() / 1000) - 24 * 60 * 60;
+        await dpool.query(
+          "UPDATE `token_ledger` SET `at` = FROM_UNIXTIME(?) WHERE `idempotency_key` = ?", // module-review-ok: test fixture in the S5 scratch schema, backdating a seed row so it was held going into the moon
+          [carriedIn, key],
+        );
+      }
       return id;
+    }
+
+    /** Every waning leg taken from one member, off the rows themselves. */
+    async function wanedFrom(userId: string): Promise<number[]> {
+      const [rows] = await dpool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "SELECT `amount` FROM `token_ledger` WHERE `source` = 'voice_decay' AND `from_account` = ? AND `token_type` = ?",
+        [memberAccount(userId), VILLAGE_VOICE],
+      );
+      return rows.map((row) => Number(row.amount));
+    }
+
+    /** A live seat for one member, and the rule that pays a seat 50 Voice a moon. */
+    async function seated(id: string): Promise<void> {
+      await dpool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT IGNORE INTO `mint_rules` (`id`, `village_id`, `trigger`, `token_slug`, `amount`, `ceiling`, `recipient`, `enabled`) " +
+          "VALUES ('decay-seat-rule', ?, 'role.cycle', ?, 50, 200, 'holder', 1)",
+        [villageId(), VILLAGE_VOICE],
+      );
+      await dpool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x') " +
+          "ON DUPLICATE KEY UPDATE `name` = VALUES(`name`)",
+        [id, id, `${id}@examples.invalid`],
+      );
+      await dpool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT IGNORE INTO `org_role_assignments` " +
+          "(`id`, `org_role_id`, `holder_kind`, `user_id`, `holder_key`, `is_example`) VALUES (?,?,'member',?,?,0)",
+        [`seat-${id}`, `role-${id}`, id, id],
+      );
     }
 
     /** Conservation, read the way the boot invariant reads it. */
@@ -2803,26 +2849,107 @@ describe.skipIf(!configured)("the village economy engine", () => {
       expect(await voiceSum()).toBe(0);
     });
 
-    it("MEASURED: a member who held nothing at the moon's first ask wanes on what it paid them", async () => {
+    it("wanes nothing from a member who carried nothing in and was paid during the moon, however often the job asks", async () => {
       /*
-       * NOT a proof that this is right, only a record of what it does.
-       *
-       * The job asks hourly and a member holding nothing is not in the read,
-       * so no key is written for them. Paid later in the same moon, the next
-       * ask finds a positive balance and wanes one percent of it. It happens
-       * once in a member's life and closing it would mean posting a ledger row
-       * of zero, which `postTransfer` refuses. If the founder decides a new
-       * member's first moon should be untouched, this test is where that
-       * decision changes.
+       * THE DEFECT THIS REPLACES. This test used to be called "MEASURED" and
+       * asserted 49500: the job asks hourly, a member holding nothing got no
+       * key on the first ask, and the second ask waned one percent of what
+       * the moon had just paid them. That happened every moon, not once in a
+       * life. The base is now what they carried in, which here is nothing.
        */
       const at = new Date();
       const firstAsk = await runSettlement(dpool, at);
       expect(firstAsk.decay.holders).toBe(0);
 
-      const u = await holding("wane-latecomer", 50000);
-      const secondAsk = await runSettlement(dpool, at);
-      expect(secondAsk.decay.holders).toBe(1);
-      expect(await balanceOf(dpool, memberAccount(u), VILLAGE_VOICE)).toBe(49500);
+      const u = await holding("wane-latecomer", 50000, { duringMoon: true });
+      for (let ask = 2; ask <= 4; ask += 1) {
+        const out = await runSettlement(dpool, at);
+        expect(out.decay.holders, `ask ${ask}`).toBe(0);
+        expect(out.decay.total, `ask ${ask}`).toBe(0);
+      }
+      expect(await wanedFrom(u)).toEqual([]);
+      expect(await balanceOf(dpool, memberAccount(u), VILLAGE_VOICE)).toBe(50000);
+      expect(await balanceOf(dpool, VOICE_DECAY, VILLAGE_VOICE)).toBe(0);
+      expect(await voiceSum()).toBe(0);
+    });
+
+    it("wanes nothing all moon from a member below the floor going in, whatever they are paid after", async () => {
+      // 50 minor units floors to nothing at one percent, so the first ask
+      // counts them as too small and writes no key. A payout later in the moon
+      // used to make the next ask wane one percent of it.
+      const u = await holding("wane-below-floor", 50);
+      const at = new Date();
+      const firstAsk = await runSettlement(dpool, at);
+      expect(firstAsk.decay.skippedTooSmall).toBe(1);
+      expect(firstAsk.decay.holders).toBe(0);
+
+      await holding(u, 50000, { duringMoon: true });
+      for (let ask = 2; ask <= 4; ask += 1) {
+        const out = await runSettlement(dpool, at);
+        expect(out.decay.holders, `ask ${ask}`).toBe(0);
+        expect(out.decay.total, `ask ${ask}`).toBe(0);
+        expect(out.decay.skippedTooSmall, `ask ${ask}`).toBe(1);
+      }
+      expect(await wanedFrom(u)).toEqual([]);
+      expect(await balanceOf(dpool, memberAccount(u), VILLAGE_VOICE)).toBe(50050);
+      expect(await voiceSum()).toBe(0);
+    });
+
+    it("does not wane a seat payout the first run made when a second run asks in the same moon", async () => {
+      const fresh = "wane-seat-fresh";
+      const carried = "wane-seat-carried";
+      await seated(fresh);
+      await seated(carried);
+      await holding(carried, 5000);
+      const seat = 50 * 10 ** VOICE_DECIMALS;
+      const at = new Date();
+      try {
+        const firstRun = await runSettlement(dpool, at);
+        expect(firstRun.stewardsThanked).toBeGreaterThanOrEqual(2);
+        // The carried member wanes on the 5000 they brought in, before and
+        // regardless of the seat. The fresh member brought nothing.
+        expect(firstRun.decay.total).toBe(50);
+
+        for (let ask = 2; ask <= 3; ask += 1) {
+          const out = await runSettlement(dpool, at);
+          expect(out.decay.holders, `ask ${ask}`).toBe(0);
+          expect(out.decay.total, `ask ${ask}`).toBe(0);
+        }
+        expect(await wanedFrom(fresh)).toEqual([]);
+        expect(await wanedFrom(carried)).toEqual([50]);
+        expect(await balanceOf(dpool, memberAccount(fresh), VILLAGE_VOICE)).toBe(seat);
+        expect(await balanceOf(dpool, memberAccount(carried), VILLAGE_VOICE)).toBe(4950 + seat);
+        expect(await balanceOf(dpool, VOICE_DECAY, VILLAGE_VOICE)).toBe(50);
+        expect(await voiceSum()).toBe(0);
+      } finally {
+        await dpool.query("DELETE FROM `org_role_assignments` WHERE `id` IN (?, ?)", [ // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+          `seat-${fresh}`,
+          `seat-${carried}`,
+        ]);
+      }
+    });
+
+    it("wanes a member above the floor going in exactly once, on what they carried in, over any number of asks", async () => {
+      const u = await holding("wane-once", 5000);
+      // Paid BEFORE the moon's first ask as well as between asks: the first
+      // hourly run lands up to an hour after the cycle opens, and a payout in
+      // that hour is still not part of the base.
+      await holding(u, 20000, { duringMoon: true });
+      const at = new Date();
+      const totals: number[] = [];
+      for (let ask = 1; ask <= 5; ask += 1) {
+        const out = await runSettlement(dpool, at);
+        totals.push(out.decay.total);
+        if (ask === 2) await holding(u, 7000, { duringMoon: true });
+        expect(await voiceSum(), `ask ${ask}`).toBe(0);
+      }
+      // One percent of 5000, once. Not of 25000, and never a second time.
+      expect(totals).toEqual([50, 0, 0, 0, 0]);
+      expect(await wanedFrom(u)).toEqual([50]);
+      expect(await balanceOf(dpool, memberAccount(u), VILLAGE_VOICE)).toBe(5000 - 50 + 20000 + 7000);
+      expect(await balanceOf(dpool, VOICE_DECAY, VILLAGE_VOICE)).toBe(50);
+      const books = await checkLedgerInvariants(dpool);
+      expect(books.problems).toEqual([]);
     });
 
     it("leaves a member who is in the middle of leaving alone, and says how many", async () => {
@@ -3033,7 +3160,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
     it("names the sink in the settlement report when the account is missing, once", async () => {
       const a = await holding("wane-nosink-a", 5000);
       const b = await holding("wane-nosink-b", 5000);
-      await dpool.query("DELETE FROM `token_balances` WHERE `account_id` = ?", [VOICE_DECAY]);
+      await dpool.query("DELETE FROM `token_balances` WHERE `account_id` = ?", [VOICE_DECAY]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       await dpool.query("DELETE FROM `ledger_accounts` WHERE `id` = ?", [VOICE_DECAY]);
       try {
         const out = await runSettlement(dpool);
@@ -3112,12 +3239,12 @@ describe.skipIf(!configured)("the village economy engine", () => {
      * directly to walk one token across the scales the flip will walk it.
      */
     async function atScale(decimals: number): Promise<void> {
-      await pool.query("UPDATE `tokens` SET `decimals` = ? WHERE `slug` = ?", [decimals, TOKEN]);
+      await pool.query("UPDATE `tokens` SET `decimals` = ? WHERE `slug` = ?", [decimals, TOKEN]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       await loadTokenRegistry(pool);
     }
 
     async function setRule(amount: number | null, ceiling: number): Promise<void> {
-      await pool.query(
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "INSERT INTO `mint_rules` (`id`, `village_id`, `trigger`, `token_slug`, `amount`, `ceiling`, `recipient`, `enabled`, `effective_from_cycle`) " +
           "VALUES (?,?,'quest.completed',?,?,?,'claimant',1,0) " +
           "ON DUPLICATE KEY UPDATE `amount` = VALUES(`amount`), `ceiling` = VALUES(`ceiling`), " +
@@ -3127,7 +3254,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
     }
 
     async function setSeatRule(amount: number | null, ceiling: number): Promise<void> {
-      await pool.query(
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "INSERT INTO `mint_rules` (`id`, `village_id`, `trigger`, `token_slug`, `amount`, `ceiling`, `recipient`, `enabled`, `effective_from_cycle`) " +
           "VALUES (?,?,'role.cycle',?,?,?,'holder',1,0) " +
           "ON DUPLICATE KEY UPDATE `amount` = VALUES(`amount`), `ceiling` = VALUES(`ceiling`), " +
@@ -3138,7 +3265,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
 
     /** What the ledger holds for one member in this token, off the rows. */
     async function heldBy(userId: string): Promise<number> {
-      const [rows] = await pool.query<any[]>(
+      const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT COALESCE(SUM(`amount`), 0) AS units FROM `token_ledger` " +
           "WHERE `to_account` = ? AND `token_type` = ?",
         [memberAccount(userId), TOKEN],
@@ -3155,8 +3282,8 @@ describe.skipIf(!configured)("the village economy engine", () => {
     });
 
     afterAll(async () => {
-      await pool.query("DELETE FROM `mint_rules` WHERE `id` IN (?,?)", [RULE, SEAT_RULE]);
-      await pool.query("DELETE FROM `org_role_assignments` WHERE `id` = ?", [SEAT]);
+      await pool.query("DELETE FROM `mint_rules` WHERE `id` IN (?,?)", [RULE, SEAT_RULE]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("DELETE FROM `org_role_assignments` WHERE `id` = ?", [SEAT]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       await atScale(0);
     });
 
@@ -3243,7 +3370,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
     it("previews and settles the same number, and never a payout the run will not make", async () => {
       await atScale(0);
       await setSeatRule(25, 5);
-      await pool.query(
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "INSERT INTO `org_role_assignments` (`id`, `org_role_id`, `holder_kind`, `user_id`, `holder_key`, `is_example`) " +
           "VALUES (?,'role-mx','member',?,?,0) ON DUPLICATE KEY UPDATE `user_id` = VALUES(`user_id`)",
         [SEAT, await makeMember("mx-seat-holder"), "mx-seat-holder"],
@@ -3276,6 +3403,30 @@ describe.skipIf(!configured)("the village economy engine", () => {
       expect(card?.pays).toEqual({ units: 0, ceilingUnits: 0, decimals: 0 });
     });
 
+    it("logs a seat rule its ceiling refuses, the way every other unpayable seat rule is logged", async () => {
+      // THE GAP. The settlement filter put a ceiling refusal straight onto
+      // `out.unpayable` and never into the list `reportUnpayable` prints, so a
+      // seat rule at a ceiling of zero paid nobody every moon and no log line
+      // anywhere said so. Observed on the console, where that report goes.
+      await atScale(0);
+      await setSeatRule(25, 0);
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const out = await runSettlement(pool);
+        // Carried home once, not twice, now that it travels with the others.
+        const said = out.unpayable.filter((x) => x.token === TOKEN);
+        expect(said).toHaveLength(1);
+        expect(said[0].reason).toMatch(/ceiling is 0/);
+        const lines = errors.mock.calls.map((call) => call.map(String).join(" "));
+        const logged = lines.filter(
+          (line) => line.includes(`the rule on "${TOKEN}" paid nobody`) && /ceiling is 0/.test(line),
+        );
+        expect(logged).toHaveLength(1);
+      } finally {
+        errors.mockRestore();
+      }
+    });
+
     it("carries the scale for the one shipped token that has one, which is live today", async () => {
       /*
        * NOT A HYPOTHETICAL AND NOT ABOUT THE CANCELLED FLIP. Village Voice
@@ -3284,7 +3435,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
        * anywhere in the payload and the panel printed "50000 of village-voice"
        * for a village that had promised 50.
        */
-      await pool.query(
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "INSERT INTO `mint_rules` (`id`, `village_id`, `trigger`, `token_slug`, `amount`, `ceiling`, `recipient`, `enabled`, `effective_from_cycle`) " +
           "VALUES ('rule-mx-voice',?,'role.cycle',?,50,200,'holder',1,0) " +
           "ON DUPLICATE KEY UPDATE `amount` = 50, `ceiling` = 200, `enabled` = 1, `effective_from_cycle` = 0",
@@ -3298,7 +3449,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
       const scale = await scaleOf(pool, VILLAGE_VOICE);
       expect(voice).toEqual({ token: VILLAGE_VOICE, units: 50 * scale * seats, decimals: Math.log10(scale) });
       expect(voice!.units).toBeGreaterThan(50 * seats);
-      await pool.query("DELETE FROM `mint_rules` WHERE `id` = 'rule-mx-voice'");
+      await pool.query("DELETE FROM `mint_rules` WHERE `id` = 'rule-mx-voice'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     });
 
     it("does not call a settlement that could pay nothing an already settled moon", async () => {
@@ -3308,7 +3459,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
       // list: a misconfiguration reported as a completed moon, which is the
       // reading that stops anybody looking.
       await atScale(0);
-      await pool.query("DELETE FROM `mint_rules` WHERE `village_id` = ? AND `trigger` = 'role.cycle'", [
+      await pool.query("DELETE FROM `mint_rules` WHERE `village_id` = ? AND `trigger` = 'role.cycle'", [ // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         villageId(),
       ]);
       await setSeatRule(null, 0);
@@ -3394,7 +3545,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
       // off the rows: a second row would be a double pay and a row above 5
       // would be the clamp losing a race it cannot have.
       for (const who of [a, b]) {
-        const [rows] = await pool.query<any[]>(
+        const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
           "SELECT COUNT(*) AS n, COALESCE(SUM(`amount`), 0) AS units FROM `token_ledger` " +
             "WHERE `to_account` = ? AND `token_type` = ?",
           [memberAccount(who), TOKEN],
@@ -3421,7 +3572,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
       expect(huge.ok).toBe(false);
       expect(huge.ok === false && huge.error).toContain("above that");
       // Nothing was queued by any of the three.
-      const [rows] = await pool.query<any[]>(
+      const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT `pending_from_cycle` FROM `mint_rules` WHERE `id` = ?", [RULE],
       );
       expect(rows[0].pending_from_cycle).toBeNull();
@@ -3471,7 +3622,7 @@ function gratitudeAtScale(decimals: number): void {
 
     beforeAll(async () => {
       fdb = await provisionTestDb();
-      fpool = mysql.createPool({ uri: fdb.url, timezone: "Z", connectionLimit: 10 });
+      fpool = mysql.createPool({ uri: fdb.url, timezone: "Z", connectionLimit: 10 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       // The seam, before anything is posted. What the flip migration does,
       // minus the rescale of rows already held.
       await fpool.query("UPDATE `tokens` SET `decimals` = ? WHERE `slug` = ?", [decimals, HEARTS]); // module-review-ok: the decimals seam this suite exists to exercise, against the S5 scratch schema

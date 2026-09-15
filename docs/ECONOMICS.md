@@ -130,7 +130,7 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `admin_mint:<slug>:<body>` | `server/index.ts` |
 | `admin_mint:req:<id>` | `server/index.ts` |
 | `circle_treasury:<kind>:<budgetId.slice(0, 40)>:<tail>` | `server/routes/circleTreasury.ts` |
-| `circle_treasury:dormant:<circleId>:<tokenSlug>:<day>:<balanceMinor>` | `server/lib/circleTreasury.ts` |
+| `circle_treasury:dormant:<circleId.slice(0, 40)>:<tokenSlug>:<day>:<balanceMinor>:<accountRows>` | `server/lib/circleTreasury.ts` |
 | `circle-bonus:<recordId>:<unit>` | `server/lib/circleBonus.ts` |
 | `comp-<Date.now()>-<Math.random().toString(36).slice(2, 6)>` | `server/routes/stays.ts` |
 | `exit:<exitId>:convert-credit:<token>` | `server/lib/exit.ts` |
@@ -2631,6 +2631,7 @@ display name as the member sees it.
 - `This village has chosen that redemptions go to a village vote, and that path is still being finished. A steward can move it back to a steward confirming in the village's dials`
 - `You have a departure open, and what happens to your balance is being settled there`
 - `You have opened <openedThisCycle> redemptions this moon, which is what this village allows. The count starts again at the new moon`
+- `Ask for <name> in positive amounts with at most <decimals> decimal places`
 - `Ask for <name> in whole positive amounts`
 - `You hold <free> <name> that is free, and <held> more is already held against a redemption you have open`
 - `You hold <free> <name>, and that is what there is to redeem`
@@ -3454,21 +3455,24 @@ a description of their mechanics. Two of them made a figure on our page wrong or
 impossible through no fault of any code here, and the third is the opposite and
 is the dangerous one.
 
-1. **`pledgedTotal` is a FLOOR and not a total.** The hub sums a campaign's
-   pledged value filtering on the ACCEPTED status alone, and delivered and
-   thanked are later states of the same lifecycle, so a confirmed delivery takes
-   its value out of the number the gold ring divides. Their trial: accept ten
-   thousand, deliver it, accept five thousand more, and the campaign reports five
-   thousand where the honest figure is fifteen. They recompute in one branch
-   only, so the drop is DEFERRED and lands on a later, unrelated acceptance,
-   which is how a member watching a village do well sees the ring go backwards at
-   a moment that looks like it has nothing to do with the delivery. **Ours does
-   not correct it and does not hide it.** `percentPledged` still divides by the
-   hub's own number, because a computed guess at the delivered value would be
-   worse than an honest gap, and every surface that shows the figure names it as
-   a floor. That is the same rule as the fake-zero rule above, one step further
-   on: an empty state and a real zero are different facts, and so are a floor and
-   a total.
+1. **`pledgedTotal` WAS a floor, and the hub fixed it on 2026-09-05.** Until
+   then the hub summed a campaign's pledged value filtering on the ACCEPTED
+   status alone, and delivered and thanked are later states of the same
+   lifecycle, so a confirmed delivery took its value out of the number the gold
+   ring divides. Their trial: accept ten thousand, deliver it, accept five
+   thousand more, and the campaign reported five thousand where the honest
+   figure was fifteen, with the drop deferred to a later, unrelated acceptance.
+   The hub's commit `b835c28` now counts accepted, fulfilled and thanked, so
+   delivered value stays in the number and it no longer falls when a village
+   succeeds. The Crowdpooling session confirmed it on the hub's main with CI and
+   the deploy both green, rather than inferring it from silence, and
+   `7c83ef4` switched `HUB_PLEDGED_TOTAL_IS_A_FLOOR` off in
+   `client/src/components/crowdpool/PoolPieces.tsx`, which removed the hedge
+   from every surface that carried it. `percentPledged` divides by the hub's own
+   number, as it always did. The rule the hedge served still stands: an empty
+   state and a real zero are different facts, and so are a floor and a total.
+   **One gap this side cannot close:** village-os reads no hub contract version,
+   so a fork pointed at a hub older than `b835c28` would show a floor as a total.
 2. **The three-slot meter can arrive with more delivered than were wanted.**
    Their fulfil path is not idempotent despite a comment of theirs claiming it
    is: two stewards confirming at once put delivered on two instead of one, ten

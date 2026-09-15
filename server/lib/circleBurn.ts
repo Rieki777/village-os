@@ -192,6 +192,14 @@ export function seasonWindowAt(
      * exact either way, and only the projection depends on it.
      */
     endsAt: (ends ?? openEndedHorizon(startsAt, timeZone)).toISOString(),
+    /*
+     * AND THE HORIZON SAYS IT IS ONE. Two readers took `endsAt` as a boundary:
+     * `modeChangeSchedule` queued a mode change for it, and `readOne` stopped
+     * the season sum at it. For a season open longer than a year the horizon
+     * is already in the past, so a "queued" change landed the instant it was
+     * asked for and the meter stopped counting a year in. Both now read this.
+     */
+    endsDeclared: ends !== null,
   };
 }
 
@@ -588,7 +596,10 @@ async function readOne(
    * asserted, because no test had put a row between the instant and the end.
    */
   const from = new Date(window.startsAt);
-  const to = new Date(Math.min(at.getTime(), Date.parse(window.endsAt)));
+  // A derived horizon is not an end, so it cannot stop the sum. See `seasonWindowAt`.
+  const to = window.endsDeclared === false
+    ? at
+    : new Date(Math.min(at.getTime(), Date.parse(window.endsAt)));
   const spend = to.getTime() <= from.getTime()
     ? { issuedMinor: 0, returnedMinor: 0, netMinor: 0, rows: 0 }
     : await circleSpendIn(conn, circleId, tokenType, from, to);

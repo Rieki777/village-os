@@ -445,6 +445,20 @@ export function exitLeverFindings(reading: ExitLeverReading): ExitLeverFinding[]
     });
   }
 
+  // 4b. A conversion of a share of zero. The settlement converts only the
+  // share of Voice a leaver keeps (`sweepBalances` converts when that share is
+  // above zero), so at a zero share nothing converts and all of it goes: a
+  // forfeit that reads as a conversion. A set pair, like the rate above.
+  if (reading.value("exit.voice_on_exit") === "convert" && pct(reading, "exit.keep_pct.voice") <= 0) {
+    out.push({
+      keys: ["exit.voice_on_exit", "exit.keep_pct.voice"],
+      severity: "refusal",
+      scope: "set",
+      message:
+        "Convert turns the share of Voice a leaver keeps into credits, and that share is 0, so nothing would convert. Set the share of Voice a leaver keeps, or say forfeit.",
+    });
+  }
+
   // 5. Keeping Voice, while resolve anonymizes. `anonymizeMember` runs at
   // resolve and a tombstone is not a person who can hold voting weight. The
   // refusal names the condition that would make it available, because a
@@ -533,13 +547,17 @@ export function exitLeverRefusal(
   proposed: string,
   policy: ExitPolicy,
   rawValue: (key: string) => string,
+  alongside?: Readonly<Record<string, string>>,
 ): string | null {
   if (!key.startsWith("exit.")) return null;
   const value = String(proposed).trim();
-  return exitLeverProblem(
-    exitLeverReading((k) => (k === key ? value : rawValue(k)), policy),
-    key,
-  );
+  // Inside a change set, the set's other dials read at their FINAL values, so
+  // this judges the state the set produces. `exitSetRefusals` is the complete
+  // answer about that reading; narrowing it to refusals naming this key is the
+  // same no-deadlock rule `exitLeverProblem` states.
+  const resulting = (k: string): string =>
+    k === key ? value : alongside && k in alongside ? String(alongside[k]).trim() : rawValue(k);
+  return exitSetRefusals(exitLeverReading(resulting, policy)).find((r) => r.keys.includes(key))?.sentence ?? null;
 }
 
 /**

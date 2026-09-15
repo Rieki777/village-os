@@ -287,8 +287,29 @@ describe("the Voice pair", () => {
 
   it("convert at a real rate is accepted, including a fraction", () => {
     expect(
-      exitLeverProblem(reading({ "exit.voice_on_exit": "convert", "exit.voice_convert_rate": "0.25" })),
+      exitLeverProblem(
+        reading({ "exit.voice_on_exit": "convert", "exit.voice_convert_rate": "0.25", "exit.keep_pct.voice": "50" }),
+      ),
     ).toBeNull();
+  });
+
+  it("convert with a Voice share of zero is refused: nothing would convert", () => {
+    // D2-3. `sweepBalances` converts only a share above zero, so this saved
+    // and then settled as a forfeit.
+    const zeroShare = { "exit.voice_on_exit": "convert", "exit.voice_convert_rate": "2.5", "exit.keep_pct.voice": "0" };
+    const sentence =
+      "Convert turns the share of Voice a leaver keeps into credits, and that share is 0, so nothing would convert. Set the share of Voice a leaver keeps, or say forfeit.";
+    // The single-write guard, from either half of the pair.
+    expect(exitLeverProblem(reading(zeroShare), "exit.voice_on_exit")).toBe(sentence);
+    expect(exitLeverProblem(reading(zeroShare), "exit.keep_pct.voice")).toBe(sentence);
+    // The set predicate, on the final state, with both keys named.
+    expect(exitSetRefusals(reading(zeroShare))).toEqual([
+      { sentence, keys: ["exit.voice_on_exit", "exit.keep_pct.voice"] },
+    ]);
+    // A set carrying the share as well is coherent.
+    expect(exitSetRefusals(reading({ ...zeroShare, "exit.keep_pct.voice": "1" }))).toEqual([]);
+    // And a zero share under forfeit is the shipped default, never refused.
+    expect(exitLeverProblem(reading({ "exit.keep_pct.voice": "0" }), "exit.keep_pct.voice")).toBeNull();
   });
 
   it("a rate of zero on its own is fine, because forfeit does not read it", () => {
@@ -480,7 +501,7 @@ describe("the two predicates a change-set executor calls before it writes anythi
 
   it("the SET predicate answers about the resulting reading, and names every element implicated", () => {
     // The pair, which no element pass can see: conversion on, rate at zero.
-    const both = exitSetRefusals(reading({ "exit.voice_on_exit": "convert" }));
+    const both = exitSetRefusals(reading({ "exit.voice_on_exit": "convert", "exit.keep_pct.voice": "50" }));
     expect(both).toEqual([
       {
         sentence: "A conversion at zero is a forfeit. Say forfeit, or set a rate.",
@@ -491,7 +512,11 @@ describe("the two predicates a change-set executor calls before it writes anythi
     // The same set, with the rate the executor is about to apply, is coherent.
     // This is the state a per-element pass over current-plus-one refuses and
     // the resulting reading allows, which is the whole reason for the shape.
-    expect(exitSetRefusals(reading({ "exit.voice_on_exit": "convert", "exit.voice_convert_rate": "2.5" }))).toEqual([]);
+    expect(
+      exitSetRefusals(
+        reading({ "exit.voice_on_exit": "convert", "exit.voice_convert_rate": "2.5", "exit.keep_pct.voice": "50" }),
+      ),
+    ).toEqual([]);
   });
 
   it("the set predicate reaches the published notice period, which is a document and no dial at all", () => {

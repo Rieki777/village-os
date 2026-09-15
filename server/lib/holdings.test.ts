@@ -275,7 +275,7 @@ describe.skipIf(!configured)("what the library actually holds", () => {
     // The old sentence sent them to go and earn credits they already have.
     expect(said).not.toContain("Earn them by contributing items or work");
     // The shelf is unharmed by a refusal.
-    const [rows] = await pool.query<any[]>("SELECT status FROM library_items WHERE id = 'fork'");
+    const [rows] = await pool.query<any[]>("SELECT status FROM library_items WHERE id = 'fork'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(rows[0].status).toBe("available");
     await conserves();
   });

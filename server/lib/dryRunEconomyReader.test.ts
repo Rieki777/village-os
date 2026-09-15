@@ -113,7 +113,7 @@ describe.skipIf(!configured)("the economy snapshot of a live village", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 });
+    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await loadTokenRegistry(pool);
     // Registers `village-voice` at VOICE_DECIMALS and writes the default rules.
     await seedEconomy(pool, VILLAGE);
@@ -136,7 +136,7 @@ describe.skipIf(!configured)("the economy snapshot of a live village", () => {
     expect(moved.ok).toBe(true);
     // One stored override, written here and not inside a test, so the row
     // counts every test below reads do not depend on the order they run in.
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT INTO `game_variables` (`config_key`, `value`, `value_type`) VALUES (?,?,?)",
       ["gratitude.pool_per_cycle", "1234", "integer"],
     );
@@ -202,7 +202,7 @@ describe.skipIf(!configured)("the economy snapshot of a live village", () => {
   it("carries every balance as a bigint, faucets and their negatives included", async () => {
     const snapshot = await read();
 
-    const [rows] = await pool.query<any[]>(
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT `account_id`, `token_type`, `balance` FROM `token_balances` ORDER BY `account_id`, `token_type`",
     );
     expect(rows.length).toBeGreaterThan(0);
@@ -294,11 +294,11 @@ describe.skipIf(!configured)("the economy snapshot of a live village", () => {
   it("runs whole inside a transaction the caller opened READ ONLY", async () => {
     const conn = await pool.getConnection();
     try {
-      await conn.query("SET TRANSACTION READ ONLY");
-      await conn.query("START TRANSACTION");
+      await conn.query("SET TRANSACTION READ ONLY"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await conn.query("START TRANSACTION"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       const snapshot = await readEconomySnapshot(conn);
       const provenance = await economyProvenance(conn);
-      await conn.query("COMMIT");
+      await conn.query("COMMIT"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       expect(snapshot.tokens.length).toBe(5);
       expect(snapshot.mintRules.length).toBe(5);
       expect(provenance.anySeeded).toBe(false);
@@ -314,18 +314,18 @@ describe.skipIf(!configured)("the economy snapshot of a live village", () => {
     const conn = await pool.getConnection();
     let refusal: any = null;
     try {
-      await conn.query("SET TRANSACTION READ ONLY");
-      await conn.query("START TRANSACTION");
+      await conn.query("SET TRANSACTION READ ONLY"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await conn.query("START TRANSACTION"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       await readEconomySnapshot(conn);
       try {
-        await conn.query(
+        await conn.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
           "INSERT INTO `game_variables` (`config_key`, `value`, `value_type`) VALUES (?,?,?)",
           ["rd-fence-probe", "1", "text"],
         );
       } catch (e) {
         refusal = e;
       }
-      await conn.query("ROLLBACK");
+      await conn.query("ROLLBACK"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     } finally {
       conn.release();
     }
@@ -399,27 +399,27 @@ describe.skipIf(!configured)("a rule written below its token's own resolution", 
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await loadTokenRegistry(pool);
     await seedEconomy(pool, VILLAGE);
 
     // A token with four places, which is the resolution `decimal(18,4)` itself
     // has. No migration seeds one, so this is the only way to measure the far
     // end of the scaling.
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT INTO `tokens` (`slug`, `name`, `kind`, `governance`, `transferable`, `decimals`, `active`, `sort_order`) " +
         "VALUES (?,?,?,?,?,?,?,?)",
       ["fine-grain", "Fine Grain", "credit", "platform", 0, 4, 1, 90],
     );
 
     // 0.0004 on a token with NO places. The engine rounds it to nothing.
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT INTO `mint_rules` (`id`, `village_id`, `trigger`, `token_slug`, `amount`, `ceiling`, `recipient`, `enabled`) " +
         "VALUES (?,?,?,?,?,?,?,?)",
       ["rd-rounds-away", VILLAGE, "gratitude.given", CREDITS, "0.0004", "1", "receiver", 1],
     );
     // The same text on a token with four places, where it is four minor units.
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT INTO `mint_rules` (`id`, `village_id`, `trigger`, `token_slug`, `amount`, `ceiling`, `recipient`, `enabled`) " +
         "VALUES (?,?,?,?,?,?,?,?)",
       ["rd-fine-grain", VILLAGE, "gratitude.given", "fine-grain", "0.0004", "0.0004", "receiver", 1],
@@ -430,13 +430,13 @@ describe.skipIf(!configured)("a rule written below its token's own resolution", 
     // `0.5005` discriminated the two arithmetics at THREE places and both give
     // 50 at two, so keeping it would have left a green test that proved
     // nothing. `1.0050` is the same shape at the new scale, found the same way.
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT INTO `mint_rules` (`id`, `village_id`, `trigger`, `token_slug`, `amount`, `ceiling`, `recipient`, `enabled`) " +
         "VALUES (?,?,?,?,?,?,?,?)",
       ["rd-half-up", VILLAGE, "gratitude.given", VILLAGE_VOICE, "1.0050", "9", "receiver", 1],
     );
     // No amount at all: the amount rides on whatever the source posted.
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT INTO `mint_rules` (`id`, `village_id`, `trigger`, `token_slug`, `amount`, `ceiling`, `recipient`, `enabled`) " +
         "VALUES (?,?,?,?,NULL,?,?,?)",
       ["rd-from-source", VILLAGE, "library.contributed", CREDITS, "5", "claimant", 1],
@@ -516,13 +516,13 @@ describe.skipIf(!configured)("the seed fallback, and saying it is a seed", () =>
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     // What the migrations alone put in the registry, before any boot code runs.
-    const [rows] = await pool.query<any[]>("SELECT `slug` FROM `tokens` ORDER BY `slug`");
+    const [rows] = await pool.query<any[]>("SELECT `slug` FROM `tokens` ORDER BY `slug`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     migratedSlugs = rows.map((r: any) => String(r.slug));
     // Now empty both tables, which is the state a founder can open a preview in.
-    await pool.query("DELETE FROM `tokens`");
-    await pool.query("DELETE FROM `mint_rules`");
+    await pool.query("DELETE FROM `tokens`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("DELETE FROM `mint_rules`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await loadTokenRegistry(pool);
   });
 
@@ -651,7 +651,7 @@ describe.skipIf(!configured)("the seed fallback, and saying it is a seed", () =>
     // only honest check is to run the real thing and compare. This is the test
     // that fails the day somebody retunes the seed and forgets the mirror.
     const fresh = await provisionTestDb();
-    const other = mysql.createPool({ uri: fresh.url, timezone: "Z", connectionLimit: 4 });
+    const other = mysql.createPool({ uri: fresh.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     try {
       await loadTokenRegistry(other);
       await seedEconomy(other, VILLAGE);

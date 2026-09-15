@@ -239,14 +239,28 @@ describe.skipIf(!DB_CONFIGURED)("what the variables route refuses about a depart
     expect(await storedValue("exit.voice_on_exit")).toBeNull();
   });
 
-  it("CONVERT saves once a rate stands under it, which is the pair reading both dials", async () => {
+  it("CONVERT with a rate but a Voice share of zero is refused, because nothing would convert", async () => {
     expect((await setDial("exit.voice_convert_rate", "2.5")).status).toBe(200);
+    const r = await setDial("exit.voice_on_exit", "convert");
+    expect(r.status).toBe(400);
+    expect(r.json?.error).toBe(
+      "Convert turns the share of Voice a leaver keeps into credits, and that share is 0, so nothing would convert. Set the share of Voice a leaver keeps, or say forfeit.",
+    );
+    expect(await storedValue("exit.voice_on_exit")).toBeNull();
+  });
+
+  it("CONVERT saves once a rate and a share stand under it, which is the pair reading every dial", async () => {
+    expect((await setDial("exit.keep_pct.voice", "50")).status).toBe(200);
     const r = await setDial("exit.voice_on_exit", "convert");
     expect(r.status).toBe(200);
     expect(await storedValue("exit.voice_on_exit")).toBe("convert");
+    // The share cannot be taken back to zero underneath a standing conversion.
+    expect((await setDial("exit.keep_pct.voice", "0")).status).toBe(400);
+    expect(await storedValue("exit.keep_pct.voice")).toBe("50");
     // And back, so the rest of the suite runs on the shipped answers.
     expect((await setDial("exit.voice_on_exit", "forfeit")).status).toBe(200);
     expect((await setDial("exit.voice_convert_rate", "0")).status).toBe(200);
+    expect((await setDial("exit.keep_pct.voice", "0")).status).toBe(200);
   });
 
   it("KEEPING Voice is refused while a resolved exit anonymizes the account", async () => {

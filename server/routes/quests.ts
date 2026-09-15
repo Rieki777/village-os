@@ -547,17 +547,17 @@ export function register(app: Express, deps: Deps): void {
     // in flight is work someone is doing or has already submitted, and
     // deleting the quest out from under it strands the claim (badges and
     // health both still join against it) with nothing left to consent.
-    const open = (await claimsRepo.all()).filter(
-      (c) => c.questId === req.params.id && (c.status === "claimed" || c.status === "submitted"),
-    );
-    if (open.length) {
+    // Counted inside `questsRepo.remove`, under the quest's row lock, which is
+    // the lock `openClaim` takes. Counted here, several awaits before the
+    // delete, a claim landing in between was left pointing at nothing.
+    const removed = await questsRepo.remove(req.params.id);
+    if (!removed.ok && removed.reason === "in_flight") {
       return res.status(409).json({
-        error: `${open.length} member(s) have this quest in flight. Consent or decline those claims first. Deleting it now would strand their work.`,
-        openClaims: open.length,
+        error: `${removed.count} member(s) have this quest in flight. Consent or decline those claims first. Deleting it now would strand their work.`,
+        openClaims: removed.count,
       });
     }
-    const removed = await questsRepo.remove(req.params.id);
-    if (!removed) return res.status(404).json({ error: "Not found" });
+    if (!removed.ok) return res.status(404).json({ error: "Not found" });
     /*
      * THE TAGS GO WITH IT. `need_links` carries no foreign key, because this
      * schema has none anywhere, so the domain that owns the subject is the
@@ -566,8 +566,9 @@ export function register(app: Express, deps: Deps): void {
      * `unlinkSubject` and never a DELETE written here, so there is one place
      * that knows the table's shape.
      *
-     * AFTER the remove and not before. A quest whose delete refuses (an
-     * example row, or a claim in flight above) keeps every tag it had.
+     * AFTER BOTH REFUSALS ABOVE and never before. A quest whose delete refuses
+     * (an example row, or a claim in flight, refused inside questsRepo.remove)
+     * keeps every tag it had.
      */
     await unlinkSubject(getPool(), "quest", req.params.id);
     void recordEvent(getPool(), {
@@ -678,12 +679,23 @@ export function register(app: Express, deps: Deps): void {
     if (await isExampleRow(getPool(), "quests", req.params.id)) {
       return res.status(409).json(EXAMPLE_REFUSAL_BODY);
     }
-    const updated = await claimsRepo.update(active.id, (c) => {
-      c.status = "submitted";
-      c.artifactUrl = artifactUrl ?? "";
-      c.note = note ?? "";
-      c.submittedAt = new Date().toISOString();
+    // Under the claim's row lock, from `claimed` or `submitted` only. `active`
+    // was read several awaits back and a steward may have resolved the claim
+    // since; what writing over that used to do is on `submitOnce` in
+    // server/repos/quests.ts. Nobody is summoned for work already resolved.
+    const moved = await claimsRepo.submitOnce(active.id, {
+      artifactUrl: artifactUrl ?? "",
+      note: note ?? "",
+      at: new Date().toISOString(),
     });
+    if (!moved.ok) {
+      if (moved.reason === "missing") return res.status(404).json({ error: "No active claim for this quest" });
+      return res.status(409).json({
+        error: `This claim was already ${moved.status} when this submission arrived, so nothing was changed.`,
+        status: moved.status,
+      });
+    }
+    const updated = moved.claim;
     /*
      * SWEEP (the incomplete loop). The claim moved to `submitted` and the
      * route returned. Nobody who can consent was told, so a member who

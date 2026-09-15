@@ -69,7 +69,7 @@ describe.skipIf(!configured)("stay credits across a decimals flip", () => {
   const users = new Map<string, { id: string; name: string }>();
 
   const api = async (method: string, path: string, body?: unknown) => {
-    const res = await fetch(`${base}${path}`, {
+    const res = await fetch(`${base}${path}`, { // module-review-ok: the test client dialling the server this suite started on localhost
       method,
       headers: { "content-type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -84,7 +84,7 @@ describe.skipIf(!configured)("stay credits across a decimals flip", () => {
   };
 
   const storedPrice = async (accId: string, token: string, audience = "guest") => {
-    const [rows] = await pool.query<any[]>(
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT amount_minor FROM accommodation_prices WHERE accommodation_id = ? AND token_type = ? AND audience = ?",
       [accId, token, audience],
     );
@@ -92,7 +92,7 @@ describe.skipIf(!configured)("stay credits across a decimals flip", () => {
   };
 
   const legFor = async (key: string) => {
-    const [rows] = await pool.query<any[]>(
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT amount, from_account, to_account FROM token_ledger WHERE idempotency_key = ?",
       [key],
     );
@@ -148,7 +148,7 @@ describe.skipIf(!configured)("stay credits across a decimals flip", () => {
     // The module ships OFF, and every route in this file mounts behind
     // `requireModule('stays')`, so the suite has to open it the way an admin does.
     await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-      "INSERT INTO module_settings (module_id, lifecycle) VALUES ('stays','public') " +
+      "INSERT INTO module_settings (module_id, lifecycle) VALUES ('stays','public') " + // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "ON DUPLICATE KEY UPDATE lifecycle = 'public'",
     );
     await loadModuleSettings(pool);
@@ -222,6 +222,17 @@ describe.skipIf(!configured)("stay credits across a decimals flip", () => {
       expect(row.prices.usd.guest).toBe(5_000);
     });
 
+    it("refuses a fractional price the token cannot hold, and posts nothing", async () => {
+      const accId = await room("acc-d0-frac");
+      const put = await api("PUT", `/api/admin/stays/accommodations/${accId}/prices`, {
+        prices: [{ tokenType: STAY_CREDIT, audience: "guest", amountMinor: 2.5 }],
+      });
+      // `priceToStored` used to floor this and answer 200 with a stored 2.
+      expect(put.status).toBe(400);
+      expect(put.json.error).toMatch(/priced in whole amounts, so a price of 2\.5 cannot be posted exactly/);
+      expect(await storedPrice(accId, STAY_CREDIT)).toBeNull();
+    });
+
     it("comps, adjusts and refunds the same numbers it always did", async () => {
       const accId = await room("acc-d0b");
       await api("PUT", `/api/admin/stays/accommodations/${accId}/prices`, {
@@ -277,6 +288,26 @@ describe.skipIf(!configured)("stay credits across a decimals flip", () => {
       const row = catalog.json.accommodations.find((a: any) => a.id === accId);
       expect(row.prices[STAY_CREDIT].guest).toBe(2);
       expect(row.prices.usd.guest).toBe(5_000);
+    });
+
+    it("stores a fractional price exactly, and refuses one finer than the token holds", async () => {
+      const accId = await room("acc-d4-frac");
+      const put = await api("PUT", `/api/admin/stays/accommodations/${accId}/prices`, {
+        prices: [{ tokenType: STAY_CREDIT, audience: "guest", amountMinor: 2.5 }],
+      });
+      expect(put.status).toBe(200);
+      // 2.5 credits is 2.5 x 10^4 units. Floored first, this column held 2 x 10^4.
+      expect(await storedPrice(accId, STAY_CREDIT)).toBe(25_000);
+      const catalog = await api("GET", "/api/admin/stays");
+      expect(catalog.json.accommodations.find((a: any) => a.id === accId).prices[STAY_CREDIT].guest).toBe(2.5);
+
+      const fine = await api("PUT", `/api/admin/stays/accommodations/${accId}/prices`, {
+        prices: [{ tokenType: STAY_CREDIT, audience: "guest", amountMinor: 2.00005 }],
+      });
+      expect(fine.status).toBe(400);
+      expect(fine.json.error).toMatch(/goes to 4 decimal places/);
+      // Refused before the write, so the room's rate is still 2.5.
+      expect(await storedPrice(accId, STAY_CREDIT)).toBe(25_000);
     });
 
     it("snapshots the rate in minor, burns nights at that rate, and counts nights right", async () => {
@@ -370,7 +401,7 @@ describe.skipIf(!configured)("stay credits across a decimals flip", () => {
        * with no conversion on any of them, which is what makes an asymmetric
        * reversal impossible rather than merely untested.
        */
-      const [[purchase]] = await pool.query<any[]>(
+      const [[purchase]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "SELECT credits_granted, status FROM stay_purchases WHERE id = ?",
         [manual.json.id],
       );
