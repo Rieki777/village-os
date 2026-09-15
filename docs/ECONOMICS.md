@@ -3376,13 +3376,15 @@ thing sections 1 to 16 describe.
 
 ### What this side actually does
 
-`server/lib/crowdpool.ts` reads **five** public tRPC procedures off the hub's
+`server/lib/crowdpool.ts` reads **six** public tRPC procedures off the hub's
 no-auth `/api/trpc`: `campaigns.list` (only to resolve a slug to a numeric id by
 slugified title), `campaigns.getById`, `campaigns.getItems`,
-`campaigns.getActivity` and `campaigns.getPartnerLinks`. The hub sends no CORS
+`campaigns.getActivity`, `campaigns.getPartnerLinks`, and `meta.contract`, the
+hub's contract version (item 1 below). The hub sends no CORS
 headers, so a browser cannot read them; the game server proxies through
 `guardedFetchJson`, the same pinned, range-checked dialer the feedback relay uses,
-with a 12 second timeout. The four per-campaign reads go out together.
+with a 12 second timeout. The four per-campaign reads go out together, with
+`meta.contract` beside them.
 
 The cache is memory, TTL **90 seconds** (`CROWDPOOL_TTL_MS`). Every successful
 fetch becomes that key's snapshot, and the `crowdpool-sync` job runs every **10
@@ -3422,8 +3424,8 @@ a description of their mechanics. Two of them made a figure on our page wrong or
 impossible through no fault of any code here, and the third is the opposite and
 is the dangerous one.
 
-1. **`pledgedTotal` WAS a floor, and the hub fixed it on 2026-09-05.** Until
-   then the hub summed a campaign's pledged value filtering on the ACCEPTED
+1. **`pledgedTotal` is a floor on an older hub, and this side now reads which
+   hub it is.** Until 2026-09-05 the hub summed a campaign's pledged value filtering on the ACCEPTED
    status alone, and delivered and thanked are later states of the same
    lifecycle, so a confirmed delivery took its value out of the number the gold
    ring divides. Their trial: accept ten thousand, deliver it, accept five
@@ -3432,14 +3434,23 @@ is the dangerous one.
    The hub's commit `b835c28` now counts accepted, fulfilled and thanked, so
    delivered value stays in the number and it no longer falls when a village
    succeeds. The Crowdpooling session confirmed it on the hub's main with CI and
-   the deploy both green, rather than inferring it from silence, and
-   `7c83ef4` switched `HUB_PLEDGED_TOTAL_IS_A_FLOOR` off in
-   `client/src/components/crowdpool/PoolPieces.tsx`, which removed the hedge
-   from every surface that carried it. `percentPledged` divides by the hub's own
-   number, as it always did. The rule the hedge served still stands: an empty
-   state and a real zero are different facts, and so are a floor and a total.
-   **One gap this side cannot close:** village-os reads no hub contract version,
-   so a fork pointed at a hub older than `b835c28` would show a floor as a total.
+   the deploy both green, rather than inferring it from silence. `7c83ef4` then
+   switched a client constant, `HUB_PLEDGED_TOTAL_IS_A_FLOOR`, off for every hub
+   at once, which left a fork pointed at a hub older than `b835c28` showing a
+   floor as a total. **That gap closed on 2026-09-14**, when Rye ruled to add a
+   version number. The hub publishes `meta.contract` (hub commit `3c70b12c`,
+   history in section 10 of CROWDPOOL_HUB_CONTRACT.md in the hub's own
+   repository, not this one): at
+   `crowdpool` 1 the total counts accepted pledges only, at 2 it counts all
+   three, and the number rises only when a field a village already reads changes
+   meaning. `server/lib/crowdpool.ts` reads it beside the campaign reads every
+   sync and carries it on each campaign as `hubContract`; a hub that does not
+   answer, or answers anything but a positive integer, reads as 1. The page
+   words the figure as a floor whenever the served version is below 2 or absent
+   (`pledgedIsFloor` in `client/src/components/crowdpool/PoolPieces.tsx`).
+   `percentPledged` divides by the hub's own number, as it always did. The rule
+   the hedge served still stands: an empty state and a real zero are different
+   facts, and so are a floor and a total.
 2. **The three-slot meter can arrive with more delivered than were wanted.**
    Their fulfil path is not idempotent despite a comment of theirs claiming it
    is: two stewards confirming at once put delivered on two instead of one, ten
@@ -3529,9 +3540,13 @@ Four questions are open with the Crowdpooling session and are **not answered
 here, because answering them from this side would be describing somebody else's
 mechanics from a read path**:
 
-1. Which of the five procedures and which of their fields are stable contract,
-   and which are internal and free to move. The normalisers above are written
-   against a live read taken 2026-08-22 and nothing has promised them.
+1. Which of the five campaign procedures and which of their fields are stable
+   contract, and which are internal and free to move. The normalisers above are
+   written against a live read taken 2026-08-22 and nothing has promised them.
+   **Partly answered on 2026-09-14**: the hub's `meta.contract` bump rule says
+   the `crowdpool` number rises when a field a village already reads changes
+   meaning, so a change of meaning is now announced. Which fields are promised
+   at all is still theirs to state.
 2. What a pledge does in the hub's own terms, including whether it is a
    commitment, a payment, or an intent.
 3. Whether the nine `capitalType` values are theirs to change, and on what notice.
