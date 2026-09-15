@@ -445,6 +445,20 @@ export function exitLeverFindings(reading: ExitLeverReading): ExitLeverFinding[]
     });
   }
 
+  // 4b. A conversion of a share of zero. The settlement converts only the
+  // share of Voice a leaver keeps (`sweepBalances` converts when that share is
+  // above zero), so at a zero share nothing converts and all of it goes: a
+  // forfeit that reads as a conversion. A set pair, like the rate above.
+  if (reading.value("exit.voice_on_exit") === "convert" && pct(reading, "exit.keep_pct.voice") <= 0) {
+    out.push({
+      keys: ["exit.voice_on_exit", "exit.keep_pct.voice"],
+      severity: "refusal",
+      scope: "set",
+      message:
+        "Convert turns the share of Voice a leaver keeps into credits, and that share is 0, so nothing would convert. Set the share of Voice a leaver keeps, or say forfeit.",
+    });
+  }
+
   // 5. Keeping Voice, while resolve anonymizes. `anonymizeMember` runs at
   // resolve and a tombstone is not a person who can hold voting weight. The
   // refusal names the condition that would make it available, because a
