@@ -93,7 +93,7 @@ import { feedbackIsShared } from "./feedback";
 import { memberSecretsConfigured } from "./memberSecrets";
 import { registeredJobs, TICK_MS } from "./scheduler";
 import { halfErasedMembers } from "./subjectRefs";
-import { landingStatusesFor } from "../repos/ballotLandings";
+import { landingStatusesFor, scheduledLandings } from "../repos/ballotLandings";
 import {
   forgetResolvedBefore,
   itemCount,
@@ -417,12 +417,30 @@ export function stillOwedLandings(rows: readonly StuckLanding[], statuses: Reado
   return rows.filter((r) => LANDING_STILL_OWED.has(statuses.get(r.ballotId) ?? ""));
 }
 
-export function landingFindings(rows: readonly StuckLanding[]): ReportFinding[] {
+const LANDING_CHECK_FIRST =
+  "Check first whether the change is already in place: a server that stopped just after making it leaves this record open too.";
+
+/** Said of a decision that still has a landing time, which the landing job selects. */
+const LANDING_RETRIED = `It has a landing time, so the landing job tries it again every few minutes while automatic landing is on, until it lands or is written off. If it keeps failing, the error below says why, and fixing the cause may need whoever maintains the village's code or database. ${LANDING_CHECK_FIRST}`;
+
+/** Said of a decision with no landing time, which nothing selects. */
+const LANDING_LEFT = `It has no landing time, so nothing tries it again and no button in the admin panel reapplies it: it needs whoever maintains the village's code or database. A decision set to take effect the moment its vote closed is left this way when that fails. ${LANDING_CHECK_FIRST}`;
+
+/**
+ * One finding per unfinished landing, worded by `lands_at` and never by status.
+ *
+ * The sentence used to key on how a decision was meant to take effect, and said
+ * one that took effect at its close "is never tried again". That stops being
+ * true the moment a release parks such a failure WITH a landing time so the
+ * landing job retries it. The job's own selection is the only honest source for
+ * "tried again": it takes a row with `lands_at` set and nothing else
+ * (`dueBallotIds`, server/repos/ballotLandings.ts).
+ */
+export function landingFindings(rows: readonly StuckLanding[], scheduled: ReadonlySet<string>): ReportFinding[] {
   return rows.map((r) => ({
     key: r.ballotId,
     title: `A decision the village carried started taking effect and did not finish (ballot ${r.ballotId})`,
-    advice:
-      "A decision set to take effect later is tried again by the landing job every few minutes while automatic landing is on, until it lands or is written off. One that took effect the moment its vote closed is never tried again, and no button in the admin panel reapplies it, so it needs whoever maintains the village's code or database. Check first whether the change is already in place: a server that stopped just after making it leaves this record open too.",
+    advice: scheduled.has(r.ballotId) ? LANDING_RETRIED : LANDING_LEFT,
     lastError:
       r.lastError ?? "The attempt stopped without writing an error, which usually means the server restarted part way through it.",
   }));
@@ -650,7 +668,8 @@ export function defaultSources(pool: Pool, now: () => number = Date.now): Failur
       key: "governance",
       find: async () => {
         const stuck = await stuckLandings(pool, new Date(now() - LANDING_GRACE_MS));
-        return landingFindings(stillOwedLandings(stuck, await landingStatusesFor(pool, stuck.map((r) => r.ballotId))));
+        const owed = stillOwedLandings(stuck, await landingStatusesFor(pool, stuck.map((r) => r.ballotId)));
+        return landingFindings(owed, await scheduledLandings(pool, owed.map((r) => r.ballotId)));
       },
     },
     {

@@ -39,7 +39,7 @@ import {
   type FailureSource,
   type ReportFinding,
 } from "./lib/failedActions";
-import { landingStatusesFor } from "./repos/ballotLandings";
+import { landingStatusesFor, scheduledLandings } from "./repos/ballotLandings";
 import * as items from "./repos/failedActionItems";
 import * as sources from "./repos/failureSources";
 import { annotateNewestOpenAttempt, closeNewestOpenAttempt, insertAttempt, stuckLandings } from "./repos/governanceExecutorPending";
@@ -386,6 +386,24 @@ describe.skipIf(!configured)("the failed-actions report, against a real database
         ]),
       );
       expect((await defaultSources(pool)[3].find()).map((f) => f.key)).toEqual(["bal-owed"]);
+    });
+
+    it("words a stuck landing by whether its decision still has a landing time", async () => {
+      await ballot("bal-retrying-launch", "pending");
+      await ballot("bal-left-at-close", "stalled");
+      await q("UPDATE `ballots` SET `lands_at` = NOW() - INTERVAL 1 HOUR WHERE `id` = ?", ["bal-retrying-launch"]);
+      for (const id of ["bal-retrying-launch", "bal-left-at-close"]) {
+        await insertAttempt(pool, { ballotId: id, claimedAt: new Date(Date.now() - 60 * 60_000), attempts: 1 });
+        await annotateNewestOpenAttempt(pool, id, "the executor threw");
+      }
+
+      expect(await scheduledLandings(pool, ["bal-retrying-launch", "bal-left-at-close", "bal-missing"])).toEqual(
+        new Set(["bal-retrying-launch"]),
+      );
+      const governance = defaultSources(pool).find((s) => s.key === "governance");
+      const advice = new Map((await governance!.find()).map((f) => [f.key, String(f.advice)] as [string, string]));
+      expect(advice.get("bal-retrying-launch")).toContain("tries it again every few minutes");
+      expect(advice.get("bal-left-at-close")).toContain("nothing tries it again");
     });
 
     it("pages kept seat fees newest first, one range at a time", async () => {

@@ -201,7 +201,7 @@ describe("scheduled jobs", () => {
 
 describe("decisions taking effect", () => {
   it("says a landing that wrote no error most likely met a restart", () => {
-    const [f] = landingFindings([{ ballotId: "bal-1", attempts: 1, lastError: null }]);
+    const [f] = landingFindings([{ ballotId: "bal-1", attempts: 1, lastError: null }], new Set());
     expect(f.key).toBe("bal-1");
     expect(f.lastError).toContain("restarted");
   });
@@ -220,6 +220,18 @@ describe("decisions taking effect", () => {
       ["b-expired", "expired"],
     ]);
     expect(stillOwedLandings(rows, statuses).map((r) => r.ballotId)).toEqual(["b-pending", "b-applying", "b-stalled", "b-at-close"]);
+  });
+
+  it("says the landing job tries again only a decision with a landing time, whatever its status", () => {
+    // The two shapes a release may park an at-close failure in: kept with a
+    // landing time so the job retries it, or left without one. Status alone
+    // cannot tell them apart, and the job selects on the landing time.
+    const rows = ["b-retrying", "b-left"].map((ballotId) => ({ ballotId, attempts: 2, lastError: "the executor threw" }));
+    const [retrying, left] = landingFindings(rows, new Set(["b-retrying"]));
+    expect(retrying.advice).toContain("the landing job tries it again every few minutes while automatic landing is on");
+    expect(left.advice).toContain("nothing tries it again");
+    expect(retrying.advice).not.toContain("nothing tries it again");
+    expect(left.advice).not.toContain("every few minutes");
   });
 });
 
