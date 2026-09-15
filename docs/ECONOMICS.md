@@ -2581,6 +2581,7 @@ display name as the member sees it.
 - `This village has chosen that redemptions go to a village vote, and that path is still being finished. A steward can move it back to a steward confirming in the village's dials`
 - `You have a departure open, and what happens to your balance is being settled there`
 - `You have opened <openedThisCycle> redemptions this moon, which is what this village allows. The count starts again at the new moon`
+- `Ask for <name> in positive amounts with at most <decimals> decimal places`
 - `Ask for <name> in whole positive amounts`
 - `You hold <free> <name> that is free, and <held> more is already held against a redemption you have open`
 - `You hold <free> <name>, and that is what there is to redeem`

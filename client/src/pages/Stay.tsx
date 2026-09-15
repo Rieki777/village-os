@@ -180,11 +180,14 @@ export default function Stay() {
                     <>Your stay request is with the stewards.</>
                   ) : (
                     <>
-                      {/* The snapshot is in the token the stay was ACTIVATED
-                          in, which is not always stay credits, so it reads
-                          against that token's scale and not against the one
-                          the balance line above uses. */}
-                      Your stay is active at <b>{formatTokenAmount(Number(s.rateSnapshotCredits ?? 0), tokenScale(s.rateSnapshotToken ?? "stay-credit"))}</b> credit(s)/night
+                      {/* The snapshot is MINOR units of the token the stay was
+                          ACTIVATED in, and the route sends that token's scale
+                          beside it as `rateSnapshotDecimals`. It used to read
+                          the scale off `priceTokens`, which lists only tokens a
+                          room still posts, so a stay activated in a token no
+                          room prices any more read 850 for 8.5. The fallback
+                          is for a payload without the field. */}
+                      Your stay is active at <b>{formatTokenAmount(Number(s.rateSnapshotCredits ?? 0), Number(s.rateSnapshotDecimals ?? tokenScale(s.rateSnapshotToken ?? "stay-credit")))}</b> credit(s)/night
                       {s.nightsRemaining != null && <>, about <b>{Math.max(0, s.nightsRemaining)}</b> night(s) covered</>}.
                     </>
                   )}

@@ -5896,8 +5896,8 @@ function StaysAdminTab({ password, onOpenTab }: { password: string; onOpenTab: (
     const cm = val("cm", acc.prices?.["stay-credit"]?.member);
     const ug = val("ug", acc.prices?.usd?.guest ? acc.prices.usd.guest / 100 : undefined);
     const um = val("um", acc.prices?.usd?.member ? acc.prices.usd.member / 100 : undefined);
-    if (cg) prices.push({ tokenType: "stay-credit", audience: "guest", amountMinor: Math.floor(cg) });
-    if (cm) prices.push({ tokenType: "stay-credit", audience: "member", amountMinor: Math.floor(cm) });
+    if (cg) prices.push({ tokenType: "stay-credit", audience: "guest", amountMinor: cg });
+    if (cm) prices.push({ tokenType: "stay-credit", audience: "member", amountMinor: cm });
     if (ug) prices.push({ tokenType: "usd", audience: "guest", amountMinor: Math.round(ug * 100) });
     if (um) prices.push({ tokenType: "usd", audience: "member", amountMinor: Math.round(um * 100) });
     /*
@@ -5917,8 +5917,8 @@ function StaysAdminTab({ password, onOpenTab }: { password: string; onOpenTab: (
     if (vSlug) {
       const vg = val("vg", acc.prices?.[vSlug]?.guest);
       const vm = val("vm", acc.prices?.[vSlug]?.member);
-      if (vg) prices.push({ tokenType: vSlug, audience: "guest", amountMinor: Math.floor(vg) });
-      if (vm) prices.push({ tokenType: vSlug, audience: "member", amountMinor: Math.floor(vm) });
+      if (vg) prices.push({ tokenType: vSlug, audience: "guest", amountMinor: vg });
+      if (vm) prices.push({ tokenType: vSlug, audience: "member", amountMinor: vm });
     }
     const d = await post(`/admin/stays/accommodations/${acc.id}/prices`, { prices }, "PUT");
     if (d) { toast.success("Prices posted"); setPriceDraft((p) => ({ ...p, [acc.id]: {} })); load(); }
@@ -6025,7 +6025,7 @@ function StaysAdminTab({ password, onOpenTab }: { password: string; onOpenTab: (
                   <label key={k} className="text-xs text-gray-500">
                     {label}
                     <input
-                      type="number" min={0} step={k.startsWith("u") ? "0.01" : "1"}
+                      type="number" min={0} step={k.startsWith("u") ? "0.01" : "any"}
                       value={priceDraft[a.id]?.[k] ?? cur ?? ""}
                       disabled={a.isExample}
                       onChange={(e) => setPriceDraft((p) => ({ ...p, [a.id]: { ...(p[a.id] ?? {}), [k]: e.target.value } }))}
