@@ -42,6 +42,15 @@
  * Ports stay below 32768 on purpose: Linux hands out 32768-60999 as ephemeral
  * source ports, so a suite binding up there can lose to an ordinary outbound
  * connection on CI and nowhere else.
+ *
+ * And no window may hold a port `fetch()` refuses. The Fetch standard blocks a
+ * short list (X11's 6000, SIP's 5060, IRC's 6665-6669, and others; the source
+ * is linked below), and Node's `fetch` rejects a URL on one of them with
+ * `fetch failed`, cause `bad port`, before it opens a socket. Every e2e suite
+ * reaches its server through `fetch`, so a pid landing on one boots a healthy
+ * server that the boot poll can never see. `server/adminTokens.e2e.test.ts`
+ * held eight of them in 400 ports and failed CI on 6668, 6669 and 6679, each
+ * time with "Server listening" in the log it printed beside "did not start".
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -57,6 +66,31 @@ const DIR = dirArg !== -1 && process.argv[dirArg + 1]
 
 /** Linux's default ephemeral range starts here; a bound test port must stay below it. */
 const EPHEMERAL_FLOOR = 32768;
+
+/**
+ * The ports `fetch()` will not dial: https://fetch.spec.whatwg.org/#port-blocking,
+ * copied from undici's `lib/web/fetch/constants.js`, which is what Node runs.
+ * `server/db/e2eBoot.test.ts` drives a real server on one of them.
+ */
+const FETCH_BLOCKED_PORTS = [
+  1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95, 101, 102,
+  103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 137, 139, 143, 161, 179, 389, 427, 465,
+  512, 513, 514, 515, 526, 530, 531, 532, 540, 548, 554, 556, 563, 587, 601, 636, 989, 990, 993,
+  995, 1719, 1720, 1723, 2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668,
+  6669, 6679, 6697, 10080,
+];
+
+/** The widest run of ports inside [lo, hi] that fetch will dial, or null. */
+function widestCleanStretch(lo, hi) {
+  let best = null;
+  let start = lo;
+  for (let p = lo; p <= hi + 1; p++) {
+    if (p <= hi && !FETCH_BLOCKED_PORTS.includes(p)) continue;
+    if (p > start && (!best || p - start > best.hi - best.lo + 1)) best = { lo: start, hi: p - 1 };
+    start = p + 1;
+  }
+  return best;
+}
 
 const NAME = "[A-Z][A-Z_0-9]*";
 const isPort = (n) => n.includes("PORT");
@@ -123,6 +157,21 @@ for (const w of windows) {
   }
 }
 
+for (const w of windows) {
+  const blocked = FETCH_BLOCKED_PORTS.filter((p) => p >= w.lo && p <= w.hi);
+  if (blocked.length === 0) continue;
+  const clean = widestCleanStretch(w.lo, w.hi);
+  problems.push(
+    `${w.file}: ${w.name} [${w.lo}-${w.hi}] holds ${blocked.join(", ")}, which fetch() refuses to dial ` +
+      `("bad port"). A run whose pid lands there boots a healthy server that the suite can never reach, ` +
+      `and fails "server did not start" with "Server listening" in its own log. ` +
+      (clean
+        ? `The widest clean stretch inside this window is [${clean.lo}-${clean.hi}], ` +
+          `${clean.hi - clean.lo + 1} port(s).`
+        : `No port inside this window is clean; move it.`),
+  );
+}
+
 for (let i = 0; i < windows.length; i++) {
   for (let j = i + 1; j < windows.length; j++) {
     const a = windows[i];
@@ -147,5 +196,5 @@ const hi = Math.max(...windows.map((w) => w.hi));
 console.log(
   `e2e port guard passed. ${windows.length} window(s) across ` +
     `${new Set(windows.map((w) => w.file)).size} file(s), disjoint between files, ${lo}-${hi}, ` +
-    `clear of the ${EPHEMERAL_FLOOR}+ ephemeral range.`,
+    `clear of the ${EPHEMERAL_FLOOR}+ ephemeral range and of every port fetch() refuses.`,
 );

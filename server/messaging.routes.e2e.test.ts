@@ -30,7 +30,8 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, E2E_BOOT_DEADLINE_MS, waitForPortFree } from "./db/testDb";
+import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { waitForHealth } from "./db/e2eBoot";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -137,19 +138,9 @@ beforeAll(async () => {
   child.stdout?.on("data", (d) => logs.push(String(d)));
   child.stderr?.on("data", (d) => logs.push(String(d)));
 
-  const deadline = Date.now() + E2E_BOOT_DEADLINE_MS;
-  for (;;) {
-    if (Date.now() > deadline) {
-      throw new Error(`server did not start in ${E2E_BOOT_DEADLINE_MS / 1000}s. Output:\n${logs.join("")}`);
-    }
-    try {
-      const res = await fetch(`${BASE}/health`);
-      if (res.ok) break;
-    } catch {
-      /* not up yet */
-    }
-    await new Promise((r) => setTimeout(r, 400));
-  }
+  // Reports the last /health answer and when the server logged that it was
+  // listening, and stops at once if the child died. See ./db/e2eBoot.ts.
+  await waitForHealth({ base: BASE, logs, child });
 
   const boot = await call(
     "POST",
@@ -180,7 +171,8 @@ beforeAll(async () => {
   //
   //     migrations     71 files
   //     provisioning   118.9s      (1.67s per file, up from the config's 1.25s)
-  //     boot deadline  E2E_BOOT_DEADLINE_MS (180s, the loop below)
+  //     boot deadline  E2E_BOOT_DEADLINE_MS (180s then; 120s now, and the wait
+  //                    itself moved to waitForHealth in ./db/e2eBoot.ts)
   //     worst case     298.9s      against the global 600s hook budget
   //
   // Provisioning ALONE was 66% of the old budget, so the hook could expire
