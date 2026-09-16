@@ -151,6 +151,21 @@ export interface AppDeps {
   milestonesRepo: DbCollection<Row>;
 
   /**
+   * The stewards' inbox: raised hands, applications, proposals, and anything
+   * else a member sends in that a human works through a pipeline.
+   *
+   * THERE IS ONE OF THESE AND IT IS THIS ONE. `submissions` is served from a
+   * boot-loaded cache, so a second `dbCollection` over the same table would
+   * write rows the admin inbox could not see until a restart. A module that
+   * files a row takes this and calls `insert`; a module that moves one reads
+   * `all()`, changes the row, and hands the WHOLE list back to `replaceAll`,
+   * which rebases a stale snapshot instead of overwriting a concurrent insert.
+   * Never call `replaceAll` with an empty array: an empty payload carries no
+   * version stamp, so the check that makes the rebase possible cannot run.
+   */
+  submissionsRepo: DbCollection<Row>;
+
+  /**
    * The village's circles, as the admin circle routes write them.
    *
    * `all()` answers from the cache, and the cache is current for every write

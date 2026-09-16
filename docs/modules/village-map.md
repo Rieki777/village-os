@@ -541,11 +541,28 @@ behind `org.seat`, the power that decides who sits in the village's seats. It
 grants nothing `POST /api/admin/org/roles/:id/holders` did not already carry;
 what it adds is doing it IN PLACE, through `claimSeating`, so the seating keeps
 its id and its start date and the seat's history does not restart the day
-somebody finally signs up.
+somebody finally signs up. `POST /api/org/seat-claims/:id/decline` is the same
+power saying no: it closes the ask and touches no seating.
 
-**The request is the alert and the journal line.** No third table holds a
-pending state. `notifyAdmins` rings the stewards, keyed on the seating and the
-member so pressing twice asks once, and the seat's own journal
-(`GET /api/org/:kind/:id/journal`) carries the same sentence for a steward who
-opens the seat later. What is still missing is a BUTTON: the admin org chart
-tab has no confirm control yet, so today a steward confirms through the route.
+**The ask is a row in the stewards' inbox**, `submissions` type `seat-claim`,
+which is the shape a raised hand already uses. It carries the seating id, the
+seat, the name recorded on the seating, and the claimant's name and email, with
+`userId` set to the claimant, and it goes through the one `submissionsRepo` the
+rest of the server holds, so the admin inbox sees it without a restart. A
+second open ask for the same seating and member is refused and says so.
+`notifyAdmins` rings the stewards beside it, keyed on the seating and the
+member, and the seat's own journal (`GET /api/org/:kind/:id/journal`) keeps
+every ask whether or not the row was filed.
+
+**Where a steward answers.** `GET /api/org/seat-claims` behind `org.seat`
+returns the open asks, and `client/src/components/admin/SeatClaimAsks.tsx`
+draws them on the seat itself in the admin org chart tab: who asked, the name
+the seat was recorded under, Confirm and Decline. Nothing renders on a seat
+with no ask. Neither button says anything until the server has answered, and a
+refusal prints the server's own sentence through the tab's `call`.
+
+**What the member hears.** Confirming sends the same `role_appointed`
+notification both other seating paths send, under the same `org-seat:` dedupe
+key. Declining sends the words `server/lib/submissionNotices.ts` already owns
+for a declined submission, so a no reads the same whichever door it came
+through.

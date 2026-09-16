@@ -1,10 +1,10 @@
 /**
  * The org chart: links, structural drafts, seat history, and the admin edits.
  *
- * Twenty-one routes. Nineteen were lifted out of server/index.ts unchanged
+ * Twenty-three routes. Nineteen were lifted out of server/index.ts unchanged
  * and are grouped as they were grouped there, because they were already one
- * contiguous run. Two are marked below and were not moves: the needs read,
- * and the confirm door beside the claim.
+ * contiguous run. Four are marked below and were not moves: the needs read,
+ * and the three doors that turned claiming a seat into asking for one.
  *
  *   links       GET  /api/org/relations
  *               GET  /api/org/:kind/:id/relations
@@ -23,7 +23,9 @@
  *   needs       GET  /api/org/roles/:id/needs
  *   claiming    GET  /api/org/my-unclaimed-seats
  *               POST /api/org/seatings/:id/claim
+ *               GET  /api/org/seat-claims
  *               POST /api/org/seatings/:id/claim/confirm
+ *               POST /api/org/seat-claims/:id/decline
  *   editing     POST /api/admin/org/roles
  *               PUT  /api/admin/org/roles/:id
  *               POST /api/admin/org/roles/:id/holders
@@ -89,6 +91,7 @@ import {
   type NodeKind,
 } from "../lib/orgRelations";
 import { captureIntoCurrentPattern } from "../lib/seasonPatterns";
+import { submissionStatusNotice } from "../lib/submissionNotices";
 import { resolveSeatTerm } from "../../shared/seatTerms";
 
 type Deps = Pick<
@@ -105,6 +108,7 @@ type Deps = Pick<
   | "seasonState"
   | "notify"
   | "notifyAdmins"
+  | "submissionsRepo"
 >;
 
 export function register(app: Express, deps: Deps): void {
@@ -121,7 +125,47 @@ export function register(app: Express, deps: Deps): void {
     seasonState,
     notify,
     notifyAdmins,
+    submissionsRepo,
   } = deps;
+
+  /*
+   * ── The stewards' inbox, as this module uses it ──────────────────────────
+   *
+   * `seat-claim` rows are filed by the claim route and answered by the two
+   * `org.seat` doors below. The type string is the one the admin inbox
+   * filters on and the one `submissionNotices.ts` words for the member, so it
+   * is named once here.
+   *
+   * OPEN means a steward has not decided yet. The pipeline's five words are
+   * `new`, `reviewing`, `in-conversation`, `accepted` and `declined`, and the
+   * last two are the only ones that close a row. Reading it that way round,
+   * instead of listing the open ones, means a village that adds a status word
+   * does not silently lose its pending asks out of this queue.
+   */
+  const SEAT_CLAIM_TYPE = "seat-claim";
+  const CLOSED_STATUSES = new Set(["accepted", "declined"]);
+  const openSeatClaims = (): any[] =>
+    (submissionsRepo.all() as any[]).filter(
+      (s) => s.type === SEAT_CLAIM_TYPE && !CLOSED_STATUSES.has(String(s.status ?? "")),
+    );
+
+  /**
+   * Close one ask, through the one repository the admin inbox reads.
+   *
+   * THE WHOLE LIST GOES BACK, which is what `replaceAll` takes, and the rows
+   * carry the version they were read at so a concurrent insert is rebased
+   * instead of overwritten. Never called with an empty list: `rows` always
+   * holds at least the row being closed.
+   */
+  const closeSeatClaim = async (match: (s: any) => boolean, status: "accepted" | "declined") => {
+    const rows = submissionsRepo.all() as any[];
+    const idx = rows.findIndex((s) => s.type === SEAT_CLAIM_TYPE && !CLOSED_STATUSES.has(String(s.status ?? "")) && match(s));
+    if (idx === -1) return null;
+    const closed = rows[idx];
+    rows[idx] = { ...closed, status };
+    await submissionsRepo.replaceAll(rows);
+    return closed;
+  };
 
   /*
    * ── Links between seats and circles (0054) ───────────────────────────
@@ -531,11 +575,16 @@ export function register(app: Express, deps: Deps): void {
    * who sits in the village's seats, and the sibling route below is where it
    * is exercised.
    *
-   * THE REQUEST IS THE NOTIFICATION AND THE JOURNAL LINE, and there is no
-   * third place holding a pending state. The alert is keyed on the seating
-   * and the member, so pressing twice asks once; the seat's own journal
-   * (`GET /api/org/:kind/:id/journal`) carries the same sentence for a
-   * steward who opens the seat later.
+   * THE ASK IS A ROW IN THE STEWARDS' INBOX, type `seat-claim`, which is the
+   * shape a raised hand already uses (`POST /api/map/roles/:id/raise-hand`).
+   * An alert and a journal line alone would have left a steward with a bell
+   * and nothing to act on, which is the "API complete, UI absent" shape this
+   * repo has paid for before. The row carries what the control below needs to
+   * draw the decision, and `org.seat` reads it at `GET /api/org/seat-claims`.
+   *
+   * A SECOND OPEN ASK FOR THE SAME SEATING IS REFUSED, and says so, the way a
+   * second raised hand is. The seat's own journal keeps every ask, so nothing
+   * is lost by not filing the duplicate.
    */
   app.post("/api/org/seatings/:id/claim", async (req, res) => {
     const user = await authedUser(req);
@@ -556,6 +605,29 @@ export function register(app: Express, deps: Deps): void {
     }
     const roles = await listOrgRoles(getPool());
     const seatName = roles.find((r) => r.id === wanted.orgRoleId)?.name ?? wanted.orgRoleId;
+    if (openSeatClaims().some((s) => s.data?.assignmentId === req.params.id && s.userId === user.id)) {
+      return res.status(409).json({
+        error: "You have already asked for this seat, and a steward has it in front of them",
+      });
+    }
+    const entry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      type: SEAT_CLAIM_TYPE,
+      status: "new",
+      rewarded: false,
+      data: {
+        assignmentId: req.params.id,
+        roleId: wanted.orgRoleId,
+        roleName: seatName,
+        recordedName: wanted.displayName ?? "",
+        name: user.name,
+        email: user.email ?? null,
+      },
+      userId: user.id,
+      userName: user.name,
+      submittedAt: new Date().toISOString(),
+    };
+    await submissionsRepo.insert(entry as any);
     await recordEvent(getPool(), {
       kind: "role",
       text: `${firstName(user.name)} asks to be confirmed as the holder recorded "${wanted.displayName ?? ""}"`,
@@ -581,6 +653,27 @@ export function register(app: Express, deps: Deps): void {
   });
 
   /**
+   * THE ASKS A STEWARD HAS IN FRONT OF THEM, behind the power that answers
+   * them. Trimmed to what the control draws: which seating, which seat, who
+   * asked, and the name the village had written down.
+   */
+  app.get("/api/org/seat-claims", async (req, res) => {
+    if (!(await guardCapability(req, res, "org.seat"))) return;
+    res.json(
+      openSeatClaims().map((s) => ({
+        claimId: s.id,
+        assignmentId: String(s.data?.assignmentId ?? ""),
+        roleId: String(s.data?.roleId ?? ""),
+        roleName: String(s.data?.roleName ?? ""),
+        recordedName: String(s.data?.recordedName ?? ""),
+        userId: s.userId,
+        userName: s.userName,
+        askedAt: s.submittedAt,
+      })),
+    );
+  });
+
+  /**
    * CONFIRMING ONE, which is `org.seat` and nothing weaker.
    *
    * This grants no power that `POST /api/admin/org/roles/:id/holders` above
@@ -593,6 +686,12 @@ export function register(app: Express, deps: Deps): void {
    *
    * The member is told, with the same words and the same `org-seat:` dedupe
    * key both seating paths use, because it is the same act by a third door.
+   *
+   * THE ASK IS CLOSED AFTER THE SEAT MOVES, never before: a row marked
+   * accepted over a `claimSeating` that refused would take the decision off
+   * the steward's queue and leave the seat where it was. A confirm with no ask
+   * behind it still works, because seating somebody is this power's to use
+   * whether or not they wrote in.
    */
   app.post("/api/org/seatings/:id/claim/confirm", async (req, res) => {
     if (!(await guardCapability(req, res, "org.seat"))) return;
@@ -618,6 +717,7 @@ export function register(app: Express, deps: Deps): void {
       entityRef: before?.orgRoleId ?? req.params.id,
       audience: "admin",
     });
+    await closeSeatClaim((s) => s.data?.assignmentId === req.params.id && s.userId === userId, "accepted");
     await notify({
       userId,
       type: "role_appointed",
@@ -627,6 +727,44 @@ export function register(app: Express, deps: Deps): void {
       actorUserId: actor?.id ?? null,
       dedupeKey: `org-seat:${req.params.id}`,
     });
+    res.json({ success: true });
+  });
+
+  /**
+   * SAYING NO TO ONE, which is the same power and touches no seating.
+   *
+   * A queue with only a yes on it is a queue that fills up with asks nobody
+   * can clear, and the member is left waiting on a decision that was made in
+   * somebody's head. The row closes as `declined`, the seat stays exactly as
+   * it was, and the member hears the sentence
+   * `server/lib/submissionNotices.ts` already owns for a declined submission,
+   * so a no reads the same whichever door it came through.
+   */
+  app.post("/api/org/seat-claims/:id/decline", async (req, res) => {
+    if (!(await guardCapability(req, res, "org.seat"))) return;
+    const closed = await closeSeatClaim((s) => s.id === req.params.id, "declined");
+    if (!closed) return res.status(404).json({ error: "That ask has already been answered" });
+    const actor = await authedUser(req);
+    await recordEvent(getPool(), {
+      kind: "role",
+      text: `declined: the seat stays recorded under "${String(closed.data?.recordedName ?? "")}"`,
+      actorUserId: actor?.id ?? null,
+      entityType: "org_role",
+      entityRef: String(closed.data?.roleId ?? ""),
+      audience: "admin",
+    });
+    const words = submissionStatusNotice(SEAT_CLAIM_TYPE, "declined", closed.data ?? null);
+    if (closed.userId && words) {
+      await notify({
+        userId: String(closed.userId),
+        type: "submission",
+        title: words.headline,
+        body: words.line,
+        link: "/roles",
+        actorUserId: actor?.id ?? null,
+        dedupeKey: `seat-claim-declined:${closed.id}`,
+      });
+    }
     res.json({ success: true });
   });
 

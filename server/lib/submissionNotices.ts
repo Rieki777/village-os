@@ -28,6 +28,10 @@
  */
 const WHAT_THEY_SENT: Record<string, string> = {
   "role-application": "your offer to hold a seat",
+  // A seat the village had already written your name on, before you had an
+  // account here. Different from a raised hand, which offers to take on a
+  // seat nobody is holding.
+  "seat-claim": "your ask to be confirmed in a seat",
   "work-with-us": "your proposal to work together",
   "quest-proposal": "the quest you proposed",
   "visit-inquiry": "your request to visit",
@@ -47,16 +51,18 @@ const FALLBACK = "what you sent us";
 
 /**
  * A raised hand names its seat, because a member may have raised several and
- * "your offer to hold a seat" would leave them guessing which one moved. Only
- * this type carries a name worth saying: the rest are free text a stranger
- * typed, and quoting it back into an email subject is a different decision.
+ * "your offer to hold a seat" would leave them guessing which one moved. An
+ * ask to be confirmed in a seat names it for the same reason: a backfilled
+ * chart can carry one person's name on several seatings. Only these two types
+ * carry a name worth saying, because it is a seat the village itself wrote
+ * down. The rest are free text a stranger typed, and quoting that back into
+ * an email subject is a different decision.
  */
 export function submissionSubject(type: string, data?: Record<string, unknown> | null): string {
   const base = WHAT_THEY_SENT[type] ?? FALLBACK;
-  if (type === "role-application") {
-    const seat = String((data as any)?.roleName ?? "").trim();
-    if (seat) return `your offer to hold ${seat}`;
-  }
+  const seat = String((data as any)?.roleName ?? "").trim();
+  if (type === "role-application" && seat) return `your offer to hold ${seat}`;
+  if (type === "seat-claim" && seat) return `your ask to be confirmed as ${seat}`;
   return base;
 }
 

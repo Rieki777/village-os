@@ -26294,6 +26294,7 @@ ${inner}
   registerOrgRoutes(app, {
     isAdmin, authedUser, guardCapability, getPool, members, firstName,
     capabilityCtx, lapseContext, currentPatternId, seasonState, notify, notifyAdmins,
+    submissionsRepo,
   });
 
   // The steward review surface (0140-0141). Mounted here beside the org
