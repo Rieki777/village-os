@@ -28,7 +28,7 @@
  * tests.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -182,7 +182,7 @@ describe("VariablesTab", () => {
       expect(named.getAttribute("aria-current")).toBe("true");
       const other = screen.getByText("Agreement needed").closest("[id]") as HTMLElement;
       expect(other.getAttribute("aria-current")).toBeNull();
-      expect(scrolled).toHaveBeenCalled();
+      await waitFor(() => expect(scrolled).toHaveBeenCalled());
       expect(scrolled.mock.contexts[0]).toBe(named);
     } finally {
       Element.prototype.scrollIntoView = original;
@@ -192,6 +192,34 @@ describe("VariablesTab", () => {
 
   it("scrolls to the linked dial once, so saving another dial does not jump back to it", async () => {
     // Every Save reloads the list, and the scroll ran again on every load.
+    //
+    // THE RELOAD IS WAITED FOR BY ITS OWN EVIDENCE. A fixed pause here made this
+    // test pass against the defect on one run in two: it asserted the count
+    // before the reloaded list had rendered. The second read answers a changed
+    // cap, so the new number on screen IS the reload having happened.
+    const reloaded = JSON.parse(JSON.stringify(VARIABLES));
+    reloaded.categories[1].variables[0].value = "41";
+    let saved = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: { method?: string }) => {
+        const u = String(url);
+        if (init?.method === "PUT") {
+          saved = true;
+          return { status: 200, ok: true, json: async () => ({ success: true }) };
+        }
+        if (u.includes("/admin/hypha/status")) return { status: 404, ok: false, json: async () => ({}) };
+        if (u.includes("/admin/variables")) {
+          // A TICK OF DELAY, because the defect needs one. A read that resolves
+          // in the same tick never renders the loading state, so the effect
+          // never re-runs and the second scroll cannot happen even with nothing
+          // stopping it. A real server always takes longer than a microtask.
+          await new Promise((r) => setTimeout(r, 5));
+          return { status: 200, ok: true, json: async () => (saved ? reloaded : VARIABLES) };
+        }
+        return { status: 200, ok: true, json: async () => ({}) };
+      }),
+    );
     const scrolled = vi.fn();
     const original = Element.prototype.scrollIntoView;
     Element.prototype.scrollIntoView = scrolled;
@@ -199,14 +227,14 @@ describe("VariablesTab", () => {
     try {
       render(<VariablesTab password="secret" />);
       await screen.findByText("Gratitude cap");
-      expect(scrolled).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(scrolled).toHaveBeenCalledTimes(1));
       // The key leaves the address and the tab stays, so a refresh opens the tab at its top.
       expect(window.location.search).toBe("?tab=variables");
       fireEvent.change(screen.getByDisplayValue("70"), { target: { value: "80" } });
       fireEvent.click(screen.getAllByRole("button", { name: "Save" })[0]!);
-      await new Promise((r) => setTimeout(r, 50));
-      expect(calls().filter(([, init]) => init?.method === "PUT")).toHaveLength(1);
-      await screen.findByText("Gratitude cap");
+      // The reloaded list is on screen, which is what the scroll used to follow.
+      expect(await screen.findByDisplayValue("41")).toBeInTheDocument();
+      await act(async () => { await Promise.resolve(); });
       expect(scrolled).toHaveBeenCalledTimes(1);
       // Still marked: the address is gone, the dial it named is not.
       expect(screen.getByText("Gratitude cap").closest("[id]")!.getAttribute("aria-current")).toBe("true");
@@ -238,7 +266,7 @@ describe("VariablesTab", () => {
     try {
       render(<VariablesTab password="secret" />);
       await screen.findByText("Gratitude cap");
-      expect(scrolled).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(scrolled).toHaveBeenCalledTimes(1));
       observer.shift();
       expect(scrolled).toHaveBeenCalledTimes(2);
       expect(observer.disconnected).toBe(0);
