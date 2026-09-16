@@ -58,11 +58,18 @@ type Answer = [status: number, body: unknown];
  * One answer per read. A stub answering every URL with the queue's body would
  * hand the claims section an object where it reads an array.
  */
-function answerRoutes(routes: { queue: Answer; claims: Answer }) {
+function answerRoutes(routes: { queue: Answer; claims: Answer; owed?: Answer }) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
-      const [status, body] = String(url).startsWith("/api/admin/quest-claims") ? routes.claims : routes.queue;
+      const path = String(url);
+      // The owed postings section reads under the claims' own prefix. Nothing is owed unless a
+      // test says so, so that section renders nothing and these tests read the page they meant.
+      const [status, body] = path.startsWith("/api/admin/quest-claims/owed")
+        ? (routes.owed ?? [200, []])
+        : path.startsWith("/api/admin/quest-claims")
+          ? routes.claims
+          : routes.queue;
       return {
         ok: status >= 200 && status < 300,
         status,

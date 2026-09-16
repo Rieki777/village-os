@@ -72,6 +72,7 @@ import {
   addChange,
   createDraft,
   draftChangeCap,
+  getDraft,
   listDrafts,
   previewDraft,
   publishDraft,
@@ -102,6 +103,7 @@ type Deps = Pick<
   | "currentPatternId"
   | "seasonState"
   | "notify"
+  | "circlesRepo"
 >;
 
 export function register(app: Express, deps: Deps): void {
@@ -117,6 +119,7 @@ export function register(app: Express, deps: Deps): void {
     currentPatternId,
     seasonState,
     notify,
+    circlesRepo,
   } = deps;
 
   /*
@@ -181,9 +184,21 @@ export function register(app: Express, deps: Deps): void {
 
   app.post("/api/admin/org/drafts/:id/changes", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const ops = ["create_seat", "update_seat", "rest_seat", "seat_holder", "end_holding"];
+    const ops = ["create_seat", "update_seat", "rest_seat", "seat_holder", "end_holding", "move_circle"];
     const op = String(req.body?.op ?? "");
     if (!ops.includes(op)) return res.status(400).json({ error: `op must be one of: ${ops.join(", ")}` });
+    // A circle move names its CIRCLE in the seat column, as circle:<id>, so an
+    // older release reading the row finds no seat to apply it to (0208).
+    if (op === "move_circle") {
+      const target = String(req.body?.orgRoleId ?? "");
+      const parent = req.body?.payload?.parentCircleId;
+      if (!target.startsWith("circle:") || target.length <= "circle:".length) {
+        return res.status(400).json({ error: "A circle move names its circle as circle:<id>" });
+      }
+      if (parent !== null && parent !== undefined && typeof parent !== "string") {
+        return res.status(400).json({ error: "parentCircleId must be a circle id or null" });
+      }
+    }
     const r = await addChange(getPool(), req.params.id, {
       op: op as any,
       orgRoleId: String(req.body?.orgRoleId ?? ""),
@@ -240,6 +255,16 @@ export function register(app: Express, deps: Deps): void {
     });
     if (!r.ok) return res.status(409).json({ error: r.error });
     /*
+     * EVERYTHING BELOW RUNS AFTER THE COMMIT. The publish has happened, so
+     * nothing here may turn it into an answer a client reads as "nothing was
+     * published". A failure is logged and carried as a flag on the 200.
+     *
+     * A draft can move circles (0208), written by raw SQL inside the
+     * transaction, and `circlesRepo.all()` never re-reads the table, so without
+     * the reload the map would keep drawing the old shape until a restart.
+     */
+    const reloaded = await reloadCircles();
+    /*
      * TELL THE PEOPLE THE DRAFT SEATED.
      *
      * The direct seating route has notified since F5. Publishing a draft did
@@ -254,36 +279,63 @@ export function register(app: Express, deps: Deps): void {
      * twice by two paths should hear once.
      */
     for (const st of r.seated) {
-      await notify({
-        userId: st.userId,
-        type: "role_appointed",
-        title: `You were seated as ${st.seatName}`,
-        body: st.seatAim ? st.seatAim.slice(0, 140) : null,
-        link: "/map/circles",
-        actorUserId: actor?.id ?? null,
-        dedupeKey: `org-seat:${st.assignmentId}`,
-      });
+      try {
+        await notify({
+          userId: st.userId,
+          type: "role_appointed",
+          title: `You were seated as ${st.seatName}`,
+          body: st.seatAim ? st.seatAim.slice(0, 140) : null,
+          link: "/map/circles",
+          actorUserId: actor?.id ?? null,
+          dedupeKey: `org-seat:${st.assignmentId}`,
+        });
+      } catch (e) {
+        console.error("[org] a published draft could not tell a member about their seat:", req.params.id, st.userId, st.seatName, e);
+      }
     }
     // One journal line per seat the draft touched, so a reorganisation shows up
     // in the history of every node it moved rather than only in a draft list
     // nobody opens twice.
-    const drafts = await listDrafts(getPool());
-    const draft = drafts.find((d) => d.id === req.params.id);
-    for (const seatId of Array.from(new Set((draft?.changes ?? []).map((c) => c.orgRoleId)))) {
-      void recordEvent(getPool(), {
-        kind: "org", text: `reorganised: ${draft?.title ?? "a draft"}`,
-        actorUserId: actor?.id ?? null,
-        entityType: "org_role", entityRef: seatId, audience: "admin",
-      });
+    try {
+      const draft = await getDraft(getPool(), req.params.id);
+      for (const seatId of Array.from(new Set((draft?.changes ?? []).map((c) => c.orgRoleId)))) {
+        void recordEvent(getPool(), {
+          kind: "org", text: `reorganised: ${draft?.title ?? "a draft"}`,
+          actorUserId: actor?.id ?? null,
+          entityType: seatId.startsWith("circle:") ? "circle" : "org_role",
+          entityRef: seatId.startsWith("circle:") ? seatId.slice("circle:".length) : seatId,
+          audience: "admin",
+        });
+      }
+    } catch (e) {
+      console.error("[org] a published draft could not write its journal lines:", req.params.id, e);
     }
-    res.json({ success: true, applied: r.applied });
+    res.json({ success: true, applied: r.applied, reloaded });
   });
+
+  /**
+   * Reload the circles cache after a commit, trying a second time if the first
+   * fails. Answers whether it took, so a client can say the map is still
+   * catching up where it would otherwise say nothing was done.
+   */
+  const reloadCircles = async (): Promise<boolean> => {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        await circlesRepo.load();
+        return true;
+      } catch (e) {
+        console.error(`[org] reloading the circles after an org draft failed, attempt ${attempt} of 2:`, e);
+      }
+    }
+    return false;
+  };
 
   app.post("/api/admin/org/drafts/:id/revert", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const r = await revertDraft(getPool(), req.params.id);
     if (!r.ok) return res.status(409).json({ error: r.error });
-    res.json({ success: true, reverted: r.reverted });
+    // After the commit, the same as publish: a reverted circle move is raw SQL too.
+    res.json({ success: true, reverted: r.reverted, reloaded: await reloadCircles() });
   });
 
   app.post("/api/admin/org/relations", async (req, res) => {

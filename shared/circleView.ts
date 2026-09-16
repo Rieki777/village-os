@@ -350,6 +350,27 @@ export function circlesOnCycles(circles: CircleLink[]): string[] {
 }
 
 /**
+ * A whole set of circles that holds a loop, said in the words a person reads.
+ *
+ * `circlesOnCycles` answers WHICH circles are looping. This answers what to
+ * tell somebody whose save was refused because of it, and it exists for the
+ * writes no row-by-row check can see: an import, a seed, and the MERGE of two
+ * concurrent saves, where the looping pair is a state neither writer ever had
+ * in front of them.
+ *
+ * Null means the set is fine, which is the answer for every ordinary write.
+ */
+export function loopedCirclesRefusal(circles: Array<CircleLink & { name?: string }>): string | null {
+  const looped = circlesOnCycles(circles);
+  if (!looped.length) return null;
+  const nameOf = (id: string) => String(circles.find((c) => c.id === id)?.name ?? id);
+  if (looped.length === 1) return `${nameOf(looped[0])} would end up inside itself.`;
+  const named = looped.slice(0, 3).map(nameOf).join(", ");
+  const rest = looped.length > 3 ? ` and ${looped.length - 3} more` : "";
+  return `${named}${rest} would end up inside each other.`;
+}
+
+/**
  * Every refusal a parenting write can meet, as the body a route sends.
  *
  * Three reasons, in the order a person would want to hear them: the parent

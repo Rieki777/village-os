@@ -97,7 +97,7 @@ const deps = (p: mysql.Pool = pool): GratitudeDeps => ({
  * so the transaction is real, the note has genuinely been written when the
  * ledger write dies, and what the test reads afterwards is what a member's
  * village would actually hold. `ER_LOCK_WAIT_TIMEOUT` because that is one of
- * the two errors the writer already names as worth retrying, which makes it
+ * the errors `lostConcurrencyRace` names as worth retrying, which makes it
  * the one most likely to arrive on a busy evening — and it also drives the
  * retry, so each case reads the outcome after all three attempts rather than
  * after a single unlucky one.
@@ -128,6 +128,56 @@ function poolThatFailsTheLedgerWrite(real: mysql.Pool): mysql.Pool {
       return typeof value === "function" ? value.bind(target) : value;
     },
   }) as mysql.Pool;
+}
+
+/**
+ * A pool that loses ONE snapshot race, the way MariaDB 11.8 and later lose it
+ * with `innodb_snapshot_isolation` on (ER_CHECKREAD, errno 1020), and passes
+ * every other statement straight through.
+ *
+ * It fires at the first balance recompute across all its connections (the
+ * UPDATE statement in `recomputeBalance`, server/lib/ledger.ts, whose table is
+ * the one the real error named when it was measured, `token_balances`). It
+ * matches that statement by its first keyword and its table, and writes
+ * nothing. By then the note row AND the ledger row have both been written
+ * inside the transaction, so a retry that did not roll back first would
+ * double both. The injected error rolls nothing back by itself, which makes
+ * the caller's own rollback the thing under test. `fired` counts the
+ * injections, so a case cannot pass because the path stopped reaching the
+ * statement.
+ */
+function poolThatLosesOneSnapshotRace(real: mysql.Pool): { pool: mysql.Pool; fired: () => number } {
+  let fired = 0;
+  const wrapConn = (conn: any) =>
+    new Proxy(conn, {
+      get(target: any, prop: string | symbol) {
+        if (prop === "query" || prop === "execute") {
+          return async (sql: any, params?: any) => {
+            const text = typeof sql === "string" ? sql : String(sql?.sql ?? "");
+            if (fired === 0 && text.startsWith("UPDATE") && text.includes("token_balances")) {
+              fired++;
+              const err: any = new Error(
+                "Record has changed since last read in table 'token_balances'; try restarting transaction",
+              );
+              err.code = "ER_CHECKREAD";
+              err.errno = 1020;
+              throw err;
+            }
+            return target[prop](sql, params);
+          };
+        }
+        const value = target[prop];
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  const racing = new Proxy(real, {
+    get(target: any, prop: string | symbol) {
+      if (prop === "getConnection") return async () => wrapConn(await target.getConnection());
+      const value = target[prop];
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  }) as mysql.Pool;
+  return { pool: racing, fired: () => fired };
 }
 
 async function notesBetween(from: string, to: string): Promise<number> {
@@ -194,6 +244,38 @@ describe.skipIf(!configured)("a gratitude note and its credit", () => {
     const after = await allowanceFor(pool, giver.id, 1);
     expect(after.spent).toBe(before.spent);
     expect(await balanceOf(pool, memberAccount(recipient.id), HEARTS)).toBe(0);
+  });
+
+  it("retries a lost snapshot race, and the gift lands exactly once", async () => {
+    // WHY THIS CASE EXISTS. "lets twenty-four different members thank the same
+    // person at once" (server/economy.test.ts) no longer reaches ER_CHECKREAD
+    // on MariaDB, because `give()` locks the ledger rows before its first plain
+    // read. So it stays green with ER_CHECKREAD taken off LOST_RACE_CODES and
+    // cannot show that the retry recognises the error. This case can: take it
+    // off the list (server/db/concurrency.ts) and `out.ok` is false.
+    //
+    // What it cannot show: that the engine raises the error at this statement
+    // in production, or anything about lock order. It proves the wiring, and
+    // that a retry after a note and a ledger row were written does not charge
+    // or pay twice.
+    const giver = await makeMember("atomic-race-from");
+    const recipient = await makeMember("atomic-race-to");
+    const before = await allowanceFor(pool, giver.id, 1);
+    const racing = poolThatLosesOneSnapshotRace(pool);
+
+    const out = await give(
+      racing.pool,
+      { fromUserId: giver.id, toUserId: recipient.id, amount: 5, note: "for the well" },
+      async () => 1,
+    );
+
+    expect(racing.fired()).toBe(1);
+    expect(out.ok).toBe(true);
+    // One note, one charge and one payment, although the first attempt had
+    // written a note and a ledger row before it died.
+    expect(await notesBetween(giver.id, recipient.id)).toBe(1);
+    expect((await allowanceFor(pool, giver.id, 1)).spent).toBe(before.spent + 5);
+    expect(await balanceOf(pool, memberAccount(recipient.id), HEARTS)).toBe(5);
   });
 
   it("still delivers both when the ledger is well", async () => {

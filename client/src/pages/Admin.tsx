@@ -21,6 +21,7 @@ import BreathingLoader from "@/components/natural/BreathingLoader";
 import { SeatSomebody } from "@/components/power/SeatSomebody";
 import { AppointToRole } from "@/components/admin/AppointToRole";
 import { RAISED_HAND_TERM_KEYS, RaisedHandTerm } from "@/components/admin/RaisedHandTerm";
+import { POWER_HAND_KEYS, PowerHandNote } from "@/components/admin/PowerHandNote";
 import Celebration from "@/components/natural/Celebration";
 import { useMomentWindow } from "@/components/natural/moments";
 import { playMoment } from "@/lib/sound";
@@ -72,7 +73,9 @@ import { ExampleChip, ExamplesBanner, forgetExamplesCache, RETIRES_WITH } from "
 // submissions on the site: a request to walk the land, and a signed 508(c)(1)(a)
 // membership. Both were reachable only by scrolling "All types". The strings are
 // the ones the pages actually POST, from Visit.tsx and LoveLetter.tsx.
-const FORM_TYPES = ["work-with-us", "quest-proposal", "visit-inquiry", "membership-508", "investor", "steward", "resident", "prosperity", "contact"] as const;
+// membership-request is somebody with no invitation asking to join, from
+// RequestMembership.tsx (Rye, 2026-09-09: requests sit in admin for a team to talk to them).
+const FORM_TYPES = ["work-with-us", "quest-proposal", "visit-inquiry", "membership-508", "membership-request", "investor", "steward", "resident", "prosperity", "contact"] as const;
 
 /**
  * THE SERVER'S OWN SENTENCE, WHEN IT HAS ONE.
@@ -992,10 +995,11 @@ function SubmissionsTab({ password }: { password: string }) {
                     )}
                   </div>
                   {s.type === "role-application" && <RaisedHandTerm data={s.data} />}
+                  {s.type === "power-application" && <PowerHandNote data={s.data} />}
                   <table className="w-full text-sm">
                     <tbody>
                       {Object.entries(s.data)
-                        .filter(([k]) => k !== "attachmentName" && !(s.type === "role-application" && RAISED_HAND_TERM_KEYS.includes(k)))
+                        .filter(([k]) => k !== "attachmentName" && !(s.type === "role-application" && RAISED_HAND_TERM_KEYS.includes(k)) && !(s.type === "power-application" && POWER_HAND_KEYS.includes(k)))
                         .map(([k, v]) => (
                         <tr key={k} className="border-b border-gray-100 last:border-0">
                           <td className="py-1.5 pr-4 font-medium text-gray-600 capitalize w-1/4 align-top">
