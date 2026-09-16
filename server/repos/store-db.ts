@@ -118,6 +118,25 @@ export interface CollectionSpec {
    * the first column, which is `id` on every collection in this codebase.
    */
   key?: string;
+  /**
+   * A last look at the rows a REBASE produced, in the collection's own terms.
+   *
+   * ONLY A REBASE REACHES IT, and that is the point. A caller writing back a
+   * current snapshot has already checked whatever it checks, against the very
+   * rows it is writing. A rebase is the other case: the merged rows are a state
+   * NO CALLER EVER SAW, assembled here field by field from two writes that were
+   * each true on their own.
+   *
+   * Circles are the live example. One steward puts Finance inside Business
+   * while another puts Business inside Finance. Each write is fine against the
+   * rows its author read, the merge keeps each writer's own field, and the
+   * table ends up holding a loop neither of them could have saved.
+   *
+   * Return a sentence to refuse the whole write, or null to let it through.
+   * A person reads that sentence, so write it for the steward who is about to
+   * be told their save did not happen.
+   */
+  mergeRefusal?: (rows: readonly any[]) => string | null;
 }
 
 export interface DbCollection<T extends Row = Row> {
@@ -176,6 +195,27 @@ export class StaleSnapshotError extends Error {
         `collection again and re-apply the change.`,
     );
     this.name = "StaleSnapshotError";
+  }
+}
+
+/**
+ * Thrown when a rebase produced rows the collection itself refuses.
+ *
+ * Nothing was written, the same as a stale snapshot, and the caller does the
+ * same thing about it: read again and make the change again. The difference
+ * worth carrying to the person is that their own write was fine. It was the
+ * MERGE of their write with somebody else's that the collection would not
+ * hold, so the sentence `mergeRefusal` wrote travels on the error.
+ */
+export class MergeRefusedError extends Error {
+  readonly code = "merge_refused";
+  constructor(
+    readonly table: string,
+    /** Written for a steward by `mergeRefusal`, and answered to them verbatim. */
+    readonly refusal: string,
+  ) {
+    super(`${table}: two concurrent writes merged into rows this collection refuses. ${refusal}`);
+    this.name = "MergeRefusedError";
   }
 }
 
@@ -495,6 +535,17 @@ export function dbCollection<T extends Row = Row>(pool: Pool, spec: CollectionSp
           write = merged.rows;
           conflicts = merged.conflicts;
           rebased = true;
+        }
+
+        /*
+         * The merged rows are a state no caller ever saw, so the collection
+         * gets a last look at them before they become the table. Only a rebase
+         * arrives here: a write built on a current snapshot was already checked
+         * by whoever built it, against the very rows they are writing.
+         */
+        if (rebased && spec.mergeRefusal) {
+          const refused = spec.mergeRefusal(write);
+          if (refused) throw new MergeRefusedError(spec.table, refused);
         }
 
         await conn.query(`DELETE FROM \`${spec.table}\``);

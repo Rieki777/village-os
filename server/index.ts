@@ -126,7 +126,7 @@ import {
 import { buildThemeCss, sanitizeFontName } from "./lib/themeCss";
 import { applyTimingOf, ringOf, VARIABLES_BY_KEY } from "../shared/gameVariables";
 import { CONSTITUTION } from "../shared/constitution";
-import { circleViews } from "../shared/circleView";
+import { circleViews, loopedCirclesRefusal } from "../shared/circleView";
 import { DEFAULT_MAP_SKIN, sanitiseMapSkin } from "../shared/mapSkin";
 import {
   DEFAULT_MAP_VOCABULARY,
@@ -1438,6 +1438,16 @@ const circlesRepo = dbCollection(getPool(), {
      */
     { js: "createdAt", db: "created_at", kind: "time", defaultNow: true },
   ],
+  /*
+   * TWO STEWARDS, ONE MOMENT, AND A LOOP NEITHER OF THEM SAVED.
+   *
+   * The circle routes refuse a loop against the rows they read, and `replaceAll`
+   * then merges a stale snapshot field by field, so Finance inside Business and
+   * Business inside Finance can arrive together as a state neither writer saw.
+   * The rule that says no lives in shared/circleView.ts, where the map and the
+   * routes already read it, so the store asks it instead of holding a copy.
+   */
+  mergeRefusal: (rows) => loopedCirclesRefusal(rows as any[]),
 });
 
 // S15: the tools hub registry (the framework's reference consumer).

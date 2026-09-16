@@ -12,7 +12,7 @@
  * still route through here at all.
  */
 import { describe, expect, it } from "vitest";
-import { circleView, circleViews, toneForCircle, ancestorIds, cycleFromParenting, parentCycleRefusal, parentingRefusal, parentChoicesFor, circlesOnCycles, CIRCLE_TONES, CIRCLE_TONE_HEX } from "./circleView";
+import { circleView, circleViews, toneForCircle, ancestorIds, cycleFromParenting, parentCycleRefusal, parentingRefusal, parentChoicesFor, loopedCirclesRefusal, circlesOnCycles, CIRCLE_TONES, CIRCLE_TONE_HEX } from "./circleView";
 
 /** A row shaped like `circlesRepo.all()` returns one. */
 const row = (over: Record<string, unknown> = {}) => ({
@@ -309,5 +309,51 @@ describe("where a circle may sit", () => {
         expect(parentingRefusal(tree, circle.id, choice.id), `${circle.id} inside ${choice.id}`).toBeNull();
       }
     }
+  });
+});
+
+/**
+ * The words for a loop nobody can catch row by row: an import, a seed, or the
+ * merge of two concurrent saves (`mergeRefusal`, server/repos/store-db.ts).
+ */
+describe("the refusal for a whole set that holds a loop", () => {
+  const link = (id: string, parentCircleId: string | null = null, name?: string) => ({
+    id,
+    parentCircleId,
+    ...(name ? { name } : {}),
+  });
+
+  it("says nothing about a set with no loop in it", () => {
+    expect(loopedCirclesRefusal([link("gcc"), link("dev", "gcc"), link("web", "dev")])).toBeNull();
+  });
+
+  it("names the circles that would end up inside each other", () => {
+    const said = loopedCirclesRefusal([
+      link("finance", "business", "Finance Circle"),
+      link("business", "finance", "Business Council"),
+    ]);
+    expect(said).toContain("Finance Circle");
+    expect(said).toContain("Business Council");
+    expect(said).toContain("inside each other");
+  });
+
+  it("has its own sentence for a circle inside itself", () => {
+    expect(loopedCirclesRefusal([link("a", "a", "Land Circle")])).toBe(
+      "Land Circle would end up inside itself.",
+    );
+  });
+
+  it("falls back to the id when a row carries no name", () => {
+    const said = loopedCirclesRefusal([link("x", "y"), link("y", "x")]);
+    expect(said).toContain("x");
+    expect(said).toContain("y");
+  });
+
+  it("speaks for circlesOnCycles, and leaves the circles off the loop out of it", () => {
+    const rows = [link("gcc"), link("dev", "gcc"), link("x", "y"), link("y", "x")];
+    expect(circlesOnCycles(rows)).toEqual(["x", "y"]);
+    const said = loopedCirclesRefusal(rows)!;
+    expect(said).toContain("x");
+    expect(said).not.toContain("dev");
   });
 });
