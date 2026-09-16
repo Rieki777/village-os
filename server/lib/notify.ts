@@ -195,6 +195,7 @@ export function emailCadenceFor(type: string, p: NotifyPrefs): "immediate" | "da
     case "ballot_opened":
     case "ballot_closing":
     case "ballot_carried":
+    case "ballot_not_yet_in_effect":
     case "ballot_failed":
     case "ballot_no_quorum":
     case "ballot_withdrawn":

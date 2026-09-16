@@ -57,6 +57,7 @@
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { ballotById } from "../lib/ballots";
+import { decisionLink } from "../lib/ballotNotices";
 import { changeSetOf, recordVeto as stopTheLanding } from "../lib/applyDue";
 import {
   beingVotedOut,
@@ -238,7 +239,7 @@ export function register(app: Express, deps: Deps): void {
         type: "ballot_vetoed",
         title: `A steward stopped ${ballot.title}`,
         body: departing ? `${votedOutSentence(firstName(user.name), departing.landsAt)}\n\n${reason}` : reason,
-        link: `/decisions/${ballot.id}`,
+        link: decisionLink(ballot),
         dedupeKey: `bal:${ballot.id}:vetoed:${user.id}`,
       });
     }
