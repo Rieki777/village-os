@@ -413,6 +413,31 @@ export function installShutdownHandlers(deps: ShutdownDeps): void {
  * Matched on the `code` field rather than with `instanceof`, so this module
  * needs no dependency on the repo layer and a second copy of the class across a
  * bundle boundary cannot make the check silently miss.
+ *
+ * ── WHY A LOST LOCK IS NOT AN INTERNAL ERROR EITHER ────────────────────────
+ *
+ * InnoDB picks a victim when two transactions cross, and it gives up on a
+ * statement that waited too long for a row somebody else holds. Three places
+ * retry that for us, three times each: `withDeadlockRetry`
+ * (server/repos/quests.ts), and the two loops around `postTransfer` and
+ * `postTransferPair` (server/lib/ledger.ts). All three rethrow after the third
+ * attempt, and every one of them sits under a route: a steward consenting a
+ * quest reaches the ledger's hot faucet row through `postTransferOn`, and a
+ * consent that loses to contention three times running answered "Internal
+ * server error" to somebody who had done nothing wrong and whose next press
+ * would very likely have worked.
+ *
+ * 503, because the request disagreed with nothing. The village was busy, this
+ * one did not get through, and the same request again is the whole remedy. The
+ * sentence says that and promises nothing further: the transaction that raised
+ * it rolled back, which the three retry sites guarantee for themselves, and a
+ * handler that writes twice without a transaction is not something this module
+ * can see from here, so "nothing was saved" is a promise it does not make.
+ *
+ * Matched on `code` OR `errno`, because a driver that hands back the number
+ * without the name still means the same thing. The two names are the ones the
+ * three retry loops already spell out inline; a fourth copy lives here rather
+ * than in a shared import so this module keeps its dependencies.
  */
 export interface TerminalAnswer {
   status: number;
@@ -423,8 +448,29 @@ export interface TerminalAnswer {
   detail: string;
 }
 
+/** InnoDB's two "try again" answers, by the names and the numbers mysql2 sets. */
+const LOCK_CONTENTION_CODES = new Set(["ER_LOCK_DEADLOCK", "ER_LOCK_WAIT_TIMEOUT"]);
+const LOCK_CONTENTION_ERRNOS = new Set([1213, 1205]);
+
+function isLockContention(err: unknown): boolean {
+  const e = err as { code?: unknown; errno?: unknown } | null | undefined;
+  if (typeof e?.code === "string" && LOCK_CONTENTION_CODES.has(e.code)) return true;
+  return typeof e?.errno === "number" && LOCK_CONTENTION_ERRNOS.has(e.errno);
+}
+
 export function terminalAnswerFor(err: unknown): TerminalAnswer {
   const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
+  if (isLockContention(err)) {
+    return {
+      status: 503,
+      body: {
+        error: "Several people were saving at the same moment, and this one did not get through. Try it again.",
+        code: "lock_contention",
+      },
+      level: "warn",
+      detail,
+    };
+  }
   if ((err as { code?: unknown } | null | undefined)?.code === "stale_snapshot") {
     return {
       status: 409,
