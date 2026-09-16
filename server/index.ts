@@ -746,7 +746,7 @@ import {
   webhookSecretConfigured,
 } from "./lib/payments";
 import {
-  LIFECYCLE_RANK, MODULES, MODULES_BY_ID, priceLine, supportRoute, vendorModules,
+  LIFECYCLE_RANK, MODULES, MODULES_BY_ID, modulesOwning, priceLine, supportRoute, vendorModules,
   type ModuleLifecycle,
 } from "../shared/modules";
 import { poolStatus } from "../shared/modulePool";
@@ -20538,16 +20538,46 @@ ${inner}
 
   app.get("/api/admin/variables", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    // S13: a module's tunables only appear while the module is non-off — an
-    // off module contributes zero admin surface, variables included.
-    const hiddenKeys = new Set(
-      MODULES.filter((m) => !m.core && effectiveLifecycle(m.id) === "off").flatMap((m) => m.variableKeys),
-    );
-    const all = allVariables().filter((v) => !hiddenKeys.has(v.key)).map(decorateChoices);
+    /*
+     * EVERY DIAL, WHATEVER ITS MODULE IS DOING (Rye, 2026-09-15). This route
+     * filtered out the tunables of every off module, under S13's rule that an
+     * off module contributes zero admin surface. Setting a module up happens
+     * BEFORE it is turned on, so that rule hid exactly the settings a founder
+     * needs while they are needed, and the module card now renders them at any
+     * lifecycle. Nothing else here decided visibility, so lifting the filter is
+     * the whole change; `modules` below is what lets a surface sort them.
+     *
+     * The public snapshot at /api/game/mechanics still hides an off module's
+     * own dials. That is a different question (what a village not playing this
+     * game should read) with a different answer, and it stays keyed on the
+     * listed `variableKeys` rather than on ownership.
+     */
+    const all = allVariables()
+      .map(decorateChoices)
+      .map((v) => ({
+        ...v,
+        // The ring and the timing travel with the dial so an editor can show
+        // who may turn it and when a change lands without importing the
+        // registry into the client bundle.
+        ring: ringOf(v),
+        applyTiming: applyTimingOf(v),
+        // Which module cards this dial belongs on. Empty means no module owns
+        // it, which is what keeps it in Game Mechanics.
+        modules: modulesOwning(v.key),
+      }));
     const categories: Record<string, typeof all> = {};
     for (const v of all) (categories[v.category] ??= []).push(v);
     res.json({
       categories: Object.entries(categories).map(([name, variables]) => ({ name, variables })),
+      // One row per module holding settings, so Game Mechanics can say where a
+      // moved group went and link to it without a second request.
+      moduleSettings: MODULES.map((m) => ({
+        id: m.id,
+        name: m.name,
+        core: !!m.core,
+        lifecycle: m.core ? "public" : effectiveLifecycle(m.id),
+        keys: all.filter((v) => v.modules.includes(m.id)).map((v) => v.key),
+      })).filter((m) => m.keys.length > 0),
       customized: all.filter((v) => !v.isDefault).length,
       total: all.length,
     });
@@ -21007,10 +21037,20 @@ ${inner}
     // non-admins everywhere else (the identical-404 rule), and this page is
     // anonymous — listing a preview module's dials would leak what the
     // village is trying before it decided. Same idiom as /api/platform/info.
+    /*
+     * A dial two modules list is hidden only when BOTH are hidden. The old
+     * reading hid a key as soon as ANY module listing it was below members, so
+     * a village running a public exchange with stays switched off published no
+     * purchase limits at all: the pair `payments.purchase_limit_*` sits on both.
+     * Shared keys were rare enough for that to go unnoticed and are not rare
+     * now.
+     */
+    const shown = (m: { id: string; core?: boolean }) =>
+      !!m.core || LIFECYCLE_RANK[effectiveLifecycle(m.id)] >= LIFECYCLE_RANK.members;
     const hiddenKeys = new Set(
-      MODULES.filter(
-        (m) => !m.core && LIFECYCLE_RANK[effectiveLifecycle(m.id)] < LIFECYCLE_RANK.members,
-      ).flatMap((m) => m.variableKeys),
+      MODULES.filter((m) => !shown(m))
+        .flatMap((m) => m.variableKeys)
+        .filter((key) => !MODULES.some((m) => m.variableKeys.includes(key) && shown(m))),
     );
     res.json({
       constitution: CONSTITUTION,

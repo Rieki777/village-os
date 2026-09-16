@@ -379,8 +379,33 @@ export interface ModuleDef {
   /** Capability keys this module ADDS to the one gate — never a second
    *  permission mechanism. */
   capabilities: Capability[];
-  /** Namespaced game-variable keys ('tools.*'); Admin hides the group while
-   *  the module is off. */
+  /**
+   * Game-variable keys this module owns BEYOND its own namespace.
+   *
+   * Ownership is answered by `modulesOwning` below, which reads this list AND
+   * the module's key namespace (`MODULE_KEY_PREFIXES`). So a dial called
+   * `tools.click_tracking` needs no entry here at all: the namespace says whose
+   * it is. What this list is FOR is the two cases a namespace cannot express:
+   *
+   *   1. A dial in somebody else's namespace that this module's own code reads.
+   *      `payments.purchase_limit_*` sits on stays and on exchange because both
+   *      charge through the same spine; `events.rsvp_enabled` is on map because
+   *      the map's promise reads it.
+   *   2. A dial in no module's namespace that one module owns outright, such as
+   *      `assistant.synthesis_batch`, which only Call Automation reads.
+   *
+   * A key listed by two modules is SHARED, and both cards show it saying so.
+   * Never guess which one owns it: the reading is the evidence, and a module
+   * that reads a dial is a module whose founder has to be able to find it.
+   *
+   * This used to say "Admin hides the group while the module is off". It does
+   * not any more (Rye, 2026-09-15): a village sets a module up BEFORE turning
+   * it on, so every setting is editable on the module's own card whatever its
+   * lifecycle. The public `/api/game/mechanics` page still hides an off
+   * module's OWN listed dials, which is a different question with a different
+   * answer, and the reason that filter still reads this list and not
+   * `modulesOwning`.
+   */
   variableKeys: string[];
   /** API prefixes mounted behind requireModule(id). */
   apiPrefixes: string[];
@@ -434,12 +459,23 @@ export const MODULES: ModuleDef[] = [
     recommends: [],
     capabilities: [],
     variableKeys: [
-      "gratitude.base_budget",
-      "gratitude.require_message",
-      "gratitude.full_sends_per_cycle",
-      "gratitude.pool_per_cycle",
-      "gratitude.pool_token",
-      "gratitude.proposal_accept_award",
+      // The `gratitude.*` namespace comes with the module (MODULE_KEY_PREFIXES);
+      // these are the dials in OTHER namespaces that this module's own code
+      // reads, so a founder tuning the recognition economy finds them here.
+      //
+      // The cycle clock: server/lib/gratitude-cycles.ts reads `cycle.mode` to
+      // know what a cycle IS, and cycleSettlement reads the settlement pair at
+      // every close.
+      "cycle.mode",
+      "cycle.settlement_mode",
+      "cycle.settlement_vote_days",
+      // A heart is a real send out of the same allowance, and the per-recipient
+      // ceiling on it is enforced in server/lib/gratitude.ts. Shared with feed,
+      // which is where the taps happen.
+      "feed.max_hearts_per_recipient_per_cycle",
+      // The cycle close asks Village Health whether a vital sign moved far
+      // enough to speak up (server/lib/cycleSettlement.ts). Shared with health.
+      "health.alert_change_pct",
     ],
     // Cycle close and the settlement preview hang off /api/admin/cycles, which
     // this list forgot. Inert while gratitude is core and nothing is above
@@ -498,6 +534,9 @@ export const MODULES: ModuleDef[] = [
     recommends: [],
     capabilities: ["map.viewPeople", "map.contact", "map.photograph", "map.curatePhotos"],
     variableKeys: [
+      // The map lights the building something is happening in, so its promise
+      // route reads whether RSVPs are on at all. Shared with events.
+      "events.rsvp_enabled",
       "map.public_structure",
       "map.concierge_enabled",
       "map.contact_daily_cap",
@@ -527,7 +566,13 @@ export const MODULES: ModuleDef[] = [
     requires: ["map"],
     recommends: ["forum"],
     capabilities: [],
-    variableKeys: [],
+    // `resources.*` arrives by namespace. These two are read by this module's
+    // own routes: /api/resources refuses to draw the flows while the org chart
+    // is private (`map.public_structure`, shared with map), and the circle
+    // treasury asks the ledger's co-sign threshold before it funds
+    // (server/routes/circleTreasury.ts, which the platform's admin mint reads
+    // too).
+    variableKeys: ["map.public_structure", "ledger.admin_mint_cosign_over"],
     apiPrefixes: ["/api/resources"],
     defaultConfig: { requestCategory: "governance", measuredVisibleTo: "members", labels: {} },
     validateConfig: (c: any) => {
@@ -562,7 +607,10 @@ export const MODULES: ModuleDef[] = [
     requires: [],
     recommends: ["map"],
     capabilities: ["forum.post", "forum.moderate"],
-    variableKeys: ["forum.report_hide_threshold"],
+    // `forum.*` arrives by namespace. The feed's category is listed because
+    // the forum's own thread route reads it (server/index.ts, /api/forum/threads)
+    // to tell a feed post from a thread. Shared with feed.
+    variableKeys: ["feed.category_slug"],
     apiPrefixes: ["/api/forum"],
     defaultConfig: {
       categories: [
@@ -670,7 +718,9 @@ export const MODULES: ModuleDef[] = [
     requires: [],
     recommends: ["forum"],
     capabilities: [],
-    variableKeys: [],
+    // There is no `automation.*` namespace: the one dial this module owns is
+    // the synthesis batching switch, which only its own job reads.
+    variableKeys: ["assistant.synthesis_batch"],
     apiPrefixes: ["/api/recordings"],
     defaultConfig: { youtubeChannelId: "", maxReadyQueue: 15, forumCategory: "village-life" },
     validateConfig: (c: any) => {
@@ -697,7 +747,10 @@ export const MODULES: ModuleDef[] = [
     // land steward never recorded anything or somebody handed out admin to
     // make it possible — the exact trade the capability gate exists to avoid.
     capabilities: ["health.record"],
-    variableKeys: ["health.alert_change_pct"],
+    // `health.*` arrives by namespace. The sending allowance is listed because
+    // this module's own snapshot reads it (server/lib/health.ts) to size a
+    // vital sign against what the village can give. Shared with gratitude.
+    variableKeys: ["gratitude.base_budget"],
     apiPrefixes: ["/api/health"],
   },
   {
@@ -773,13 +826,14 @@ export const MODULES: ModuleDef[] = [
     recommends: [],
     capabilities: ["exchange.buy", "exchange.swap", "exchange.manage"],
     variableKeys: [
-      "exchange.price_change_max_pct",
-      "exchange.swap_spread_bps",
-      "exchange.swap_fiat_hold_days",
-      "exchange.swap_max_receive_per_order",
       "payments.purchase_limit_per_order_usd",
       "payments.purchase_limit_30d_usd",
       "payments.purchase_limit_annual_usd",
+      // A token money can buy may not weigh a vote, and this module enforces
+      // that itself (server/lib/exchange.ts reads both before it will list a
+      // token). Shared with governance, which owns the namespace.
+      "governance.weight_mode",
+      "governance.weight_token",
     ],
     apiPrefixes: ["/api/exchange"],
     legalReview: true,
@@ -813,7 +867,9 @@ export const MODULES: ModuleDef[] = [
     requires: [],
     recommends: [],
     capabilities: [],
-    variableKeys: [],
+    // There is no `commerce.*` namespace. The donation ceiling is this
+    // module's own: /api/products/:id/checkout is the only reader.
+    variableKeys: ["payments.donation_max_usd"],
     apiPrefixes: ["/api/products"],
     // Funds-bearing: same enabling posture as stays/exchange — per-admin
     // identities first, the caution copy shown, refusal while shared-password.
@@ -1026,12 +1082,32 @@ export const MODULES: ModuleDef[] = [
     requires: [],
     recommends: ["governance", "tools"],
     capabilities: [],
-    // ONLY the variable this module introduces. `hypha.org_url`, `space_id`,
-    // `founder_base_address` and the four link overrides are DELIBERATELY
-    // absent: an off module's variables are hidden from Admin, and those seven
-    // configure surfaces that work with this module off. Listing them here
-    // would take a village's Hypha links away the moment this shipped.
-    variableKeys: ["hypha.treasury_address"],
+    /*
+     * The whole `hypha.*` namespace arrives through MODULE_KEY_PREFIXES, which
+     * REVERSES what stood here. This list held one key, and the note beside it
+     * said the other seven were left out because "an off module's variables are
+     * hidden from Admin, and those seven configure surfaces that work with this
+     * module off. Listing them here would take a village's Hypha links away the
+     * moment this shipped." That reasoning was right about the consequence and
+     * is now answered at the cause: a module's settings are editable on its card
+     * whatever its lifecycle, so naming a dial here no longer hides it from
+     * anybody. The public mechanics page still keys on `variableKeys`, and the
+     * link overrides are deliberately not in this list, so nothing this village
+     * publishes about its own Hypha links changes either.
+     *
+     * The three below are in other namespaces and are read by this module's own
+     * routes: the Base endpoint the bridge reads through, and the two contract
+     * pointers /api/admin/hypha/status reports against its confirmed bindings.
+     * All three are shared with the platform, which reads them for the wallet.
+     */
+    variableKeys: [
+      "tokens.base_rpc_url",
+      "tokens.equity_address",
+      "tokens.voice_address",
+      // The bridge's switchover preflight reads how this village decides
+      // (server/index.ts, /api/admin/hypha/status). Shared with governance.
+      "governance.default_method",
+    ],
     // `/api/hypha` is mounted whole behind requireModule. `/api/admin/hypha`
     // carries the contract lookup (/candidates), which is deliberately
     // ungated: it took over from the retired find-token route, and a founder
@@ -1054,6 +1130,75 @@ export const MODULES: ModuleDef[] = [
 export const MODULES_BY_ID: Record<string, ModuleDef> = Object.fromEntries(
   MODULES.map((m) => [m.id, m]),
 );
+
+// ── Which module a setting belongs to ────────────────────────────────────────
+
+/**
+ * THE KEY NAMESPACE EACH MODULE OWNS: the first dotted segment of a game
+ * variable key, mapped to the module id that answers for it.
+ *
+ * WHY A MAP AND NOT A LIST PER MODULE. Two families of keys are GENERATED
+ * rather than typed: `progression.multiplier.<stage>` and
+ * `progression.unlock.<capability>` are built at load time out of
+ * `GAME_CONFIG.stages` and `STAGE_UNLOCKS` (29 keys today). Hand-listing them
+ * in `variableKeys` would be a copy that goes stale the day a village adds a
+ * stage, and the copy would be silent about it. A namespace is one line and
+ * cannot drift.
+ *
+ * WHERE THE NAME DIFFERS FROM THE ID, it is here rather than anywhere else:
+ * `quest.*` is the quests module, `stay.*` is stays, and `calendar.*` is the
+ * calendar the events module draws.
+ *
+ * A prefix that names no module is NOT an oversight and is the normal case:
+ * `exit.*`, `economy.*`, `ledger.*`, `needs.*`, `org.*`, `village.*`,
+ * `abuse.*`, `auth.*`, `retention.*`, `uploads.*`, `platform.*` and
+ * `redemption.*` are platform dials that no module owns, and they stay in Game
+ * Mechanics for exactly that reason.
+ */
+export const MODULE_KEY_PREFIXES: Record<string, string> = {
+  quest: "quests",
+  gratitude: "gratitude",
+  progression: "progression",
+  profile: "profiles",
+  map: "map",
+  resources: "resources",
+  forum: "forum",
+  feed: "feed",
+  messaging: "messaging",
+  stay: "stays",
+  health: "health",
+  library: "library",
+  badges: "badges",
+  exchange: "exchange",
+  network: "network",
+  crowdpool: "crowdpool",
+  tools: "tools",
+  events: "events",
+  calendar: "events",
+  introductions: "introductions",
+  governance: "governance",
+  hypha: "hypha",
+};
+
+/**
+ * Every module that owns a game-variable key, by id, in registry order.
+ *
+ * The union of the two statements of ownership: the key's namespace, and any
+ * module that lists the key in `variableKeys` because its own code reads it.
+ * Empty means no module owns it, which is what keeps a platform dial in Game
+ * Mechanics.
+ *
+ * THIS IS THE FUNCTION THE ADMIN SPLIT READS. One answer, so the module card
+ * and the Game Mechanics list can never both claim a dial or both drop it.
+ */
+export function modulesOwning(key: string, defs: readonly ModuleDef[] = MODULES): string[] {
+  const namespace = MODULE_KEY_PREFIXES[String(key).split(".")[0] ?? ""];
+  const out: string[] = [];
+  for (const m of defs) {
+    if (m.id === namespace || m.variableKeys.includes(key)) out.push(m.id);
+  }
+  return out;
+}
 
 // ── The library, derived ─────────────────────────────────────────────────────
 
