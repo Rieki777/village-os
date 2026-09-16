@@ -484,6 +484,29 @@ export function terminalAnswerFor(err: unknown): TerminalAnswer {
       detail,
     };
   }
+  /*
+   * A rebase that produced rows the collection refuses (`mergeRefusal` in
+   * server/repos/store-db.ts). Also 409, and also nothing written, with one
+   * difference worth telling the person: their own change was fine. It was the
+   * two changes TOGETHER that the collection would not hold, so the refusal
+   * carries a sentence saying what the pair would have made, and that sentence
+   * was written for a steward rather than for a log.
+   */
+  if ((err as { code?: unknown } | null | undefined)?.code === "merge_refused") {
+    const said = String((err as { refusal?: unknown } | null | undefined)?.refusal ?? "").trim();
+    return {
+      status: 409,
+      body: {
+        error:
+          (said ? `${said} ` : "") +
+          "Somebody else changed this while you were working on it, and the two changes together " +
+          "would not hold. Nothing was saved. Reload and make the change again.",
+        code: "merge_refused",
+      },
+      level: "warn",
+      detail,
+    };
+  }
   return { status: 500, body: { error: "Internal server error" }, level: "error", detail };
 }
 
