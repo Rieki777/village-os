@@ -152,12 +152,17 @@ const LIST_MARKER = /^(?:(?:\d{1,3}[.)]|[-*•])\s+)+/;
  * the marker, so "1. Survey Lot 3. Stake it" kept its "1." while the items
  * around it lost theirs, and a bullet was kept for the same "3.". A bullet has
  * no next number, so it is never kept.
+ *
+ * AND ONLY WHERE A LIST WOULD PUT IT: after a sentence end, or with the number
+ * after it following as well. "1. Survey lots 1 and 2. Stake them" mentions a
+ * 2 after "and", which no list does, and it kept its "1." the same way.
  */
 function numberedRun(s: string): string | null {
   const lead = LIST_MARKER.exec(s)?.[0] ?? "";
   const last = /(\d{1,3})[.)]\s+$/.exec(lead);
   if (!last) return null;
-  const next = new RegExp(`\\s${Number(last[1]) + 1}[.)]\\s`);
+  const n = Number(last[1]);
+  const next = new RegExp(`[.;:!?]\\s+${n + 1}[.)]\\s|\\s${n + 1}[.)]\\s.*\\s${n + 2}[.)]\\s`);
   return next.test(s.slice(lead.length)) ? s.slice(lead.length - last[0].length) : null;
 }
 
@@ -193,15 +198,24 @@ const SENTENCE_END = /\.\s+(?=[A-ZÀ-ÖØ-Þ])/g;
 /** An ordinary lowercase word, hyphens allowed inside: "logged", "one-pager". */
 const PLAIN_WORD = /^[a-zß-öø-ÿ][a-zß-öø-ÿ-]*[a-zß-öø-ÿ]$/;
 
-/** Lowercase words that are abbreviations, and a capital after them starts no sentence. */
+/**
+ * Lowercase words that are abbreviations, and a capital after them starts no sentence.
+ *
+ * NONE OF THEM IS ALSO A WORD THAT ENDS A SENTENCE. "etc", "no" and "mar"
+ * left the list: "gloves, bags, etc. Report damage", "say no. Log it" and
+ * "limpiar el mar. Reportar" each end a duty there, and two duties merged.
+ */
 const LOWERCASE_ABBREVIATIONS = new Set([
-  "etc", "vs", "approx", "aprox", "incl", "excl", "esp", "min", "max", "no", "nos", "tel", "ext", "cf", "ca", "pp",
+  "vs", "approx", "aprox", "incl", "excl", "esp", "min", "max", "nos", "tel", "ext", "cf", "ca", "pp",
   // Titles and offices written in lowercase, which cut "lic. Mora" off its duty.
   "lic", "licda", "ing", "prof", "profa", "dra", "sra", "srta", "arq", "dpto", "depto", "admón", "gral",
   "hrs", "hr", "dept", "govt", "est", "mgr", "asst",
   // Spanish weekdays.
-  "lun", "mar", "mié", "jue", "vie", "sáb", "dom",
+  "lun", "mié", "jue", "vie", "sáb", "dom",
 ]);
+
+/** Units written after a number. "Walk it for 2 hrs. Log it" ends the duty at the unit. */
+const UNITS_AFTER_A_NUMBER = new Set(["hrs", "hr", "min", "max", "est"]);
 
 /** A quote mark, or an apostrophe with no letter on one side of it ("parcel's" is not a quote). */
 const QUOTE = /["“”«»„]|(?<![A-Za-zÀ-ÖØ-öø-ÿ])['‘’]|['‘’](?![A-Za-zÀ-ÖØ-öø-ÿ])/;
@@ -227,8 +241,11 @@ function splitSentences(v: string): string[] {
   let from = 0;
   let m: RegExpExecArray | null;
   while ((m = ends.exec(v)) !== null) {
-    const word = /\S+$/.exec(v.slice(from, m.index))?.[0] ?? "";
-    if (!PLAIN_WORD.test(word) || LOWERCASE_ABBREVIATIONS.has(word)) continue;
+    const before = v.slice(from, m.index);
+    const word = /\S+$/.exec(before)?.[0] ?? "";
+    if (!PLAIN_WORD.test(word)) continue;
+    const unitAfterNumber = UNITS_AFTER_A_NUMBER.has(word) && /\d\s+\S+$/.test(before);
+    if (LOWERCASE_ABBREVIATIONS.has(word) && !unitAfterNumber) continue;
     parts.push(v.slice(from, m.index));
     from = m.index + m[0].length;
   }

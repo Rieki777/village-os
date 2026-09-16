@@ -190,6 +190,66 @@ describe("VariablesTab", () => {
     }
   });
 
+  it("scrolls to the linked dial once, so saving another dial does not jump back to it", async () => {
+    // Every Save reloads the list, and the scroll ran again on every load.
+    const scrolled = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrolled;
+    window.history.pushState({}, "", "/admin?tab=variables&variable=gratitude.cap");
+    try {
+      render(<VariablesTab password="secret" />);
+      await screen.findByText("Gratitude cap");
+      expect(scrolled).toHaveBeenCalledTimes(1);
+      // The key leaves the address and the tab stays, so a refresh opens the tab at its top.
+      expect(window.location.search).toBe("?tab=variables");
+      fireEvent.change(screen.getByDisplayValue("70"), { target: { value: "80" } });
+      fireEvent.click(screen.getAllByRole("button", { name: "Save" })[0]!);
+      await new Promise((r) => setTimeout(r, 50));
+      expect(calls().filter(([, init]) => init?.method === "PUT")).toHaveLength(1);
+      await screen.findByText("Gratitude cap");
+      expect(scrolled).toHaveBeenCalledTimes(1);
+      // Still marked: the address is gone, the dial it named is not.
+      expect(screen.getByText("Gratitude cap").closest("[id]")!.getAttribute("aria-current")).toBe("true");
+    } finally {
+      Element.prototype.scrollIntoView = original;
+      window.history.pushState({}, "", "/");
+    }
+  });
+
+  it("keeps the linked dial centred while the page above it settles, and stops when the admin moves", async () => {
+    // The Hypha panel above loads on its own clock and pushed the dial off screen.
+    const scrolled = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrolled;
+    const observer = { shift: (): void => undefined, disconnected: 0 };
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(cb: () => void) {
+          observer.shift = cb;
+        }
+        observe() {}
+        disconnect() {
+          observer.disconnected += 1;
+        }
+      },
+    );
+    window.history.pushState({}, "", "/admin?tab=variables&variable=gratitude.cap");
+    try {
+      render(<VariablesTab password="secret" />);
+      await screen.findByText("Gratitude cap");
+      expect(scrolled).toHaveBeenCalledTimes(1);
+      observer.shift();
+      expect(scrolled).toHaveBeenCalledTimes(2);
+      expect(observer.disconnected).toBe(0);
+      window.dispatchEvent(new Event("wheel"));
+      expect(observer.disconnected).toBe(1);
+    } finally {
+      Element.prototype.scrollIntoView = original;
+      window.history.pushState({}, "", "/");
+    }
+  });
+
   it("still says what the screen is for when the server refuses the load", async () => {
     vi.stubGlobal(
       "fetch",
