@@ -514,3 +514,41 @@ export async function vetoedBallotCount(pool: Pool, proposalId: string): Promise
   );
   return Number(rows[0]?.n ?? 0);
 }
+
+/**
+ * Each ballot's `landing_status`, for the failed-actions report
+ * (server/lib/failedActions.ts), which lists an unfinished landing attempt only
+ * while its decision is still owed a landing. An id with no ballot is simply
+ * absent from the map.
+ *
+ * A read by bound ids rather than a join from `governance_executor_pending`, so
+ * no comparison crosses two tables' collations on a village whose alignment has
+ * not run yet.
+ */
+export async function landingStatusesFor(pool: Pool, ballotIds: readonly string[]): Promise<Map<string, string>> {
+  if (ballotIds.length === 0) return new Map();
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT id, landing_status FROM ballots WHERE id IN (${ballotIds.map(() => "?").join(",")})`,
+    [...ballotIds],
+  );
+  return new Map(rows.map((r) => [String(r.id), String(r.landing_status)] as [string, string]));
+}
+
+/**
+ * Which of these ballots still have a landing time, for the same report, which
+ * words an unfinished landing by it. The landing job only ever selects a row
+ * with `lands_at` set (`dueBallotIds` above), so a decision with one is tried
+ * again and a decision without one is left alone, whatever its status says. A
+ * release that parks an at-close failure with a landing time, to retry it, and
+ * one that parks it without, to leave it, both read correctly off this column.
+ *
+ * Bound ids, for the collation reason `landingStatusesFor` gives.
+ */
+export async function scheduledLandings(pool: Pool, ballotIds: readonly string[]): Promise<Set<string>> {
+  if (ballotIds.length === 0) return new Set();
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT id FROM ballots WHERE lands_at IS NOT NULL AND id IN (${ballotIds.map(() => "?").join(",")})`,
+    [...ballotIds],
+  );
+  return new Set(rows.map((r) => String(r.id)));
+}
