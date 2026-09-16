@@ -2671,6 +2671,7 @@ them": it made a repaired build read as a broken one. Every row re-measured
 | Asks to leave while holding an unsettled library loan | `Open state must settle through its own domain first`, with the blocking domains named | Correct. See section 14 |
 | Opens their wallet holding 10 Village Voice | **10** | Correct. `formatTokenAmount` divides by the scale the payload carries. It printed 10000 until 10.3 closed |
 | Presses Consent in a busy moment, and InnoDB gives up on the row lock all three times the code retries | `Several people were saving at the same moment, and this one did not get through. Try it again.` as a 503 | Correct. The consent's transaction rolled back, so the claim is untouched and the member is still owed, and pressing again is the whole remedy. It read `Internal server error` until `terminalAnswerFor` learned the two lock codes |
+| Presses Decline twice on the same claim | The claim comes back declined, and the queue settles | Correct. The first press wrote the row and rang the member; the second answers the row it already wrote, writes nothing and rings nobody. Every other resolution, consented above all, is still refused with 409 |
 
 **The four that no longer happen, kept here because deleting them would lose what
 a member used to meet and what closed it.**
