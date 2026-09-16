@@ -281,6 +281,20 @@ export const MODULE_CATALOG: Record<string, ModuleCatalogEntry> = {
     hue: 160,
     emblem: "Coins",
   },
+  redemption: {
+    promise: "A member turns tokens they hold into something real, and the village says when it happened.",
+    benefits: [
+      "Asking holds the tokens, so nothing is spent twice while the village pays",
+      "Tokens are destroyed only after a steward confirms the member was paid",
+      "A refusal, a withdrawal or an expiry gives every token back",
+      "The confirming key can be handed to a named role",
+    ],
+    forWhom: "Villages that will pay members back, in cash, services or shares, for tokens they earned.",
+    setupSummary: "Nothing to set up to switch it on. The legal card comes first.",
+    dataSummary: "Each member's requests, what they asked for, and who decided, tied to named members.",
+    hue: 40,
+    emblem: "Landmark",
+  },
   commerce: {
     promise: "Every payment your project receives, as products you define.",
     benefits: [

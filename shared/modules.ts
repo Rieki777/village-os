@@ -802,6 +802,35 @@ export const MODULES: ModuleDef[] = [
     // openStateCheck attached by the server at boot (needs the pool).
   },
   {
+    id: "redemption",
+    tier: "included",
+    // A redemption row names the member who asked, what they asked for, and
+    // who decided. That is a named person's financial request.
+    dataClass: "member-pii",
+    group: "host-and-earn",
+    setup: "none",
+    name: "Redemption",
+    description:
+      "A member asks for tokens they hold to become something real off the platform: cash, a service, a share. Asking holds the tokens, a steward confirms once the village has paid, and only then are the tokens destroyed; a refusal, a withdrawal or an expiry gives them back in full. Funds-bearing: read the legal card before enabling.",
+    // Ruling 22 (2026-09-15): a module that ships OFF. It ran ungated for every
+    // village before this entry existed, so drizzle/0211 keeps it on for any
+    // village that already holds a redemption row.
+    requires: [],
+    recommends: [],
+    capabilities: ["redemption.confirm"],
+    variableKeys: [
+      "redemption.confirmed_by",
+      "redemption.holds_on_propose",
+      "redemption.tokens",
+      "redemption.per_member_per_cycle",
+      "redemption.expires_after_days",
+    ],
+    apiPrefixes: ["/api/redemptions", "/api/admin/redemptions"],
+    legalReview: true,
+    // openStateCheck attached by server/routes/redemption.ts at registration
+    // (needs the pool): an open redemption holds somebody's tokens.
+  },
+  {
     id: "commerce",
     tier: "included",
     dataClass: "member-pii",

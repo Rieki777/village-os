@@ -19,6 +19,26 @@
  * export that touches Express, and `deps` is a `Pick<AppDeps, ...>` so the
  * module's own signature says what it can reach.
  *
+ * ── A MODULE THAT SHIPS OFF (ruling 22, 2026-09-15) ───────────────────────
+ *
+ * Both prefixes mount behind `requireModule("redemption")`, and the gate lines
+ * live HERE rather than in server/index.ts for the ratchet reason above, the
+ * shape server/routes/stays.ts already has. Off is a 404 for every door but one.
+ *
+ * WITHDRAW IS REGISTERED ABOVE THE GATE, DELIBERATELY. It is the member's own
+ * refund door, and stays' settlement webhook is the precedent: value that is
+ * already held has to be able to come home even when the module is served off.
+ * `openStateCheck` refuses to switch the module off while anything is open, so
+ * this matters only when a module is served off with rows open anyway, by a
+ * quarantine or a hand-edited settings row, and then it is the one way a member
+ * gets their tokens back before expiry, or at all if the village set expiry to
+ * never. It reveals nothing about the lifecycle: an outsider gets the same 401
+ * or "no such redemption" whether the module is on or off. Expiry itself runs
+ * lifecycle-blind for the same reason (`expireRedemptions`).
+ *
+ * `openStateCheck` is attached in `register` below, which runs once at boot.
+ * It needs the pool, so the shared registry stays import-clean for the client.
+ *
  * ── WHO CONFIRMS, AND WHY IT IS A CAPABILITY ──────────────────────────────
  *
  * The founder's words are "confirmed by a steward or a vote (if no stewards are
@@ -51,7 +71,9 @@
  * machinery that word points at.
  */
 import type { Express } from "express";
+import { MODULES_BY_ID } from "../../shared/modules";
 import type { AppDeps } from "../lib/appDeps";
+import { requireModule } from "../lib/modules";
 import { recordEvent } from "../lib/events";
 import { allTokens, tokenDef } from "../lib/ledger";
 import { cycleWindow, decimalsFor, finerThanScale, fromLedgerUnits, toLedgerUnits } from "../lib/economy";
@@ -72,6 +94,7 @@ import {
   openRedemptionsFor,
   redemptionById,
   redemptionHistory,
+  redemptionOpenState,
   redemptionQueue,
   redemptionsOpenedSince,
   requestRedemption,
@@ -118,6 +141,40 @@ function forReading(row: {
 
 export function register(app: Express, deps: Deps): void {
   const { authedUser, getPool, guardCapability, members, notify, overLimit } = deps;
+
+  MODULES_BY_ID["redemption"].openStateCheck = () => redemptionOpenState(getPool());
+
+  /**
+   * Take it back. The member's own act, and the only ending they can reach.
+   *
+   * It carries no reason, deliberately: a confirmation and a refusal are
+   * decisions ABOUT somebody and owe them a stated reason, and changing your
+   * own mind owes nobody one.
+   *
+   * ABOVE THE GATE, on purpose: see the header. Express answers in
+   * registration order, so this handler replies before the `app.use` below is
+   * ever consulted for this path.
+   */
+  app.post("/api/redemptions/:id/withdraw", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    const pool = getPool();
+    const row = await redemptionById(pool, String(req.params.id));
+    if (!row || row.userId !== user.id) return res.status(404).json({ error: "no such redemption" });
+    const out = await settleRedemption(pool, {
+      id: row.id,
+      to: "withdrawn",
+      actorUserId: user.id,
+      note: "Withdrawn by the member who asked",
+    });
+    if (!out.ok) {
+      return res.status(out.reason === "raced" || out.reason === "terminal" ? 409 : 500).json({ error: out.error });
+    }
+    res.json({ redemption: forReading(out.row), released: out.released });
+  });
+
+  app.use("/api/redemptions", requireModule("redemption"));
+  app.use("/api/admin/redemptions", requireModule("redemption"));
 
   /**
    * What this member has open, what they may ask for, and what is held.
@@ -217,31 +274,6 @@ export function register(app: Express, deps: Deps): void {
       audience: "admin",
     });
     res.status(201).json({ redemption: forReading(out.row), holds: !!out.row.heldAccount });
-  });
-
-  /**
-   * Take it back. The member's own act, and the only ending they can reach.
-   *
-   * It carries no reason, deliberately: a confirmation and a refusal are
-   * decisions ABOUT somebody and owe them a stated reason, and changing your
-   * own mind owes nobody one.
-   */
-  app.post("/api/redemptions/:id/withdraw", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required" });
-    const pool = getPool();
-    const row = await redemptionById(pool, String(req.params.id));
-    if (!row || row.userId !== user.id) return res.status(404).json({ error: "no such redemption" });
-    const out = await settleRedemption(pool, {
-      id: row.id,
-      to: "withdrawn",
-      actorUserId: user.id,
-      note: "Withdrawn by the member who asked",
-    });
-    if (!out.ok) {
-      return res.status(out.reason === "raced" || out.reason === "terminal" ? 409 : 500).json({ error: out.error });
-    }
-    res.json({ redemption: forReading(out.row), released: out.released });
   });
 
   /**

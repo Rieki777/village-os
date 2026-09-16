@@ -206,6 +206,19 @@ export async function openCountRows(pool: Pool, villageId: string, userId: strin
 }
 
 /**
+ * A count of every open redemption in the village, held or not. One row. The
+ * module's `openStateCheck` reads it: `requested` is the one state that has
+ * not ended (`canSettleRedemption` in server/lib/redemption.ts).
+ */
+export async function openCountAllRows(pool: Pool, villageId: string): Promise<RowDataPacket[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT COUNT(*) AS n FROM `redemptions` WHERE `village_id` = ? AND `state` = 'requested'",
+    [villageId],
+  );
+  return rows;
+}
+
+/**
  * One member's open, held redemptions as locks, oldest first. The read
  * `redemptionLocksFor` in server/lib/holdings.ts makes; `held_account IS NOT
  * NULL` is the same test `heldRowsByToken` applies.

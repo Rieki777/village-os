@@ -39,6 +39,7 @@ import {
   historyRows,
   insertRedemptionRow,
   markHoldRefused,
+  openCountAllRows,
   openCountRows,
   openedSinceRows,
   openRedemptionRows,
@@ -590,6 +591,15 @@ export async function retryRelease(
  * through the same door a human would, so an expiry cannot become a second way
  * to move value. `expires_at` is NULL for a village that lets them wait
  * forever, and a NULL is never past.
+ *
+ * DELIBERATELY BLIND TO THE MODULE LIFECYCLE, and the `redemption-reap` job in
+ * server/index.ts calls it with no lifecycle test. `openStateCheck` refuses to
+ * switch the module off while anything is open, so in the ordinary case there
+ * is nothing here to expire once it is off. The module can still be SERVED off
+ * with rows open: `quarantineModule` takes a module off without touching its
+ * stored lifecycle, and a hand-edited `module_settings` row skips the check.
+ * An expiry that waited for the module to come back would hold those tokens
+ * for as long as it stayed off. The same reasoning as `seat-fee-settle`.
  */
 export async function expireRedemptions(pool: Pool, now: Date = new Date()): Promise<number> {
   const rows = await expiredIdRows(pool, villageId(), now);
@@ -685,4 +695,21 @@ export async function retiredSupply(pool: Pool): Promise<Record<string, number>>
 export async function openRedemptionCount(pool: Pool, userId: string): Promise<number> {
   const rows = await openCountRows(pool, villageId(), userId);
   return Number(rows[0]?.n ?? 0);
+}
+
+/**
+ * The redemption module's open state (economy invariant #13): every request
+ * still waiting on an answer, village-wide.
+ *
+ * Held or not. A request opened with the hold turned off holds nothing, and it
+ * is still a member waiting on a decision the village owes them, which a
+ * module switched off would 404.
+ */
+export async function redemptionOpenState(pool: Pool): Promise<{ count: number; description: string }> {
+  const rows = await openCountAllRows(pool, villageId());
+  const n = Number(rows[0]?.n ?? 0);
+  return {
+    count: n,
+    description: `${n} redemption(s) still waiting on an answer. Each is confirmed, refused or withdrawn, or runs out of time`,
+  };
 }

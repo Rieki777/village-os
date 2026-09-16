@@ -2229,6 +2229,12 @@ choices, with the vote path refusing at the door while it is unbuilt
 that setting is told instead of being left with a stranded hold. Section 16
 carries both as questions.
 
+**2026-09-15, ruling 22: redemption is a module that ships off.** Its routes now
+mount behind `requireModule("redemption")`, its open requests block switching it
+off, and `drizzle/0211_redemption_stays_on_where_it_was_used.sql` keeps it on for
+any village that already holds a redemption row, while expiry and the member's
+own withdraw keep running whatever the lifecycle, so a hold is never stranded.
+
 ### 10.39 A generated table said where value sits and named four of the eleven places. Fixed on `wt/econ`, measured.
 
 10.37's blind spot has a second form and this is it: a HAND-KEPT LIST inside the

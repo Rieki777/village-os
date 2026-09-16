@@ -223,6 +223,28 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
     if (dataDir) fs.rmSync(dataDir, { recursive: true, force: true });
   });
 
+  /*
+   * RULING 22: REDEMPTION IS A MODULE THAT SHIPS OFF. This runs FIRST, before
+   * anything here turns it on, so it proves the shipped default rather than a
+   * state the file arranged. Every case below it needs the module on, which is
+   * the correct setup for them and not a workaround.
+   */
+  it("ships off: its doors 404 until a founder turns it on, and withdraw still answers", async () => {
+    const mine = await call("GET", "/api/redemptions", undefined, wrenToken);
+    expect(mine.status).toBe(404);
+    expect(mine.json?.error).toBe("module_disabled");
+    expect((await call("POST", "/api/redemptions", { token: CREDITS, amount: 1, askedFor: "x" }, wrenToken)).status).toBe(404);
+    expect((await call("GET", "/api/admin/redemptions", undefined, founderToken)).json?.error).toBe("module_disabled");
+    // Withdraw is registered above the gate: it answers from its own handler,
+    // and the same body a village with the module on would give.
+    const withdraw = await call("POST", "/api/redemptions/rdm-nobody/withdraw", undefined, wrenToken);
+    expect(withdraw.status).toBe(404);
+    expect(withdraw.json?.error).toBe("no such redemption");
+
+    const on = await call("PUT", "/api/admin/modules/redemption/lifecycle", { lifecycle: "members" }, founderToken);
+    expect(on.status, on.text.slice(0, 300)).toBe(200);
+  });
+
   it("tells a signed-out visitor nothing", async () => {
     expect((await call("GET", "/api/redemptions", undefined, null)).status).toBe(401);
     expect((await call("POST", "/api/redemptions", { token: CREDITS, amount: 1, askedFor: "x" }, null)).status).toBe(401);
@@ -451,5 +473,29 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
     const back = await call("POST", `/api/redemptions/${id}/withdraw`, undefined, wrenToken);
     expect(back.status, back.text.slice(0, 300)).toBe(200);
     expect(await balanceOf(wrenToken)).toBe(before);
+  });
+
+  it("refuses to switch off while a member is waiting, and serves withdraw once it is off", async () => {
+    await mintTo(wrenId, 15);
+    const asked = await call("POST", "/api/redemptions", { token: CREDITS, amount: 15, askedFor: "a lamp" }, wrenToken);
+    expect(asked.status, asked.text.slice(0, 300)).toBe(201);
+    const id = String(asked.json?.redemption?.id ?? "");
+
+    // Invariant #13: open state blocks the switch, and the sentence counts it.
+    const refused = await call("PUT", "/api/admin/modules/redemption/lifecycle", { lifecycle: "off" }, founderToken);
+    expect(refused.status, refused.text.slice(0, 300)).toBe(409);
+    expect(Number(refused.json?.count)).toBe(1);
+    expect(String(refused.json?.description)).toContain("still waiting on an answer");
+
+    expect((await call("POST", `/api/redemptions/${id}/withdraw`, undefined, wrenToken)).status).toBe(200);
+    const off = await call("PUT", "/api/admin/modules/redemption/lifecycle", { lifecycle: "off" }, founderToken);
+    expect(off.status, off.text.slice(0, 300)).toBe(200);
+
+    expect((await call("GET", "/api/redemptions", undefined, wrenToken)).status).toBe(404);
+    // Off, and the withdraw door still reaches its own handler: the row's own
+    // answer (already withdrawn), never the module's 404.
+    const again = await call("POST", `/api/redemptions/${id}/withdraw`, undefined, wrenToken);
+    expect(again.status, again.text.slice(0, 300)).toBe(409);
+    expect(again.json?.error).not.toBe("module_disabled");
   });
 });
