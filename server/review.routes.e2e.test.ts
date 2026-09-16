@@ -222,6 +222,8 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
     expect(q.json.proposalChangeLimit).toBe(500);
     const batch = (q.json.batches ?? []).find((b: any) => b.batchId === BATCH);
     expect(batch.proposedChanges).toBe(12);
+    // The shares the page counts a steward's edits against add up to that total.
+    expect(Object.values(batch.proposedChangesByItem as Record<string, number>).reduce((a, n) => a + n, 0)).toBe(12);
     // Kira keeps the queue and is no admin, so the admin page would refuse her.
     expect(q.json.mayChangeProposalLimit).toBe(false);
 
@@ -497,6 +499,11 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
     const withdrawn = await call("POST", `/api/review/drafts/${first.json.draftId}/withdraw`, {}, kiraToken);
     expect(withdrawn.status, withdrawn.text).toBe(200);
     expect(withdrawn.json.reopened).toBe(3);
+    // A second withdraw is refused and names the state, which is how the page
+    // tells it apart from the break-glass refusal that is also a 409.
+    const twice = await call("POST", `/api/review/drafts/${first.json.draftId}/withdraw`, {}, kiraToken);
+    expect(twice.status, twice.text).toBe(409);
+    expect(twice.json.draftStatus).toBe("withdrawn");
     expect((await stuckOn()).map((d) => d.draftId)).not.toContain(first.json.draftId);
 
     const again = await call("POST", `/api/review/batches/${SHAPED}/accept`, {}, kiraToken);
