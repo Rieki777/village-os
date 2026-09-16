@@ -141,7 +141,14 @@ import {
   vetoedBallotCount,
   type LandingRow,
 } from "../repos/ballotLandings";
-import { NOT_YET_NEEDS_A_PERSON, NOT_YET_RETRYING, atCloseFailureShape } from "./atCloseLanding";
+import {
+  NOT_YET_NEEDS_A_PERSON,
+  NOT_YET_RETRYING,
+  atCloseFailureShape,
+  notYetInEffectVetoRefusalFor,
+  parkedAtCloseAndRetrying,
+  tellRollItTookEffect,
+} from "./atCloseLanding";
 import {
   rawChangeSet,
   returnProposalToProposer,
@@ -499,6 +506,10 @@ export async function recordVeto(
   if (row.landingStatus === "applied") {
     return { ok: false, error: "This one has already landed. Bringing it back is a new proposal." };
   }
+  // A landing that failed at the close, or failed and is being tried again, has
+  // not taken effect, and `server/lib/atCloseLanding.ts` says so.
+  const notYet = await notYetInEffectVetoRefusalFor(deps.pool, row, nowOf(deps));
+  if (notYet) return { ok: false, error: notYet };
   if (!row.landsAt) {
     return { ok: false, error: "This one took effect the moment it carried, so there is no window on it." };
   }
@@ -781,6 +792,8 @@ export async function applyDueGovernance(deps: LandingDeps, at: Date = new Date(
       continue;
     }
 
+    // Read before the claim: the attempt the claim opens hides the failure.
+    const parkedAtClose = await parkedAtCloseAndRetrying(deps.pool, before);
     if (!(await claimDue(deps.pool, id, at))) continue;
     await openPending(deps.pool, id);
     const closer = deps.closerFor(b.subjectType);
@@ -797,6 +810,8 @@ export async function applyDueGovernance(deps: LandingDeps, at: Date = new Date(
       await clearPending(deps.pool, id);
       landed += 1;
       if (routing.held) notes.push(`${b.title}: ${routing.held}`);
+      // The close told this roll "not yet in effect"; it is now (atCloseLanding.ts).
+      if (parkedAtClose) await tellRollItTookEffect(deps, b, routing.proposerTold);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       // Back to pending, so the next tick tries again and a human can see the
@@ -1465,6 +1480,8 @@ export async function vetoWindowOn(pool: Pool, ballotId: string, now: Date = new
   if (row.landingStatus === "applied") {
     return { open: false, known: true, error: "This one has already landed. Bringing it back is a new proposal." };
   }
+  const notYet = await notYetInEffectVetoRefusalFor(pool, row, now);
+  if (notYet) return { open: false, known: true, error: notYet };
   if (!row.landsAt) {
     return { open: false, known: true, error: "This one took effect the moment it carried, so there is no window on it." };
   }
