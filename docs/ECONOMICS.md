@@ -162,7 +162,7 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `proposal_accepted:<id>` | `server/index.ts` |
 | `quest_consent:<id>` | `server/routes/questClaims.ts` |
 | `quest.completed:<esc(v)>:<esc(questId)>:<esc(claimId)>:<esc(userId)>:<esc(tokenSlug)>` | `server/lib/economy.ts` |
-| `queststay:<id>` | `server/routes/questClaims.ts` |
+| `queststay:<id>` | `server/lib/economy.ts` |
 | `redemption:<esc(v)>:<esc(redemptionId)>:hold` | `server/lib/redemptionStore.ts` |
 | `reversal:<esc(v)>:<eventKey>` | `server/lib/economy.ts` |
 | `role.cycle:<esc(v)>:<esc(cycleKey)>:<esc(seatId)>:<esc(userId)>:<esc(tokenSlug)>` | `server/lib/economy.ts` |
@@ -177,7 +177,7 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `xstock-<Date.now()>-<Math.random().toString(36).slice(2, 8)>` | `server/index.ts` |
 | `xstock:<slug>:<body>` | `server/index.ts` |
 
-51 distinct shapes across 57 posting site(s), plus 6 site(s) that forward a key their caller decided (`mint()` and `mintStayCredits` hand on what they were given, and every caller of those is read above). A shape ending in a timestamp and a random suffix is a key the caller did not make idempotent: the admin mint and the exchange stocking route both fall back to one when no client nonce is sent, so a retried request there is a second posting rather than a no-op.
+51 distinct shapes across 57 posting site(s), plus 8 site(s) that forward a key their caller decided (`mint()` and `mintStayCredits` hand on what they were given, and every caller of those is read above). A shape ending in a timestamp and a random suffix is a key the caller did not make idempotent: the admin mint and the exchange stocking route both fall back to one when no client nonce is sent, so a retried request there is a second posting rather than a no-op.
 <!-- generated:triggers end -->
 
 ---
@@ -441,9 +441,9 @@ is also the source of the most serious defect in this engine today (10.1).
 
 ## 6. Village Voice and the one-way bridge
 
-Village Voice is the governance weight the village mints for itself. It is the
-only platform token with decimals, so it stores thousandths: a rule that pays 10
-posts 10000.
+Village Voice is the governance weight the village mints for itself. Since `0202`
+it carries two decimals, like the tokens a village spends, so it stores
+hundredths: a rule that pays 10 posts 1000.
 
 A member with enough of it can **claim**, which is the bridge to Base. The claim
 debits the private balance at request time (member to `sys:voice-bridge`) and the
@@ -485,8 +485,8 @@ The amount is computed in minor units and floored:
 `Math.floor(balanceUnits * pct / 100)`. Rounding up would take more than the
 published rate, which is the one direction that must never happen. Flooring also
 makes a balance too small to reach into a counted exemption instead of a unit
-quietly costed to somebody, so at three decimals and 1 percent a member holding
-5.000 Voice wanes 50 units and a member holding 0.050 Voice wanes nothing.
+quietly costed to somebody, so at two decimals and 1 percent a member holding
+5.00 Voice (500 units) wanes 5 units and a member holding 0.50 Voice wanes nothing.
 
 The step runs inside `runSettlement`, behind `economyReady`, behind the launch
 fact, and ahead of the read that returns early when no `role.cycle` rule is in
@@ -771,8 +771,9 @@ has to widen and backfill `accommodation_prices.amount_minor`,
 still `int` from `0021`.
 
 **One token used to be inconsistent with itself, and the two doors agree now.
-Fixed on `wt/econ`, re-measured 2026-09-04 at `1861f7d`.** Village Voice has 3
-decimals, and the two ways it can be issued once disagreed:
+Fixed on `wt/econ`, re-measured 2026-09-04 at `1861f7d`.** Village Voice had 3
+decimals then (`0202` has since lowered it to 2, so each figure below is ten times
+what the same grant posts today), and the two ways it can be issued once disagreed:
 
 - a `quest.completed` rule of 10 goes through `mintForConfirmedClaim`, which calls
   `toLedgerUnits`, and posts **10000** minor units, which is 10 voice;
@@ -1144,11 +1145,11 @@ the balances on the wallet payload, on the tokens payload and on the member's ow
 data export, each built from `tokenDef(slug).decimals`.
 
 **What is left is not this defect and is worth naming so nobody re-opens it as
-one.** Village Voice still carries 3 decimals, so its wallet figure is a real
-0.010 whenever a posting was small, and section 11 item 1 is the decision that
-lowers it to 0. Lowering it is the DOWNWARD scale change section 7 opens with,
-and the wallet dividing correctly is exactly what makes that change visible to a
-member the moment it lands.
+one.** When this was written Village Voice carried 3 decimals, so a small posting
+showed as a real 0.010. Section 11 item 1 has since settled the scale: `0202`
+lowered Voice to 2, the DOWNWARD scale change section 7 opens with, and the
+wallet dividing correctly is exactly what made that change visible to a member
+the moment it landed.
 
 ### 10.4 `reverse()` took its amount from the caller. Fixed on `wt/econ`, measured.
 
@@ -1602,7 +1603,7 @@ What broke was the unit. `ceilingOutcome` answered in the rule's own human
 units, both callers then ran `toLedgerUnits` over that answer, and
 `toLedgerUnits` is `Math.round(human * 10 ** decimals)`, which was bounded by
 nothing. `mint_rules.ceiling` is `decimal(18,4)` and six of the seven shipped
-tokens carry 0 decimals, so the column holds places the token cannot. Read off
+tokens then carried 0 decimals (four carry 2 since `0202`), so the column holds places the token cannot. Read off
 `token_ledger` before the fix: amount 0.6 under a ceiling of 0.5 at 0 decimals
 posted 1, which is two hundred percent of the cap; amount 1.5 under a ceiling of
 1.5 posted 2; 25.5 under 25.5 posted 26; at 3 decimals a ceiling of 0.0005
@@ -2970,13 +2971,13 @@ changes with it.
 | # | Posted by | From | To | Token | Amount | Source | Idempotency key |
 |---|---|---|---|---|---|---|---|
 | 1 | the consent route | `sys:gratitude-pool` | `mem:<wren>` | `gratitude` | the consented amount, lifted by any standing badge multiplier (1 by default) and never past a top: the range's top under `posted`, the bonus ceiling under `capped`, the advertised top under `unlimited` | `quest_consent` | `quest_consent:<claimId>` |
-| 2 | `mintForConfirmedClaim` | `sys:voice-mint` | `mem:<wren>` | `village-voice` | **1000** (10) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:village-voice` |
-| 3 | `mintForConfirmedClaim` | `sys:cycle-pool` | `mem:<wren>` | `credits` | **2500** (25) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:credits` |
+| 2 | `settleOwedPosting` | `sys:voice-mint` | `mem:<wren>` | `village-voice` | **1000** (10) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:village-voice` |
+| 3 | `settleOwedPosting` | `sys:cycle-pool` | `mem:<wren>` | `credits` | **2500** (25) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:credits` |
 
 Five things this table is showing:
 
 - **Row 1 is not a mint rule.** The consent route has posted recognition since S7
-  from the range the quest advertises. `mintForConfirmedClaim` explicitly skips
+  from the range the quest advertises. The pricing behind `owedForClaim` explicitly skips
   the gratitude slug (`if (r.tokenSlug === HEARTS) continue`) so one piece of work
   cannot pay twice. There is deliberately no seeded `quest.completed` gratitude
   rule: a disabled one would look like the obvious thing to switch on.
@@ -2986,16 +2987,25 @@ Five things this table is showing:
   instead of two.
 - **10 becomes 1000 and 25 becomes 2500.** `toLedgerUnits` reads the token's own
   `decimals`, which is 2 for both Village Voice and credits since `0202`.
-- **Row 1 is awaited and rows 2 and 3 are not.** The consent route wraps
-  `mintForConfirmedClaim` in a try/catch and does not fail the response on it. A
-  quest that was witnessed and credited must not fail because a secondary mint had
-  a bad afternoon, and the occurrence key makes a later repair-post safe.
+- **Row 1 posts in the consent's commit, and rows 2 and 3 are recorded there.**
+  Recognition posts inside `consentOnce`'s transaction, as it always has. Rows 2
+  and 3, and any stay-credit reward the quest carries, are priced by `owedForClaim`
+  on the same connection and written to `quest_owed_postings` (0210) before that
+  commit. `settleOwedPosting` pays each one straight after it, in a transaction
+  that marks the row posted in the same commit. A payment that does not go through
+  stays owed, with the ledger's reason, and a steward pays it from /review
+  (`POST /api/admin/quest-claims/:id/owed/pay`); a refusal no retry can change
+  (`key_clash`, `rule`) is marked refused instead. Rye asked for this repair path
+  on 2026-09-14, on one condition: nothing pays twice. The owed row's key is the
+  ledger's occurrence key, so a second press finds the row posted, and a posting
+  that already landed answers duplicate and moves nothing. The consent's own
+  response never fails on any of it.
 - **A consent at 0 posts none of the three.** A zero is the witness saying the work
-  earned no recognition, so row 1 posts nothing, and rows 2 and 3 are not minted
-  either (economics and governance, 2026-09-14): a village can weight its ballots by
+  earned no recognition, so row 1 posts nothing, and `owedForClaim` prices no rule
+  for a grant of 0 either (economics and governance, 2026-09-14): a village can weight its ballots by
   any token (`governance.weight_token`), so a rule token minted at 0 would be voting
   weight farmed through `quest.allow_zero_consent`. A stay-credit reward the quest
-  itself carries still releases, keyed `queststay:<claimId>`.
+  itself carries is still owed and paid, keyed `queststay:<claimId>`.
 
 Wren's balances after: 25 credits, 10 voice, and whatever recognition the
 quest advertised.
@@ -3047,8 +3057,8 @@ cycle `lunar-000330`.
 
 | Posted by | From | To | Token | Amount | Source | Idempotency key |
 |---|---|---|---|---|---|---|
-| `runSettlement` | `sys:voice-mint` | `mem:<wren>` | `village-voice` | **50000** (50) | `role_cycle` | `role.cycle:local:lunar-000330:seat-hearth:<wren>:village-voice` |
-| `runSettlement` | `sys:cycle-pool` | `mem:<wren>` | `credits` | **25** (25) | `role_cycle` | `role.cycle:local:lunar-000330:seat-hearth:<wren>:credits` |
+| `runSettlement` | `sys:voice-mint` | `mem:<wren>` | `village-voice` | **5000** (50) | `role_cycle` | `role.cycle:local:lunar-000330:seat-hearth:<wren>:village-voice` |
+| `runSettlement` | `sys:cycle-pool` | `mem:<wren>` | `credits` | **2500** (25) | `role_cycle` | `role.cycle:local:lunar-000330:seat-hearth:<wren>:credits` |
 
 The seeded `role.cycle` gratitude rule of 20 is `enabled: false`, so it writes
 nothing. Two seats would be two thanks, and the same seat next moon is another,

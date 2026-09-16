@@ -2,7 +2,7 @@
 
 Provenance: platform
 
-<!-- describes: server/routes/quests.ts server/routes/questClaims.ts server/lib/questConsent.ts server/repos/quests.ts server/index.ts shared/modules.ts shared/gameVariables.ts shared/questRewards.ts client/src/pages/Admin.tsx client/src/pages/QuestDetail.tsx client/src/components/QuestActions.tsx server/lib/capabilityRegistry.ts server/lib/crews.ts server/lib/questProposals.ts server/lib/calendarProviders.ts -->
+<!-- describes: server/routes/quests.ts server/routes/questClaims.ts server/lib/questConsent.ts server/repos/quests.ts server/index.ts shared/modules.ts shared/gameVariables.ts shared/questRewards.ts client/src/pages/Admin.tsx client/src/pages/QuestDetail.tsx client/src/components/QuestActions.tsx server/lib/capabilityRegistry.ts server/lib/crews.ts server/lib/questProposals.ts server/lib/calendarProviders.ts server/repos/questOwedPostings.ts client/src/components/review/OwedPostings.tsx -->
 
 > The contribution board. A quest is posted by an admin or by a `quest.approve` holder, claimed by
 > a member, submitted with evidence, and consented to by somebody who is not the claimant. Consent
@@ -183,6 +183,8 @@ that file alphabetically would make `field` a quest id that does not exist.
 | `PUT /api/game/quest-claims/:id/confidence` | the claim's holder | Only while the claim is `claimed` or `submitted`. Only `at_risk` and `stuck` ring a bell. |
 | `GET /api/admin/quest-claims` | `mayStillSee("quest.consent")` | A read, so it asks the see-path and never `mayAct`. There is no break-glass on a GET. Each claim carries `bounds` from `consentBounds` (`server/lib/questConsent.ts`): the floor, the ceiling, whether 0 passes and whether the label is readable, as the consent route will enforce them under the dials in force, or `null` when the claim's quest is gone. |
 | `POST /api/admin/quest-claims/:id/consent` | `mayAct("quest.consent")` | The whole of Mechanics below. |
+| `GET /api/admin/quest-claims/owed` | `mayStillSee("quest.consent")` | What consents recorded as owed and have not paid: rows still owed, with the ledger's last reason, and rows refused for good. A read, so it asks the see-path. `/review` renders it as `OwedPostings`. |
+| `POST /api/admin/quest-claims/:id/owed/pay` | `mayAct("quest.consent")` | Pays what one consent still owes, each row in its own transaction that marks it posted in the same commit. It decides nothing, because the amounts and keys were fixed when the consent recorded them, and a second press finds nothing owed. A steward's press writes an admin audit row naming the tokens paid. |
 | `GET /api/admin/quest-claims/attention` | `isAdmin` | The flagged-claims queue. Note the gate: this one is `isAdmin` and not the capability, unlike the two rows above it. |
 | `GET /api/review/queue` | `mayStillSee("intake.moderate")` or `mayStillSee("quest.approve")` | Served from `server/routes/review.ts`. Returns the full prose, rationale, quote and source ref of every `proposed` quest, through `questProposalQueue(pool, "proposed")`. `intake.moderate` reads both halves of the queue. `quest.approve` alone reads this quest half, and the proposal half and the dropped-batch summary are never queried for it. `scope` in the response names the halves that were read, so a page can tell an empty half from a hidden one. Neither key: `401 {"error":"auth_required"}`, as before. |
 
@@ -272,7 +274,7 @@ pass `audience: "admin"` and are not.
 
 **No self-consent, and it is enforced in exactly one place.** The `claim.userId === actor.userId`
 branch in `POST /api/admin/quest-claims/:id/consent` is the whole of it. There is no backstop
-underneath: `mintForConfirmedClaim` is handed `{ id, questId, userId, confirmedAt }` and is never
+underneath: `owedForClaim` is handed `{ id, questId, userId, granted, stay }` and is never
 told who the confirmer is, so it cannot check; `postTransfer` on the recognition leg does not
 check either. `canConfirm` in `server/lib/economy.ts` does exist and does enforce this rule, but on
 two other paths, the event check-in and the intake-proposal reward, and neither one runs here.
@@ -309,15 +311,30 @@ what runs first:
 10. The badge reward multiplier, and `payoutFor`, which lifts the grant toward the cap and never
     past it.
 11. `claimsRepo.consentOnce`: one transaction that locks the claim row, re-checks the status,
-    flips the row and posts the credit on the same connection.
-12. After it commits: the balance cache, the rule mint, the stay credits, the activity line, the
-    notification and the stage event.
+    flips the row, posts the credit, and records what else the consent owes (`owedForClaim` into
+    `quest_owed_postings`) on the same connection.
+12. After it commits: the balance cache, paying what the consent owes (`settleOwedForClaim`), the
+    stay credits' notification, the activity line, the notification and the stage event.
 
 **Step 11 is one commit**, and `quest.require_submission_before_consent` is enforced inside it
 rather than as a separate read: the variable decides which statuses `consentOnce` accepts
 (`submitted` alone when it is on, `claimed` or `submitted` when it is off), and the status is
 re-read under the claim's own row lock. Both of the gaps this used to have are closed by the same
 change.
+
+**What a consent owes beyond recognition is recorded in that commit, and paid after it.** The rule
+tokens and a quest's stay credits used to post after the commit, best effort, and a failure was
+lost: nothing retried it, and a resolved claim refuses a second consent. `owedForClaim` now prices
+them on the consent's own connection, and `recordOwed` writes them to `quest_owed_postings` (0210)
+before the commit. `settleOwedForClaim` pays each row straight after, in a transaction that locks
+the row, posts it through `postOwedOn` and marks it posted in the same commit. A row that does not
+go through stays owed with the ledger's reason (`not_launched`), or is marked refused when no retry
+can change it (`key_clash`, `rule`). `/review` lists both through `GET /api/admin/quest-claims/owed`,
+with a press for the owed ones. Nothing pays twice, which was Rye's one condition for this repair
+path (2026-09-14): the row's key is the ledger's occurrence key, a second press finds the row
+posted, and a posting that already landed answers duplicate and moves nothing.
+`server/routes/questOwedPostings.test.ts` drives each of those against the real ledger, two
+simultaneous presses included.
 
 The first gap was that `claimsRepo.update` committed on its own connection and only then did
 `postTransfer` run. A post that failed for any reason the launch-vote check did not already catch

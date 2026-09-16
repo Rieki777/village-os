@@ -54,6 +54,7 @@
  */
 import Layout from "@/components/Layout";
 import ConsentQueue, { useConsentClaims } from "@/components/review/ConsentQueue";
+import OwedPostings from "@/components/review/OwedPostings";
 import { blockedReasons, NOTHING_LEFT_OUT, notReadLines, type NotRead } from "@/components/review/draftNotes";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -661,6 +662,7 @@ export default function Review() {
           onChanged={consent.load}
           onRetry={() => void load()}
         />
+        <OwedPostings headers={headers} />
 
         {/* The queue's own failure, in a card of its own. It used to be the
             whole page, which was right while the queue was all the page held. */}
