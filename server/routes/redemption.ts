@@ -81,6 +81,7 @@ import { isListedForTrade } from "../lib/exchange";
 import { openExitFor } from "../lib/exit";
 import {
   canSettleRedemption,
+  confirmModeFor,
   confirmRefusal,
   redeemableTokens,
   redemptionCurrencies,
@@ -115,7 +116,17 @@ import { numberVar, stringVar } from "../lib/variables";
 type Deps = Pick<
   AppDeps,
   "authedUser" | "brandRepo" | "getPool" | "guardCapability" | "members" | "notify" | "overLimit"
->;
+> & {
+  /**
+   * Who can actually confirm a redemption in this village right now.
+   *
+   * Handed in rather than computed here, because counting holders needs the
+   * roles cache and the role_holders cache, both of which live in
+   * server/index.ts, plus one read of the badge rows. `liveHoldersOfCapability`
+   * does the counting; this is only the wire.
+   */
+  redemptionKeyHolders: () => Promise<string[]>;
+};
 
 /**
  * WHAT THE EXCHANGE'S POSTED PRICE IS DENOMINATED IN, measured rather than
@@ -192,7 +203,26 @@ function forReading(row: {
 }
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, brandRepo, getPool, guardCapability, members, notify, overLimit } = deps;
+  const { authedUser, brandRepo, getPool, guardCapability, members, notify, overLimit, redemptionKeyHolders } = deps;
+
+  /**
+   * WHO DECIDES, derived at the moment of asking (Rye, 2026-09-15).
+   *
+   * "A steward confirms but if there isn't a steward the village can vote on
+   * these things." So this counts the people who hold `redemption.confirm`
+   * through the village's own powers, and `confirmModeFor` turns that number
+   * into the mode. A failed count answers STEWARD, deliberately: the vote path
+   * is the wider consequence (a public ballot, permanently), and a database
+   * hiccup must never be what routes somebody's private request into public.
+   */
+  const confirmMode = async (): Promise<"steward" | "vote"> => {
+    try {
+      return confirmModeFor((await redemptionKeyHolders()).length);
+    } catch (e) {
+      console.error("[redemption] could not count who holds the redemption key; treating it as a steward's", e);
+      return "steward";
+    }
+  };
 
   MODULES_BY_ID["redemption"].openStateCheck = () => redemptionOpenState(getPool());
 
@@ -322,7 +352,7 @@ export function register(app: Express, deps: Deps): void {
       history: (await redemptionHistory(pool, user.id)).map(forReading),
       held,
       holds: holdsOnPropose(),
-      confirmedBy: String(stringVar("redemption.confirmed_by") ?? "steward"),
+      confirmedBy: await confirmMode(),
       votePathBuilt: VOTE_PATH_BUILT,
       perCycle,
       openedThisCycle,
@@ -409,6 +439,7 @@ export function register(app: Express, deps: Deps): void {
       askedFor: String(body.askedFor ?? ""),
       exitOpen: !!exit,
       cycleStart: cycleWindow().startsAt,
+      confirmedBy: await confirmMode(),
       money: {
         currency: ctx.currency,
         quote,

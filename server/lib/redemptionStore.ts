@@ -211,6 +211,17 @@ export interface RedeemInput {
   exitOpen: boolean;
   /** The start of the lunar cycle, for the per-cycle count. */
   cycleStart: Date;
+  /**
+   * WHO WILL DECIDE THIS ONE, derived by the caller and snapshotted here.
+   *
+   * `confirmModeFor` reads it off the village's own powers: "steward" when
+   * somebody holds `redemption.confirm`, "vote" when nobody does. It arrives as
+   * an input because counting holders needs the roles cache and the badge
+   * rows, and this file reads neither. Absent means steward, which is what a
+   * village with a key-holder has and what every caller before the ruling
+   * assumed.
+   */
+  confirmedBy?: "steward" | "vote";
   /** Absent on a village that has set none of the ruling 23 dials. */
   money?: RedeemMoney;
 }
@@ -280,7 +291,9 @@ export async function requestRedemption(pool: Pool, input: RedeemInput): Promise
     openedThisCycle: await redemptionsOpenedSince(pool, input.userId, input.cycleStart),
     perCycle: numberVar("redemption.per_member_per_cycle"),
     askedFor,
-    confirmedBy: String(stringVar("redemption.confirmed_by") ?? "steward"),
+    // DERIVED BY THE CALLER, not read from a dial (Rye, 2026-09-15). See
+    // `confirmedBy` on RedeemInput for why the counting happens up there.
+    confirmedBy: input.confirmedBy ?? "steward",
     votePathBuilt: VOTE_PATH_BUILT,
     exitOpen: input.exitOpen,
   };

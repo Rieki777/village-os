@@ -324,27 +324,19 @@ export const VARIABLES: VariableDef[] = [
   // bicycle. The village settles that off the platform. When a steward
   // confirms that the member has been paid, the tokens are destroyed here.
   // The five dials below are everything a village decides about that.
-  {
-    key: "redemption.confirmed_by",
-    category: "Ledger",
-    label: "Who confirms a redemption",
-    description:
-      "Who has to agree before a member's redemption is carried out and their tokens are destroyed. A steward means one person who holds this village's redemption key signs it off, and it stays between them, the member, and the other stewards. A village vote means it opens as a ballot, and a ballot is public: what the member asked for, and what they asked for it in return, become readable by anyone with the link, permanently, including after a refusal. Whichever is set when a member asks is written onto their request, so moving this dial never changes how something already open is decided.",
-    type: "choice",
-    default: "steward",
-    choices: [
-      {
-        value: "steward",
-        label: "A steward confirms",
-        hint: "One holder of the redemption key signs it off. Grant that key to a role in the village's powers, and a village that has granted it to nobody falls back to its admins.",
-      },
-      {
-        value: "vote",
-        label: "The village votes",
-        hint: "It opens as a ballot. Ballots are public. This path is still being finished, and while it is, asking to redeem is refused with a sentence saying so.",
-      },
-    ],
-  },
+  // `redemption.confirmed_by` STOOD HERE UNTIL 2026-09-15, and it is retired
+  // rather than renamed. Rye's ruling is that a steward confirms, and that a
+  // village with no steward votes, so who decides is DERIVED from whether
+  // anybody actually holds `redemption.confirm` (`confirmModeFor` in
+  // server/lib/redemption.ts). A dial beside that derivation could only
+  // disagree with it: a village that set "steward" while holding the key to
+  // nobody was promised a fall-back to its admins, which is the behaviour the
+  // ruling overturns.
+  //
+  // A village that stored a value keeps the ROW in `game_variables`, harmlessly:
+  // `allVariables` walks the registry and never the table, `variable()` is only
+  // reached through a key some code asks for, and nothing asks for this one any
+  // more. `redemptionOrphanDial.test.ts` boots with such a row present.
   {
     key: "redemption.holds_on_propose",
     category: "Ledger",

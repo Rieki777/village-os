@@ -319,7 +319,14 @@ export interface RedeemAsk {
   openedThisCycle: number;
   perCycle: number;
   askedFor: string;
-  /** The `redemption.confirmed_by` dial, as it stands right now. */
+  /**
+   * Who decides this one, DERIVED and no longer a dial (Rye, 2026-09-15).
+   *
+   * `confirmModeFor` below reads it off the village's own powers: somebody
+   * holds the redemption key, or nobody does. It is snapshotted onto the row
+   * at the ask, the way it always was, so moving a power later never changes
+   * how something already open is decided.
+   */
   confirmedBy: string;
   /** Whether this build can carry a redemption to a village vote. */
   votePathBuilt: boolean;
@@ -371,7 +378,7 @@ export function redemptionRefusal(ask: RedeemAsk): string | null {
     return "This village is not taking redemptions just now. A steward can open them in the village's dials";
   }
   if (ask.confirmedBy === "vote" && !ask.votePathBuilt) {
-    return "This village has chosen that redemptions go to a village vote, and that path is still being finished. A steward can move it back to a steward confirming in the village's dials";
+    return "Nobody in this village holds the key that confirms a redemption, so this would go to a village vote, and that path is still being finished. Ask a steward to give the redemption key to a role, and this works straight away";
   }
   if (ask.exitOpen) {
     return "You have a departure open, and what happens to your balance is being settled there";
@@ -465,6 +472,28 @@ export function confirmRefusal(ask: ConfirmAsk): string | null {
     return "Say why, in a sentence. A decision with no stated reason is not a record";
   }
   return null;
+}
+
+/**
+ * WHO CONFIRMS THIS ONE, read off the village's powers instead of a dial.
+ *
+ * Rye, 2026-09-15: "a steward confirms but if there isn't a steward the village
+ * can vote on these things". So the question is not what a founder typed into a
+ * setting, it is whether this village has actually given the redemption key to
+ * anybody: `liveHoldersOfCapability` counts that through the gate's own planes,
+ * with the admin short-circuit deliberately excluded, because an admin who was
+ * never given the key is exactly the "there isn't a steward" case.
+ *
+ * WHAT THIS REPLACED. `redemption.confirmed_by` was a choice dial whose steward
+ * option promised that "a village that has granted it to nobody falls back to
+ * its admins". That fallback is what the ruling overturns: a village with no
+ * steward votes, and the admins do not quietly inherit it.
+ *
+ * A pure function of one number, so the decision is testable with no village at
+ * all, and the caller does the counting.
+ */
+export function confirmModeFor(liveHolders: number): "steward" | "vote" {
+  return liveHolders > 0 ? "steward" : "vote";
 }
 
 // ── What a redemption is worth (ruling 23) ─────────────────────────────────

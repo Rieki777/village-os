@@ -819,7 +819,9 @@ export const MODULES: ModuleDef[] = [
     recommends: [],
     capabilities: ["redemption.confirm"],
     variableKeys: [
-      "redemption.confirmed_by",
+      // `redemption.confirmed_by` was here until 2026-09-15. Who confirms is
+      // now DERIVED from whether anybody holds `redemption.confirm`, so there
+      // is nothing for a founder to set.
       "redemption.holds_on_propose",
       "redemption.tokens",
       "redemption.per_member_per_cycle",

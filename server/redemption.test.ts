@@ -368,7 +368,9 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
     await pool.query("DELETE FROM `event_seat_charges`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await pool.query("DELETE FROM `events`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await pool.query("DELETE FROM `exits`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-    await setVariable(pool, "redemption.confirmed_by", "steward");
+    // `redemption.confirmed_by` is GONE (Rye, 2026-09-15): who confirms is
+    // derived from whether anybody holds the redemption key, so there is no
+    // dial to set here any more. `ask` below passes the mode explicitly.
     await setVariable(pool, "redemption.holds_on_propose", "true");
     await setVariable(pool, "redemption.per_member_per_cycle", "2");
     await setVariable(pool, "redemption.expires_after_days", "30");
@@ -434,14 +436,31 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
     expect(Number(rows[0].n)).toBe(0);
   });
 
-  it("refuses when the village has chosen a village vote, before anything is held", async () => {
+  /*
+   * NOBODY HOLDS THE KEY, so this would go to a village vote, and the vote path
+   * is not built in this build. The refusal lands BEFORE anything is held,
+   * which is the property that matters: a village on the vote path must never
+   * take the tokens and then have no event coming to release them.
+   *
+   * The mode is passed in rather than read from a dial, because there is no
+   * dial any more: `confirmModeFor` derives it from the village's own powers
+   * and the route counts the holders.
+   */
+  it("refuses when nobody holds the redemption key, before anything is held", async () => {
     const wren = await makeMember("rd-vote");
     await giveCredits(wren, 500);
-    await setVariable(pool, "redemption.confirmed_by", "vote");
     const before = await balanceOf(pool, memberAccount(wren), CREDITS);
-    const out = await ask(wren, 100);
+    const out = await requestRedemption(pool, {
+      userId: wren,
+      tokenSlug: CREDITS,
+      amountUnits: toLedgerUnits(CREDITS, 100),
+      askedFor: "a bicycle",
+      exitOpen: false,
+      cycleStart: cycleWindow().startsAt,
+      confirmedBy: "vote",
+    });
     expect(out.ok).toBe(false);
-    if (!out.ok) expect(out.error).toContain("redemptions go to a village vote");
+    if (!out.ok) expect(out.error).toContain("Nobody in this village holds the key");
     expect(await balanceOf(pool, memberAccount(wren), CREDITS)).toBe(before);
   });
 
