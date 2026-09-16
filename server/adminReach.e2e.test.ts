@@ -49,7 +49,9 @@ const DIST = path.resolve(process.cwd(), "dist/index.js");
 // Its window is checked by scripts/check-e2e-ports.mjs, not claimed here: the
 // hand-written claims this replaces had gone stale and were describing a tree
 // that had moved on.
-const PORT = 6000 + (process.pid % 500);
+// From 6001: 6000 is a port fetch() refuses to dial, so a pid landing on it
+// booted a server this suite could never reach. The gate now refuses it.
+const PORT = 6001 + (process.pid % 499);
 const BASE = `http://localhost:${PORT}`;
 const ADMIN = "admin-reach-admin";
 

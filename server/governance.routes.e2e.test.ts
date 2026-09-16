@@ -35,7 +35,8 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, E2E_BOOT_DEADLINE_MS, waitForPortFree } from "./db/testDb";
+import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { waitForHealth } from "./db/e2eBoot";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -174,17 +175,9 @@ beforeAll(async () => {
   child.stdout?.on("data", (d) => logs.push(String(d)));
   child.stderr?.on("data", (d) => logs.push(String(d)));
 
-  const deadline = Date.now() + E2E_BOOT_DEADLINE_MS;
-  for (;;) {
-    if (Date.now() > deadline) {
-      throw new Error(`server did not start in ${E2E_BOOT_DEADLINE_MS / 1000}s. Output:\n${logs.join("")}`);
-    }
-    try {
-      const res = await fetch(`${BASE}/health`); // module-review-ok: the boot poll against the local test server
-      if (res.ok) break;
-    } catch { /* not up yet */ }
-    await settle(400);
-  }
+  // Reports the last /health answer and when the server logged that it was
+  // listening, and stops at once if the child died. See ./db/e2eBoot.ts.
+  await waitForHealth({ base: BASE, logs, child });
 
   const boot = await call("POST", "/api/admin/bootstrap", {
     body: { password: ADMIN, email: `founder-${PORT}@example.test`, name: "Gov Founder" },

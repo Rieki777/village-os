@@ -343,6 +343,39 @@ export async function releaseClaimToPending(pool: Pool, ballotId: string): Promi
   await pool.query("UPDATE ballots SET landing_status = 'pending' WHERE id = ? AND landing_status = 'applying'", [ballotId]);
 }
 
+/**
+ * A landing that failed INSIDE the close, handed to the landing job.
+ *
+ * `lands_at` becomes the instant it failed, so `dueBallotIds` selects it on the
+ * next tick and the job's own claim runs it. The guard is the shape the close
+ * path wrote a moment earlier (`not_applicable` with no instant), so a row that
+ * anything else has moved since is left alone, and zero says so.
+ * `server/lib/atCloseLanding.ts` holds the rule for which rows come here.
+ */
+export async function queueFailedAtCloseLanding(pool: Pool, ballotId: string, at: Date): Promise<number> {
+  const [res] = await pool.query<ResultSetHeader>(
+    "UPDATE ballots SET lands_at = ?, veto_closes_at = ?, landing_status = 'pending' " +
+      "WHERE id = ? AND status = 'passed' AND landing_status = 'not_applicable' AND lands_at IS NULL",
+    [sqlInstant(at), sqlInstant(at), ballotId],
+  );
+  return Number(res.affectedRows);
+}
+
+/**
+ * A landing that failed inside the close and is not safe to run twice.
+ *
+ * `stalled` with `lands_at` left NULL. Every selector the landing job has
+ * requires an instant, so no job runs this row again. Same guard as above.
+ */
+export async function stallFailedAtCloseLanding(pool: Pool, ballotId: string): Promise<number> {
+  const [res] = await pool.query<ResultSetHeader>(
+    "UPDATE ballots SET landing_status = 'stalled' " +
+      "WHERE id = ? AND status = 'passed' AND landing_status = 'not_applicable' AND lands_at IS NULL",
+    [ballotId],
+  );
+  return Number(res.affectedRows);
+}
+
 /** A passed row still waiting, with the two fields the write-off sentence needs. */
 export interface ExpiryCandidate {
   id: string;

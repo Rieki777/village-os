@@ -44,7 +44,8 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, E2E_BOOT_DEADLINE_MS, waitForPortFree } from "./db/testDb";
+import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { waitForHealth } from "./db/e2eBoot";
 import { civilDateKey } from "../shared/lunar";
 import { civilDateInstant } from "../shared/seatTerms";
 
@@ -139,14 +140,9 @@ async function boot(): Promise<void> {
   child.stdout?.on("data", (d) => logs.push(String(d)));
   child.stderr?.on("data", (d) => logs.push(String(d)));
 
-  const deadline = Date.now() + E2E_BOOT_DEADLINE_MS;
-  for (;;) {
-    if (Date.now() > deadline) throw new Error(`server did not start in ${E2E_BOOT_DEADLINE_MS / 1000}s:\n${logs.join("")}`);
-    try {
-      if ((await fetch(`${BASE}/health`)).ok) break; // module-review-ok: the boot poll against the local test server
-    } catch { /* not up yet */ }
-    await new Promise((r) => setTimeout(r, 400));
-  }
+  // Reports the last /health answer and when the server logged that it was
+  // listening, and stops at once if the child died. See ./db/e2eBoot.ts.
+  await waitForHealth({ base: BASE, logs, child });
 }
 
 async function stop(): Promise<void> {
