@@ -11,10 +11,13 @@
  *
  * WHY THESE THREE TOGETHER. One subject and one audience: the account behind
  * the bearer token, answering only to itself. Every one of them refuses a
- * stranger with the same 401 and none of them reads another member's row,
- * which is what makes `members` a defensible slice here rather than a roster
- * read. The neighbouring /api/profile/prefs routes stay where they are: they
- * resolve notification preferences, which is a different dependency slice.
+ * stranger with the same 401. ONE OF THEM READS EVERY MEMBER: `PUT` checks a
+ * new handle against every other member's handle through `members.all()`,
+ * which is a read of the whole roll, and that is why the slice is `members`
+ * and not a single-row getter. This header used to say none of them read
+ * another member's row, and docs/modules/profiles.md picked the sentence up as
+ * current. The neighbouring /api/profile/prefs routes stay where they are:
+ * they resolve notification preferences, which is a different dependency slice.
  *
  * REGISTERED WHERE IT WAS. `register()` is called from startServer at exactly
  * the point these routes used to occupy, because Express matches in

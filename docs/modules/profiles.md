@@ -133,21 +133,21 @@ against exactly this blob, through `resolveNotifyPrefs` and `emailCadenceFor` in
 therefore subscribed to outbound mail until they say otherwise, and `PUT /api/profile/prefs` is the
 only member-facing switch.
 
-**The export omits this module's own tables.** The `exportDoc` literal in `server/index.ts` has no
-query against `player_characters`, `character_portraits` or `portrait_grants`, so a member's party,
-the pictures they uploaded or forged and their forge budget are absent from the one file whose own
-comment says "EVERYTHING THE VILLAGE HOLDS ABOUT ME HAS TO MEAN EVERYTHING". The eight domains that
-comment names were added; the tables this module has grown since were not. This is the paragraph a
-fork operator answering a data-rights request needs, and it is repeated in
-[Sharp edges](#sharp-edges).
+**The export carries this module's own tables.** `exportDoc` in `server/index.ts` reads
+`player_characters`, `character_portraits`, `portrait_grants` and `gratitude_distributions` as
+`party`, `portraits`, `portraitBudget` and `gratitudeDistributions`, so a member's party, the
+pictures they uploaded or forged, their forge budget and what the value pool credited them are all
+in the one file whose own comment says "EVERYTHING THE VILLAGE HOLDS ABOUT ME HAS TO MEAN
+EVERYTHING". All four were missing until #233, and this paragraph went on saying so after they were
+not, which is how a data-rights review came to report the gap against code that had already closed
+it. [Sharp edges](#sharp-edges) describes the fix.
 
 Every one of these refuses a stranger with `401 {"error": "auth_required"}`. The `prefs`, export,
-exit and delete handlers live in `server/index.ts` rather than in the routes file; the module's own
-header explains the split as "none of them reads another member's row", and that sentence is stale.
-Two of the three do. `PUT /api/profile` runs `(await members.all()).some(...)` for the handle-clash
-scan, which is a read of every member row on the deployment, and that is exactly why the slice is
-`members` and not a single-row getter. The header in `server/routes/profile.ts` still carries the
-old claim; do not read it as the current one.
+exit and delete handlers live in `server/index.ts` rather than in the routes file. One of the three
+routes in `server/routes/profile.ts` reads beyond its own member: `PUT /api/profile` runs
+`(await members.all()).some(...)` for the handle-clash scan, which is a read of every member row on
+the deployment, and that is exactly why the slice is `members` and not a single-row getter. The
+file's header claimed none of them did until 2026-09-14, and now names the scan.
 
 ### The character sheet
 
@@ -558,7 +558,12 @@ Withdrawing now MOVES the bytes: they are copied to a fresh stamped name, the ro
 copy, and the old file is unlinked, so the old address answers 404 and the member still has their
 picture. Withdrawing is not deleting, and `DELETE /api/me/portraits/:key` stays the other door. The
 response carries `addressRevoked`, because a best-effort move that failed silently would be the
-original defect wearing a fix. Erasure does the blunter version: rows, forge budget and files all go.
+original defect wearing a fix. Erasure does the blunter version: files, rows and forge budget all go,
+and the files go FIRST. The rows are the only record of which files on the volume are this member's
+face, so a sweep that deleted them first and died before unlinking left bytes nothing could name
+again, still served at their addresses. A file that will not come off now stops the sweep at that
+step, where it used to be logged while the step was recorded as done, so a resume comes back for it
+with the rows that name it still in place.
 
 **The export contains this module's own tables.** `party`, `portraits`, `portraitBudget` and
 `gratitudeDistributions` were all absent from the `exportDoc` literal, so a departing member's

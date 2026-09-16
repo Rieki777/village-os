@@ -14,10 +14,11 @@ this module moves money, records a pledge, or holds a member's name.**
 
 ## Where the data comes from
 
-The hub serves a public, no-auth tRPC API at `/api/trpc`. Five procedures are
-read (measured live 2026-08-22). Four of them are the per-campaign bundle,
-dialled in parallel; `campaigns.list` is the fifth and runs only for a key that
-has never synced. This paragraph said FOUR and listed five from the day it
+The hub serves a public, no-auth tRPC API at `/api/trpc`. Six procedures are
+read. Five were measured live 2026-08-22, and `meta.contract` joined on
+2026-09-14. Four of them are the per-campaign bundle, dialled in parallel, with
+`meta.contract` beside them on every sync; `campaigns.list` runs only for a key
+that has never synced. This paragraph said FOUR and listed five from the day it
 shipped, and so did `server/lib/crowdpool.ts:5`; both were corrected on
 2026-09-04.
 
@@ -31,6 +32,9 @@ shipped, and so did `server/lib/crowdpool.ts:5`; both were corrected on
 - `campaigns.getActivity` (input `{campaignId}`): the public Pool Ledger
 - `campaigns.getPartnerLinks` (input `{campaignId}`): partner funders with the
   hub's own cached raised, percent and contributor count
+- `meta.contract` (input `{}`): the hub's contract versions, one integer per
+  surface. This module reads `crowdpool` and serves it on each campaign as
+  `hubContract`; the section below says what the number changes
 
 The hub sends no CORS headers, so a browser cannot read any of this directly.
 The game server proxies through `guardedFetchJson`, the same pinned,
@@ -51,14 +55,39 @@ honestly claim.
 
 | Their defect | What it does to us | What we do |
 |---|---|---|
-| `pledgedTotal` is summed filtering on the ACCEPTED status alone, and delivered and thanked are later states of the same lifecycle | the ring shrinks when a village succeeds, and the drop is DEFERRED to the next unrelated acceptance, so it looks unrelated to the delivery that caused it | still divide by the hub's number, and NAME it as a floor everywhere a reader meets it. No correction is computed: a guess at the delivered value would be worse than an honest gap |
+| `pledgedTotal` is summed filtering on the ACCEPTED status alone, and delivered and thanked are later states of the same lifecycle | the ring shrinks when a village succeeds, and the drop is DEFERRED to the next unrelated acceptance, so it looks unrelated to the delivery that caused it | still divide by the hub's number, and NAME it as a floor everywhere a reader meets it unless the hub has said, through `meta.contract`, that it counts delivered pledges. No correction is computed: a guess at the delivered value would be worse than an honest gap |
 | the fulfil path is not idempotent, so two stewards at once put `quantityDelivered` at 2 where 1 was wanted (ten trials out of ten) | a need can arrive with more delivered than wanted | `percentDelivered` clamps each need's share at 1 so the walls cannot pass the ring; the meter draws against what is WANTED and says out loud that more arrived than were wanted; the campaign page stops filing such a need away as quietly met |
 | a financial pledge is stored as a total and a financial SUBTOTAL, and three of the hub's own surfaces add the two, so a ten thousand pledge headlines as twenty thousand | nothing: we read them as separate fields and divide by the total alone | **our figure is right where their gallery is wrong.** `server/lib/crowdpoolPledgeNeverSums.test.ts` pins that to one spelling across the whole bridge, so a later lane cannot quietly "fix" ours to match theirs |
 
-The first two are being fixed on the hub. When the first lands,
-`HUB_PLEDGED_TOTAL_IS_A_FLOOR` in
-`client/src/components/crowdpool/PoolPieces.tsx` is the one switch that turns
-the floor language back off.
+The first two went to the hub to fix. The first landed as hub `b835c28` on
+2026-09-05, and the hub now says which pledged sum it serves, so a village no
+longer has to assume. Rye ruled on 2026-09-14 to add the version number.
+
+- **What the hub publishes.** `meta.contract` (hub commit `3c70b12c`) answers
+  `{"crowdpool": 2}` today. The history is in section 10 of
+  CROWDPOOL_HUB_CONTRACT.md in the hub's own repository, not this one: at
+  `crowdpool` 1, `pledgedTotal`
+  sums accepted pledges only and is a floor; at 2 it sums accepted, fulfilled
+  and thanked. The number rises only when a field a village already reads
+  changes meaning.
+- **What this side does with it.** `fetchCampaignBundle` dials it beside the
+  four campaign reads, once per sync, and it can never fail or hold the
+  campaign. A missing procedure, an error, a non-object, a missing key or a value
+  that is not a positive integer all read as 1
+  (`HUB_CONTRACT_CROWDPOOL_FALLBACK`), because a hub that predates the field is
+  the older contract. A contract read still travelling when the four reads land
+  waits at most `HUB_CONTRACT_GRACE_MS`, then reads as 1.
+- **Where it travels.** Each campaign carries `hubContract: { crowdpool }`, on
+  the campaign page payload and on every list card, so a stale snapshot keeps
+  the version it was fetched with. A snapshot persisted before the field
+  existed comes back as 1.
+- **What the page says.** `pledgedIsFloor` in
+  `client/src/components/crowdpool/PoolPieces.tsx` is the one reading: the
+  figure is a floor when the served version is below 2 or absent. The money
+  line, both rings, the tip and the plaque paragraph all take its answer as a
+  required argument. It replaced the module constant
+  `HUB_PLEDGED_TOTAL_IS_A_FLOOR`, which could not tell one hub from another. A
+  floor is never shown as a total.
 
 ## Config shape
 

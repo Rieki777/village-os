@@ -59,6 +59,8 @@ const CAMPAIGN = {
   percentPledged: 5, percentDelivered: 40,
   startedAt: null, endsAt: null, daysRemaining: null,
   contributorsCount: 7, imageUrl: null, hubUrl: "https://hub.example.test/campaigns/79", isDemo: false,
+  // The live hub's contract on 2026-09-14: the pledged total counts delivered.
+  hubContract: { crowdpool: 2 },
   needs: [
     need({ id: "n1", name: "Yoga Instructor", quantityWanted: 1, quantityClaimed: 1, quantityDelivered: 2 }),
     need({ id: "n2" }),
@@ -101,12 +103,12 @@ describe("the campaign page, given a need the hub delivered twice", () => {
   });
 
   /**
-   * The other defect, met at the same place: the pooled figure is a floor,
-   * because the hub drops a pledge out of its sum once the delivery is
-   * confirmed. The page prints the hub's own number and qualifies it. Nothing
-   * here recomputes it.
+   * The other defect, met at the same place: on a hub at crowdpool contract 1
+   * the pooled figure is a floor, because that hub drops a pledge out of its sum
+   * once the delivery is confirmed. The page reads the contract off the payload
+   * and prints the hub's own number, qualified or not. Nothing here recomputes it.
    */
-  it("prints the hub's pooled figure plainly, with no floor language left", async () => {
+  it("at contract 2, prints the hub's pooled figure plainly, with no floor language", async () => {
     const { container } = render(<CrowdpoolCampaign />);
     await waitFor(() => expect(screen.getByText("Harmony Valley")).toBeTruthy());
     // WITHOUT THE STYLESHEET. `container.textContent` concatenates the contents
@@ -123,6 +125,30 @@ describe("the campaign page, given a need the hub delivered twice", () => {
     expect(ring).toContain("5%");
     expect(ring).toContain("pooled");
     expect(ring).not.toContain("pooled or more");
+  });
+
+  /**
+   * THREADED FROM THE PAYLOAD, not from anything the page decides for itself.
+   * The same campaign served with no `hubContract`, and served at contract 1,
+   * must word the figure as a floor on every surface that words it.
+   */
+  it("at contract 1 or with no contract served, names the floor on every surface", async () => {
+    const { hubContract: _v2, ...unversioned } = CAMPAIGN;
+    for (const campaign of [unversioned, { ...CAMPAIGN, hubContract: { crowdpool: 1 } }]) {
+      vi.stubGlobal("fetch", serve(campaign));
+      const { container, unmount } = render(<CrowdpoolCampaign />);
+      await waitFor(() => expect(screen.getByText("Harmony Valley")).toBeTruthy());
+      const chrome = container.cloneNode(true) as HTMLElement;
+      chrome.querySelectorAll("style").forEach((s) => s.remove());
+      const said = chrome.textContent ?? "";
+      expect(said).toContain("at least $5,000 of $100,000");
+      expect(said).toContain("what this page shows is a floor");
+      const ring = Array.from(container.querySelectorAll("svg text")).map((t) => t.textContent);
+      expect(ring).toContain("5%");
+      expect(ring).toContain("pooled or more");
+      expect(container.querySelector("svg[aria-label^='at least 5 percent pledged']")).toBeTruthy();
+      unmount();
+    }
   });
 
   it("refuses to narrate 40 percent delivered against 5 percent pooled as health", async () => {
