@@ -47,7 +47,8 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, E2E_BOOT_DEADLINE_MS, waitForPortFree } from "./db/testDb";
+import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { waitForHealth } from "./db/e2eBoot";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -66,7 +67,9 @@ const DIST = path.resolve(process.cwd(), "dist/index.js");
  * a single run the pid is fixed and the two would have differed, which is exactly why the
  * guard checks windows and not the ports a run happens to compute.
  */
-const PORT = 4002 + (process.pid % 400);
+// From 4191: 4045 and 4190 are ports fetch() refuses to dial, so a pid landing on
+// either booted a server this suite could never reach. The gate now refuses them.
+const PORT = 4191 + (process.pid % 211);
 const BASE = `http://localhost:${PORT}`;
 const ADMIN = "decimals-routes-admin";
 const WEBHOOK_SECRET = "whsec_decimalsroutes"; // module-review-ok: a throwaway value for the spawned scratch server, never a real credential
@@ -115,7 +118,6 @@ async function call(
   return { status: res.status, json: await res.json().catch(() => null) };
 }
 
-const settle = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function register(name: string, email: string): Promise<{ token: string; id: string }> {
   const r = await call("POST", "/api/auth/register", {
@@ -210,17 +212,7 @@ beforeAll(async () => {
   child.stdout?.on("data", (d) => logs.push(String(d)));
   child.stderr?.on("data", (d) => logs.push(String(d)));
 
-  const deadline = Date.now() + E2E_BOOT_DEADLINE_MS;
-  for (;;) {
-    if (Date.now() > deadline) {
-      throw new Error(`server did not start in ${E2E_BOOT_DEADLINE_MS / 1000}s. Output:\n${logs.join("")}`);
-    }
-    try {
-      const res = await fetch(`${BASE}/health`); // module-review-ok: the boot poll against the local test server
-      if (res.ok) break;
-    } catch { /* not up yet */ }
-    await settle(400);
-  }
+  await waitForHealth({ base: BASE, logs, child });
 
   const boot = await call("POST", "/api/admin/bootstrap", {
     body: { password: ADMIN, email: `founder-${PORT}@example.test`, name: "Decimals Founder" },

@@ -36,7 +36,8 @@ import os from "os";
 import path from "path";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { E2E_BOOT_DEADLINE_MS, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { waitForHealth } from "./db/e2eBoot";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -52,7 +53,9 @@ const DIST = path.resolve(process.cwd(), "dist/index.js");
  * reads every declaration in `server/` on the day you run it, which is what a
  * hand-written comment claiming a clear window cannot do.
  */
-const PORT = 5000 + (process.pid % 400);
+// From 5062: 5060 and 5061 are ports fetch() refuses to dial, so a pid landing on
+// either booted a server this suite could never reach. The gate now refuses them.
+const PORT = 5062 + (process.pid % 338);
 const BASE = `http://127.0.0.1:${PORT}`;
 const ADMIN = "TreasuryE2E123!";
 const PASSWORD = "MemberTreasury123!";
@@ -201,16 +204,7 @@ describe.skipIf(!DB_CONFIGURED)("a village runs caps and treasuries side by side
     child.stdout?.on("data", (d) => logs.push(String(d)));
     child.stderr?.on("data", (d) => logs.push(String(d)));
 
-    const deadline = Date.now() + E2E_BOOT_DEADLINE_MS;
-    for (;;) {
-      if (Date.now() > deadline) {
-        throw new Error(`server did not start in ${E2E_BOOT_DEADLINE_MS / 1000}s:\n${logs.join("")}`);
-      }
-      try {
-        if ((await fetch(`${BASE}/health`)).ok) break; // module-review-ok: the boot poll against the local test server
-      } catch { /* not up yet */ }
-      await new Promise((r) => setTimeout(r, 400));
-    }
+    await waitForHealth({ base: BASE, logs, child });
 
     const boot = await call("POST", "/api/admin/bootstrap", {
       password: ADMIN, email: `founder-${PORT}@example.test`, name: "Treasury Founder",
