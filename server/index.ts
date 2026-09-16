@@ -110,7 +110,7 @@ import { register as registerBrandUploadRoutes } from "./routes/brandUploads";
 import { register as registerNeedsRoutes } from "./routes/needs";
 import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
-import { REDEMPTION_SUBJECT, redemptionCloser } from "./lib/redemptionBallot";
+import { REDEMPTION_SUBJECT, openRedemptionBallot, redemptionCloser } from "./lib/redemptionBallot";
 import { badgeCapabilityRows } from "./repos/badgeCapabilities";
 import { expireRedemptions, retiredSupply } from "./lib/redemptionStore";
 import { register as registerFeedbackRoutes } from "./routes/feedback";
@@ -19001,7 +19001,18 @@ ${inner}
   registerBrandPreviewRoutes(app, { isAdmin, getPool, brandRepo });
   registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
   registerDryRunRoutes(app, { authedUser, isAdmin, overLimit, getPool });
-  registerRedemptionRoutes(app, { authedUser, brandRepo, getPool, guardCapability, members, notify, overLimit, redemptionKeyHolders });
+  /**
+   * Put a redemption to the village, with the setup every village-wide vote
+   * uses. `roleBallotSetup` is the one home of the threshold arithmetic, and a
+   * second derivation here would differ from it by a copy eventually.
+   */
+  const openRedemptionVote = async (redemptionId: string): Promise<{ ok: boolean; error?: string }> => {
+    const setup = await roleBallotSetup();
+    if (setup.tokenProblem) return { ok: false, error: setup.tokenProblem };
+    const out = await openRedemptionBallot(getPool(), setup, redemptionId);
+    return out.ok ? { ok: true } : { ok: false, error: out.error };
+  };
+  registerRedemptionRoutes(app, { authedUser, brandRepo, getPool, guardCapability, members, notify, openRedemptionBallot: (id: string) => openRedemptionVote(id), overLimit, redemptionKeyHolders });
 
   // â”€â”€ Project Settings (village dues + other editable numbers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 

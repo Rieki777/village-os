@@ -31,7 +31,7 @@ import { CREDITS, cycleWindow, mint, toLedgerUnits, villageId } from "./lib/econ
 import { loadVariables, setVariable } from "./lib/variables";
 import { REDEEMED, REDEMPTION_HOLD } from "./lib/redemption";
 import { redemptionById, requestRedemption } from "./lib/redemptionStore";
-import { redemptionCloser, REDEMPTION_SUBJECT } from "./lib/redemptionBallot";
+import { openRedemptionBallot, redemptionCloser, REDEMPTION_SUBJECT } from "./lib/redemptionBallot";
 import type { BallotRow } from "./lib/ballots";
 
 const configured = testDbConfigured();
@@ -213,6 +213,38 @@ describe.skipIf(!configured)("a redemption the village votes on", () => {
     await expect(closer().onUnlanded?.(ballotFor(id), "vetoed")).rejects.toThrow(
       new RegExp(`${id}[\\s\\S]*wren[\\s\\S]*retryRelease`),
     );
+  }, 300_000);
+
+  /*
+   * OPENING ONE. The vote path is refused at the door while VOTE_PATH_BUILT is
+   * false, so this drives the opener directly: it is the half that has to be
+   * right BEFORE the flag flips, because a vote-mode request whose ballot never
+   * opened would hold tokens with nothing left to decide them.
+   */
+  it("opens a ballot the village can actually vote on, carrying the member's own words", async () => {
+    const id = await askFor("wren", 20);
+    const out = await openRedemptionBallot(
+      pool,
+      {
+        method: "majority",
+        dials: { unityPct: 60, quorumPct: 30 },
+        snapshot: { mode: "equal", token: null },
+        electorate: [{ userId: "wren", weight: 1 }],
+        durationDays: 3,
+      },
+      id,
+    );
+    expect(out.ok, out.ok ? "" : out.error).toBe(true);
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT subject_type, subject_ref, title, doc_markdown, opened_by FROM ballots WHERE subject_ref = ?",
+      [id],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].subject_type).toBe(REDEMPTION_SUBJECT);
+    expect(String(rows[0].opened_by)).toBe("wren");
+    // What a yes MEANS has to be on the ballot, not only in the panel.
+    expect(String(rows[0].doc_markdown)).toContain("a bicycle");
+    expect(String(rows[0].doc_markdown)).toContain("HAS BEEN PAID");
   }, 300_000);
 
   it("says so instead of throwing when the redemption is gone entirely", async () => {

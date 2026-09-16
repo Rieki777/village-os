@@ -59,8 +59,12 @@ import type { BallotRow } from "./ballots";
 import type { CloseRouting, SubjectCloser } from "./applyDue";
 import type { NotifyInput } from "./notify";
 import { fromLedgerUnits } from "./economy";
+import { formatMoney } from "../../shared/money";
 import { tokenDef } from "./ledger";
 import { redemptionById, retryRelease, settleRedemption } from "./redemptionStore";
+import { openBallot, type OpenBallotResult } from "./ballots";
+import type { BallotMethod } from "../../shared/governanceEngine";
+import type { WeightMode } from "./governanceWeights";
 
 /** The ballot subject type a redemption opens under. */
 export const REDEMPTION_SUBJECT = "redemption";
@@ -238,4 +242,75 @@ export function redemptionCloser(deps: RedemptionCloserDeps): CloserWithUnlanded
       );
     },
   };
+}
+
+// ── Opening one ────────────────────────────────────────────────────────────
+
+/**
+ * Everything a village-wide vote needs, gathered by the caller.
+ *
+ * The shape `roleBallotSetup()` in server/index.ts already produces, because
+ * the threshold arithmetic for a village-wide vote belongs in ONE place and a
+ * second derivation here would eventually differ from it by a copy.
+ */
+export interface RedemptionBallotSetup {
+  method: BallotMethod;
+  dials: { unityPct: number; quorumPct: number };
+  snapshot: { mode: WeightMode; token?: string | null };
+  electorate: Array<{ userId: string; weight: number }>;
+  durationDays: number;
+}
+
+/**
+ * Put a member's redemption to the village.
+ *
+ * WHAT THE BALLOT SAYS IS WHAT THE MEMBER ALREADY AGREED TO, read off the row
+ * and never off today's dials: the amount, what they asked for, and what the
+ * village owes if it passes. The row was snapshotted at the ask (0213), so the
+ * ballot and the request cannot disagree.
+ *
+ * ── THIS IS PUBLIC, AND THAT IS THE COST ──────────────────────────────────
+ *
+ * A ballot is served to anyone with the link and it is kept after it closes.
+ * So the member is told BEFORE they ask (the panel's notice), and the text
+ * that becomes public is only what they chose to write in `askedFor`, clipped.
+ * Nothing else about them is copied in: no balance, no history, no other
+ * request.
+ */
+export async function openRedemptionBallot(
+  pool: Pool,
+  setup: RedemptionBallotSetup,
+  redemptionId: string,
+): Promise<OpenBallotResult> {
+  const row = await redemptionById(pool, redemptionId);
+  if (!row) return { ok: false, error: "that redemption no longer exists" };
+  const amount = humanAmount(row.tokenSlug, row.amountUnits);
+  const asked = String(row.askedFor ?? "").trim().slice(0, 300);
+  const worth = row.currency && row.grossMinor !== null
+    ? `The village would pay ${formatMoney(row.netMinor ?? row.grossMinor, row.currency)}, off the platform.`
+    : "The village and the member agreed what this is worth between them; no figure was put on it here.";
+  const title = `Confirm a redemption: ${amount}`;
+  return openBallot(pool, {
+    subjectType: REDEMPTION_SUBJECT,
+    subjectRef: row.id,
+    title,
+    docMarkdown: [
+      `# ${title}`,
+      "",
+      `A member asked to turn ${amount} into: ${asked}`,
+      "",
+      worth,
+      "",
+      "A yes says the member HAS BEEN PAID off the platform, and destroys the tokens they asked to redeem.",
+      "Vote yes only once the village has actually paid. A no, or too few votes, gives the tokens back in full.",
+    ].join(String.fromCharCode(10)),
+    method: setup.method,
+    weightMode: setup.snapshot.mode,
+    weightToken: setup.snapshot.token ?? null,
+    unityPct: setup.dials.unityPct,
+    quorumPct: setup.dials.quorumPct,
+    durationDays: setup.durationDays,
+    openedBy: row.userId,
+    electorate: setup.electorate,
+  });
 }

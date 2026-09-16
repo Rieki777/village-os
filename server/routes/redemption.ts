@@ -118,6 +118,16 @@ type Deps = Pick<
   "authedUser" | "brandRepo" | "getPool" | "guardCapability" | "members" | "notify" | "overLimit"
 > & {
   /**
+   * Put a redemption to the village, when nobody holds the key.
+   *
+   * Handed in for the same reason the holder count is: opening a ballot needs
+   * the electorate, the weight snapshot and the threshold dials, and those are
+   * gathered once in server/index.ts (`roleBallotSetup`). Null while this build
+   * cannot carry a redemption to a vote.
+   */
+  openRedemptionBallot?: (redemptionId: string) => Promise<{ ok: boolean; error?: string }>;
+
+  /**
    * Who can actually confirm a redemption in this village right now.
    *
    * Handed in rather than computed here, because counting holders needs the
@@ -203,7 +213,7 @@ function forReading(row: {
 }
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, brandRepo, getPool, guardCapability, members, notify, overLimit, redemptionKeyHolders } = deps;
+  const { authedUser, brandRepo, getPool, guardCapability, members, notify, openRedemptionBallot, overLimit, redemptionKeyHolders } = deps;
 
   /**
    * WHO DECIDES, derived at the moment of asking (Rye, 2026-09-15).
@@ -453,6 +463,36 @@ export function register(app: Express, deps: Deps): void {
       },
     });
     if (!out.ok) return res.status(out.status).json({ error: out.error });
+    /*
+     * A VOTE-MODE REQUEST MUST NOT EXIST WITHOUT ITS BALLOT.
+     *
+     * The hold is already posted by here, so if the ballot cannot be opened the
+     * request has tokens held and nothing that will ever decide it. The reaper
+     * would free them eventually, and "eventually" is wrong when the village
+     * can simply be told now: the request is closed, the tokens go back, and
+     * the member reads why.
+     *
+     * Dead while `VOTE_PATH_BUILT` is false, because the refusal above turns a
+     * vote-mode ask away before anything is held.
+     */
+    if (out.row.confirmedByMode === "vote" && VOTE_PATH_BUILT && openRedemptionBallot) {
+      const opened = await openRedemptionBallot(out.row.id).catch((e) => ({
+        ok: false,
+        error: String(e?.message ?? e),
+      }));
+      if (!opened.ok) {
+        await settleRedemption(pool, {
+          id: out.row.id,
+          to: "refused",
+          actorUserId: null,
+          note: "The village could not open a vote on this, so the tokens came back",
+        });
+        return res.status(503).json({
+          error: `This one goes to a village vote and the vote could not be opened: ${opened.error ?? "unknown"}. Your tokens are back in your wallet.`,
+        });
+      }
+    }
+
     void recordEvent(pool, {
       kind: "audit",
       text: `redemption:opened:${out.row.amountUnits}:${slug}`,
