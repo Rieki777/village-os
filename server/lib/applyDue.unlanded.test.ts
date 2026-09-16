@@ -42,10 +42,12 @@ import {
   landingRow,
   recordVeto,
   routeOutcome,
+  unfinishedLandings,
   type CloseRouting,
   type LandingDeps,
   type SubjectCloser,
 } from "./applyDue";
+import { sqlInstant } from "../repos/ballotLandings";
 import { STEWARD_COUNCIL_KEY, STEWARD_SUBJECTS_KEY, STEWARD_VETO } from "./stewardship";
 import { loadVariables, setVariable } from "./variables";
 import { register as registerVetoRoutes } from "../routes/governanceVetoes";
@@ -229,6 +231,39 @@ const unseatEveryone = async () => {
 
 /** Every hook call about ONE ballot, so another test's leftovers cannot answer for it. */
 const callsFor = (ballotId: string) => unlanded.filter((c) => c.includes(`:${ballotId}:`));
+
+/**
+ * THE FAILED-ACTIONS REPORT'S OWN READ, IN ITS TWO STEPS, COPIED.
+ *
+ * From PR #247 (`origin/wt/failed-actions`, and frozen inside batch #270):
+ * `stuckLandings` in server/repos/governanceExecutorPending.ts, then
+ * `stillOwedLandings` in server/lib/failedActions.ts. Copied rather than
+ * imported, the way server/lib/atCloseLanding.test.ts copies it, because that
+ * branch is not on main and nothing here may depend on it.
+ *
+ * The split is the whole point below: step one FINDS a failed release, and step
+ * two drops it.
+ */
+const LANDING_STILL_OWED: ReadonlySet<string> = new Set(["not_applicable", "pending", "applying", "stalled"]);
+
+/** Step one: the newest attempt on this ballot is open and carries an error. */
+const newestAttemptIsStuck = async (ballotId: string): Promise<boolean> => {
+  const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, mirrors the report's own read
+    "SELECT p.ballot_id FROM governance_executor_pending p " +
+      "JOIN (SELECT ballot_id, MAX(id) AS newest FROM governance_executor_pending GROUP BY ballot_id) n " +
+      "ON n.ballot_id = p.ballot_id AND n.newest = p.id " +
+      "WHERE p.cleared_at IS NULL AND (p.last_error IS NOT NULL OR p.claimed_at <= ?) AND p.ballot_id = ?",
+    [sqlInstant(new Date(NOW.getTime() - 10 * 60 * 1000)), ballotId],
+  );
+  return rows.length === 1;
+};
+
+/** Both steps: found, and then kept only while the decision is still owed a landing. */
+const onFailedActionsReport = async (ballotId: string): Promise<boolean> => {
+  if (!(await newestAttemptIsStuck(ballotId))) return false;
+  const row = await landingRow(pool, ballotId);
+  return !!row && LANDING_STILL_OWED.has(row.landingStatus);
+};
 
 beforeAll(async () => {
   if (!configured) return;
@@ -417,6 +452,62 @@ describe.skipIf(!configured)("a hook that throws", () => {
       await applyDueGovernance(unlandable(), new Date(at.getTime() + 200 * DAY));
       expect(callsFor(id).length, "once, and only once").toBe(1);
       expect((await attemptsOf(id)).length).toBe(1);
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
+  it("is written where the failed-actions report does not yet look, which is PINNED here and not blessed", async () => {
+    /*
+     * THE GAP, WRITTEN DOWN. A failed release is recorded as an open attempt
+     * carrying its error, and PR #247's report finds that attempt (step one)
+     * and then DROPS it (step two), because it keeps an attempt only while the
+     * ballot is still owed a landing and these rows are `vetoed` and `expired`
+     * by the time the hook runs. That is the exact case where a member's held
+     * tokens are stranded, so it is asserted rather than left to be discovered.
+     *
+     * This test pins TODAY'S behaviour. It does not say the behaviour is right.
+     * Widening `LANDING_STILL_OWED` belongs to #247, after batch #270 lands,
+     * and this test is what will go red and say so when it happens.
+     *
+     * A zero proves nothing on its own, so the same rows are asserted PRESENT
+     * in `unfinishedLandings`, which is what a person reads on this base. The
+     * record exists; one report filters it out.
+     */
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      hookThrows = true;
+
+      const vetoed = await stamped();
+      const stop = await recordVeto(deps(), {
+        ballotId: vetoed,
+        stewardId: "u-st1",
+        reason: "Stopping this one, and the release behind it refuses.",
+      });
+      expect(stop.ok, JSON.stringify(stop)).toBe(true);
+
+      const written = await stampedCycleTimed();
+      const landsAt = (await landingRow(pool, written))!.landsAt!;
+      await applyDueGovernance(unlandable(), writeOffAt(landsAt));
+
+      // The failure IS recorded, on both shapes.
+      expect((await attemptsOf(vetoed))[0]?.lastError).toContain("onUnlanded(vetoed) threw");
+      expect((await attemptsOf(written))[0]?.lastError).toContain("onUnlanded(written_off) threw");
+
+      // The report's first step finds both: newest, open, carrying an error.
+      expect(await newestAttemptIsStuck(vetoed), "step one finds it").toBe(true);
+      expect(await newestAttemptIsStuck(written), "step one finds it").toBe(true);
+
+      // Its second step drops both, on the landing status.
+      expect((await landingRow(pool, vetoed))?.landingStatus).toBe("vetoed");
+      expect((await landingRow(pool, written))?.landingStatus).toBe("expired");
+      expect(await onFailedActionsReport(vetoed), "a vetoed row is not on that report today").toBe(false);
+      expect(await onFailedActionsReport(written), "a written-off row is not on that report today").toBe(false);
+
+      // And the known positive: what a person CAN see on this base.
+      const unfinished = await unfinishedLandings(pool, 0);
+      expect(unfinished, "the attempt is readable here").toContain(vetoed);
+      expect(unfinished, "the attempt is readable here").toContain(written);
     } finally {
       logged.mockRestore();
     }
