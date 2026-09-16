@@ -50,7 +50,11 @@ if (!DB_CONFIGURED) {
 const DIST = path.resolve(process.cwd(), "dist/index.js");
 /** This suite's windows, checked by scripts/check-e2e-ports.mjs. */
 const PORT = 1200 + (process.pid % 400);
-const GOOGLE_PORT = 1600 + (process.pid % 400);
+// 1724 + (pid % 276), and no longer 1600 + (pid % 400): that window held 1719,
+// 1720 and 1723, which fetch() refuses to dial ("bad port"), so a run landing
+// there polls a healthy server it can never reach. This is the widest clean
+// stretch inside the old window. See server/db/e2eBoot.ts.
+const GOOGLE_PORT = 1724 + (process.pid % 276);
 const BASE = `http://localhost:${PORT}`;
 const ADMIN = "google-exit-admin";
 const PASSWORD = "GoogleExit123!";
