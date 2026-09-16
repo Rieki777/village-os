@@ -26293,7 +26293,7 @@ ${inner}
   // answer each other's requests if the order moved.
   registerOrgRoutes(app, {
     isAdmin, authedUser, guardCapability, getPool, members, firstName,
-    capabilityCtx, lapseContext, currentPatternId, seasonState, notify,
+    capabilityCtx, lapseContext, currentPatternId, seasonState, notify, notifyAdmins,
   });
 
   // The steward review surface (0140-0141). Mounted here beside the org

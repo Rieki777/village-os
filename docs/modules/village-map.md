@@ -508,3 +508,44 @@ site. `pushPhotos` in `client/src/pages/LivingMap.tsx` sends it, reading
 `docs/prototypes/qa/_probe_photos_tab.js` asserts the tab is present, that a
 click at its own centre lands on it rather than on something covering it, and
 that the room paints alt text, attribution and the door.
+
+## Claiming a seat recorded under a name (2026-09-15)
+
+A chart backfilled from a document holds its holders as free-text names,
+because that is all the document could carry. `GET /api/org/my-unclaimed-seats`
+offers a signed-in member the documented seatings whose recorded name looks
+like theirs, and `POST /api/org/seatings/:id/claim` is how they answer.
+
+**The tap ASKS. It does not take.** Both halves of the name match are typed by
+the person tapping: registration takes a name, `PUT /api/profile` rewrites it
+with no uniqueness check, and the name being matched against is published to
+them. `map.viewPeople` opens at the `guest` rung, which every account holds the
+moment it exists, and the member tier of `GET /api/org` carries a documented
+holder's full recorded name. So the old behaviour was: read the chart, set your
+own name to a holder's, press the button, hold the seat.
+
+**A seat is not a label on a picture**, which is why this was worth closing.
+Flipping a seating to `holder_kind = 'member'` with a `user_id` is the exact
+combination `seatHolder` refuses for an agent, and for the reasons stated
+there: the moon settlement pays live member seatings (`server/lib/economy.ts`,
+the `role.cycle` rules), and a seat flagged `represents_circle` opens
+`mayDeclare` for its circle, the one bridge from the seat plane to a permission
+(`docs/ADR_2026-08_REPRESENTS_CIRCLE_DECLARES.md`). Two more ride along:
+`visibleRules` in `server/lib/resources.ts` shows a holder the spending rules a
+village keeps for holders of that seat and circle, and `greetersFor` in
+`server/lib/arrival.ts` routes every arrival, carrying a new member's name, to
+whoever holds the greeter seat.
+
+**Who says yes.** `POST /api/org/seatings/:id/claim/confirm` takes `{userId}`
+behind `org.seat`, the power that decides who sits in the village's seats. It
+grants nothing `POST /api/admin/org/roles/:id/holders` did not already carry;
+what it adds is doing it IN PLACE, through `claimSeating`, so the seating keeps
+its id and its start date and the seat's history does not restart the day
+somebody finally signs up.
+
+**The request is the alert and the journal line.** No third table holds a
+pending state. `notifyAdmins` rings the stewards, keyed on the seating and the
+member so pressing twice asks once, and the seat's own journal
+(`GET /api/org/:kind/:id/journal`) carries the same sentence for a steward who
+opens the seat later. What is still missing is a BUTTON: the admin org chart
+tab has no confirm control yet, so today a steward confirms through the route.
