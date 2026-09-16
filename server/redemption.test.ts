@@ -446,7 +446,14 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
    * dial any more: `confirmModeFor` derives it from the village's own powers
    * and the route counts the holders.
    */
-  it("refuses when nobody holds the redemption key, before anything is held", async () => {
+  /*
+   * NOBODY HOLDS THE KEY, so the village decides it. Until 2026-09-15 this was
+   * refused at the door, because a build that took the hold and had no ballot
+   * to release it would strand the tokens. The ballot exists now, so the ask
+   * lands and the row RECORDS the mode it was opened under: the route opens the
+   * ballot beside it, and `redemptionBallot.test.ts` drives that half.
+   */
+  it("opens and holds when nobody holds the key, recording that the village decides it", async () => {
     const wren = await makeMember("rd-vote");
     await giveCredits(wren, 500);
     const before = await balanceOf(pool, memberAccount(wren), CREDITS);
@@ -459,9 +466,10 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
       cycleStart: cycleWindow().startsAt,
       confirmedBy: "vote",
     });
-    expect(out.ok).toBe(false);
-    if (!out.ok) expect(out.error).toContain("Nobody in this village holds the key");
-    expect(await balanceOf(pool, memberAccount(wren), CREDITS)).toBe(before);
+    expect(out.ok, out.ok ? "" : out.error).toBe(true);
+    if (out.ok) expect(out.row.confirmedByMode).toBe("vote");
+    // The hold really moved: this is the case that used to prove the opposite.
+    expect(await balanceOf(pool, memberAccount(wren), CREDITS)).toBe(before - toLedgerUnits(CREDITS, 100));
   });
 
   it("holds the tokens, and the member's account really falls", async () => {

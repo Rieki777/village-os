@@ -2603,7 +2603,6 @@ display name as the member sees it.
 - `<name> buys one thing from the village, and that thing is what it is worth`
 - `<name> is not one of the tokens this village redeems. A steward can change that in the village's dials`
 - `This village is not taking redemptions just now. A steward can open them in the village's dials`
-- `Nobody in this village holds the key that confirms a redemption, so this would go to a village vote, and that path is still being finished. Ask a steward to give the redemption key to a role, and this works straight away`
 - `You have a departure open, and what happens to your balance is being settled there`
 - `You have opened <openedThisCycle> redemptions this moon, which is what this village allows. The count starts again at the new moon`
 - `Ask for <name> in positive amounts with at most <decimals> decimal places`

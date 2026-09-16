@@ -188,15 +188,23 @@ export const REDEEMABLE_VOUCHERS: ReadonlySet<string> = new Set(["stay-credit"])
  * held, with a sentence that says which dial did it. That is a village state
  * and not a fault, and the sentence does not dead end.
  *
- * WHEN THE VOTE PATH SHIPS: flip this to true in the same commit and not
- * before. What it needs is a `redemption` subject type in the ballot engine and
- * a `SUBJECT_CLOSERS` entry, and `ballotBinds` is `hasOwnProperty` on that
- * table, so a redemption ballot without the closer holds a real vote and
- * executes nothing. It also needs the founder's answer on question 5 of the
- * design: a ballot is served to anyone with the link, so the vote path makes
- * every redemption public, permanently, including after a refusal.
+ * IT SHIPPED, 2026-09-15, and this is the commit that says so. What it needed:
+ * a `redemption` subject type with a `SUBJECT_CLOSERS` entry (server/index.ts,
+ * built in server/lib/redemptionBallot.ts), an opener the ask calls so a
+ * vote-mode request can never exist without its ballot, and the engine's
+ * `onUnlanded` hook, which gives the tokens back when a passed decision is
+ * vetoed in its landing window or written off after it stalls.
+ *
+ * THE PUBLICITY IS THE COST, and it is paid out loud rather than hidden: a
+ * ballot is served to anyone with the link and it is kept, so every redemption
+ * decided this way is public permanently, including after a refusal. The member
+ * is told that BEFORE they submit (RedemptionPanel), and the ballot carries only
+ * the amount and the words they chose to write.
+ *
+ * A village only reaches this path when NOBODY holds `redemption.confirm`. Give
+ * the key to a role and redemptions stay between the member and that role.
  */
-export const VOTE_PATH_BUILT = false;
+export const VOTE_PATH_BUILT = true;
 
 export type RedemptionState = "requested" | "confirmed" | "refused" | "withdrawn" | "expired";
 
@@ -376,9 +384,6 @@ export function redemptionRefusal(ask: RedeemAsk): string | null {
   }
   if (ask.perCycle <= 0) {
     return "This village is not taking redemptions just now. A steward can open them in the village's dials";
-  }
-  if (ask.confirmedBy === "vote" && !ask.votePathBuilt) {
-    return "Nobody in this village holds the key that confirms a redemption, so this would go to a village vote, and that path is still being finished. Ask a steward to give the redemption key to a role, and this works straight away";
   }
   if (ask.exitOpen) {
     return "You have a departure open, and what happens to your balance is being settled there";
