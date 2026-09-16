@@ -87,7 +87,7 @@ function deps(broken?: "role-holdings" | "tombstone", beforeTombstone?: () => Pr
       },
     },
     roleHoldersRepo: {
-      replaceAll: async () => {
+      remove: async () => {
         if (broken === "role-holdings") throw new Error("the role holder write was refused");
       },
     },

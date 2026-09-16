@@ -4388,7 +4388,9 @@ async function runRetentionSweep(): Promise<string> {
           /* already gone, or never written — the row still goes */
         }
       }
-      await submissionsRepo.replaceAll(keep);
+      // By id, so a sweep that ages out the whole queue cannot take a
+      // submission that arrived while it was unlinking files (store-db.ts, 0123).
+      await submissionsRepo.remove(dropped.map((s: any) => String(s.id)));
       parts.push(`${before.length - keep.length} submission(s)`);
     }
   }
@@ -7839,12 +7841,14 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     if (!(await isAdmin(req))) {
       return res.status(401).json({ error: "auth_required" });
     }
-    const submissions: any[] = submissionsRepo.all();
-    const filtered = submissions.filter((s) => s.id !== req.params.id);
-    if (filtered.length === submissions.length) {
+    // remove(), never replaceAll of a filtered snapshot. Deleting the LAST row
+    // that way hands the store an empty array, which carries no version stamp
+    // and used to DELETE the whole table: a raised hand arriving in the gap
+    // was erased and both requests answered 200 (store-db.ts, 0123). The 404
+    // now comes from the delete itself, so the cache cannot disagree with it.
+    if (!(await submissionsRepo.remove([String(req.params.id)]))) {
       return res.status(404).json({ error: "Not found" });
     }
-    await submissionsRepo.replaceAll(filtered);
     res.json({ success: true });
   });
 
@@ -11128,11 +11132,12 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     if (await isExampleRow(getPool(), "tools", req.params.id)) {
       return res.status(409).json(EXAMPLE_REFUSAL_BODY);
     }
-    const all = toolsRepo.all();
-    const filtered = all.filter((t: any) => t.id !== req.params.id);
-    if (filtered.length === all.length) return res.status(404).json({ error: "Not found" });
     // Click rows survive on purpose: analytics history is orphan-tolerated.
-    await toolsRepo.replaceAll(filtered);
+    // By id, because removing the last tool through a filtered snapshot hands
+    // the store an unstamped empty array (store-db.ts, 0123).
+    if (!(await toolsRepo.remove([String(req.params.id)]))) {
+      return res.status(404).json({ error: "Not found" });
+    }
     res.json({ success: true });
   });
 
@@ -18408,10 +18413,10 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const docs: any[] = investorDocsRepo.all();
     const target = docs.find((d) => d.id === req.params.id);
     if (!target) return res.status(404).json({ error: "Not found" });
-    // `replaceAll` is the only write this repo offers besides `insert`, and the
-    // delete route beside this one already uses it. A whole-table rewrite can
-    // race a concurrent writer; on a vault an admin edits by hand, a few rows
-    // at a time, that is the trade the available primitive forces.
+    // An EDIT still goes through the whole-table write, which is the only
+    // update this repo offers besides `insert` and `remove`. The payload is
+    // never empty here, so it carries a version stamp and a concurrent writer
+    // is rebased onto, never overwritten (store-db.ts).
     await investorDocsRepo.replaceAll(
       docs.map((d) => (d.id === req.params.id ? { ...d, inPacket } : d)),
     );
@@ -18425,8 +18430,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const docs: any[] = investorDocsRepo.all();
     const target = docs.find((d) => d.id === req.params.id);
     if (!target) return res.status(404).json({ error: "Not found" });
-    const filtered = docs.filter((d) => d.id !== req.params.id);
-    await investorDocsRepo.replaceAll(filtered);
+    // By id: a vault holding one document would otherwise be emptied through
+    // an unstamped payload and take a concurrent upload with it (0123).
+    await investorDocsRepo.remove([String(req.params.id)]);
     // `target.filename` was never a column, so this read undefined and joined
     // it into a path. Only a row whose url points into our own uploads volume
     // has a file to remove; an imported row pointing at an external address
@@ -22806,11 +22812,12 @@ ${inner}
 
       let removed = false;
       await withRoleHolderLock(async () => {
-        const holders = loadRoleHolders();
-        const keep = holders.filter((h) => !(h.roleId === asked.roleId && h.userId === asked.userId));
-        if (keep.length === holders.length) return;
-        removed = true;
-        await roleHoldersRepo.replaceAll(keep);
+        // By id (0123): unseating the village's last holder through a filtered
+        // snapshot writes an unstamped empty payload, which the store refuses.
+        const gone = loadRoleHolders()
+          .filter((h) => h.roleId === asked.roleId && h.userId === asked.userId)
+          .map((h) => String(h.id));
+        removed = gone.length > 0 && (await roleHoldersRepo.remove(gone)) > 0;
       });
 
       const role = rolesRepo.all().find((r: any) => r.id === asked.roleId) as any;
@@ -26559,11 +26566,15 @@ ${inner}
           holders.push(row);
           appointedHolderId = row.id;
         }
-      } else {
-        holders = holders.filter((h) => !(h.roleId === role.id && h.userId === userId));
+        await roleHoldersRepo.replaceAll(holders);
+        return holders;
       }
-      await roleHoldersRepo.replaceAll(holders);
-      return holders;
+      // A REMOVAL GOES BY ID (0123). Taking the village's last seat back
+      // through a filtered snapshot writes an unstamped empty payload, which
+      // reads as a seed and used to DELETE every row the table had gained.
+      const gone = holders.filter((h) => h.roleId === role.id && h.userId === userId);
+      if (gone.length) await roleHoldersRepo.remove(gone.map((h) => String(h.id)));
+      return holders.filter((h) => !gone.includes(h));
     });
     if (appointedHolderId) {
       await addActivity("role", `${firstName(member.name)} joined the ${role.name}`, { actorUserId: appointer, entityType: "role", entityRef: role.id });
