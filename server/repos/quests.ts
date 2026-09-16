@@ -608,9 +608,9 @@ const REAL_CLAIM_JOIN =
   "WHERE COALESCE(q.is_example, 0) = 0 AND COALESCE(u.is_example, 0) = 0";
 
 const CLAIM_SELECT =
-  // confidence (0055) rides along so every read carries it. It is written by
-  // its own targeted UPDATE and is deliberately absent from the generic
-  // `update()` SET list below, which means no other write path can clobber it.
+  // confidence (0055) rides along so every read carries it. Only
+  // `setConfidence` writes it, and CLAIM_UPDATE below, the one SET list every
+  // claim transition shares, leaves it out, so no transition can clobber it.
   "SELECT id, quest_id, quest_title, user_id, user_name, status, artifact_url, note, amount, claimed_at, submitted_at, consented_at, consented_by, confidence, confidence_note, confidence_at FROM quest_claims";
 
 function rowToClaim(r: RowDataPacket): ClaimRecord {
