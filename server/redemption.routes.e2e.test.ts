@@ -475,6 +475,83 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
     expect(await balanceOf(wrenToken)).toBe(before);
   });
 
+  /*
+   * RULING 23, DRIVEN THROUGH THE DOOR. Gates and tests do not see a refusal
+   * path unless something drives one, so both money refusals are driven here
+   * against the real server, with a POSITIVE CONTROL first: the same ask, at a
+   * size the caps allow, must succeed. Without that control a refusal
+   * assertion passes just as well when the rate is missing and nothing is
+   * being measured at all.
+   */
+  it("prices a redemption, then refuses one below the floor and one over the cap", async () => {
+    /*
+     * THE COUNT CAP IS RAISED FIRST, and it is not incidental. This file's
+     * setup allows five opens a moon and the cases above have spent most of
+     * them, so without this the COUNT refusal answers every ask below and each
+     * money assertion would be reading a sentence about a different rule. A
+     * refusal test that passes for the wrong reason is worse than none.
+     */
+    await setVar("redemption.per_member_per_cycle", "50");
+    await setVar("redemption.rate_source", "set");
+    await setVar("redemption.rate_per_token", "2");
+    await setVar("redemption.fee_pct", "10");
+    await setVar("redemption.fee_fixed", "1");
+    await mintTo(wrenId, 100);
+
+    // The control: 20 credits at 2 a token is 40, which no cap refuses yet.
+    const ok = await call("POST", "/api/redemptions", { token: CREDITS, amount: 20, askedFor: "a saw" }, wrenToken);
+    expect(ok.status, `the priced ask must land: ${ok.text.slice(0, 300)}`).toBe(201);
+    const money = ok.json?.redemption?.money;
+    expect(money, "a priced redemption carries its money").toBeTruthy();
+    // 40.00 gross, 10% is 4.00, plus the 1.00 flat fee, so 35.00 is received.
+    expect(money.grossMinor).toBe(4000);
+    expect(money.feeMinor).toBe(500);
+    expect(money.netMinor).toBe(3500);
+    expect((await call("POST", `/api/redemptions/${ok.json.redemption.id}/withdraw`, undefined, wrenToken)).status).toBe(200);
+
+    // BELOW THE FLOOR. 5 credits comes to 10, under a floor of 25.
+    await setVar("redemption.min_amount", "25");
+    const small = await call("POST", "/api/redemptions", { token: CREDITS, amount: 5, askedFor: "a nail" }, wrenToken);
+    expect(small.status, small.text.slice(0, 300)).toBe(409);
+    expect(String(small.json?.error)).toContain("smallest redemption here is");
+    await setVar("redemption.min_amount", "0");
+
+    // OVER THE VILLAGE'S OWN CAP for the moon.
+    await setVar("redemption.max_village_per_cycle", "30");
+    const big = await call("POST", "/api/redemptions", { token: CREDITS, amount: 20, askedFor: "a lathe" }, wrenToken);
+    expect(big.status, big.text.slice(0, 300)).toBe(409);
+    expect(String(big.json?.error)).toContain("left to redeem this moon");
+    await setVar("redemption.max_village_per_cycle", "0");
+
+    // AN UNVALUED TOKEN IS REFUSED WHILE A CAP STANDS, and allowed once it is
+    // lifted. This is the decision the design had to make out loud.
+    await setVar("redemption.rate_per_token", "0");
+    await setVar("redemption.max_per_request", "100");
+    const unpriced = await call("POST", "/api/redemptions", { token: CREDITS, amount: 5, askedFor: "a day of help" }, wrenToken);
+    expect(unpriced.status, unpriced.text.slice(0, 300)).toBe(409);
+    expect(String(unpriced.json?.error)).toContain("no rate for this token");
+    await setVar("redemption.max_per_request", "0");
+    const services = await call("POST", "/api/redemptions", { token: CREDITS, amount: 5, askedFor: "a day of help" }, wrenToken);
+    expect(services.status, services.text.slice(0, 300)).toBe(201);
+    expect(services.json?.redemption?.money, "an unvalued request carries no figures").toBeNull();
+    expect((await call("POST", `/api/redemptions/${services.json.redemption.id}/withdraw`, undefined, wrenToken)).status).toBe(200);
+
+    await setVar("redemption.fee_pct", "0");
+    await setVar("redemption.fee_fixed", "0");
+    await setVar("redemption.rate_source", "exchange");
+  }, 300_000);
+
+  it("shows the member the village's own process, as text and never as markup", async () => {
+    await setVar("redemption.process_text", "Call Suzy on 555 0101.\nShe sends a bank transfer: https://example.test/how <b>bold</b>");
+    const mine = await call("GET", "/api/redemptions", undefined, wrenToken);
+    expect(mine.status).toBe(200);
+    // Served verbatim. The CLIENT renders it through LongText, which escapes by
+    // construction, so the markup arrives as characters and never as HTML.
+    expect(String(mine.json?.money?.processText)).toContain("<b>bold</b>");
+    expect(String(mine.json?.money?.processText)).toContain("\n");
+    await setVar("redemption.process_text", "");
+  });
+
   it("refuses to switch off while a member is waiting, and serves withdraw once it is off", async () => {
     await mintTo(wrenId, 15);
     const asked = await call("POST", "/api/redemptions", { token: CREDITS, amount: 15, askedFor: "a lamp" }, wrenToken);
