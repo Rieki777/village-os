@@ -1,5 +1,6 @@
 import { anonymizeMember } from "./lib/erasure";
 import { proposalsAboutMember } from "./lib/externalProposals";
+import { ideasProposedBy, landPublicSubmission } from "./lib/publicForms";
 // Local dev reads .env (PORT=3001 so the API doesn't collide with Vite's 3000);
 // on Railway the real environment always wins over the file.
 import "dotenv/config";
@@ -58,18 +59,23 @@ import { register as registerLandRoutes } from "./routes/land";
 import { register as registerMilestonesRoutes } from "./routes/milestones";
 import { register as registerTrainingRoutes } from "./routes/training";
 import { register as registerGoogleAuthRoutes } from "./routes/authGoogle";
+import { register as registerSignUpRoutes } from "./routes/register";
+import { register as registerInviteRoutes } from "./routes/invites";
+import { makeInviteDoor } from "./lib/inviteDoor";
 import { register as registerRecoveryRoutes } from "./routes/authRecovery";
 import { register as registerPulseRoutes } from "./routes/pulse";
 import { register as registerPlayersRoutes } from "./routes/players";
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerOrgRoutes } from "./routes/org";
 import { register as registerSeasonRoutes } from "./routes/seasons";
+import { register as registerCircleRoutes } from "./routes/circles";
 import { register as registerReviewRoutes } from "./routes/review";
 import { register as registerHoldersRoutes } from "./routes/holders";
 import { register as registerErasureQueueRoutes } from "./routes/erasureQueue";
+import { register as registerFailedActionsRoutes } from "./routes/failedActions";
 import { register as registerCircleBurnRoutes } from "./routes/circleBurn";
 import { register as registerCircleBonusGateRoutes } from "./routes/circleBonusGate";
-import { budgetDeleteProblem, circleDeleteProblem, onCircleStatusChange, treasuryFacts, register as registerCircleTreasuryRoutes } from "./routes/circleTreasury";
+import { budgetDeleteProblem, treasuryFacts, register as registerCircleTreasuryRoutes } from "./routes/circleTreasury";
 import { register as registerGovernanceWeightRoutes } from "./routes/governanceWeights";
 import { register as registerGovernanceWizardRoutes } from "./routes/governanceWizard";
 import { register as registerDelegationRoutes } from "./routes/delegation";
@@ -83,7 +89,7 @@ import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader
 import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
 import { landWeightMode } from "./lib/landingRefusal";
 import { landingRow } from "./lib/applyDue";
-import { notifyRollRows, type RollNotice } from "./lib/ballotNotices";
+import { closeActivityLine, decisionLink, notifyRollRows, tellRollTheOutcome, type RollNotice } from "./lib/ballotNotices";
 import { isPresentMember, presenceTest } from "./lib/memberPresence";
 import { runSeasonReminders } from "./lib/seasonReminders";
 import { forgetStewardActs, holdingHasLapsed, recordTermStarted, runTermWatch, setVetoWindowCheck, STEWARD_VETO, stewardMailRefusal, termWatchLookaheadDays } from "./lib/stewardship";
@@ -116,6 +122,8 @@ import { expireRedemptions, retiredSupply } from "./lib/redemptionStore";
 import { register as registerFeedbackRoutes } from "./routes/feedback";
 import { register as registerCharacterPortraitRoutes } from "./routes/characterPortraits";
 import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
+import { register as registerPowerAffinityRoutes, powersForClass, withPowerAffinity } from "./routes/powerAffinity";
+import { register as registerPowerHandRoutes } from "./routes/powerHands";
 import { resolveGoogleConfig } from "./lib/oauthGoogle";
 import {
   decodeToken,
@@ -127,7 +135,7 @@ import {
 import { buildThemeCss, sanitizeFontName } from "./lib/themeCss";
 import { applyTimingOf, ringOf, VARIABLES_BY_KEY } from "../shared/gameVariables";
 import { CONSTITUTION } from "../shared/constitution";
-import { circleViews } from "../shared/circleView";
+import { circleViews, loopedCirclesRefusal } from "../shared/circleView";
 import { DEFAULT_MAP_SKIN, sanitiseMapSkin } from "../shared/mapSkin";
 import {
   DEFAULT_MAP_VOCABULARY,
@@ -497,7 +505,7 @@ import {
   type Candidate,
 } from "./lib/map";
 import { ensureInstanceIdentity, instanceIdentity, PLATFORM_VERSION } from "./lib/identity";
-import { listDrafts, measureVisionMetrics, visionProgress } from "./lib/orgDrafts";
+import { listDrafts, measureVisionMetrics, tierDraftWords, visionProgress } from "./lib/orgDrafts";
 import { DECIDES_BY, DOMAINS, HOW_CHOSEN, SHAPES } from "../shared/power";
 import { noteSeen, readSeen } from "./lib/sheetSeen"; import { displayCurrencyProblem } from "../shared/money";
 import { latestRates, refreshDailyRates } from "./lib/fxRates";
@@ -1124,11 +1132,11 @@ const FORM_TYPE_TO_PATHWAY: Record<string, "investor" | "steward" | "resident" |
  *     inbox: `investor`, `investor-pack`, `resident`, `prosperity`, `contact`;
  *   - what `Admin.tsx` lists in its own filter, which is the same set again.
  *
- * TWO REAL TYPES ARE DELIBERATELY ABSENT, and their absence is the point.
- * `role-application` is written by `POST /api/map/roles/:id/raise-hand` and
- * `investor-doc-request` by `POST /api/investor-docs/request`. Both are
- * genuine rows in this table and both land in the queue a founder works, and
- * NEITHER has ever arrived through this route. Each of those routes still
+ * THREE REAL TYPES ARE DELIBERATELY ABSENT, and their absence is the point.
+ * `role-application` is written by `POST /api/map/roles/:id/raise-hand`,
+ * `power-application` by `POST /api/powers/:key/raise-hand` and `investor-doc-request` by
+ * `POST /api/investor-docs/request`. All three are genuine rows in this table, all land in the queue a founder
+ * works, and NONE has ever arrived through this route. Each of those routes still
  * writes its own type directly, which no allowlist here touches; what stops
  * now is a stranger typing one into the public form.
  *
@@ -1138,6 +1146,7 @@ const FORM_TYPE_TO_PATHWAY: Record<string, "investor" | "steward" | "resident" |
  */
 const PUBLIC_FORM_TYPES: ReadonlySet<string> = new Set([
   "membership-508",
+  "membership-request", // RequestMembership.tsx: asking to join with no invitation (Rye, 2026-09-09)
   "visit-inquiry",
   "steward-interest",
   "steward",
@@ -1263,6 +1272,13 @@ const rolesRepo = dbCollection<RoleDef>(getPool(), {
     // so an omitted flag comes back as DEFAULT 0 and retirement can never find
     // them again.
     { js: "isExample", db: "is_example", kind: "bool" },
+    // The twin of the `circles.created_at` bug, one table over. That one was
+    // found, fixed and commented, and this one sat here through the whole
+    // round: every admin ROLE edit was resetting EVERY role's birth date to
+    // the moment of that edit. A comment naming a trap does not find the next
+    // instance of it, so `check-repo-payloads.mjs` now reports any column the
+    // schema has and a spec omits, and that rule is what found this line.
+    { js: "createdAt", db: "created_at", kind: "time", defaultNow: true },
   ],
 });
 const roleHoldersRepo = dbCollection<RoleHolderRow>(getPool(), {
@@ -1405,6 +1421,19 @@ const circlesRepo = dbCollection(getPool(), {
     { js: "decidesByGloss", db: "decides_by_gloss" },
     { js: "decidesByDomains", db: "decides_by_domains", kind: "json" },
     /*
+     * 0060, and the THIRD column to need this note, which is the tell that a
+     * missing one is the default outcome rather than an oversight.
+     *
+     * Where this circle lives on the land, read by
+     * `GET /api/admin/map/structures` (server/routes/mapScene.ts). Left out
+     * of this spec it was reset to NULL for EVERY circle, village-wide, by
+     * one steward renaming one circle. Nothing writes it yet, which is why
+     * this was quiet rather than harmless: the org editor is about to be the
+     * thing that sets it, and the wipe would have arrived looking like a drag
+     * that did not save.
+     */
+    { js: "homeStructureKey", db: "home_structure_key" },
+    /*
      * `replaceAll` is DELETE-all plus a re-INSERT of exactly the columns in
      * this spec, so a column left out is not preserved: it is re-defaulted.
      * `circles.created_at` is `NOT NULL DEFAULT CURRENT_TIMESTAMP`, so every
@@ -1419,6 +1448,16 @@ const circlesRepo = dbCollection(getPool(), {
      */
     { js: "createdAt", db: "created_at", kind: "time", defaultNow: true },
   ],
+  /*
+   * TWO STEWARDS, ONE MOMENT, AND A LOOP NEITHER OF THEM SAVED.
+   *
+   * The circle routes refuse a loop against the rows they read, and `replaceAll`
+   * then merges a stale snapshot field by field, so Finance inside Business and
+   * Business inside Finance can arrive together as a state neither writer saw.
+   * The rule that says no lives in shared/circleView.ts, where the map and the
+   * routes already read it, so the store asks it instead of holding a copy.
+   */
+  mergeRefusal: (rows) => loopedCirclesRefusal(rows as any[]),
 });
 
 // S15: the tools hub registry (the framework's reference consumer).
@@ -1914,7 +1953,10 @@ async function applyOrgRolesBackfill(): Promise<void> {
   await circlesRepo.load();
   console.log(
     `[MIGRATION] org chart as rows: ${report.seatsWritten} seat(s), ${report.circlesWritten} circle(s), ` +
-      `${report.councilsToForming} council(s) moved to forming, ${report.holdersWritten} documented holder(s)`,
+      `${report.councilsToForming} council(s) moved to forming, ${report.holdersWritten} documented holder(s)` +
+      // Never silent: a looping parent in the seed would otherwise draw a
+      // flat map nobody could tell from a village that IS flat.
+      (report.circlesUnparented ? `, ${report.circlesUnparented} circle(s) unparented (parent loop in the seed)` : ""),
   );
 }
 
@@ -7786,10 +7828,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       submittedAt: new Date().toISOString(),
     };
     if (submitter) { entry.userId = submitter.id; entry.userName = submitter.name; }
-    // One INSERT, not snapshot→push→replaceAll: two concurrent public
-    // submissions used to race, and the later whole-table rewrite deleted
-    // the earlier member's row. Same append pattern as raise-hand.
-    await submissionsRepo.insert(entry);
+    // One INSERT, then a quest idea queued for review: server/lib/publicForms.ts.
+    await landPublicSubmission(submissionsRepo, getPool(), entry);
 
     /*
      * The origin comes from OUR configuration, never from the request.
@@ -8089,47 +8129,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     res.json({ success: true });
   });
 
-  // Auth: Register
-  app.post("/api/auth/register", async (req, res) => {
-    // FIRST statement, before the exists-by-email check, so the throttle also
-    // bounds the account-enumeration oracle (409 vs 200 answers "is this
-    // address a member?"). Per-IP and admin-tunable: a village onboarding
-    // gathering behind one NAT shares a bucket, so the default is above
-    // login's. overLimit fails open on DB trouble — an outage never blocks
-    // registration.
-    if (await overLimit(`register:${clientIp(req)}`, Math.max(1, numberVar("abuse.register_per_ip_hourly")), 60 * 60 * 1000)) {
-      return res.status(429).json({ error: "Too many attempts. Try again in a few minutes." });
-    }
-    const { name, email, password, paths } = req.body;
-    if (!name || !email || !password || !paths || !Array.isArray(paths)) {
-      return res.status(400).json({ error: "Missing required fields" });
-    }
-    // The other door onto a member's paths, and the one a stranger can open.
-    const chosen = claimPaths(paths);
-    if (!chosen.ok) return res.status(400).json({ error: chosen.error });
-    if (await members.existsByEmail(email)) {
-      return res.status(409).json({ error: "Email already exists" });
-    }
-    const userId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const user = {
-      id: userId,
-      name,
-      email,
-      passwordHash: await hashPassword(password),
-      handle: await uniqueHandle(slugifyHandle(name)),
-      paths: chosen.paths ?? [],
-      contributions: [],
-      quests: [],
-      recognitionBalance: 0,
-      joinedAt: new Date().toISOString(),
-      bio: "",
-      avatar: null,
-    };
-    await members.add(user);
-    await joined({ id: userId, name, handle: user.handle });
-    const token = encodeToken(AUTH_TOKEN_SECRET, userId, email);
-    res.json({ success: true, token, user: publicUser(user) });
-  });
+  // Auth: Register lives in server/routes/register.ts, beside the Google door and the invitation both share.
 
   // Auth: Login
   app.post("/api/auth/login", async (req, res) => {
@@ -8276,7 +8276,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
         }
       }
     } else {
-      const userId = `usr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const userId = `usr-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
       user = {
         id: userId,
         name: String(name || "Founder").slice(0, 120),
@@ -8363,6 +8363,13 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     recordAudit: recordAuthAudit,
   });
   const joined = (u: { id: string; name: string; handle: string }) => memberJoined(u, { addActivity, firstName, greeterRoleId: () => stringVar("arrival.greeter_role"), seats: loadRoleHolders, everyone: () => members.all(), notify });
+  const inviteDoor = makeInviteDoor({ getPool, members }); // one invitation for both sign-up doors
+  registerSignUpRoutes(app, {
+    overLimit, clientIp, members, hashPassword, publicUser, joined, invites: inviteDoor,
+    makeHandle: (name) => uniqueHandle(slugifyHandle(name)),
+    encodeToken: (userId, email) => encodeToken(AUTH_TOKEN_SECRET, userId, email),
+  });
+  registerInviteRoutes(app, { authedUser, getPool, members, guardCapability, mayAct, overLimit, clientIp, invites: inviteDoor });
   registerGoogleAuthRoutes(app, {
     authSecret: AUTH_TOKEN_SECRET,
     availability: googleSignInAvailability,
@@ -8374,6 +8381,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     clientIp,
     recordAudit: recordAuthAudit,
     onMemberJoined: (user) => void joined(user), // every door in records the join and greets: register calls joined too
+    invites: inviteDoor,
   });
 
   /**
@@ -10148,11 +10156,11 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
           id: r.id,
           name: r.name,
           description: r.aim ?? "",
-          // A role is its AIM (above, as `description`) and its DOMAIN. These
-          // were read every request and dropped here, so the seat card showed
-          // what a seat was for and never what it decides on.
+          // A seat is its AIM (above, as `description`), what it DECIDES on,
+          // and WHY IT MATTERS. Each was read every request and dropped here.
           domain: r.domain ?? null,
           accountabilities: r.accountabilities ?? [],
+          whyItMatters: r.whyItMatters ?? null,
           circleId: r.circleId ?? null,
           seats: r.seats,
           minStage: null,
@@ -10222,6 +10230,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       viewer: {
         viewPeople,
         canContact: false,
+        mayArrange: admin, // the drag publishes an org draft: admin until the decide gate lands
         // Where this viewer may declare (P10): "village" and/or circle ids.
         // The pencil shows where this says; the server re-checks on write.
         // 0103: a LOOK, and the admin door stays OPEN here. The pencil this
@@ -10246,119 +10255,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     });
   });
 
-  app.post("/api/admin/circles", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const { id, name } = req.body ?? {};
-    // A name in any non-Latin script slugifies to "" — so a village writing
-    // Russian, Japanese or Arabic could not create a circle AT ALL, and the
-    // admin form offers no slug field to work around it. Fall back to a
-    // generated id, and cap at the varchar(64) the PK actually is (names
-    // allow 120, so a long ASCII name overflowed it too).
-    const slug =
-      String(id ?? name ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64) ||
-      `circle-${Date.now().toString(36)}`;
-    if (!String(name ?? "").trim()) return res.status(400).json({ error: "A name is required" });
-    if (circlesRepo.all().some((c: any) => c.id === slug)) return res.status(409).json({ error: "That circle already exists" });
-    const circle = {
-      id: slug,
-      name: String(name).trim().slice(0, 120),
-      purpose: req.body.purpose ?? null,
-      aliases: Array.isArray(req.body.aliases) ? req.body.aliases : [],
-      parentCircleId: null,
-      leadRoleId: req.body.leadRoleId ?? null,
-      icon: req.body.icon ?? null,
-      color: req.body.color ?? null,
-      status: (CIRCLE_STATUSES as readonly string[]).includes(req.body.status) ? req.body.status : "active",
-      order: circlesRepo.all().length + 1,
-    };
-    await circlesRepo.insert(circle);
-    onRealItemPublished(getPool(), "map", adminActor(req)?.id ?? null);
-    res.json(circle);
-  });
-
-  app.put("/api/admin/circles/:id", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const all = circlesRepo.all();
-    const idx = all.findIndex((c: any) => c.id === req.params.id);
-    if (idx === -1) return res.status(404).json({ error: "Not found" });
-    // Pinning the flag stops laundering but not the edit itself: the row stays
-    // an example, so retirement deletes the founder's own words the moment
-    // they publish a real circle. Refuse, like every sibling module.
-    if (await isExampleRow(getPool(), "circles", req.params.id)) {
-      return res.status(409).json(EXAMPLE_REFUSAL_BODY);
-    }
-    /*
-     * Validate what the editor now sends, because `replaceAll` is a DELETE-all
-     * plus a re-INSERT of every circle inside one transaction: a `status` that
-     * misses the MySQL enum rolls back the WHOLE circles table, so one bad
-     * dropdown value would look like "nothing saved" across every row. The
-     * create route already whitelists status and caps the name at the
-     * varchar(120); the edit route accepted anything.
-     */
-    if (req.body?.name !== undefined) {
-      const name = String(req.body.name).trim();
-      if (!name) return res.status(400).json({ error: "blank_name", message: "A circle needs a name. It is the heading /circles, /roles and /team print." });
-      if (name.length > 120) return res.status(400).json({ error: "name_too_long", message: "A circle name is at most 120 characters." });
-      req.body.name = name;
-    }
-    if (req.body?.status !== undefined && !(CIRCLE_STATUSES as readonly string[]).includes(String(req.body.status))) {
-      return res.status(400).json({
-        error: "unknown_status",
-        message: `A circle is ${CIRCLE_STATUSES.join(", ")}. "${String(req.body.status)}" is none of those.`,
-      });
-    }
-    if (req.body?.purpose !== undefined) {
-      const purpose = String(req.body.purpose ?? "").trim();
-      if (purpose.length > 2000) return res.status(400).json({ error: "purpose_too_long", message: "A circle purpose is at most 2000 characters." });
-      req.body.purpose = purpose || null;
-    }
-    // isExample is pinned exactly like id: a request body may not forge the
-    // flag onto a real row, nor strip it off an example to launder it.
-    const wasStatus = String((all[idx] as any).status ?? "active"), merged = { ...all[idx], ...req.body, id: all[idx].id, isExample: all[idx].isExample }; // 0200: the status is read BEFORE the merge overwrites it
-    // An alias maps to exactly ONE circle: reject collisions with any other
-    // circle's name or aliases — a quest resolving two ways is a data bug.
-    const aliases: string[] = Array.isArray(merged.aliases) ? merged.aliases.map((a: any) => String(a)) : [];
-    for (const alias of aliases) {
-      const lower = alias.toLowerCase();
-      const clash = all.some(
-        (c: any, j: number) =>
-          j !== idx &&
-          (String(c.name).toLowerCase() === lower ||
-            (c.aliases ?? []).some((x: string) => String(x).toLowerCase() === lower)),
-      );
-      if (clash) return res.status(409).json({ error: `Alias "${alias}" already resolves to another circle` });
-    }
-    if (merged.parentCircleId === merged.id) return res.status(400).json({ error: "A circle cannot parent itself" });
-    all[idx] = { ...merged, aliases };
-    await circlesRepo.replaceAll(all);
-    res.json({ ...all[idx], ...(await onCircleStatusChange(getPool(), all[idx], wasStatus, adminActor(req)?.id ?? null, listBudgets)) });
-  });
-
-  app.delete("/api/admin/circles/:id", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    // Deleting examples one by one empties the map with no tombstone stamped,
-    // so modulesWithExamples still names the module and the banner keeps
-    // promising circles that are gone. The clear endpoint is the way out.
-    if (await isExampleRow(getPool(), "circles", req.params.id)) {
-      return res.status(409).json(EXAMPLE_REFUSAL_BODY);
-    }
-    // Both planes can point at a circle: permission groups carry a circleId
-    // from 0018, and org seats carry one from 0049. Deleting a circle out
-    // from under either one orphans a reference the database cannot catch,
-    // because nothing in drizzle/ has a foreign key.
-    const referencing = loadRoles().filter((r: any) => r.circleId === req.params.id);
-    const seatsHere = (await listOrgRoles(getPool())).filter((r) => r.circleId === req.params.id);
-    const stillHere = referencing.length + seatsHere.length;
-    if (stillHere) {
-      return res.status(409).json({ error: `${stillHere} seat(s) still orbit this circle, reassign them first` });
-    }
-    const stranded = await circleDeleteProblem(getPool(), String(req.params.id), await listBudgets(getPool()), circlesRepo);
-    if (stranded) return res.status(409).json({ error: stranded });
-    const remaining = circlesRepo.all().filter((c: any) => c.id !== req.params.id);
-    if (remaining.length === circlesRepo.all().length) return res.status(404).json({ error: "Not found" });
-    await circlesRepo.replaceAll(remaining);
-    res.json({ success: true });
-  });
+  // The circle admin routes, and the rules for where a circle may sit, live in
+  // server/routes/circles.ts.
+  registerCircleRoutes(app, { isAdmin, adminActor, circlesRepo, getPool, loadRoles });
 
   /** Assign a role to a circle and size its seats. */
   app.put("/api/admin/roles/:id", async (req, res) => {
@@ -13222,6 +13121,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
         contributorsCount: d.contributorsCount,
         imageUrl: d.imageUrl,
         isDemo: d.isDemo,
+        hubContract: d.hubContract,
         reachable: true,
         stale: served.stale,
         lastSyncAt: served.lastSyncAt,
@@ -20086,6 +19986,8 @@ ${inner}
 
   registerCharacterPortraitRoutes(app, { authedUser, getPool, uploadsDir: UPLOADS_DIR });
   registerArchetypeAdminRoutes(app, { isAdmin, guardCapability, getPool });
+  registerPowerAffinityRoutes(app, { isAdmin, guardCapability, getPool });
+  registerPowerHandRoutes(app, { authedUser, capabilityCtx, stageOf, firstName, notifyAdmins, getPool, overLimit, submissionsRepo });
 
   /** The five classes, as this village names them. Public: it is the front door. */
   app.get("/api/archetypes", async (_req, res) => {
@@ -20195,7 +20097,7 @@ ${inner}
 
   /** What a class opens. A suggestion, never a restriction. */
   app.get("/api/archetypes/:key/paths", async (req, res) => {
-    res.json(await openPathsFor(getPool(), villageId(), req.params.key));
+    res.json({ ...(await openPathsFor(getPool(), villageId(), req.params.key)), powers: await powersForClass(getPool(), villageId(), req.params.key) });
   });
 
   app.get("/api/me/characters", async (req, res) => {
@@ -20520,7 +20422,7 @@ ${inner}
       // The same keys with the closed ones included, and the rung that opens
       // each. `capabilities` above is exactly the rows here whose `held` is
       // true, by construction rather than by agreement.
-      capabilityCatalogue: capabilityCatalogue(ctx),
+      capabilityCatalogue: await withPowerAffinity(capabilityCatalogue(ctx), { pool: getPool(), villageId: villageId(), userId: user.id, stageId, inbox: submissionsRepo.all() }),
       roles: rolesFor(user.id),
       history: events
         .filter((e) => e.userId === user.id)
@@ -22076,24 +21978,11 @@ ${inner}
     return eligible.map((u: any) => ({ userId: String(u.id), weight: weights.get(String(u.id)) ?? 0 }));
   }
 
-  /**
-   * Where a notice about a ballot should LAND: on the ballot.
-   *
-   * This pointed at the proposal card on /game-mechanics until the decision
-   * surface existed, because a notice has to land on something a member can
-   * actually see. /decisions/:id is now that thing and it is strictly better:
-   * the vote widget, the clock, the frozen roll and the close beat are all on
-   * it, so every one of the five decision notices lands where its reader can
-   * act on it.
-   *
-   * A STALE LINK IS NEVER AN ERROR STATE, and that is the property this
-   * function exists to protect. A withdrawn ballot renders the decision page's
-   * own "No such decision" card with a way through to /decisions, and the
-   * notification row itself renders and clears from its stored text without
-   * ever resolving the ballot. A notice outlives the thing it points at.
-   */
+  // The URL, and why a stale one is never an error state, live on `decisionLink`
+  // in server/lib/ballotNotices.ts. Declared as a function on purpose: callers
+  // above this line reach it, so it has to hoist.
   function ballotLink(b: { id: string }): string {
-    return `/decisions/${b.id}`;
+    return decisionLink(b);
   }
 
   /**
@@ -24212,22 +24101,6 @@ ${inner}
       });
     }
     /*
-     * The village's own record of the moment. Three outcomes and three
-     * sentences, because "without passing" said the same thing about a
-     * village that answered no and a village that barely turned up, and only
-     * one of those is a verdict on the question.
-     */
-    await addActivity(
-      "governance",
-      result.outcome === "passed"
-        ? `A village vote carried: ${b.title}`
-        : result.outcome === "no_quorum"
-          ? `A village vote closed with too few voting to settle it: ${b.title}`
-          : `A village vote closed without passing: ${b.title}`,
-      { actorUserId: user.id, entityType: "ballot", entityRef: b.id },
-    );
-
-    /*
      * Outcome routing, through the subject table (SUBJECT_CLOSERS above).
      * Every step inside it is a guarded update or an idempotent apply, so a
      * crash partway heals on the admin apply path instead of corrupting. A
@@ -24244,68 +24117,31 @@ ${inner}
       landingDeps(), result.ballot, result.outcome, result.ballot.outcomeNote ?? "", user.id,
       await itemKindsOf(landingDeps(), b),
     );
-    const { applied, held, proposerTold } = routing;
+    const { applied, held } = routing;
     // A seated steward's no fails a ballot at close, so the outcome the route
     // reports is the one routing settled and never the one the tally gave.
     const outcome = routing.outcome ?? result.outcome;
     /*
-     * The roll hears the outcome, once, keyed on the ballot. Everyone who was
-     * asked is told what the answer was, INCLUDING the people who did not
-     * vote: a decision binds them either way, and finding out later from
-     * somebody else is how a village stops trusting its own process.
-     *
-     * `no_quorum` is worded as its own thing and never folded into "did not
-     * pass". Too few people answered is a different fact from the village
-     * saying no, and it is the one an electorate can act on.
-     *
-     * AFTER the routing above, so `proposerTold` is settled. Not awaited, for
-     * the same reason the open path is not: a village-wide roll is one insert
-     * per member, and notifyRoll catches its own failures.
+     * The pulse line, then the roll, told once and keyed on the ballot,
+     * including the people who did not vote: a decision binds them either way.
+     * Both are phrased from what routing SETTLED, so a landing that failed at
+     * the close never reads as carried and in effect. The wording and the kinds
+     * live in server/lib/ballotNotices.ts. The roll is not awaited: one insert
+     * per member, and the ring catches its own failures.
      */
+    await addActivity("governance", closeActivityLine(b.title, outcome, routing.landingFailed), {
+      actorUserId: user.id,
+      entityType: "ballot",
+      entityRef: b.id,
+    });
     const binds = ballotBinds(b.subjectType);
-    /*
-     * THE KIND CARRIES THE MEANING, and it has to, because the bell groups,
-     * batches and rations celebration by KIND and never by title.
-     *
-     * `ballot_failed` used to fire for a missed quorum, and that kind's blurb
-     * reads "The village said no." So fix 1's defect was living in the bell as
-     * well as in the subject's status column: the title said one thing and the
-     * line underneath it said the opposite.
-     *
-     * `ballot_carried` is one of the four kinds that earn a celebration. An
-     * advisory vote must never reach it. Somebody shown the moment reserved
-     * for a decision, who finds out later that the village changed nothing, is
-     * worse off than somebody who never voted.
-     *
-     * The ternary stays INLINE on the property. `shared/notificationKinds.test.ts`
-     * reads the produced types out of this source by brace-matching the object
-     * literal and splitting it on top-level commas, and it has no idea what a
-     * comment is: a block comment sitting inside these braces splits on its own
-     * prose and hides every literal in the value below it.
-     */
-    void notifyRoll(b, {
-      type: !binds
-        ? "ballot_advisory_closed"
-        : outcome === "passed"
-          ? "ballot_carried"
-          : outcome === "no_quorum"
-            ? "ballot_no_quorum"
-            : "ballot_failed",
-      title:
-        outcome === "no_quorum"
-          ? `Closed without quorum: ${b.title}`
-          : outcome === "passed"
-            ? binds
-              ? `Carried: ${b.title}`
-              : `The village would have said yes: ${b.title}`
-            : binds
-              ? `Did not pass: ${b.title}`
-              : `The village would have said no: ${b.title}`,
-      body: binds
-        ? result.ballot.outcomeNote
-        : `${result.ballot.outcomeNote ?? ""}\n\nThis was an advisory vote. Nothing changed on its own.`.trim(),
-      keySuffix: "outcome",
-      except: [proposerTold],
+    void tellRollTheOutcome({ pool: getPool(), notify, link: ballotLink }, {
+      ballot: b,
+      outcome,
+      binds,
+      outcomeNote: result.ballot.outcomeNote ?? null,
+      routing,
+      proposerId: subjectProposerId ?? b.openedBy,
     });
 
     res.json({
@@ -25657,7 +25493,7 @@ ${inner}
   });
   registerGovernanceWizardRoutes(app, { authedUser, getPool, capabilityCtx, weightModeNow });
   registerDelegationRoutes(app, { authedUser, getPool, capabilityCtx, members, firstName });
-  registerGovernanceVetoRoutes(app, { authedUser, mayAct, isAdmin, getPool, members, firstName, notify });
+  registerGovernanceVetoRoutes(app, { authedUser, mayAct, isAdmin, getPool, members, firstName, notify, closerFor: (subjectType: string) => SUBJECT_CLOSERS[subjectType] });
   registerGovernanceLandingRoutes(app, { authedUser, mayAct, getPool, members, firstName, notify });
   // The two founder doors onto the moon's settlement: ask the village now,
   // and land what the village has already carried. server/routes/moonSettlement.ts.
@@ -26075,8 +25911,8 @@ ${inner}
   /**
    * The Vision layer (0083, P1, N2): open drafts as ghosts, each with its
    * vision block re-measured on read. Rides the same tier the org chart
-   * does: structure for anyone the map admits, PEOPLE only behind
-   * map.viewPeople, so a ghost says "a member" to everyone else.
+   * does: structure for anyone the map admits, PEOPLE and every word a
+   * member TYPED behind map.viewPeople. See `tierDraftWords`.
    *
    * Nothing here applies anything. The panel's prompt links to the existing
    * admin publish button, and `publishDraft`'s only caller stays that route.
@@ -26089,7 +25925,7 @@ ${inner}
     const admin = await isAdmin(req);
     const maySeePeople =
       admin || (viewer ? hasCapability("map.viewPeople", await capabilityCtx(viewer)) : false);
-    const drafts = (await listDrafts(getPool())).filter((d) => d.status === "open");
+    const drafts = await listDrafts(getPool(), { status: "open" });
 
     // Measure lazily: only the metric families the open visions actually
     // name are counted, so a village with no visions pays nothing here.
@@ -26117,12 +25953,14 @@ ${inner}
     res.json({
       drafts: drafts.map((d) => {
         const progress = d.vision ? visionProgress(d.vision, measure) : null;
+        // Words a MEMBER typed, and this route answers the street.
+        const words = tierDraftWords(maySeePeople, d, progress?.objectives ?? []);
         return {
           id: d.id,
-          title: d.title,
-          rationale: d.rationale,
+          title: words.title,
+          rationale: words.rationale,
           vision: progress
-            ? { objectives: progress.objectives, trigger: d.vision!.trigger }
+            ? { objectives: words.objectives, trigger: d.vision!.trigger }
             : null,
           progress: progress
             ? { done: progress.done, total: progress.total, allDone: progress.allDone }
@@ -26423,7 +26261,7 @@ ${inner}
   // answer each other's requests if the order moved.
   registerOrgRoutes(app, {
     isAdmin, authedUser, guardCapability, getPool, members, firstName,
-    capabilityCtx, lapseContext, currentPatternId, seasonState, notify,
+    capabilityCtx, lapseContext, currentPatternId, seasonState, notify, circlesRepo,
   });
 
   // The steward review surface (0140-0141). Mounted here beside the org
@@ -26431,10 +26269,11 @@ ${inner}
   // gates. NOT under /api/admin: a steward who is not an admin is exactly who
   // this is for, so it is capability-gated all the way down.
   registerReviewRoutes(app, {
-    isAdmin, authedUser, guardCapability, mayAct, adminActor, getPool, members, questsRepo, circlesRepo,
+    isAdmin, authedUser, guardCapability, mayAct, mayStillSee, adminActor, getPool, members, questsRepo, circlesRepo,
   });
   registerHoldersRoutes(app, { guardCapability, getPool });
   registerErasureQueueRoutes(app, { guardCapability, getPool, erasureDeps });
+  registerFailedActionsRoutes(app, { isAdmin, getPool, notifyAdmins, erasureDeps });
 
   // ── Season patterns (0050) ───────────────────────────────────────────────
   //
@@ -26806,6 +26645,7 @@ ${inner}
       tokenDecimals: Object.fromEntries(allTokens().map((t) => [t.slug, t.decimals])), // ...and what turns those rows into the numbers the member reads. Without it a Voice balance of 10000 in a downloaded file is unreadable by the one person entitled to read it.
       stageEvents: stageEventsRepo.all().filter((e: any) => e.userId === user.id),
       submissions: submissionsRepo.all().filter((s: any) => s.userId === user.id),
+      questIdeas: await ideasProposedBy(pool, user.id), // what they proposed through the Propose a Quest form, and what became of it
       notifications: notifRows,
       preferences: resolveNotifyPrefs(user.prefs),
       // What a MODULE wrote about this member. Absent until now, so a vendor

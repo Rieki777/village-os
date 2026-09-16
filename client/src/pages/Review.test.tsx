@@ -15,6 +15,11 @@
  * to review is a governance failure and not a cosmetic one. A steward who sees
  * "Nothing waiting" stops looking.
  *
+ * The page makes two reads now, the queue and the consent claims, and each
+ * keeps its own three states (findings 10 and 11 of the quests contract
+ * review). The second describe block holds that one key's refusal never hides
+ * the other key's section.
+ *
  * `Layout` is mocked to a passthrough. This file's subject is the queue's
  * three states, not the site shell around them.
  */
@@ -45,15 +50,41 @@ const EMPTY = {
   counts: { proposals: 0, quests: 0 },
 };
 
-function answerWith(status: number, body: unknown) {
+const CONSENT_REFUSED: Answer = [403, { error: "Consenting to finished work is for stewards" }];
+
+type Answer = [status: number, body: unknown];
+
+/**
+ * One answer per read. A stub answering every URL with the queue's body would
+ * hand the claims section an object where it reads an array.
+ */
+function answerRoutes(routes: { queue: Answer; claims: Answer; owed?: Answer }) {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => ({
-      ok: status >= 200 && status < 300,
-      status,
-      json: async () => body,
-    })),
+    vi.fn(async (url: string) => {
+      const path = String(url);
+      // The owed postings section reads under the claims' own prefix. Nothing is owed unless a
+      // test says so, so that section renders nothing and these tests read the page they meant.
+      const [status, body] = path.startsWith("/api/admin/quest-claims/owed")
+        ? (routes.owed ?? [200, []])
+        : path.startsWith("/api/admin/quest-claims")
+          ? routes.claims
+          : routes.queue;
+      return {
+        ok: status >= 200 && status < 300,
+        status,
+        json: async () => body,
+      };
+    }),
   );
+}
+
+/**
+ * The reader these tests were first written for: somebody who reads the
+ * proposal queue and holds no consent key, so the claims read is refused.
+ */
+function answerWith(status: number, body: unknown) {
+  answerRoutes({ queue: [status, body], claims: CONSENT_REFUSED });
 }
 
 function renderReview() {
@@ -296,13 +327,23 @@ describe("what the review page says after an accept", () => {
     'There is no circle called "Milling Circle" yet. Ask an admin to create it, then withdraw this draft. ' +
     "Its proposals go back in the review queue, ready to accept again";
 
+  /**
+   * The reader these tests are about holds no consent key, so the page's second
+   * read, the claims, is refused. Answered with the queue instead, every screen
+   * here would carry a claims error.
+   */
+  const claimsRefused = (url: string) =>
+    String(url).startsWith("/api/admin/quest-claims")
+      ? { ok: false, status: 403, json: async () => ({ error: "Consenting to finished work is for stewards" }) }
+      : null;
+
   /** Answers by method and path; anything unlisted gets the queue, which is what a reload reads. */
   function routes(table: Record<string, unknown>) {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: { method?: string }) => {
         const key = `${init?.method ?? "GET"} ${url}`;
-        return { ok: true, status: 200, json: async () => (key in table ? table[key] : QUEUE) };
+        return claimsRefused(url) ?? { ok: true, status: 200, json: async () => (key in table ? table[key] : QUEUE) };
       }),
     );
   }
@@ -357,7 +398,7 @@ describe("what the review page says after an accept", () => {
       "fetch",
       vi.fn(async (url: string, init?: { method?: string }) => {
         const key = `${init?.method ?? "GET"} ${url}`;
-        return { ok: true, status: 200, json: async () => (key in table ? table[key] : TWO) };
+        return claimsRefused(url) ?? { ok: true, status: 200, json: async () => (key in table ? table[key] : TWO) };
       }),
     );
     renderReview();
@@ -383,6 +424,8 @@ describe("what the review page says after an accept", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: { method?: string }) => {
+        const refusal = claimsRefused(url);
+        if (refusal) return refusal;
         if (init?.method === "POST" && url === "/api/review/drafts/d7/withdraw") {
           withdrawn = true;
           return { ok: true, status: 200, json: async () => ({ success: true, reopened: 1 }) };
@@ -410,6 +453,8 @@ describe("what the review page says after an accept", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: { method?: string }) => {
+        const refusal = claimsRefused(url);
+        if (refusal) return refusal;
         if (init?.method === "POST" && url === "/api/review/drafts/d9/withdraw") {
           refused = true;
           return {
@@ -533,5 +578,54 @@ describe("what the review page says after an accept", () => {
     fireEvent.click(screen.getByText("Withdraw that draft"));
     await waitFor(() => expect(screen.queryByText(/Not read from/)).toBeNull());
     expect(screen.queryByText("A draft from this queue cannot publish")).toBeNull();
+  });
+});
+
+describe("each key opens its own section, and only refusing both closes the page (findings 10 and 11)", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const waitingClaim = {
+    id: "c1",
+    questId: "q1",
+    questTitle: "Rebuild the garden beds",
+    userId: "u2",
+    userName: "Ada Moss",
+    status: "submitted",
+    note: null,
+    artifactUrl: null,
+    amount: null,
+    claimedAt: "2026-09-10T10:00:00.000Z",
+    submittedAt: "2026-09-12T10:00:00.000Z",
+    bounds: { label: "50-100", readable: true, floor: 50, ceiling: 100, zeroAllowed: false, mode: "posted" },
+  };
+
+  it("a steward who holds only quest.consent gets the claims, and is never told the page is closed", async () => {
+    answerRoutes({ queue: [401, { error: "auth_required" }], claims: [200, [waitingClaim]] });
+    renderReview();
+    await waitFor(() => expect(screen.getByText("Rebuild the garden beds")).toBeTruthy());
+    expect(screen.queryByText("This queue is not open to you yet")).toBeNull();
+    expect(screen.queryByText("The queue did not load")).toBeNull();
+    expect(screen.queryByText("Nothing waiting")).toBeNull();
+  });
+
+  it("a holder of quest.approve alone is told what lands here for them, and nothing about roles", async () => {
+    answerRoutes({ queue: [200, { ...EMPTY, scope: { proposals: false, quests: true } }], claims: CONSENT_REFUSED });
+    renderReview();
+    await waitFor(() => expect(screen.getByText("Nothing waiting")).toBeTruthy());
+    expect(screen.getByText(/Quests proposed for this village land here/)).toBeTruthy();
+    expect(screen.queryByText(/Roles, circles and quests/)).toBeNull();
+  });
+
+  it("a failed claims read is an error in its own section, and the queue still says what it knows", async () => {
+    answerRoutes({ queue: [200, EMPTY], claims: [500, { error: "the database went away" }] });
+    renderReview();
+    await waitFor(() => expect(screen.getByText("The claims did not load")).toBeTruthy());
+    expect(screen.getByText("Nothing waiting")).toBeTruthy();
+    expect(screen.queryByText("No finished work is waiting for a witness.")).toBeNull();
   });
 });

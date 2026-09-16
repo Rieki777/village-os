@@ -12,7 +12,7 @@
  * still route through here at all.
  */
 import { describe, expect, it } from "vitest";
-import { circleView, circleViews, toneForCircle, CIRCLE_TONES, CIRCLE_TONE_HEX } from "./circleView";
+import { circleView, circleViews, toneForCircle, ancestorIds, cycleFromParenting, parentCycleRefusal, parentingRefusal, parentChoicesFor, loopedCirclesRefusal, circlesOnCycles, CIRCLE_TONES, CIRCLE_TONE_HEX } from "./circleView";
 
 /** A row shaped like `circlesRepo.all()` returns one. */
 const row = (over: Record<string, unknown> = {}) => ({
@@ -163,5 +163,197 @@ describe("toneForCircle resolves what villages actually stored", () => {
     // class; an unknown value has to resolve to something drawable.
     const t = toneForCircle({ id: "q", color: "bg-not-a-real-colour" });
     expect(CIRCLE_TONES).toContain(t);
+  });
+});
+
+// ── The loop that erased the village ──────────────────────────────────
+//
+// `PUT /api/admin/circles/:id` checked self-parent and nothing else, so two
+// circles holding each other passed validation and the map then drew an
+// empty ring. These cover the refusal; `mapLayout.test.ts` covers the
+// degrade underneath it.
+
+describe("circle containment", () => {
+  const c = (id: string, parentCircleId: string | null = null) => ({ id, parentCircleId });
+
+  it("walks the parent chain nearest first", () => {
+    const all = [c("gcc"), c("dev", "gcc"), c("web", "dev")];
+    expect(ancestorIds(all, "web")).toEqual(["dev", "gcc"]);
+    expect(ancestorIds(all, "gcc")).toEqual([]);
+  });
+
+  it("terminates on data that is ALREADY looping", () => {
+    // Every importer has to read data it did not validate. A walk that hung
+    // here would take the boot with it.
+    const all = [c("a", "b"), c("b", "a")];
+    expect(ancestorIds(all, "a")).toEqual(["b"]);
+  });
+
+  it("refuses the move that closes a two-circle loop, and names both", () => {
+    // Business is inside Finance. Putting Finance inside Business is the
+    // exact write that blanked the map.
+    const all = [c("finance"), c("business", "finance")];
+    expect(cycleFromParenting(all, "finance", "business")).toEqual(["finance", "business"]);
+  });
+
+  it("refuses a longer loop and names the whole chain", () => {
+    const all = [c("a"), c("b", "a"), c("c", "b")];
+    expect(cycleFromParenting(all, "a", "c")).toEqual(["a", "c", "b"]);
+  });
+
+  it("refuses a circle parenting itself", () => {
+    expect(cycleFromParenting([c("a")], "a", "a")).toEqual(["a"]);
+  });
+
+  it("allows every move that does not close a loop", () => {
+    const all = [c("gcc"), c("dev", "gcc"), c("care", "gcc"), c("web", "dev")];
+    // Step 0 of the org work: hang a flat circle under the general circle.
+    expect(cycleFromParenting(all, "care", "gcc")).toBeNull();
+    // Re-home a subtree sideways.
+    expect(cycleFromParenting(all, "web", "care")).toBeNull();
+    // Unparenting can never loop.
+    expect(cycleFromParenting(all, "web", null)).toBeNull();
+    // Neither can naming a parent that is not there.
+    expect(cycleFromParenting(all, "web", "ghost")).toBeNull();
+  });
+
+  it("refuses in the words a founder can act on, naming both circles", () => {
+    // "invalid parent" tells somebody with fourteen circles nothing. The
+    // route hands this body straight back, so the sentence is testable
+    // without booting a server and the editor can say it before the drop.
+    const all = [
+      { id: "finance", name: "Finance & Business Circle" },
+      { id: "business", name: "Business & Finance Council", parentCircleId: "finance" },
+    ];
+    const r = parentCycleRefusal(all, "finance", "business")!;
+    expect(r.error).toBe("circle_parent_cycle");
+    expect(r.message).toBe(
+      "That would put Finance & Business Circle inside Business & Finance Council, which is already inside Finance & Business Circle.",
+    );
+    expect(r.circles).toEqual(["finance", "business"]);
+  });
+
+  it("says the plain thing for a circle put inside itself", () => {
+    const r = parentCycleRefusal([{ id: "a", name: "Land Circle" }], "a", "a")!;
+    expect(r.message).toBe("A circle cannot be inside itself.");
+  });
+
+  it("returns null for a move that is allowed, so the route writes", () => {
+    const all = [{ id: "gcc", name: "General" }, { id: "dev", name: "Dev" }];
+    expect(parentCycleRefusal(all, "dev", "gcc")).toBeNull();
+  });
+
+  it("finds every circle sitting on a loop in a batch, and only those", () => {
+    const all = [c("gcc"), c("dev", "gcc"), c("x", "y"), c("y", "x"), c("self", "self")];
+    expect(circlesOnCycles(all)).toEqual(["self", "x", "y"]);
+  });
+
+  it("says nothing is wrong with a healthy tree", () => {
+    expect(circlesOnCycles([c("gcc"), c("dev", "gcc"), c("web", "dev")])).toEqual([]);
+  });
+});
+
+/*
+ * THE PICKER AND THE ROUTE MUST NEVER DISAGREE.
+ *
+ * The admin tab offers parents from `parentChoicesFor`; the server refuses
+ * writes with `parentingRefusal`. If those drift, a person picks a parent the
+ * page offered and is told no, which reads as a broken form rather than as a
+ * rule. The property test at the bottom walks every circle and every choice.
+ */
+describe("where a circle may sit", () => {
+  const c = (id: string, parentCircleId: string | null = null, extra: Record<string, unknown> = {}) =>
+    ({ id, name: id.toUpperCase(), parentCircleId, ...extra });
+  const tree = [c("gcc"), c("dev", "gcc"), c("web", "dev"), c("care", "gcc"), c("demo", null, { isExample: true })];
+  const ids = (xs: Array<{ id: string }>) => xs.map((x) => x.id).sort();
+
+  it("lets any circle go to the top level", () => {
+    expect(parentingRefusal(tree, "web", null)).toBeNull();
+  });
+
+  it("allows an ordinary move", () => {
+    expect(parentingRefusal(tree, "care", "dev")).toBeNull();
+  });
+
+  it("refuses a parent that does not exist", () => {
+    expect(parentingRefusal(tree, "care", "ghost")?.error).toBe("circle_parent_unknown");
+  });
+
+  it("refuses an example parent, and says examples are removed", () => {
+    const r = parentingRefusal(tree, "care", "demo")!;
+    expect(r.error).toBe("circle_parent_example");
+    expect(r.message).toContain("Examples are removed");
+  });
+
+  it("still refuses a loop, in the loop's own words", () => {
+    expect(parentingRefusal(tree, "gcc", "web")?.error).toBe("circle_parent_cycle");
+  });
+
+  it("offers neither the circle itself nor anything inside it, nor an example", () => {
+    expect(ids(parentChoicesFor(tree, "dev"))).toEqual(["care", "gcc"]);
+  });
+
+  it("offers the current parent even when it is an example", () => {
+    const t = [...tree, c("lost", "demo")];
+    expect(ids(parentChoicesFor(t, "lost"))).toContain("demo");
+  });
+
+  it("terminates on data that already loops", () => {
+    const looped = [c("a", "b"), c("b", "a"), c("x")];
+    expect(ids(parentChoicesFor(looped, "a"))).toEqual(["x"]);
+  });
+
+  it("never offers a choice the route would refuse", () => {
+    for (const circle of tree) {
+      for (const choice of parentChoicesFor(tree, circle.id)) {
+        expect(parentingRefusal(tree, circle.id, choice.id), `${circle.id} inside ${choice.id}`).toBeNull();
+      }
+    }
+  });
+});
+
+/**
+ * The words for a loop nobody can catch row by row: an import, a seed, or the
+ * merge of two concurrent saves (`mergeRefusal`, server/repos/store-db.ts).
+ */
+describe("the refusal for a whole set that holds a loop", () => {
+  const link = (id: string, parentCircleId: string | null = null, name?: string) => ({
+    id,
+    parentCircleId,
+    ...(name ? { name } : {}),
+  });
+
+  it("says nothing about a set with no loop in it", () => {
+    expect(loopedCirclesRefusal([link("gcc"), link("dev", "gcc"), link("web", "dev")])).toBeNull();
+  });
+
+  it("names the circles that would end up inside each other", () => {
+    const said = loopedCirclesRefusal([
+      link("finance", "business", "Finance Circle"),
+      link("business", "finance", "Business Council"),
+    ]);
+    expect(said).toContain("Finance Circle");
+    expect(said).toContain("Business Council");
+    expect(said).toContain("inside each other");
+  });
+
+  it("has its own sentence for a circle inside itself", () => {
+    expect(loopedCirclesRefusal([link("a", "a", "Land Circle")])).toBe(
+      "Land Circle would end up inside itself.",
+    );
+  });
+
+  it("falls back to the id when a row carries no name", () => {
+    const said = loopedCirclesRefusal([link("x", "y"), link("y", "x")]);
+    expect(said).toContain("x");
+    expect(said).toContain("y");
+  });
+
+  it("speaks for circlesOnCycles, and leaves the circles off the loop out of it", () => {
+    const rows = [link("gcc"), link("dev", "gcc"), link("x", "y"), link("y", "x")];
+    expect(circlesOnCycles(rows)).toEqual(["x", "y"]);
+    const said = loopedCirclesRefusal(rows)!;
+    expect(said).toContain("x");
+    expect(said).not.toContain("dev");
   });
 });

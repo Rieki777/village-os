@@ -144,6 +144,9 @@ export default function QuestActions({
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         setError(d.message ?? d.error ?? "Could not claim");
+        // And the claim is read again. The likeliest refusal is a claim this
+        // member already holds, from a second tap or another tab.
+        onChanged();
       } else {
         onChanged();
       }
@@ -165,6 +168,10 @@ export default function QuestActions({
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         setError(d.message ?? d.error ?? "Could not submit");
+        // And the claim is read again, with the form left open on what was
+        // typed. The likeliest refusal is a claim a steward decided meanwhile,
+        // and the page should show that decision.
+        onChanged();
       } else {
         setShowSubmit(false);
         onChanged();

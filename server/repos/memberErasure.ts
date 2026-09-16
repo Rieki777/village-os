@@ -209,3 +209,50 @@ export async function unfinishedErasures(pool: Pool, limit = 200): Promise<Erasu
   );
   return rows.map(rowToRecord);
 }
+
+/**
+ * The unfinished sweeps with how long it has been since each last attempt, for
+ * the failed-actions job.
+ *
+ * The age is computed HERE, in SQL, and not from `lastAttemptAt` in JavaScript:
+ * `last_attempt_at` is written with CURRENT_TIMESTAMP, and although the app's
+ * pool pins UTC (server/db/pool.ts), a test suite's pool does not, and there a
+ * TIMESTAMP read into a Date shifts by the host's offset, so a backoff built on
+ * it would fire hours early or late. Which of these the job may resume without a
+ * person is the job's decision, and it is made on `stepsDone`, not here.
+ */
+export async function unfinishedErasuresWithAge(
+  pool: Pool,
+  limit = 500,
+): Promise<Array<ErasureRecord & { sinceLastAttemptSeconds: number | null; sinceStartSeconds: number | null }>> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT ${COLUMNS}, TIMESTAMPDIFF(SECOND, \`last_attempt_at\`, CURRENT_TIMESTAMP) AS since_s, ` +
+      "TIMESTAMPDIFF(SECOND, `started_at`, CURRENT_TIMESTAMP) AS started_s " +
+      "FROM `member_erasures` WHERE `finished_at` IS NULL ORDER BY `started_at`, `user_id` LIMIT ?",
+    [Math.max(1, Math.min(1000, Math.trunc(limit)))],
+  );
+  return rows.map((r) => ({
+    ...rowToRecord(r),
+    sinceLastAttemptSeconds: r.since_s == null ? null : Math.max(0, Number(r.since_s)),
+    sinceStartSeconds: r.started_s == null ? null : Math.max(0, Number(r.started_s)),
+  }));
+}
+
+/**
+ * Claim one unfinished sweep for an unattended resume, or learn that it is not
+ * this caller's to run.
+ *
+ * The failed-actions job decides from a snapshot taken when its run starts, and
+ * a steward can press Finish them on /review in between. The conditional UPDATE
+ * is the lock: it moves `last_attempt_at` only while the sweep is unfinished and
+ * its last attempt is at least `backoffSeconds` old, so a sweep somebody just
+ * attempted changes no row here, and the job walks away from it.
+ */
+export async function claimResume(pool: Pool, userId: string, backoffSeconds: number): Promise<boolean> {
+  const [result] = await pool.query(
+    "UPDATE `member_erasures` SET `last_attempt_at` = CURRENT_TIMESTAMP WHERE `user_id` = ? AND `finished_at` IS NULL " +
+      "AND (`last_attempt_at` IS NULL OR `last_attempt_at` <= CURRENT_TIMESTAMP - INTERVAL ? SECOND)",
+    [userId, Math.max(0, Math.trunc(backoffSeconds))],
+  );
+  return Number((result as { affectedRows?: number }).affectedRows ?? 0) === 1;
+}

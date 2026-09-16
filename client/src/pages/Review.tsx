@@ -1,5 +1,6 @@
 /**
- * /review: what a machine proposed, and what a steward does about it.
+ * /review: what a machine proposed, what a member finished, and what a
+ * steward does about each.
  *
  * ── NOT /steward, AND THE REASON IS STRUCTURAL ───────────────────────────
  *
@@ -11,11 +12,20 @@
  *
  * ── GATED BY CAPABILITY AND NEVER BY ROLE ────────────────────────────────
  *
- * A steward who is not an admin is who this page is for. The dead end it is
- * careful not to repeat: the server already accepts a non-admin holding
- * `quest.consent` on three routes, and the only client surface for it sits
- * behind an `isAdmin` check, so that capability is exercisable today only with
- * curl. This page asks the server what it may do and renders that answer.
+ * A steward who is not an admin is who this page is for. The dead end it was
+ * written against: the server accepted a non-admin holding `quest.consent` on
+ * the consent routes long before any browser did, because the only client
+ * surface sat behind `AdminGate` in Admin.tsx, and the submit bell rang those
+ * stewards with a link to it. So the page asks the server what it may do and
+ * renders that answer, one section per read:
+ *
+ *   - `GET /api/review/queue` answers `intake.moderate` with both halves and
+ *     `quest.approve` alone with the quest half, and names them in `scope`.
+ *   - `GET /api/admin/quest-claims` answers `quest.consent` with the claims
+ *     waiting for a witness, rendered by `ConsentQueue`.
+ *
+ * A key somebody does not hold hides its section and never the page. The page
+ * refuses as a whole only when both reads refused.
  *
  * ── A FAILED READ IS NEVER AN EMPTY QUEUE ────────────────────────────────
  *
@@ -24,6 +34,7 @@
  * positively that there is nothing to review is a governance failure and not a
  * cosmetic one. THREE states are told apart here and never collapsed: the read
  * failed, the person may not open it, and there is genuinely nothing waiting.
+ * Each section keeps its own three.
  *
  * ── THE CARD BODY COPIES THE CALLS TAB ───────────────────────────────────
  *
@@ -42,12 +53,16 @@
  * textarea is the point of the screen.
  */
 import Layout from "@/components/Layout";
+import ConsentQueue, { useConsentClaims } from "@/components/review/ConsentQueue";
+import OwedPostings from "@/components/review/OwedPostings";
+import { blockedReasons, NOTHING_LEFT_OUT, notReadLines, type NotRead } from "@/components/review/draftNotes";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
 import { toast } from "sonner";
 import { Inbox } from "lucide-react";
 import { Link } from "wouter";
+import QuestProposalCard, { type QuestCard, type QuestTyped } from "@/components/review/QuestProposalCard";
 
 interface ProposalCard {
   id: string;
@@ -77,18 +92,6 @@ interface Batch {
   items: ProposalCard[];
 }
 
-interface QuestCard {
-  id: string;
-  batchId: string;
-  moduleId: string;
-  prose: Record<string, unknown> & { title?: string; description?: string | null };
-  rationale: string | null;
-  quote: string | null;
-  sourceRef: string | null;
-  proposedByKind: string;
-  receivedAt: string;
-}
-
 interface Drop {
   moduleId: string;
   reason: string;
@@ -103,6 +106,11 @@ interface Queue {
   /** Open drafts this queue made that cannot publish. Absent from an older server. */
   stuckDrafts?: { draftId: string; blocked: number; blockedLines: unknown; unpreviewable?: boolean }[];
   counts: { proposals: number; quests: number };
+  /**
+   * The halves this reader was given. An older server sends no `scope`, and it
+   * only ever answered the key that reads both, so absent reads as both.
+   */
+  scope?: { proposals: boolean; quests: boolean };
   /** `org.proposal_change_limit`, as the server reads it. Absent from an older server. */
   proposalChangeLimit?: number;
   /** Whether this reader can open the admin page where that limit is changed. */
@@ -153,6 +161,8 @@ const DROP_WORDS: Record<string, string> = {
   unknown_kind: "were a kind this village does not know",
   unknown_trust_tier: "named a trust tier this village does not read",
   empty_payload: "arrived with nothing in them",
+  identifier_too_long: "carried an identifier longer than 64 characters",
+  over_allowance: "were held back, because their sender already had as many ideas waiting as the queue takes",
 };
 
 /** A time somebody can read, in the reader's own zone. */
@@ -206,63 +216,6 @@ function agedFor(oldestSince: string | null): string {
   return days === 1 ? ", asked one day ago" : `, the oldest ${days} days ago`;
 }
 
-/** One line per proposal whose accept left keys out of the draft. */
-interface NotReadLine {
-  label: string;
-  keys: string[];
-}
-
-/**
- * The server's `ignored` list, as lines a steward can read.
- *
- * Each proposal is named by its seat where the payload gives one, under the
- * same spellings the server reads, so a vendor record that says `role_name`
- * is still called by its name. An absent or malformed list is no lines, which
- * is what an older server that never sent one should produce.
- */
-function notReadLines(
-  ignored: unknown,
-  payloadOf: (proposalId: string) => Record<string, unknown> | undefined,
-): NotReadLine[] {
-  if (!Array.isArray(ignored)) return [];
-  const lines: NotReadLine[] = [];
-  for (const entry of ignored as { proposalId?: unknown; keys?: unknown }[]) {
-    const keys = Array.isArray(entry?.keys) ? entry.keys.map(String) : [];
-    if (!entry?.proposalId || keys.length === 0) continue;
-    const id = String(entry.proposalId);
-    const payload = payloadOf(id);
-    let label = id;
-    for (const k of ["name", "role_name", "roleName", "title"]) {
-      const v = payload?.[k];
-      if (typeof v === "string" && v.trim() !== "") {
-        label = v.trim();
-        break;
-      }
-    }
-    lines.push({ label, keys });
-  }
-  return lines;
-}
-
-/** What the last accept left out, and the draft it made, so a withdraw of that draft clears it. */
-interface NotRead {
-  draftId: string | null;
-  lines: NotReadLine[];
-}
-
-const NOTHING_LEFT_OUT: NotRead = { draftId: null, lines: [] };
-
-/**
- * The server's `blockedLines`, one sentence per seat that cannot apply. An
- * older server sends none, which is no lines and the count alone.
- */
-function blockedReasons(v: unknown): string[] {
-  if (!Array.isArray(v)) return [];
-  return (v as { reads?: unknown; blocked?: unknown }[])
-    .filter((l) => typeof l?.blocked === "string" && l.blocked !== "")
-    .map((l) => (typeof l.reads === "string" && l.reads !== "" ? `${l.reads}: ${l.blocked}` : String(l.blocked)));
-}
-
 export default function Review() {
   const { user } = useAuth();
   const [queue, setQueue] = useState<Queue | null>(null);
@@ -275,7 +228,6 @@ export default function Review() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
   const [edits, setEdits] = useState<Record<string, string>>({});
-  const [rewards, setRewards] = useState<Record<string, { gratitude: string; stayCreditReward: string }>>({});
   const [busy, setBusy] = useState<string | null>(null);
   // Every draft this queue made that cannot publish, by draft id, with the
   // reason for each blocked seat. Held so the steward has a way out of each
@@ -314,6 +266,7 @@ export default function Review() {
     const t = authToken();
     return t ? { Authorization: `Bearer ${t}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
   }, []);
+  const consent = useConsentClaims(headers);
 
   /**
    * Ask every unconfirmed store again. This is the only thing that can finish
@@ -364,17 +317,22 @@ export default function Review() {
     }
   };
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  /**
+   * The proposal queue, and the erasure list behind it. Refused, failed and
+   * answered are three different states, and none of them touches the claims.
+   */
+  const loadQueue = useCallback(async () => {
     try {
       const r = await fetch("/api/review/queue", { headers: headers() });
       if (r.status === 401 || r.status === 403 || r.status === 409) {
         setForbidden(true);
         setLoadError(null);
+        setQueue(null);
         return;
       }
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
+        setForbidden(false);
         setLoadError((d as { error?: string })?.error ?? "Could not read the queue");
         return;
       }
@@ -403,10 +361,17 @@ export default function Review() {
       }
     } catch {
       setLoadError("Could not reach the server");
+    }
+  }, [headers]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      await Promise.all([loadQueue(), consent.load()]);
     } finally {
       setLoading(false);
     }
-  }, [headers]);
+  }, [loadQueue, consent.load]);
 
   useEffect(() => {
     void load();
@@ -597,9 +562,8 @@ export default function Review() {
     }
   };
 
-  const acceptQuest = async (q: QuestCard) => {
-    const r = rewards[q.id] ?? { gratitude: "", stayCreditReward: "" };
-    if (!r.gratitude.trim()) {
+  const acceptQuest = async (q: QuestCard, typed: QuestTyped) => {
+    if (!typed.gratitude.trim()) {
       toast.error("Type what this quest pays before it goes on the board.");
       return;
     }
@@ -607,9 +571,11 @@ export default function Review() {
     try {
       const ok = await post(`/api/review/quests/${q.id}/accept`, {
         reward: {
-          gratitude: r.gratitude.trim(),
-          stayCreditReward: r.stayCreditReward.trim() === "" ? null : Number(r.stayCreditReward),
+          gratitude: typed.gratitude.trim(),
+          stayCreditReward: typed.stayCreditReward.trim() === "" ? null : Number(typed.stayCreditReward),
         },
+        // The words as the steward left them: the one way a name typed into an idea comes out before the board.
+        edits: { title: typed.title.trim(), description: typed.description.trim() || null },
       });
       if (ok) {
         // A quest leaves no field out, so "the last accept" is no longer the one the card named.
@@ -622,9 +588,23 @@ export default function Review() {
     }
   };
 
-  const card = "bg-card border border-border rounded-xl p-5";
+  const rejectQuest = async (q: QuestCard) => {
+    setBusy(q.id);
+    try {
+      if (await post(`/api/review/quests/${q.id}/reject`, { note: "" })) {
+        toast.success("Rejected");
+        await load();
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
 
-  if (loading && !queue) {
+  const card = "bg-card border border-border rounded-xl p-5";
+  const nothingReadYet =
+    queue === null && consent.claims === null && !forbidden && !consent.refused && !loadError && !consent.error;
+
+  if (loading && nothingReadYet) {
     return (
       <Layout>
         <div className="max-w-4xl mx-auto px-4 py-10">
@@ -634,15 +614,17 @@ export default function Review() {
     );
   }
 
-  if (forbidden) {
+  // The whole page refuses only when both reads did. Somebody refused one key
+  // and given the other is shown the section they hold.
+  if (forbidden && consent.refused) {
     return (
       <Layout>
         <div className="max-w-4xl mx-auto px-4 py-10">
           <div className={card}>
             <h1 className="text-xl font-bold text-foreground">This queue is not open to you yet</h1>
             <p className="text-sm text-muted-foreground mt-2">
-              Reviewing what an outside service proposes is a job this village hands to somebody. Ask
-              whoever looks after the village queues, and they can pass it on.
+              Reviewing what an outside service proposes, and witnessing finished quests, are jobs this
+              village hands to somebody. Ask whoever looks after the village queues, and they can pass one on.
             </p>
           </div>
         </div>
@@ -650,12 +632,46 @@ export default function Review() {
     );
   }
 
-  if (loadError) {
-    return (
-      <Layout>
-        <div className="max-w-4xl mx-auto px-4 py-10">
+  const drops = queue?.drops ?? [];
+  const totalDropped = drops.reduce((n, d) => n + d.dropped, 0);
+  const readsProposals = queue?.scope?.proposals ?? true;
+  const nothingWaiting =
+    queue !== null && (queue.counts?.proposals ?? 0) === 0 && (queue.counts?.quests ?? 0) === 0;
+
+  return (
+    <Layout>
+      <div className="max-w-4xl mx-auto px-4 py-10 space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+            <Inbox className="w-6 h-6" aria-hidden="true" />
+            Review
+          </h1>
+          {!forbidden && (
+            <p className="text-sm text-muted-foreground mt-2 max-w-2xl">
+              What an outside service has proposed about this village. Nothing here is true yet. Read it,
+              change anything you want, and accept what the village agrees with. What you accept goes into
+              a draft you can preview and undo.
+            </p>
+          )}
+        </div>
+
+        {/* Finished work first. Consent is the one step that releases value,
+            and a claim sitting here is somebody's work going unpaid. */}
+        <ConsentQueue
+          claims={consent.claims}
+          refused={consent.refused}
+          error={consent.error}
+          headers={headers}
+          onChanged={consent.load}
+          onRetry={() => void load()}
+        />
+        <OwedPostings headers={headers} />
+
+        {/* The queue's own failure, in a card of its own. It used to be the
+            whole page, which was right while the queue was all the page held. */}
+        {loadError && (
           <div className={card}>
-            <h1 className="text-xl font-bold text-foreground">The queue did not load</h1>
+            <h2 className="text-xl font-bold text-foreground">The queue did not load</h2>
             <p className="text-sm text-muted-foreground mt-2">
               {loadError}. There may be proposals waiting; this is not an empty queue.
             </p>
@@ -666,29 +682,7 @@ export default function Review() {
               Try again
             </button>
           </div>
-        </div>
-      </Layout>
-    );
-  }
-
-  const drops = queue?.drops ?? [];
-  const totalDropped = drops.reduce((n, d) => n + d.dropped, 0);
-  const nothingWaiting = (queue?.counts.proposals ?? 0) === 0 && (queue?.counts.quests ?? 0) === 0;
-
-  return (
-    <Layout>
-      <div className="max-w-4xl mx-auto px-4 py-10 space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <Inbox className="w-6 h-6" aria-hidden="true" />
-            Review
-          </h1>
-          <p className="text-sm text-muted-foreground mt-2 max-w-2xl">
-            What an outside service has proposed about this village. Nothing here is true yet. Read it,
-            change anything you want, and accept what the village agrees with. What you accept goes into
-            a draft you can preview and undo.
-          </p>
-        </div>
+        )}
 
         {/* A sweep that stopped inside this database. Its own card, because it
             is a different problem from a vendor that will not answer: the work
@@ -818,8 +812,9 @@ export default function Review() {
           <div className={card}>
             <h2 className="font-semibold text-foreground">Nothing waiting</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Roles, circles and quests an outside service proposes land here for you to read before they
-              exist. Nothing creates itself.
+              {readsProposals
+                ? "Roles, circles and quests an outside service proposes land here for you to read before they exist. Nothing creates itself."
+                : "Quests proposed for this village land here for you to read before they go on the board. Nothing creates itself."}
             </p>
           </div>
         )}
@@ -918,75 +913,14 @@ export default function Review() {
         ))}
 
         {(queue?.quests ?? []).map((q) => (
-          <div key={q.id} className={card}>
-            <h2 className="font-semibold text-foreground">{String(q.prose.title ?? "A proposed quest")}</h2>
-            <p className="text-xs text-muted-foreground mt-1">
-              Proposed by {q.moduleId}, {when(q.receivedAt)}
-            </p>
-            {q.prose.description && (
-              <p className="text-sm text-muted-foreground mt-2">{String(q.prose.description)}</p>
-            )}
-            {q.quote && (
-              <p className="text-xs text-muted-foreground mt-2 italic">&ldquo;{q.quote}&rdquo;</p>
-            )}
-
-            <p className="text-xs text-foreground mt-4 font-medium">
-              What it pays. Nothing else can set this, so it is yours to type.
-            </p>
-            <div className="flex flex-wrap gap-2 mt-2">
-              <input
-                aria-label="What this quest pays"
-                placeholder="50-100"
-                value={rewards[q.id]?.gratitude ?? ""}
-                onChange={(e) =>
-                  setRewards((s) => ({
-                    ...s,
-                    [q.id]: { stayCreditReward: s[q.id]?.stayCreditReward ?? "", gratitude: e.target.value },
-                  }))
-                }
-                className="border border-border rounded-lg px-3 py-2 text-sm min-h-[44px] bg-background text-foreground"
-              />
-              <input
-                aria-label="Stay credits, in nights"
-                placeholder="Nights, optional"
-                value={rewards[q.id]?.stayCreditReward ?? ""}
-                onChange={(e) =>
-                  setRewards((s) => ({
-                    ...s,
-                    [q.id]: { gratitude: s[q.id]?.gratitude ?? "", stayCreditReward: e.target.value },
-                  }))
-                }
-                className="border border-border rounded-lg px-3 py-2 text-sm min-h-[44px] bg-background text-foreground"
-              />
-            </div>
-
-            <div className="flex gap-2 mt-3">
-              <button
-                disabled={busy === q.id}
-                onClick={() => void acceptQuest(q)}
-                className="text-xs border border-border rounded-lg px-3 py-2 min-h-[44px] font-medium"
-              >
-                Put it on the board
-              </button>
-              <button
-                disabled={busy === q.id}
-                onClick={async () => {
-                  setBusy(q.id);
-                  try {
-                    if (await post(`/api/review/quests/${q.id}/reject`, { note: "" })) {
-                      toast.success("Rejected");
-                      await load();
-                    }
-                  } finally {
-                    setBusy(null);
-                  }
-                }}
-                className="text-xs border border-border rounded-lg px-3 py-2 min-h-[44px]"
-              >
-                Reject
-              </button>
-            </div>
-          </div>
+          <QuestProposalCard
+            key={q.id}
+            q={q}
+            arrived={when(q.receivedAt)}
+            busy={busy === q.id}
+            onAccept={(typed) => void acceptQuest(q, typed)}
+            onReject={() => void rejectQuest(q)}
+          />
         ))}
       </div>
     </Layout>

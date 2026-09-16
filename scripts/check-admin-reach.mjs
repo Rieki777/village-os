@@ -153,11 +153,7 @@ const STANDING_ORPHANS = {
    * refusal already said "Allocate weight before opening a ballot"; there is
    * now somewhere to do it.
    */
-  "POST /api/admin/org/drafts": "The assistant's org-draft flow has no admin surface.",
-  "POST /api/admin/org/drafts/:id/changes": "The assistant's org-draft flow has no admin surface.",
   "PUT /api/admin/org/drafts/:id/vision": "The assistant's org-draft flow has no admin surface.",
-  "POST /api/admin/org/drafts/:id/publish": "The assistant's org-draft flow has no admin surface.",
-  "POST /api/admin/org/drafts/:id/revert": "The assistant's org-draft flow has no admin surface.",
   /*
    * `POST /api/admin/org/relations` and `DELETE /api/admin/org/relations/:id`
    * came off this list by WIRING too. The door the entries called owed is

@@ -13,6 +13,7 @@ import MaturityLadder from "@/components/profile/MaturityLadder";
 import PowersMap from "@/components/profile/PowersMap";
 import PathsPanel, { type PathTile } from "@/components/profile/PathsPanel";
 import StandingRow from "@/components/profile/StandingRow";
+import InvitePanel from "@/components/profile/InvitePanel";
 import PathFacts from "@/components/profile/PathFacts";
 import QuietSection from "@/components/profile/QuietSection";
 import { SHEET_SECTIONS } from "@/components/profile/sheetSections";
@@ -376,6 +377,10 @@ export default function Profile() {
                 Sign Out
               </motion.button>
             </div>
+
+            {/* INVITE SOMEBODY, at the top of the page on Rye's ruling of
+                2026-09-09. It draws nothing until the village has answered. */}
+            <InvitePanel />
 
             {/* WHAT IS NEXT. Server-resolved, and the only element on this page
                 that answers a question without making the member assemble it.

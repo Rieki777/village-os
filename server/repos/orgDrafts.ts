@@ -1,5 +1,5 @@
 /**
- * The two `org_drafts` statements that stand on their own.
+ * The draft machinery's SQL that can live outside server/lib/orgDrafts.ts.
  *
  * ── WHY THIS MODULE IS SMALL, AND WHY THAT IS THE POINT ──────────────────
  *
@@ -31,15 +31,26 @@
  * moved in this change because a burn-down that also rewrites the edit guards
  * is two changes wearing one commit message.
  *
- * ── WHAT IS DELIBERATELY NOT HERE ────────────────────────────────────────
+ * ── THE DRAFT BODY, MOVED WHOLE ──────────────────────────────────────────
  *
- * No listing, no draft body, no changes. `listDrafts` reads both tables
- * together and maps them into the `Draft` shape the routes serve; splitting
- * that read in half would leave a caller assembling a draft from two modules
- * and nothing saying the halves agree. It stays where it is until it can move
- * whole.
+ * This header used to keep the listing out: `listDrafts` reads both tables
+ * together, and splitting that read in half would leave a caller assembling a
+ * draft from two modules with nothing saying the halves agree. So it waited
+ * until it could move whole, and `readDraftBodies` at the foot of this file is
+ * that move: one function reads both tables under one filter. The mapping into
+ * the `Draft` shape the routes serve stays in server/lib/orgDrafts.ts.
+ *
+ * ── AND ONE READ OF THE CHANGES, WHICH IS ERASURE'S AND STANDS ALONE ────
+ *
+ * `forgetMemberInDrafts` (server/lib/orgDrafts.ts) scans the changes that can
+ * name a person and rewrites the ones that do. That is neither a draft body
+ * nor a step in anybody's transaction: it runs as one named step of the
+ * resumable erasure sweep, on the pool, selecting by op and writing by primary
+ * key. So it meets the test the withdrawal statements meet, and its two
+ * statements live here, while the JSON policy they serve stays beside the
+ * code that decides those shapes.
  */
-import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 
 /**
  * One column, and it is the only one either statement here needs.
@@ -87,4 +98,107 @@ export async function draftStatus(pool: Pool, draftId: string): Promise<string |
   );
   const row = rows[0];
   return row ? String(row.status) : null;
+}
+
+/** A draft change that can restate a person, exactly as stored. */
+export interface PeopleChangeRow {
+  id: string;
+  op: string;
+  payload: unknown;
+  before_json: unknown;
+}
+
+/**
+ * Every change that can name somebody: `seat_holder` carries them in
+ * `payload`, and `end_holding` carries their whole assignment row in
+ * `before_json`. Read for erasure only, on the pool, never inside a publish.
+ */
+export async function draftChangesNamingPeople(pool: Pool): Promise<PeopleChangeRow[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT id, op, payload, before_json FROM org_draft_changes WHERE op IN ('seat_holder', 'end_holding')",
+  );
+  return rows as unknown as PeopleChangeRow[];
+}
+
+/** Write one change's person-bearing JSON back, by primary key. */
+export async function rewriteDraftChangePeople(
+  pool: Pool,
+  changeId: string,
+  payload: string | null,
+  beforeJson: string | null,
+): Promise<void> {
+  await pool.query<ResultSetHeader>(
+    "UPDATE org_draft_changes SET payload = ?, before_json = ? WHERE id = ?",
+    [payload, beforeJson, changeId],
+  );
+}
+
+/*
+ * WHERE EVERY CIRCLE SITS, for a draft preview that moves circles (0208).
+ *
+ * Read on the connection the caller passes. Inside a publish that is the
+ * connection of the transaction itself, so the preview checks the very rows
+ * the moves then change.
+ */
+export async function readCirclesForPreview(conn: Pool | PoolConnection): Promise<any[]> {
+  const [rows]: any = await conn.query("SELECT id, name, parent_circle_id, is_example FROM circles");
+  return rows as any[];
+}
+
+/*
+ * THE CIRCLES COUNTER, LOCKED FIRST in every publish and every revert.
+ *
+ * A circle form save (replaceAll in server/repos/store-db.ts) takes this row
+ * FOR UPDATE before it touches a circle, while a draft moving a circle took the
+ * circle row first and this counter after. Those two orders deadlock together,
+ * and one admin is shown a raw MySQL error. Taking the counter first gives both
+ * writers one order: a form saved at the same moment waits for the publish,
+ * and every read the publish makes after this sees what that save committed. A
+ * draft with no move in it pays one small locking read.
+ */
+export async function lockCirclesCounter(conn: PoolConnection): Promise<void> {
+  await conn.query("SELECT version FROM collection_versions WHERE collection = ? FOR UPDATE", ["circles"]);
+}
+
+/*
+ * ── A DRAFT'S BODY: BOTH TABLES, UNDER ONE FILTER ────────────────────────
+ *
+ * The header kept the listing out of this module until it could move whole,
+ * because two reads split across modules have nothing saying they agree. This
+ * is it moving whole. The drafts are read first and the changes are read BY THE
+ * IDS THAT CAME BACK, so every change returned belongs to a draft returned, even
+ * when a draft changes state between the two statements. The mapping into the
+ * `Draft` shape stays in server/lib/orgDrafts.ts, beside the type.
+ *
+ * Both filtered reads ride an index from 0056: `org_drafts_status_idx`
+ * (status, created_at) and `org_draft_changes_draft_idx` (draft_id, sort_order).
+ * Takes a connection as happily as a pool, because `publishDraft` reads its
+ * draft inside its own transaction.
+ */
+
+/** Which drafts to read: one by id, every draft in one status, or (null) every draft. */
+export type DraftBodyFilter = { id: string } | { status: string } | null;
+
+/** Rows exactly as stored: drafts newest first, changes in their draft's order. */
+export interface DraftBodyRows {
+  drafts: any[];
+  changes: any[];
+}
+
+export async function readDraftBodies(conn: Pool | PoolConnection, filter: DraftBodyFilter): Promise<DraftBodyRows> {
+  if (filter === null) {
+    const [drafts]: any = await conn.query("SELECT * FROM org_drafts ORDER BY created_at DESC");
+    const [changes]: any = await conn.query("SELECT * FROM org_draft_changes ORDER BY sort_order, id");
+    return { drafts: drafts as any[], changes: changes as any[] };
+  }
+  const [drafts]: any = "id" in filter
+    ? await conn.query("SELECT * FROM org_drafts WHERE id = ?", [filter.id])
+    : await conn.query("SELECT * FROM org_drafts WHERE status = ? ORDER BY created_at DESC", [filter.status]);
+  const ids = (drafts as any[]).map((d) => String(d.id));
+  if (!ids.length) return { drafts: [], changes: [] };
+  const [changes]: any = await conn.query(
+    "SELECT * FROM org_draft_changes WHERE draft_id IN (?) ORDER BY sort_order, id",
+    [ids],
+  );
+  return { drafts: drafts as any[], changes: changes as any[] };
 }

@@ -40,6 +40,7 @@
 import type express from "express";
 import type { Pool } from "mysql2/promise";
 import type { Capability, CapabilityCtx } from "../../shared/capabilities";
+import type { SubjectCloser } from "./applyDue";
 import type { CrewsRepo } from "./crews";
 import type { WeightModeSnapshot } from "./governanceWeights";
 import type { NotifyDeps, NotifyInput, NotifyResult } from "./notify";
@@ -314,6 +315,15 @@ export interface AppDeps {
    * "token" on the next.
    */
   weightModeNow(): WeightModeSnapshot;
+
+  /**
+   * A ballot subject's closer, from the one table `server/index.ts` keeps.
+   *
+   * Taken by the veto route, because stopping a carried decision has to tell
+   * its subject (`SubjectCloser.onUnlanded` in server/lib/applyDue.ts), and a
+   * route holding its own copy of the table would be a second routing table.
+   */
+  closerFor(subjectType: string): SubjectCloser | undefined;
 
   /**
    * Tell one member one thing. Fire and forget by contract: the sender never

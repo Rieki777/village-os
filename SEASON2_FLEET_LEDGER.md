@@ -282,6 +282,15 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   found no deployed schema holding the economics filenames, only `village_tpl_` templates and
   `village_test_` scratch schemas. **Never refill `0182`**: a template or scratch schema may still
   record the filename, and the applied ledger keys on it.
+- **quests lane (ADMIN, owed-postings repair), 2026-09-15: holds 0210** for
+  `drizzle/0210_a_consent_remembers_what_it_owes.sql` on `wt/quest-owed-repair`: one new table,
+  `quest_owed_postings`, created `IF NOT EXISTS`, with no foreign key and no `ALTER`. Measured two
+  ways at 10:05 UTC, after `git fetch origin`. The trees of all 794 refs (every origin and local
+  ref) reach **0209**: `0207` on `wt/failed-actions`, `0208` on `wt/org-drag` and `0209` on
+  `wt/invite-links`. The `drizzle/` directories of all 381 worktrees reach **0209**, the same
+  three files. `origin/main` reaches `0206`. The number is confirmed again at landing, and
+  renumbering this file is safe until it runs anywhere but a scratch schema, because its one
+  statement is a `CREATE TABLE IF NOT EXISTS`.
 - **econ renumber lane 2, 2026-09-14: holds 0200 to 0206** on `wt/econ-renumber-2`, for the seven
   economics migrations that `wt/econ` still carried at or below main's ceiling after the merge at
   `fb2d94b`, kept in the same relative order: `0181`->`0200`, `0183`->`0201`, `0184`->`0202`,
@@ -305,6 +314,13 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   `origin/wt/seat-terms` and on a second local branch `wt/seat-terms-ui`, and `0197` and `0198`
   were committed and pushed on `origin/wt/first-hour` with that lane's claim now on a ref. The
   ceiling was still **0199** on all four channels and nothing anywhere held `0200` or above.
+- **membrane lane (invitations), 2026-09-14: holds 0209** for
+  `drizzle/0209_a_member_arrives_by_invitation.sql` (one new table, `member_invites`). Measured three
+  ways before the file was created: every remote and local ref and every worktree disk reached 0207
+  (`wt/failed-actions`), and an UNTRACKED `drizzle/0208_a_draft_can_move_a_circle.sql` sat in the
+  `CIRCLES` worktree, which no git command sees, so 0208 was left to it. Expand-only: the previous
+  release neither reads nor writes the table. Lands after #243 (0200 to 0206), #247 (0207) and
+  whichever branch takes 0208.
 - **first-hour lane (profile), 2026-09-14: holds 0197 and 0198** for
   `drizzle/0197_a_training_module_says_whether_it_is_mandatory.sql` (one column on
   `training_modules`, `mandatory TINYINT(1) NOT NULL DEFAULT 1`) and
@@ -319,6 +335,13 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   0197's `ADD COLUMN` stops that boot on a duplicate column, so drop that scratch schema. **0191
   and 0192 are BURNED**: copies still sit on six worktree disks and in a peer session's scratch
   copy.
+- **failed-actions lane (the retry-and-report job), 2026-09-14: holds 0207** for
+  `drizzle/0207_a_failure_is_kept_until_it_is_fixed.sql` (one new table, `failed_action_items`,
+  and one new non-unique index on `payments_log`). Measured three ways minutes before creating it: every remote and
+  local ref and every worktree disk hold 0196 through 0206 (0197 and 0198 on `wt/first-hour`, 0199
+  on `wt/seat-terms`, 0200 to 0206 on `wt/econ`) and nothing at 0207 or above.
+  `check-migration-numbers.mjs --next` answered 0197 on this main-based branch, which is the usual
+  under-report. Additive only: the previous release neither reads nor writes the table.
 - **quest-consent integrity lane, 2026-09-10: holds 0196** for
   `drizzle/0196_one_live_claim_per_member.sql`. The number was ASSIGNED by the coordinator, not
   measured by this lane, and `check-migration-numbers.mjs` reported next-free 0190 in this
@@ -378,6 +401,7 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   Recorded here by the bridge lane rather than by its author, because it was created on a worktree
   and pushed hours after the surrounding numbers were measured, which is exactly the case this
   section exists to catch.
+- **Org Map lane (`amora-d2`), 2026-09-14: holds 0208** for `drizzle/0208_a_draft_can_move_a_circle.sql` (widens `org_draft_changes.op` by one enum value, `move_circle`; expand only). Measured four ways immediately before creating the file: origin/main 0196; every remote ref 0207 (`wt/failed-actions`); every local branch 0207; untracked files in sibling worktrees, none. Governance reports #249 takes 0197-0199, #243 holds 0200-0206 and #247 holds 0207. Branch `wt/org-drag`, stacked on #252. Re-measured again before landing.
 - **governance build, 2026-09-02: RESERVES 0132 to 0139.** A reservation that lives only in one
   session's head is not a reservation, so it is written down here.
 - **bridge-primitives lane, 2026-09-02: claims 0140, 0141, 0142 and 0143** for the platform
@@ -3179,13 +3203,26 @@ Both look like intentional work and neither is.
 
 | 2026-09-14 | governance (`amora-b0`) | migration `0199` (`drizzle/0199_every_seat_has_a_term.sql`); `server/index.ts` (net 18 lines DOWN: the three season routes moved to `server/routes/seasons.ts`, baseline left at 27553 so the headroom goes to whoever lands next) | `wt/seat-terms` | HELD. Ceiling measured two ways on 2026-09-14: every remote ref reached `0196`, and UNTRACKED files in the `wt-theme` worktree hold `0197_a_training_module_says_whether_it_is_mandatory.sql` and `0198_a_member_is_vouched_into_membership.sql`, which no git command sees. **If `0199` lands first, those two sit below main's ceiling and the numbers gate refuses them: renumber to `0200`+ before landing.** Safe for them only because untracked files have never run outside a scratch schema. |
 | 2026-09-14 | seat-terms screens (lane) | `server/index.ts` (two counted lines in `POST /api/map/roles/:id/raise-hand`, logic in `server/lib/raisedHandTerm.ts`; the ratchet still passes against 27553), plus `docs/GOVERNANCE.md` and `docs/knowledge/governance-lineage.md` regenerated only, because `role_seat` joined `WIZARD_TYPES` and `CONDUCTABLE_TYPES` | `wt/seat-terms-ui`, PR base `wt/seat-terms` | HELD. No migration and no baseline moved. Land after `wt/seat-terms`; a later change to either governance source re-stamps the lineage fingerprint, so regenerate on rebase. |
+| 2026-09-14 | Org Map lane (`amora-d2`) | `server/index.ts` (circle admin routes moved to `server/routes/circles.ts`); the raw-SQL burn-down register and `BURNDOWN_CEILING` (lowered: `server/lib/orgDrafts.ts` 25 to 22); `docs/GOVERNANCE.md` and its lineage (regenerated) | `wt/circles-lens` | HELD. Lands AFTER the governance batch #249, agreed with governance (`amora-b0`). After #249: merge main, resolve the five `orgDrafts.ts` hunks as agreed, re-record the burn-down and regenerate the docs immediately before the push. A migration for `move_circle` will be claimed in section 3 first (0208 or above, four-channel scan). |
+| 2026-09-14 | Org Map lane (`amora-d2`) | migration `0208` (`drizzle/0208_a_draft_can_move_a_circle.sql`; re-measured four ways the same day: no ref and not main, and `wt-invite` holds an untracked `0209`); `server/index.ts` (one line, `mayArrange` on the `/api/map` viewer); `scripts/check-admin-reach.mjs` (four org-draft waivers deleted, because the Arrange bar is now their door) | `wt/org-drag`, stacked on `wt/circles-lens` | HELD. Lands after #252. Regenerate the governance docs immediately before its push, since `server/routes/org.ts` and `drizzle/` are both in their sources. |
+| 2026-09-15 | Org Map lane (`amora-d2`) | the raw-SQL burn-down register and `BURNDOWN_CEILING`, **lowered 728 to 726** (`server/lib/orgDrafts.ts` 21 to 19: `listDrafts`'s two whole-table reads became one filtered read, `readDraftBodies`, in `server/repos/orgDrafts.ts`); `server/index.ts` LINE-NEUTRAL (the `/api/org/vision` read asks for `{ status: "open" }`); plus `docs/GOVERNANCE.md` and its lineage regenerated | `wt/org-drag` | In #262, which waits on Rye and lands after the batch #270. No migration, no other baseline moved. Whoever merges main into this branch re-runs `sql-burndown.mjs --update-baseline` and re-syncs the ceiling in the same commit, because the register is one number for the whole tree and any other lane lowering it lands a conflict here. |
 | 2026-09-15 | seat-term landing (lane for `amora-b0`) | `server/index.ts`, **net 3 counted lines DOWN** (27486 to 27483 on the ratchet): the `POST /api/governance/role-seats` term line is line-neutral and now measures from `seatVoteLandsAt` (server/lib/seatTermLanding.ts), `roleBallotSetup` reads `roleVoteDays()` in place of a four-line expression, and the seasons register takes one field on an existing line. Plus `docs/GOVERNANCE.md` and `docs/knowledge/governance-lineage.md` regenerated only. Baseline left at 27507. | `wt/seat-term-landing` | HELD. No migration. Touches `server/lib/ballots.ts` (`ballotWindow` export, `openBallot` reads it) and widens `landingOf`'s deps in `server/lib/applyDue.ts` to the three it reads; a lane editing either rebases over this. |
+| 2026-09-14 | failed-actions lane | migration `0207`, `drizzle/0207_a_failure_is_kept_until_it_is_fixed.sql`; one import line and one register line in `server/index.ts`; the `failures` admin tab key | `wt/failed-actions` | HELD. The number was measured three ways before the file was created (remote refs, local refs, worktree disks): section 3 carries the bullet. The index.ts lines are exempt from the size ratchet and sit beside `registerErasureQueueRoutes`, so a rebase conflict there is one line. |
 
 
 | 2026-09-08 | first-hour lane (profile) | migration `0179`, `drizzle/0179_a_training_module_says_whether_it_is_mandatory.sql` | `wt/first-hour` | **RENUMBERED TWICE, kept as history: `0179` became `0191`, and on 2026-09-14 `0197` (section 3 holds the claim).** Originally HELD. Ceiling measured TWO WAYS per the rule above: every remote ref and every file on disk reach `0178`, and `check-migration-numbers.mjs --next` agrees at `0179`. Adds one column to `training_modules`, `mandatory TINYINT(1) NOT NULL DEFAULT 1`, so every existing row keeps today's behaviour exactly (all modules mandatory = all must be finished, which is what `trainingIsComplete` already requires). Expand-only, no backfill needed, and the previous release ignores the column. |
 
 | 2026-09-08 | first-hour lane (profile) | migration `0190`, `drizzle/0190_a_member_is_vouched_into_membership.sql` | `wt/first-hour` | **RENUMBERED TWICE, kept as history: `0190` became `0192`, and on 2026-09-14 `0198` (section 3 holds the claim).** Originally HELD, AND READ WHY THE NUMBER WAS NOT 0180. `check-migration-numbers.mjs --next` said **0180**, because it measures against `origin/main` alone. A two-way scan says otherwise: remote refs reach `0189` and sibling worktrees reach `0189`, and `0180`-`0189` are all taken by other lanes (`the_wall_speaks_first`, `a_circle_holds_its_own_treasury`, `one_gift_one_key`, `a_member_redeems_what_they_hold`, `a_village_spends_its_credits_in_hundredths`, `voice_that_waned`, `a_village_says_what_it_is_for`, `a_member_says_how_they_are`, `a_circle_has_two_caps`, `the_voices_reach_a_village_that_already_exists`). Taking the script's answer would have collided with TEN lanes at once. This is the same failure the 2026-09-05 row records, and the script still cannot see either source. |
 | 2026-09-14 | handover-confirm lane | `server/index.ts`, LINE-NEUTRAL (the ratchet sits at its baseline): one import widened, and `GET /api/admin/capabilities/holding` roles gain `holderCount`. Plus `docs/GOVERNANCE.md` if the generator restamps it | `wt/handover-confirm` | HELD - lands alone per 27b item 3, rebased last |
+| 2026-09-15 | failed-landing notice lane (for `amora-b0`) | `server/index.ts`, **net 66 counted lines DOWN** (27363 to 27297 on the ratchet, measured on this branch; baseline left at 27507 so the headroom goes to whoever lands next): the close route's pulse line and roll notice move to `server/lib/ballotNotices.ts` (`closeActivityLine`, `tellRollTheOutcome`) and are phrased from what routing settled, and `ballotLink` delegates to the one `decisionLink` there. Also `server/lib/atCloseLanding.ts` (veto refusal sentences, the parked-row predicate, `tellRollItTookEffect`), `server/lib/applyDue.ts` (`recordVeto`, `vetoWindowOn`, the landing job's success branch), one new notification kind `ballot_not_yet_in_effect` in `shared/notificationKinds.ts` with its case in `server/lib/notify.ts`, plus `docs/GOVERNANCE.md` and `docs/knowledge/governance-lineage.md` regenerated only. | `wt/failed-landing-notice` | HELD. No migration and no baseline moved. **Stacked on #266 (`wt/at-close-retry`, head `7197077`) and lands AFTER the landing batch**; the PR is opened against `main` so a batched base branch cannot close it. A lane editing the close route's notices or `applyDue`'s landing job rebases over this. |
+
+| 2026-09-15 | membrane lane (character affinity) | `server/index.ts`: one import of `./routes/powerAffinity` and its register call, both exempt from the ratchet, and two lines changed in place (the progression catalogue now carries `suits` and `recommended`, a class's paths carry `powers`), so the counted total does not move. One new `app_config` key, `power-affinity`, written only by `server/lib/powerAffinity.ts`. No migration, no capability key, no game variable, no baseline | `wt/archetype-affinity` | HELD. Claims no number, so it lands in any order against the open PRs. |
+
+| 2026-09-15 | membrane lane (power hands) | `server/index.ts`: one import of `./routes/powerHands` and its register call, both exempt from the ratchet, and the progression catalogue line changed in place to hand `withPowerAffinity` the inbox, so the counted total does not move. A new inbox type, `power-application`, in `submissions`, whose `type` column is free text, so no migration. No capability key, no game variable, no baseline | `wt/power-hands`, stacked on `wt/archetype-affinity` (#267) | HELD. Claims no number, and lands after #267. |
+
+| 2026-09-14 | membrane lane (invitations) | migration `0209`, `drizzle/0209_a_member_arrives_by_invitation.sql`; `POST /api/auth/register` moved out of `server/index.ts` into `server/routes/register.ts` (the size ratchet fell, the baseline was left alone); one fixture opinion in `server/db/testDb.ts`, `ProvisionOptions.inviteOnly`, so scratch villages provision with `membership.invite_only` off | `wt/invite-links`, PR #259 | HELD. Lands after `0200` to `0208` are on main. A suite that counts customized variables sees `membership.invite_only` stored by the harness; the loop suite names it rather than counting it. |
+
+| 2026-09-15 | Org Map lane (`amora-d2`) | `server/index.ts` (+9 lines: the circles collection gets `mergeRefusal`, wired to `loopedCirclesRefusal`; the ratchet passes against main's baseline), plus `docs/GOVERNANCE.md` and its lineage regenerated | `wt/circle-merge-loop`, off main at `ee38104` | Ready for its own PR. No migration, no baseline moved, and independent of #262. Also touches `server/repos/store-db.ts` (one optional spec field, `mergeRefusal`, and `MergeRefusedError`) and `server/lib/errors.ts` (a `merge_refused` branch in `terminalAnswerFor`), so a lane editing either rebases over this. It closes the twelfth defect from #262's review: a circle form save that rebases over somebody else's concurrent move could merge a loop into `circles`, which neither writer could have saved alone. |
 
 ### 27d — Verification: CI runs the full suite, lanes run what they touched
 

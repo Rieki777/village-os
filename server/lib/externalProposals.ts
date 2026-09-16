@@ -252,7 +252,12 @@ export function identityKeyFor(input: { moduleId: string; kind: string; sourceRe
  * would pass it.
  */
 export function containsEmail(v: unknown): boolean {
-  const RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+  // Bounded, because the unbounded runs made this quadratic: 40,000 letters with no
+  // @ took 820 ms, each doubling took four times as long, and a public form can send
+  // a megabyte. An address still matches through the bounds, since the pattern is
+  // unanchored and a longer local part has a 64-character tail that matches. Only a
+  // domain running past 253 characters before a dot goes unseen, and DNS holds none.
+  const RE = /[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}/;
   const seen = new Set<unknown>();
   const walk = (x: unknown): boolean => {
     if (typeof x === "string") return RE.test(x);
@@ -426,7 +431,9 @@ export type DropReason =
   | "unknown_kind"
   | "unknown_trust_tier"
   | "empty_payload"
-  | "identifier_too_long";
+  | "identifier_too_long"
+  /** A quest idea from the public form, held back because its sender's allowance was full. */
+  | "over_allowance";
 
 export type LandResult =
   | {
@@ -448,6 +455,8 @@ const DROP_SENTENCES: Record<DropReason, string> = {
   empty_payload: "A proposal with no payload has nothing for a steward to read.",
   identifier_too_long:
     "One of the identifiers on this record is longer than 64 characters. Shortening it here would merge two batches, so nothing was stored.",
+  over_allowance:
+    "Its sender already has as many quest ideas waiting as the queue takes, so this one stays in the inbox.",
 };
 
 /** One row per (module, day, reason), incremented. Content-free by design. */

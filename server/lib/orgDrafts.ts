@@ -36,13 +36,14 @@
  * is lossy, and an archive may not be.
  */
 import type { Pool, PoolConnection } from "mysql2/promise";
-import { draftStatus, withdrawDraftRow } from "../repos/orgDrafts";
+import { draftChangesNamingPeople, draftStatus, lockCirclesCounter, readCirclesForPreview, readDraftBodies, rewriteDraftChangePeople, withdrawDraftRow, type DraftBodyRows } from "../repos/orgDrafts";
 import { stageIndex } from "../../shared/gameConfig";
 import { numberVar } from "./variables";
-import { listOrgAssignments, listOrgRoles, peopleOnly, seatState, type LapseContext, type OrgAssignment } from "./orgChart";
+import { documentedKey, listOrgAssignments, listOrgRoles, peopleOnly, seatHolder, seatState, type LapseContext, type OrgAssignment } from "./orgChart";
 import { resolveSeatTerm, type SeatCalendar } from "../../shared/seatTerms";
+import { parentingRefusal } from "../../shared/circleView";
 
-export type DraftOp = "create_seat" | "update_seat" | "rest_seat" | "seat_holder" | "end_holding";
+export type DraftOp = "create_seat" | "update_seat" | "rest_seat" | "seat_holder" | "end_holding" | "move_circle";
 export type DraftStatus = "open" | "published" | "reverted" | "withdrawn";
 
 export interface DraftChange {
@@ -131,6 +132,125 @@ export const VISION_METRIC_PREFIXES = ["seats_filled_in:", "members_at_stage:"] 
 export function visionMetricKnown(metric: string): boolean {
   if ((VISION_METRICS as readonly string[]).includes(metric)) return true;
   return VISION_METRIC_PREFIXES.some((p) => metric.startsWith(p) && metric.length > p.length);
+}
+
+/**
+ * Take a departed member out of every draft that names them.
+ *
+ * WHY THIS IS ITS OWN FUNCTION AND NOT A LINE IN `erasure.ts`. Every other
+ * trace in that sweep is a COLUMN, so it is one UPDATE. A draft restates a
+ * person inside JSON: `seat_holder` carries `{ userId, displayName }` in
+ * `payload`, and `end_holding` carries a whole assignment row in
+ * `before_json`, `display_name`, `user_id`, `focus` and `note` included. The
+ * shape of those two blobs is decided in this file, so the code that empties
+ * them belongs beside the code that fills them, or it goes stale the first
+ * time a payload gains a key.
+ *
+ * WHAT IT WAS BEFORE. Nothing swept these at all. A member exercised deletion,
+ * every column-shaped trace went, and their name sat in an open draft forever
+ * while `/api/org/vision` published it to anyone the map admits.
+ *
+ * DE-ATTRIBUTION IS NOT ERASURE, the rule this file inherits: the id is nulled
+ * AND the name goes, because a sentence naming somebody identifies them with
+ * no id at all.
+ *
+ * `before_json` is the revert data, so emptying it costs a published draft its
+ * undo for THAT holding. That is the right trade and it is deliberate: the
+ * alternative is keeping a departed member's name to preserve the ability to
+ * seat them again, which is the thing they asked the village to stop doing.
+ * Every other field of the row is left alone, so reverting the structure still
+ * works and only the person is gone.
+ */
+export async function forgetMemberInDrafts(pool: Pool, userId: string, anon: string): Promise<number> {
+  const rows = await draftChangesNamingPeople(pool);
+  const parse = (v: unknown) => {
+    if (v == null) return null;
+    if (typeof v !== "string") return v as any;
+    try { return JSON.parse(v); } catch { return null; }
+  };
+  let touched = 0;
+  for (const r of rows as any[]) {
+    const payload = parse(r.payload);
+    const before = parse(r.before_json);
+    let changed = false;
+    if (payload && String(payload.userId ?? "") === userId) {
+      payload.userId = null;
+      payload.displayName = anon;
+      if (payload.focus) payload.focus = null;
+      changed = true;
+    }
+    if (before && String(before.user_id ?? "") === userId) {
+      before.user_id = null;
+      before.display_name = anon;
+      before.focus = null;
+      before.note = null;
+      // The generated active-holder key is derived from this, so it goes too
+      // or the row still points at them by id.
+      if (before.holder_key) before.holder_key = `doc:forgotten-${String(r.id)}`;
+      changed = true;
+    }
+    if (!changed) continue;
+    await rewriteDraftChangePeople(
+      pool,
+      String(r.id),
+      payload === null ? null : JSON.stringify(payload),
+      before === null ? null : JSON.stringify(before),
+    );
+    touched += 1;
+  }
+  return touched;
+}
+
+/*
+ * ── THE FREE TEXT ON A DRAFT, AND WHO MAY READ IT ────────────────────────
+ *
+ * `/api/org/vision` answers ANONYMOUS callers whenever `map.public_structure`
+ * is on, and it was returning three fields a member types in their own words:
+ * the draft's `title`, its `rationale`, and every objective's `text`. It
+ * tiered `holder` correctly and then published the sentence next to it.
+ *
+ * Survivable only while nothing but an admin could draft. The org editor
+ * opens drafting to any member, and the first time somebody writes "Move
+ * Sarah out of Finance, she keeps missing meetings" that is a signed-out
+ * stranger's to read, cache and index.
+ *
+ * So the three go behind `map.viewPeople`, the same key the holder name sits
+ * behind. That key stands at the `guest` rung, which every signed-in account
+ * reaches, so this costs a member nothing and closes the door on the street.
+ *
+ * Below the tier the ghost is still DRAWABLE and still COUNTS: the shape, the
+ * seat names, the numbers and the progress all stay, because those are
+ * structure and structure is what that tier is for. Only the sentences go.
+ */
+
+/** A neutral line for an objective, from platform vocabulary, never a village's. */
+export function neutralObjectiveText(metric: string | null): string {
+  if (!metric) return "An objective the village has set";
+  if (metric === "seats_filled") return "Seats filled";
+  if (metric === "seasons_completed") return "Seasons completed";
+  if (metric.startsWith("seats_filled_in:")) return "Seats filled in a circle";
+  if (metric.startsWith("members_at_stage:")) return "Members at a stage";
+  return "An objective the village is measuring";
+}
+
+/**
+ * The words of a draft as this viewer may have them.
+ *
+ * Lives here rather than in the route so the tier and the vocabulary it falls
+ * back to sit beside each other, and so a test can ask what an anonymous
+ * reader gets without booting a server.
+ */
+export function tierDraftWords<T extends { text: string; metric: string | null }>(
+  maySeePeople: boolean,
+  d: { title: string; rationale?: string | null },
+  objectives: T[],
+): { title: string; rationale: string | null; objectives: T[] } {
+  if (maySeePeople) return { title: d.title, rationale: d.rationale ?? null, objectives };
+  return {
+    title: "A change being drafted",
+    rationale: null,
+    objectives: objectives.map((o) => ({ ...o, text: neutralObjectiveText(o.metric) })),
+  };
 }
 
 /** What is wrong with a proposed vision block, in the words somebody would use. */
@@ -332,12 +452,43 @@ export async function measureVisionMetrics(
   return measured;
 }
 
-export async function listDrafts(pool: Pool): Promise<Draft[]> {
-  const [drafts]: any = await pool.query("SELECT * FROM org_drafts ORDER BY created_at DESC");
-  const [changes]: any = await pool.query("SELECT * FROM org_draft_changes ORDER BY sort_order, id");
+/**
+ * Drafts with their changes. Takes a CONNECTION as happily as a pool,
+ * so `publishDraft` can read the draft inside its own transaction and act
+ * on the same snapshot it wrote against.
+ *
+ * ── THE READ THAT GREW WITH EVERY PUBLISH ────────────────────────────────
+ *
+ * Every caller used to read both tables whole and pick what it wanted out of
+ * the pile. `/api/org/vision` wanted the open drafts, and it answers the street
+ * whenever `map.public_structure` is on. `publishDraft` wanted ONE draft and
+ * read everything twice to find it, inside its transaction and after taking the
+ * circles counter FOR UPDATE, so a circle form saved meanwhile waited on that
+ * read. Since 0208 every Publish on the living map is a draft of its own, so
+ * what all of them paid for grew with every arrangement ever published.
+ *
+ * So a caller says what it wants: `getDraft` reads one draft's rows, and
+ * `{ status }` reads the drafts in that state with only their changes. The
+ * unfiltered form stays for the admin list, which shows history on purpose.
+ */
+export async function listDrafts(
+  pool: Pool | PoolConnection,
+  opts: { status?: DraftStatus } = {},
+): Promise<Draft[]> {
+  return rowsToDrafts(await readDraftBodies(pool, opts.status ? { status: opts.status } : null));
+}
+
+/** One draft with its changes, or null when there is no such draft. */
+export async function getDraft(pool: Pool | PoolConnection, draftId: string): Promise<Draft | null> {
+  return rowsToDrafts(await readDraftBodies(pool, { id: draftId }))[0] ?? null;
+}
+
+function rowsToDrafts({ drafts, changes }: DraftBodyRows): Draft[] {
   const byDraft = new Map<string, DraftChange[]>();
-  for (const c of changes as any[]) {
-    byDraft.set(c.draft_id, [...(byDraft.get(c.draft_id) ?? []), rowToChange(c)]);
+  for (const c of changes) {
+    const list = byDraft.get(c.draft_id);
+    if (list) list.push(rowToChange(c));
+    else byDraft.set(c.draft_id, [rowToChange(c)]);
   }
   return (drafts as any[]).map((d) => ({
     id: d.id, title: d.title, rationale: d.rationale ?? null,
@@ -610,7 +761,13 @@ export interface PreviewLine {
  * WHOLE thing if any single change is blocked, and never half-apply.
  */
 export async function previewDraft(
-  pool: Pool,
+  /**
+   * A pool, or the connection of a transaction in progress. `publishDraft`
+   * passes its own connection so the state the preview VALIDATES is the
+   * state the writes then change, with no window in between for another
+   * request to move a seat out from under a check that already passed.
+   */
+  pool: Pool | PoolConnection,
   draftId: string,
   /**
    * The volume cap, from `draftChangeCap`. Applied only to a machine-sourced
@@ -618,8 +775,7 @@ export async function previewDraft(
    */
   changeCap?: number | null,
 ): Promise<{ lines: PreviewLine[]; blocked: number }> {
-  const drafts = await listDrafts(pool);
-  const draft = drafts.find((d) => d.id === draftId);
+  const draft = await getDraft(pool, draftId);
   if (!draft) return { lines: [], blocked: 0 };
   return previewLoadedDraft(draft, await loadPreviewContext(pool), changeCap);
 }
@@ -628,12 +784,20 @@ export async function previewDraft(
 export interface PreviewContext {
   roles: any[];
   circleIds: Set<string>;
+  /** Every circle and where it sits, for a move_circle line (0208). */
+  circles: Array<{ id: string; name: string; parentCircleId: string | null; isExample: boolean }>;
 }
 
-export async function loadPreviewContext(pool: Pool): Promise<PreviewContext> {
+export async function loadPreviewContext(pool: Pool | PoolConnection): Promise<PreviewContext> {
   const [roles]: any = await pool.query("SELECT id, name, is_example, active FROM org_roles");
-  const [circles]: any = await pool.query("SELECT id FROM circles WHERE is_example = 0");
-  return { roles: roles as any[], circleIds: new Set((circles as any[]).map((c) => String(c.id))) };
+  const circles = await readCirclesForPreview(pool);
+  const all = (circles as any[]).map((c) => ({
+    id: String(c.id),
+    name: String(c.name ?? c.id),
+    parentCircleId: c.parent_circle_id ? String(c.parent_circle_id) : null,
+    isExample: !!c.is_example,
+  }));
+  return { roles: roles as any[], circleIds: new Set(all.filter((c) => !c.isExample).map((c) => c.id)), circles: all };
 }
 
 /**
@@ -667,6 +831,8 @@ export function previewLoadedDraft(
   // a draft can create a seat and then put somebody in it.
   const willExist = new Set(draft.changes.filter((c) => c.op === "create_seat").map((c) => c.orgRoleId));
 
+  // The circles as this draft moves them, for the move_circle lines below.
+  const working = context.circles.map((x) => ({ ...x }));
   const lines: PreviewLine[] = [];
   let index = 0;
   for (const c of draft.changes) {
@@ -705,6 +871,31 @@ export function previewLoadedDraft(
 
     if (blocked) {
       lines.push({ changeId: c.id, op: c.op, orgRoleId: c.orgRoleId, reads: `${c.op} on ${name}`, blocked });
+      continue;
+    }
+
+    /*
+     * A CIRCLE MOVE (0208), checked against the village AS THIS DRAFT WILL HAVE
+     * LEFT IT so far, and not against the village as it stands. Two moves in
+     * one draft can close a loop that neither closes alone, and a loop drew an
+     * empty map. Each accepted move updates the working copy for those after it.
+     */
+    if (c.op === "move_circle") {
+      const circleId = c.orgRoleId.startsWith("circle:") ? c.orgRoleId.slice("circle:".length) : "";
+      const parentId =
+        typeof c.payload?.parentCircleId === "string" && c.payload.parentCircleId ? String(c.payload.parentCircleId) : null;
+      const moving = working.find((x) => x.id === circleId);
+      const parentName = parentId ? (working.find((x) => x.id === parentId)?.name ?? parentId) : null;
+      reads = !moving
+        ? `Move the circle "${circleId || c.orgRoleId}"`
+        : parentId
+          ? `Move "${moving.name}" inside "${parentName}"`
+          : `Move "${moving.name}" to the top of the village`;
+      if (!moving) blocked = "That circle does not exist";
+      else if (moving.isExample) blocked = "A standing example is not moved. Publish your own circles and it is removed";
+      else blocked = parentingRefusal(working, circleId, parentId)?.message ?? null;
+      if (!blocked && moving) moving.parentCircleId = parentId;
+      lines.push({ changeId: c.id, op: c.op, orgRoleId: c.orgRoleId, reads, blocked });
       continue;
     }
 
@@ -903,33 +1094,66 @@ export async function publishDraft(
    * term (0199). A draft with no seating in it publishes without one.
    */
   calendar?: SeatCalendar | null,
-): Promise<{ ok: true; applied: number } | { ok: false; error: string }> {
-  const preview = await previewDraft(pool, draftId, changeCap);
-  if (!preview.lines.length) return { ok: false, error: "This draft has no changes in it" };
-  if (preview.blocked > 0) {
-    const first = preview.lines.find((l) => l.blocked);
-    return { ok: false, error: `${preview.blocked} change(s) cannot be applied. First: ${first?.blocked}` };
-  }
-
-  const drafts = await listDrafts(pool);
-  const draft = drafts.find((d) => d.id === draftId);
-  if (!draft) return { ok: false, error: "No such draft" };
-  if (draft.status !== "open") return { ok: false, error: `This draft is already ${draft.status}` };
-
+): Promise<{ ok: true; applied: number; seated: DraftSeating[] } | { ok: false; error: string }> {
   const conn: PoolConnection = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    // The circles counter first, in the order a circle form takes it (see lockCirclesCounter).
+    await lockCirclesCounter(conn);
+
+    // READ INSIDE THE TRANSACTION. These used to run on the pool before
+    // `beginTransaction`, so the seats the preview approved and the draft
+    // status it trusted were both read from a snapshot the writes below
+    // never saw. Two publishes of one draft could each pass the status
+    // check out here and then both apply.
+    const preview = await previewDraft(conn, draftId, changeCap);
+    if (!preview.lines.length) { await conn.rollback(); return { ok: false, error: "This draft has no changes in it" }; }
+    if (preview.blocked > 0) {
+      const first = preview.lines.find((l) => l.blocked);
+      await conn.rollback();
+      return { ok: false, error: `${preview.blocked} change(s) cannot be applied. First: ${first?.blocked}` };
+    }
+    const draft = await getDraft(conn, draftId);
+    if (!draft) { await conn.rollback(); return { ok: false, error: "No such draft" }; }
+    if (draft.status !== "open") { await conn.rollback(); return { ok: false, error: `This draft is already ${draft.status}` }; }
+
+    /*
+     * SEATINGS ARE COLLECTED, NEVER NOTIFIED FROM IN HERE.
+     *
+     * `notify` writes rows of its own, and a rollback after one had been
+     * sent would leave a member told they hold a seat that no publish ever
+     * applied. So the transaction only records WHO, and the caller tells
+     * them once the commit has actually happened.
+     *
+     * The seat name and aim are read in here on purpose: read afterwards,
+     * a later edit would put different words in the message than the ones
+     * this publish wrote.
+     */
+    const seated: DraftSeating[] = [];
     for (const c of draft.changes) {
       const before = await captureBefore(conn, c);
       await conn.query("UPDATE org_draft_changes SET before_json = ? WHERE id = ?", [JSON.stringify(before), c.id]);
-      await applyChange(conn, c, calendar ?? null);
+      const s = await applyChange(conn, c, calendar ?? null);
+      if (s) seated.push(s);
     }
-    await conn.query(
+    // THE WHOLE POINT OF THE `status = 'open'` CLAUSE IS THIS COUNT.
+    //
+    // The guard was here and its result was thrown away, so a second
+    // publish of the same draft matched zero rows, committed anyway and
+    // answered 200. That is not merely a duplicate: `before_json` is
+    // rewritten above with whatever is there NOW, so the second pass
+    // overwrote every revert value with the ALREADY-PUBLISHED state and
+    // the draft became unrevertable behind a success.
+    const [done]: any = await conn.query( // module-review-ok: a step inside this function's own transaction on its connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
       "UPDATE org_drafts SET status = 'published', published_by = ?, published_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'open'",
       [publishedBy, draftId],
     );
+    if (!done?.affectedRows) {
+      await conn.rollback();
+      return { ok: false, error: "This draft was published by someone else while this was being applied" };
+    }
     await conn.commit();
-    return { ok: true, applied: draft.changes.length };
+    return { ok: true, applied: draft.changes.length, seated };
   } catch (e: any) {
     await conn.rollback();
     return { ok: false, error: String(e?.message ?? e).slice(0, 200) };
@@ -939,6 +1163,10 @@ export async function publishDraft(
 }
 
 async function captureBefore(conn: PoolConnection, c: DraftChange): Promise<any> {
+  if (c.op === "move_circle") {
+    const [[row]] = await conn.query<any[]>("SELECT id, parent_circle_id FROM circles WHERE id = ?", [c.orgRoleId.slice("circle:".length)]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    return row ?? null;
+  }
   if (c.op === "create_seat") return null;
   if (c.op === "seat_holder") return null;
   if (c.op === "end_holding") {
@@ -962,8 +1190,33 @@ const SEAT_FIELDS: Record<string, string> = {
   recruiting: "recruiting",
 };
 
-async function applyChange(conn: PoolConnection, c: DraftChange, calendar: SeatCalendar | null): Promise<void> {
+/** The seating a change made, for the caller to tell the person about. */
+export interface DraftSeating {
+  userId: string;
+  orgRoleId: string;
+  assignmentId: string;
+  /** Read here, inside the transaction, so the words match what was applied. */
+  seatName: string;
+  seatAim: string | null;
+}
+
+async function applyChange(conn: PoolConnection, c: DraftChange, calendar: SeatCalendar | null): Promise<DraftSeating | null> {
   const p = c.payload ?? {};
+  if (c.op === "move_circle") {
+    /*
+     * RAW SQL INSIDE THE TRANSACTION, then a cache reload after commit.
+     * `circles` is served from `circlesRepo`, whose `all()` never re-reads the
+     * table, so this write stays invisible until the publish route calls
+     * `circlesRepo.load()`. The version bump in the SAME transaction stops a
+     * writer holding an older snapshot from putting the old parent back in that
+     * gap: store-db.ts rebases a stale snapshot instead of writing over it.
+     */
+    const circleId = c.orgRoleId.slice("circle:".length);
+    const parentId = typeof p.parentCircleId === "string" && p.parentCircleId ? p.parentCircleId : null;
+    await conn.query("UPDATE circles SET parent_circle_id = ? WHERE id = ? AND is_example = 0", [parentId, circleId]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    await conn.query("UPDATE collection_versions SET version = version + 1 WHERE collection = 'circles'"); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    return null;
+  }
   if (c.op === "create_seat") {
     // Every field a proposal may carry (PROPOSABLE_SEAT_FIELDS in
     // server/lib/proposedSeats.ts), not only the first six. This INSERT used to
@@ -980,37 +1233,63 @@ async function applyChange(conn: PoolConnection, c: DraftChange, calendar: SeatC
         p.whyItMatters ?? null, p.criticality === "high" ? "high" : "normal",
         p.recruiting === true || Number(p.recruiting) === 1 ? 1 : 0],
     );
-    return;
+    return null;
   }
   if (c.op === "rest_seat") {
     await conn.query("UPDATE org_roles SET active = 0 WHERE id = ?", [c.orgRoleId]);
-    return;
+    return null;
   }
   if (c.op === "seat_holder") {
-    const holderKey = p.userId ? String(p.userId) : `doc:${String(p.displayName ?? "unnamed").toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
     /*
-     * 0199: a seating a draft makes carries a term like every other seating,
-     * decided at publish against the calendar as it stands then. A term the
-     * draft cannot give refuses the whole publish, and the reason is the error
-     * the publish returns.
+     * THROUGH `seatHolder`, NOT A SECOND INSERT BESIDE IT.
+     *
+     * This branch built its own holder key with an inline slug that was
+     * MISSING the trailing-dash trim `documentedKey` does, so "Alex "
+     * became `doc:alex` through the seating route and `doc:alex-` through a
+     * draft. The unique index on the active holder key therefore could not
+     * see that those were one person, and the same human could be seated
+     * twice in the same seat.
+     *
+     * Going through the real function also buys the refusals: a documented
+     * holder with no name is caught here, and a duplicate answers "They
+     * already hold this seat" instead of surfacing a raw MySQL ER_DUP_ENTRY
+     * string to whoever pressed Publish.
+     *
+     * 0199: the seating carries a term like every other seating, decided at
+     * publish against the calendar as it stands then. A term the draft cannot
+     * give refuses the whole publish, and the reason is the error the publish
+     * returns.
      */
     if (!calendar) throw new Error("Publishing a seating needs the village's calendar to set its term. Nothing was published.");
     const term = resolveSeatTerm({ requestedEndsOn: p.termEndsOn, calendar, capAtSeasonEnd: false, now: new Date() });
     if (!term.ok) throw new Error(term.error);
-    await conn.query(
-      `INSERT INTO org_role_assignments (id, org_role_id, holder_kind, user_id, display_name, holder_key, focus, season_id, term_ends_at, term_follows_season)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      [newId("orgasg"), c.orgRoleId, p.userId ? "member" : "documented", p.userId ?? null,
-        p.displayName ?? null, holderKey, p.focus ?? null, p.seasonId ?? term.seasonId, term.endsAt, term.followsSeason ? 1 : 0],
-    );
-    return;
+    const seated = await seatHolder(conn, c.orgRoleId, {
+      userId: p.userId ? String(p.userId) : null,
+      displayName: p.displayName ?? null,
+      focus: p.focus ?? null,
+      seasonId: p.seasonId ?? term.seasonId,
+      termEndsAt: term.endsAt,
+      termFollowsSeason: term.followsSeason,
+    });
+    if (!seated.ok) throw new Error(seated.reason ?? "That seating could not be applied");
+    // Only a MEMBER can be told. A documented holder has no account to
+    // reach, which is the same rule the direct seating route follows.
+    if (!p.userId || !seated.assignmentId) return null;
+    const [[seat]] = await conn.query<any[]>("SELECT name, aim FROM org_roles WHERE id = ?", [c.orgRoleId]); // module-review-ok: read inside the publish transaction on purpose, so the words a seated member is sent are the ones this publish wrote
+    return {
+      userId: String(p.userId),
+      orgRoleId: c.orgRoleId,
+      assignmentId: seated.assignmentId,
+      seatName: String(seat?.name ?? c.orgRoleId),
+      seatAim: seat?.aim ? String(seat.aim) : null,
+    };
   }
   if (c.op === "end_holding") {
     await conn.query(
       "UPDATE org_role_assignments SET ended_at = CURRENT_TIMESTAMP, ended_reason = ? WHERE id = ? AND ended_at IS NULL",
       [String(p.reason ?? "reorganisation").slice(0, 200), String(p.assignmentId ?? "")],
     );
-    return;
+    return null;
   }
   // update_seat: only the fields the draft names, mapped through a fixed
   // table. A payload key is never used as a column name.
@@ -1025,9 +1304,10 @@ async function applyChange(conn: PoolConnection, c: DraftChange, calendar: SeatC
     sets.push("`accountabilities` = ?");
     args.push(JSON.stringify(p.accountabilities));
   }
-  if (!sets.length) return;
+  if (!sets.length) return null;
   args.push(c.orgRoleId);
   await conn.query(`UPDATE org_roles SET ${sets.join(", ")} WHERE id = ?`, args);
+  return null;
 }
 
 /**
@@ -1046,22 +1326,59 @@ export async function revertDraft(
   pool: Pool,
   draftId: string,
 ): Promise<{ ok: true; reverted: number } | { ok: false; error: string }> {
-  const drafts = await listDrafts(pool);
-  const draft = drafts.find((d) => d.id === draftId);
+  const draft = await getDraft(pool, draftId);
   if (!draft) return { ok: false, error: "No such draft" };
   if (draft.status !== "published") return { ok: false, error: "Only a published draft can be reverted" };
 
   const conn: PoolConnection = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    await lockCirclesCounter(conn);
+    // Where every circle sits NOW, and its name for a refusal. Undoing a move is
+    // itself a move, and the village may have changed since the publish: if the
+    // old parent now sits inside the moved circle, putting it back closes a loop.
+    const [circleRows]: any = await conn.query("SELECT id, name, parent_circle_id FROM circles"); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    const nowCircles = (circleRows as any[]).map((x) => ({
+      id: String(x.id),
+      name: String(x.name ?? x.id),
+      parentCircleId: x.parent_circle_id ? String(x.parent_circle_id) : null,
+    }));
     for (const c of [...draft.changes].reverse()) {
-      if (c.op === "create_seat") {
+      if (c.op === "move_circle") {
+        if (c.beforeJson) {
+          const circleId = c.orgRoleId.slice("circle:".length);
+          const back = c.beforeJson.parent_circle_id ? String(c.beforeJson.parent_circle_id) : null;
+          /*
+           * UNDO ONLY WHAT IS STILL THERE. If the circle has moved again since
+           * this draft put it somewhere, putting it "back" would silently throw
+           * that later move away, and the later draft would go on saying it was
+           * published. The same when the circle is gone.
+           */
+          const current = nowCircles.find((x) => x.id === circleId);
+          const placed =
+            typeof c.payload?.parentCircleId === "string" && c.payload.parentCircleId ? String(c.payload.parentCircleId) : null;
+          if (!current) throw new Error(`This move cannot be undone: the circle "${circleId}" is no longer in the village.`);
+          if (current.parentCircleId !== placed) {
+            throw new Error(`This move cannot be undone as things stand. "${current.name}" has moved again since, and undoing this would throw that later move away.`);
+          }
+          const refused = parentingRefusal(nowCircles, circleId, back);
+          if (refused) throw new Error(`This move cannot be undone as things stand. ${refused.message}`);
+          await conn.query("UPDATE circles SET parent_circle_id = ? WHERE id = ?", [back, circleId]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+          await conn.query("UPDATE collection_versions SET version = version + 1 WHERE collection = 'circles'"); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+          const moved = nowCircles.find((x) => x.id === circleId);
+          if (moved) moved.parentCircleId = back;
+        }
+      } else if (c.op === "create_seat") {
         await conn.query("UPDATE org_roles SET active = 0 WHERE id = ?", [c.orgRoleId]);
       } else if (c.op === "seat_holder") {
         await conn.query(
           "UPDATE org_role_assignments SET ended_at = CURRENT_TIMESTAMP, ended_reason = 'draft reverted' WHERE org_role_id = ? AND ended_at IS NULL AND holder_key = ?",
+          // The same key `applyChange` seated under, from the same function.
+          // Built by hand here it did not match, so reverting a seating of
+          // anyone whose name ended in a space or punctuation ended nothing
+          // and reported success.
           [c.orgRoleId, c.payload?.userId ? String(c.payload.userId)
-            : `doc:${String(c.payload?.displayName ?? "unnamed").toLowerCase().replace(/[^a-z0-9]+/g, "-")}`],
+            : documentedKey(String(c.payload?.displayName ?? "unnamed"))],
         );
       } else if (c.op === "end_holding" && c.beforeJson) {
         const b = c.beforeJson;
@@ -1086,10 +1403,16 @@ export async function revertDraft(
         );
       }
     }
-    await conn.query(
+    // Same count, same reason as publish: without it a second revert put
+    // every `before_json` value back a second time and reported success.
+    const [done]: any = await conn.query( // module-review-ok: a step inside this function's own transaction on its connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
       "UPDATE org_drafts SET status = 'reverted', reverted_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'published'",
       [draftId],
     );
+    if (!done?.affectedRows) {
+      await conn.rollback();
+      return { ok: false, error: "This draft was reverted by someone else while this was being undone" };
+    }
     await conn.commit();
     return { ok: true, reverted: draft.changes.length };
   } catch (e: any) {

@@ -69,20 +69,6 @@ import type { WeightMode } from "./governanceWeights";
 /** The ballot subject type a redemption opens under. */
 export const REDEMPTION_SUBJECT = "redemption";
 
-/**
- * `SubjectCloser` plus the hook.
- *
- * ON THIS BRANCH'S BASE (d8c42ae) the interface carries `settle`, `execute` and
- * `onWithdraw` and no `onUnlanded`: governance added that member on main, after
- * this branch was cut. Declaring it here keeps the closer compiling on the base
- * it was written against, and the shape is exactly theirs, so the member lines
- * up with the interface the moment main is merged and this alias becomes a
- * redundancy rather than a difference.
- */
-export type CloserWithUnlanded = SubjectCloser & {
-  onUnlanded?: (b: BallotRow, reason: "vetoed" | "written_off") => Promise<void>;
-};
-
 export interface RedemptionCloserDeps {
   getPool: () => Pool;
   notify: (input: NotifyInput) => Promise<unknown>;
@@ -94,7 +80,7 @@ function humanAmount(tokenSlug: string, amountUnits: number): string {
   return `${fromLedgerUnits(tokenSlug, amountUnits)} ${def?.name ?? tokenSlug}`;
 }
 
-export function redemptionCloser(deps: RedemptionCloserDeps): CloserWithUnlanded {
+export function redemptionCloser(deps: RedemptionCloserDeps): SubjectCloser {
   const { getPool, notify } = deps;
 
   /**

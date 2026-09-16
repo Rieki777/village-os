@@ -50,6 +50,7 @@ import { erasureRecord, noteStepDone, unfinishedErasures } from "../repos/member
 import { saveMemberNeed } from "./needs";
 import * as portraits from "../repos/characterPortraits";
 import { charactersForMember } from "../repos/playerCharacters";
+import { landPublicSubmission } from "./publicForms";
 
 const configured = testDbConfigured();
 const VILLAGE = "local";
@@ -263,6 +264,39 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
     expect(portraitFileExists(id)).toBe(false);
   });
 
+  it("STOPS AT A FILE THAT WILL NOT COME OFF, keeps the rows naming it, and the resume takes it down", async () => {
+    // This used to log the failure and record the step as done, AFTER the rows
+    // naming the file had already been deleted, so nothing could ever find the
+    // file again and `/api/uploads/:filename` went on serving it. A directory
+    // standing where the file was makes unlink refuse with something other than
+    // ENOENT on every platform (EPERM on Windows and macOS, EISDIR on Linux).
+    const id = "er-stuck-file-1";
+    const target = await seedMember(id);
+    const onVolume = path.join(uploadsDir, `portrait-${id}.webp`);
+    fs.rmSync(onVolume, { force: true });
+    fs.mkdirSync(onVolume);
+
+    await expect(anonymizeMember(pool, target, null, deps())).rejects.toThrow(/could not take .* off the volume/);
+
+    const record = await erasureRecord(pool, id);
+    expect(record!.failedStep).toBe("portraits");
+    expect(record!.finishedAt).toBeNull();
+    expect(record!.stepsDone).not.toContain("portraits");
+    // The rows are still there, which is the only way a resume finds the file.
+    expect(await portraits.portraitsForMember(pool, id)).toHaveLength(1);
+
+    // Whatever stood in the way clears, and the picture is still on the volume.
+    fs.rmdirSync(onVolume);
+    fs.writeFileSync(onVolume, Buffer.from("still a picture"));
+
+    const out = await resumeErasure(pool, id, deps());
+    expect(out.finished).toBe(true);
+    expect(out.ran).toContain("portraits");
+    expect(portraitFileExists(id)).toBe(false);
+    expect(await portraits.portraitsForMember(pool, id)).toHaveLength(0);
+    expect(await portraits.grantsForMember(pool, id)).toHaveLength(0);
+  });
+
   it("is safe to resume twice, and a finished sweep stays finished", async () => {
     const id = "er-resume-2";
     const target = await seedMember(id);
@@ -301,6 +335,39 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
     expect(twice!.attempts).toBe(2);
     expect(await q("SELECT `id` FROM `skill_tags` WHERE `user_id` = ?", [id])).toHaveLength(0);
     expect((await usersRepo(pool).byId(id))!.name).toBe("A departed member");
+  });
+
+  it("takes the member's name off a quest idea they sent through the form, and keeps the idea", async () => {
+    // The idea waits in /review, and its words are part of the village record,
+    // the rule the submission it came from already follows. Its author is not.
+    const id = "er-idea-1";
+    const target = await seedMember(id);
+    const idea = {
+      id: `sub-idea-${id}`,
+      type: "quest-proposal",
+      userId: id,
+      userName: "Wren Halloway",
+      data: {
+        name: "Wren Halloway",
+        email: "wren@examples.invalid",
+        title: "Mend the long bench",
+        whatYouWantToDo: "Sand and oil the bench by the pond.",
+      },
+    };
+    await landPublicSubmission({ insert: async (e) => void submissions.push(e) }, pool, idea);
+    const ref = `submission:${idea.id}`;
+    expect(await q("SELECT `proposed_by` FROM `quest_proposals` WHERE `source_ref` = ?", [ref])).toEqual([
+      { proposed_by: id },
+    ]);
+
+    await anonymizeMember(pool, target, null, deps());
+
+    expect(await q("SELECT `title`, `proposed_by` FROM `quest_proposals` WHERE `source_ref` = ?", [ref])).toEqual([
+      { title: "Mend the long bench", proposed_by: null },
+    ]);
+    expect((await erasureRecord(pool, id))!.stepsDone).toContain("quest-proposals");
+    // The submission it came from is scrubbed by its own step, as it always was.
+    expect(submissions.find((s) => s.id === idea.id).data.email).toBe("[removed at member's request]");
   });
 
   it("records a break AFTER the tombstone, where the account is already gone", async () => {

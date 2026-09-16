@@ -162,7 +162,7 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `proposal_accepted:<id>` | `server/index.ts` |
 | `quest_consent:<id>` | `server/routes/questClaims.ts` |
 | `quest.completed:<esc(v)>:<esc(questId)>:<esc(claimId)>:<esc(userId)>:<esc(tokenSlug)>` | `server/lib/economy.ts` |
-| `queststay:<id>` | `server/routes/questClaims.ts` |
+| `queststay:<id>` | `server/lib/economy.ts` |
 | `redemption:<esc(v)>:<esc(redemptionId)>:hold` | `server/lib/redemptionStore.ts` |
 | `reversal:<esc(v)>:<eventKey>` | `server/lib/economy.ts` |
 | `role.cycle:<esc(v)>:<esc(cycleKey)>:<esc(seatId)>:<esc(userId)>:<esc(tokenSlug)>` | `server/lib/economy.ts` |
@@ -177,7 +177,7 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `xstock-<Date.now()>-<Math.random().toString(36).slice(2, 8)>` | `server/index.ts` |
 | `xstock:<slug>:<body>` | `server/index.ts` |
 
-51 distinct shapes across 57 posting site(s), plus 6 site(s) that forward a key their caller decided (`mint()` and `mintStayCredits` hand on what they were given, and every caller of those is read above). A shape ending in a timestamp and a random suffix is a key the caller did not make idempotent: the admin mint and the exchange stocking route both fall back to one when no client nonce is sent, so a retried request there is a second posting rather than a no-op.
+51 distinct shapes across 57 posting site(s), plus 8 site(s) that forward a key their caller decided (`mint()` and `mintStayCredits` hand on what they were given, and every caller of those is read above). A shape ending in a timestamp and a random suffix is a key the caller did not make idempotent: the admin mint and the exchange stocking route both fall back to one when no client nonce is sent, so a retried request there is a second posting rather than a no-op.
 <!-- generated:triggers end -->
 
 ---
@@ -441,9 +441,9 @@ is also the source of the most serious defect in this engine today (10.1).
 
 ## 6. Village Voice and the one-way bridge
 
-Village Voice is the governance weight the village mints for itself. It is the
-only platform token with decimals, so it stores thousandths: a rule that pays 10
-posts 10000.
+Village Voice is the governance weight the village mints for itself. Since `0202`
+it carries two decimals, like the tokens a village spends, so it stores
+hundredths: a rule that pays 10 posts 1000.
 
 A member with enough of it can **claim**, which is the bridge to Base. The claim
 debits the private balance at request time (member to `sys:voice-bridge`) and the
@@ -485,8 +485,8 @@ The amount is computed in minor units and floored:
 `Math.floor(balanceUnits * pct / 100)`. Rounding up would take more than the
 published rate, which is the one direction that must never happen. Flooring also
 makes a balance too small to reach into a counted exemption instead of a unit
-quietly costed to somebody, so at three decimals and 1 percent a member holding
-5.000 Voice wanes 50 units and a member holding 0.050 Voice wanes nothing.
+quietly costed to somebody, so at two decimals and 1 percent a member holding
+5.00 Voice (500 units) wanes 5 units and a member holding 0.50 Voice wanes nothing.
 
 The step runs inside `runSettlement`, behind `economyReady`, behind the launch
 fact, and ahead of the read that returns early when no `role.cycle` rule is in
@@ -742,7 +742,11 @@ migration has to rescale every `held` row by the same factor it applies to
 charge; convert only the post and it reports the same drift from the other side.
 `heldSeatValue` is the read that had to change shape as well as scale: one
 `SUM(amount)` over the whole table added tokens at different scales together, so
-it groups by token and divides by each token's own.
+it groups by token and divides by each token's own. `keysFor`, which derives a
+seat charge's pay, refund and keep keys, is exported for one outside reader: the
+failed-actions report (`server/lib/failedActions.ts`) asks through it whether a
+kept fee's transfer landed, so the key format keeps a single home. None of the
+formats in the occurrence-key table changed with it.
 
 **Stays answered it on the WRITE, and the answer is worth copying.** Four of the
 29 are stay credits, and a fix at each of the four would have repaired the debit
@@ -767,8 +771,9 @@ has to widen and backfill `accommodation_prices.amount_minor`,
 still `int` from `0021`.
 
 **One token used to be inconsistent with itself, and the two doors agree now.
-Fixed on `wt/econ`, re-measured 2026-09-04 at `1861f7d`.** Village Voice has 3
-decimals, and the two ways it can be issued once disagreed:
+Fixed on `wt/econ`, re-measured 2026-09-04 at `1861f7d`.** Village Voice had 3
+decimals then (`0202` has since lowered it to 2, so each figure below is ten times
+what the same grant posts today), and the two ways it can be issued once disagreed:
 
 - a `quest.completed` rule of 10 goes through `mintForConfirmedClaim`, which calls
   `toLedgerUnits`, and posts **10000** minor units, which is 10 voice;
@@ -1140,11 +1145,11 @@ the balances on the wallet payload, on the tokens payload and on the member's ow
 data export, each built from `tokenDef(slug).decimals`.
 
 **What is left is not this defect and is worth naming so nobody re-opens it as
-one.** Village Voice still carries 3 decimals, so its wallet figure is a real
-0.010 whenever a posting was small, and section 11 item 1 is the decision that
-lowers it to 0. Lowering it is the DOWNWARD scale change section 7 opens with,
-and the wallet dividing correctly is exactly what makes that change visible to a
-member the moment it lands.
+one.** When this was written Village Voice carried 3 decimals, so a small posting
+showed as a real 0.010. Section 11 item 1 has since settled the scale: `0202`
+lowered Voice to 2, the DOWNWARD scale change section 7 opens with, and the
+wallet dividing correctly is exactly what made that change visible to a member
+the moment it landed.
 
 ### 10.4 `reverse()` took its amount from the caller. Fixed on `wt/econ`, measured.
 
@@ -1598,7 +1603,7 @@ What broke was the unit. `ceilingOutcome` answered in the rule's own human
 units, both callers then ran `toLedgerUnits` over that answer, and
 `toLedgerUnits` is `Math.round(human * 10 ** decimals)`, which was bounded by
 nothing. `mint_rules.ceiling` is `decimal(18,4)` and six of the seven shipped
-tokens carry 0 decimals, so the column holds places the token cannot. Read off
+tokens then carried 0 decimals (four carry 2 since `0202`), so the column holds places the token cannot. Read off
 `token_ledger` before the fix: amount 0.6 under a ceiling of 0.5 at 0 decimals
 posted 1, which is two hundred percent of the cap; amount 1.5 under a ceiling of
 1.5 posted 2; 25.5 under 25.5 posted 26; at 3 decimals a ceiling of 0.0005
@@ -2299,6 +2304,56 @@ purpose turned it red with `sys:redeemed is seeded by
 0183_a_member_redeems_what_they_hold.sql and is missing from the vault table`;
 restored, the file passes 42 checks and the generator is byte-identical.
 
+### 10.40 Concurrent gives failed on MariaDB 11.8 and later, and a retry could not heal it. Fixed on `wt/econ-snapshot-retry`, measured.
+
+MariaDB 11.8 turned `innodb_snapshot_isolation` on by default. Under it, a
+transaction's first PLAIN read fixes its read view, and a later locking read or
+write that reaches a row somebody committed after that view fails with
+`ER_CHECKREAD` (errno 1020, "Record has changed since last read ... try
+restarting transaction"), and the engine rolls the whole transaction back. A
+locking read does not fix the view. All three facts were measured on
+2026-09-14 against MariaDB 12.3.2 with a two-connection probe: a row inserted
+before the conflict was gone afterwards and `@@in_transaction` read 0. MySQL 8,
+which CI runs, never raises this error, so CI could not see any of it.
+
+**Two defects, one on top of the other.** Every retry site (`postTransfer`,
+`postTransferPair`, `writeGratitudeRow`, and `withDeadlockRetry` in
+`server/repos/quests.ts`) spelled out `ER_LOCK_DEADLOCK` and
+`ER_LOCK_WAIT_TIMEOUT` by hand, so none retried the new code, and a member was
+told "Your thanks could not be recorded", the sentence for a failure waiting
+cannot fix. Under that, the order was wrong. `writeGratitudeRowOnce` locked the
+giver, ran the cycle SUM (view fixed), and only then did the post queue on the
+recognition faucet's ledger row, which every giver shares, and rewrite its
+balance. Every giver behind the head of that queue found the balance moved since
+its view. A retry repeats the same order.
+
+**Measured, `server/economy.test.ts`, "lets twenty-four different members thank
+the same person at once", MariaDB 12.3.2:**
+
+| Tree | Failed of 24 | What they failed with |
+|---|---|---|
+| `wt/econ` at `bc44a3e`, unchanged | 21 | `ER_CHECKREAD`, shown as "could not be recorded" |
+| the shared retry predicate only (`d2dad79`) | 12 | `ER_CHECKREAD` after three attempts, shown as "busy" |
+| the predicate and the lock order (`f13fe95`) | 0 | the file passed 152 of 152 |
+| `f13fe95` with only the early lock disabled | 11 | `ER_CHECKREAD`, shown as "busy" |
+
+**The fix is two changes.** `lostConcurrencyRace` in `server/db/concurrency.ts`
+is now the one list of errors that mean a transaction lost a race, and all five
+sites read it, so the next engine difference is one edit. And
+`writeGratitudeRow` takes a `lockFirst` hook that runs after the giver's lock and
+before the first plain read. Both doors (`give` and `sendGratitude`) pass
+`lockLedgerAccounts` over the faucet and the recipient, the same sorted
+`FOR UPDATE` that `postTransferOn` takes, now exported and called by it. The lock
+order is unchanged (giver, then ledger accounts), only earlier, so the view is
+fixed only once nobody else can move those rows.
+
+**What this does not close.** Any other transaction that does a plain read
+before it locks a row other writers share has the same shape on MariaDB 11.8
+and later. Those are now retried, but not reordered, and none of them was
+measured here. The other 151 cases in `server/economy.test.ts`, including its
+concurrent mint races, passed on MariaDB 12.3.2. CI pins MySQL 8 and cannot see
+this class at all.
+
 ## 11. Open decisions
 
 1. **Decimals. SETTLED 2026-09-04, AND SHIPPED. This entry stated the ruling
@@ -2639,6 +2694,7 @@ them": it made a repaired build read as a broken one. Every row re-measured
 | Consents a claim a second time, on a village with the submission guard off | `This claim was already consented, so it was not consented again. The member was paid once.` as a 409 | Correct since 10.34: the status test moved inside `claimsRepo.update`'s row lock, so the claim's amount and the ledger row agree |
 | Asks to leave while holding an unsettled library loan | `Open state must settle through its own domain first`, with the blocking domains named | Correct. See section 14 |
 | Opens their wallet holding 10 Village Voice | **10** | Correct. `formatTokenAmount` divides by the scale the payload carries. It printed 10000 until 10.3 closed |
+| Presses Consent in a busy moment, and InnoDB gives up on the row lock all three times the code retries | `Several people were saving at the same moment, and this one did not get through. Try it again.` as a 503 | Correct. The consent's transaction rolled back, so the claim is untouched and the member is still owed, and pressing again is the whole remedy. It read `Internal server error` until `terminalAnswerFor` learned the two lock codes |
 
 **The four that no longer happen, kept here because deleting them would lose what
 a member used to meet and what closed it.**
@@ -2980,31 +3036,60 @@ person is `shareCapFor(100) = max(1, floor(100 x 25 / 100)) = 25`.
 One human act, **three** ledger rows, from three different faucets. `canConfirm`
 refuses first if Ash and Wren are the same person.
 
+Ash's amount is checked where Ash types it, before the route sees it. Each claim in
+the steward's claims read (`GET /api/admin/quest-claims`) carries its `bounds`, which
+`consentBounds` states from the same dials `checkConsentAmount` enforces, so the
+consent queue opens on the quest's floor where it has one and will not send an
+amount the route would refuse. That read moves no value, and nothing in this table
+changes with it.
+
 | # | Posted by | From | To | Token | Amount | Source | Idempotency key |
 |---|---|---|---|---|---|---|---|
-| 1 | the consent route | `sys:gratitude-pool` | `mem:<wren>` | `gratitude` | the consented amount, times any standing badge multiplier (1 by default) | `quest_consent` | `quest_consent:<claimId>` |
-| 2 | `mintForConfirmedClaim` | `sys:voice-mint` | `mem:<wren>` | `village-voice` | **10000** (10) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:village-voice` |
-| 3 | `mintForConfirmedClaim` | `sys:cycle-pool` | `mem:<wren>` | `credits` | **25** (25) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:credits` |
+| 1 | the consent route | `sys:gratitude-pool` | `mem:<wren>` | `gratitude` | the consented amount, lifted by any standing badge multiplier (1 by default) and never past a top: the range's top under `posted`, the bonus ceiling under `capped`, the advertised top under `unlimited` | `quest_consent` | `quest_consent:<claimId>` |
+| 2 | `settleOwedPosting` | `sys:voice-mint` | `mem:<wren>` | `village-voice` | **1000** (10) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:village-voice` |
+| 3 | `settleOwedPosting` | `sys:cycle-pool` | `mem:<wren>` | `credits` | **2500** (25) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:credits` |
 
-Four things this table is showing:
+Five things this table is showing:
 
 - **Row 1 is not a mint rule.** The consent route has posted recognition since S7
-  from the range the quest advertises. `mintForConfirmedClaim` explicitly skips
+  from the range the quest advertises. The pricing behind `owedForClaim` explicitly skips
   the gratitude slug (`if (r.tokenSlug === HEARTS) continue`) so one piece of work
   cannot pay twice. There is deliberately no seeded `quest.completed` gratitude
   rule: a disabled one would look like the obvious thing to switch on.
-- **Rows 2 and 3 end in the token slug.** That segment is appended at the call
-  site, not by `keys.questCompleted`. Without it the second rule would collide
-  with the first, read as a duplicate, and Wren would be quietly paid in one token
+- **Rows 2 and 3 end in the token slug.** `keys.questCompleted` builds that segment,
+  escaped like the rest of the key. Without it the second rule would collide with
+  the first, read as a duplicate, and Wren would be quietly paid in one token
   instead of two.
-- **10 becomes 10000 and 25 stays 25.** `toLedgerUnits` reads the token's own
-  `decimals`: 3 for Village Voice, 0 for credits.
-- **Row 1 is awaited and rows 2 and 3 are not.** The consent route wraps
-  `mintForConfirmedClaim` in a try/catch and does not fail the response on it. A
-  quest that was witnessed and credited must not fail because a secondary mint had
-  a bad afternoon, and the occurrence key makes a later repair-post safe.
+- **10 becomes 1000 and 25 becomes 2500.** `toLedgerUnits` reads the token's own
+  `decimals`, which is 2 for both Village Voice and credits since `0202`.
+- **Row 1 posts in the consent's commit, and rows 2 and 3 are recorded there.**
+  Recognition posts inside `consentOnce`'s transaction, as it always has. Rows 2
+  and 3, and any stay-credit reward the quest carries, are priced by `owedForClaim`
+  on the same connection and written to `quest_owed_postings` (0210) before that
+  commit. `settleOwedPosting` pays each one straight after it, in a transaction
+  that marks the row posted in the same commit. A payment that does not go through
+  stays owed, with the ledger's reason, and a steward pays it from /review
+  (`POST /api/admin/quest-claims/:id/owed/pay`); a refusal no retry can change
+  (`key_clash`, `rule`) is marked refused instead. Rye asked for this repair path
+  on 2026-09-14, on one condition: nothing pays twice. The owed row's key is the
+  ledger's occurrence key, so a second press finds the row posted, and a posting
+  that already landed answers duplicate and moves nothing. The consent's own
+  response never fails on any of it.
+- **A consent at 0 posts none of the three.** A zero is the witness saying the work
+  earned no recognition, so row 1 posts nothing, and `owedForClaim` prices no rule
+  for a grant of 0 either (economics and governance, 2026-09-14): a village can weight its ballots by
+  any token (`governance.weight_token`), so a rule token minted at 0 would be voting
+  weight farmed through `quest.allow_zero_consent`. A stay-credit reward the quest
+  itself carries is still owed and paid, keyed `queststay:<claimId>`.
 
-Wren's balances after: 25 credits, 10.000 voice, and whatever recognition the
+Nothing in this table changes when the audit trail does. The row a founder's own
+consent leaves (`quest:self-consent:solo-founder:<claim>`) is written after the
+consent commits rather than at the guard that opens the window, so it records
+uses of that window and not attempts at it. No faucet, key, amount or order
+above moves with it, and a founder who declines their own claim now leaves no
+row at all, which is what declining always meant.
+
+Wren's balances after: 25 credits, 10 voice, and whatever recognition the
 quest advertised.
 
 ### 15.3 Wren thanks Ash, 5 gratitude
@@ -3054,8 +3139,8 @@ cycle `lunar-000330`.
 
 | Posted by | From | To | Token | Amount | Source | Idempotency key |
 |---|---|---|---|---|---|---|
-| `runSettlement` | `sys:voice-mint` | `mem:<wren>` | `village-voice` | **50000** (50) | `role_cycle` | `role.cycle:local:lunar-000330:seat-hearth:<wren>:village-voice` |
-| `runSettlement` | `sys:cycle-pool` | `mem:<wren>` | `credits` | **25** (25) | `role_cycle` | `role.cycle:local:lunar-000330:seat-hearth:<wren>:credits` |
+| `runSettlement` | `sys:voice-mint` | `mem:<wren>` | `village-voice` | **5000** (50) | `role_cycle` | `role.cycle:local:lunar-000330:seat-hearth:<wren>:village-voice` |
+| `runSettlement` | `sys:cycle-pool` | `mem:<wren>` | `credits` | **2500** (25) | `role_cycle` | `role.cycle:local:lunar-000330:seat-hearth:<wren>:credits` |
 
 The seeded `role.cycle` gratitude rule of 20 is `enabled: false`, so it writes
 nothing. Two seats would be two thanks, and the same seat next moon is another,
@@ -3383,13 +3468,15 @@ thing sections 1 to 16 describe.
 
 ### What this side actually does
 
-`server/lib/crowdpool.ts` reads **five** public tRPC procedures off the hub's
+`server/lib/crowdpool.ts` reads **six** public tRPC procedures off the hub's
 no-auth `/api/trpc`: `campaigns.list` (only to resolve a slug to a numeric id by
 slugified title), `campaigns.getById`, `campaigns.getItems`,
-`campaigns.getActivity` and `campaigns.getPartnerLinks`. The hub sends no CORS
+`campaigns.getActivity`, `campaigns.getPartnerLinks`, and `meta.contract`, the
+hub's contract version (item 1 below). The hub sends no CORS
 headers, so a browser cannot read them; the game server proxies through
 `guardedFetchJson`, the same pinned, range-checked dialer the feedback relay uses,
-with a 12 second timeout. The four per-campaign reads go out together.
+with a 12 second timeout. The four per-campaign reads go out together, with
+`meta.contract` beside them.
 
 The cache is memory, TTL **90 seconds** (`CROWDPOOL_TTL_MS`). Every successful
 fetch becomes that key's snapshot, and the `crowdpool-sync` job runs every **10
@@ -3429,8 +3516,8 @@ a description of their mechanics. Two of them made a figure on our page wrong or
 impossible through no fault of any code here, and the third is the opposite and
 is the dangerous one.
 
-1. **`pledgedTotal` WAS a floor, and the hub fixed it on 2026-09-05.** Until
-   then the hub summed a campaign's pledged value filtering on the ACCEPTED
+1. **`pledgedTotal` is a floor on an older hub, and this side now reads which
+   hub it is.** Until 2026-09-05 the hub summed a campaign's pledged value filtering on the ACCEPTED
    status alone, and delivered and thanked are later states of the same
    lifecycle, so a confirmed delivery took its value out of the number the gold
    ring divides. Their trial: accept ten thousand, deliver it, accept five
@@ -3439,14 +3526,23 @@ is the dangerous one.
    The hub's commit `b835c28` now counts accepted, fulfilled and thanked, so
    delivered value stays in the number and it no longer falls when a village
    succeeds. The Crowdpooling session confirmed it on the hub's main with CI and
-   the deploy both green, rather than inferring it from silence, and
-   `7c83ef4` switched `HUB_PLEDGED_TOTAL_IS_A_FLOOR` off in
-   `client/src/components/crowdpool/PoolPieces.tsx`, which removed the hedge
-   from every surface that carried it. `percentPledged` divides by the hub's own
-   number, as it always did. The rule the hedge served still stands: an empty
-   state and a real zero are different facts, and so are a floor and a total.
-   **One gap this side cannot close:** village-os reads no hub contract version,
-   so a fork pointed at a hub older than `b835c28` would show a floor as a total.
+   the deploy both green, rather than inferring it from silence. `7c83ef4` then
+   switched a client constant, `HUB_PLEDGED_TOTAL_IS_A_FLOOR`, off for every hub
+   at once, which left a fork pointed at a hub older than `b835c28` showing a
+   floor as a total. **That gap closed on 2026-09-14**, when Rye ruled to add a
+   version number. The hub publishes `meta.contract` (hub commit `3c70b12c`,
+   history in section 10 of CROWDPOOL_HUB_CONTRACT.md in the hub's own
+   repository, not this one): at
+   `crowdpool` 1 the total counts accepted pledges only, at 2 it counts all
+   three, and the number rises only when a field a village already reads changes
+   meaning. `server/lib/crowdpool.ts` reads it beside the campaign reads every
+   sync and carries it on each campaign as `hubContract`; a hub that does not
+   answer, or answers anything but a positive integer, reads as 1. The page
+   words the figure as a floor whenever the served version is below 2 or absent
+   (`pledgedIsFloor` in `client/src/components/crowdpool/PoolPieces.tsx`).
+   `percentPledged` divides by the hub's own number, as it always did. The rule
+   the hedge served still stands: an empty state and a real zero are different
+   facts, and so are a floor and a total.
 2. **The three-slot meter can arrive with more delivered than were wanted.**
    Their fulfil path is not idempotent despite a comment of theirs claiming it
    is: two stewards confirming at once put delivered on two instead of one, ten
@@ -3536,9 +3632,13 @@ Four questions are open with the Crowdpooling session and are **not answered
 here, because answering them from this side would be describing somebody else's
 mechanics from a read path**:
 
-1. Which of the five procedures and which of their fields are stable contract,
-   and which are internal and free to move. The normalisers above are written
-   against a live read taken 2026-08-22 and nothing has promised them.
+1. Which of the five campaign procedures and which of their fields are stable
+   contract, and which are internal and free to move. The normalisers above are
+   written against a live read taken 2026-08-22 and nothing has promised them.
+   **Partly answered on 2026-09-14**: the hub's `meta.contract` bump rule says
+   the `crowdpool` number rises when a field a village already reads changes
+   meaning, so a change of meaning is now announced. Which fields are promised
+   at all is still theirs to state.
 2. What a pledge does in the hub's own terms, including whether it is a
    commitment, a payment, or an intent.
 3. Whether the nine `capitalType` values are theirs to change, and on what notice.

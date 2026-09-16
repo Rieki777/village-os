@@ -19,7 +19,7 @@
  * village genuinely knows better than the derivation, and it carries an
  * expiry so it lapses back rather than outliving the moment somebody meant it.
  */
-import type { Pool } from "mysql2/promise";
+import type { Pool, PoolConnection } from "mysql2/promise";
 import { applyCircleStatusChanges, type CircleStatusMove, type CircleStatusOutcome } from "./circleTreasury";
 import { listBudgets } from "./resources";
 import { circleStatusRows } from "../repos/circles";
@@ -28,6 +28,7 @@ import {
   domainsProblem,
   shapeProblem,
 } from "../../shared/power";
+import { circlesOnCycles } from "../../shared/circleView";
 
 export type SeatState = "open" | "filled" | "partial" | "forming" | "expired";
 
@@ -771,19 +772,32 @@ export async function createOrgRole(pool: Pool, body: any): Promise<string> {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "")
       .slice(0, 64) || `seat-${Date.now().toString(36)}`;
+  // The four every seat gets whether or not the caller sent them, so a bare
+  // `{name}` still produces a usable row.
+  const cols = ["id", "name", "circle_id", "aim", "domain", "accountabilities", "seats", "sort_order"];
+  const vals: unknown[] = [
+    id,
+    String(body?.name ?? "New seat"),
+    body?.circleId || null,
+    body?.aim ?? null,
+    body?.domain ?? null,
+    JSON.stringify(Array.isArray(body?.accountabilities) ? body.accountabilities : []),
+    Math.max(1, Number(body?.seats ?? 1)),
+    Number(body?.order ?? 0),
+  ];
+  // Then ANYTHING ELSE `updateOrgRole` would have taken. A field this route
+  // accepts and drops is worse than one it refuses, because the caller is
+  // told it worked.
+  for (const js of Object.keys(WRITABLE)) {
+    const w = writableColumn(js, body);
+    if (!w || cols.includes(w.col)) continue;
+    cols.push(w.col);
+    vals.push(w.value);
+  }
   await pool.query(
-    `INSERT INTO org_roles (id, name, circle_id, aim, domain, accountabilities, seats, sort_order)
-     VALUES (?,?,?,?,?,?,?,?)`,
-    [
-      id,
-      String(body?.name ?? "New seat"),
-      body?.circleId || null,
-      body?.aim ?? null,
-      body?.domain ?? null,
-      JSON.stringify(Array.isArray(body?.accountabilities) ? body.accountabilities : []),
-      Math.max(1, Number(body?.seats ?? 1)),
-      Number(body?.order ?? 0),
-    ],
+    `INSERT INTO org_roles (${cols.map((c) => `\`${c}\``).join(", ")})
+     VALUES (${cols.map(() => "?").join(",")})`,
+    vals,
   );
   return id;
 }
@@ -813,17 +827,39 @@ export function statusOverrideProblem(v: unknown): string | null {
   return `A declared state must be one of: ${DECLARABLE_STATES.join(", ")}`;
 }
 
+/**
+ * ONE COERCION FOR BOTH DOORS.
+ *
+ * It used to live inside `updateOrgRole` alone, and `createOrgRole` wrote a
+ * hand-listed EIGHT columns of the twenty-three this map accepts. So a
+ * founder who posted a whole seat in one call, aim and domain and why it
+ * matters together, got a seat with the first two and silently lost the
+ * third: no error, no 400, a 200 and a seat missing the sentence that says
+ * why anyone should care about it.
+ *
+ * Caught by driving `POST /api/admin/org/roles` with all four sentences and
+ * reading `/api/map` back, which is the only way to see it: the column
+ * exists, the update path writes it, and nothing anywhere says the create
+ * path does not.
+ */
+function writableColumn(js: string, body: any): { col: string; value: unknown } | null {
+  const col = WRITABLE[js];
+  if (!col || body[js] === undefined) return null;
+  if (js === "seats") return { col, value: Math.max(1, Number(body[js] ?? 1)) };
+  if (js === "order") return { col, value: Number(body[js] ?? 0) };
+  if (js === "active" || js === "recruiting" || js === "representsCircle") return { col, value: body[js] ? 1 : 0 };
+  if (js === "expiresEachSeason") return { col, value: body[js] === null ? null : body[js] ? 1 : 0 };
+  return { col, value: body[js] === "" ? null : body[js] };
+}
+
 export async function updateOrgRole(pool: Pool, id: string, body: any): Promise<boolean> {
   const sets: string[] = [];
   const args: any[] = [];
-  for (const [js, col] of Object.entries(WRITABLE)) {
-    if (body[js] === undefined) continue;
-    sets.push(`\`${col}\` = ?`);
-    if (js === "seats") args.push(Math.max(1, Number(body[js] ?? 1)));
-    else if (js === "order") args.push(Number(body[js] ?? 0));
-    else if (js === "active" || js === "recruiting" || js === "representsCircle") args.push(body[js] ? 1 : 0);
-    else if (js === "expiresEachSeason") args.push(body[js] === null ? null : body[js] ? 1 : 0);
-    else args.push(body[js] === "" ? null : body[js]);
+  for (const js of Object.keys(WRITABLE)) {
+    const w = writableColumn(js, body);
+    if (!w) continue;
+    sets.push(`\`${w.col}\` = ?`);
+    args.push(w.value);
   }
   if (body.accountabilities !== undefined) {
     sets.push("`accountabilities` = ?");
@@ -861,7 +897,12 @@ export async function updateOrgRole(pool: Pool, id: string, body: any): Promise<
  * at the write rather than at each of the readers.
  */
 export async function seatHolder(
-  pool: Pool,
+  /**
+   * A pool, or a transaction's connection. `orgDrafts.applyChange` passes
+   * its own connection so a published draft seats people through THIS
+   * function rather than through a second hand-rolled INSERT.
+   */
+  pool: Pool | PoolConnection,
   orgRoleId: string,
   h: {
     userId?: string | null;
@@ -1095,6 +1136,8 @@ export interface BackfillInput {
 
 export interface BackfillReport {
   circlesWritten: number;
+  /** Circles whose parent link sat on a loop and was dropped to null. */
+  circlesUnparented: number;
   councilsToForming: number;
   seatsWritten: number;
   holdersWritten: number;
@@ -1151,7 +1194,7 @@ export async function backfillOrgChart(pool: Pool, input: BackfillInput): Promis
   const expected = (input.cards ?? []).length + ((input.corrections?.seats ?? []).filter((s: any) => s.isNew).length);
   if (already > 0 && already >= expected) {
     return {
-      circlesWritten: 0, councilsToForming: 0, seatsWritten: 0, holdersWritten: 0, skipped: true,
+      circlesWritten: 0, circlesUnparented: 0, councilsToForming: 0, seatsWritten: 0, holdersWritten: 0, skipped: true,
       treasury: [], circlesCreated: [],
     };
   }
@@ -1165,13 +1208,21 @@ export async function backfillOrgChart(pool: Pool, input: BackfillInput): Promis
   const circleCardById = new Map<string, any>();
   for (const c of input.circleCards ?? []) if (c?.id) circleCardById.set(c.id, c);
 
+  // A loop in `parentCircleId` makes the map draw NOTHING (see
+  // shared/circleView.ts), and this runs at first boot on every fork, from a
+  // file in the repo. Throwing here would brick the boot, which is strictly
+  // worse than a flat map, so a looping parent is dropped and counted: the
+  // village comes up with those circles at the top level and the report says
+  // how many, which is a line in the boot log rather than a silent blank.
+  const looping = new Set(circlesOnCycles(corr.circles ?? []));
+
   const circleRows = (corr.circles ?? []).map((c: any) => {
     const card = circleCardById.get(c.id);
     return [
       c.id,
       c.name,
       c.purpose ?? card?.description ?? null,
-      c.parentCircleId ?? null,
+      looping.has(c.id) ? null : c.parentCircleId ?? null,
       c.grownFromOrgRoleId ?? null,
       c.icon ?? card?.icon ?? null,
       c.color ?? card?.color ?? null,
@@ -1362,7 +1413,7 @@ export async function backfillOrgChart(pool: Pool, input: BackfillInput): Promis
   );
 
   return {
-    circlesWritten, councilsToForming, seatsWritten, holdersWritten, skipped: false,
+    circlesWritten, circlesUnparented: looping.size, councilsToForming, seatsWritten, holdersWritten, skipped: false,
     treasury, circlesCreated,
   };
 }
