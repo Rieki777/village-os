@@ -70,6 +70,85 @@ The exit desk (`server/lib/exit.ts`) blocks leaving while a member has a request
 hold reconciliation and retired supply figures keep reading the ledger. None of these serve the
 module; they are the village's books.
 
+## Security review, 2026-09-15 (phases 2 and 3)
+
+Mechanical checks first, all clean: no `dangerouslySetInnerHTML` on any surface that
+renders village- or member-authored text; every statement added for the money dials
+and the holder count is a parameterised query in `server/repos/`; every route is
+behind `authedUser` or `guardCapability`; `check-auth-fetch`, `check-admin-reach`,
+`check-save-honesty` and `check-upload-strip` pass. What follows is the judgement,
+which is the part a guard cannot make.
+
+### 1. A village vote publishes the member's request, permanently
+
+**The exposure.** When nobody holds `redemption.confirm`, the request opens as a
+ballot. A ballot is served to anyone with the link and it is kept after it closes,
+so the member's own words for what they asked for (`askedFor`, clipped to 300
+characters) and their identity as the ballot's opener become public and stay
+public, including after the village votes no.
+
+**Who can see it.** Anyone with the link. Ballot reads are not member-only.
+
+**What the member sees before they submit**, in the panel, before the button:
+
+> Nobody in this village holds the key that confirms a redemption, so this one goes
+> to a village vote. A vote is public and it stays public: what you are asking for,
+> and what you are asking for it in return, become readable by anyone with the link,
+> permanently, including if the village says no. If you would rather it stayed
+> between you and a steward, ask the village to give the redemption key to a role first.
+
+**Can a member redeem privately in a village with no steward? No.** There is no
+private path in that village. Every redemption goes to a public ballot until
+somebody holds the key, and the member's only remedy is to ask the village to give
+`redemption.confirm` to a role. This is a real consequence of the ruling rather
+than an implementation choice: "if there isn't a steward the village can vote on
+these things" makes the village the decider, and this village's decider is public.
+It lands hardest on exactly the requests a member would most want kept quiet, which
+is why the notice says it in those words and before the ask rather than after.
+
+**Recommendation.** Ship as is, and put the choice in front of a founder: a village
+that does not want members' requests public gives the redemption key to a role on
+day one. Worth Rye's attention as a product question, not a code one: if he wants a
+private fallback where no steward exists, that is a different ruling (an
+admin-decides path, or a members-only ballot), and neither exists today.
+
+### 2. The payload says whether the village has a key-holder
+
+**The exposure.** `confirmedBy` in `GET /api/redemptions` is `steward` or `vote`,
+and it is derived from whether anybody holds `redemption.confirm`. A member can
+therefore tell that the village has given that power to nobody.
+
+**Who can see it.** Any signed-in member, since the module serves at `members`.
+
+**Recommendation.** Accept. The same fact is already public to members through the
+powers surfaces, which list roles and the capabilities they carry, and the field is
+what lets the panel warn a member before they ask. Hiding it would remove the
+warning without removing the inference.
+
+### 3. The member's redemption page reads prices once per token
+
+**The exposure.** `GET /api/redemptions` resolves a rate for every redeemable
+token, and each resolution reads the exchange's posted price and the daily rate
+table. A village with several redeemable tokens pays several reads per page load.
+Availability only: the reads are cheap indexed lookups, the route is authenticated,
+and the ask itself is rate limited to thirty a day per member.
+
+**Recommendation.** Fix when the route is next open: read the fx table once per
+request and hand it to each resolution, which removes the repeated read without
+changing any figure. Not done here because it is a performance change to a path
+this lane had already frozen and tested, and it is not a correctness or an
+authorisation defect.
+
+### What a stranded hold looks like, and who finds it
+
+Said plainly because the obvious answer is wrong: the failed-actions report does
+NOT show one. It keeps an attempt only while a landing is `not_applicable`,
+`pending`, `applying` or `stalled`, and a vetoed or written-off ballot is none of
+those. Two reads do show it: `unfinishedLandings`, and this module's own
+`holdReconciliation`, which compares `sys:redemption-hold` against the sum of open
+rows per token and is the one that names the money. Governance has filed widening
+the report separately.
+
 ## Tests
 
 - `server/redemption.test.ts` and `server/stayRedeem.test.ts` drive the store against a real schema.
