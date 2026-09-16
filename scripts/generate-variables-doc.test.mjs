@@ -69,7 +69,7 @@ function sourceField(key, field) {
 
 // ── A fixture registry, self-contained so a case can break one thing ─────────
 
-const TYPES = ["integer", "decimal", "percentage", "boolean", "choice", "text"];
+const TYPES = ["integer", "decimal", "percentage", "boolean", "choice", "text", "longtext"];
 
 const DIAL = {
   key: "sample.allowance",
