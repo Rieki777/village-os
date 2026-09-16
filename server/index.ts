@@ -25958,7 +25958,7 @@ ${inner}
     const admin = await isAdmin(req);
     const maySeePeople =
       admin || (viewer ? hasCapability("map.viewPeople", await capabilityCtx(viewer)) : false);
-    const drafts = (await listDrafts(getPool())).filter((d) => d.status === "open");
+    const drafts = await listDrafts(getPool(), { status: "open" });
 
     // Measure lazily: only the metric families the open visions actually
     // name are counted, so a village with no visions pays nothing here.

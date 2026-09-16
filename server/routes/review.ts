@@ -253,7 +253,7 @@ export function register(app: Express, deps: Deps): void {
       proposalQueue(pool, "proposed"),
       questProposalQueue(pool, "proposed"),
       recentDrops(pool, 30),
-      listDrafts(pool),
+      listDrafts(pool, { status: "open" }),
       loadPreviewContext(pool),
     ]);
 

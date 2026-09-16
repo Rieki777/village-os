@@ -72,6 +72,7 @@ import {
   addChange,
   createDraft,
   draftChangeCap,
+  getDraft,
   listDrafts,
   previewDraft,
   publishDraft,
@@ -296,8 +297,7 @@ export function register(app: Express, deps: Deps): void {
     // in the history of every node it moved rather than only in a draft list
     // nobody opens twice.
     try {
-      const drafts = await listDrafts(getPool());
-      const draft = drafts.find((d) => d.id === req.params.id);
+      const draft = await getDraft(getPool(), req.params.id);
       for (const seatId of Array.from(new Set((draft?.changes ?? []).map((c) => c.orgRoleId)))) {
         void recordEvent(getPool(), {
           kind: "org", text: `reorganised: ${draft?.title ?? "a draft"}`,

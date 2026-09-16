@@ -2,7 +2,7 @@
   "note": "Raw SQL call sites outside server/repos, recorded per file. A DEBT REGISTER, not an allowlist: a file listed here is measured, not blessed. This list only ever shrinks. Read scripts/sql-burndown.mjs before editing it, and lower BURNDOWN_CEILING in that file to match the total here. Test files are out of scope for the register and still in scope for the contribution rule; the header says why.",
   "rule": "raw SQL outside server/repos",
   "fix": "move the query into a repo under server/repos, so the caches above it stay correct and a table's readers stay enumerable",
-  "total": 728,
+  "total": 726,
   "counts": {
     "server/index.ts": 32,
     "server/lib/agentInbox.ts": 17,
@@ -57,7 +57,7 @@
     "server/lib/network.ts": 10,
     "server/lib/notify.ts": 11,
     "server/lib/orgChart.ts": 21,
-    "server/lib/orgDrafts.ts": 21,
+    "server/lib/orgDrafts.ts": 19,
     "server/lib/orgRelations.ts": 8,
     "server/lib/payments.ts": 11,
     "server/lib/profile.ts": 4,

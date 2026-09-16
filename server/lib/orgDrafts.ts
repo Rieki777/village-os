@@ -36,7 +36,7 @@
  * is lossy, and an archive may not be.
  */
 import type { Pool, PoolConnection } from "mysql2/promise";
-import { draftChangesNamingPeople, draftStatus, lockCirclesCounter, readCirclesForPreview, rewriteDraftChangePeople, withdrawDraftRow } from "../repos/orgDrafts";
+import { draftChangesNamingPeople, draftStatus, lockCirclesCounter, readCirclesForPreview, readDraftBodies, rewriteDraftChangePeople, withdrawDraftRow, type DraftBodyRows } from "../repos/orgDrafts";
 import { stageIndex } from "../../shared/gameConfig";
 import { numberVar } from "./variables";
 import { documentedKey, listOrgAssignments, listOrgRoles, peopleOnly, seatHolder, seatState, type LapseContext, type OrgAssignment } from "./orgChart";
@@ -453,16 +453,42 @@ export async function measureVisionMetrics(
 }
 
 /**
- * Every draft with its changes. Takes a CONNECTION as happily as a pool,
+ * Drafts with their changes. Takes a CONNECTION as happily as a pool,
  * so `publishDraft` can read the draft inside its own transaction and act
  * on the same snapshot it wrote against.
+ *
+ * ── THE READ THAT GREW WITH EVERY PUBLISH ────────────────────────────────
+ *
+ * Every caller used to read both tables whole and pick what it wanted out of
+ * the pile. `/api/org/vision` wanted the open drafts, and it answers the street
+ * whenever `map.public_structure` is on. `publishDraft` wanted ONE draft and
+ * read everything twice to find it, inside its transaction and after taking the
+ * circles counter FOR UPDATE, so a circle form saved meanwhile waited on that
+ * read. Since 0208 every Publish on the living map is a draft of its own, so
+ * what all of them paid for grew with every arrangement ever published.
+ *
+ * So a caller says what it wants: `getDraft` reads one draft's rows, and
+ * `{ status }` reads the drafts in that state with only their changes. The
+ * unfiltered form stays for the admin list, which shows history on purpose.
  */
-export async function listDrafts(pool: Pool | PoolConnection): Promise<Draft[]> {
-  const [drafts]: any = await pool.query("SELECT * FROM org_drafts ORDER BY created_at DESC");
-  const [changes]: any = await pool.query("SELECT * FROM org_draft_changes ORDER BY sort_order, id");
+export async function listDrafts(
+  pool: Pool | PoolConnection,
+  opts: { status?: DraftStatus } = {},
+): Promise<Draft[]> {
+  return rowsToDrafts(await readDraftBodies(pool, opts.status ? { status: opts.status } : null));
+}
+
+/** One draft with its changes, or null when there is no such draft. */
+export async function getDraft(pool: Pool | PoolConnection, draftId: string): Promise<Draft | null> {
+  return rowsToDrafts(await readDraftBodies(pool, { id: draftId }))[0] ?? null;
+}
+
+function rowsToDrafts({ drafts, changes }: DraftBodyRows): Draft[] {
   const byDraft = new Map<string, DraftChange[]>();
-  for (const c of changes as any[]) {
-    byDraft.set(c.draft_id, [...(byDraft.get(c.draft_id) ?? []), rowToChange(c)]);
+  for (const c of changes) {
+    const list = byDraft.get(c.draft_id);
+    if (list) list.push(rowToChange(c));
+    else byDraft.set(c.draft_id, [rowToChange(c)]);
   }
   return (drafts as any[]).map((d) => ({
     id: d.id, title: d.title, rationale: d.rationale ?? null,
@@ -749,8 +775,7 @@ export async function previewDraft(
    */
   changeCap?: number | null,
 ): Promise<{ lines: PreviewLine[]; blocked: number }> {
-  const drafts = await listDrafts(pool);
-  const draft = drafts.find((d) => d.id === draftId);
+  const draft = await getDraft(pool, draftId);
   if (!draft) return { lines: [], blocked: 0 };
   return previewLoadedDraft(draft, await loadPreviewContext(pool), changeCap);
 }
@@ -1088,7 +1113,7 @@ export async function publishDraft(
       await conn.rollback();
       return { ok: false, error: `${preview.blocked} change(s) cannot be applied. First: ${first?.blocked}` };
     }
-    const draft = (await listDrafts(conn)).find((d) => d.id === draftId);
+    const draft = await getDraft(conn, draftId);
     if (!draft) { await conn.rollback(); return { ok: false, error: "No such draft" }; }
     if (draft.status !== "open") { await conn.rollback(); return { ok: false, error: `This draft is already ${draft.status}` }; }
 
@@ -1301,8 +1326,7 @@ export async function revertDraft(
   pool: Pool,
   draftId: string,
 ): Promise<{ ok: true; reverted: number } | { ok: false; error: string }> {
-  const drafts = await listDrafts(pool);
-  const draft = drafts.find((d) => d.id === draftId);
+  const draft = await getDraft(pool, draftId);
   if (!draft) return { ok: false, error: "No such draft" };
   if (draft.status !== "published") return { ok: false, error: "Only a published draft can be reverted" };
 
