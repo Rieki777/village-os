@@ -61,6 +61,7 @@ import { authToken } from "@/lib/gameApi";
 import { toast } from "sonner";
 import { Inbox } from "lucide-react";
 import { Link } from "wouter";
+import QuestProposalCard, { type QuestCard, type QuestTyped } from "@/components/review/QuestProposalCard";
 
 interface ProposalCard {
   id: string;
@@ -88,18 +89,6 @@ interface Batch {
   /** Changes accepting the batch whole would propose. Null with no org proposals; absent from an older server. */
   proposedChanges?: number | null;
   items: ProposalCard[];
-}
-
-interface QuestCard {
-  id: string;
-  batchId: string;
-  moduleId: string;
-  prose: Record<string, unknown> & { title?: string; description?: string | null };
-  rationale: string | null;
-  quote: string | null;
-  sourceRef: string | null;
-  proposedByKind: string;
-  receivedAt: string;
 }
 
 interface Drop {
@@ -171,6 +160,8 @@ const DROP_WORDS: Record<string, string> = {
   unknown_kind: "were a kind this village does not know",
   unknown_trust_tier: "named a trust tier this village does not read",
   empty_payload: "arrived with nothing in them",
+  identifier_too_long: "carried an identifier longer than 64 characters",
+  over_allowance: "were held back, because their sender already had as many ideas waiting as the queue takes",
 };
 
 /** A time somebody can read, in the reader's own zone. */
@@ -236,7 +227,6 @@ export default function Review() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
   const [edits, setEdits] = useState<Record<string, string>>({});
-  const [rewards, setRewards] = useState<Record<string, { gratitude: string; stayCreditReward: string }>>({});
   const [busy, setBusy] = useState<string | null>(null);
   // Every draft this queue made that cannot publish, by draft id, with the
   // reason for each blocked seat. Held so the steward has a way out of each
@@ -571,9 +561,8 @@ export default function Review() {
     }
   };
 
-  const acceptQuest = async (q: QuestCard) => {
-    const r = rewards[q.id] ?? { gratitude: "", stayCreditReward: "" };
-    if (!r.gratitude.trim()) {
+  const acceptQuest = async (q: QuestCard, typed: QuestTyped) => {
+    if (!typed.gratitude.trim()) {
       toast.error("Type what this quest pays before it goes on the board.");
       return;
     }
@@ -581,14 +570,28 @@ export default function Review() {
     try {
       const ok = await post(`/api/review/quests/${q.id}/accept`, {
         reward: {
-          gratitude: r.gratitude.trim(),
-          stayCreditReward: r.stayCreditReward.trim() === "" ? null : Number(r.stayCreditReward),
+          gratitude: typed.gratitude.trim(),
+          stayCreditReward: typed.stayCreditReward.trim() === "" ? null : Number(typed.stayCreditReward),
         },
+        // The words as the steward left them: the one way a name typed into an idea comes out before the board.
+        edits: { title: typed.title.trim(), description: typed.description.trim() || null },
       });
       if (ok) {
         // A quest leaves no field out, so "the last accept" is no longer the one the card named.
         setNotRead(NOTHING_LEFT_OUT);
         toast.success("On the board");
+        await load();
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const rejectQuest = async (q: QuestCard) => {
+    setBusy(q.id);
+    try {
+      if (await post(`/api/review/quests/${q.id}/reject`, { note: "" })) {
+        toast.success("Rejected");
         await load();
       }
     } finally {
@@ -908,75 +911,14 @@ export default function Review() {
         ))}
 
         {(queue?.quests ?? []).map((q) => (
-          <div key={q.id} className={card}>
-            <h2 className="font-semibold text-foreground">{String(q.prose.title ?? "A proposed quest")}</h2>
-            <p className="text-xs text-muted-foreground mt-1">
-              Proposed by {q.moduleId}, {when(q.receivedAt)}
-            </p>
-            {q.prose.description && (
-              <p className="text-sm text-muted-foreground mt-2">{String(q.prose.description)}</p>
-            )}
-            {q.quote && (
-              <p className="text-xs text-muted-foreground mt-2 italic">&ldquo;{q.quote}&rdquo;</p>
-            )}
-
-            <p className="text-xs text-foreground mt-4 font-medium">
-              What it pays. Nothing else can set this, so it is yours to type.
-            </p>
-            <div className="flex flex-wrap gap-2 mt-2">
-              <input
-                aria-label="What this quest pays"
-                placeholder="50-100"
-                value={rewards[q.id]?.gratitude ?? ""}
-                onChange={(e) =>
-                  setRewards((s) => ({
-                    ...s,
-                    [q.id]: { stayCreditReward: s[q.id]?.stayCreditReward ?? "", gratitude: e.target.value },
-                  }))
-                }
-                className="border border-border rounded-lg px-3 py-2 text-sm min-h-[44px] bg-background text-foreground"
-              />
-              <input
-                aria-label="Stay credits, in nights"
-                placeholder="Nights, optional"
-                value={rewards[q.id]?.stayCreditReward ?? ""}
-                onChange={(e) =>
-                  setRewards((s) => ({
-                    ...s,
-                    [q.id]: { gratitude: s[q.id]?.gratitude ?? "", stayCreditReward: e.target.value },
-                  }))
-                }
-                className="border border-border rounded-lg px-3 py-2 text-sm min-h-[44px] bg-background text-foreground"
-              />
-            </div>
-
-            <div className="flex gap-2 mt-3">
-              <button
-                disabled={busy === q.id}
-                onClick={() => void acceptQuest(q)}
-                className="text-xs border border-border rounded-lg px-3 py-2 min-h-[44px] font-medium"
-              >
-                Put it on the board
-              </button>
-              <button
-                disabled={busy === q.id}
-                onClick={async () => {
-                  setBusy(q.id);
-                  try {
-                    if (await post(`/api/review/quests/${q.id}/reject`, { note: "" })) {
-                      toast.success("Rejected");
-                      await load();
-                    }
-                  } finally {
-                    setBusy(null);
-                  }
-                }}
-                className="text-xs border border-border rounded-lg px-3 py-2 min-h-[44px]"
-              >
-                Reject
-              </button>
-            </div>
-          </div>
+          <QuestProposalCard
+            key={q.id}
+            q={q}
+            arrived={when(q.receivedAt)}
+            busy={busy === q.id}
+            onAccept={(typed) => void acceptQuest(q, typed)}
+            onReject={() => void rejectQuest(q)}
+          />
         ))}
       </div>
     </Layout>
