@@ -314,7 +314,7 @@ describe.skipIf(!configured)("a landing that failed at the close, told and refus
     const b = await carried("token_send", { timing: "at_acceptance" });
     await routeOutcome(deps(), b, "passed", NOTE, "u-a");
     const later = at(HOUR);
-    const refused = await recordVeto({ pool, now: () => later }, { ballotId: b.id, stewardId: "u-steward", reason: "stop it" });
+    const refused = await recordVeto(deps({ now: () => later }), { ballotId: b.id, stewardId: "u-steward", reason: "stop it" });
     expect(refused).toEqual({ ok: false, error: VETO_REFUSED_NEEDS_A_PERSON });
     expect(await vetoWindowOn(pool, b.id, later)).toEqual({ open: false, known: true, error: VETO_REFUSED_NEEDS_A_PERSON });
     expect((await landingRow(pool, b.id))?.vetoedAt, "and nothing was stopped").toBeNull();
@@ -325,13 +325,13 @@ describe.skipIf(!configured)("a landing that failed at the close, told and refus
     await routeOutcome(deps(), b, "passed", NOTE, "u-a");
     expect((await landingRow(pool, b.id))?.vetoLocked, "the lock that used to pick the steward-limits sentence").toBe(true);
     const later = at(HOUR);
-    const refused = await recordVeto({ pool, now: () => later }, { ballotId: b.id, stewardId: "u-steward", reason: "stop it" });
+    const refused = await recordVeto(deps({ now: () => later }), { ballotId: b.id, stewardId: "u-steward", reason: "stop it" });
     expect(refused).toEqual({ ok: false, error: VETO_REFUSED_RETRYING });
     expect(await vetoWindowOn(pool, b.id, later)).toEqual({ open: false, known: true, error: VETO_REFUSED_RETRYING });
 
     failing.delete(b.id);
     await applyDueGovernance(deps(), at(5 * 60_000));
-    const afterLanding = await recordVeto({ pool, now: () => later }, { ballotId: b.id, stewardId: "u-steward", reason: "stop it" });
+    const afterLanding = await recordVeto(deps({ now: () => later }), { ballotId: b.id, stewardId: "u-steward", reason: "stop it" });
     expect(afterLanding.ok === false && afterLanding.error, "once it lands, the landed refusal applies").toContain("already landed");
   });
 
