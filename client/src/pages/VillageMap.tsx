@@ -41,6 +41,10 @@ import DecideLens, { DecideKey } from "@/components/power/DecideLens";
 import ResourcesLens, { ResourcesKey, RESOURCES_PAD, useResources } from "@/components/power/ResourcesLens";
 import ResourcesPanel from "@/components/power/ResourcesPanel";
 import SetupWalk from "@/components/power/SetupWalk";
+import ArrangeBar from "@/components/power/ArrangeBar";
+import ArrangeLens from "@/components/power/ArrangeLens";
+import { useArrange } from "@/components/power/useArrange";
+import { withMoves } from "@/components/power/arrange";
 import { useVision, VisionGhosts, VisionPanel } from "@/components/power/VisionLayer";
 import {
   NO_FILTERS,
@@ -94,19 +98,39 @@ export default function VillageMap() {
   const [mode, setMode] = useState<"now" | "vision">("now");
   const [viewerIsAdmin, setViewerIsAdmin] = useState(false);
   const [walkOpen, setWalkOpen] = useState(false);
+  const [arranging, setArranging] = useState(false);
+  // A publish in flight: the gestures and the Arrange toggle wait for its answer.
+  const [publishing, setPublishing] = useState(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const vision = useVision(mode === "vision");
   const resourcesModule = useModule("resources");
   const resources = useResources(resourcesOn && !!resourcesModule);
 
-  const refetchMap = () => {
+  /*
+   * ARRANGE MODE draws the village as the pending moves leave it, and the
+   * things that read structure read that picture: the layout, both canvases
+   * and the breadcrumb. `data` stays the published truth, which is what every
+   * refusal and the Publish bar measure against.
+   */
+  // Off in list mode, where there is no map to arrange, and while a publish is in flight.
+  const arrange = useArrange({ on: arranging && !listMode && !publishing, svgRef, live: data?.circles ?? null });
+  const shown = useMemo(
+    () => (data && arranging && arrange.moves.length ? { ...data, circles: withMoves(data.circles, arrange.moves) } : data),
+    [data, arranging, arrange.moves],
+  );
+
+  /** The fresh picture, or null when it did not arrive. Arrange checks its moves against it before writing anything. */
+  const refetchMap = (): Promise<PowerData | null> =>
     fetch("/api/map", { headers: headers() })
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-      .then(setData)
+      .then((d: PowerData) => {
+        setData(d);
+        return d;
+      })
       .catch((status) => {
         if (status === 401) setDenied(true);
+        return null;
       });
-  };
 
   useEffect(() => {
     if (!mapModule) return;
@@ -142,11 +166,12 @@ export default function VillageMap() {
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
-  const shape = shapePreview ?? data?.power.shape ?? "circle";
+  // Arrange pins the declared shape: a previewed one would move every drop target mid-drag.
+  const shape = (arranging ? null : shapePreview) ?? data?.power.shape ?? "circle";
 
   const layout = useMemo(() => {
-    if (!data) return null;
-    const inputs: NestedInput[] = data.circles.map((c) => ({
+    if (!data || !shown) return null;
+    const inputs: NestedInput[] = shown.circles.map((c) => ({
       id: c.id,
       parentId: c.parentCircleId ?? null,
       order: c.order ?? 0,
@@ -159,7 +184,7 @@ export default function VillageMap() {
     // The resources ring draws AROUND the village, so the canvas grows by
     // the pad while that lens is on; pad 0 hands back the base layout.
     return layoutForShape(shape, inputs, villageRoles, resourcesOn ? RESOURCES_PAD : 0);
-  }, [data, shape, resourcesOn]);
+  }, [data, shown, shape, resourcesOn]);
 
   // A focus pointing at a circle the layout does not draw falls back to the
   // village, so a stale link cannot strand the camera.
@@ -202,7 +227,8 @@ export default function VillageMap() {
    * what to) had no surface anywhere. This is the focus, read as a circle,
    * and it drives the inspector on both the standing panel and the sheet.
    */
-  const focusedCircle = focusId ? (data?.circles?.find((c) => c.id === focusId) ?? null) : null;
+  // The arranged picture, so the card and the canvas agree about where the focus sits.
+  const focusedCircle = focusId ? ((shown ?? data)?.circles?.find((c) => c.id === focusId) ?? null) : null;
 
   /*
    * HOW DEEP THE PHONE DRAWS.
@@ -227,6 +253,7 @@ export default function VillageMap() {
         {lensOn && <DecideLens layout={layout} circles={data.circles} power={data.power} domain={lensDomain} />}
         {resourcesOn && resources && <ResourcesLens layout={layout} circles={data.circles} resources={resources} />}
         {mode === "vision" && <VisionGhosts layout={layout} drafts={vision.drafts} />}
+        {arranging && <ArrangeLens layout={layout} picked={arrange.picked} target={arrange.target} refused={!!arrange.refusal} />}
       </>
     ) : null;
 
@@ -331,7 +358,7 @@ export default function VillageMap() {
                 <div className="sm:hidden -mx-4 mb-4">
                   <div className="relative aspect-square block" data-power-map-box>
                     <PowerMap
-                      data={data}
+                      data={shown ?? data}
                       layout={layout}
                       shape={shape}
                       focusId={focusId}
@@ -362,7 +389,7 @@ export default function VillageMap() {
               <div className="flex items-center justify-between gap-2 flex-wrap mt-4 mb-2">
                 <Breadcrumb
                   villageName="Village"
-                  circles={data.circles}
+                  circles={(shown ?? data).circles}
                   focusId={focusId}
                   filters={filters}
                   onFocus={focusTo}
@@ -400,6 +427,24 @@ export default function VillageMap() {
                   >
                     How we decide
                   </button>
+                  {data.viewer.mayArrange && !listMode && (
+                    <button
+                      type="button"
+                      aria-pressed={arranging}
+                      disabled={publishing}
+                      onClick={() => {
+                        if (!arranging) setShapePreview(null);
+                        setArranging((v) => !v);
+                      }}
+                      data-arrange-toggle
+                      // A mouse, pen or trackpad, on a screen wide enough for the card beside the canvas, which holds the bar.
+                      className={`hidden md:any-pointer-fine:inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border disabled:opacity-40 ${
+                        arranging ? "bg-teal-deep text-white border-teal-deep" : "bg-card text-muted-foreground border-border"
+                      }`}
+                    >
+                      {arranging || !arrange.moves.length ? "Arrange circles" : `Arrange circles (${arrange.moves.length} not published)`}
+                    </button>
+                  )}
                   {resourcesModule && (
                     <button
                       type="button"
@@ -514,9 +559,14 @@ export default function VillageMap() {
                       height, drew at 0.51x, and left 331px of width empty.
                       Taller stage, bigger disc, and the width beside it is
                       the gutter a long name is now allowed to use. */}
-                  <div className="relative flex-1 min-w-0 aspect-square md:aspect-auto md:h-[86vh] md:min-h-[560px] md:max-h-[980px]" data-power-map-box>
+                  <div
+                    className={`relative flex-1 min-w-0 aspect-square md:aspect-auto md:h-[86vh] md:min-h-[560px] md:max-h-[980px]${
+                      arranging ? " [&_[data-circle-id]]:cursor-grab" : ""
+                    }`}
+                    data-power-map-box
+                  >
                     <PowerMap
-                      data={data}
+                      data={shown ?? data}
                       layout={layout}
                       shape={shape}
                       focusId={focusId}
@@ -529,9 +579,24 @@ export default function VillageMap() {
                       pulseSeatId={pulseSeatId}
                       lenses={lensNodes}
                       svgRef={svgRef}
+                      arrangeHint={arranging && !publishing ? "press M to pick it up and move it" : undefined}
                     />
                   </div>
                   <aside data-scroll-contain className="w-80 shrink-0 bg-card border border-border rounded-2xl p-5 sticky top-24 max-h-[80vh] overflow-y-auto hidden md:block">
+                    {/* Arranging rides the top of this card, so the canvas never moves when it turns on. */}
+                    {arranging && (
+                      <ArrangeBar
+                        live={data.circles}
+                        moves={arrange.moves}
+                        status={arrange.status}
+                        busy={publishing}
+                        onBusy={setPublishing}
+                        reload={refetchMap}
+                        onPropose={arrange.propose}
+                        onSettled={arrange.settle}
+                        onDiscard={arrange.clear}
+                      />
+                    )}
                     {selectedSeat ? (
                       <div>
                         <div className="flex justify-end">

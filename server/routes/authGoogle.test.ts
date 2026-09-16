@@ -96,6 +96,13 @@ describe("an unconfigured village registers the routes and refuses them", () => 
       clientIp: () => "1.2.3.4",
       recordAudit: () => {},
       onMemberJoined: () => {},
+      invites: {
+        required: () => false,
+        resolve: async () => ({ ok: false, error: "" }),
+        claim: async () => null,
+        release: async () => {},
+        welcome: async () => {},
+      },
     });
     log.mockRestore();
 
@@ -119,10 +126,13 @@ describe("an unconfigured village registers the routes and refuses them", () => 
     // list correctly names the one thing absent. Asserted as measured, because
     // a guess at what a list "should" say is how the field would end up
     // pinned to a value nothing produces.
+    // `inviteOnly` is published on purpose, for the sign-up page, and this
+    // fixture's invitation door answers that the village is open.
     expect(methods).toEqual({
       password: true,
       google: false,
       missing: ["GOOGLE_CLIENT_ID"],
+      inviteOnly: false,
     });
 
     let status = 0;

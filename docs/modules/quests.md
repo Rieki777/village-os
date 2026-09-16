@@ -2,7 +2,7 @@
 
 Provenance: platform
 
-<!-- describes: server/routes/quests.ts server/routes/questClaims.ts server/lib/questConsent.ts server/repos/quests.ts server/index.ts shared/modules.ts shared/gameVariables.ts shared/questRewards.ts client/src/pages/Admin.tsx client/src/pages/QuestDetail.tsx client/src/components/QuestActions.tsx server/lib/capabilityRegistry.ts server/lib/crews.ts server/lib/questProposals.ts server/lib/calendarProviders.ts -->
+<!-- describes: server/routes/quests.ts server/routes/questClaims.ts server/lib/questConsent.ts server/repos/quests.ts server/index.ts shared/modules.ts shared/gameVariables.ts shared/questRewards.ts client/src/pages/Admin.tsx client/src/pages/QuestDetail.tsx client/src/components/QuestActions.tsx server/lib/capabilityRegistry.ts server/lib/crews.ts server/lib/questProposals.ts server/lib/calendarProviders.ts server/repos/questOwedPostings.ts client/src/components/review/OwedPostings.tsx -->
 
 > The contribution board. A quest is posted by an admin or by a `quest.approve` holder, claimed by
 > a member, submitted with evidence, and consented to by somebody who is not the claimant. Consent
@@ -46,7 +46,7 @@ Treat the Endpoints section below as the real list.
 ## Data model
 
 Five tables. Four are written by this module's own routes; the fifth, `quest_proposals`, is written
-only from a neighbouring path, and today from nothing at all. A full list of the tables **other**
+from a neighbouring path, the public Propose a Quest form. A full list of the tables **other**
 modules own that a quest write touches sits at the end of this section.
 
 **`quests`** (`drizzle/0001_init.sql`, extended by 0004, 0012, 0021, 0046, 0060, 0062, 0068, 0069,
@@ -136,17 +136,39 @@ calendar write are inherited instead of reimplemented. The accept and reject wri
 `quest.approve` and served from `server/routes/review.ts`, which no module declares; the queue
 READ beside them asks a different key. See Capabilities and Endpoints below.
 
-**Nothing in the running product writes `quest_proposals`.** `proposeQuest` in
-`server/lib/questProposals.ts` holds the only INSERT into the table, and it has no caller anywhere
-outside its own test file. (Control: the same search finds `acceptQuestProposal` called from
-`server/routes/review.ts`, so the absence is real and not a bad search.) The public suggestion form
-goes somewhere else entirely: `client/src/pages/ProposeQuest.tsx` calls
+**The public Propose a Quest form writes `quest_proposals`** (Rye, 2026-09-14: people should be
+able to propose quests). `client/src/pages/ProposeQuest.tsx`, and the guided chat beside it, call
 `submitProposal("quest-proposal", ...)` in `client/src/lib/proposals.ts`, which POSTs
-`/api/forms/submit` into the generic submissions pipeline under `intake.moderate`, and those rows
-are swept by `runRetentionSweep` once they age past `retention.submissions_days` in any status but
-`new`. So the table, the batch cap, the dedupe key and the accept and reject routes are a landed
-intake path with no ingress: a fork operator who grants `quest.approve` will find the quest half of
-the queue permanently empty.
+`/api/forms/submit`. That handler in `server/index.ts` stores the submission in the generic
+submissions pipeline under `intake.moderate`, as it always did, and then `landPublicSubmission` in
+`server/lib/publicForms.ts` derives a proposal from it through `proposeQuest`:
+
+- The idea is copied. The title falls back to the first line of what the person wants to do, the
+  description is what they want to do, and what they bring, need, ask for in return and by when
+  becomes the rationale, one labelled line each. Each is cut to the width the table keeps before
+  anything reads it, because a form body may carry a megabyte. `/review` shows the rationale
+  beneath the description and names the form as the idea's source (`PROPOSE_QUEST_MODULE` in
+  `shared/questIdeas.ts`).
+- Who they are is not. Name and email stay in `submissions`, which the admin inbox, the member
+  export and erasure already handle, and which `runRetentionSweep` sweeps once they age past
+  `retention.submissions_days` in any status but `new`. The proposal points back through
+  `source_ref` (`submission:<id>`), and a signed-in member's id goes in `proposed_by`. The member
+  export lists those rows as `questIdeas`, and the erasure sweep clears `proposed_by` (the
+  `quest-proposals` step, through `forgetProposer` in `server/repos/questProposals.ts`). Nothing
+  else on the row is made from the member: the batch id names the submission.
+- An idea is held back when it carries an email address, has nothing to title it by, or would pass
+  an allowance: three open ideas per member (`OPEN_IDEAS_PER_MEMBER`, counted on `proposed_by`),
+  and ten from visitors taken together (`OPEN_VISITOR_IDEAS`), because a visitor has no identity to
+  count against. The count and the insert run under one named lock (`withIdeaLock`), so ideas sent
+  together cannot pass an allowance. Each idea held back is counted in `external_proposal_drops`
+  under `propose-quest` (`contained_an_email`, `empty_payload`, `over_allowance`), which `/review`
+  reads out beside the queue. A database error keeps an idea out too. In every case the submission
+  and the form's answer are unchanged, and the steward inbox still receives it.
+
+Vendor intake still writes nothing here: external `quest.proposed` records land in
+`external_proposals`, and the form is `proposeQuest`'s only caller. `quest_proposals` has no
+retention sweep of its own, so a decided proposal stays after the submission it came from ages
+out.
 
 What this module writes that other modules own, on its own request paths: `village_calendar`
 (`syncQuestCalendar` on every quest add and update), `season_pattern_members`
@@ -183,6 +205,8 @@ that file alphabetically would make `field` a quest id that does not exist.
 | `PUT /api/game/quest-claims/:id/confidence` | the claim's holder | Only while the claim is `claimed` or `submitted`. Only `at_risk` and `stuck` ring a bell. |
 | `GET /api/admin/quest-claims` | `mayStillSee("quest.consent")` | A read, so it asks the see-path and never `mayAct`. There is no break-glass on a GET. Each claim carries `bounds` from `consentBounds` (`server/lib/questConsent.ts`): the floor, the ceiling, whether 0 passes and whether the label is readable, as the consent route will enforce them under the dials in force, or `null` when the claim's quest is gone. |
 | `POST /api/admin/quest-claims/:id/consent` | `mayAct("quest.consent")` | The whole of Mechanics below. |
+| `GET /api/admin/quest-claims/owed` | `mayStillSee("quest.consent")` | What consents recorded as owed and have not paid: rows still owed, with the ledger's last reason, and rows refused for good. A read, so it asks the see-path. `/review` renders it as `OwedPostings`. |
+| `POST /api/admin/quest-claims/:id/owed/pay` | `mayAct("quest.consent")` | Pays what one consent still owes, each row in its own transaction that marks it posted in the same commit. It decides nothing, because the amounts and keys were fixed when the consent recorded them, and a second press finds nothing owed. A steward's press writes an admin audit row naming the tokens paid. |
 | `GET /api/admin/quest-claims/attention` | `isAdmin` | The flagged-claims queue. Note the gate: this one is `isAdmin` and not the capability, unlike the two rows above it. |
 | `GET /api/review/queue` | `mayStillSee("intake.moderate")` or `mayStillSee("quest.approve")` | Served from `server/routes/review.ts`. Returns the full prose, rationale, quote and source ref of every `proposed` quest, through `questProposalQueue(pool, "proposed")`. `intake.moderate` reads both halves of the queue. `quest.approve` alone reads this quest half, and the proposal half and the dropped-batch summary are never queried for it. `scope` in the response names the halves that were read, so a page can tell an empty half from a hidden one. Neither key: `401 {"error":"auth_required"}`, as before. |
 
@@ -227,7 +251,8 @@ And two more, on tables this module owns:
 - `client/src/components/QuestCrews.tsx` is the crew panel, signed-in only.
 - `client/src/pages/ProposeQuest.tsx` is the suggestion form. It is not an authoring surface: a
   quest is created by an admin, or by a holder of `quest.approve` accepting a proposal. Its
-  submission lands in `submissions`, not in `quest_proposals`.
+  submission lands in `submissions`, and a proposal derived from it lands in `quest_proposals`
+  for review (see Data model).
 - `client/src/pages/Admin.tsx` holds `QuestsTab` (the CRUD) and `QuestClaimsTab`, which since
   2026-09-14 is only a door to `/review`.
 - `client/src/pages/Review.tsx` is the steward surface, one section per key. `intake.moderate` or
@@ -246,7 +271,10 @@ for the second currency (`stay_credit_reward`), and none for the three calendar 
 reachable by curl, by the seed file, and by `acceptQuestProposal`. Everything Mechanics and
 Endpoints say those columns do is true and unreachable from the admin browser. `Review.tsx` is the
 one surface that can set two of them, `gratitude` and `stayCreditReward`, and only on the accept of
-a proposal that nothing currently creates.
+a proposal, which today means an idea from the public form. Each proposal is a `QuestProposalCard`
+(`client/src/components/review/QuestProposalCard.tsx`), where the steward types the reward and may
+change the title and description first, because a person's idea goes onto a public board and only
+an email address is screened on the way.
 
 ## Mechanics
 
@@ -272,7 +300,7 @@ pass `audience: "admin"` and are not.
 
 **No self-consent, and it is enforced in exactly one place.** The `claim.userId === actor.userId`
 branch in `POST /api/admin/quest-claims/:id/consent` is the whole of it. There is no backstop
-underneath: `mintForConfirmedClaim` is handed `{ id, questId, userId, confirmedAt }` and is never
+underneath: `owedForClaim` is handed `{ id, questId, userId, granted, stay }` and is never
 told who the confirmer is, so it cannot check; `postTransfer` on the recognition leg does not
 check either. `canConfirm` in `server/lib/economy.ts` does exist and does enforce this rule, but on
 two other paths, the event check-in and the intake-proposal reward, and neither one runs here.
@@ -281,7 +309,9 @@ has nothing catching them.
 
 One exception: `quest.self_consent_until_members` (default 6). While the count of living members is
 below it, an **admin or founder** may consent to their own claim, and the route writes an audit
-event saying so. Stewards never get the exception, because role authority is not founder authority.
+event saying so. That row is written after the consent commits, so a founder who declines their own
+claim, or whose amount the dials refuse, leaves none: the row records uses of the window and not
+attempts at it. Stewards never get the exception, because role authority is not founder authority.
 Three kinds of row are excluded from the count: standing examples, tombstoned members (email ending
 `@anonymized.invalid`), and any member row carrying no email at all, since the filter reads
 `!u.isExample && u.email && !endsWith("@anonymized.invalid")`. Phantom identities would otherwise
@@ -309,15 +339,30 @@ what runs first:
 10. The badge reward multiplier, and `payoutFor`, which lifts the grant toward the cap and never
     past it.
 11. `claimsRepo.consentOnce`: one transaction that locks the claim row, re-checks the status,
-    flips the row and posts the credit on the same connection.
-12. After it commits: the balance cache, the rule mint, the stay credits, the activity line, the
-    notification and the stage event.
+    flips the row, posts the credit, and records what else the consent owes (`owedForClaim` into
+    `quest_owed_postings`) on the same connection.
+12. After it commits: the balance cache, paying what the consent owes (`settleOwedForClaim`), the
+    stay credits' notification, the activity line, the notification and the stage event.
 
 **Step 11 is one commit**, and `quest.require_submission_before_consent` is enforced inside it
 rather than as a separate read: the variable decides which statuses `consentOnce` accepts
 (`submitted` alone when it is on, `claimed` or `submitted` when it is off), and the status is
 re-read under the claim's own row lock. Both of the gaps this used to have are closed by the same
 change.
+
+**What a consent owes beyond recognition is recorded in that commit, and paid after it.** The rule
+tokens and a quest's stay credits used to post after the commit, best effort, and a failure was
+lost: nothing retried it, and a resolved claim refuses a second consent. `owedForClaim` now prices
+them on the consent's own connection, and `recordOwed` writes them to `quest_owed_postings` (0210)
+before the commit. `settleOwedForClaim` pays each row straight after, in a transaction that locks
+the row, posts it through `postOwedOn` and marks it posted in the same commit. A row that does not
+go through stays owed with the ledger's reason (`not_launched`), or is marked refused when no retry
+can change it (`key_clash`, `rule`). `/review` lists both through `GET /api/admin/quest-claims/owed`,
+with a press for the owed ones. Nothing pays twice, which was Rye's one condition for this repair
+path (2026-09-14): the row's key is the ledger's occurrence key, a second press finds the row
+posted, and a posting that already landed answers duplicate and moves nothing.
+`server/routes/questOwedPostings.test.ts` drives each of those against the real ledger, two
+simultaneous presses included.
 
 The first gap was that `claimsRepo.update` committed on its own connection and only then did
 `postTransfer` run. A post that failed for any reason the launch-vote check did not already catch
