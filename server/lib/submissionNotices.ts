@@ -34,6 +34,7 @@ const WHAT_THEY_SENT: Record<string, string> = {
   "quest-proposal": "the quest you proposed",
   "visit-inquiry": "your request to visit",
   "membership-508": "your membership request",
+  "membership-request": "your request to join",
   "steward-interest": "your interest in stewarding",
   steward: "your interest in stewarding",
   resident: "your request to live here",

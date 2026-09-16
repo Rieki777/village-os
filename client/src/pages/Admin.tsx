@@ -72,7 +72,9 @@ import { ExampleChip, ExamplesBanner, forgetExamplesCache, RETIRES_WITH } from "
 // submissions on the site: a request to walk the land, and a signed 508(c)(1)(a)
 // membership. Both were reachable only by scrolling "All types". The strings are
 // the ones the pages actually POST, from Visit.tsx and LoveLetter.tsx.
-const FORM_TYPES = ["work-with-us", "quest-proposal", "visit-inquiry", "membership-508", "investor", "steward", "resident", "prosperity", "contact"] as const;
+// membership-request is somebody with no invitation asking to join, from
+// RequestMembership.tsx (Rye, 2026-09-09: requests sit in admin for a team to talk to them).
+const FORM_TYPES = ["work-with-us", "quest-proposal", "visit-inquiry", "membership-508", "membership-request", "investor", "steward", "resident", "prosperity", "contact"] as const;
 
 /**
  * THE SERVER'S OWN SENTENCE, WHEN IT HAS ONE.

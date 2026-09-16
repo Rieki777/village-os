@@ -314,6 +314,13 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   `origin/wt/seat-terms` and on a second local branch `wt/seat-terms-ui`, and `0197` and `0198`
   were committed and pushed on `origin/wt/first-hour` with that lane's claim now on a ref. The
   ceiling was still **0199** on all four channels and nothing anywhere held `0200` or above.
+- **membrane lane (invitations), 2026-09-14: holds 0209** for
+  `drizzle/0209_a_member_arrives_by_invitation.sql` (one new table, `member_invites`). Measured three
+  ways before the file was created: every remote and local ref and every worktree disk reached 0207
+  (`wt/failed-actions`), and an UNTRACKED `drizzle/0208_a_draft_can_move_a_circle.sql` sat in the
+  `CIRCLES` worktree, which no git command sees, so 0208 was left to it. Expand-only: the previous
+  release neither reads nor writes the table. Lands after #243 (0200 to 0206), #247 (0207) and
+  whichever branch takes 0208.
 - **first-hour lane (profile), 2026-09-14: holds 0197 and 0198** for
   `drizzle/0197_a_training_module_says_whether_it_is_mandatory.sql` (one column on
   `training_modules`, `mandatory TINYINT(1) NOT NULL DEFAULT 1`) and
@@ -3212,6 +3219,8 @@ Both look like intentional work and neither is.
 | 2026-09-15 | membrane lane (character affinity) | `server/index.ts`: one import of `./routes/powerAffinity` and its register call, both exempt from the ratchet, and two lines changed in place (the progression catalogue now carries `suits` and `recommended`, a class's paths carry `powers`), so the counted total does not move. One new `app_config` key, `power-affinity`, written only by `server/lib/powerAffinity.ts`. No migration, no capability key, no game variable, no baseline | `wt/archetype-affinity` | HELD. Claims no number, so it lands in any order against the open PRs. |
 
 | 2026-09-15 | membrane lane (power hands) | `server/index.ts`: one import of `./routes/powerHands` and its register call, both exempt from the ratchet, and the progression catalogue line changed in place to hand `withPowerAffinity` the inbox, so the counted total does not move. A new inbox type, `power-application`, in `submissions`, whose `type` column is free text, so no migration. No capability key, no game variable, no baseline | `wt/power-hands`, stacked on `wt/archetype-affinity` (#267) | HELD. Claims no number, and lands after #267. |
+
+| 2026-09-14 | membrane lane (invitations) | migration `0209`, `drizzle/0209_a_member_arrives_by_invitation.sql`; `POST /api/auth/register` moved out of `server/index.ts` into `server/routes/register.ts` (the size ratchet fell, the baseline was left alone); one fixture opinion in `server/db/testDb.ts`, `ProvisionOptions.inviteOnly`, so scratch villages provision with `membership.invite_only` off | `wt/invite-links`, PR #259 | HELD. Lands after `0200` to `0208` are on main. A suite that counts customized variables sees `membership.invite_only` stored by the harness; the loop suite names it rather than counting it. |
 
 ### 27d — Verification: CI runs the full suite, lanes run what they touched
 
