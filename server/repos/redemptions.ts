@@ -120,12 +120,25 @@ export async function insertRedemptionRow(
     holdKey: string | null;
     burnKey: string;
     expiresAt: Date | null;
+    /** 0213, ruling 23: what this was worth when it was asked for. NULL where
+     *  the village values nothing (no rate, or no currency arithmetic). */
+    currency: string | null;
+    rateMinor: number | null;
+    rateSource: string | null;
+    feePct: number | null;
+    feeFixedMinor: number | null;
+    grossMinor: number | null;
+    feeMinor: number | null;
+    netMinor: number | null;
+    processText: string | null;
   },
 ): Promise<void> {
   await conn.query(
     "INSERT INTO `redemptions` (`id`, `village_id`, `user_id`, `token_slug`, `amount`, `asked_for`, " +
-      "`state`, `confirmed_by_mode`, `held_account`, `hold_key`, `burn_key`, `expires_at`) " +
-      "VALUES (?,?,?,?,?,?,'requested',?,?,?,?,?)",
+      "`state`, `confirmed_by_mode`, `held_account`, `hold_key`, `burn_key`, `expires_at`, " +
+      "`currency`, `rate_minor`, `rate_source`, `fee_pct`, `fee_fixed_minor`, " +
+      "`gross_minor`, `fee_minor`, `net_minor`, `process_text`) " +
+      "VALUES (?,?,?,?,?,?,'requested',?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
     [
       row.id,
       row.villageId,
@@ -138,8 +151,71 @@ export async function insertRedemptionRow(
       row.holdKey,
       row.burnKey,
       row.expiresAt,
+      row.currency,
+      row.rateMinor,
+      row.rateSource,
+      row.feePct,
+      row.feeFixedMinor,
+      row.grossMinor,
+      row.feeMinor,
+      row.netMinor,
+      row.processText,
     ],
   );
+}
+
+/**
+ * What ONE member has already asked for in money since a moment, in the minor
+ * units of each request's own currency. One row per currency.
+ *
+ * `requested` and `confirmed` only. A refusal, a withdrawal and an expiry each
+ * gave the tokens back and cost the village nothing, so counting them would
+ * spend a member's allowance on requests the village never paid.
+ */
+export async function moneyAskedSinceRows(
+  conn: Pool | PoolConnection,
+  villageId: string,
+  userId: string,
+  since: Date,
+): Promise<RowDataPacket[]> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    "SELECT `currency`, COALESCE(SUM(`gross_minor`), 0) AS total FROM `redemptions` " +
+      "WHERE `village_id` = ? AND `user_id` = ? AND `state` IN ('requested','confirmed') " +
+      "AND `created_at` >= ? AND `gross_minor` IS NOT NULL GROUP BY `currency`",
+    [villageId, userId, since],
+  );
+  return rows;
+}
+
+/**
+ * What the WHOLE VILLAGE has asked for in money since a moment, LOCKED.
+ *
+ * ── WHY THIS ONE TAKES A CONNECTION AND LOCKS ────────────────────────────
+ *
+ * The per-member caps are serialised by the `users` row `requestRedemption`
+ * already locks: every ask by one member queues behind the one before it. The
+ * village-wide cap has no such row. Two members asking in the same instant
+ * would each read a total that did not include the other, each pass a cap with
+ * room for one, and the village would owe more than it said it would pay.
+ *
+ * `FOR UPDATE` over the cycle's range is the serialisation point, and it is the
+ * shape `createExchangeOrder` already uses to claim a receipt number: the range
+ * lock makes the second ask wait for the first to commit, so it reads a total
+ * that includes it. It MUST run on the caller's connection, inside the
+ * transaction that writes the row, or it locks nothing that outlives the read.
+ */
+export async function villageMoneyAskedSinceRowsForUpdate(
+  conn: PoolConnection,
+  villageId: string,
+  since: Date,
+): Promise<RowDataPacket[]> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    "SELECT `currency`, `gross_minor` FROM `redemptions` " +
+      "WHERE `village_id` = ? AND `state` IN ('requested','confirmed') " +
+      "AND `created_at` >= ? AND `gross_minor` IS NOT NULL FOR UPDATE",
+    [villageId, since],
+  );
+  return rows;
 }
 
 /** Mark a still-requested row refused because its hold never posted. */

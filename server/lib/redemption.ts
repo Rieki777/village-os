@@ -91,6 +91,7 @@
  * live in `server/lib/redemptionStore.ts`.
  */
 import { tokenDef, type TokenDef } from "./ledger";
+import { exponentOf } from "../../shared/money";
 import { fromLedgerUnits } from "./economy";
 import { MODULE_VOUCHERS, isPriceableToken } from "./spending";
 import { stringVar } from "./variables";
@@ -462,6 +463,221 @@ export function confirmRefusal(ask: ConfirmAsk): string | null {
   }
   if (!ask.note.trim()) {
     return "Say why, in a sentence. A decision with no stated reason is not a record";
+  }
+  return null;
+}
+
+// ── What a redemption is worth (ruling 23) ─────────────────────────────────
+
+/**
+ * The currencies this village will settle a redemption in.
+ *
+ * Blank means the one currency the project already counts in, which a founder
+ * set in Make This Yours and which `shared/money.ts` falls back to CHF for. A
+ * list means the member picks one when they ask, and the first is the one a
+ * rate set by hand is expressed in.
+ */
+export function redemptionCurrencies(projectCurrency: string): string[] {
+  const raw = String(stringVar("redemption.currencies") ?? "").trim();
+  const fallback = String(projectCurrency ?? "").trim().toUpperCase() || "CHF";
+  if (!raw) return [fallback];
+  const out: string[] = [];
+  for (const code of raw.split(",")) {
+    const c = code.trim().toUpperCase();
+    if (/^[A-Z]{3}$/.test(c) && !out.includes(c)) out.push(c);
+  }
+  return out.length ? out : [fallback];
+}
+
+/** Where a rate comes from, as the village has it set right now. */
+export function redemptionRateSource(): "exchange" | "set" {
+  return String(stringVar("redemption.rate_source") ?? "exchange") === "set" ? "set" : "exchange";
+}
+
+export interface RedemptionRate {
+  /** Minor units of `currency` for ONE whole token. */
+  minorPerToken: number;
+  source: "exchange" | "set";
+  currency: string;
+}
+
+export interface RateAsk {
+  /** The currency this request is counted in. */
+  currency: string;
+  /** The exchange's posted price for one token, in minor units of `postedCurrency`. */
+  postedPriceMinor: number | null;
+  /**
+   * What the posted price is denominated in. MEASURED, not assumed:
+   * `currency_prices` carries `price_minor` and no currency column, and
+   * `/api/exchange/buy` hands `createCheckout` no currency, so it charges the
+   * `"usd"` default in server/lib/payments.ts. A posted price is USD minor.
+   */
+  postedCurrency: string;
+  /** The village's own rate per whole token, in `setRateCurrency`. */
+  setRatePerToken: number;
+  /** The first of this village's redemption currencies. */
+  setRateCurrency: string;
+  source: "exchange" | "set";
+  /** Units of `to` per one unit of `from`, keyed the way `crossRate` wants. */
+  convert: (amountMinor: number, from: string, to: string) => number | null;
+}
+
+/**
+ * What one whole token is worth here, or null when this village cannot say.
+ *
+ * NULL IS A REAL ANSWER AND NOT A FAILURE. The founder's own sentence names
+ * "services, cash, equity", and two of those three have no price. A village
+ * with the exchange off, a token nobody has priced, or a currency no rate
+ * reaches all arrive here, and the request then carries what the member asked
+ * for in their own words and no arithmetic at all.
+ */
+export function resolveRedemptionRate(ask: RateAsk): RedemptionRate | null {
+  if (ask.source === "set") {
+    if (!(ask.setRatePerToken > 0)) return null;
+    const inBase = Math.round(ask.setRatePerToken * Math.pow(10, currencyExponent(ask.setRateCurrency)));
+    if (ask.currency === ask.setRateCurrency) {
+      return { minorPerToken: inBase, source: "set", currency: ask.currency };
+    }
+    const converted = ask.convert(inBase, ask.setRateCurrency, ask.currency);
+    return converted === null ? null : { minorPerToken: converted, source: "set", currency: ask.currency };
+  }
+  if (!(Number(ask.postedPriceMinor) > 0)) return null;
+  const posted = Number(ask.postedPriceMinor);
+  if (ask.currency === ask.postedCurrency) {
+    return { minorPerToken: posted, source: "exchange", currency: ask.currency };
+  }
+  const converted = ask.convert(posted, ask.postedCurrency, ask.currency);
+  return converted === null ? null : { minorPerToken: converted, source: "exchange", currency: ask.currency };
+}
+
+/**
+ * Decimal places for a CURRENCY. `shared/money.ts` owns this and this is the
+ * one caller in the server's redemption path, kept here so the pure file has no
+ * opinion of its own about what a currency is.
+ */
+function currencyExponent(currency: string): number {
+  return exponentOf(currency);
+}
+
+export interface RedemptionQuote {
+  currency: string;
+  /** Minor units of `currency`. */
+  grossMinor: number;
+  feeMinor: number;
+  netMinor: number;
+  /** The flat half of the fee, in minor units, as it was applied. */
+  feeFixedMinor: number;
+  ratePerTokenMinor: number;
+  rateSource: "exchange" | "set";
+}
+
+/**
+ * What the member asked for, what the village keeps, and what they receive.
+ *
+ * THE FEE COMES OUT OF THE PAYMENT AND NEVER OFF THE BURN (ruling 23: "take
+ * the fee from the payment, happens off platform, platform just informs"). The
+ * tokens destroyed at confirmation are the tokens asked for, in full, whatever
+ * these numbers say. Nothing here is posted to the ledger, because the money
+ * these figures describe never entered this software.
+ *
+ * The fee is CLAMPED to the gross. A fixed fee larger than a small redemption
+ * would otherwise compute a negative payment, which reads as the member owing
+ * the village money for redeeming.
+ */
+export function redemptionQuote(input: {
+  amountUnits: number;
+  decimals: number;
+  rate: RedemptionRate | null;
+  feePct: number;
+  feeFixed: number;
+}): RedemptionQuote | null {
+  if (!input.rate) return null;
+  const whole = input.amountUnits / Math.pow(10, Math.max(0, input.decimals));
+  const grossMinor = Math.round(whole * input.rate.minorPerToken);
+  const pct = Math.max(0, Number(input.feePct) || 0);
+  const fixedMinor = Math.round(
+    Math.max(0, Number(input.feeFixed) || 0) * Math.pow(10, currencyExponent(input.rate.currency)),
+  );
+  const feeMinor = Math.min(grossMinor, Math.round((grossMinor * pct) / 100) + fixedMinor);
+  return {
+    currency: input.rate.currency,
+    grossMinor,
+    feeMinor,
+    netMinor: grossMinor - feeMinor,
+    feeFixedMinor: fixedMinor,
+    ratePerTokenMinor: input.rate.minorPerToken,
+    rateSource: input.rate.source,
+  };
+}
+
+/**
+ * Does a rate set by hand pay more than the village sells the token for?
+ *
+ * The warning ruling 11 asks for, and it never blocks: a member could buy on
+ * the exchange and redeem at a profit until the treasury is empty, and a
+ * village may still mean exactly this (a village buying back above the shelf
+ * price to retire supply is a real choice). Null when there is nothing to say.
+ */
+export function setRateAboveExchange(input: {
+  setMinorPerToken: number | null;
+  exchangeMinorPerToken: number | null;
+  tokenName: string;
+}): string | null {
+  const set = Number(input.setMinorPerToken);
+  const sold = Number(input.exchangeMinorPerToken);
+  if (!(set > 0) || !(sold > 0) || set <= sold) return null;
+  return `This village pays more to redeem ${input.tokenName} than it sells it for, so a member can buy it here and redeem it at a profit. A village may mean exactly this. The rate is set in the village's dials, under redemption.`;
+}
+
+export interface MoneyAsk {
+  /** False when this village could not put a number on the request. */
+  valued: boolean;
+  /** True while any money cap is set, which is what makes an unvalued ask a refusal. */
+  capsSet: boolean;
+  grossMinor: number;
+  minMinor: number;
+  maxPerRequestMinor: number;
+  memberSoFarMinor: number;
+  memberCapMinor: number;
+  villageSoFarMinor: number;
+  villageCapMinor: number;
+  /** Pre-formatted money, so this file never formats and stays quotable. */
+  grossText: string;
+  minText: string;
+  maxText: string;
+  memberLeftText: string;
+  villageLeftText: string;
+}
+
+/**
+ * Why the village will not take this redemption at this size, in words, or null.
+ *
+ * AN UNVALUED REQUEST IS REFUSED WHILE A CAP IS SET, and that is the decision
+ * worth stating. A cap is a promise about how much the village will pay, and a
+ * request nobody can price cannot be measured against it, so letting it through
+ * would silently exempt exactly the requests the cap exists to bound. A village
+ * that redeems for services rather than cash lifts the caps, which is a choice
+ * a founder makes out loud instead of one this code makes for them.
+ *
+ * Same function-declaration and literals-only contract as `redemptionRefusal`:
+ * `refusalsFrom` in scripts/generate-economics-doc.mjs quotes every `return`.
+ */
+export function redemptionMoneyRefusal(ask: MoneyAsk): string | null {
+  if (!ask.valued) {
+    if (!ask.capsSet) return null;
+    return "This village counts what it redeems in money, and there is no rate for this token right now, so this request cannot be measured against what the village has said it will pay. A steward can post a price for it, set a rate in the village's dials, or lift the limits";
+  }
+  if (ask.minMinor > 0 && ask.grossMinor < ask.minMinor) {
+    return `The smallest redemption here is ${ask.minText}, and this one comes to ${ask.grossText}`;
+  }
+  if (ask.maxPerRequestMinor > 0 && ask.grossMinor > ask.maxPerRequestMinor) {
+    return `The most one redemption may be worth here is ${ask.maxText}, and this one comes to ${ask.grossText}`;
+  }
+  if (ask.memberCapMinor > 0 && ask.memberSoFarMinor + ask.grossMinor > ask.memberCapMinor) {
+    return `You have ${ask.memberLeftText} left to redeem this moon, and this one comes to ${ask.grossText}`;
+  }
+  if (ask.villageCapMinor > 0 && ask.villageSoFarMinor + ask.grossMinor > ask.villageCapMinor) {
+    return `This village has ${ask.villageLeftText} left to redeem this moon, and this one comes to ${ask.grossText}. The count starts again at the new moon`;
   }
   return null;
 }

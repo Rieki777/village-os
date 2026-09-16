@@ -83,11 +83,20 @@ import {
   canSettleRedemption,
   confirmRefusal,
   redeemableTokens,
+  redemptionCurrencies,
+  redemptionQuote,
+  redemptionRateSource,
   redemptionWarnings,
+  resolveRedemptionRate,
+  setRateAboveExchange,
   VOTE_PATH_BUILT,
   type ConfirmAsk,
+  type RedemptionQuote,
   type RedemptionState,
 } from "../lib/redemption";
+import { latestPrice } from "../lib/exchange";
+import { latestRates } from "../lib/fxRates";
+import { convertMinor, crossRate, exponentOf, formatMoney } from "../../shared/money";
 import {
   heldForRedemption,
   holdsOnPropose,
@@ -103,7 +112,24 @@ import {
 import { balanceOf, memberAccount } from "../lib/ledger";
 import { numberVar, stringVar } from "../lib/variables";
 
-type Deps = Pick<AppDeps, "authedUser" | "getPool" | "guardCapability" | "members" | "notify" | "overLimit">;
+type Deps = Pick<
+  AppDeps,
+  "authedUser" | "brandRepo" | "getPool" | "guardCapability" | "members" | "notify" | "overLimit"
+>;
+
+/**
+ * WHAT THE EXCHANGE'S POSTED PRICE IS DENOMINATED IN, measured rather than
+ * assumed. `currency_prices` carries `price_minor` and no currency column, and
+ * `/api/exchange/buy` hands `createCheckout` no currency, so Stripe is charged
+ * in the `"usd"` default in server/lib/payments.ts. Following the exchange
+ * therefore means following a USD price, converted through the daily table.
+ *
+ * A village with the exchange module OFF may still have a posted price sitting
+ * in that table from before. That is the honest answer to "what does this
+ * village sell it for": the last price it posted. A village that means to stop
+ * offering that number clears the price or sets its own rate.
+ */
+const EXCHANGE_PRICE_CURRENCY = "USD";
 
 /** What one redemption looks like to a person, with every amount human. */
 function forReading(row: {
@@ -118,9 +144,35 @@ function forReading(row: {
   decidedAt: string | null;
   expiresAt: string | null;
   createdAt: string;
+  currency?: string | null;
+  rateMinor?: number | null;
+  rateSource?: string | null;
+  feePct?: number | null;
+  grossMinor?: number | null;
+  feeMinor?: number | null;
+  netMinor?: number | null;
+  processText?: string | null;
 }) {
   const def = tokenDef(row.tokenSlug);
+  const money = row.currency && row.grossMinor !== null && row.grossMinor !== undefined
+    ? {
+        currency: row.currency,
+        grossMinor: row.grossMinor,
+        feeMinor: row.feeMinor ?? 0,
+        netMinor: row.netMinor ?? 0,
+        rateMinor: row.rateMinor ?? 0,
+        rateSource: row.rateSource ?? null,
+        feePct: row.feePct ?? 0,
+        // FORMATTED ON THE SERVER, once. Every surface that prints these has to
+        // agree, and `shared/money.ts` is the one place money becomes words.
+        grossText: formatMoney(row.grossMinor, row.currency),
+        feeText: formatMoney(row.feeMinor ?? 0, row.currency),
+        netText: formatMoney(row.netMinor ?? 0, row.currency),
+      }
+    : null;
   return {
+    money,
+    processText: row.processText ?? null,
     id: row.id,
     userId: row.userId,
     token: row.tokenSlug,
@@ -140,9 +192,81 @@ function forReading(row: {
 }
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, getPool, guardCapability, members, notify, overLimit } = deps;
+  const { authedUser, brandRepo, getPool, guardCapability, members, notify, overLimit } = deps;
 
   MODULES_BY_ID["redemption"].openStateCheck = () => redemptionOpenState(getPool());
+
+  /**
+   * WHAT THIS VILLAGE HAS DECIDED ABOUT MONEY, resolved for one token and one
+   * currency (ruling 23).
+   *
+   * Every figure a member or a steward reads comes from here, and so does the
+   * snapshot written onto the row, so the number on the screen and the number
+   * in the record are the same number by construction.
+   *
+   * THE CAPS ARE CONVERTED ONCE, HERE. A cap is typed in whole money and stored
+   * that way; everything below the route boundary is minor units, the same rule
+   * the token amounts already follow.
+   */
+  async function moneyContext(slug: string, wanted?: unknown) {
+    const pool = getPool();
+    const project = ((brandRepo.get() as any)?.project ?? {}) as { fiatCurrency?: string };
+    const currencies = redemptionCurrencies(String(project.fiatCurrency ?? ""));
+    const asked = String(wanted ?? "").trim().toUpperCase();
+    const currency = currencies.includes(asked) ? asked : currencies[0];
+    const source = redemptionRateSource();
+    // Both reads are outside the ask's transaction on purpose: they are another
+    // module's table and a cache of a daily feed, and neither is a figure this
+    // request may hold a lock over.
+    const posted = await latestPrice(pool, slug).catch(() => null);
+    const table = await latestRates(pool).catch(() => ({ base: "EUR", asOf: null, rates: {} as Record<string, number> }));
+    const convert = (amountMinor: number, from: string, to: string) => {
+      const r = crossRate(table.rates, from, to);
+      return r === null ? null : convertMinor(amountMinor, from, to, r);
+    };
+    const common = {
+      currency,
+      postedPriceMinor: posted?.priceMinor ?? null,
+      postedCurrency: EXCHANGE_PRICE_CURRENCY,
+      setRatePerToken: numberVar("redemption.rate_per_token"),
+      setRateCurrency: currencies[0],
+      convert,
+    };
+    const rate = resolveRedemptionRate({ ...common, source });
+    // What the village SELLS it for, whatever it pays to redeem. Read for the
+    // warning alone, and it costs no extra query.
+    const exchangeRate = resolveRedemptionRate({ ...common, source: "exchange" });
+    const minorOf = (human: number) => Math.round(Math.max(0, human) * Math.pow(10, exponentOf(currency)));
+    return {
+      currencies,
+      currency,
+      rate,
+      exchangeRate,
+      source,
+      feePct: numberVar("redemption.fee_pct"),
+      feeFixed: numberVar("redemption.fee_fixed"),
+      minMinor: minorOf(numberVar("redemption.min_amount")),
+      maxPerRequestMinor: minorOf(numberVar("redemption.max_per_request")),
+      memberCapMinor: minorOf(numberVar("redemption.max_per_member_per_cycle")),
+      villageCapMinor: minorOf(numberVar("redemption.max_village_per_cycle")),
+      processText: String(stringVar("redemption.process_text") ?? ""),
+    };
+  }
+
+  /** The money half of a payload, as every surface prints it. */
+  const moneyPayload = (ctx: Awaited<ReturnType<typeof moneyContext>>) => ({
+    currencies: ctx.currencies,
+    currency: ctx.currency,
+    rateSource: ctx.source,
+    rateMinor: ctx.rate?.minorPerToken ?? null,
+    feePct: ctx.feePct,
+    feeFixedMinor: Math.round(Math.max(0, ctx.feeFixed) * Math.pow(10, exponentOf(ctx.currency))),
+    minMinor: ctx.minMinor,
+    maxPerRequestMinor: ctx.maxPerRequestMinor,
+    memberCapMinor: ctx.memberCapMinor,
+    villageCapMinor: ctx.villageCapMinor,
+    processText: ctx.processText,
+  });
 
   /**
    * Take it back. The member's own act, and the only ending they can reach.
@@ -202,11 +326,23 @@ export function register(app: Express, deps: Deps): void {
       votePathBuilt: VOTE_PATH_BUILT,
       perCycle,
       openedThisCycle,
-      tokens: redeemableTokens(allTokens()).map((t) => ({
-        slug: t.slug,
-        name: t.name,
-        decimals: t.decimals,
-      })),
+      // ONE RESOLUTION PER TOKEN, so the form can show what each is worth
+      // before a member picks one. `moneyContext` reads the posted price for
+      // that token and the one daily rate table.
+      tokens: await Promise.all(
+        redeemableTokens(allTokens()).map(async (t) => {
+          const ctx = await moneyContext(t.slug, req.query.currency);
+          return {
+            slug: t.slug,
+            name: t.name,
+            decimals: t.decimals,
+            rateMinor: ctx.rate?.minorPerToken ?? null,
+            rateSource: ctx.rate?.source ?? null,
+            currency: ctx.currency,
+          };
+        }),
+      ),
+      money: moneyPayload(await moneyContext(redeemableTokens(allTokens())[0]?.slug ?? "", req.query.currency)),
     });
   });
 
@@ -256,6 +392,16 @@ export function register(app: Express, deps: Deps): void {
     }
     const pool = getPool();
     const exit = await openExitFor(pool, user.id);
+    // Ruling 23: what this comes to, resolved once here and snapshotted onto
+    // the row inside the transaction, so a dial moved later never changes it.
+    const ctx = await moneyContext(slug, body.currency);
+    const quote = redemptionQuote({
+      amountUnits: units,
+      decimals: decimalsFor(slug),
+      rate: ctx.rate,
+      feePct: ctx.feePct,
+      feeFixed: ctx.feeFixed,
+    });
     const out = await requestRedemption(pool, {
       userId: user.id,
       tokenSlug: slug,
@@ -263,6 +409,17 @@ export function register(app: Express, deps: Deps): void {
       askedFor: String(body.askedFor ?? ""),
       exitOpen: !!exit,
       cycleStart: cycleWindow().startsAt,
+      money: {
+        currency: ctx.currency,
+        quote,
+        processText: ctx.processText,
+        minMinor: ctx.minMinor,
+        maxPerRequestMinor: ctx.maxPerRequestMinor,
+        memberCapMinor: ctx.memberCapMinor,
+        villageCapMinor: ctx.villageCapMinor,
+        feePct: ctx.feePct,
+        feeFixed: ctx.feeFixed,
+      },
     });
     if (!out.ok) return res.status(out.status).json({ error: out.error });
     void recordEvent(pool, {
@@ -290,20 +447,47 @@ export function register(app: Express, deps: Deps): void {
     const pool = getPool();
     const queue = await redemptionQueue(pool);
     const rows = [];
+    /*
+     * ONE RESOLUTION PER TOKEN IN THE QUEUE, not one per row. A hundred waiting
+     * requests would otherwise read the posted price and the daily table a
+     * hundred times over to answer one question about the village's dials.
+     */
+    const rateWarnings = new Map<string, string | null>();
+    const warningFor = async (slug: string, tokenName: string): Promise<string | null> => {
+      if (!rateWarnings.has(slug)) {
+        const ctx = await moneyContext(slug);
+        rateWarnings.set(
+          slug,
+          setRateAboveExchange({
+            setMinorPerToken: ctx.source === "set" ? ctx.rate?.minorPerToken ?? null : null,
+            exchangeMinorPerToken: ctx.exchangeRate?.minorPerToken ?? null,
+            tokenName,
+          }),
+        );
+      }
+      return rateWarnings.get(slug) ?? null;
+    };
     for (const row of queue) {
       const person = await members.byId(row.userId).catch(() => null);
       const totalHeldUnits =
         (await balanceOf(pool, memberAccount(row.userId), row.tokenSlug)) + row.amountUnits;
+      const tokenName = tokenDef(row.tokenSlug)?.name ?? row.tokenSlug;
+      const warnings = redemptionWarnings({
+        tokenName,
+        listedForTrade: isListedForTrade(row.tokenSlug),
+        amountUnits: row.amountUnits,
+        totalHeldUnits,
+        redemptionsThisMoon: await redemptionsOpenedSince(pool, row.userId, cycleWindow().startsAt),
+      });
+      // Ruling 23's warning rides the same list and blocks nothing, like every
+      // other one here. It is about the DIAL as it stands now, not about this
+      // row, so it reads the same on every row of a queue.
+      const rateWarning = await warningFor(row.tokenSlug, tokenName);
+      if (rateWarning) warnings.push({ key: "rate-above-exchange", message: rateWarning });
       rows.push({
         ...forReading(row),
         memberName: person?.name ?? row.userId,
-        warnings: redemptionWarnings({
-          tokenName: tokenDef(row.tokenSlug)?.name ?? row.tokenSlug,
-          listedForTrade: isListedForTrade(row.tokenSlug),
-          amountUnits: row.amountUnits,
-          totalHeldUnits,
-          redemptionsThisMoon: await redemptionsOpenedSince(pool, row.userId, cycleWindow().startsAt),
-        }),
+        warnings,
       });
     }
     res.json({ redemptions: rows, holds: holdsOnPropose() });
