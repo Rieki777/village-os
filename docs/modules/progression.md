@@ -103,7 +103,8 @@ member-facing reads. Everything else that moves this module's data sits outside 
 
 - `GET /api/game/progression` (`server/index.ts`). Requires a bearer token; 401 `auth_required` otherwise.
   Serves `stage` (as played, not as configured), `stageIndex`, `consentedQuests`, `capabilities` (held),
-  `capabilityCatalogue` (all of them, with the rung that opens each), `roles` (id and name), `history` (this
+  `capabilityCatalogue` (all of them, with the rung that opens each, and on every power the village entrusts
+  the classes it `suits` and whether it is `recommended` to this member), `roles` (id and name), `history` (this
   member's stage events, newest first) and `firsts`.
 - `GET /api/roles` (`server/index.ts`). No auth required, no module gate. Serves the village's SHAPE to
   anyone: role id, name, description, `capabilities`, `minStage`, `circleId`, `seats`, `holderCount`,
@@ -141,6 +142,11 @@ prefix.
   CREATES a `roles` row, with the capabilities and the `min_stage` an AI assistant proposed, through
   `rolesRepo.insert`. It runs the same `applyEscalationChoices` confirmation as the route above. It does not
   call `onRealItemPublished`, so a real role created this way leaves the example roles standing.
+- `GET /api/admin/power-affinity` and `PUT /api/admin/power-affinity/:key` (`server/routes/powerAffinity.ts`).
+  Which classes each entrusted power suits. The read takes `isAdmin`. The write takes `story.tell`, the gate
+  the class words already use, and saves one power per request: `classes` is that power's whole list, empty
+  for none, or `null` to follow the platform again, and a body with no `classes` is refused. A suggestion
+  permits nothing, so neither route can hand anybody a power.
 - `GET /api/admin/members/:id/capabilities` (`server/index.ts`). A read, under an admin prefix. The
   explainer: every capability key with the step that decided it, read out of `capabilityDecision` rather
   than re-implemented.
@@ -179,7 +185,16 @@ the whole frozen roll was notified when the ballot opened, the document named th
   `GAME_CONFIG`.
 - `client/src/components/profile/PowersMap.tsx`. The capability catalogue as a map rather than an
   inventory: open, opens at the next rung, opens further along, appointment only, and closed-at-or-below
-  your own rung. Its groups are derived from `held` and `opens`, never from a hand-kept table.
+  your own rung. Its groups are derived from `held` and `opens`, never from a hand-kept table. An entrusted
+  row prints the classes the power `suits`, and "Suits your ..." only on a row the server marked
+  `recommended`, which also leads the entrusted list.
+- `client/src/pages/Characters.tsx`. Each class card lists "Powers it suits" from
+  `GET /api/archetypes/:key/paths` (`powersForClass`, `server/lib/powerAffinity.ts`), leaving out a power whose
+  module is off.
+- `client/src/components/admin/PowerAffinityPanel.tsx`, inside the character classes panel. The village's own
+  map: entrusted powers down the side, classes across the top, one power saved per tick through
+  `GET /api/admin/power-affinity` (admin) and `PUT /api/admin/power-affinity/:key` (`story.tell`, the gate the
+  class words already use). `classes: null` hands a power back to the platform's suggestion.
 - `client/src/components/ProfileJourney.tsx`. Held-capability chips, the three `firsts`, and the stage
   history with what each crossing unlocked. It runs raw capability keys through `capabilityLabel` before
   printing them.
@@ -279,6 +294,19 @@ resolves the registry through the same expression the deciding code uses.
 the catalogue rows whose `held` is true, by construction rather than by agreement, and the e2e suite pins
 it. The reason is a route contract: a module's API prefixes stop mounting the moment it goes off, so
 advertising its key would name a door with nothing behind it.
+
+**Which character suits which power is a suggestion, and it never permits.** Each power the village entrusts
+names the classes it suits (`shared/powerAffinity.ts`, Rye's ruling of 2026-09-09), keyed by capability and by
+archetype KEY, so a renamed class keeps every line. The platform ships a suggestion. A village's own decisions
+live in the `power-affinity` document in `app_config`, which holds only the powers it changed, so a power it
+never touched follows the platform and an empty list is a decision that the power suits nobody.
+`withPowerAffinity` (`server/lib/powerAffinity.ts`) puts `suits` on every catalogue row the village entrusts,
+and sets `recommended` on the rows put to THIS member: they stand at `contributor` or above, they play a class
+the power suits, and they do not hold it. Below the rung the class is named and nothing is claimed for the
+member. The capability gate never reads the map, and `shared/powerAffinity.test.ts` fails if
+`shared/capabilities.ts` ever reaches it, directly or through any file it imports. The proof that matters is
+behavioural: `server/powerAffinity.routes.e2e.test.ts` has the member the map suggests `story.tell` to try to
+edit the map, and she is refused. The Builder suits no power yet, by the same ruling.
 
 ## Game variables
 

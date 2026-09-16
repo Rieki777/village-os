@@ -289,6 +289,69 @@ describe("PowersMap", () => {
   });
 });
 
+describe("PowersMap: which class a power suits", () => {
+  const entrusted = (over: Partial<ProgressionCapability>): ProgressionCapability =>
+    ({ ...cap("library.keep", "Keep the shared library and its loans", false, { via: "appointment" }), ...over }) as ProgressionCapability;
+
+  it("puts a recommended power to the member as theirs, and leads the entrusted list with it", () => {
+    const catalogue = [
+      cap("org.seat", "Seat and unseat holders", false, { via: "appointment" }),
+      entrusted({ suits: [{ key: "researching", name: "The Architect", yours: true }], recommended: true }),
+    ];
+    render(<PowersMap catalogue={catalogue} stages={stages} stageIndex={4} />);
+    expect(screen.getByText("Suits your Architect")).toBeTruthy();
+    expect(screen.getByText("One of these suits a character you play.")).toBeTruthy();
+    // Sent second, drawn first.
+    const library = screen.getByTitle("library.keep");
+    const seat = screen.getByTitle("org.seat");
+    expect(library.compareDocumentPosition(seat) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("names the class without claiming it, for a member the server does not recommend it to", () => {
+    render(
+      <PowersMap
+        catalogue={[entrusted({ suits: [{ key: "researching", name: "The Architect" }], recommended: false })]}
+        stages={stages}
+        stageIndex={3}
+      />,
+    );
+    expect(screen.getByText("Suits The Architect")).toBeTruthy();
+    expect(screen.queryByText(/Suits your/)).toBeNull();
+    expect(screen.queryByText(/suits? a character you play/)).toBeNull();
+  });
+
+  it("joins several classes into one sentence, whatever a village calls them", () => {
+    const suits = [
+      { key: "researching", name: "The Architect" },
+      { key: "storytelling", name: "The Storyteller" },
+      { key: "gardening", name: "Gardener" },
+    ];
+    render(<PowersMap catalogue={[entrusted({ suits })]} stages={stages} stageIndex={3} />);
+    expect(screen.getByText("Suits The Architect, The Storyteller and Gardener")).toBeTruthy();
+  });
+
+  it("says nothing about a class on a power that suits none, or from a server that predates the map", () => {
+    render(<PowersMap catalogue={[entrusted({}), entrusted({ key: "org.seat" as ProgressionCapability["key"], suits: [] })]} stages={stages} stageIndex={3} />);
+    expect(screen.queryByText(/^Suits/)).toBeNull();
+  });
+
+  it("counts only the rows it shows, so hiding what is closed drops the sentence and keeps what is held", () => {
+    const catalogue = [
+      entrusted({ suits: [{ key: "researching", name: "The Architect", yours: true }], recommended: true }),
+      // Held, so it survives the filter and the entrusted block stays on the
+      // page. Without it the whole block unmounts on hiding, and the sentence
+      // would vanish however it was counted.
+      cap("org.seat", "Seat and unseat holders", true, { via: "appointment" }),
+    ];
+    render(<PowersMap catalogue={catalogue} stages={stages} stageIndex={4} />);
+    expect(screen.getByText("One of these suits a character you play.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Hide what is closed/ }));
+    expect(screen.getByText("Entrusted by the village")).toBeTruthy();
+    expect(screen.getByText("Seat and unseat holders")).toBeTruthy();
+    expect(screen.queryByText(/suits? a character you play/)).toBeNull();
+  });
+});
+
 describe("PathsPanel", () => {
   const tiles = [
     { id: "investor", label: "Investor", role: "Capital Contributor", route: "/investor", offered: true },
