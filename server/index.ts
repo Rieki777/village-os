@@ -110,6 +110,7 @@ import { register as registerBrandUploadRoutes } from "./routes/brandUploads";
 import { register as registerNeedsRoutes } from "./routes/needs";
 import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
+import { REDEMPTION_SUBJECT, redemptionCloser } from "./lib/redemptionBallot";
 import { expireRedemptions, retiredSupply } from "./lib/redemptionStore";
 import { register as registerFeedbackRoutes } from "./routes/feedback";
 import { register as registerCharacterPortraitRoutes } from "./routes/characterPortraits";
@@ -23121,6 +23122,7 @@ ${inner}
    * is read straight off this table.
    */
   SUBJECT_CLOSERS[MINT_RULE] = SUBJECT_CLOSERS.mechanics;
+  SUBJECT_CLOSERS[REDEMPTION_SUBJECT] = redemptionCloser({ getPool, notify });
 
   /**
    * WHAT SETTLING A MOON NEEDS that only this file can hand over: the four
