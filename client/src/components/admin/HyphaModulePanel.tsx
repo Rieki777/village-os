@@ -44,8 +44,17 @@ const input =
  */
 const FOUNDER_KEY = "hypha.founder_base_address";
 
-/** The account settings, most-needed first. A key absent from `vars` renders nothing. */
-const HYPHA_KEYS = [FOUNDER_KEY, "hypha.org_url", "hypha.space_id", "hypha.treasury_address"];
+/**
+ * The account settings, most-needed first. A key absent from `vars` renders
+ * nothing.
+ *
+ * EXPORTED because this panel now sits inside the Hypha Bridge module's card,
+ * beside the generic list of that module's dials, and the generic list has to
+ * leave these four to the panel. Two editors for one address on one screen is
+ * the disagreement this panel was built to end.
+ */
+export const HYPHA_PANEL_KEYS = [FOUNDER_KEY, "hypha.org_url", "hypha.space_id", "hypha.treasury_address"];
+const HYPHA_KEYS = HYPHA_PANEL_KEYS;
 
 /**
  * Where the address is, drawn rather than screenshotted.
