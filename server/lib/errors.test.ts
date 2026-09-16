@@ -142,6 +142,11 @@ describe("what the terminal handler answers", () => {
     expect(answer.detail).toContain("org_roles");
   });
 
+  // The other answer this handler gives, 503 for a lock the engine refused to
+  // wait for any longer, is proved in `server/lib/lockContention.test.ts`
+  // against an error a real database raised, for the reason above: a hand-made
+  // error object would prove only that the matcher matches itself.
+
   it("still answers everything else with 500, which is the control", () => {
     // Without this, a matcher that returned 409 for every error would pass the
     // case above and break the whole surface.

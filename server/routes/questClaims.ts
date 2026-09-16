@@ -282,6 +282,18 @@ export function register(app: Express, deps: Deps): void {
     // the witness rule applies to everyone, admins included. Stewards never
     // get the exception — role authority is not founder authority — and
     // tombstoned members do not count toward the size.
+    //
+    // WHETHER THIS REQUEST USED THE WINDOW is answered here and RECORDED LATER.
+    // The audit row used to be written the moment the window was found open,
+    // which is a whole decline branch and five refusals before anything
+    // happens. So the one trace the exception leaves said a founder had
+    // witnessed their own claim when the founder had DECLINED it, when the
+    // dials refused the amount, when the launch vote had not carried, and when
+    // another steward had already resolved the claim. `shared/constitution.ts`
+    // reads this row as "every such use is recorded", and a record of uses that
+    // did not happen is not that. It is written below, once the consent it
+    // attests to has committed.
+    let selfConsented = false;
     if (claim.userId === actor.userId) {
       const soloWindow = Math.max(0, numberVar("quest.self_consent_until_members"));
       // Neither tombstones nor standing examples are people, and three
@@ -296,14 +308,7 @@ export function register(app: Express, deps: Deps): void {
           error: "You cannot consent to your own claim. Someone else has to witness the work.",
         });
       }
-      void recordEvent(getPool(), {
-        kind: "audit",
-        text: `quest:self-consent:solo-founder:${claim.id}`,
-        actorUserId: actor.userId,
-        entityType: "quest_claim",
-        entityRef: claim.id,
-        audience: "admin",
-      });
+      selfConsented = true;
     }
     if (approve === false) {
       // From `claimed` or `submitted` only, under the claim's row lock. A stale
@@ -474,6 +479,22 @@ export function register(app: Express, deps: Deps): void {
       });
     }
     const consented = outcome.claim;
+    // THE WHOLE TRACE OF THE EXCEPTION, written now that the consent it
+    // attests to exists. It sits outside the `claimant` block below, because a
+    // claim whose member row has gone still used the window, and it is written
+    // for an admin actor too: the window opens for nobody else, and the
+    // /api/admin middleware attributes the request without naming the rule
+    // that let it through.
+    if (selfConsented) {
+      void recordEvent(getPool(), {
+        kind: "audit",
+        text: `quest:self-consent:solo-founder:${consented.id}`,
+        actorUserId: actor.userId,
+        entityType: "quest_claim",
+        entityRef: consented.id,
+        audience: "admin",
+      });
+    }
     // Credit the player's balance
     if (claimant) {
       let after: any = claimant;
