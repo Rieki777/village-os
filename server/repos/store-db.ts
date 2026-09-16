@@ -443,7 +443,13 @@ export function dbCollection<T extends Row = Row>(pool: Pool, spec: CollectionSp
          * pre-existing and unchanged here; it is filed in the ledger.
          */
         const heldBefore = cache.length;
-        const behindOurBack = heldBefore > 0 && !sameRowSet(cache, rows);
+        // Different rows under a counter that ALSO moved were written through a
+        // counter: another process's collection, or a transaction that bumps it on
+        // purpose, as an org draft moving a circle does. Every snapshot out there is
+        // already stale against that version, so there is nothing to bump and
+        // nothing to warn about. Only rows that changed under a counter that did
+        // not move are a writer going around the collection.
+        const behindOurBack = heldBefore > 0 && dbVersion === version && !sameRowSet(cache, rows);
         if (behindOurBack) {
           await conn.query("UPDATE collection_versions SET version = version + 1 WHERE collection = ?", [
             spec.table,

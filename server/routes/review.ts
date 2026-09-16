@@ -281,7 +281,7 @@ export function register(app: Express, deps: Deps): void {
         ? questProposalQueue(pool, "proposed")
         : Promise.resolve([] as Awaited<ReturnType<typeof questProposalQueue>>),
       readsProposals ? recentDrops(pool, 30) : Promise.resolve([] as Awaited<ReturnType<typeof recentDrops>>),
-      readsProposals ? listDrafts(pool) : Promise.resolve(null),
+      readsProposals ? listDrafts(pool, { status: "open" }) : Promise.resolve(null),
       readsProposals ? loadPreviewContext(pool) : Promise.resolve(null),
     ]);
 
