@@ -290,7 +290,7 @@ export function register(app: Express, deps: Deps): void {
           dedupeKey: `org-seat:${st.assignmentId}`,
         });
       } catch (e) {
-        console.error(`[org] draft ${req.params.id} was published, but telling ${st.userId} about ${st.seatName} failed:`, e);
+        console.error("[org] a published draft could not tell a member about their seat:", req.params.id, st.userId, st.seatName, e);
       }
     }
     // One journal line per seat the draft touched, so a reorganisation shows up
@@ -308,7 +308,7 @@ export function register(app: Express, deps: Deps): void {
         });
       }
     } catch (e) {
-      console.error(`[org] draft ${req.params.id} was published, but its journal lines could not be written:`, e);
+      console.error("[org] a published draft could not write its journal lines:", req.params.id, e);
     }
     res.json({ success: true, applied: r.applied, reloaded });
   });
