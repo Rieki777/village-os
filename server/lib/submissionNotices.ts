@@ -20,6 +20,7 @@
  *    notification would arrive after the conversation it describes, telling
  *    somebody about a thread they are holding one end of.
  */
+import { asOffer } from "../../shared/powerHands";
 
 /**
  * The thing they sent, in their words, keyed by the pipeline's type string.
@@ -28,6 +29,7 @@
  */
 const WHAT_THEY_SENT: Record<string, string> = {
   "role-application": "your offer to hold a seat",
+  "power-application": "your offer to take on a power",
   "work-with-us": "your proposal to work together",
   "quest-proposal": "the quest you proposed",
   "visit-inquiry": "your request to visit",
@@ -47,8 +49,9 @@ const FALLBACK = "what you sent us";
 
 /**
  * A raised hand names its seat, because a member may have raised several and
- * "your offer to hold a seat" would leave them guessing which one moved. Only
- * this type carries a name worth saying: the rest are free text a stranger
+ * "your offer to hold a seat" would leave them guessing which one moved. A hand
+ * for a power names its power for the same reason, in the power's own label.
+ * Only these two carry a name worth saying: the rest are free text a stranger
  * typed, and quoting it back into an email subject is a different decision.
  */
 export function submissionSubject(type: string, data?: Record<string, unknown> | null): string {
@@ -56,6 +59,10 @@ export function submissionSubject(type: string, data?: Record<string, unknown> |
   if (type === "role-application") {
     const seat = String((data as any)?.roleName ?? "").trim();
     if (seat) return `your offer to hold ${seat}`;
+  }
+  if (type === "power-application") {
+    const power = String((data as any)?.powerLabel ?? "").trim();
+    if (power) return `your offer to ${asOffer(power)}`;
   }
   return base;
 }

@@ -3211,6 +3211,8 @@ Both look like intentional work and neither is.
 
 | 2026-09-15 | membrane lane (character affinity) | `server/index.ts`: one import of `./routes/powerAffinity` and its register call, both exempt from the ratchet, and two lines changed in place (the progression catalogue now carries `suits` and `recommended`, a class's paths carry `powers`), so the counted total does not move. One new `app_config` key, `power-affinity`, written only by `server/lib/powerAffinity.ts`. No migration, no capability key, no game variable, no baseline | `wt/archetype-affinity` | HELD. Claims no number, so it lands in any order against the open PRs. |
 
+| 2026-09-15 | membrane lane (power hands) | `server/index.ts`: one import of `./routes/powerHands` and its register call, both exempt from the ratchet, and the progression catalogue line changed in place to hand `withPowerAffinity` the inbox, so the counted total does not move. A new inbox type, `power-application`, in `submissions`, whose `type` column is free text, so no migration. No capability key, no game variable, no baseline | `wt/power-hands`, stacked on `wt/archetype-affinity` (#267) | HELD. Claims no number, and lands after #267. |
+
 ### 27d — Verification: CI runs the full suite, lanes run what they touched
 
 **Measured, 2026-09-03/04.** A local full suite is 25 minutes on a quiet machine and 46.6 minutes

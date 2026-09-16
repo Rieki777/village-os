@@ -68,11 +68,19 @@
  * the member's own, because the ruling holds that claim back until
  * Contributor. A recommended row leads the entrusted list, and the sentence
  * counting them counts the rows SHOWN.
+ *
+ * ── A HAND FOR A POWER ──────────────────────────────────────────────────────
+ *
+ * A row put to the member carries `PowerHand`, which raises a hand for the
+ * power and says where a hand that is up stands. The inbox, the rules and the
+ * answers are the server's (shared/powerHands.ts), and a hand asks for a power
+ * without ever granting it.
  */
 import { useState } from "react";
 import { Check, Circle, Lock, UserCheck } from "lucide-react";
 import type { GameStagePublic, ProgressionCapability } from "@/lib/gameApi";
 import type { StageRule } from "@shared/gameConfig";
+import PowerHand from "./PowerHand";
 
 /**
  * How each rung is reached, in the words a member would use.
@@ -231,6 +239,10 @@ function PowerRow({ row, reached }: { row: ProgressionCapability; reached: boole
       ) : suits.length ? (
         <span className="basis-full text-xs text-muted-foreground">Suits {namesOf(suits.map((s) => s.name))}</span>
       ) : null}
+      {/* A HAND, where the server put the power to this member or a hand of
+          theirs is still up. PowerHand holds the button and the server's
+          answers, and renders nothing on a row with neither. */}
+      <PowerHand row={row} />
     </li>
   );
 }

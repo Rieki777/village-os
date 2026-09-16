@@ -368,3 +368,113 @@ describe.skipIf(!DB_CONFIGURED)("a suggestion never permits", () => {
     expect(powerIn(await editor(), "library.keep")).toMatchObject({ classes: ["researching"], decided: false });
   });
 });
+
+/*
+ * A HAND ASKS, AND IT NEVER GRANTS. Cass raises a hand for a power put to her,
+ * and the founder's inbox, the founder's bell and her own profile all read it
+ * back. Dell plays the same class below the rung, and Ezra stands at the rung
+ * playing only The Builder: both are refused and neither files anything, which
+ * is the ruling's rung half and its class half each failing on its own. The
+ * last case has the founder say yes and reads Cass's catalogue again: the power
+ * is still closed, because a role carries a power and an inbox row does not,
+ * and the answered hand is down.
+ */
+describe.skipIf(!DB_CONFIGURED)("a raised hand for a power", () => {
+  let handId = "";
+
+  /** Every hand for a power, as the founder's inbox lists them. */
+  async function inbox(): Promise<any[]> {
+    const r = await call("GET", "/api/admin/submissions?type=power-application");
+    expect(r.status, JSON.stringify(r.json)).toBe(200);
+    return r.json;
+  }
+
+  it("refuses a stranger, a power the village does not have, and a power not put to the member, filing nothing", async () => {
+    const stranger = await call("POST", "/api/powers/library.keep/raise-hand", { token: null, body: {} });
+    expect(stranger.status).toBe(401);
+
+    const nothing = await call("POST", "/api/powers/library.burn/raise-hand", { token: cassToken, body: {} });
+    expect(nothing.status).toBe(404);
+    expect(nothing.json?.error).toBe("power_not_found");
+
+    const below = await call("POST", "/api/powers/library.keep/raise-hand", { token: dellToken, body: {} });
+    expect(below.status, JSON.stringify(below.json)).toBe(409);
+    expect(below.json?.error).toBe("not_recommended");
+
+    // At the rung, and playing a class the power does not suit.
+    const builder = await call("POST", "/api/powers/library.keep/raise-hand", { token: ezraToken, body: {} });
+    expect(builder.status, JSON.stringify(builder.json)).toBe(409);
+    expect(builder.json?.error).toBe("not_recommended");
+
+    expect(await inbox()).toEqual([]);
+  });
+
+  it("files a hand for a power put to the member, rings the founder, and shows it on her profile", async () => {
+    const up = await call("POST", "/api/powers/library.keep/raise-hand", {
+      token: cassToken,
+      body: { note: "I already keep the tool shed ledger." },
+    });
+    expect(up.status, JSON.stringify(up.json)).toBe(200);
+    expect(up.json?.hand?.status).toBe("new");
+
+    const rows = await inbox();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ type: "power-application", status: "new" });
+    expect(rows[0].data).toMatchObject({
+      capability: "library.keep",
+      powerLabel: "Keep the shared library and its loans",
+      suits: ["The Architect"],
+      note: "I already keep the tool shed ledger.",
+    });
+    handId = String(rows[0].id);
+
+    const [bells] = await pool.query<any[]>("SELECT title FROM notifications WHERE dedupe_key LIKE ?", [`power-application:${handId}:%`]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(bells.length, "the founder's bell rang").toBeGreaterThan(0);
+    expect(String(bells[0].title)).toBe("Cass raised a hand to keep the shared library and its loans");
+
+    const row = rowOf(await catalogueOf(cassToken), "library.keep");
+    expect(row.hand).toMatchObject({ status: "new" });
+    expect(row.recommended).toBe(true);
+  });
+
+  it("refuses a second hand for the same power while the first is up, and names the hand that is", async () => {
+    const again = await call("POST", "/api/powers/library.keep/raise-hand", { token: cassToken, body: {} });
+    expect(again.status).toBe(409);
+    expect(again.json?.error).toBe("hand_already_up");
+    expect(again.json?.hand).toMatchObject({ status: "new" });
+    expect(await inbox()).toHaveLength(1);
+  });
+
+  it("shows the member when somebody opens her hand, and keeps it up", async () => {
+    const opened = await call("PUT", `/api/admin/submissions/${handId}/status`, { body: { status: "reviewing" } });
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    expect(rowOf(await catalogueOf(cassToken), "library.keep").hand).toMatchObject({ status: "reviewing" });
+
+    const again = await call("POST", "/api/powers/library.keep/raise-hand", { token: cassToken, body: {} });
+    expect(again.status).toBe(409);
+    expect(again.json?.hand).toMatchObject({ status: "reviewing" });
+
+    // No route takes a hand down (shared/powerHands.ts says why).
+    const down = await call("DELETE", "/api/powers/library.keep/raise-hand", { token: cassToken });
+    expect(down.status).not.toBe(200);
+    expect(await inbox()).toHaveLength(1);
+  });
+
+  it("grants nothing when the founder says yes, puts the answered hand down, and tells the member which power", async () => {
+    const yes = await call("PUT", `/api/admin/submissions/${handId}/status`, { body: { status: "accepted" } });
+    expect(yes.status, JSON.stringify(yes.json)).toBe(200);
+
+    const row = rowOf(await catalogueOf(cassToken), "library.keep");
+    expect(row.held, "an inbox row is not a role").toBe(false);
+    expect(row.hand, "an answered hand is down").toBeUndefined();
+    expect(row.recommended).toBe(true);
+
+    const [told] = await pool.query<any[]>("SELECT title FROM notifications WHERE dedupe_key = ?", [`submission:${handId}:accepted`]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(String(told[0]?.title)).toBe("Yes to your offer to keep the shared library and its loans");
+
+    // Still waiting on the appointment, she can ask again, and the new hand is its own row.
+    const again = await call("POST", "/api/powers/library.keep/raise-hand", { token: cassToken, body: {} });
+    expect(again.status, JSON.stringify(again.json)).toBe(200);
+    expect((await inbox()).map((r) => String(r.status)).sort()).toEqual(["accepted", "new"]);
+  });
+});

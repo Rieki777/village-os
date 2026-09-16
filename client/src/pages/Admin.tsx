@@ -21,6 +21,7 @@ import BreathingLoader from "@/components/natural/BreathingLoader";
 import { SeatSomebody } from "@/components/power/SeatSomebody";
 import { AppointToRole } from "@/components/admin/AppointToRole";
 import { RAISED_HAND_TERM_KEYS, RaisedHandTerm } from "@/components/admin/RaisedHandTerm";
+import { POWER_HAND_KEYS, PowerHandNote } from "@/components/admin/PowerHandNote";
 import Celebration from "@/components/natural/Celebration";
 import { useMomentWindow } from "@/components/natural/moments";
 import { playMoment } from "@/lib/sound";
@@ -991,10 +992,11 @@ function SubmissionsTab({ password }: { password: string }) {
                     )}
                   </div>
                   {s.type === "role-application" && <RaisedHandTerm data={s.data} />}
+                  {s.type === "power-application" && <PowerHandNote data={s.data} />}
                   <table className="w-full text-sm">
                     <tbody>
                       {Object.entries(s.data)
-                        .filter(([k]) => k !== "attachmentName" && !(s.type === "role-application" && RAISED_HAND_TERM_KEYS.includes(k)))
+                        .filter(([k]) => k !== "attachmentName" && !(s.type === "role-application" && RAISED_HAND_TERM_KEYS.includes(k)) && !(s.type === "power-application" && POWER_HAND_KEYS.includes(k)))
                         .map(([k, v]) => (
                         <tr key={k} className="border-b border-gray-100 last:border-0">
                           <td className="py-1.5 pr-4 font-medium text-gray-600 capitalize w-1/4 align-top">
