@@ -407,6 +407,11 @@ export interface Landing {
   vetoLocked: boolean;
   lockedByConsent: boolean;
   countdownSentence: string;
+  /**
+   * Set when the vote carried and its landing failed: the server's plain
+   * sentence saying it has not taken effect yet and what happens next.
+   */
+  notYetInEffect?: string | null;
 }
 
 export const fetchLanding = (id: string) => call<Landing>(`/api/governance/ballots/${encodeURIComponent(id)}/landing`);

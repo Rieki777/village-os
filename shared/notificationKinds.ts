@@ -91,6 +91,16 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} votes carried.",
     celebrate: true,
   },
+  // A carried vote whose decision did not take effect at the close
+  // (server/lib/atCloseLanding.ts). Its own kind, because `ballot_carried` says
+  // what was voted on now applies and celebrates, and neither is true yet. The
+  // roll hears `ballot_carried` from the landing job once it is.
+  ballot_not_yet_in_effect: {
+    group: "decisions",
+    blurb: "The village said yes and the decision has not taken effect yet. The decision page says what happens next.",
+    many: "{n} carried votes have not taken effect yet.",
+    celebrate: false,
+  },
   ballot_failed: {
     group: "decisions",
     blurb: "The village said no. The closer wrote down the reasoning, and it stands on the record.",

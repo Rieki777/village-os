@@ -85,7 +85,7 @@ import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader
 import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
 import { landWeightMode } from "./lib/landingRefusal";
 import { landingRow } from "./lib/applyDue";
-import { notifyRollRows, type RollNotice } from "./lib/ballotNotices";
+import { closeActivityLine, decisionLink, notifyRollRows, tellRollTheOutcome, type RollNotice } from "./lib/ballotNotices";
 import { isPresentMember, presenceTest } from "./lib/memberPresence";
 import { runSeasonReminders } from "./lib/seasonReminders";
 import { forgetStewardActs, holdingHasLapsed, recordTermStarted, runTermWatch, setVetoWindowCheck, STEWARD_VETO, stewardMailRefusal, termWatchLookaheadDays } from "./lib/stewardship";
@@ -21950,24 +21950,11 @@ ${inner}
     return eligible.map((u: any) => ({ userId: String(u.id), weight: weights.get(String(u.id)) ?? 0 }));
   }
 
-  /**
-   * Where a notice about a ballot should LAND: on the ballot.
-   *
-   * This pointed at the proposal card on /game-mechanics until the decision
-   * surface existed, because a notice has to land on something a member can
-   * actually see. /decisions/:id is now that thing and it is strictly better:
-   * the vote widget, the clock, the frozen roll and the close beat are all on
-   * it, so every one of the five decision notices lands where its reader can
-   * act on it.
-   *
-   * A STALE LINK IS NEVER AN ERROR STATE, and that is the property this
-   * function exists to protect. A withdrawn ballot renders the decision page's
-   * own "No such decision" card with a way through to /decisions, and the
-   * notification row itself renders and clears from its stored text without
-   * ever resolving the ballot. A notice outlives the thing it points at.
-   */
+  // The URL, and why a stale one is never an error state, live on `decisionLink`
+  // in server/lib/ballotNotices.ts. Declared as a function on purpose: callers
+  // above this line reach it, so it has to hoist.
   function ballotLink(b: { id: string }): string {
-    return `/decisions/${b.id}`;
+    return decisionLink(b);
   }
 
   /**
@@ -24085,22 +24072,6 @@ ${inner}
       });
     }
     /*
-     * The village's own record of the moment. Three outcomes and three
-     * sentences, because "without passing" said the same thing about a
-     * village that answered no and a village that barely turned up, and only
-     * one of those is a verdict on the question.
-     */
-    await addActivity(
-      "governance",
-      result.outcome === "passed"
-        ? `A village vote carried: ${b.title}`
-        : result.outcome === "no_quorum"
-          ? `A village vote closed with too few voting to settle it: ${b.title}`
-          : `A village vote closed without passing: ${b.title}`,
-      { actorUserId: user.id, entityType: "ballot", entityRef: b.id },
-    );
-
-    /*
      * Outcome routing, through the subject table (SUBJECT_CLOSERS above).
      * Every step inside it is a guarded update or an idempotent apply, so a
      * crash partway heals on the admin apply path instead of corrupting. A
@@ -24117,68 +24088,31 @@ ${inner}
       landingDeps(), result.ballot, result.outcome, result.ballot.outcomeNote ?? "", user.id,
       await itemKindsOf(landingDeps(), b),
     );
-    const { applied, held, proposerTold } = routing;
+    const { applied, held } = routing;
     // A seated steward's no fails a ballot at close, so the outcome the route
     // reports is the one routing settled and never the one the tally gave.
     const outcome = routing.outcome ?? result.outcome;
     /*
-     * The roll hears the outcome, once, keyed on the ballot. Everyone who was
-     * asked is told what the answer was, INCLUDING the people who did not
-     * vote: a decision binds them either way, and finding out later from
-     * somebody else is how a village stops trusting its own process.
-     *
-     * `no_quorum` is worded as its own thing and never folded into "did not
-     * pass". Too few people answered is a different fact from the village
-     * saying no, and it is the one an electorate can act on.
-     *
-     * AFTER the routing above, so `proposerTold` is settled. Not awaited, for
-     * the same reason the open path is not: a village-wide roll is one insert
-     * per member, and notifyRoll catches its own failures.
+     * The pulse line, then the roll, told once and keyed on the ballot,
+     * including the people who did not vote: a decision binds them either way.
+     * Both are phrased from what routing SETTLED, so a landing that failed at
+     * the close never reads as carried and in effect. The wording and the kinds
+     * live in server/lib/ballotNotices.ts. The roll is not awaited: one insert
+     * per member, and the ring catches its own failures.
      */
+    await addActivity("governance", closeActivityLine(b.title, outcome, routing.landingFailed), {
+      actorUserId: user.id,
+      entityType: "ballot",
+      entityRef: b.id,
+    });
     const binds = ballotBinds(b.subjectType);
-    /*
-     * THE KIND CARRIES THE MEANING, and it has to, because the bell groups,
-     * batches and rations celebration by KIND and never by title.
-     *
-     * `ballot_failed` used to fire for a missed quorum, and that kind's blurb
-     * reads "The village said no." So fix 1's defect was living in the bell as
-     * well as in the subject's status column: the title said one thing and the
-     * line underneath it said the opposite.
-     *
-     * `ballot_carried` is one of the four kinds that earn a celebration. An
-     * advisory vote must never reach it. Somebody shown the moment reserved
-     * for a decision, who finds out later that the village changed nothing, is
-     * worse off than somebody who never voted.
-     *
-     * The ternary stays INLINE on the property. `shared/notificationKinds.test.ts`
-     * reads the produced types out of this source by brace-matching the object
-     * literal and splitting it on top-level commas, and it has no idea what a
-     * comment is: a block comment sitting inside these braces splits on its own
-     * prose and hides every literal in the value below it.
-     */
-    void notifyRoll(b, {
-      type: !binds
-        ? "ballot_advisory_closed"
-        : outcome === "passed"
-          ? "ballot_carried"
-          : outcome === "no_quorum"
-            ? "ballot_no_quorum"
-            : "ballot_failed",
-      title:
-        outcome === "no_quorum"
-          ? `Closed without quorum: ${b.title}`
-          : outcome === "passed"
-            ? binds
-              ? `Carried: ${b.title}`
-              : `The village would have said yes: ${b.title}`
-            : binds
-              ? `Did not pass: ${b.title}`
-              : `The village would have said no: ${b.title}`,
-      body: binds
-        ? result.ballot.outcomeNote
-        : `${result.ballot.outcomeNote ?? ""}\n\nThis was an advisory vote. Nothing changed on its own.`.trim(),
-      keySuffix: "outcome",
-      except: [proposerTold],
+    void tellRollTheOutcome({ pool: getPool(), notify, link: ballotLink }, {
+      ballot: b,
+      outcome,
+      binds,
+      outcomeNote: result.ballot.outcomeNote ?? null,
+      routing,
+      proposerId: subjectProposerId ?? b.openedBy,
     });
 
     res.json({
@@ -25530,7 +25464,7 @@ ${inner}
   });
   registerGovernanceWizardRoutes(app, { authedUser, getPool, capabilityCtx, weightModeNow });
   registerDelegationRoutes(app, { authedUser, getPool, capabilityCtx, members, firstName });
-  registerGovernanceVetoRoutes(app, { authedUser, mayAct, isAdmin, getPool, members, firstName, notify });
+  registerGovernanceVetoRoutes(app, { authedUser, mayAct, isAdmin, getPool, members, firstName, notify, closerFor: (subjectType: string) => SUBJECT_CLOSERS[subjectType] });
   registerGovernanceLandingRoutes(app, { authedUser, mayAct, getPool, members, firstName, notify });
   // The two founder doors onto the moon's settlement: ask the village now,
   // and land what the village has already carried. server/routes/moonSettlement.ts.
