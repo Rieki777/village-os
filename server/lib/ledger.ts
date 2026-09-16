@@ -30,6 +30,7 @@
  * never be. Boot invariants enforce that with a loud failure, not a comment.
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
+import { lostConcurrencyRace } from "../db/concurrency";
 import { balanceRowsFor } from "../repos/tokenBalances";
 import { accountEntryRows, accountsReceivedFromVillage, idempotencyKeyRows, keysCollatingWith, questConsentCreditRows, receivedFromVillage } from "../repos/tokenLedger";
 import { contributionSources } from "./contributionPay";
@@ -37,6 +38,7 @@ import { issuanceRefusal } from "./gameStart";
 import {
   keyClashRows,
   keyRowsWithSource,
+  lockedLedgerAccountRows,
   lockedReversalMirrorRows,
   postingRowForKey,
   reversalMirrorRows,
@@ -1027,13 +1029,7 @@ async function postTransferInside(
    * and the single-leg poster is the one every recognition credit in the
    * village goes through.
    */
-  const lockAccounts = async () => {
-    const [rows] = await conn.query<RowDataPacket[]>(
-      "SELECT id, faucet FROM ledger_accounts WHERE id IN (?, ?) ORDER BY id FOR UPDATE",
-      [input.from, input.to].sort(),
-    );
-    return new Map(rows.map((r) => [String(r.id), { faucet: !!r.faucet }]));
-  };
+  const lockAccounts = () => lockLedgerAccounts(conn, input.from, input.to);
   let accounts = await lockAccounts();
   const absent = [input.from, input.to].filter((a) => a.startsWith("mem:") && !accounts.has(a));
   if (absent.length) {
@@ -1233,6 +1229,9 @@ export function refusalForMember(
  *
  * A rolled-back transaction moved nothing, so retrying is safe and honest;
  * giving up after three keeps a pathological case from hiding as latency.
+ * Which errors count as a lost race is `lostConcurrencyRace`'s decision
+ * (server/db/concurrency.ts). It was two codes spelled out here until MariaDB
+ * 11.8's snapshot isolation added a third that nothing retried.
  */
 export async function postTransfer(
   pool: Pool,
@@ -1255,13 +1254,49 @@ export async function postTransfer(
       return result;
     } catch (e: any) {
       try { await conn.rollback(); } catch { /* already rolled back */ }
-      const retryable = e?.code === "ER_LOCK_DEADLOCK" || e?.code === "ER_LOCK_WAIT_TIMEOUT";
-      if (!retryable || attempt >= 3) throw e;
+      if (!lostConcurrencyRace(e) || attempt >= 3) throw e;
       await new Promise((r) => setTimeout(r, 25 * attempt + Math.floor(Math.random() * 25)));
     } finally {
       conn.release();
     }
   }
+}
+
+/**
+ * The two account rows a single-leg post locks, in `id` order, on the
+ * caller's connection. `postTransferOn` takes exactly this lock first.
+ *
+ * EXPORTED FOR A CALLER THAT MUST READ BEFORE IT POSTS. On MariaDB 11.8 and
+ * later (`innodb_snapshot_isolation` ON) a transaction's first PLAIN read
+ * fixes a read view, and a later lock or write on a row somebody committed
+ * after that view fails with ER_CHECKREAD. A locking read does not fix the
+ * view. So a transaction that reads first and then queues here for a shared
+ * faucet row loses whenever anyone committed ahead of it, and a retry repeats
+ * the same order. Taking this lock BEFORE the first plain read means the view
+ * is fixed only once nobody else can move these rows. Re-taking it inside
+ * `postTransferOn` afterwards is free: the rows are already this
+ * transaction's.
+ *
+ * A ROW THAT DOES NOT EXIST YET STILL TAKES A LOCK. Under REPEATABLE READ the
+ * missing id's GAP is locked, so a different new member account inserted into
+ * that gap waits. Measured on MariaDB 12.3.2 on 2026-09-15 in a scratch
+ * schema: an INSERT into the gap timed out and an INSERT outside it did not,
+ * and two transactions each locking a first-time recipient beside the faucet
+ * and then creating that account, the `postTransferOn` shape, deadlocked
+ * (ER_LOCK_DEADLOCK). `postTransferOn` always took this statement, so the
+ * deadlock predates the early lock; a caller that takes it early holds the
+ * gap longer before the INSERT IGNORE, and the retry in
+ * `lostConcurrencyRace` is what heals it.
+ */
+export async function lockLedgerAccounts(
+  conn: PoolConnection,
+  a: string,
+  b: string,
+): Promise<Map<string, { faucet: boolean }>> {
+  // The statement is `lockedLedgerAccountRows` in server/repos/tokenLedger.ts.
+  const [first, second] = [a, b].sort();
+  const rows = await lockedLedgerAccountRows(conn, first, second);
+  return new Map(rows.map((r) => [String(r.id), { faucet: !!r.faucet }]));
 }
 
 // ── The pair: two legs, one transaction (S57) ────────────────────────────────
@@ -1313,8 +1348,8 @@ export async function postTransferPair(
     try {
       return await postTransferPairOnce(pool, legs, guard);
     } catch (e: any) {
-      const retryable = e?.code === "ER_LOCK_DEADLOCK" || e?.code === "ER_LOCK_WAIT_TIMEOUT";
-      if (!retryable || attempt >= 3) throw e;
+      // postTransferPairOnce has already rolled back on every throw path.
+      if (!lostConcurrencyRace(e) || attempt >= 3) throw e;
       await new Promise((r) => setTimeout(r, 25 * attempt + Math.floor(Math.random() * 25)));
     }
   }

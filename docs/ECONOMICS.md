@@ -2279,6 +2279,56 @@ purpose turned it red with `sys:redeemed is seeded by
 0183_a_member_redeems_what_they_hold.sql and is missing from the vault table`;
 restored, the file passes 42 checks and the generator is byte-identical.
 
+### 10.40 Concurrent gives failed on MariaDB 11.8 and later, and a retry could not heal it. Fixed on `wt/econ-snapshot-retry`, measured.
+
+MariaDB 11.8 turned `innodb_snapshot_isolation` on by default. Under it, a
+transaction's first PLAIN read fixes its read view, and a later locking read or
+write that reaches a row somebody committed after that view fails with
+`ER_CHECKREAD` (errno 1020, "Record has changed since last read ... try
+restarting transaction"), and the engine rolls the whole transaction back. A
+locking read does not fix the view. All three facts were measured on
+2026-09-14 against MariaDB 12.3.2 with a two-connection probe: a row inserted
+before the conflict was gone afterwards and `@@in_transaction` read 0. MySQL 8,
+which CI runs, never raises this error, so CI could not see any of it.
+
+**Two defects, one on top of the other.** Every retry site (`postTransfer`,
+`postTransferPair`, `writeGratitudeRow`, and `withDeadlockRetry` in
+`server/repos/quests.ts`) spelled out `ER_LOCK_DEADLOCK` and
+`ER_LOCK_WAIT_TIMEOUT` by hand, so none retried the new code, and a member was
+told "Your thanks could not be recorded", the sentence for a failure waiting
+cannot fix. Under that, the order was wrong. `writeGratitudeRowOnce` locked the
+giver, ran the cycle SUM (view fixed), and only then did the post queue on the
+recognition faucet's ledger row, which every giver shares, and rewrite its
+balance. Every giver behind the head of that queue found the balance moved since
+its view. A retry repeats the same order.
+
+**Measured, `server/economy.test.ts`, "lets twenty-four different members thank
+the same person at once", MariaDB 12.3.2:**
+
+| Tree | Failed of 24 | What they failed with |
+|---|---|---|
+| `wt/econ` at `bc44a3e`, unchanged | 21 | `ER_CHECKREAD`, shown as "could not be recorded" |
+| the shared retry predicate only (`d2dad79`) | 12 | `ER_CHECKREAD` after three attempts, shown as "busy" |
+| the predicate and the lock order (`f13fe95`) | 0 | the file passed 152 of 152 |
+| `f13fe95` with only the early lock disabled | 11 | `ER_CHECKREAD`, shown as "busy" |
+
+**The fix is two changes.** `lostConcurrencyRace` in `server/db/concurrency.ts`
+is now the one list of errors that mean a transaction lost a race, and all five
+sites read it, so the next engine difference is one edit. And
+`writeGratitudeRow` takes a `lockFirst` hook that runs after the giver's lock and
+before the first plain read. Both doors (`give` and `sendGratitude`) pass
+`lockLedgerAccounts` over the faucet and the recipient, the same sorted
+`FOR UPDATE` that `postTransferOn` takes, now exported and called by it. The lock
+order is unchanged (giver, then ledger accounts), only earlier, so the view is
+fixed only once nobody else can move those rows.
+
+**What this does not close.** Any other transaction that does a plain read
+before it locks a row other writers share has the same shape on MariaDB 11.8
+and later. Those are now retried, but not reordered, and none of them was
+measured here. The other 151 cases in `server/economy.test.ts`, including its
+concurrent mint races, passed on MariaDB 12.3.2. CI pins MySQL 8 and cannot see
+this class at all.
+
 ## 11. Open decisions
 
 1. **Decimals. SETTLED 2026-09-04, AND SHIPPED. This entry stated the ruling
