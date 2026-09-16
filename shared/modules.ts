@@ -824,6 +824,18 @@ export const MODULES: ModuleDef[] = [
       "redemption.tokens",
       "redemption.per_member_per_cycle",
       "redemption.expires_after_days",
+      // Ruling 23 (2026-09-15): what a redemption is worth, and what the
+      // village will pay. Every one of these is snapshotted onto the request.
+      "redemption.currencies",
+      "redemption.rate_source",
+      "redemption.rate_per_token",
+      "redemption.fee_pct",
+      "redemption.fee_fixed",
+      "redemption.min_amount",
+      "redemption.max_per_request",
+      "redemption.max_per_member_per_cycle",
+      "redemption.max_village_per_cycle",
+      "redemption.process_text",
     ],
     apiPrefixes: ["/api/redemptions", "/api/admin/redemptions"],
     legalReview: true,
