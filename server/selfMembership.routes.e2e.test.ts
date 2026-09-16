@@ -367,6 +367,36 @@ describe.skipIf(!DB_CONFIGURED)("a submitted form cannot name its own type", () 
     }
   });
 
+  it("puts a quest idea in the review queue, and a member's in their own export", async () => {
+    await forgetTheRateWindow();
+    // A visitor and a member each send an idea through the Propose a Quest form.
+    for (const [token, title] of [
+      [null, "Mend the orchard gate"],
+      [wrenToken, "Clear the lower swale"],
+    ] as const) {
+      const sent = await call("POST", "/api/forms/submit", {
+        token,
+        body: {
+          type: "quest-proposal",
+          data: { name: "A Stranger", email: "idea@example.test", title, whatYouWantToDo: `${title}, with whoever turns up.` },
+        },
+      });
+      expect(sent.status, JSON.stringify(sent.json)).toBe(200);
+    }
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL reading back what the built server wrote to the S5 scratch schema
+      "SELECT title, proposed_by FROM quest_proposals WHERE title IN (?, ?) ORDER BY title",
+      ["Clear the lower swale", "Mend the orchard gate"],
+    );
+    expect(rows.map((r) => [r.title, r.proposed_by])).toEqual([
+      ["Clear the lower swale", wrenId],
+      ["Mend the orchard gate", null],
+    ]);
+
+    const exported = await call("GET", "/api/profile/export", { token: wrenToken });
+    expect(exported.status, JSON.stringify(exported.json)).toBe(200);
+    expect((exported.json?.questIdeas ?? []).map((i: any) => i.title)).toEqual(["Clear the lower swale"]);
+  });
+
   it("refuses a type nobody built a form for, in a sentence a person can read", async () => {
     await forgetTheRateWindow();
     const made = await call("POST", "/api/forms/submit", {

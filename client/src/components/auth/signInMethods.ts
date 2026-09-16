@@ -18,18 +18,24 @@
 export interface SignInMethods {
   password: boolean;
   google: boolean;
+  /** Whether making an account here needs an invitation link. */
+  inviteOnly: boolean;
 }
 
 let cached: SignInMethods | null = null;
 let inFlight: Promise<SignInMethods> | null = null;
 
 /**
- * A failure answers "password only".
+ * A failure answers "password only", and "no invitation needed".
  *
  * That is the safe direction: the password form is always rendered by the page
  * itself, so a village that really does have Google loses a button until the
  * next load, and a village that does not gets what it should. The opposite
  * default would put a broken button in front of every member during any blip.
+ *
+ * The invitation answer fails the same way for the same reason. The sign-up
+ * form is drawn, and a village that joins by invitation refuses it with its own
+ * sentence, so nobody meets a wall that the server itself would not put up.
  */
 export function fetchSignInMethods(): Promise<SignInMethods> {
   if (cached) return Promise.resolve(cached);
@@ -37,10 +43,10 @@ export function fetchSignInMethods(): Promise<SignInMethods> {
   inFlight = fetch("/api/auth/methods")
     .then((r) => (r.ok ? r.json() : { password: true, google: false }))
     .then((data: any) => {
-      cached = { password: data?.password !== false, google: data?.google === true };
+      cached = { password: data?.password !== false, google: data?.google === true, inviteOnly: data?.inviteOnly === true };
       return cached;
     })
-    .catch(() => ({ password: true, google: false }) as SignInMethods)
+    .catch(() => ({ password: true, google: false, inviteOnly: false }) as SignInMethods)
     .finally(() => {
       inFlight = null;
     });

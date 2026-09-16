@@ -94,6 +94,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/resident": "Resident journey",
   "/prosperity": "Prosperity journey",
   "/love-letter": "Love letter",
+  "/request-membership": "Ask to join",
   "/circles": "Circles",
   "/quests": "Quests",
   "/propose-quest": "Propose a quest",
@@ -273,6 +274,7 @@ const FirstWalk = lazyPage(() => import("./pages/FirstWalk"));
 const Forum = lazyPage(() => import("./pages/Forum"));
 const Messages = lazyPage(() => import("./pages/Messages"));
 const Introductions = lazyPage(() => import("./pages/Introductions"));
+const RequestMembership = lazyPage(() => import("./pages/RequestMembership"));
 const Feed = lazyPage(() => import("./pages/Feed"));
 const Stay = lazyPage(() => import("./pages/Stay"));
 const Wallet = lazyPage(() => import("./pages/Wallet"));
@@ -398,6 +400,7 @@ function Router() {
       <Route path="/profile/:handle" component={PublicProfile} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
+      <Route path="/request-membership" component={RequestMembership} />
       <Route path="/set-password" component={SetPassword} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/game-mechanics" component={GameMechanics} />

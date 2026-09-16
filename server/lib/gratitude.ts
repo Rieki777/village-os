@@ -15,7 +15,7 @@ import { boolVar, numberVar } from "./variables";
 import { parseCycleId } from "./gratitude-cycles";
 import { isExampleUser } from "./examples";
 import { issuanceRefusal } from "./gameStart";
-import { PLATFORM_TOKEN, memberAccount, postTransferOn, RECOGNITION_FAUCET } from "./ledger";
+import { PLATFORM_TOKEN, lockLedgerAccounts, memberAccount, postTransferOn, RECOGNITION_FAUCET } from "./ledger";
 import { allowanceFor, writeGratitudeRow, shareCapFor, fullSendsIn, recognitionName, toLedgerUnits, type Allowance } from "./economy";
 import { userIdForHandle } from "./profile";
 import type { GratitudeLogRepo, GratitudeEntry } from "../repos/gratitude";
@@ -443,6 +443,11 @@ export async function sendGratitude(deps: GratitudeDeps, input: SendInput): Prom
       });
       if (!res.ok) return { ok: false, error: res.error ?? "ledger refused the credit", status: 500 };
       return { ok: true, duplicate: res.duplicate, balance: res.toBalance };
+    },
+    // The two rows the post above writes, locked before the first plain read,
+    // for the MariaDB snapshot-isolation reason in `writeGratitudeRowOnce`.
+    async (conn) => {
+      await lockLedgerAccounts(conn, RECOGNITION_FAUCET, memberAccount(recipient.id));
     },
   );
 

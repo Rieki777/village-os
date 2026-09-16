@@ -63,7 +63,7 @@ describe("the confirmation token", () => {
     for (const other of [
       encodeToken(SECRET, "user-1", "a@example.test", 0),
       makeHandoffToken(SECRET, "user-1", 0, T0),
-      makeOAuthState(SECRET, "/profile", T0, "delete-account"),
+      makeOAuthState(SECRET, "/profile", T0, { confirm: "delete-account" }),
       "",
       "not.a.token",
     ]) {
@@ -282,7 +282,7 @@ describe("the gate both destructive routes call", () => {
 
 describe("the pieces around the gate", () => {
   it("OAuth state carries the action and still refuses an edit", () => {
-    const state = makeOAuthState(SECRET, "/profile", T0, "delete-account");
+    const state = makeOAuthState(SECRET, "/profile", T0, { confirm: "delete-account" });
     expect(readOAuthState(SECRET, state, T0)).toMatchObject({ next: "/profile", confirm: "delete-account" });
     expect(readOAuthState(SECRET, makeOAuthState(SECRET, "/profile", T0), T0)?.confirm).toBeNull();
     const [payload, sig] = state.split(".");

@@ -159,6 +159,25 @@ describe("OAuth state is the login-CSRF token", () => {
     expect(readOAuthState(SECRET, `${payload}.${sig}`)?.next).toBeNull();
   });
 
+  it("carries an invitation's id, and a caller cannot write one in", () => {
+    const id = "inv-1726000000000-abc123";
+    expect(readOAuthState(SECRET, makeOAuthState(SECRET, "/profile", Date.now(), { invite: id }))?.invite).toBe(id);
+    expect(readOAuthState(SECRET, makeOAuthState(SECRET, "/profile"))?.invite).toBeNull();
+
+    // Writing the id into a state this server signed without one breaks the signature.
+    const state = makeOAuthState(SECRET, "/profile");
+    const [payload, sig] = state.split(".");
+    const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8"));
+    decoded.invite = id;
+    expect(readOAuthState(SECRET, state)).not.toBeNull(); // positive control
+    expect(readOAuthState(SECRET, `${Buffer.from(JSON.stringify(decoded)).toString("base64url")}.${sig}`)).toBeNull();
+  });
+
+  it("keeps only an id in the shape the village mints, so a token handed in is dropped", () => {
+    const token = "A".repeat(43);
+    expect(readOAuthState(SECRET, makeOAuthState(SECRET, null, Date.now(), token))?.invite).toBeNull();
+  });
+
   it("puts the nonce on the authorization URL, where Google binds it into the id_token", () => {
     const url = new URL(googleAuthUrl({ clientId: "cid", clientSecret: "s", redirectUri: "https://v/cb" }, "st", "nn"));
     expect(url.searchParams.get("nonce")).toBe("nn");

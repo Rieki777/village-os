@@ -112,7 +112,11 @@ describe.skipIf(!configured)("the economy snapshot of a live village", () => {
   const MEMBER = "u-rd";
 
   beforeAll(async () => {
-    db = await provisionTestDb();
+    // `inviteOnly: true` keeps game_variables to the rows this suite writes. The
+    // harness otherwise stores `membership.invite_only` for every scratch village
+    // (server/db/testDb.ts), and the row counts below read that table. Nothing here
+    // makes an account through the register route, so the closed door costs nothing.
+    db = await provisionTestDb({ inviteOnly: true });
     pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await loadTokenRegistry(pool);
     // Registers `village-voice` at VOICE_DECIMALS and writes the default rules.
@@ -386,6 +390,27 @@ describe.skipIf(!configured)("the economy snapshot of a live village", () => {
     // No faucet was reported missing: every account the ledger holds is in the
     // snapshot, empty rows and all.
     expect(result.flags.filter((f) => f.code === "econ_faucet_account_missing")).toEqual([]);
+
+    // The invitation door is a variable this preview carries and never a number
+    // it reads. The same village with `membership.invite_only` flipped runs the
+    // same cycle to the same balances and the same memo. Proven by running it,
+    // because a search of the model's source for the key proves nothing.
+    expect(economy.variables["membership.invite_only"], "the reader carries the flag at all").toBeDefined();
+    const flippedVariables = {
+      ...economy.variables,
+      "membership.invite_only": economy.variables["membership.invite_only"] === "true" ? "false" : "true",
+    };
+    const flipped = simulate(
+      {
+        snapshot: snapshotAround({ ...economy, variables: flippedVariables }, MEMBER),
+        changes: [],
+        cycles: 1,
+        seed: 20260903,
+      },
+      [economicsModel()],
+    );
+    expect(flipped.proposed[0].state.balances).toEqual(final.balances);
+    expect(readEconomicsMemo(flipped.proposed[0].state)).toEqual(memo);
   });
 });
 
@@ -398,7 +423,7 @@ describe.skipIf(!configured)("a rule written below its token's own resolution", 
   let pool: mysql.Pool;
 
   beforeAll(async () => {
-    db = await provisionTestDb();
+    db = await provisionTestDb({ inviteOnly: true });
     pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await loadTokenRegistry(pool);
     await seedEconomy(pool, VILLAGE);
@@ -515,7 +540,7 @@ describe.skipIf(!configured)("the seed fallback, and saying it is a seed", () =>
   let migratedSlugs: string[] = [];
 
   beforeAll(async () => {
-    db = await provisionTestDb();
+    db = await provisionTestDb({ inviteOnly: true });
     pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     // What the migrations alone put in the registry, before any boot code runs.
     const [rows] = await pool.query<any[]>("SELECT `slug` FROM `tokens` ORDER BY `slug`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
@@ -650,7 +675,7 @@ describe.skipIf(!configured)("the seed fallback, and saying it is a seed", () =>
     // migrations plus `ensureVoiceToken` produce. Neither is exported, so the
     // only honest check is to run the real thing and compare. This is the test
     // that fails the day somebody retunes the seed and forgets the mirror.
-    const fresh = await provisionTestDb();
+    const fresh = await provisionTestDb({ inviteOnly: true });
     const other = mysql.createPool({ uri: fresh.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     try {
       await loadTokenRegistry(other);

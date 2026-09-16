@@ -103,13 +103,27 @@ member-facing reads. Everything else that moves this module's data sits outside 
 
 - `GET /api/game/progression` (`server/index.ts`). Requires a bearer token; 401 `auth_required` otherwise.
   Serves `stage` (as played, not as configured), `stageIndex`, `consentedQuests`, `capabilities` (held),
-  `capabilityCatalogue` (all of them, with the rung that opens each), `roles` (id and name), `history` (this
-  member's stage events, newest first) and `firsts`.
+  `capabilityCatalogue` (all of them, with the rung that opens each, on every power the village entrusts
+  the classes it `suits` and whether it is `recommended` to this member, and the member's own `hand` on a power
+  while one is up), `roles` (id and name), `history` (this member's stage events, newest first) and `firsts`.
 - `GET /api/roles` (`server/index.ts`). No auth required, no module gate. Serves the village's SHAPE to
   anyone: role id, name, description, `capabilities`, `minStage`, `circleId`, `seats`, `holderCount`,
   `isExample`. It answers with a **bare array**, not an object; reading `.roles` off it yields `undefined`,
   which `client/src/pages/Admin.tsx` carries a comment about because it happened. The `holders` array is
   empty unless the caller is an admin or holds `map.viewPeople`, so structure is public and people are not.
+
+**A raised hand for a power** (`server/routes/powerHands.ts`, rules in `shared/powerHands.ts`), outside any
+declared progression prefix.
+
+- `POST /api/powers/:key/raise-hand` with an optional `note`. Needs a bearer token (401 `auth_required`) and allows
+  a member ten hands in ten minutes (429 `too_many_hands`), because each one rings every founder. Rebuilds the
+  member's catalogue the way `/api/game/progression` does, and files a `power-application` row in `submissions`
+  only while the power is `recommended` to them. Otherwise 404 `power_not_found`, or 409 `already_held`,
+  `hand_already_up` (whose body names the hand that is up) or `not_recommended`, in that order, with 503
+  `try_again` in place of `not_recommended` when the village's map could not be read. The row carries the
+  power's key, its label and the member's classes it suits. It records an admin-audience event and rings the
+  founders (`notifyAdmins`, type `submission`), as a hand for a seat does, and when the row moves the member's
+  notice names the power (`server/lib/submissionNotices.ts`). No route takes a hand down; Mechanics says why.
 
 **Reads that carry this module's data under another prefix.** `GET /api/game/config` serves the ladder
 through `servedLadder` to anonymous callers. `GET /api/game/me` serves `stage`, `stages`,
@@ -141,6 +155,11 @@ prefix.
   CREATES a `roles` row, with the capabilities and the `min_stage` an AI assistant proposed, through
   `rolesRepo.insert`. It runs the same `applyEscalationChoices` confirmation as the route above. It does not
   call `onRealItemPublished`, so a real role created this way leaves the example roles standing.
+- `GET /api/admin/power-affinity` and `PUT /api/admin/power-affinity/:key` (`server/routes/powerAffinity.ts`).
+  Which classes each entrusted power suits. The read takes `isAdmin`. The write takes `story.tell`, the gate
+  the class words already use, and saves one power per request: `classes` is that power's whole list, empty
+  for none, or `null` to follow the platform again, and a body with no `classes` is refused. A suggestion
+  permits nothing, so neither route can hand anybody a power.
 - `GET /api/admin/members/:id/capabilities` (`server/index.ts`). A read, under an admin prefix. The
   explainer: every capability key with the step that decided it, read out of `capabilityDecision` rather
   than re-implemented.
@@ -179,7 +198,21 @@ the whole frozen roll was notified when the ballot opened, the document named th
   `GAME_CONFIG`.
 - `client/src/components/profile/PowersMap.tsx`. The capability catalogue as a map rather than an
   inventory: open, opens at the next rung, opens further along, appointment only, and closed-at-or-below
-  your own rung. Its groups are derived from `held` and `opens`, never from a hand-kept table.
+  your own rung. Its groups are derived from `held` and `opens`, never from a hand-kept table. An entrusted
+  row prints the classes the power `suits`, and "Suits your ..." only on a row the server marked
+  `recommended`, which also leads the entrusted list. A row put to the member, or one carrying the member's
+  `hand`, holds `client/src/components/profile/PowerHand.tsx`, which raises a hand and says where one stands. It
+  keeps the server's answer through a remount, so "Hide what is closed" never brings the button back.
+- `client/src/pages/Characters.tsx`. Each class card lists "Powers it suits" from
+  `GET /api/archetypes/:key/paths` (`powersForClass`, `server/lib/powerAffinity.ts`), leaving out a power whose
+  module is off.
+- `client/src/components/admin/PowerAffinityPanel.tsx`, inside the character classes panel. The village's own
+  map: entrusted powers down the side, classes across the top, one power saved per tick through
+  `GET /api/admin/power-affinity` (admin) and `PUT /api/admin/power-affinity/:key` (`story.tell`, the gate the
+  class words already use). `classes: null` hands a power back to the platform's suggestion.
+- `client/src/components/admin/PowerHandNote.tsx`, in the submissions inbox in `client/src/pages/Admin.tsx`. A
+  `power-application` row reads as one sentence naming the power and the classes it suits, and says that saying
+  yes grants nothing until somebody seats the member on a role that carries the power.
 - `client/src/components/ProfileJourney.tsx`. Held-capability chips, the three `firsts`, and the stage
   history with what each crossing unlocked. It runs raw capability keys through `capabilityLabel` before
   printing them.
@@ -257,7 +290,8 @@ no key; the warning is for the fork that moves a rung.
 contributor in `server/routes/vouches.ts`. The `membership` rung is crossed whenever `membershipGranted` is
 set: by `PUT /api/admin/submissions/:id/status` when an accepted Love Letter names its signer (gated on
 `intake.moderate`), by the vouch routes in `server/routes/vouches.ts` when the bar is met or a steward vouches,
-and once each, at boot, by `freezeEmailMatchedMemberships` and `freezeStandingAboveTheDoor`. The
+by the inviter's `arrival` vouch in `server/lib/inviteDoor.ts` in a village whose bar is one, and once each,
+at boot, by `freezeEmailMatchedMemberships` and `freezeStandingAboveTheDoor`. The
 `training-complete` rung is crossed by `POST /api/game/journey/sync`. None of those calls `recordStageEvent`. So the crossing into `member`,
 which opens nine of the thirteen stage unlocks, writes no `stage_events` row, no pulse line and no
 notification. The member is never told, and their profile history skips the rung entirely.
@@ -279,6 +313,37 @@ resolves the registry through the same expression the deciding code uses.
 the catalogue rows whose `held` is true, by construction rather than by agreement, and the e2e suite pins
 it. The reason is a route contract: a module's API prefixes stop mounting the moment it goes off, so
 advertising its key would name a door with nothing behind it.
+
+**Which character suits which power is a suggestion, and it never permits.** Each power the village entrusts
+names the classes it suits (`shared/powerAffinity.ts`, Rye's ruling of 2026-09-09), keyed by capability and by
+archetype KEY, so a renamed class keeps every line. The platform ships a suggestion. A village's own decisions
+live in the `power-affinity` document in `app_config`, which holds only the powers it changed, so a power it
+never touched follows the platform and an empty list is a decision that the power suits nobody.
+`withPowerAffinity` (`server/lib/powerAffinity.ts`) puts `suits` on every catalogue row the village entrusts,
+and sets `recommended` on the rows put to THIS member: they stand at `contributor` or above, they play a class
+the power suits, and they do not hold it. Below the rung the class is named and nothing is claimed for the
+member. The capability gate never reads the map, and `shared/powerAffinity.test.ts` fails if
+`shared/capabilities.ts` ever reaches it, directly or through any file it imports. The proof that matters is
+behavioural: `server/powerAffinity.routes.e2e.test.ts` has the member the map suggests `story.tell` to try to
+edit the map, and she is refused. The Builder suits no power yet, by the same ruling.
+
+**A hand asks for a power, and it never grants one.** A member a power is `recommended` to can raise a hand for
+it (`server/routes/powerHands.ts`), and the hand is a `power-application` row in the same `submissions` inbox a
+hand for a seat lands in. The route rebuilds the member's catalogue for the request, so a profile loaded before
+the village changed its map cannot file a hand the map no longer puts to them. A hand is up through `new`,
+`reviewing` and `in-conversation`, and an answer, yes or no, puts it down (`shared/powerHands.ts`). A member has
+at most one hand up per power, and requests for one member and one power run one at a time. Accepting the row
+changes nothing a gate reads: the power still reaches the member through a role that carries it and a seat on
+that role, and `PowerHandNote` says so beside the status select, naming Game Roles for the seat and The Handover
+for giving a role the power. `server/powerAffinity.routes.e2e.test.ts` has the founder say yes, then reads the
+member's catalogue back with the power still closed and the hand down.
+
+A yes puts a hand down because counting it as still up kept it up for good. Nothing moves an answered row, and
+every seat has a term, so once the seat that carried the power ended, the member's profile went on promising an
+appointment and refused every new hand. No route takes a hand down, the same as for a seat: the inbox is a
+`dbCollection` whose only way to remove a row is `replaceAll`, the whole table written back from a cached
+snapshot, and a member's click must not do that to every row a founder works. A member who changes their mind
+tells the founders, who can decline or delete the row.
 
 ## Game variables
 
@@ -407,6 +472,13 @@ and `server/lib/dryRun.ts` reads the same key for its projection, quest gates re
 path reads `roleIdsFor` before it will let anybody leave.
 
 ## Sharp edges
+
+**The inbox a hand lands in is read by fewer people than can act on it.** `GET /api/admin/submissions` lists
+rows to admins only, and the Admin page is admin-only, while moving a row takes `intake.moderate`, and the bell
+for a new hand rings admins and founders (`notifyAdmins`). A member who holds `intake.moderate` can move a hand
+through the API and cannot see the inbox anywhere in the product. A hand for a seat had that shape before hands
+for powers existed, and this change keeps it. The inbox's type filter (`FORM_TYPES` in `client/src/pages/Admin.tsx`)
+lists neither `role-application` nor `power-application`, so both show only under all types.
 
 **A stage can fall, and nothing records it.** Every rung except `granted` is recomputed from live facts on
 every read, and `recordStageEvent` returns early on a backward move. Three ordinary admin acts therefore

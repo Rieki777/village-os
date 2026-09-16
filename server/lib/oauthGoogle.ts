@@ -153,11 +153,24 @@ export interface OAuthState {
   /** Bound into the id_token by Google, which is what ties the answer to this request. */
   nonce: string;
   /**
+   * The invitation this sign-in may use to make an account: its ID, never its
+   * token. `start` checks the token and writes only an invitation it found
+   * open into the SIGNED payload, so a caller cannot put an id here, and the
+   * secret half of the link never travels to Google and back.
+   */
+  invite: string | null;
+  /**
    * Set when this round trip confirms a signed-in member for one destructive
    * action (server/lib/identityConfirm.ts) and signs nobody in. Carried as a
    * plain word; the route decides whether it names a real action.
    */
   confirm: string | null;
+}
+
+/** An invitation id in the shape `server/routes/invites.ts` mints, or null. */
+function readInviteId(raw: unknown): string | null {
+  const id = typeof raw === "string" ? raw : "";
+  return /^inv-[A-Za-z0-9-]{1,60}$/.test(id) ? id : null;
 }
 
 /**
@@ -179,7 +192,13 @@ export function makeOAuthState(
   secret: string,
   next: string | null,
   nowMs: number = Date.now(),
-  confirm: string | null = null,
+  /**
+   * What this round trip is FOR beyond signing in, as ONE object rather than a
+   * growing tail of positional arguments. Two lanes took the fourth slot on the
+   * same day, the invitation and the confirmation, and a third field would have
+   * taken a fifth. Both are optional and absent means an ordinary sign-in.
+   */
+  opts: { invite?: string | null; confirm?: string | null } = {},
 ): string {
   const payload = Buffer.from(
     JSON.stringify({
@@ -187,7 +206,8 @@ export function makeOAuthState(
       next: normalizeNext(next) ?? "",
       nonce: crypto.randomBytes(16).toString("hex"),
       t: nowMs,
-      ...(confirm ? { confirm } : {}),
+      invite: readInviteId(opts.invite) ?? "",
+      ...(opts.confirm ? { confirm: opts.confirm } : {}),
     }),
   ).toString("base64url");
   return `${payload}.${signTokenPayload(secret, payload)}`;
@@ -212,6 +232,7 @@ export function readOAuthState(secret: string, state: string, nowMs: number = Da
     return {
       next: normalizeNext(decoded.next),
       nonce: decoded.nonce,
+      invite: readInviteId(decoded.invite),
       confirm: typeof decoded.confirm === "string" && decoded.confirm ? decoded.confirm : null,
     };
   } catch {

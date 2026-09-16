@@ -72,6 +72,8 @@ interface Character {
 interface Paths {
   roles: Array<{ id: string; name: string; recruiting: boolean; color: string | null }>;
   questCount: number;
+  /** The powers the village entrusts that suit this class. Absent from an older server. */
+  powers?: Array<{ key: string; label: string }>;
 }
 
 const TONES: Array<{ key: Character["tone"]; label: string; swatch: string }> = [
@@ -664,6 +666,33 @@ export default function Characters() {
                         ? "The whole quest board is open to you."
                         : `${paths.questCount} quests on the land welcome these hands.`}
                     </p>
+                  ) : null}
+
+                  {/*
+                    WHAT THIS CLASS IS SUITED TO: the powers the village entrusts,
+                    as its own map ties them to this class
+                    (shared/powerAffinity.ts). A suggestion like everything else
+                    on this card, and it opens nothing. The section is absent
+                    for a class that suits no power, which is The Builder today
+                    by ruling, so the card never prints a heading over nothing.
+
+                    Frozen inks on this frozen `bg-white` card, for the reason
+                    the cast failure line gives: no new `text-gray-*` anywhere.
+                  */}
+                  {paths?.powers?.length ? (
+                    <>
+                      <h3 className="mt-6 text-sm font-semibold uppercase tracking-wide text-teal-deep">
+                        Powers it suits
+                      </h3>
+                      <p className="mt-1 text-sm text-sage">The village entrusts these, and they suit this class.</p>
+                      <ul className="mt-2 space-y-1.5">
+                        {paths.powers.map((p) => (
+                          <li key={p.key} className="rounded-lg border border-sage/30 px-3 py-2 text-sm text-teal-deep">
+                            {p.label}
+                          </li>
+                        ))}
+                      </ul>
+                    </>
                   ) : null}
                 </>
               ) : null}
