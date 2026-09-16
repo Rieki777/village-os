@@ -152,6 +152,19 @@ export interface OAuthState {
   next: string | null;
   /** Bound into the id_token by Google, which is what ties the answer to this request. */
   nonce: string;
+  /**
+   * The invitation this sign-in may use to make an account: its ID, never its
+   * token. `start` checks the token and writes only an invitation it found
+   * open into the SIGNED payload, so a caller cannot put an id here, and the
+   * secret half of the link never travels to Google and back.
+   */
+  invite: string | null;
+}
+
+/** An invitation id in the shape `server/routes/invites.ts` mints, or null. */
+function readInviteId(raw: unknown): string | null {
+  const id = typeof raw === "string" ? raw : "";
+  return /^inv-[A-Za-z0-9-]{1,60}$/.test(id) ? id : null;
 }
 
 /**
@@ -169,13 +182,19 @@ export interface OAuthState {
  * id_token Google returned answers THIS authorization request, and an id_token
  * is minted by Google against a nonce it was given, not by the holder of one.
  */
-export function makeOAuthState(secret: string, next: string | null, nowMs: number = Date.now()): string {
+export function makeOAuthState(
+  secret: string,
+  next: string | null,
+  nowMs: number = Date.now(),
+  invite: string | null = null,
+): string {
   const payload = Buffer.from(
     JSON.stringify({
       purpose: "oauth-state",
       next: normalizeNext(next) ?? "",
       nonce: crypto.randomBytes(16).toString("hex"),
       t: nowMs,
+      invite: readInviteId(invite) ?? "",
     }),
   ).toString("base64url");
   return `${payload}.${signTokenPayload(secret, payload)}`;
@@ -197,7 +216,7 @@ export function readOAuthState(secret: string, state: string, nowMs: number = Da
     if (typeof decoded.t !== "number" || nowMs - decoded.t > OAUTH_STATE_TTL_MS) return null;
     // Re-normalised on the way out. A signature proves this server wrote the
     // value; it does not prove the value was safe when it was written.
-    return { next: normalizeNext(decoded.next), nonce: decoded.nonce };
+    return { next: normalizeNext(decoded.next), nonce: decoded.nonce, invite: readInviteId(decoded.invite) };
   } catch {
     return null;
   }

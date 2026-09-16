@@ -189,6 +189,15 @@ export default function Login() {
                 Create Account
                 <ArrowRight className="w-5 h-5" />
               </motion.a>
+              {/* The second way to ask to join (Rye, 2026-09-09): in a village
+                  that joins by invitation, somebody here with no account and
+                  no link is exactly who needs it. */}
+              <p className="mt-4 text-sm text-stone-600">
+                No invitation yet?{" "}
+                <a href="/request-membership" className="font-semibold text-teal-deep underline underline-offset-2">
+                  Ask to join
+                </a>
+              </p>
             </div>
           </motion.div>
         </div>

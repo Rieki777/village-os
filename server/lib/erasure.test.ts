@@ -50,6 +50,7 @@ import { erasureRecord, noteStepDone, unfinishedErasures } from "../repos/member
 import { saveMemberNeed } from "./needs";
 import * as portraits from "../repos/characterPortraits";
 import { charactersForMember } from "../repos/playerCharacters";
+import { landPublicSubmission } from "./publicForms";
 
 const configured = testDbConfigured();
 const VILLAGE = "local";
@@ -334,6 +335,39 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
     expect(twice!.attempts).toBe(2);
     expect(await q("SELECT `id` FROM `skill_tags` WHERE `user_id` = ?", [id])).toHaveLength(0);
     expect((await usersRepo(pool).byId(id))!.name).toBe("A departed member");
+  });
+
+  it("takes the member's name off a quest idea they sent through the form, and keeps the idea", async () => {
+    // The idea waits in /review, and its words are part of the village record,
+    // the rule the submission it came from already follows. Its author is not.
+    const id = "er-idea-1";
+    const target = await seedMember(id);
+    const idea = {
+      id: `sub-idea-${id}`,
+      type: "quest-proposal",
+      userId: id,
+      userName: "Wren Halloway",
+      data: {
+        name: "Wren Halloway",
+        email: "wren@examples.invalid",
+        title: "Mend the long bench",
+        whatYouWantToDo: "Sand and oil the bench by the pond.",
+      },
+    };
+    await landPublicSubmission({ insert: async (e) => void submissions.push(e) }, pool, idea);
+    const ref = `submission:${idea.id}`;
+    expect(await q("SELECT `proposed_by` FROM `quest_proposals` WHERE `source_ref` = ?", [ref])).toEqual([
+      { proposed_by: id },
+    ]);
+
+    await anonymizeMember(pool, target, null, deps());
+
+    expect(await q("SELECT `title`, `proposed_by` FROM `quest_proposals` WHERE `source_ref` = ?", [ref])).toEqual([
+      { title: "Mend the long bench", proposed_by: null },
+    ]);
+    expect((await erasureRecord(pool, id))!.stepsDone).toContain("quest-proposals");
+    // The submission it came from is scrubbed by its own step, as it always was.
+    expect(submissions.find((s) => s.id === idea.id).data.email).toBe("[removed at member's request]");
   });
 
   it("records a break AFTER the tombstone, where the account is already gone", async () => {

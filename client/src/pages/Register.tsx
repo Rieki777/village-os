@@ -1,9 +1,10 @@
 import Layout from "@/components/Layout";
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
+import { fetchSignInMethods } from "@/components/auth/signInMethods";
 import { useAuth } from "@/contexts/AuthContext";
 import { motion } from "framer-motion";
-import { Heart, ArrowRight, Mail, Lock, User, CheckCircle2, Circle } from "lucide-react";
-import { useState } from "react";
+import { Heart, ArrowRight, Mail, Lock, User, CheckCircle2, Circle, CalendarDays } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useVillageName } from "@/hooks/useVillageName";
 
@@ -55,6 +56,70 @@ const paths = (villageName: string) => [
   },
 ];
 
+/** What the server said about the invitation link this page was opened with. */
+interface InviteCheck {
+  valid: boolean;
+  invitedBy?: string | null;
+  daysLeft?: number;
+  error?: string;
+}
+
+/** The `?invite=` token, read once. Empty when the page was opened without one. */
+function inviteFromAddress(): string {
+  try {
+    return new URLSearchParams(window.location.search).get("invite")?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * JOINING BY INVITATION, where the form would be (Rye, 2026-09-09).
+ *
+ * Somebody with no working link is told how people arrive here, and given the
+ * two ways forward the ruling names: ask to join, and come to a community call
+ * or an event. It sits on the same fixed light card as the form it stands in
+ * for, with the page's own measured inks, so it reads the same in either theme.
+ */
+function InvitationNeeded({ villageName, reason }: { villageName: string; reason?: string }) {
+  return (
+    <section aria-labelledby="invitation-needed" className="bg-white rounded-2xl shadow-lg p-8 space-y-5">
+      {reason && (
+        <p role="alert" className="p-4 bg-amber/10 border border-amber/30 rounded-lg text-amber-ink text-sm">
+          {reason}
+        </p>
+      )}
+      <h2 id="invitation-needed" className="text-2xl font-display font-bold text-teal-deep">
+        Joining {villageName} is by invitation
+      </h2>
+      <p className="text-stone-600">
+        Everybody here arrives because somebody already in the village knows them. If a member has sent you an
+        invitation link, open that link to make your account.
+      </p>
+      <p className="text-stone-600">
+        No link yet? Ask to join, and someone from the village will be in touch. Coming to a community call or an
+        event is the best way to get to know us.
+      </p>
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <a
+          href="/request-membership"
+          className="inline-flex min-h-11 items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-teal-deep to-teal-deep/80 text-white font-semibold rounded-lg hover:shadow-lg transition-shadow"
+        >
+          Ask to join
+          <ArrowRight className="w-5 h-5" aria-hidden="true" />
+        </a>
+        <a
+          href="/events"
+          className="inline-flex min-h-11 items-center justify-center gap-2 px-6 py-3 border-2 border-amber-ink text-amber-ink font-semibold rounded-lg hover:bg-amber-ink/5 transition-colors"
+        >
+          <CalendarDays className="w-5 h-5" aria-hidden="true" />
+          See calls and events
+        </a>
+      </div>
+    </section>
+  );
+}
+
 export default function Register() {
   const villageName = useVillageName();
   const PATHS = paths(villageName);
@@ -67,6 +132,53 @@ export default function Register() {
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  /*
+   * THE INVITATION (Rye, 2026-09-09: "all members are by invitation").
+   *
+   * The form waits for the village's answer, because a form that appears and
+   * then gives way to "joining is by invitation" is the page contradicting
+   * itself. A failed read answers open (signInMethods.ts says why), so a blip
+   * never costs somebody the form, and the server refuses an uninvited account
+   * with its own sentence either way.
+   */
+  const [invite] = useState(inviteFromAddress);
+  const [inviteOnly, setInviteOnly] = useState<boolean | null>(null);
+  const [check, setCheck] = useState<InviteCheck | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void fetchSignInMethods().then((m) => {
+      if (alive) setInviteOnly(m.inviteOnly);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!invite) return;
+    let alive = true;
+    fetch(`/api/invites/check?token=${encodeURIComponent(invite)}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => {
+        if (alive) setCheck(d as InviteCheck);
+      })
+      .catch(() => {
+        // A link that could not be checked is not a link that was refused. The
+        // form is offered, and the server says what is wrong if anything is.
+        if (alive) setCheck({ valid: true });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [invite]);
+
+  /** Still asking, so the page draws neither the form nor the invitation panel. */
+  const deciding = inviteOnly === null || (invite !== "" && check === null);
+  /** The link that opened this page works, as far as the server has said. */
+  const goodLink = invite !== "" && check?.valid === true;
+  /** Nobody makes an account here without a link, and this page has no working one. */
+  const heldAtTheDoor = !deciding && inviteOnly === true && !goodLink;
 
   function togglePath(pathId: string) {
     setSelectedPaths((prev) =>
@@ -89,7 +201,8 @@ export default function Register() {
 
     setLoading(true);
     try {
-      await register(name, email, password, selectedPaths);
+      if (goodLink) await register(name, email, password, selectedPaths, invite);
+      else await register(name, email, password, selectedPaths);
       // Straight into the class select, skippable. Somebody who has just
       // signed up is the one moment they are most willing to say who they
       // want to be, and the one moment a form they cannot leave would be
@@ -119,7 +232,26 @@ export default function Register() {
               <p className="text-gray-600">Begin your village journey and choose your path</p>
             </div>
 
+            {deciding ? (
+              <p aria-live="polite" className="text-center text-stone-600">
+                Checking how to join...
+              </p>
+            ) : heldAtTheDoor ? (
+              <InvitationNeeded villageName={villageName} reason={invite ? check?.error : undefined} />
+            ) : (
             <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-lg p-8 space-y-8">
+              {goodLink && (
+                <p className="p-4 bg-teal-deep/5 border border-teal-deep/20 rounded-lg text-teal-deep text-sm">
+                  {check?.invitedBy ? `${check.invitedBy} invited you. ` : "You were invited. "}
+                  This link makes one account, and it works for {check?.daysLeft ?? 0} more{" "}
+                  {check?.daysLeft === 1 ? "day" : "days"}.
+                </p>
+              )}
+              {invite !== "" && check?.valid === false && check.error && (
+                <p className="p-4 bg-amber/10 border border-amber/30 rounded-lg text-amber-ink text-sm">
+                  {check.error} This village is open, so you can still make an account here.
+                </p>
+              )}
               {/*
                 role="alert", the same as Login.tsx's matching box. All three
                 things that land here are refusals of a submit the member just
@@ -288,9 +420,17 @@ export default function Register() {
                 REGISTER page is registering. A returning member who uses this
                 door instead of Login sees their own party once, which costs
                 them a click and tells them nothing untrue.
+
+                The invitation rides along when the link works, so an account
+                made by Google carries the same vouch as one made by the form.
               */}
-              <GoogleSignInButton label="Continue with Google" next="/profile/characters?first=1" />
+              <GoogleSignInButton
+                label="Continue with Google"
+                next="/profile/characters?first=1"
+                invite={goodLink ? invite : undefined}
+              />
             </form>
+            )}
 
             <div className="mt-8 text-center">
               <p className="text-gray-600 mb-4">Already have an account?</p>

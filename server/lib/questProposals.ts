@@ -34,7 +34,7 @@
  * becoming a second write path into the domain.
  */
 import { createHash, randomUUID } from "crypto";
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { parseRewardRange } from "../../shared/questRewards";
 import type { QuestRecord, QuestsRepo } from "../repos/quests";
 import { recordEvent } from "./events";
@@ -232,7 +232,9 @@ export type ProposeQuestResult =
   | { ok: true; id: string; outcome: "stored" | "duplicate" }
   | { ok: false; error: string };
 
-export async function proposeQuest(pool: Pool, input: ProposeQuestInput): Promise<ProposeQuestResult> {
+// A connection as well as a pool, so the public form can count its allowance and insert on the one
+// connection holding its lock (`withIdeaLock` in server/repos/questProposals.ts).
+export async function proposeQuest(pool: Pool | PoolConnection, input: ProposeQuestInput): Promise<ProposeQuestResult> {
   const title = str(input.prose?.title);
   if (!title) return { ok: false, error: "A proposed quest needs a title." };
   if (containsEmail(input.prose) || containsEmail(input.rationale ?? null) || containsEmail(input.quote ?? null)) {

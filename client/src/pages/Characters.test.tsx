@@ -149,6 +149,38 @@ describe("Characters: a failure is not an emptiness", () => {
   });
 });
 
+describe("Characters: the powers a class suits", () => {
+  it("lists the powers the server ties to the class, under their own heading", async () => {
+    routing(async (path, init) =>
+      path.includes("/paths")
+        ? ok({ roles: [], questCount: 4, powers: [{ key: "library.keep", label: "Keep the shared library and its loans" }] })
+        : happy(path, init),
+    );
+    const { container } = render(<Characters />);
+
+    await waitFor(() => expect(container.textContent).toContain("Keep the shared library and its loans"));
+    expect(screen.getByRole("heading", { name: "Powers it suits" })).toBeTruthy();
+  });
+
+  it("prints no heading over nothing for a class that suits no power", async () => {
+    routing(async (path, init) => (path.includes("/paths") ? ok({ roles: [], questCount: 4, powers: [] }) : happy(path, init)));
+    const { container } = render(<Characters />);
+
+    // Waiting on the quest line proves the paths read LANDED, so the absence
+    // below is about the list and never about a read still in flight.
+    await waitFor(() => expect(container.textContent).toContain("4 quests on the land welcome these hands."));
+    expect(screen.queryByRole("heading", { name: "Powers it suits" })).toBeNull();
+  });
+
+  it("prints no heading for a server that predates the map", async () => {
+    routing(happy);
+    const { container } = render(<Characters />);
+
+    await waitFor(() => expect(container.textContent).toContain("4 quests on the land welcome these hands."));
+    expect(screen.queryByRole("heading", { name: "Powers it suits" })).toBeNull();
+  });
+});
+
 describe("Characters: the two toggles say what is selected", () => {
   it("puts both groups in a labelled radiogroup with a checked radio", async () => {
     routing(happy);

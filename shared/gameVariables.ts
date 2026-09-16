@@ -150,6 +150,23 @@ export const VARIABLES: VariableDef[] = [
     max: 20,
   },
   {
+    key: "membership.invite_only",
+    category: "Membership",
+    label: "Joining is by invitation",
+    /*
+     * Rye's ruling, 2026-09-09: "all members are by invitation". ON by default
+     * because that is the ruling. A dial because thirteen forks inherit this
+     * file, and a village that already welcomes anybody through its door keeps
+     * a way to say so. STRUCTURAL for the reason the bar above is: who may make
+     * an account here is not a routine change.
+     */
+    criticality: "structural",
+    description:
+      "When on, an account can only be made with an invitation link a member sent, by email sign-up or by Google. Anybody else can still look around, and is asked to send a request to join, which lands in the admin queue. When off, anybody can make an account, and an invitation link still counts as the inviter's vouch.",
+    type: "boolean",
+    default: "true",
+  },
+  {
     key: "arrival.greeter_role",
     category: "Membership",
     label: "The seat that greets a new arrival",

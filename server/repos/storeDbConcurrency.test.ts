@@ -28,7 +28,14 @@
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
-import { dbCollection, snapshotVersionOf, StaleSnapshotError, type CollectionSpec } from "./store-db";
+import { circlesOnCycles, loopedCirclesRefusal } from "../../shared/circleView";
+import {
+  dbCollection,
+  MergeRefusedError,
+  snapshotVersionOf,
+  StaleSnapshotError,
+  type CollectionSpec,
+} from "./store-db";
 
 const configured = testDbConfigured();
 if (!configured) {
@@ -347,5 +354,140 @@ describe.skipIf(!configured)("the snapshot stamp itself", () => {
     await repo.replaceAll(seed as any);
     const [rows] = await pool.query<any[]>("SELECT id FROM tools");
     expect(rows.map((r) => r.id)).toEqual(["seeded-only"]);
+  });
+});
+
+/**
+ * THE LOOP TWO SAVES CAN MAKE, which neither writer could have made alone.
+ *
+ * `PUT /api/admin/circles/:id` checks the parenting it is handed against the
+ * rows it read (`parentingRefusal`), and `replaceAll` then merges a stale
+ * snapshot field by field. So two stewards saving at the same moment can each
+ * be right and still leave Finance inside Business inside Finance: the merged
+ * state is one neither request could have seen, so no row-by-row check in
+ * either of them was ever going to catch it.
+ *
+ * The first test is the CONTROL. It runs the same two saves against a spec with
+ * no `mergeRefusal` and asserts the loop lands, which is what the store did
+ * before this change. Without it, the test below would pass just as happily
+ * against a hook that never ran.
+ */
+const CIRCLE_COLUMNS: CollectionSpec["columns"] = [
+  { js: "id", db: "id" },
+  { js: "name", db: "name" },
+  { js: "parentCircleId", db: "parent_circle_id" },
+  { js: "order", db: "sort_order", kind: "int" },
+];
+
+const CIRCLES_UNGUARDED: CollectionSpec = {
+  table: "circles",
+  orderBy: "`sort_order`, `id`",
+  columns: CIRCLE_COLUMNS,
+};
+
+const CIRCLES_GUARDED: CollectionSpec = {
+  ...CIRCLES_UNGUARDED,
+  mergeRefusal: (rows) => loopedCirclesRefusal(rows as any[]),
+};
+
+describe.skipIf(!configured)("a rebase that would merge a loop into the circles", () => {
+  let db: TestDb;
+  let pool: mysql.Pool;
+
+  beforeAll(async () => {
+    db = await provisionTestDb();
+    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 8 });
+  }, 300_000);
+
+  afterAll(async () => {
+    await pool?.end();
+    await db?.drop();
+  });
+
+  beforeEach(async () => {
+    await pool.query("DELETE FROM circles");
+    await pool.query("DELETE FROM collection_versions WHERE collection = 'circles'");
+    for (const [id, name] of [["finance", "Finance Circle"], ["business", "Business Council"]]) {
+      await pool.query("INSERT INTO circles (id, name, sort_order) VALUES (?,?,1)", [id, name]);
+    }
+  });
+
+  /** Where every circle sits, as the table says it, which is the only honest reading. */
+  const parents = async () => {
+    const [rows] = await pool.query<any[]>("SELECT id, parent_circle_id FROM circles ORDER BY id");
+    return Object.fromEntries(rows.map((r) => [String(r.id), r.parent_circle_id ?? null]));
+  };
+
+  /**
+   * Two stewards read the same version. B commits Business inside Finance, then
+   * A writes Finance inside Business from the snapshot that predates it.
+   */
+  const twoStewards = async (spec: CollectionSpec) => {
+    const repo = dbCollection(pool, spec);
+    await repo.load();
+    const mine = repo.all() as any[];
+    const theirs = repo.all() as any[];
+
+    theirs[theirs.findIndex((c) => c.id === "business")].parentCircleId = "finance";
+    await repo.replaceAll(theirs);
+
+    mine[mine.findIndex((c) => c.id === "finance")].parentCircleId = "business";
+    return () => repo.replaceAll(mine);
+  };
+
+  it("merges the loop when the collection says nothing, which is the defect", async () => {
+    const realWarn = console.warn;
+    console.warn = () => {};
+    try {
+      await (await twoStewards(CIRCLES_UNGUARDED))();
+    } finally {
+      console.warn = realWarn;
+    }
+    const after = await parents();
+    expect(after, "each writer's own field survived, and together they are a loop").toEqual({
+      business: "finance",
+      finance: "business",
+    });
+    const links = Object.entries(after).map(([id, parentCircleId]) => ({ id, parentCircleId }));
+    expect(circlesOnCycles(links), "and the shared rule agrees that is a loop").toEqual([
+      "business",
+      "finance",
+    ]);
+  });
+
+  it("refuses the whole write when the collection carries the containment rule", async () => {
+    const write = await twoStewards(CIRCLES_GUARDED);
+    await expect(write()).rejects.toBeInstanceOf(MergeRefusedError);
+    expect(await parents(), "nothing was written, so the earlier save stands alone").toEqual({
+      business: "finance",
+      finance: null,
+    });
+  });
+
+  it("says which circles, in words a steward can act on", async () => {
+    const write = await twoStewards(CIRCLES_GUARDED);
+    const err: any = await write().catch((e) => e);
+    expect(err).toBeInstanceOf(MergeRefusedError);
+    expect(String(err.refusal)).toContain("Business Council");
+    expect(String(err.refusal)).toContain("Finance Circle");
+    expect(String(err.table)).toBe("circles");
+  });
+
+  it("lets an ordinary rebase through, so this is not a second stale-snapshot refusal", async () => {
+    const repo = dbCollection(pool, CIRCLES_GUARDED);
+    await repo.load();
+    const mine = repo.all() as any[];
+    const theirs = repo.all() as any[];
+
+    theirs[theirs.findIndex((c) => c.id === "business")].name = "Business and Finance Council";
+    await repo.replaceAll(theirs);
+
+    mine[mine.findIndex((c) => c.id === "finance")].parentCircleId = "business";
+    await repo.replaceAll(mine);
+
+    expect(await parents(), "one steward renamed, the other nested, and both landed").toEqual({
+      business: null,
+      finance: "business",
+    });
   });
 });

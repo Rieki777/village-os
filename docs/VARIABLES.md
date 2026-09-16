@@ -22,25 +22,25 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 170 open and 35 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 171 open and 35 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 179 of them as soon as it is saved, and 26 of them at the next cycle close.
+Each dial also says WHEN a change lands. 180 of them as soon as it is saved, and 26 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-205 dials in 32 categories. 120 carry a minimum and a maximum. By type: 90 integer, 14 decimal, 17 percentage, 23 boolean, 29 choice, 32 text.
+206 dials in 32 categories. 120 carry a minimum and a maximum. By type: 90 integer, 14 decimal, 17 percentage, 24 boolean, 29 choice, 32 text.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
-| Membership | 2 | 2 | 0 |
+| Membership | 3 | 3 | 0 |
 | Gratitude | 11 | 11 | 0 |
 | Ledger | 8 | 6 | 2 |
 | The Mint | 6 | 5 | 1 |
@@ -80,6 +80,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Dial | Key | Category | Type | Default | Who may change it |
 | --- | --- | --- | --- | --- | --- |
 | Vouches that admit a member | `membership.vouches_required` | Membership | integer | `3` | the whole village |
+| Joining is by invitation | `membership.invite_only` | Membership | boolean | `true` | the whole village |
 | The seat that greets a new arrival | `arrival.greeter_role` | Membership | text | blank | the whole village |
 | Base sending allowance per cycle | `gratitude.base_budget` | Gratitude | integer | `105` | the whole village |
 | Value pool distributed at each cycle close | `gratitude.pool_per_cycle` | Gratitude | integer | `1000` | the whole village |
@@ -287,7 +288,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 
 ## Membership
 
-2 dials. 2 for the whole village.
+3 dials. 3 for the whole village.
 
 ### Vouches that admit a member
 
@@ -300,6 +301,20 @@ How many people have to say they know somebody before that person becomes a memb
 | Default | `3` |
 | Range | 0 to 20 |
 | Counted in | vouches |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
+
+### Joining is by invitation
+
+When on, an account can only be made with an invitation link a member sent, by email sign-up or by Google. Anybody else can still look around, and is asked to send a request to join, which lands in the admin queue. When off, anybody can make an account, and an invitation link still counts as the inviter's vouch.
+
+| Fact | Value |
+| --- | --- |
+| Key | `membership.invite_only` |
+| Type | boolean, on or off |
+| Default | `true` |
+| Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a structural vote, at a higher bar |

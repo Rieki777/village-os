@@ -1,5 +1,6 @@
 import { anonymizeMember } from "./lib/erasure";
 import { proposalsAboutMember } from "./lib/externalProposals";
+import { ideasProposedBy, landPublicSubmission } from "./lib/publicForms";
 // Local dev reads .env (PORT=3001 so the API doesn't collide with Vite's 3000);
 // on Railway the real environment always wins over the file.
 import "dotenv/config";
@@ -58,6 +59,9 @@ import { register as registerLandRoutes } from "./routes/land";
 import { register as registerMilestonesRoutes } from "./routes/milestones";
 import { register as registerTrainingRoutes } from "./routes/training";
 import { register as registerGoogleAuthRoutes } from "./routes/authGoogle";
+import { register as registerSignUpRoutes } from "./routes/register";
+import { register as registerInviteRoutes } from "./routes/invites";
+import { makeInviteDoor } from "./lib/inviteDoor";
 import { register as registerRecoveryRoutes } from "./routes/authRecovery";
 import { register as registerPulseRoutes } from "./routes/pulse";
 import { register as registerPlayersRoutes } from "./routes/players";
@@ -116,6 +120,8 @@ import { expireRedemptions, retiredSupply } from "./lib/redemptionStore";
 import { register as registerFeedbackRoutes } from "./routes/feedback";
 import { register as registerCharacterPortraitRoutes } from "./routes/characterPortraits";
 import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
+import { register as registerPowerAffinityRoutes, powersForClass, withPowerAffinity } from "./routes/powerAffinity";
+import { register as registerPowerHandRoutes } from "./routes/powerHands";
 import { resolveGoogleConfig } from "./lib/oauthGoogle";
 import {
   decodeToken,
@@ -127,7 +133,7 @@ import {
 import { buildThemeCss, sanitizeFontName } from "./lib/themeCss";
 import { applyTimingOf, ringOf, VARIABLES_BY_KEY } from "../shared/gameVariables";
 import { CONSTITUTION } from "../shared/constitution";
-import { circleViews } from "../shared/circleView";
+import { circleViews, loopedCirclesRefusal } from "../shared/circleView";
 import { DEFAULT_MAP_SKIN, sanitiseMapSkin } from "../shared/mapSkin";
 import {
   DEFAULT_MAP_VOCABULARY,
@@ -1124,11 +1130,11 @@ const FORM_TYPE_TO_PATHWAY: Record<string, "investor" | "steward" | "resident" |
  *     inbox: `investor`, `investor-pack`, `resident`, `prosperity`, `contact`;
  *   - what `Admin.tsx` lists in its own filter, which is the same set again.
  *
- * TWO REAL TYPES ARE DELIBERATELY ABSENT, and their absence is the point.
- * `role-application` is written by `POST /api/map/roles/:id/raise-hand` and
- * `investor-doc-request` by `POST /api/investor-docs/request`. Both are
- * genuine rows in this table and both land in the queue a founder works, and
- * NEITHER has ever arrived through this route. Each of those routes still
+ * THREE REAL TYPES ARE DELIBERATELY ABSENT, and their absence is the point.
+ * `role-application` is written by `POST /api/map/roles/:id/raise-hand`,
+ * `power-application` by `POST /api/powers/:key/raise-hand` and `investor-doc-request` by
+ * `POST /api/investor-docs/request`. All three are genuine rows in this table, all land in the queue a founder
+ * works, and NONE has ever arrived through this route. Each of those routes still
  * writes its own type directly, which no allowlist here touches; what stops
  * now is a stranger typing one into the public form.
  *
@@ -1138,6 +1144,7 @@ const FORM_TYPE_TO_PATHWAY: Record<string, "investor" | "steward" | "resident" |
  */
 const PUBLIC_FORM_TYPES: ReadonlySet<string> = new Set([
   "membership-508",
+  "membership-request", // RequestMembership.tsx: asking to join with no invitation (Rye, 2026-09-09)
   "visit-inquiry",
   "steward-interest",
   "steward",
@@ -1439,6 +1446,16 @@ const circlesRepo = dbCollection(getPool(), {
      */
     { js: "createdAt", db: "created_at", kind: "time", defaultNow: true },
   ],
+  /*
+   * TWO STEWARDS, ONE MOMENT, AND A LOOP NEITHER OF THEM SAVED.
+   *
+   * The circle routes refuse a loop against the rows they read, and `replaceAll`
+   * then merges a stale snapshot field by field, so Finance inside Business and
+   * Business inside Finance can arrive together as a state neither writer saw.
+   * The rule that says no lives in shared/circleView.ts, where the map and the
+   * routes already read it, so the store asks it instead of holding a copy.
+   */
+  mergeRefusal: (rows) => loopedCirclesRefusal(rows as any[]),
 });
 
 // S15: the tools hub registry (the framework's reference consumer).
@@ -7777,10 +7794,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       submittedAt: new Date().toISOString(),
     };
     if (submitter) { entry.userId = submitter.id; entry.userName = submitter.name; }
-    // One INSERT, not snapshot→push→replaceAll: two concurrent public
-    // submissions used to race, and the later whole-table rewrite deleted
-    // the earlier member's row. Same append pattern as raise-hand.
-    await submissionsRepo.insert(entry);
+    // One INSERT, then a quest idea queued for review: server/lib/publicForms.ts.
+    await landPublicSubmission(submissionsRepo, getPool(), entry);
 
     /*
      * The origin comes from OUR configuration, never from the request.
@@ -8080,47 +8095,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     res.json({ success: true });
   });
 
-  // Auth: Register
-  app.post("/api/auth/register", async (req, res) => {
-    // FIRST statement, before the exists-by-email check, so the throttle also
-    // bounds the account-enumeration oracle (409 vs 200 answers "is this
-    // address a member?"). Per-IP and admin-tunable: a village onboarding
-    // gathering behind one NAT shares a bucket, so the default is above
-    // login's. overLimit fails open on DB trouble — an outage never blocks
-    // registration.
-    if (await overLimit(`register:${clientIp(req)}`, Math.max(1, numberVar("abuse.register_per_ip_hourly")), 60 * 60 * 1000)) {
-      return res.status(429).json({ error: "Too many attempts. Try again in a few minutes." });
-    }
-    const { name, email, password, paths } = req.body;
-    if (!name || !email || !password || !paths || !Array.isArray(paths)) {
-      return res.status(400).json({ error: "Missing required fields" });
-    }
-    // The other door onto a member's paths, and the one a stranger can open.
-    const chosen = claimPaths(paths);
-    if (!chosen.ok) return res.status(400).json({ error: chosen.error });
-    if (await members.existsByEmail(email)) {
-      return res.status(409).json({ error: "Email already exists" });
-    }
-    const userId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const user = {
-      id: userId,
-      name,
-      email,
-      passwordHash: await hashPassword(password),
-      handle: await uniqueHandle(slugifyHandle(name)),
-      paths: chosen.paths ?? [],
-      contributions: [],
-      quests: [],
-      recognitionBalance: 0,
-      joinedAt: new Date().toISOString(),
-      bio: "",
-      avatar: null,
-    };
-    await members.add(user);
-    await joined({ id: userId, name, handle: user.handle });
-    const token = encodeToken(AUTH_TOKEN_SECRET, userId, email);
-    res.json({ success: true, token, user: publicUser(user) });
-  });
+  // Auth: Register lives in server/routes/register.ts, beside the Google door and the invitation both share.
 
   // Auth: Login
   app.post("/api/auth/login", async (req, res) => {
@@ -8267,7 +8242,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
         }
       }
     } else {
-      const userId = `usr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const userId = `usr-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
       user = {
         id: userId,
         name: String(name || "Founder").slice(0, 120),
@@ -8354,6 +8329,13 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     recordAudit: recordAuthAudit,
   });
   const joined = (u: { id: string; name: string; handle: string }) => memberJoined(u, { addActivity, firstName, greeterRoleId: () => stringVar("arrival.greeter_role"), seats: loadRoleHolders, everyone: () => members.all(), notify });
+  const inviteDoor = makeInviteDoor({ getPool, members }); // one invitation for both sign-up doors
+  registerSignUpRoutes(app, {
+    overLimit, clientIp, members, hashPassword, publicUser, joined, invites: inviteDoor,
+    makeHandle: (name) => uniqueHandle(slugifyHandle(name)),
+    encodeToken: (userId, email) => encodeToken(AUTH_TOKEN_SECRET, userId, email),
+  });
+  registerInviteRoutes(app, { authedUser, getPool, members, guardCapability, mayAct, overLimit, clientIp, invites: inviteDoor });
   registerGoogleAuthRoutes(app, {
     authSecret: AUTH_TOKEN_SECRET,
     availability: googleSignInAvailability,
@@ -8365,6 +8347,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     clientIp,
     recordAudit: recordAuthAudit,
     onMemberJoined: (user) => void joined(user), // every door in records the join and greets: register calls joined too
+    invites: inviteDoor,
   });
 
   /**
@@ -10213,6 +10196,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       viewer: {
         viewPeople,
         canContact: false,
+        mayArrange: admin, // the drag publishes an org draft: admin until the decide gate lands
         // Where this viewer may declare (P10): "village" and/or circle ids.
         // The pencil shows where this says; the server re-checks on write.
         // 0103: a LOOK, and the admin door stays OPEN here. The pencil this
@@ -19957,6 +19941,8 @@ ${inner}
 
   registerCharacterPortraitRoutes(app, { authedUser, getPool, uploadsDir: UPLOADS_DIR });
   registerArchetypeAdminRoutes(app, { isAdmin, guardCapability, getPool });
+  registerPowerAffinityRoutes(app, { isAdmin, guardCapability, getPool });
+  registerPowerHandRoutes(app, { authedUser, capabilityCtx, stageOf, firstName, notifyAdmins, getPool, overLimit, submissionsRepo });
 
   /** The five classes, as this village names them. Public: it is the front door. */
   app.get("/api/archetypes", async (_req, res) => {
@@ -20066,7 +20052,7 @@ ${inner}
 
   /** What a class opens. A suggestion, never a restriction. */
   app.get("/api/archetypes/:key/paths", async (req, res) => {
-    res.json(await openPathsFor(getPool(), villageId(), req.params.key));
+    res.json({ ...(await openPathsFor(getPool(), villageId(), req.params.key)), powers: await powersForClass(getPool(), villageId(), req.params.key) });
   });
 
   app.get("/api/me/characters", async (req, res) => {
@@ -20391,7 +20377,7 @@ ${inner}
       // The same keys with the closed ones included, and the rung that opens
       // each. `capabilities` above is exactly the rows here whose `held` is
       // true, by construction rather than by agreement.
-      capabilityCatalogue: capabilityCatalogue(ctx),
+      capabilityCatalogue: await withPowerAffinity(capabilityCatalogue(ctx), { pool: getPool(), villageId: villageId(), userId: user.id, stageId, inbox: submissionsRepo.all() }),
       roles: rolesFor(user.id),
       history: events
         .filter((e) => e.userId === user.id)
@@ -25893,7 +25879,7 @@ ${inner}
     const admin = await isAdmin(req);
     const maySeePeople =
       admin || (viewer ? hasCapability("map.viewPeople", await capabilityCtx(viewer)) : false);
-    const drafts = (await listDrafts(getPool())).filter((d) => d.status === "open");
+    const drafts = await listDrafts(getPool(), { status: "open" });
 
     // Measure lazily: only the metric families the open visions actually
     // name are counted, so a village with no visions pays nothing here.
@@ -26229,7 +26215,7 @@ ${inner}
   // answer each other's requests if the order moved.
   registerOrgRoutes(app, {
     isAdmin, authedUser, guardCapability, getPool, members, firstName,
-    capabilityCtx, lapseContext, currentPatternId, seasonState, notify,
+    capabilityCtx, lapseContext, currentPatternId, seasonState, notify, circlesRepo,
   });
 
   // The steward review surface (0140-0141). Mounted here beside the org
@@ -26613,6 +26599,7 @@ ${inner}
       tokenDecimals: Object.fromEntries(allTokens().map((t) => [t.slug, t.decimals])), // ...and what turns those rows into the numbers the member reads. Without it a Voice balance of 10000 in a downloaded file is unreadable by the one person entitled to read it.
       stageEvents: stageEventsRepo.all().filter((e: any) => e.userId === user.id),
       submissions: submissionsRepo.all().filter((s: any) => s.userId === user.id),
+      questIdeas: await ideasProposedBy(pool, user.id), // what they proposed through the Propose a Quest form, and what became of it
       notifications: notifRows,
       preferences: resolveNotifyPrefs(user.prefs),
       // What a MODULE wrote about this member. Absent until now, so a vendor

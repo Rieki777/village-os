@@ -49,6 +49,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ARCHETYPES, type ArchetypeSeed } from "@shared/archetypes";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
+import PowerAffinityPanel from "./PowerAffinityPanel";
 
 /** One class as `GET /api/admin/archetypes` sends it. */
 interface ArchetypeRow {
@@ -678,6 +679,15 @@ export default function ArchetypesPanel({ password }: { password: string }) {
           </div>
         ) : null}
       </div>
+
+      {/* Which powers suit each class, keyed by the same identifiers this panel
+          keeps out of reach. `castKey` moves when a class is added or renamed
+          here, so the table's columns follow the cast. */}
+      <PowerAffinityPanel
+        password={password}
+        castKey={list.map((r) => `${r.key}:${r.name}`).join("|")}
+        castOrder={list.map((r) => r.key)}
+      />
     </div>
   );
 }

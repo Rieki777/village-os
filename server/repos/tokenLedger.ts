@@ -355,8 +355,8 @@ export async function heldBeforeRows(
 
 /**
  * Whether a key already exists, for the collation clash check, and one of the
- * two reads in this block that take a lock (`lockedReversalMirrorRows` is the
- * other).
+ * three reads in this block that take a lock (`lockedReversalMirrorRows` and
+ * `lockedLedgerAccountRows` are the others).
  *
  * Its caller (`postTransferOn`, server/lib/ledger.ts) reaches it after an
  * INSERT failed on the unique index, inside a transaction it may not own. A
@@ -383,6 +383,26 @@ export async function keyClashRows(conn: Pool | PoolConnection, key: string): Pr
   const [rows] = await conn.query<RowDataPacket[]>(
     "SELECT idempotency_key FROM token_ledger WHERE idempotency_key = ? LIMIT 1 LOCK IN SHARE MODE",
     [key],
+  );
+  return rows;
+}
+
+/**
+ * The two account rows a single-leg post locks, FOR UPDATE, on the caller's
+ * connection. `ORDER BY id` is the lock order every single-leg post shares;
+ * the caller passes the ids sorted as well.
+ *
+ * Its one caller is `lockLedgerAccounts` (server/lib/ledger.ts), which
+ * `postTransferOn` runs first and `writeGratitudeRow` runs before its first
+ * plain read. Why taking it early matters on MariaDB 11.8 and later, and the
+ * gap lock a missing id still takes, are measured there. Moved here verbatim
+ * when the module intake check flagged the statement on a line
+ * `wt/econ-snapshot-retry` changed.
+ */
+export async function lockedLedgerAccountRows(conn: PoolConnection, first: string, second: string): Promise<RowDataPacket[]> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    "SELECT id, faucet FROM ledger_accounts WHERE id IN (?, ?) ORDER BY id FOR UPDATE",
+    [first, second],
   );
   return rows;
 }
