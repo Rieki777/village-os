@@ -30,8 +30,13 @@ import { questCalendarInput } from "../lib/calendarProviders";
  * every write inside these two is either an insert of a fresh row or an
  * idempotency-keyed post. Giving up after three keeps a pathological case
  * from hiding as latency.
+ *
+ * Exported for `settleOwedPosting` in server/repos/questOwedPostings.ts, whose
+ * transaction reaches the same faucet rows through `postOwedOn`, for the same
+ * reason and with the same safety: its only writes are the keyed posting and
+ * the owed row's own state.
  */
-async function withDeadlockRetry<T>(run: () => Promise<T>): Promise<T> {
+export async function withDeadlockRetry<T>(run: () => Promise<T>): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     try {
       return await run();

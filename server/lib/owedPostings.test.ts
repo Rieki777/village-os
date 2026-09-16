@@ -76,6 +76,7 @@ async function stayRowFor(claimId: string, userId: string, reward = 3): Promise<
     id: claimId,
     questId: `q-${claimId}`,
     userId,
+    granted: 60,
     stay: { reward, questTitle: "Fixing the fence" },
   });
   const row = priced.owed.find((o) => o.tokenSlug === STAY);
@@ -108,6 +109,7 @@ describe.skipIf(!configured)("what a consent is owed, and posting it", () => {
       id: "claim-owed-no-stay-token",
       questId: "quest-owed-no-stay-token",
       userId: u,
+      granted: 60,
       stay: { reward: 3, questTitle: "Fixing the fence" },
     });
     expect(priced.owed.some((o) => o.tokenSlug === STAY)).toBe(false);
@@ -132,6 +134,7 @@ describe.skipIf(!configured)("what a consent is owed, and posting it", () => {
           id: "claim-owed-price",
           questId: "quest-owed-price",
           userId: u,
+          granted: 60,
           stay: { reward: 3, questTitle: "Fixing the fence" },
         });
         await conn.commit();
@@ -169,10 +172,78 @@ describe.skipIf(!configured)("what a consent is owed, and posting it", () => {
         id: "claim-owed-zero",
         questId: "quest-owed-zero",
         userId: u,
+        granted: 60,
         stay: { reward: 0, questTitle: "Nothing extra" },
       });
       expect(priced.owed.some((o) => o.tokenSlug === STAY)).toBe(false);
       expect(priced.owed.every((o) => o.units > 0)).toBe(true);
+    });
+
+    /**
+     * A GRANT OF 0 OWES THE STAY AND NO RULE (economics and governance, 2026-09-14). A
+     * zero is the witness saying the work earned no recognition, and any rule token priced
+     * for it could be ballot weight farmed through `quest.allow_zero_consent`. The stay is
+     * the quest's own payment and is owed at any grant. The control beside it, the same
+     * claim shape at a grant of 60, owes the seeded rules, so the zero case cannot pass on
+     * a village whose rules price nothing at all.
+     */
+    it("prices no rule for a grant of 0, and still owes the stay", async () => {
+      const u = await seatAMember("owed-granted-zero");
+      const control = await owedForClaim(pool, {
+        id: "claim-owed-granted-sixty",
+        questId: "quest-owed-granted-sixty",
+        userId: u,
+        granted: 60,
+        stay: { reward: 3, questTitle: "Fixing the fence" },
+      });
+      const controlTokens = control.owed.map((o) => o.tokenSlug);
+      expect(controlTokens).toContain(CREDITS);
+      expect(controlTokens).toContain(VILLAGE_VOICE);
+      expect(controlTokens).toContain(STAY);
+
+      const zero = await owedForClaim(pool, {
+        id: "claim-owed-granted-zero",
+        questId: "quest-owed-granted-zero",
+        userId: u,
+        granted: 0,
+        stay: { reward: 3, questTitle: "Fixing the fence" },
+      });
+      expect(zero.owed.map((o) => o.tokenSlug)).toEqual([STAY]);
+      expect(zero.owed[0]?.idempotencyKey).toBe("queststay:claim-owed-granted-zero");
+      expect(zero.unpayable).toEqual([]);
+    });
+
+    /**
+     * THE STAY IS NOT A RULE, SO THE RULES' READINESS DOES NOT GATE IT. With every
+     * mint rule disabled the engine is not ready, no rule prices, and `skipped` says
+     * why; the quest's own stay credits are still owed, as the consent route released
+     * them before this pricing existed.
+     */
+    it("prices the stay when no mint rule is enabled, and says why no rule priced", async () => {
+      const u = await seatAMember("owed-no-rules");
+      const [enabled] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "SELECT `id` FROM `mint_rules` WHERE `village_id` = ? AND `enabled` = 1",
+        [VILLAGE],
+      );
+      expect(enabled.length, "the seed enables rules, which this case turns off").toBeGreaterThan(0);
+      await pool.query("UPDATE `mint_rules` SET `enabled` = 0 WHERE `village_id` = ?", [VILLAGE]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      try {
+        const priced = await owedForClaim(pool, {
+          id: "claim-owed-no-rules",
+          questId: "quest-owed-no-rules",
+          userId: u,
+          granted: 60,
+          stay: { reward: 3, questTitle: "Fixing the fence" },
+        });
+        expect(priced.skipped).toMatch(/no enabled mint rules/);
+        expect(priced.owed.map((o) => o.tokenSlug)).toEqual([STAY]);
+        expect(priced.owed[0]?.units).toBe(toLedgerUnits(STAY, 3));
+      } finally {
+        await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+          "UPDATE `mint_rules` SET `enabled` = 1 WHERE `id` IN (?)",
+          [enabled.map((r) => r.id)],
+        );
+      }
     });
 
     it("postOwedOn leaves the transaction to its caller: a rollback takes the posting with it", async () => {
