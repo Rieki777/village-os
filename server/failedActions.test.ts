@@ -425,7 +425,7 @@ describe.skipIf(!configured)("the failed-actions report, against a real database
       for (const r of await sources.keptSeatChargesBefore(pool, null, 1000)) {
         if (r.id === "sc-0001") continue;
         await q(
-          "INSERT INTO `token_ledger` (`id`, `from_account`, `to_account`, `token_type`, `amount`, `source`, `idempotency_key`) " +
+          "INSERT INTO `token_ledger` (`id`, `from_account`, `to_account`, `token_type`, `amount`, `source`, `idempotency_key`) " + // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
             "VALUES (?, 'sys:event-escrow', 'sys:treasury', 'seat-credit', 5, 'event_seat_kept', ?)",
           [`tl-${r.id}`, keysFor(r).keep],
         );

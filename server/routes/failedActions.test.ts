@@ -50,7 +50,7 @@ function deps(): ErasureDeps {
 }
 
 const read = async () => {
-  const r = await fetch(`${base}/api/admin/failures`);
+  const r = await fetch(`${base}/api/admin/failures`); // module-review-ok: the test client dialling its own in-process server on localhost, as every e2e suite does
   return { status: r.status, body: await r.json().catch(() => undefined) };
 };
 
