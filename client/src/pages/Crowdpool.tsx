@@ -14,7 +14,7 @@ import { authToken } from "@/lib/gameApi";
 import { ExampleChip } from "@/components/ExamplesBanner";
 import { Users } from "lucide-react";
 import InfoTip from "@/components/InfoTip";
-import { CrowdpoolStyles, MiniRing, PLEDGED_FLOOR_TIP, phaseLabel, pooledLine, timeAgo } from "@/components/crowdpool/PoolPieces";
+import { CrowdpoolStyles, MiniRing, phaseLabel, pledgedIsFloor, pooledLine, timeAgo } from "@/components/crowdpool/PoolPieces";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 
 const headers = (): Record<string, string> => {
@@ -42,6 +42,11 @@ interface CampaignCard {
    * a demo raising's ring and backer count read as this village's own.
    */
   isDemo?: boolean;
+  /**
+   * The hub contract this card's numbers were read under. Below 2, or absent,
+   * the pledged figure is a floor and the card says so (`pledgedIsFloor`).
+   */
+  hubContract?: { crowdpool?: number };
   reachable: boolean;
   stale?: boolean;
   lastSyncAt?: string | null;
@@ -101,7 +106,7 @@ export default function Crowdpool() {
                 className="cp-board block p-5 hover:opacity-95 transition-opacity"
               >
                 <div className="flex items-center gap-5">
-                  <MiniRing percent={c.percentPledged ?? 0} />
+                  <MiniRing percent={c.percentPledged ?? 0} floor={pledgedIsFloor(c.hubContract)} />
                   <div className="min-w-0 flex-1">
                     <h2 className="font-display text-xl font-bold" style={{ color: "#f3e6c8" }}>
                       {c.title}
@@ -111,7 +116,7 @@ export default function Crowdpool() {
                     <p className="text-sm mt-1.5" style={{ color: "#e4d3ae" }}>
                       {/* The floor qualifier lives in `pooledLine` so this card
                           and the campaign page cannot drift apart on it. */}
-                      {pooledLine(c.pledgedTotal ?? 0, c.totalValue ?? 0, c.currency ?? "USD")} pooled
+                      {pooledLine(c.pledgedTotal ?? 0, c.totalValue ?? 0, c.currency ?? "USD", pledgedIsFloor(c.hubContract))} pooled
                       {typeof c.daysRemaining === "number" && c.daysRemaining > 0
                         ? `, ${c.daysRemaining} ${c.daysRemaining === 1 ? "day" : "days"} left`
                         : ""}

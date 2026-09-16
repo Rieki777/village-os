@@ -18,6 +18,8 @@ import http from "http";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   CROWDPOOL_TTL_MS,
+  HUB_CONTRACT_CROWDPOOL_FALLBACK,
+  HUB_CONTRACT_GRACE_MS,
   campaignKey,
   crowdpoolStatus,
   fetchCampaignBundle,
@@ -25,6 +27,7 @@ import {
   getCampaign,
   normalizeCampaign,
   normalizeEvents,
+  readHubContract,
   resetCrowdpoolCache,
   resolveCampaignId,
   slugify,
@@ -105,18 +108,58 @@ const HUB_PARTNERS = [
 
 const envelope = (json: unknown) => ({ result: { data: { json } } });
 
+/**
+ * What a tRPC hub with no such procedure answers: an error envelope, and HTTP
+ * 404. This is the shape a hub older than 3c70b12c gives `meta.contract`.
+ */
+const NO_PROCEDURE = {
+  error: {
+    json: {
+      message: 'No procedure found on path "meta.contract"',
+      code: -32004,
+      data: { code: "NOT_FOUND", httpStatus: 404, path: "meta.contract" },
+    },
+  },
+};
+
+/** The live hub's answer, as the coordinator read it on 2026-09-14. */
+const HUB_CONTRACT_V2 = envelope({ crowdpool: 2 });
+
 const NOW = new Date("2026-08-22T00:00:00.000Z").getTime();
 
-/** A dialer over the fixtures, counting calls, failable on demand. */
-function fixtureDeps(overrides?: { failing?: boolean; nowRef?: { t: number } }) {
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * A dialer over the fixtures, counting calls, failable on demand.
+ *
+ * `contract` is what `meta.contract` does: a payload to answer with, "throw"
+ * for a dial that fails outright, or "hang" for one that never settles.
+ * `delayMs` holds each of the four campaign reads, so a test can see whether
+ * the contract read held the bundle.
+ */
+function fixtureDeps(overrides?: {
+  failing?: boolean;
+  nowRef?: { t: number };
+  contract?: unknown;
+  delayMs?: number;
+}) {
   const calls: string[] = [];
   const nowRef = overrides?.nowRef ?? { t: NOW };
-  const state = { failing: overrides?.failing ?? false };
+  const state = {
+    failing: overrides?.failing ?? false,
+    contract: "contract" in (overrides ?? {}) ? overrides!.contract : HUB_CONTRACT_V2,
+  };
   const deps: CrowdpoolDeps = {
     now: () => nowRef.t,
     async fetchJson(url: string) {
       calls.push(url);
       if (state.failing) throw new Error("resolves to a private address");
+      if (url.includes("meta.contract")) {
+        if (state.contract === "throw") throw new Error("404");
+        if (state.contract === "hang") return new Promise(() => {});
+        return state.contract;
+      }
+      if (overrides?.delayMs) await sleep(overrides.delayMs);
       if (url.includes("campaigns.list")) {
         return envelope([
           { id: 79, title: "Harmony Valley Ecovillage", status: "active" },
@@ -258,12 +301,14 @@ describe("getCampaign: cache and honest degrade", () => {
   it("fetches once inside the TTL, again past it", async () => {
     const { deps, calls, nowRef } = fixtureDeps();
     await getCampaign(deps, REF, BASE);
-    expect(calls.length).toBe(4); // the four procedures
+    expect(calls.length).toBe(5); // the four procedures and meta.contract
     await getCampaign(deps, REF, BASE);
-    expect(calls.length).toBe(4); // served from cache
+    expect(calls.length).toBe(5); // served from cache
     nowRef.t = NOW + CROWDPOOL_TTL_MS + 1000;
     await getCampaign(deps, REF, BASE);
-    expect(calls.length).toBe(8);
+    expect(calls.length).toBe(10);
+    // Exactly one contract read per sync, never one per procedure.
+    expect(calls.filter((u) => u.includes("meta.contract")).length).toBe(2);
   });
 
   it("serves the snapshot with its age named when the hub stops answering", async () => {
@@ -298,7 +343,7 @@ describe("getCampaign: cache and honest degrade", () => {
       getCampaign(deps, REF, BASE),
       getCampaign(deps, REF, BASE),
     ]);
-    expect(calls.length).toBe(4);
+    expect(calls.length).toBe(5);
   });
 
   it("resolves a slug through campaigns.list when the ref carries no id", async () => {
@@ -327,11 +372,140 @@ describe("getCampaign: cache and honest degrade", () => {
   });
 });
 
+// ── The hub contract version ─────────────────────────────────────────────────
+
+/**
+ * Rye's ruling of 2026-09-14, against hub commit 3c70b12c. The hub publishes
+ * `meta.contract`, a map of integers with one per surface; its
+ * docs/CROWDPOOL_HUB_CONTRACT.md section 10 says crowdpool 1 is a pledged total
+ * of accepted pledges only, a floor, and crowdpool 2 counts fulfilled and
+ * thanked too. The client words the figure off this number, so a wrong reading
+ * here is a floor printed as a total.
+ */
+describe("the hub contract version rides on the campaign", () => {
+  const REF = { slug: "harmony-valley-ecovillage", id: 79 };
+
+  it("(a) a hub answering {crowdpool:2} serves hubContract.crowdpool === 2", async () => {
+    const { deps, calls } = fixtureDeps({ contract: HUB_CONTRACT_V2 });
+    const served = await getCampaign(deps, REF, BASE);
+    expect(served?.data.hubContract).toEqual({ crowdpool: 2 });
+    // Dialled with the input the hub accepts, `{"json":{}}`.
+    expect(calls).toContain(trpcQueryUrl(BASE, "meta.contract", {}));
+  });
+
+  it("(b) a hub with no meta.contract still serves the campaign, at version 1", async () => {
+    // The error envelope a tRPC hub answers for a procedure it does not have.
+    const envelopeHub = fixtureDeps({ contract: NO_PROCEDURE });
+    const one = await getCampaign(envelopeHub.deps, REF, BASE);
+    expect(one?.stale).toBe(false);
+    expect(one?.data.title).toBe("Harmony Valley Ecovillage");
+    expect(one?.data.percentPledged).toBe(19);
+    expect(one?.data.hubContract).toEqual({ crowdpool: 1 });
+
+    // A dialer that throws on the 404 instead of handing back the body.
+    resetCrowdpoolCache();
+    const throwingHub = fixtureDeps({ contract: "throw" });
+    const two = await getCampaign(throwingHub.deps, REF, BASE);
+    expect(two?.stale).toBe(false);
+    expect(two?.data.title).toBe("Harmony Valley Ecovillage");
+    expect(two?.data.hubContract).toEqual({ crowdpool: 1 });
+    expect(crowdpoolStatus().find((s) => s.key === REF.slug)?.lastError).toBeNull();
+  });
+
+  it("(c) a malformed answer reads as 1", () => {
+    expect(HUB_CONTRACT_CROWDPOOL_FALLBACK).toBe(1);
+    const malformed: Array<[string, unknown]> = [
+      ["a string value", envelope({ crowdpool: "2" })],
+      ["a negative value", envelope({ crowdpool: -2 })],
+      ["zero", envelope({ crowdpool: 0 })],
+      ["a fraction", envelope({ crowdpool: 2.5 })],
+      ["a missing key", envelope({ feedback: 3 })],
+      ["an empty map", envelope({})],
+      ["a string answer", envelope("2")],
+      ["a bare number", envelope(2)],
+      ["an array", envelope([2])],
+      ["a null answer", envelope(null)],
+      ["no envelope", { crowdpool: 2 }],
+      ["an error envelope", NO_PROCEDURE],
+      ["nothing", undefined],
+    ];
+    for (const [what, payload] of malformed) {
+      expect(readHubContract(payload), what).toEqual({ crowdpool: 1 });
+    }
+    // And a later version passes through as the number it is.
+    expect(readHubContract(envelope({ crowdpool: 3, feedback: 1 }))).toEqual({ crowdpool: 3 });
+  });
+
+  it("(c) through the whole path: a malformed answer serves version 1", async () => {
+    const { deps } = fixtureDeps({ contract: envelope({ crowdpool: "2" }) });
+    const served = await getCampaign(deps, REF, BASE);
+    expect(served?.data.hubContract).toEqual({ crowdpool: 1 });
+  });
+
+  it("(d) a contract fetch that throws does not fail or delay the bundle", async () => {
+    // Each of the four campaign reads takes 40ms; the contract throws at once.
+    const throwing = fixtureDeps({ contract: "throw", delayMs: 40 });
+    const started = Date.now();
+    const campaign = await fetchCampaignBundle(throwing.deps, BASE, 79, "harmony-valley-ecovillage");
+    const elapsed = Date.now() - started;
+    expect(campaign.title).toBe("Harmony Valley Ecovillage");
+    expect(campaign.hubContract).toEqual({ crowdpool: 1 });
+    // A settled failure spends none of the grace: the bundle is as quick as its
+    // four reads.
+    expect(elapsed).toBeLessThan(HUB_CONTRACT_GRACE_MS);
+  });
+
+  it("(d) a contract read that never answers holds the bundle no longer than the grace", async () => {
+    const hanging = fixtureDeps({ contract: "hang", delayMs: 40 });
+    const started = Date.now();
+    const campaign = await fetchCampaignBundle(hanging.deps, BASE, 79);
+    const elapsed = Date.now() - started;
+    expect(campaign.hubContract).toEqual({ crowdpool: 1 });
+    expect(elapsed).toBeLessThan(40 + HUB_CONTRACT_GRACE_MS + 400);
+  });
+
+  it("(d) the four reads still decide failure, whatever the contract did", async () => {
+    const { deps, state } = fixtureDeps({ contract: HUB_CONTRACT_V2 });
+    state.failing = true; // every dial refuses, the contract's included
+    await expect(fetchCampaignBundle(deps, BASE, 79)).rejects.toThrow(/private address/);
+  });
+
+  it("a stale snapshot keeps the version it was fetched with", async () => {
+    const { deps, state, nowRef } = fixtureDeps({ contract: HUB_CONTRACT_V2 });
+    expect((await getCampaign(deps, REF, BASE))?.data.hubContract.crowdpool).toBe(2);
+    state.failing = true;
+    nowRef.t = NOW + CROWDPOOL_TTL_MS + 60_000;
+    const served = await getCampaign(deps, REF, BASE);
+    expect(served?.stale).toBe(true);
+    expect(served?.data.hubContract).toEqual({ crowdpool: 2 });
+    // And it persists with the snapshot.
+    expect(snapshotExport()[REF.slug].data.hubContract).toEqual({ crowdpool: 2 });
+  });
+
+  it("a snapshot persisted before the field existed comes back as version 1", async () => {
+    const { deps } = fixtureDeps();
+    await getCampaign(deps, REF, BASE);
+    const doc = snapshotExport();
+    const { hubContract: _dropped, ...legacy } = doc[REF.slug].data;
+    resetCrowdpoolCache();
+    expect(snapshotImport({ [REF.slug]: { ...doc[REF.slug], data: legacy as any } })).toBe(1);
+    expect(snapshotExport()[REF.slug].data.hubContract).toEqual({ crowdpool: 1 });
+  });
+
+  it("normalizeCampaign with no contract reading is version 1", () => {
+    const bare = normalizeCampaign(HUB_BY_ID, HUB_ITEMS, [], [], { baseUrl: BASE, now: NOW });
+    expect(bare.hubContract).toEqual({ crowdpool: 1 });
+  });
+});
+
 // ── The local fixture dial: real bytes over a real socket ────────────────────
 
 describe("fetchCampaignBundle against a live local fixture", () => {
   let server: http.Server;
   let origin = "";
+  /** What the fixture hub does with `meta.contract`: answer 2, or 404 the way
+   *  a hub older than the procedure does. */
+  let contractMode: "v2" | "absent" = "v2";
 
   const start = () =>
     new Promise<void>((resolve) => {
@@ -343,6 +517,12 @@ describe("fetchCampaignBundle against a live local fixture", () => {
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify(envelope(json)));
         };
+        if (proc === "meta.contract") {
+          if (contractMode === "v2") return answer({ crowdpool: 2 });
+          res.statusCode = 404;
+          res.setHeader("Content-Type", "application/json");
+          return res.end(JSON.stringify(NO_PROCEDURE));
+        }
         if (proc === "campaigns.getById" && input.id === 79) return answer(HUB_BY_ID);
         if (proc === "campaigns.getItems" && input.campaignId === 79) return answer(HUB_ITEMS);
         if (proc === "campaigns.getActivity" && input.campaignId === 79) return answer(HUB_ACTIVITY);
@@ -378,6 +558,18 @@ describe("fetchCampaignBundle against a live local fixture", () => {
     expect(campaign.needs.length).toBe(3);
     expect(campaign.partners[0].partner).toBe("maearth");
     expect(campaign.events[1].who).toBe("A contributor");
+    // The contract read went over the same socket, with the input the hub takes.
+    expect(campaign.hubContract).toEqual({ crowdpool: 2 });
+
+    // (b) over a real socket: a hub that 404s meta.contract, read by a dialer
+    // that throws on any non-2xx, still serves the whole campaign, at version 1.
+    contractMode = "absent";
+    const older = await fetchCampaignBundle(deps, origin, 79, "harmony-valley-ecovillage");
+    expect(older.title).toBe("Harmony Valley Ecovillage");
+    expect(older.percentPledged).toBe(19);
+    expect(older.hubContract).toEqual({ crowdpool: 1 });
+    contractMode = "v2";
+
     // The fixture 400s on a wrong input key, exactly like the live hub did
     // when getItems was asked with `id`: the guard proves the parameter
     // names, which is the mistake a fixture nobody dials would never catch.

@@ -68,6 +68,7 @@ import { register as registerCircleRoutes } from "./routes/circles";
 import { register as registerReviewRoutes } from "./routes/review";
 import { register as registerHoldersRoutes } from "./routes/holders";
 import { register as registerErasureQueueRoutes } from "./routes/erasureQueue";
+import { register as registerFailedActionsRoutes } from "./routes/failedActions";
 import { register as registerCircleBurnRoutes } from "./routes/circleBurn";
 import { register as registerCircleBonusGateRoutes } from "./routes/circleBonusGate";
 import { budgetDeleteProblem, treasuryFacts, register as registerCircleTreasuryRoutes } from "./routes/circleTreasury";
@@ -13103,6 +13104,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
         contributorsCount: d.contributorsCount,
         imageUrl: d.imageUrl,
         isDemo: d.isDemo,
+        hubContract: d.hubContract,
         reachable: true,
         stale: served.stale,
         lastSyncAt: served.lastSyncAt,
@@ -26302,10 +26304,11 @@ ${inner}
   // gates. NOT under /api/admin: a steward who is not an admin is exactly who
   // this is for, so it is capability-gated all the way down.
   registerReviewRoutes(app, {
-    isAdmin, authedUser, guardCapability, mayAct, adminActor, getPool, members, questsRepo, circlesRepo,
+    isAdmin, authedUser, guardCapability, mayAct, mayStillSee, adminActor, getPool, members, questsRepo, circlesRepo,
   });
   registerHoldersRoutes(app, { guardCapability, getPool });
   registerErasureQueueRoutes(app, { guardCapability, getPool, erasureDeps });
+  registerFailedActionsRoutes(app, { isAdmin, getPool, notifyAdmins, erasureDeps });
 
   // ── Season patterns (0050) ───────────────────────────────────────────────
   //

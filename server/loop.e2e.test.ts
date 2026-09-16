@@ -2680,7 +2680,8 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       (n: any) => n.type === "quest_submitted" && String(n.title).includes("Rebuild the garden beds"),
     );
     expect(submitAlert, "finished work reaches the people who can consent to it").toBeTruthy();
-    expect(submitAlert.link).toBe("/admin?tab=quest-claims");
+    // /review, which a steward who is not an admin can open. The admin tab could not be.
+    expect(submitAlert.link).toBe("/review");
     expect(String(submitAlert.title) + String(submitAlert.body ?? "")).not.toContain("drip lines");
     // A second submit on the same claim is a correction, and correcting a link
     // must not summon the same steward twice.
