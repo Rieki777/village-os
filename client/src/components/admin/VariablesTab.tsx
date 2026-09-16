@@ -246,6 +246,18 @@ export default function VariablesTab({ password }: { password: string }) {
                               <option key={c.value} value={c.value}>{c.label}</option>
                             ))}
                           </select>
+                        ) : v.type === "longtext" ? (
+                          /* A paragraph gets a paragraph-shaped box. Full
+                             width on its own row, because a 40-character
+                             input for 4,000 characters of process text is a
+                             control that hides what it holds. */
+                          <textarea
+                            value={draft}
+                            rows={6}
+                            aria-label={v.label}
+                            onChange={(e) => setDrafts((d) => ({ ...d, [v.key]: e.target.value }))}
+                            className="text-sm border border-gray-200 rounded-lg px-3 py-2 w-full font-sans"
+                          />
                         ) : (
                           <input
                             type={v.type === "text" ? "text" : "number"}

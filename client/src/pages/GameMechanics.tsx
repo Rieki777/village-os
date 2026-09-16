@@ -56,6 +56,7 @@ import { ballotReturn } from "./gameMechanicsBallotCopy";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFocusTarget } from "@/lib/useFocusTarget";
 import InfoTip, { DialFact } from "@/components/InfoTip";
+import LongText from "@/components/LongText";
 
 interface MechanicsVariable {
   key: string;
@@ -457,6 +458,20 @@ function DialEditor({
           </option>
         ))}
       </select>
+    );
+  }
+  if (v.type === "longtext") {
+    // A paragraph, staged the same way every other dial is. Wider and taller
+    // than `cls` allows, because what is being proposed here is words a member
+    // will read, and a proposal nobody can read the whole of is not one.
+    return (
+      <textarea
+        aria-label={`Proposed value for ${v.label}`}
+        value={current}
+        rows={6}
+        onChange={(e) => onStage(v.key, e.target.value === v.value ? undefined : e.target.value)}
+        className="border border-stone-200 rounded-lg px-2 py-1 text-sm w-full font-sans"
+      />
     );
   }
   if (v.type === "text") {
@@ -960,7 +975,10 @@ export default function GameMechanics() {
                                   <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                                     <span className="font-medium text-stone-900">{v.label}</span>
                                     <span className="text-teal-deep font-semibold">
-                                      {displayValue(v, v.value)}
+                                      {/* A paragraph renders as text with its
+                                          line breaks kept and its http(s)
+                                          addresses linked, never as markup. */}
+                                      {v.type === "longtext" ? <LongText text={v.value} /> : displayValue(v, v.value)}
                                       {stagedValue !== undefined && (
                                         <span className="ml-2 text-amber-700 font-semibold">→ {displayValue(v, stagedValue)}</span>
                                       )}
