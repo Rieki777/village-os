@@ -5,9 +5,11 @@
  * paid this member for something they brought it". It carries the whole
  * Contributor rung, which is the rung that opens `member.vouch`.
  *
- * The fourth parameter has a DEFAULT of false. That default is what made this
- * defect silent: a caller that hands over three arguments compiles, runs, and
- * answers a rung too low for anybody the village has paid. `stageOf` and
+ * The fourth parameter CARRIED A DEFAULT of false until the commit that adds
+ * this file. That default is what made the defect silent: a caller that handed
+ * over three arguments compiled, ran, and answered a rung too low for anybody
+ * the village had paid. The default is gone now, so the compiler asks the
+ * question, and these cases hold the two surfaces to the answer. `stageOf` and
  * `GET /api/game/progression` pass all four. Two surfaces did not, and they are
  * the two a steward reads:
  *
