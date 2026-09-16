@@ -82,7 +82,7 @@ import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader
 import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
 import { landWeightMode } from "./lib/landingRefusal";
 import { landingRow } from "./lib/applyDue";
-import { closeActivityLine, notifyRollRows, tellRollTheOutcome, type RollNotice } from "./lib/ballotNotices";
+import { closeActivityLine, decisionLink, notifyRollRows, tellRollTheOutcome, type RollNotice } from "./lib/ballotNotices";
 import { isPresentMember, presenceTest } from "./lib/memberPresence";
 import { runSeasonReminders } from "./lib/seasonReminders";
 import { forgetStewardActs, holdingHasLapsed, recordTermStarted, runTermWatch, setVetoWindowCheck, STEWARD_VETO, stewardMailRefusal, termWatchLookaheadDays } from "./lib/stewardship";
@@ -22199,24 +22199,11 @@ ${inner}
     return eligible.map((u: any) => ({ userId: String(u.id), weight: weights.get(String(u.id)) ?? 0 }));
   }
 
-  /**
-   * Where a notice about a ballot should LAND: on the ballot.
-   *
-   * This pointed at the proposal card on /game-mechanics until the decision
-   * surface existed, because a notice has to land on something a member can
-   * actually see. /decisions/:id is now that thing and it is strictly better:
-   * the vote widget, the clock, the frozen roll and the close beat are all on
-   * it, so every one of the five decision notices lands where its reader can
-   * act on it.
-   *
-   * A STALE LINK IS NEVER AN ERROR STATE, and that is the property this
-   * function exists to protect. A withdrawn ballot renders the decision page's
-   * own "No such decision" card with a way through to /decisions, and the
-   * notification row itself renders and clears from its stored text without
-   * ever resolving the ballot. A notice outlives the thing it points at.
-   */
+  // The URL, and why a stale one is never an error state, live on `decisionLink`
+  // in server/lib/ballotNotices.ts. Declared as a function on purpose: callers
+  // above this line reach it, so it has to hoist.
   function ballotLink(b: { id: string }): string {
-    return `/decisions/${b.id}`;
+    return decisionLink(b);
   }
 
   /**

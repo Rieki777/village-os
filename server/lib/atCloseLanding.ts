@@ -75,7 +75,7 @@ import type { Pool } from "mysql2/promise";
 import type { LandingRow } from "../repos/ballotLandings";
 import { newestAttemptOf } from "../repos/governanceExecutorPending";
 import { executesAtPassWithNoWindow } from "../../shared/governanceKinds";
-import { notifyRollRows, type RollNotice, type RollNoticeDeps } from "./ballotNotices";
+import { decisionLink, notifyRollRows, type RollNotice, type RollNoticeDeps } from "./ballotNotices";
 
 /** Subjects whose at-close executor has been read and is safe to run twice. */
 export const AT_CLOSE_RETRY_SAFE_SUBJECTS: ReadonlySet<string> = new Set(["village_launch"]);
@@ -200,9 +200,6 @@ export async function parkedAtCloseAndRetrying(pool: Pool, row: LandingRow): Pro
 /** What the roll reads when a parked row finally takes effect. */
 export const TOOK_EFFECT_BODY =
   "The vote carried earlier and the step that carries it out stopped with an error. It has now taken effect.";
-
-/** The decision page, the same one `ballotLink` in `server/index.ts` names. */
-const decisionLink = (b: { id: string }): string => `/decisions/${b.id}`;
 
 /**
  * WHEN A PARKED ROW TAKES EFFECT, THE ROLL HEARS IT, ONCE.

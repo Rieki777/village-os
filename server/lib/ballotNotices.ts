@@ -20,6 +20,29 @@
 import type { Pool } from "mysql2/promise";
 import { electorateOf } from "./ballots";
 
+/**
+ * WHERE A NOTICE ABOUT A BALLOT LANDS: on the ballot. ONE copy of the URL.
+ *
+ * It pointed at the proposal card on /game-mechanics until the decision surface
+ * existed, because a notice has to land on something a member can actually see.
+ * /decisions/:id is now that thing and it is strictly better: the vote widget,
+ * the clock, the frozen roll and the close beat are all on it, so every decision
+ * notice lands where its reader can act on it.
+ *
+ * A STALE LINK IS NEVER AN ERROR STATE, and that is the property this protects.
+ * A withdrawn ballot renders the decision page's own "No such decision" card
+ * with a way through to /decisions, and the notification row renders and clears
+ * from its stored text without ever resolving the ballot. A notice outlives the
+ * thing it points at.
+ *
+ * It lives HERE because this module owns `RollNoticeDeps.link` and every caller
+ * that rings a roll. `ballotLink` in `server/index.ts` delegates to it and
+ * `tellRollItTookEffect` in `server/lib/atCloseLanding.ts` reads it, so a route
+ * rename moves one string. There was briefly a second copy, and no gate reads
+ * either one, so the two would have drifted with nothing to say so.
+ */
+export const decisionLink = (b: { id: string }): string => `/decisions/${b.id}`;
+
 export interface RollNoticeDeps {
   pool: Pool;
   notify: (input: {
