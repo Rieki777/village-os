@@ -309,7 +309,9 @@ has nothing catching them.
 
 One exception: `quest.self_consent_until_members` (default 6). While the count of living members is
 below it, an **admin or founder** may consent to their own claim, and the route writes an audit
-event saying so. Stewards never get the exception, because role authority is not founder authority.
+event saying so. That row is written after the consent commits, so a founder who declines their own
+claim, or whose amount the dials refuse, leaves none: the row records uses of the window and not
+attempts at it. Stewards never get the exception, because role authority is not founder authority.
 Three kinds of row are excluded from the count: standing examples, tombstoned members (email ending
 `@anonymized.invalid`), and any member row carrying no email at all, since the filter reads
 `!u.isExample && u.email && !endsWith("@anonymized.invalid")`. Phantom identities would otherwise

@@ -2670,6 +2670,7 @@ them": it made a repaired build read as a broken one. Every row re-measured
 | Consents a claim a second time, on a village with the submission guard off | `This claim was already consented, so it was not consented again. The member was paid once.` as a 409 | Correct since 10.34: the status test moved inside `claimsRepo.update`'s row lock, so the claim's amount and the ledger row agree |
 | Asks to leave while holding an unsettled library loan | `Open state must settle through its own domain first`, with the blocking domains named | Correct. See section 14 |
 | Opens their wallet holding 10 Village Voice | **10** | Correct. `formatTokenAmount` divides by the scale the payload carries. It printed 10000 until 10.3 closed |
+| Presses Consent in a busy moment, and InnoDB gives up on the row lock all three times the code retries | `Several people were saving at the same moment, and this one did not get through. Try it again.` as a 503 | Correct. The consent's transaction rolled back, so the claim is untouched and the member is still owed, and pressing again is the whole remedy. It read `Internal server error` until `terminalAnswerFor` learned the two lock codes |
 
 **The four that no longer happen, kept here because deleting them would lose what
 a member used to meet and what closed it.**
@@ -3056,6 +3057,13 @@ Five things this table is showing:
   any token (`governance.weight_token`), so a rule token minted at 0 would be voting
   weight farmed through `quest.allow_zero_consent`. A stay-credit reward the quest
   itself carries is still owed and paid, keyed `queststay:<claimId>`.
+
+Nothing in this table changes when the audit trail does. The row a founder's own
+consent leaves (`quest:self-consent:solo-founder:<claim>`) is written after the
+consent commits rather than at the guard that opens the window, so it records
+uses of that window and not attempts at it. No faucet, key, amount or order
+above moves with it, and a founder who declines their own claim now leaves no
+row at all, which is what declining always meant.
 
 Wren's balances after: 25 credits, 10 voice, and whatever recognition the
 quest advertised.
