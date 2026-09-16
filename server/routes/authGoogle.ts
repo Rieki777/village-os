@@ -39,6 +39,16 @@ import {
   type AccountFacts,
 } from "../lib/oauthAccounts";
 import { decideFounderGrant, parseFounderEmails } from "../lib/founderGrant";
+import {
+  IDENTITY_CONFIRM_COOKIE_PATH,
+  IDENTITY_CONFIRM_TTL_MS,
+  confirmCookieName,
+  confirmReturnUrl,
+  confirmWithFor,
+  isConfirmAction,
+  mintConfirmation,
+  recordPending,
+} from "../lib/identityConfirm";
 
 /** What this module reaches. The complete list. */
 export interface GoogleAuthDeps {
@@ -64,6 +74,12 @@ export interface GoogleAuthDeps {
    * the email door does. Called without waiting, so it must never reject.
    */
   onMemberJoined(user: any): void;
+  /**
+   * The signed-in member behind a bearer token, or null. Optional so a unit
+   * test can register the sign-in routes without a session layer; without it
+   * `GET /api/auth/confirm-methods` is not mounted.
+   */
+  authedUser?(req: Request): Promise<any | null>;
 }
 
 /**
@@ -181,6 +197,21 @@ export function register(app: Express, deps: GoogleAuthDeps): void {
     });
   });
 
+  /**
+   * What the signed-in member confirms a destructive action with, so the exit
+   * and delete screens draw a control the member can actually use: their
+   * password, Confirm with Google, or a sentence about setting a password.
+   * Mounted only when the host hands over its session reader.
+   */
+  if (deps.authedUser) {
+    const sessionUser = deps.authedUser;
+    app.get("/api/auth/confirm-methods", async (req: Request, res: Response) => {
+      const user = await sessionUser(req);
+      if (!user) return res.status(401).json({ error: "auth_required" });
+      res.json({ confirmWith: confirmWithFor(user, deps.authSecret, deps.availability().available) });
+    });
+  }
+
   app.get("/api/auth/google/start", async (req: Request, res: Response) => {
     const avail = deps.availability();
     if (!avail.available) return res.status(404).json({ error: "Google sign-in is not set up on this village." });
@@ -190,30 +221,40 @@ export function register(app: Express, deps: GoogleAuthDeps): void {
       return res.status(429).json({ error: "Too many attempts. Try again in a few minutes." });
     }
     const next = normalizeNext(typeof req.query.next === "string" ? req.query.next : null);
-    const state = makeOAuthState(deps.authSecret, next);
+    // `confirm` makes this round trip a confirmation for one destructive action
+    // (server/lib/identityConfirm.ts), which signs nobody in. An unknown word
+    // is dropped, and the trip is an ordinary sign-in.
+    const confirm = isConfirmAction(req.query.confirm) ? req.query.confirm : null;
+    const state = makeOAuthState(deps.authSecret, next, Date.now(), confirm);
     const parsed = readOAuthState(deps.authSecret, state);
     if (!parsed) return res.status(500).json({ error: "Could not start sign-in." });
     res.redirect(302, googleAuthUrl(avail.config, state, parsed.nonce));
   });
 
   app.get("/api/auth/google/callback", async (req: Request, res: Response) => {
-    const avail = deps.availability();
-    if (!avail.available) return failTo(res, "not_configured");
-
     const code = typeof req.query.code === "string" ? req.query.code : "";
     const rawState = typeof req.query.state === "string" ? req.query.state : "";
-    // Google reports a refusal here too. A member who pressed Cancel is not an
-    // error to investigate.
-    if (typeof req.query.error === "string" && req.query.error) return failTo(res, "cancelled");
-    if (!code) return failTo(res, "no_code");
-
     // THE LOGIN-CSRF GUARD, and it runs before any network call. Without it an
     // attacker can drop a victim onto this URL carrying the attacker's own
     // authorization code, and the victim's browser silently ends up holding a
     // session for the attacker's Google account, or the victim's account gets
-    // linked to it.
+    // linked to it. Read first so a refusal on a confirmation goes back to the
+    // screen it started from; nothing below trusts it until it is non-null.
     const state = readOAuthState(deps.authSecret, rawState);
-    if (!state) return failTo(res, "bad_state");
+    const confirm = state && isConfirmAction(state.confirm) ? state.confirm : null;
+    const fail = (reason: string): void => {
+      if (!confirm) return failTo(res, reason);
+      res.redirect(302, confirmReturnUrl(confirm, `google_confirm=error&for=${confirm}&reason=${encodeURIComponent(reason)}`));
+    };
+
+    const avail = deps.availability();
+    if (!avail.available) return fail("not_configured");
+
+    // Google reports a refusal here too. A member who pressed Cancel is not an
+    // error to investigate.
+    if (typeof req.query.error === "string" && req.query.error) return fail("cancelled");
+    if (!code) return fail("no_code");
+    if (!state) return fail("bad_state");
 
     /*
      * BOUNDED AFTER THE STATE CHECK, WHICH IS THE ONLY PLACE IT BELONGS.
@@ -231,7 +272,7 @@ export function register(app: Express, deps: GoogleAuthDeps): void {
      * more sign-ins than a household makes and far fewer than a flood.
      */
     if (await deps.overLimit(`oauth-callback:${deps.clientIp(req)}`, 60, 60 * 60 * 1000)) {
-      return failTo(res, "rate_limited");
+      return fail("rate_limited");
     }
 
     let claims: Record<string, unknown> | null = null;
@@ -264,7 +305,7 @@ export function register(app: Express, deps: GoogleAuthDeps): void {
             `[oauth] Google token exchange failed: status=${r.status} redirectUri=${avail.config.redirectUri} ` +
               `body=${text.slice(0, 400).replace(/[{}]/g, "|")}`,
           );
-          return failTo(res, "exchange_failed");
+          return fail("exchange_failed");
         }
         payload = await r.json();
       } finally {
@@ -273,13 +314,13 @@ export function register(app: Express, deps: GoogleAuthDeps): void {
       claims = decodeIdTokenPayload(String(payload?.id_token ?? ""));
     } catch (e) {
       console.error("[oauth] Google token exchange threw:", e instanceof Error ? e.message : String(e));
-      return failTo(res, "exchange_failed");
+      return fail("exchange_failed");
     }
 
     const check = identityFromClaims(claims, { clientId: avail.config.clientId, nonce: state.nonce });
     if (!check.ok) {
       console.warn(`[oauth] Google sign-in refused: ${check.reason}`);
-      return failTo(res, check.reason);
+      return fail(check.reason);
     }
     const identity = check.identity;
 
@@ -291,6 +332,35 @@ export function register(app: Express, deps: GoogleAuthDeps): void {
     const everyone = await deps.members.all();
     const bySub =
       everyone.find((m) => readGoogleLink(deps.authSecret, m) === identity.sub) ?? null;
+
+    /*
+     * A CONFIRMATION, NOT A SIGN-IN. Everything above ran exactly as it does
+     * for a sign-in: the state signature, the nonce, the audience, the expiry
+     * and the verified email. What differs is what the answer may do. It names
+     * ONLY a member this Google subject is already linked to, never matches by
+     * email, never creates or links an account, never grants a role, and hands
+     * back no session: a five-minute cookie for one action, spent by that
+     * action's route (server/lib/identityConfirm.ts). A member with a password
+     * is sent back to it, because this path exists for the member who has none.
+     */
+    if (confirm) {
+      const back = (query: string) => res.redirect(302, confirmReturnUrl(confirm, query));
+      if (!bySub) return back(`google_confirm=error&for=${confirm}&reason=not_linked`);
+      if (bySub.passwordHash) return back(`google_confirm=error&for=${confirm}&reason=has_password`);
+      const minted = mintConfirmation(deps.authSecret, bySub.id, confirm, Number(bySub.tokenVersion ?? 0));
+      const saved = await deps.members.update(bySub.id, (m: any) => recordPending(m, confirm, minted.jti, minted.exp));
+      if (!saved) return back(`google_confirm=error&for=${confirm}&reason=account_unavailable`);
+      res.cookie(confirmCookieName(confirm), minted.token, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: avail.config.redirectUri.startsWith("https://"),
+        maxAge: IDENTITY_CONFIRM_TTL_MS,
+        path: IDENTITY_CONFIRM_COOKIE_PATH,
+      });
+      deps.recordAudit(`auth:google-confirmed:${confirm}`, bySub.id);
+      return back(`google_confirm=${confirm}`);
+    }
+
     const byEmail = bySub ? null : await deps.members.byEmail(identity.email);
 
     const decision = decideGoogleSignIn({

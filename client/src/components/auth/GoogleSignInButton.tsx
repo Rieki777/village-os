@@ -37,7 +37,7 @@ interface Props {
  * This is the one place in the client where a colour should not follow the
  * founder's seed colour.
  */
-function GoogleMark() {
+export function GoogleMark() {
   return (
     <svg className="w-5 h-5" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
       {/* theme-ok: Google's brand mark, fixed by Google's guidelines and never re-themed by a village. */}
