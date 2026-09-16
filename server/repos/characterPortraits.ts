@@ -578,11 +578,27 @@ export async function grantsForMember(
  * record about a person, so it leaves with the person.
  *
  * IDEMPOTENT, because the erasure sequence may re-run it. A second pass finds
- * no rows, returns no filenames, and unlinks nothing.
+ * no rows and returns no filenames.
+ *
+ * THE FILES COME OFF BEFORE THIS RUNS, and the caller asks for them first with
+ * `portraitFilesForMember`. These rows are the only record of which files on
+ * the volume are this member's face, so deleting them first and unlinking
+ * second meant a sweep that died in between left bytes nothing could ever
+ * name again, still served to anybody holding the address. The filenames are
+ * still returned, for a caller that has already taken them off.
  */
 export async function forgetPortraitsForMember(pool: Pool, userId: string): Promise<string[]> {
-  const held = await portraitsForMember(pool, userId);
+  const files = await portraitFilesForMember(pool, userId);
   await pool.query("DELETE FROM `character_portraits` WHERE `user_id` = ?", [userId]);
   await pool.query("DELETE FROM `portrait_grants` WHERE `user_id` = ?", [userId]);
+  return files;
+}
+
+/**
+ * Every file on the volume that is one of this member's portraits: each
+ * published picture and any forge candidate still waiting to be chosen.
+ */
+export async function portraitFilesForMember(pool: Pool, userId: string): Promise<string[]> {
+  const held = await portraitsForMember(pool, userId);
   return held.flatMap((p) => [p.fileName, p.candidateFileName]).filter((f): f is string => !!f);
 }

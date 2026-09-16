@@ -13,7 +13,8 @@ import os from "os";
 import path from "path";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { E2E_BOOT_DEADLINE_MS, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { waitForHealth } from "./db/e2eBoot";
 /*
  * THE CLIENT'S OWN FORMATTER, imported into a server test on purpose.
  *
@@ -48,7 +49,12 @@ const DIST = path.resolve(process.cwd(), "dist/index.js");
  * port, and anything reaching into Linux's ephemeral range. Change the number
  * below and it will tell you.
  */
-const PORT = 6500 + (process.pid % 400);
+// 6698 + (pid % 202), and no longer 6500 + (pid % 400). That window held eight
+// ports fetch() refuses to dial (6566, 6665-6669, 6679, 6697). Three CI runs
+// landed on 6668, 6669 and 6679, and each failed "server did not start in 120s"
+// against a server that was up and listening. This is the widest clean stretch
+// of the old window, so it cannot overlap another suite. See ./db/e2eBoot.ts.
+const PORT = 6698 + (process.pid % 202);
 const BASE = `http://127.0.0.1:${PORT}`;
 const ADMIN = "AdminTokens123!";
 const PASSWORD = "OraTokens123!";
@@ -139,16 +145,9 @@ describe.skipIf(!DB_CONFIGURED)("the tokens tab, and what a member sees afterwar
     child.stdout?.on("data", (d) => logs.push(String(d)));
     child.stderr?.on("data", (d) => logs.push(String(d)));
 
-    const deadline = Date.now() + E2E_BOOT_DEADLINE_MS;
-    for (;;) {
-      if (Date.now() > deadline) {
-        throw new Error(`server did not start in ${E2E_BOOT_DEADLINE_MS / 1000}s:\n${logs.join("")}`);
-      }
-      try {
-        if ((await fetch(`${BASE}/health`)).ok) break; // module-review-ok: the boot poll against the local test server
-      } catch { /* not up yet */ }
-      await new Promise((r) => setTimeout(r, 400));
-    }
+    // Throws with the last thing /health said and when the server logged that it
+    // was listening, and stops at once if the child has died. See ./db/e2eBoot.ts.
+    await waitForHealth({ base: BASE, logs, child });
 
     const boot = await call("POST", "/api/admin/bootstrap", {
       password: ADMIN, email: `founder-${PORT}@example.test`, name: "Tokens Founder",

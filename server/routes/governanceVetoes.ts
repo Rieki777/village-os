@@ -57,6 +57,7 @@
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { ballotById } from "../lib/ballots";
+import { decisionLink } from "../lib/ballotNotices";
 import { changeSetOf, recordVeto as stopTheLanding } from "../lib/applyDue";
 import {
   beingVotedOut,
@@ -80,10 +81,10 @@ import {
 } from "../lib/stewardship";
 import { boolVar, stringVar } from "../lib/variables";
 
-type Deps = Pick<AppDeps, "authedUser" | "mayAct" | "isAdmin" | "getPool" | "members" | "firstName" | "notify">;
+type Deps = Pick<AppDeps, "authedUser" | "mayAct" | "isAdmin" | "getPool" | "members" | "firstName" | "notify" | "closerFor">;
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, mayAct, isAdmin, getPool, members, firstName, notify } = deps;
+  const { authedUser, mayAct, isAdmin, getPool, members, firstName, notify, closerFor } = deps;
 
   /**
    * One gate for both acts, so the veto and the no-objection can never drift
@@ -223,7 +224,7 @@ export function register(app: Express, deps: Deps): void {
     let stopped = false;
     let unstoppable: string | null = null;
     if (standing.stands) {
-      const stop = await stopTheLanding({ pool: getPool() }, { ballotId: ballot.id, stewardId: user.id, reason });
+      const stop = await stopTheLanding({ pool: getPool(), closerFor }, { ballotId: ballot.id, stewardId: user.id, reason });
       stopped = stop.ok;
       if (!stop.ok) unstoppable = stop.error;
     }
@@ -238,7 +239,7 @@ export function register(app: Express, deps: Deps): void {
         type: "ballot_vetoed",
         title: `A steward stopped ${ballot.title}`,
         body: departing ? `${votedOutSentence(firstName(user.name), departing.landsAt)}\n\n${reason}` : reason,
-        link: `/decisions/${ballot.id}`,
+        link: decisionLink(ballot),
         dedupeKey: `bal:${ballot.id}:vetoed:${user.id}`,
       });
     }
