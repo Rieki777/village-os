@@ -318,6 +318,54 @@ describe.skipIf(!DB_CONFIGURED)("an admin write reaches the page that renders it
     }
   });
 
+  it("where a circle sits: created inside, moved, refused in words, never deleted from under its children", async () => {
+    /*
+     * `parentCircleId` had one writer that could set it, a blind body spread on
+     * PUT, and one check, self-parent. Two circles holding each other passed,
+     * and the map then drew NOTHING. POST hardcoded null, so a founder could not
+     * create a circle inside another at all. These drive the routes the admin
+     * picker calls and read /api/org back, which is what every surface draws.
+     */
+    const parent = await call("POST", "/api/admin/circles", { name: "Nesting Hearth Circle" });
+    expect(parent.status, JSON.stringify(parent.json)).toBe(200);
+    const pid = String(parent.json.id);
+    const child = await call("POST", "/api/admin/circles", { name: "Nesting Garden Circle", parentCircleId: pid });
+    expect(child.status, JSON.stringify(child.json)).toBe(200);
+    const cid = String(child.json.id);
+    const sits = async (id: string) =>
+      ((await asStranger("/api/org")).json.circles ?? []).find((x: any) => x.id === id)?.parentCircleId ?? null;
+    expect(await sits(cid), "created inside its parent").toBe(pid);
+
+    const ghost = await call("POST", "/api/admin/circles", { name: "Nesting Nowhere Circle", parentCircleId: "no-such-circle" });
+    expect(ghost.status).toBe(400);
+    expect(ghost.json.error).toBe("circle_parent_unknown");
+
+    // The loop that used to blank the map, refused with both names in it.
+    const loop = await call("PUT", `/api/admin/circles/${pid}`, { parentCircleId: cid });
+    expect(loop.status, JSON.stringify(loop.json)).toBe(400);
+    expect(loop.json.error).toBe("circle_parent_cycle");
+    expect(String(loop.json.message)).toContain("Nesting Hearth Circle");
+    expect(String(loop.json.message)).toContain("Nesting Garden Circle");
+    expect(await sits(pid), "a refused move writes nothing").toBeNull();
+
+    // A rename that does not move the circle is never checked for placement.
+    const renamed = await call("PUT", `/api/admin/circles/${cid}`, { name: "Nesting Garden and Orchard Circle" });
+    expect(renamed.status, JSON.stringify(renamed.json)).toBe(200);
+    expect(await sits(cid)).toBe(pid);
+
+    const blocked = await call("DELETE", `/api/admin/circles/${pid}`);
+    expect(blocked.status).toBe(409);
+    expect(blocked.json.error).toBe("circle_has_children");
+
+    // "" is the picker's "at the top".
+    const out = await call("PUT", `/api/admin/circles/${cid}`, { parentCircleId: "" });
+    expect(out.status, JSON.stringify(out.json)).toBe(200);
+    expect(await sits(cid), "moved to the top of the village").toBeNull();
+
+    const gone = await call("DELETE", `/api/admin/circles/${pid}`);
+    expect(gone.status, JSON.stringify(gone.json)).toBe(200);
+  });
+
   it("image alt text reaches /api/game/config, which is what every page reads", async () => {
     const saved = await call("PUT", "/api/admin/brand", {
       images: {

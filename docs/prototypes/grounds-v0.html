@@ -454,13 +454,13 @@
   .wallrow:hover{background:rgba(236,208,138,.1)}
   .wallrow b{color:#fff;font-weight:normal}
   .wallrow span{color:#b9cf9a;display:block;font-size:10.5px}
-  #wallBtn{position:absolute;left:200px;top:14px;z-index:33;border:1px solid #6b5430;border-radius:8px;cursor:pointer;
+  #wallBtn{border:1px solid #6b5430;border-radius:8px;cursor:pointer;white-space:nowrap;
     background:linear-gradient(180deg,#2c2114,#1c140b);color:var(--parch);font-family:inherit;font-size:11px;
     font-variant:small-caps;letter-spacing:.14em;padding:7px 14px;box-shadow:0 3px 10px rgba(0,0,0,.5)}
 
 
   /* ---------- the Loom — connections lens (D9: a lens, never a ledger) ---------- */
-  #loomBtn{position:absolute;left:310px;top:14px;z-index:33;border:1px solid #6b5430;border-radius:8px;cursor:pointer;
+  #loomBtn{border:1px solid #6b5430;border-radius:8px;cursor:pointer;white-space:nowrap;
     background:linear-gradient(180deg,#2c2114,#1c140b);color:var(--parch);font-family:inherit;font-size:11px;
     font-variant:small-caps;letter-spacing:.14em;padding:7px 14px;box-shadow:0 3px 10px rgba(0,0,0,.5)}
   body.loom #loomBtn{background:linear-gradient(180deg,#7a5f33,#5a4423);color:#fff}
@@ -683,7 +683,21 @@
 
 
   /* ---------- map-type selector + the Circles org map (same data, second projection) ---------- */
-  #mapSel{position:absolute;left:14px;top:14px;z-index:33;display:flex;gap:0;border:1px solid #6b5430;border-radius:8px;
+  /* THE TOP BAR IS ONE ROW, NOT THREE GUESSES.
+
+     These three sat at hardcoded lefts: the map selector at 14, Get Involved
+     at 200, the Loom at 310. The gap between the last two is 110px and the
+     Get Involved button is wider than that, so the Loom painted over its
+     final letter and the live map read "GET INVOLVE". Nothing was wrong with
+     the words; the second button was standing on them.
+
+     A hand-placed left is a guess about how wide small-caps text with .14em
+     letter-spacing renders, and that guess is wrong the moment a village
+     renames anything. So the three become ONE flex row and the browser does
+     the arithmetic. Order is DOM order now, which is why Get Involved sits
+     first: it is a MENU, and the two beside it are views of the land. */
+  #topNav{position:absolute;left:14px;top:14px;z-index:33;display:flex;gap:8px;align-items:flex-start}
+  #mapSel{display:flex;gap:0;border:1px solid #6b5430;border-radius:8px;
     overflow:hidden;box-shadow:0 3px 10px rgba(0,0,0,.5)}
   #mapSel button{appearance:none;border:none;background:linear-gradient(180deg,#2c2114,#1c140b);color:var(--parch);
     font-family:inherit;font-variant:small-caps;letter-spacing:.1em;font-size:11px;padding:7px 12px;cursor:pointer}
@@ -933,7 +947,7 @@
      panel gets a real pocket form below instead. #themeBtn is a desk button
      anchored at right:356px with nowhere to stand here, so the pocket door
      is a cell in the drawer, where every other way in already lives. */
-  body.pocket :is(#dock,#mapSel,#wallBtn,#loomBtn,#buildBtn,#minimapWrap,#attention,#themeBtn,#dayBtn,#layers,#buildBar){display:none!important}
+  body.pocket :is(#dock,#topNav,#mapSel,#wallBtn,#loomBtn,#buildBtn,#minimapWrap,#attention,#themeBtn,#dayBtn,#layers,#buildBar){display:none!important}
   /* THE SHEET, and it is the one this document already uses: #panel,
      #moduleCard and #pdrawer all hinge off the bottom edge on the same
      300 ms curve. Following it costs nothing and means a person who has
@@ -1427,12 +1441,19 @@
   <h4 style="margin-top:4px">Or describe your land</h4>
   <div id="aiTheme"><input id="aiWords" placeholder="e.g. high-desert mesa, adobe & sage"><button class="chip" id="aiGo">Weave it</button></div>
 </div>
-<div id="mapSel" title="what kind of map do you want to see?">
- <button id="msLiving" class="on">🏞 Living Map</button>
- <button id="msCircles">◎ Circles</button>
+<!-- ONE ROW, and DOM order is what the reader sees (see #topNav).
+     Get Involved leads because it is a MENU: it opens a list of ways to
+     help. The two beside it are VIEWS of the same land, and the Loom is a
+     lens over it. A menu belongs at the edge, not wedged between two
+     projections of the map. -->
+<div id="topNav">
+ <button id="wallBtn">☰ Get Involved</button><!-- ids keep the historical wall name; user-facing copy says Get Involved -->
+ <div id="mapSel" title="what kind of map do you want to see?">
+  <button id="msLiving" class="on">🏞 Living Map</button>
+  <button id="msCircles">◎ Circles</button>
+ </div>
+ <button id="loomBtn" title="every connection, one snapshot (L)">⧉ The Loom</button>
 </div>
-<button id="wallBtn">☰ Get Involved</button><!-- ids keep the historical wall name; user-facing copy says Get Involved -->
-<button id="loomBtn" title="every connection, one snapshot (L)">⧉ The Loom</button>
 <div id="dock">
  <button data-m="wallet" data-tip="The Exchange. One ledger, every token; Hearts are thanks, never a wage. · /wallet"></button>
  <button data-m="stay" data-tip="Stays. Book a room; work-exchange quests extend your stay. · /stay"></button>

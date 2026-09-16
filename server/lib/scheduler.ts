@@ -116,7 +116,7 @@ async function tick(pool: Pool) {
  * change needs its own lane, its own reasoning about first boot, and a new
  * vehicle for that assertion.
  */
-function schedulerEnabled(): boolean {
+export function schedulerEnabled(): boolean {
   const raw = process.env.SCHEDULER_ENABLED;
   if (raw === undefined || raw === "") return true;
   const v = raw.trim().toLowerCase();

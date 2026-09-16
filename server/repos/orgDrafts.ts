@@ -38,6 +38,16 @@
  * that read in half would leave a caller assembling a draft from two modules
  * and nothing saying the halves agree. It stays where it is until it can move
  * whole.
+ *
+ * ── AND ONE READ OF THE CHANGES, WHICH IS ERASURE'S AND STANDS ALONE ────
+ *
+ * `forgetMemberInDrafts` (server/lib/orgDrafts.ts) scans the changes that can
+ * name a person and rewrites the ones that do. That is neither a draft body
+ * nor a step in anybody's transaction: it runs as one named step of the
+ * resumable erasure sweep, on the pool, selecting by op and writing by primary
+ * key. So it meets the test the withdrawal statements meet, and its two
+ * statements live here, while the JSON policy they serve stays beside the
+ * code that decides those shapes.
  */
 import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 
@@ -87,4 +97,37 @@ export async function draftStatus(pool: Pool, draftId: string): Promise<string |
   );
   const row = rows[0];
   return row ? String(row.status) : null;
+}
+
+/** A draft change that can restate a person, exactly as stored. */
+export interface PeopleChangeRow {
+  id: string;
+  op: string;
+  payload: unknown;
+  before_json: unknown;
+}
+
+/**
+ * Every change that can name somebody: `seat_holder` carries them in
+ * `payload`, and `end_holding` carries their whole assignment row in
+ * `before_json`. Read for erasure only, on the pool, never inside a publish.
+ */
+export async function draftChangesNamingPeople(pool: Pool): Promise<PeopleChangeRow[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT id, op, payload, before_json FROM org_draft_changes WHERE op IN ('seat_holder', 'end_holding')",
+  );
+  return rows as unknown as PeopleChangeRow[];
+}
+
+/** Write one change's person-bearing JSON back, by primary key. */
+export async function rewriteDraftChangePeople(
+  pool: Pool,
+  changeId: string,
+  payload: string | null,
+  beforeJson: string | null,
+): Promise<void> {
+  await pool.query<ResultSetHeader>(
+    "UPDATE org_draft_changes SET payload = ?, before_json = ? WHERE id = ?",
+    [payload, beforeJson, changeId],
+  );
 }
