@@ -22155,6 +22155,7 @@ ${inner}
      * literal and read at landing time, not at boot.
      */
     [CYCLE_SETTLEMENT]: settlementCloser(() => moonDeps()),
+    [REDEMPTION_SUBJECT]: redemptionCloser({ getPool, notify }),
     /*
      * Mechanics (GOV_DESIGN 2.6). Every step is a guarded update or an
      * idempotent apply, so a crash partway heals on the admin apply path
@@ -23155,7 +23156,6 @@ ${inner}
    * is read straight off this table.
    */
   SUBJECT_CLOSERS[MINT_RULE] = SUBJECT_CLOSERS.mechanics;
-  SUBJECT_CLOSERS[REDEMPTION_SUBJECT] = redemptionCloser({ getPool, notify });
 
   /**
    * WHAT SETTLING A MOON NEEDS that only this file can hand over: the four

@@ -32,7 +32,10 @@ shared password is the only admin credential.
    `sys:redemption-hold` after the row commits.
 3. **Decide.** A holder of `redemption.confirm` confirms (the tokens post on to `sys:redeemed`, a
    sink and never a faucet) or refuses (the hold is reversed). The member may withdraw their own
-   request at any time before that.
+   request at any time before that. WHO decides is derived and not configured: a village where nobody
+   holds the key sends the request to a village ballot instead (`confirmModeFor`), which is why
+   `redemption.confirmed_by` was retired on 2026-09-15. The ballot path is built and its closer is
+   registered; it stays refused at the door while `VOTE_PATH_BUILT` is false.
 4. **Expire.** The `redemption-reap` job reverses any request older than
    `redemption.expires_after_days`. Zero means never.
 
@@ -45,7 +48,7 @@ update changed the row posts.
 |---|---|
 | API prefixes | `/api/redemptions`, `/api/admin/redemptions` |
 | Capability it adds | `redemption.confirm` |
-| Variables | `redemption.confirmed_by`, `redemption.holds_on_propose`, `redemption.tokens`, `redemption.per_member_per_cycle`, `redemption.expires_after_days` |
+| Variables | `redemption.holds_on_propose`, `redemption.tokens`, `redemption.per_member_per_cycle`, `redemption.expires_after_days`, and ruling 23's money dials: `redemption.currencies`, `redemption.rate_source`, `redemption.rate_per_token`, `redemption.fee_pct`, `redemption.fee_fixed`, `redemption.min_amount`, `redemption.max_per_request`, `redemption.max_per_member_per_cycle`, `redemption.max_village_per_cycle`, `redemption.process_text` |
 | Open state | every row still `requested`, village-wide |
 
 **Off means off, with two deliberate exceptions, both about value already held.**

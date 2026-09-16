@@ -208,6 +208,35 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
     ashToken = String(ash.json?.token ?? "");
     ashId = String(ash.json?.user?.id ?? "");
 
+    /*
+     * THIS VILLAGE HAS A STEWARD, and after 2026-09-15 that is setup rather
+     * than decoration. Who confirms a redemption is DERIVED from who holds
+     * `redemption.confirm`, and the count deliberately excludes admins, so a
+     * fixture whose only key-holder is the founder's admin role is a village
+     * with no steward: every ask below would be refused into the unbuilt vote
+     * path. Measured, on the run that added this: nine cases went red with
+     * that one sentence.
+     *
+     * Rowan holds it, and neither Wren nor Ash does, because two cases below
+     * assert exactly that a member without the key is turned away.
+     */
+    const rowan = await call("POST", "/api/auth/register", {
+      name: "Rowan", email: `rowan-${PORT}@example.test`, password: PASSWORD, paths: ["resident"],
+    }, null);
+    expect(rowan.status, `Rowan must register: ${rowan.text.slice(0, 200)}`).toBe(200);
+    const rowanId = String(rowan.json?.user?.id ?? "");
+    const roles = await call("GET", "/api/roles", undefined, founderToken);
+    const steward = (roles.json ?? []).find((r: any) => r.id === "steward-circle");
+    expect(steward, "the seeded Steward Circle must exist").toBeTruthy();
+    const granted = await call("PUT", "/api/admin/roles/steward-circle/capabilities", {
+      capabilities: [...(steward.capabilities ?? []), "redemption.confirm"],
+      grantedEscalations: ["redemption.confirm"],
+    }, founderToken);
+    expect(granted.status, granted.text.slice(0, 300)).toBe(200);
+    await call("PUT", `/api/admin/players/${rowanId}/stage`, { stageId: "member" }, founderToken);
+    const seated = await call("POST", "/api/admin/roles/steward-circle/holders", { userId: rowanId, action: "add" }, founderToken);
+    expect(seated.status, seated.text.slice(0, 300)).toBe(200);
+
     // The exchange module carries the balances read this file uses.
     expect((await call("PUT", "/api/admin/modules/exchange/lifecycle", { lifecycle: "public" }, founderToken)).status).toBe(200);
     // A self-grant is refused at any amount, so every mint here goes to
@@ -551,6 +580,80 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
     expect(String(mine.json?.money?.processText)).toContain("\n");
     await setVar("redemption.process_text", "");
   });
+
+  /*
+   * THE SNAPSHOT LAW, DRIVEN THROUGH THE DOORS.
+   *
+   * `held_account` has followed this law since 0201: what a request was opened
+   * with is what it settles by. Ruling 23 puts MONEY on the row, which makes the
+   * law load-bearing in a new way: a member agreed to a number, and a founder
+   * editing a rate afterwards must not change what that member is owed, or what
+   * the steward confirming it reads.
+   *
+   * So this opens one request, moves EVERY dial ruling 23 added, and then reads
+   * the same request back from the member's door and the steward's queue.
+   */
+  it("freezes what a request is worth at the ask, however the dials move afterwards", async () => {
+    await setVar("redemption.per_member_per_cycle", "50");
+    await setVar("redemption.rate_source", "set");
+    await setVar("redemption.rate_per_token", "2");
+    await setVar("redemption.fee_pct", "10");
+    await setVar("redemption.fee_fixed", "1");
+    await setVar("redemption.process_text", "Call Suzy, she sends a bank transfer.");
+    await mintTo(wrenId, 100);
+
+    const asked = await call("POST", "/api/redemptions", { token: CREDITS, amount: 20, askedFor: "a kiln" }, wrenToken);
+    expect(asked.status, asked.text.slice(0, 300)).toBe(201);
+    const id = String(asked.json?.redemption?.id ?? "");
+    const opened = asked.json?.redemption?.money;
+    expect(opened.grossMinor).toBe(4000);
+    expect(opened.feeMinor).toBe(500);
+    expect(opened.netMinor).toBe(3500);
+
+    // Every dial moves, including the ones that would have refused this ask.
+    await setVar("redemption.rate_per_token", "10");
+    await setVar("redemption.fee_pct", "50");
+    await setVar("redemption.fee_fixed", "7");
+    await setVar("redemption.currencies", "CHF");
+    await setVar("redemption.min_amount", "500");
+    await setVar("redemption.max_per_request", "600");
+    await setVar("redemption.max_per_member_per_cycle", "600");
+    await setVar("redemption.max_village_per_cycle", "600");
+    await setVar("redemption.process_text", "Everything about this has changed.");
+
+    // The member's own view of the open request: unmoved.
+    const mine = await call("GET", "/api/redemptions", undefined, wrenToken);
+    const row = (mine.json?.open ?? []).find((r: any) => r.id === id);
+    expect(row, "the request must still be open").toBeTruthy();
+    expect(row.money.grossMinor).toBe(4000);
+    expect(row.money.feeMinor).toBe(500);
+    expect(row.money.netMinor).toBe(3500);
+    expect(row.processText).toBe("Call Suzy, she sends a bank transfer.");
+
+    // And the steward's queue, which is what somebody confirms against.
+    const queue = await call("GET", "/api/admin/redemptions", undefined, founderToken);
+    const waiting = (queue.json?.redemptions ?? []).find((r: any) => r.id === id);
+    expect(waiting.money.grossMinor).toBe(4000);
+    expect(waiting.money.netMinor).toBe(3500);
+    expect(waiting.processText).toBe("Call Suzy, she sends a bank transfer.");
+
+    // Settling it destroys the TOKENS asked for, in full, whatever the fee said.
+    const before = await balanceOf(wrenToken);
+    const done = await call("POST", `/api/redemptions/${id}/confirm`, { note: "paid by transfer" }, founderToken);
+    expect(done.status, done.text.slice(0, 300)).toBe(200);
+    expect(done.json?.redemption?.money?.netMinor).toBe(3500);
+    expect(await balanceOf(wrenToken)).toBe(before);
+
+    await setVar("redemption.currencies", "");
+    await setVar("redemption.min_amount", "0");
+    await setVar("redemption.max_per_request", "0");
+    await setVar("redemption.max_per_member_per_cycle", "0");
+    await setVar("redemption.max_village_per_cycle", "0");
+    await setVar("redemption.fee_pct", "0");
+    await setVar("redemption.fee_fixed", "0");
+    await setVar("redemption.rate_source", "exchange");
+    await setVar("redemption.process_text", "");
+  }, 300_000);
 
   it("refuses to switch off while a member is waiting, and serves withdraw once it is off", async () => {
     await mintTo(wrenId, 15);

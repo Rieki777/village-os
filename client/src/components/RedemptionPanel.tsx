@@ -435,6 +435,28 @@ export default function RedemptionPanel() {
             like, and arrange how you are paid with a steward, the way this village's process says.
           </p>
 
+          {/*
+            A PUBLIC BALLOT IS A DIFFERENT THING FROM A STEWARD READING YOUR
+            REQUEST, and the member has to know which one they are starting
+            BEFORE they press the button, not after.
+
+            A ballot is served to anyone with the link and it is kept: what you
+            asked for, and what you asked for it in return, stay readable after
+            a refusal and after the moon turns. `confirmedBy` is derived from
+            whether anybody holds the redemption key, so this appears exactly
+            when the village has nobody to confirm it privately.
+          */}
+          {data.confirmedBy === "vote" && data.votePathBuilt && (
+            <p role="note" className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5">
+              <span className="font-semibold">Nobody in this village holds the key that confirms a redemption,
+              so this one goes to a village vote.</span>{" "}
+              A vote is public and it stays public: what you are asking for, and what you are asking for it in
+              return, become readable by anyone with the link, permanently, including if the village says no.
+              If you would rather it stayed between you and a steward, ask the village to give the redemption
+              key to a role first.
+            </p>
+          )}
+
           {/* THE MATHS, BEFORE THE BUTTON. */}
           {quote ? (
             <p className="text-sm text-muted-foreground">

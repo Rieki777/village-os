@@ -22,27 +22,27 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 174 open and 41 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 173 open and 41 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 189 of them as soon as it is saved, and 26 of them at the next cycle close.
+Each dial also says WHEN a change lands. 188 of them as soon as it is saved, and 26 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-215 dials in 32 categories. 127 carry a minimum and a maximum. By type: 90 integer, 20 decimal, 18 percentage, 23 boolean, 30 choice, 33 text, 1 longtext.
+214 dials in 32 categories. 127 carry a minimum and a maximum. By type: 90 integer, 20 decimal, 18 percentage, 23 boolean, 29 choice, 33 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
 | Membership | 2 | 2 | 0 |
 | Gratitude | 11 | 11 | 0 |
-| Ledger | 18 | 10 | 8 |
+| Ledger | 17 | 9 | 8 |
 | The Mint | 6 | 5 | 1 |
 | Progression | 28 | 28 | 0 |
 | Quests | 5 | 5 | 0 |
@@ -95,7 +95,6 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Issuance cap per lunar cycle | `ledger.admin_mint_cycle_cap` | Ledger | integer | `10000` | the whole village |
 | Second steward needed above | `ledger.admin_mint_cosign_over` | Ledger | integer | `100` | the whole village |
 | Bonus for a circle that finished under its cap | `resources.circle_cap_bonus_pct` | Ledger | percentage | `10` | the whole village |
-| Who confirms a redemption | `redemption.confirmed_by` | Ledger | choice | `steward` | the whole village |
 | Hold the tokens while a redemption is open | `redemption.holds_on_propose` | Ledger | boolean | `true` | the founder or an admin |
 | Which tokens may be redeemed | `redemption.tokens` | Ledger | text | blank | the founder or an admin |
 | Redemptions one member may open per cycle | `redemption.per_member_per_cycle` | Ledger | integer | `2` | the whole village |
@@ -504,7 +503,7 @@ How much recognition is minted for a member whose Work With Us proposal is accep
 
 ## Ledger
 
-18 dials. 10 for the whole village, 8 for the founder or an admin.
+17 dials. 9 for the whole village, 8 for the founder or an admin.
 
 ### Issuance cap per lunar cycle
 
@@ -550,25 +549,6 @@ The share of a circle's UNMINTED capacity that comes back to the circle as a bon
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
 | What it costs to change | a routine vote |
-
-### Who confirms a redemption
-
-Who has to agree before a member's redemption is carried out and their tokens are destroyed. A steward means one person who holds this village's redemption key signs it off, and it stays between them, the member, and the other stewards. A village vote means it opens as a ballot, and a ballot is public: what the member asked for, and what they asked for it in return, become readable by anyone with the link, permanently, including after a refusal. Whichever is set when a member asks is written onto their request, so moving this dial never changes how something already open is decided.
-
-| Fact | Value |
-| --- | --- |
-| Key | `redemption.confirmed_by` |
-| Type | choice, one of a fixed list |
-| Default | `steward` |
-| Range | one of the choices below |
-| Who may change it | the whole village |
-| A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
-
-What it may be set to:
-
-- `steward` A steward confirms. One holder of the redemption key signs it off. Grant that key to a role in the village's powers, and a village that has granted it to nobody falls back to its admins.
-- `vote` The village votes. It opens as a ballot. Ballots are public. This path is still being finished, and while it is, asking to redeem is refused with a sentence saying so.
 
 ### Hold the tokens while a redemption is open
 
