@@ -25461,7 +25461,7 @@ ${inner}
   });
   registerGovernanceWizardRoutes(app, { authedUser, getPool, capabilityCtx, weightModeNow });
   registerDelegationRoutes(app, { authedUser, getPool, capabilityCtx, members, firstName });
-  registerGovernanceVetoRoutes(app, { authedUser, mayAct, isAdmin, getPool, members, firstName, notify });
+  registerGovernanceVetoRoutes(app, { authedUser, mayAct, isAdmin, getPool, members, firstName, notify, closerFor: (subjectType: string) => SUBJECT_CLOSERS[subjectType] });
   registerGovernanceLandingRoutes(app, { authedUser, mayAct, getPool, members, firstName, notify });
   // The two founder doors onto the moon's settlement: ask the village now,
   // and land what the village has already carried. server/routes/moonSettlement.ts.
