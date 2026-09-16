@@ -400,8 +400,10 @@ export async function measureVisionMetrics(
     allMembers(): Promise<any[]>;
     consentedCounts(): Promise<Map<string, number>>;
     isExampleUser(u: any): boolean;
-    computeStage(u: any, consented: number, trainingDone: readonly string[]): string;
+    computeStage(u: any, consented: number, trainingDone: readonly string[], paidByVillage: boolean): string;
     trainingCompletions(userIds: readonly string[]): Promise<Map<string, string[]>>;
+    /** Which of these members the village has ever paid, in one query. */
+    paidByVillage(userIds: readonly string[]): Promise<Set<string>>;
     seasonsCompleted(): number;
   },
 ): Promise<Map<string, number>> {
@@ -435,13 +437,20 @@ export async function measureVisionMetrics(
     // One query for the roll, beside the grouped count above it. The stage
     // ladder now reads the server's training record rather than a member field.
     const trained = await deps.trainingCompletions(real.map((u: any) => String(u.id)));
+    // And the fourth fact, batched the same way. This tally used to ask the
+    // ladder with three of its four arguments, so everybody the village had
+    // paid was counted a rung below where they stand. A `members_at_stage`
+    // objective is a TRIGGER rather than a display: meeting it prompts a human
+    // to publish a reorganisation, so undercounting it holds the village short
+    // of a threshold it has already crossed.
+    const paid = await deps.paidByVillage(real.map((u: any) => String(u.id)));
     for (const m of asked) {
       if (!m.startsWith("members_at_stage:")) continue;
       const floor = stageIndex(m.slice("members_at_stage:".length));
       if (floor < 0) continue;
       measured.set(
         m,
-        real.filter((u) => stageIndex(deps.computeStage(u, Number(consented.get(u.id) ?? 0), trained.get(String(u.id)) ?? [])) >= floor)
+        real.filter((u) => stageIndex(deps.computeStage(u, Number(consented.get(u.id) ?? 0), trained.get(String(u.id)) ?? [], paid.has(String(u.id)))) >= floor)
           .length,
       );
     }

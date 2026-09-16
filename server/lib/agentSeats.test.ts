@@ -273,6 +273,7 @@ describe.skipIf(!configured)("an agent holds a seat", () => {
       isExampleUser: () => false,
       computeStage: () => "",
       trainingCompletions: async () => new Map<string, string[]>(),
+      paidByVillage: async () => new Set<string>(),
       seasonsCompleted: () => 0,
     });
     expect(measured.get("seats_filled")).toBe(1);
