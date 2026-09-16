@@ -253,7 +253,6 @@ export default function RedemptionPanel() {
   })();
 
   const closed = data.perCycle <= 0;
-  const votePending = data.confirmedBy === "vote" && !data.votePathBuilt;
   const atCap = data.openedThisCycle >= data.perCycle;
   const decimalsFor = (slug: string) => data.tokens.find((t) => t.slug === slug)?.decimals ?? 0;
 
@@ -348,12 +347,6 @@ export default function RedemptionPanel() {
       {closed ? (
         <p className="text-sm text-muted-foreground">
           This village is not taking redemptions just now. A steward can open them in the
-          village's dials.
-        </p>
-      ) : votePending ? (
-        <p className="text-sm text-muted-foreground">
-          This village has chosen that redemptions go to a village vote, and that path is
-          still being finished. A steward can move it back to a steward confirming in the
           village's dials.
         </p>
       ) : data.tokens.length === 0 ? (
