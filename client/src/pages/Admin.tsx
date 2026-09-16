@@ -9,6 +9,7 @@ import {
   CLOSE_CONSEQUENCES, closeReport, settlementBlocked, settlementIntent,
   type OpenCycle, type PendingSettlement,
 } from "@/lib/settlement";
+import { settlementRefusalWarning } from "@shared/moonSettlement";
 import {
   canAct, DISCLOSURE_NOTE, emptyQueueLine, reportedLine, reportPlace,
   type MessageReport, type ReportStatus,
@@ -47,6 +48,7 @@ import { CrowdpoolAdminTab, ForumCategoriesEditor, ToolsCategoriesEditor } from 
 import { CONTENT_SECTIONS, emptyContentFor } from "@/components/admin/contentSections";
 import { displayCurrencyProblem } from "@shared/money";
 import { formatTokenAmount } from "@/lib/tokenAmount";
+import { parentChoicesFor } from "@shared/circleView";
 import InvoluntaryExitDialog from "@/components/admin/InvoluntaryExitDialog";
 import ContentEditorTab from "@/components/admin/ContentEditorTab";
 import WorkWithUsTab from "@/components/admin/WorkWithUsTab";
@@ -57,6 +59,7 @@ import TokenNamingLink from "@/components/admin/TokenNamingLink";
 import TokensTab from "@/components/admin/TokensTab";
 import SetupSection from "@/components/admin/SetupSection";
 import HandoverTab from "@/components/admin/HandoverTab";
+import FailuresTab from "@/components/admin/FailuresTab";
 import VariablesTab from "@/components/admin/VariablesTab";
 import VotingWeightsPanel from "@/components/admin/VotingWeightsPanel";
 import NeedsPanel, { NeedsSetupStep, useNeedsSetupObservation } from "@/components/admin/NeedsPanel";
@@ -2968,109 +2971,35 @@ function InvestorSummaryAdminTab({ password }: { password: string }) {
   );
 }
 
-// ── Game Admin: Quest Claims consent queue ────────────────────────────────────
+// ── Game Admin: Quest Claims, a door to /review ───────────────────────────────
 
-function QuestClaimsTab({ password }: { password: string }) {
-  const [claims, setClaims] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [amounts, setAmounts] = useState<Record<string, number>>({});
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/admin/quest-claims`, { headers: authHeaders(password) });
-      const data = await res.json();
-      setClaims(Array.isArray(data) ? data : []);
-    } catch { setClaims([]); }
-    setLoading(false);
-  }, [password]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const consent = async (id: string, approve: boolean) => {
-    try {
-      const res = await fetch(`${API_BASE}/admin/quest-claims/${id}/consent`, {
-        method: "POST",
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ approve, amount: amounts[id] ?? 50 }),
-      });
-      // Surface what the server actually said. The refusals here are the
-      // informative ones — no self-consent, work not submitted yet, amount
-      // outside what the board advertises — and "Action failed" taught the
-      // steward nothing about which rule they had just met.
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.error || "Action failed");
-      }
-      toast.success(approve ? "Consented and credited" : "Declined");
-      load();
-    } catch (e: any) { toast.error(e?.message || "Action failed"); }
-  };
-
-  const pending = claims.filter((c) => c.status === "submitted");
-  const active = claims.filter((c) => c.status === "claimed");
-  const resolved = claims.filter((c) => c.status === "consented" || c.status === "declined");
-
+/**
+ * The consent queue lives on /review now (client/src/components/review/ConsentQueue.tsx).
+ *
+ * This tab was the only consent screen for as long as the server has let a
+ * steward who is not an admin consent, and `AdminGate` refused every one of
+ * them. Its amount box also opened at a hardcoded 50, a certain 409 on any
+ * quest whose advertised range leaves 50 out. The screen on /review answers
+ * anybody holding `quest.consent`, opens each box on the quest's floor and
+ * refuses what the consent route would refuse, so this stays only as a door
+ * where admins already look for it.
+ */
+function QuestClaimsTab() {
   return (
     <div>
       <div className="mb-6">
         <h2 className="text-xl font-bold text-gray-900">Quest Claims</h2>
         <p className="text-sm text-gray-500 mt-1">Consent releases the reward. Value only moves with a human yes.</p>
       </div>
-      {loading ? <div className="text-center py-12 text-gray-400">Loading...</div> : (
-        <div className="space-y-8">
-          <div>
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Awaiting consent ({pending.length})</h3>
-            {pending.length === 0 && <p className="text-sm text-gray-400">Nothing waiting.</p>}
-            <div className="space-y-2">
-              {pending.map((c) => (
-                <div key={c.id} className="border border-gray-200 rounded-xl p-4">
-                  <div className="flex items-center justify-between gap-3 mb-1">
-                    <span className="font-medium text-gray-900">{c.userName}</span>
-                    <span className="text-xs text-gray-400">{new Date(c.submittedAt ?? c.claimedAt).toLocaleDateString()}</span>
-                  </div>
-                  <p className="text-sm text-gray-600 mb-1">{c.questTitle}</p>
-                  {c.note && <p className="text-sm text-gray-500 italic mb-1">"{c.note}"</p>}
-                  {c.artifactUrl && (
-                    <a href={c.artifactUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-teal-deep underline break-all">
-                      {c.artifactUrl}
-                    </a>
-                  )}
-                  <div className="flex items-center gap-2 mt-3">
-                    <input
-                      type="number"
-                      min={0}
-                      value={amounts[c.id] ?? 50}
-                      onChange={(e) => setAmounts({ ...amounts, [c.id]: parseInt(e.target.value) || 0 })}
-                      className="w-24 px-2 py-1.5 text-sm border border-gray-200 rounded-lg"
-                    />
-                    <button onClick={() => consent(c.id, true)} className="px-3 py-1.5 text-sm bg-teal-deep text-white rounded-lg">
-                      Consent + credit
-                    </button>
-                    <button onClick={() => consent(c.id, false)} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
-                      Decline
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div>
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">In progress ({active.length})</h3>
-            {active.map((c) => (
-              <p key={c.id} className="text-sm text-gray-600 py-1">{c.userName} · {c.questTitle}</p>
-            ))}
-          </div>
-          <div>
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Resolved ({resolved.length})</h3>
-            {resolved.slice(0, 10).map((c) => (
-              <p key={c.id} className="text-sm text-gray-400 py-1">
-                {c.userName} · {c.questTitle} · {c.status}{c.amount ? ` (+${c.amount})` : ""}
-              </p>
-            ))}
-          </div>
-        </div>
-      )}
+      <div className="bg-white border border-gray-100 rounded-xl p-5">
+        <p className="text-sm text-gray-700">
+          Finished work waiting for a witness is on the Review page, beside the other things a steward
+          decides. Stewards who are not admins can open it there.
+        </p>
+        <a href="/review" className="inline-block mt-3 text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium">
+          Open Review
+        </a>
+      </div>
     </div>
   );
 }
@@ -4853,11 +4782,11 @@ function OrgChartTab({ password }: { password: string }) {
               */}
               {(() => {
                 const cd = circleDraft[c.id] ?? c;
-                const cDirty = ["name", "purpose", "status"].some((k) => (cd[k] ?? "") !== (c[k] ?? ""));
+                const cDirty = ["name", "purpose", "status", "parentCircleId"].some((k) => (cd[k] ?? "") !== (c[k] ?? ""));
                 const setCircle = (patch: any) => setCircleDraft({ ...circleDraft, [c.id]: { ...cd, ...patch } });
                 return (
                   <div className="mb-4">
-                    <div className="grid sm:grid-cols-3 gap-2 items-end">
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 items-end">
                       <label className="text-xs text-gray-500">Circle name
                         <input value={cd.name ?? ""} className={`${inputCls} w-full mt-1 min-h-[44px]`} disabled={!!c.isExample}
                           onChange={(e) => setCircle({ name: e.target.value })} />
@@ -4866,6 +4795,18 @@ function OrgChartTab({ password }: { password: string }) {
                         <select value={cd.status ?? "active"} className={`${inputCls} w-full mt-1 min-h-[44px]`} disabled={!!c.isExample}
                           onChange={(e) => setCircle({ status: e.target.value })}>
                           {CIRCLE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </label>
+                      {/* WHERE THIS CIRCLE SITS. Offered from `parentChoicesFor`,
+                          the rules the server refuses with, so nothing on this
+                          list is a choice the save turns down: not the circle
+                          itself, nothing already inside it, and no standing
+                          example. Empty is the top of the village. */}
+                      <label className="text-xs text-gray-500">Sits inside
+                        <select value={cd.parentCircleId ?? ""} className={`${inputCls} w-full mt-1 min-h-[44px]`} disabled={!!c.isExample}
+                          onChange={(e) => setCircle({ parentCircleId: e.target.value || null })}>
+                          <option value="">The village, at the top</option>
+                          {parentChoicesFor(circles, c.id).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
                       </label>
                       <div className="text-xs text-gray-400 pb-2">
@@ -4890,7 +4831,7 @@ function OrgChartTab({ password }: { password: string }) {
                       disabled={!cDirty || !!c.isExample}
                       className="mt-2 text-sm border border-gray-200 rounded-lg px-3 py-2 min-h-[44px] disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-teal-deep"
                       onClick={async () => {
-                        const ok = await call(`/admin/circles/${c.id}`, { name: cd.name, purpose: cd.purpose, status: cd.status }, "PUT");
+                        const ok = await call(`/admin/circles/${c.id}`, { name: cd.name, purpose: cd.purpose, status: cd.status, parentCircleId: cd.parentCircleId || null }, "PUT");
                         if (ok) { toast.success("Circle saved"); setCircleDraft({ ...circleDraft, [c.id]: undefined }); void load(); }
                       }}
                     >Save circle</button>
@@ -8284,6 +8225,10 @@ function CyclesTab({ password }: { password: string }) {
    */
   const [harvest, setHarvest] = useState(0);
   const harvesting = useMomentWindow(harvest);
+  /** The moon proposer's own answer, kept verbatim. See the panel below. */
+  const [proposal, setProposal] = useState<{ why: string; ballotId?: string } | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [landing, setLanding] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -8311,6 +8256,57 @@ function CyclesTab({ password }: { password: string }) {
   const blocked = settlementBlocked(pending);
   const due = pending?.due ?? [];
   const poolName = pending?.pool.tokenName ?? "";
+
+  /**
+   * Ask the village about the next moon that can be asked about.
+   *
+   * A refusal here is a 200 carrying `posted: false`, because "nothing needed
+   * asking" is an answer and not a failure. Only a transport or auth error
+   * reaches the toast.
+   */
+  const askTheVillage = async () => {
+    setAsking(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/cycles/settlement-proposal`, {
+        method: "POST",
+        headers: authHeaders(password, { "Content-Type": "application/json" }),
+        body: JSON.stringify({}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(refusal(data, "The village could not be asked."));
+      setProposal({ why: String(data?.why ?? ""), ballotId: data?.ballotId ? String(data.ballotId) : undefined });
+      await load();
+    } catch (e: any) {
+      toast.error(e?.message || "The village could not be asked.");
+    } finally {
+      setAsking(false);
+    }
+  };
+
+  /** Land every decision whose window has run, and settle nothing on the way. */
+  const landDue = async () => {
+    setLanding(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/governance/land-due`, {
+        method: "POST",
+        headers: authHeaders(password, { "Content-Type": "application/json" }),
+        body: JSON.stringify({}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(refusal(data, "Nothing could be landed."));
+      const l = data?.landing ?? {};
+      setProposal({
+        why: l.ran
+          ? `${Number(l.due ?? 0)} decision(s) were due and ${Number(l.landed ?? 0)} landed.`
+          : String(l.why ?? "The landing did not run."),
+      });
+      await load();
+    } catch (e: any) {
+      toast.error(e?.message || "Nothing could be landed.");
+    } finally {
+      setLanding(false);
+    }
+  };
 
   const settle = async () => {
     setClosing(true);
@@ -8439,6 +8435,65 @@ function CyclesTab({ password }: { password: string }) {
             </div>
           </div>
 
+          {/*
+            THE OTHER WAY A MOON GETS SETTLED, and the founder is owed a door to it.
+
+            By default this village does not settle by the button above. The moon
+            proposer notices a lunation ended, freezes exactly what each member
+            would receive, and puts it to the village as a vote; the value moves
+            when the village passes it. That runs hourly on its own, so this panel
+            is not how it ordinarily happens.
+
+            It is here for the two cases the machine deliberately will not handle.
+            A settlement the village voted DOWN is never re-posted by a job, and a
+            moon nobody answered twice stops being asked about — both so that a
+            machine cannot wear a village down by asking again until it wins.
+            Getting past either of those is a decision, so it takes a person, and
+            this is the person pressing.
+
+            The answer is the server's own sentence, always. "The village is
+            already voting on cycle 331" is a better thing to show a founder than
+            a spinner and a guess, and it is the same sentence the job logs.
+          */}
+          <div className="border border-gray-200 rounded-xl p-4">
+            <p className="text-xs text-gray-500 uppercase tracking-wide">The village's own settlement</p>
+            <p className="text-sm text-gray-600 mt-2">
+              When this village settles by vote, the moon posts the proposal on its own and the
+              value moves once the village passes it and the steward's window has run. Use these
+              only to get past a moon the village voted down, or one nobody answered.
+            </p>
+            <div className="flex flex-wrap gap-2 mt-3">
+              <button
+                onClick={() => void askTheVillage()}
+                disabled={asking}
+                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {asking ? "Asking…" : "Ask the village now"}
+              </button>
+              <button
+                onClick={() => void landDue()}
+                disabled={landing}
+                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {landing ? "Landing…" : "Land what the village has decided"}
+              </button>
+            </div>
+            {proposal && (
+              <p className="text-sm text-gray-700 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 mt-3">
+                {proposal.why}
+                {proposal.ballotId && (
+                  <>
+                    {" "}
+                    <a href={`/decisions/${proposal.ballotId}`} className="underline">
+                      Read the decision
+                    </a>
+                    .
+                  </>
+                )}
+              </p>
+            )}
+          </div>
+
           <div>
             <h3 className="font-semibold text-gray-900 mb-2">What a close would settle</h3>
             {due.length === 0 ? (
@@ -8461,6 +8516,17 @@ function CyclesTab({ password }: { password: string }) {
                         {day(c.startsAt)} to {day(c.endsAt)} · {c.recipients} {c.recipients === 1 ? "member" : "members"} · {c.credited.toLocaleString()} {c.token}
                       </p>
                     </div>
+                    {/*
+                      A FOUNDER MAY OVERRULE THE VILLAGE HERE, AND NEVER BY ACCIDENT.
+                      Rye, 2026-09-14: closing a moon the village voted down still
+                      pays its split, and this card says so before the press. It
+                      warns and blocks nothing.
+                    */}
+                    {c.villageRefused && (
+                      <p className="text-sm font-medium text-red-800 bg-red-50 border-b border-red-200 px-4 py-2">
+                        {settlementRefusalWarning(c.villageRefused)}
+                      </p>
+                    )}
                     {c.fromPersistedSplit && (
                       <p className="text-xs text-amber-800 bg-amber-50 border-b border-amber-200 px-4 py-2">
                         An earlier close already wrote this split. A retry pays from that record,
@@ -9990,7 +10056,7 @@ export default function Admin() {
           {activeTab === "uploaded-files" && <UploadedFilesTab password={password} />}
           {activeTab === "training-modules" && <TrainingModulesTab password={password} />}
           {activeTab === "quests-admin" && <QuestsTab password={password} />}
-          {activeTab === "quest-claims" && <QuestClaimsTab password={password} />}
+          {activeTab === "quest-claims" && <QuestClaimsTab />}
           {activeTab === "players" && <PlayersTab password={password} />}
           {activeTab === "game-roles" && <GameRolesTab password={password} />}
           {activeTab === "handover" && <HandoverTab password={password} />}
@@ -10000,6 +10066,7 @@ export default function Admin() {
           {activeTab === "org-chart" && <OrgChartTab password={password} />}
           {activeTab === "governance-weights" && <VotingWeightsPanel password={password} onOpenTab={setActiveTab} />}
           {activeTab === "brain" && <VillageBrainTab password={password} />}
+          {activeTab === "failures" && <FailuresTab password={password} />}
           {activeTab === "drafts" && <DraftQueueTab password={password} />}
           {activeTab === "seasons-patterns" && <SeasonPatternsTab password={password} />}
           {activeTab === "circles-map" && <CirclesMapTab password={password} />}

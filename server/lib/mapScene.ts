@@ -129,6 +129,42 @@ export async function getDraft(pool: Pool, userId: string): Promise<DraftRow | n
 }
 
 /**
+ * The draft to OFFER, which is not the same as the draft that EXISTS.
+ *
+ * `publishScene` rebases the member's draft on success, deliberately: the
+ * work under their hands is the same work a second later, now forked from
+ * what they just made live, so pressing publish twice is harmless and
+ * nothing vanishes at the moment they were told it worked.
+ *
+ * The cost is that a draft row then ALWAYS exists, and a reader that treats
+ * "a row exists" as "there is unpublished work" is wrong every time after a
+ * publish. Amora met this: the map drew
+ *
+ *   "You have an unpublished draft of the map: 23 buildings, 53 changes."
+ *
+ * over a draft byte-identical to the version just published, because the
+ * count is the scene's whole edit log rather than a difference.
+ *
+ * It is worse than a wrong sentence. The artifact resolves a conflict by
+ * letting the SERVER'S copy win over the browser-saved session, so a member
+ * who kept editing after publishing is offered the published state as "my
+ * draft", and taking it discards the newer work in front of them. That is
+ * how a map that saved correctly is experienced as one that did not.
+ *
+ * Compared as TEXT. `publishScene` stores the exact string the map wrote and
+ * the rebase writes that same string, so this is the same equality the
+ * publish established; parsing both would spend megabytes to answer a
+ * question the bytes already answer.
+ */
+export function pendingDraft<T extends { scene: string }>(
+  draft: T | null,
+  liveScene: string | null | undefined,
+): T | null {
+  if (!draft) return null;
+  return draft.scene === liveScene ? null : draft;
+}
+
+/**
  * Write a member's working copy.
  *
  * One row per person, replaced wholesale on every autosave. There is no

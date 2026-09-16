@@ -136,7 +136,7 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `exit:<exitId>:convert-credit:<token>` | `server/lib/exit.ts` |
 | `exit:<exitId>:convert:<token>` | `server/lib/exit.ts` |
 | `exit:<exitId>:sweep:<token>` | `server/lib/exit.ts` |
-| `gratitude_pool:<cycleNumber>:<userId>` | `server/index.ts` |
+| `gratitude_pool:<cycleNumber>:<userId>` | `server/lib/cycleSettlement.ts` |
 | `gratitude_received:<noteId>` | `server/lib/gratitude.ts` |
 | `gratitude.given:<esc(v)>:<esc(noteId)>` | `server/lib/economy.ts` |
 | `intake:<itemId>` | `server/lib/library.ts` |
@@ -742,7 +742,11 @@ migration has to rescale every `held` row by the same factor it applies to
 charge; convert only the post and it reports the same drift from the other side.
 `heldSeatValue` is the read that had to change shape as well as scale: one
 `SUM(amount)` over the whole table added tokens at different scales together, so
-it groups by token and divides by each token's own.
+it groups by token and divides by each token's own. `keysFor`, which derives a
+seat charge's pay, refund and keep keys, is exported for one outside reader: the
+failed-actions report (`server/lib/failedActions.ts`) asks through it whether a
+kept fee's transfer landed, so the key format keeps a single home. None of the
+formats in the occurrence-key table changed with it.
 
 **Stays answered it on the WRITE, and the answer is worth copying.** Four of the
 29 are stay credits, and a fix at each of the four would have repaired the debit
@@ -2957,31 +2961,44 @@ person is `shareCapFor(100) = max(1, floor(100 x 25 / 100)) = 25`.
 One human act, **three** ledger rows, from three different faucets. `canConfirm`
 refuses first if Ash and Wren are the same person.
 
+Ash's amount is checked where Ash types it, before the route sees it. Each claim in
+the steward's claims read (`GET /api/admin/quest-claims`) carries its `bounds`, which
+`consentBounds` states from the same dials `checkConsentAmount` enforces, so the
+consent queue opens on the quest's floor where it has one and will not send an
+amount the route would refuse. That read moves no value, and nothing in this table
+changes with it.
+
 | # | Posted by | From | To | Token | Amount | Source | Idempotency key |
 |---|---|---|---|---|---|---|---|
-| 1 | the consent route | `sys:gratitude-pool` | `mem:<wren>` | `gratitude` | the consented amount, times any standing badge multiplier (1 by default) | `quest_consent` | `quest_consent:<claimId>` |
-| 2 | `mintForConfirmedClaim` | `sys:voice-mint` | `mem:<wren>` | `village-voice` | **10000** (10) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:village-voice` |
-| 3 | `mintForConfirmedClaim` | `sys:cycle-pool` | `mem:<wren>` | `credits` | **25** (25) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:credits` |
+| 1 | the consent route | `sys:gratitude-pool` | `mem:<wren>` | `gratitude` | the consented amount, lifted by any standing badge multiplier (1 by default) and never past a top: the range's top under `posted`, the bonus ceiling under `capped`, the advertised top under `unlimited` | `quest_consent` | `quest_consent:<claimId>` |
+| 2 | `mintForConfirmedClaim` | `sys:voice-mint` | `mem:<wren>` | `village-voice` | **1000** (10) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:village-voice` |
+| 3 | `mintForConfirmedClaim` | `sys:cycle-pool` | `mem:<wren>` | `credits` | **2500** (25) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:credits` |
 
-Four things this table is showing:
+Five things this table is showing:
 
 - **Row 1 is not a mint rule.** The consent route has posted recognition since S7
   from the range the quest advertises. `mintForConfirmedClaim` explicitly skips
   the gratitude slug (`if (r.tokenSlug === HEARTS) continue`) so one piece of work
   cannot pay twice. There is deliberately no seeded `quest.completed` gratitude
   rule: a disabled one would look like the obvious thing to switch on.
-- **Rows 2 and 3 end in the token slug.** That segment is appended at the call
-  site, not by `keys.questCompleted`. Without it the second rule would collide
-  with the first, read as a duplicate, and Wren would be quietly paid in one token
+- **Rows 2 and 3 end in the token slug.** `keys.questCompleted` builds that segment,
+  escaped like the rest of the key. Without it the second rule would collide with
+  the first, read as a duplicate, and Wren would be quietly paid in one token
   instead of two.
-- **10 becomes 10000 and 25 stays 25.** `toLedgerUnits` reads the token's own
-  `decimals`: 3 for Village Voice, 0 for credits.
+- **10 becomes 1000 and 25 becomes 2500.** `toLedgerUnits` reads the token's own
+  `decimals`, which is 2 for both Village Voice and credits since `0202`.
 - **Row 1 is awaited and rows 2 and 3 are not.** The consent route wraps
   `mintForConfirmedClaim` in a try/catch and does not fail the response on it. A
   quest that was witnessed and credited must not fail because a secondary mint had
   a bad afternoon, and the occurrence key makes a later repair-post safe.
+- **A consent at 0 posts none of the three.** A zero is the witness saying the work
+  earned no recognition, so row 1 posts nothing, and rows 2 and 3 are not minted
+  either (economics and governance, 2026-09-14): a village can weight its ballots by
+  any token (`governance.weight_token`), so a rule token minted at 0 would be voting
+  weight farmed through `quest.allow_zero_consent`. A stay-credit reward the quest
+  itself carries still releases, keyed `queststay:<claimId>`.
 
-Wren's balances after: 25 credits, 10.000 voice, and whatever recognition the
+Wren's balances after: 25 credits, 10 voice, and whatever recognition the
 quest advertised.
 
 ### 15.3 Wren thanks Ash, 5 gratitude
@@ -3360,13 +3377,15 @@ thing sections 1 to 16 describe.
 
 ### What this side actually does
 
-`server/lib/crowdpool.ts` reads **five** public tRPC procedures off the hub's
+`server/lib/crowdpool.ts` reads **six** public tRPC procedures off the hub's
 no-auth `/api/trpc`: `campaigns.list` (only to resolve a slug to a numeric id by
 slugified title), `campaigns.getById`, `campaigns.getItems`,
-`campaigns.getActivity` and `campaigns.getPartnerLinks`. The hub sends no CORS
+`campaigns.getActivity`, `campaigns.getPartnerLinks`, and `meta.contract`, the
+hub's contract version (item 1 below). The hub sends no CORS
 headers, so a browser cannot read them; the game server proxies through
 `guardedFetchJson`, the same pinned, range-checked dialer the feedback relay uses,
-with a 12 second timeout. The four per-campaign reads go out together.
+with a 12 second timeout. The four per-campaign reads go out together, with
+`meta.contract` beside them.
 
 The cache is memory, TTL **90 seconds** (`CROWDPOOL_TTL_MS`). Every successful
 fetch becomes that key's snapshot, and the `crowdpool-sync` job runs every **10
@@ -3406,8 +3425,8 @@ a description of their mechanics. Two of them made a figure on our page wrong or
 impossible through no fault of any code here, and the third is the opposite and
 is the dangerous one.
 
-1. **`pledgedTotal` WAS a floor, and the hub fixed it on 2026-09-05.** Until
-   then the hub summed a campaign's pledged value filtering on the ACCEPTED
+1. **`pledgedTotal` is a floor on an older hub, and this side now reads which
+   hub it is.** Until 2026-09-05 the hub summed a campaign's pledged value filtering on the ACCEPTED
    status alone, and delivered and thanked are later states of the same
    lifecycle, so a confirmed delivery took its value out of the number the gold
    ring divides. Their trial: accept ten thousand, deliver it, accept five
@@ -3416,14 +3435,23 @@ is the dangerous one.
    The hub's commit `b835c28` now counts accepted, fulfilled and thanked, so
    delivered value stays in the number and it no longer falls when a village
    succeeds. The Crowdpooling session confirmed it on the hub's main with CI and
-   the deploy both green, rather than inferring it from silence, and
-   `7c83ef4` switched `HUB_PLEDGED_TOTAL_IS_A_FLOOR` off in
-   `client/src/components/crowdpool/PoolPieces.tsx`, which removed the hedge
-   from every surface that carried it. `percentPledged` divides by the hub's own
-   number, as it always did. The rule the hedge served still stands: an empty
-   state and a real zero are different facts, and so are a floor and a total.
-   **One gap this side cannot close:** village-os reads no hub contract version,
-   so a fork pointed at a hub older than `b835c28` would show a floor as a total.
+   the deploy both green, rather than inferring it from silence. `7c83ef4` then
+   switched a client constant, `HUB_PLEDGED_TOTAL_IS_A_FLOOR`, off for every hub
+   at once, which left a fork pointed at a hub older than `b835c28` showing a
+   floor as a total. **That gap closed on 2026-09-14**, when Rye ruled to add a
+   version number. The hub publishes `meta.contract` (hub commit `3c70b12c`,
+   history in section 10 of CROWDPOOL_HUB_CONTRACT.md in the hub's own
+   repository, not this one): at
+   `crowdpool` 1 the total counts accepted pledges only, at 2 it counts all
+   three, and the number rises only when a field a village already reads changes
+   meaning. `server/lib/crowdpool.ts` reads it beside the campaign reads every
+   sync and carries it on each campaign as `hubContract`; a hub that does not
+   answer, or answers anything but a positive integer, reads as 1. The page
+   words the figure as a floor whenever the served version is below 2 or absent
+   (`pledgedIsFloor` in `client/src/components/crowdpool/PoolPieces.tsx`).
+   `percentPledged` divides by the hub's own number, as it always did. The rule
+   the hedge served still stands: an empty state and a real zero are different
+   facts, and so are a floor and a total.
 2. **The three-slot meter can arrive with more delivered than were wanted.**
    Their fulfil path is not idempotent despite a comment of theirs claiming it
    is: two stewards confirming at once put delivered on two instead of one, ten
@@ -3513,9 +3541,13 @@ Four questions are open with the Crowdpooling session and are **not answered
 here, because answering them from this side would be describing somebody else's
 mechanics from a read path**:
 
-1. Which of the five procedures and which of their fields are stable contract,
-   and which are internal and free to move. The normalisers above are written
-   against a live read taken 2026-08-22 and nothing has promised them.
+1. Which of the five campaign procedures and which of their fields are stable
+   contract, and which are internal and free to move. The normalisers above are
+   written against a live read taken 2026-08-22 and nothing has promised them.
+   **Partly answered on 2026-09-14**: the hub's `meta.contract` bump rule says
+   the `crowdpool` number rises when a field a village already reads changes
+   meaning, so a change of meaning is now announced. Which fields are promised
+   at all is still theirs to state.
 2. What a pledge does in the hub's own terms, including whether it is a
    commitment, a payment, or an intent.
 3. Whether the nine `capitalType` values are theirs to change, and on what notice.

@@ -123,6 +123,8 @@ export interface SeasonState {
   today: string;
   /** The whole dated calendar, in order. A seat's term is decided against it. */
   seasons?: SeasonEntry[];
+  /** When a seat vote opened now would land. A voted seat's term is measured from it. */
+  seatVoteLandsAt?: string | null;
 }
 
 // One shared, cached fetch of the public config so many components don't each hit it.

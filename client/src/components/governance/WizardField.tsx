@@ -209,6 +209,7 @@ export default function WizardField({
             labelNode={label}
             describedBy={describedBy}
             look={TERM_LOOK}
+            byVote
           />
           {footer}
         </div>

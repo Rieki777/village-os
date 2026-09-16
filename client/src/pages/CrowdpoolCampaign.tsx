@@ -23,9 +23,10 @@ import { ExampleChip } from "@/components/ExamplesBanner";
 import { ArrowLeft, ExternalLink, HandHeart, Package, Sparkles, Users } from "lucide-react";
 import InfoTip from "@/components/InfoTip";
 import {
-  CrowdpoolStyles, GoldRing, GrowthStrip, KIND_LABELS, PLEDGED_FLOOR_PARAGRAPH, RING_TIP,
+  CrowdpoolStyles, GoldRing, GrowthStrip, KIND_LABELS,
   SlotMeter, StarLantern,
-  capitalTint, isOverDelivered, kindGlyph, money, phaseLabel, pooledLine, timeAgo,
+  capitalTint, isOverDelivered, kindGlyph, money, phaseLabel, pledgedFloorParagraph, pledgedIsFloor,
+  pooledLine, ringTip, timeAgo,
 } from "@/components/crowdpool/PoolPieces";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 
@@ -54,6 +55,9 @@ interface Campaign {
   startedAt: string | null; endsAt: string | null; daysRemaining: number | null;
   contributorsCount: number; imageUrl: string | null; hubUrl: string; isDemo: boolean;
   needs: Need[]; partners: Partner[]; events: PoolEvent[];
+  /** The hub contract these numbers were read under. Optional on purpose: a
+   *  payload without it is a floor (`pledgedIsFloor`). */
+  hubContract?: { crowdpool?: number };
 }
 
 /** One arrival, in the register Maia uses on the map. */
@@ -152,6 +156,10 @@ export default function CrowdpoolCampaign() {
   }
 
   const c = campaign;
+  // One reading of the hub contract for the whole page, so the money line, the
+  // ring, the tip and the plaque cannot disagree about whether this is a floor.
+  const floor = pledgedIsFloor(c?.hubContract);
+  const floorParagraph = pledgedFloorParagraph(floor);
   const openNeeds = (c?.needs ?? []).filter((n) => n.quantityDelivered < n.quantityWanted);
   const metNeeds = (c?.needs ?? []).filter((n) => n.quantityDelivered >= n.quantityWanted);
   /**
@@ -250,8 +258,8 @@ export default function CrowdpoolCampaign() {
                     <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-4 text-sm" style={{ color: "#e4d3ae" }}>
                       <span className="inline-flex items-center gap-1.5">
                         <HandHeart className="w-4 h-4" style={{ color: "#c9a25e" }} />
-                        {pooledLine(c.pledgedTotal, c.totalValue, c.currency)}{" "}
-                        <InfoTip tip={RING_TIP}>pooled</InfoTip>
+                        {pooledLine(c.pledgedTotal, c.totalValue, c.currency, floor)}{" "}
+                        <InfoTip tip={ringTip(floor)}>pooled</InfoTip>
                       </span>
                       <span className="inline-flex items-center gap-1.5">
                         <Users className="w-4 h-4" style={{ color: "#c9a25e" }} />
@@ -268,6 +276,7 @@ export default function CrowdpoolCampaign() {
                       percentDelivered={c.percentDelivered}
                       label={phaseLabel(c.status, c.percentPledged)}
                       ripple={ripple}
+                      floor={floor}
                     />
                   </div>
                 </div>
@@ -281,7 +290,7 @@ export default function CrowdpoolCampaign() {
                   hands, know-how and funds. No money moves through this page. Crypto pledges are tracked on the
                   hub, and gifts or loans of ordinary money go through the partner funders below. Claim a need
                   here and you finish the claim on the hub's own page.
-                  {PLEDGED_FLOOR_PARAGRAPH ? ` ${PLEDGED_FLOOR_PARAGRAPH}` : ""}
+                  {floorParagraph ? ` ${floorParagraph}` : ""}
                 </div>
               </div>
 

@@ -45,6 +45,8 @@ import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, type TestDb, E2E_BOOT_DEADLINE_MS, waitForPortFree } from "./db/testDb";
+import { civilDateKey } from "../shared/lunar";
+import { civilDateInstant } from "../shared/seatTerms";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -454,5 +456,103 @@ describe.skipIf(!DB_CONFIGURED)("the steward the village seated can stop a decis
     expect(r.json?.act?.reason).toBe("");
     expect(r.json?.act?.redacted).toBe(true);
     expect(r.json?.act?.decidedByUserId, "the author stays on the record").toBe(solId);
+  });
+});
+
+/**
+ * A SEAT VOTE OPENED IN A SEASON'S LAST DAYS TAKES THE SEASON IT LANDS IN.
+ *
+ * A carried `role_seat` waits its window like a Game change: it lands at the
+ * later of the next boundary and the close plus 72 hours at least. The route
+ * used to measure the term from the CLOSE, so a vote closing before the season
+ * turned and landing after it froze the running season's end, a day the seat
+ * would never reach. The fix measures from `seatVoteLandsAt`.
+ *
+ * The band is built off the real clock without depending on it. The vote runs
+ * one day, and the season turns at the first midnight at least 25 hours from
+ * now: always after the close, and always inside the 72 hours before any
+ * landing, whatever the date and wherever the moon is.
+ *
+ * LAST IN THE FILE on purpose, because it rewrites the season list.
+ */
+describe.skipIf(!DB_CONFIGURED)("a seat vote across the season's turn is measured from when it lands", () => {
+  const HOUR = 60 * 60 * 1000;
+  let openerToken = "";
+  let tz = "UTC";
+  let turnsOn = "";
+  let followingEndsOn = "";
+
+  const plusDays = (date: string, n: number): string =>
+    new Date(Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10)) + n)).toISOString().slice(0, 10);
+
+  /** The term the vote froze, read as stored. `seat_term_ends_at` is DATETIME, so no zone applies to it. */
+  const frozenTerm = async (ballotId: string): Promise<{ ends: string; seasonId: string }> => {
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT DATE_FORMAT(seat_term_ends_at, '%Y-%m-%dT%H:%i:%s.000Z') AS ends, seat_term_season_id AS season FROM ballots WHERE id = ?",
+      [ballotId],
+    );
+    return { ends: String(rows[0]?.ends ?? ""), seasonId: String(rows[0]?.season ?? "") };
+  };
+
+  it("arranges a season that turns after a vote opened now closes, and before it can land", async () => {
+    const opener = await register("Rhoda Vane", "rhoda");
+    openerToken = opener.token;
+    // co-creator is the rung proposal.open unlocks at, held as a member.
+    expect((await call("PUT", `/api/admin/players/${opener.id}/stage`, { body: { stageId: "co-creator" } })).status).toBe(200);
+    const days = await call("PUT", "/api/admin/variables/governance.vote_days", { body: { value: "1" } });
+    expect(days.status, JSON.stringify(days.json)).toBe(200);
+
+    const current = await call("GET", "/api/admin/seasons");
+    expect(current.status).toBe(200);
+    tz = String(current.json?.timezone || "UTC");
+    const today = civilDateKey(new Date(), tz);
+    turnsOn = plusDays(civilDateKey(new Date(Date.now() + 25 * HOUR), tz), 1);
+    followingEndsOn = plusDays(turnsOn, 90);
+    const saved = await call("PUT", "/api/admin/seasons", {
+      body: {
+        cadence: current.json?.cadence,
+        timezone: tz,
+        seasons: [
+          { id: "closing", name: "Closing season", startsOn: plusDays(today, -30), endsOn: turnsOn },
+          { id: "following", name: "Following season", startsOn: turnsOn, endsOn: followingEndsOn },
+        ],
+      },
+    });
+    expect(saved.status, JSON.stringify(saved.json)).toBe(200);
+    expect(saved.json?.current?.id).toBe("closing");
+  });
+
+  it("forecasts the landing on the season payload the seat form reads, and it is after the turn", async () => {
+    const season = await call("GET", "/api/season", { token: null });
+    expect(season.status).toBe(200);
+    const lands = Date.parse(String(season.json?.seatVoteLandsAt));
+    expect(Number.isNaN(lands), "the payload carries the forecast").toBe(false);
+    expect(lands).toBeGreaterThan(civilDateInstant(turnsOn, tz)!.getTime());
+  });
+
+  it("opens a STEWARD seat vote in the band, with the following season's end", async () => {
+    const opened = await call("POST", "/api/governance/role-seats", {
+      token: openerToken,
+      body: { userId: tamId, roleId: STEWARD_ROLE, reason: "Tam has kept the veto record for the circle all season and can hold the seat next season." },
+    });
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    const ballot = opened.json?.ballot;
+    // Inside the band, or this proves nothing: the vote closes before the turn.
+    expect(Date.parse(String(ballot?.closesAt))).toBeLessThan(civilDateInstant(turnsOn, tz)!.getTime());
+    expect(String(ballot?.docMarkdown)).toContain(`Until the season ends on ${followingEndsOn}`);
+    expect(await frozenTerm(String(ballot?.id))).toEqual({
+      ends: civilDateInstant(followingEndsOn, tz)!.toISOString(),
+      seasonId: "following",
+    });
+  });
+
+  it("and gives a seat with no veto the following season's end too", async () => {
+    const opened = await call("POST", "/api/governance/role-seats", {
+      token: openerToken,
+      body: { userId: solId, roleId: OTHER_ROLE, reason: "Sol has worked the beds every morning this season and the gardeners asked for them." },
+    });
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    expect(String(opened.json?.ballot?.docMarkdown)).toContain(`Until the season ends on ${followingEndsOn}`);
+    expect((await frozenTerm(String(opened.json?.ballot?.id))).seasonId).toBe("following");
   });
 });

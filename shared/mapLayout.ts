@@ -166,6 +166,44 @@ function packChildren(children: PackedNode[]): number {
   return ringR + maxSat;
 }
 
+/** Build the containment forest, refusing any parent link that would close a
+ *  loop. `parent_circle_id` is written by three routes and, once nesting is a
+ *  drag, by members; a loop there used to make BOTH nodes unreachable, so
+ *  `roots` came back empty and the map drew nothing at all. No error, no
+ *  console line, just a blank square. A circle whose chain of parents comes
+ *  back round to itself therefore stands at the top instead, which is what the
+ *  comment here promised for a year while the code checked only self-parent.
+ *  Every circle reaches `roots` exactly once, so nothing can vanish. */
+function buildForest(sorted: NestedInput[], byId: Map<string, NestedInput>): PackedNode[] {
+  const nodeFor = new Map<string, PackedNode>();
+  for (const c of sorted) nodeFor.set(c.id, { input: c, r: 0, dx: 0, dy: 0, children: [] });
+
+  /** The parent to actually use: null when unknown, self, or part of a loop. */
+  const liveParent = (c: NestedInput): PackedNode | undefined => {
+    const first = c.parentId;
+    if (!first || first === c.id || !byId.has(first)) return undefined;
+    // Walk up from the parent. Meeting anyone twice means the chain loops.
+    const seen = new Set<string>([c.id]);
+    let at: string | undefined = first;
+    while (at) {
+      if (seen.has(at)) return undefined;
+      seen.add(at);
+      const next: string | null | undefined = byId.get(at)?.parentId;
+      at = next && next !== at && byId.has(next) ? next : undefined;
+    }
+    return nodeFor.get(first);
+  };
+
+  const roots: PackedNode[] = [];
+  for (const c of sorted) {
+    const node = nodeFor.get(c.id)!;
+    const parent = liveParent(c);
+    if (parent) parent.children.push(node);
+    else roots.push(node);
+  }
+  return roots;
+}
+
 /** Nested layout: the village encloses its circles; sub-circles nest inside.
  *  Roles with no circle are the village's own seats and sit on its ring. */
 export function layoutNestedMap(
@@ -175,17 +213,9 @@ export function layoutNestedMap(
   const sorted = [...inputs].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
   const byId = new Map(sorted.map((c) => [c.id, c]));
 
-  // Build the tree; an unknown or cyclic parent becomes a top-level circle
-  // rather than vanishing.
-  const nodeFor = new Map<string, PackedNode>();
-  for (const c of sorted) nodeFor.set(c.id, { input: c, r: 0, dx: 0, dy: 0, children: [] });
-  const roots: PackedNode[] = [];
-  for (const c of sorted) {
-    const node = nodeFor.get(c.id)!;
-    const parent = c.parentId && c.parentId !== c.id ? nodeFor.get(c.parentId) : undefined;
-    if (parent && byId.has(c.parentId!)) parent.children.push(node);
-    else roots.push(node);
-  }
+  // An unknown or cyclic parent becomes a top-level circle rather than
+  // vanishing. See buildForest: that sentence used to be a comment only.
+  const roots = buildForest(sorted, byId);
 
   // Radii bottom-up: a parent must hold its packed children AND its own
   // role ring outside them.
@@ -373,20 +403,14 @@ export function layoutMap(circles: LayoutCircle[]): MapLayout {
 // village (lane L3's resources ring). pad = 0 returns the base layout object
 // untouched, which is what keeps the byte-identity promise checkable.
 
-/** The tree-and-size pass layoutNestedMap runs, duplicated deliberately so
- *  that function stays untouched (its output is under byte-identity test). */
+/** The tree-and-size pass layoutNestedMap runs. The tree half was duplicated
+ *  here for a while and drifted; both now call buildForest, so a cycle guard
+ *  cannot be fixed in one and missed in the other. The SIZING half stays
+ *  separate: layoutNestedMap's output is under byte-identity test. */
 function sizedRoots(inputs: NestedInput[]): PackedNode[] {
   const sorted = [...inputs].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
   const byId = new Map(sorted.map((c) => [c.id, c]));
-  const nodeFor = new Map<string, PackedNode>();
-  for (const c of sorted) nodeFor.set(c.id, { input: c, r: 0, dx: 0, dy: 0, children: [] });
-  const roots: PackedNode[] = [];
-  for (const c of sorted) {
-    const node = nodeFor.get(c.id)!;
-    const parent = c.parentId && c.parentId !== c.id ? nodeFor.get(c.parentId) : undefined;
-    if (parent && byId.has(c.parentId!)) parent.children.push(node);
-    else roots.push(node);
-  }
+  const roots = buildForest(sorted, byId);
   const sizeNode = (node: PackedNode): void => {
     node.children.forEach(sizeNode);
     const contentR = packChildren(node.children);
