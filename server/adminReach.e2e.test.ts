@@ -366,6 +366,46 @@ describe.skipIf(!DB_CONFIGURED)("an admin write reaches the page that renders it
     expect(gone.status, JSON.stringify(gone.json)).toBe(200);
   });
 
+  it("a draft that moves a circle publishes, redraws at once, and undoes", async () => {
+    /*
+     * The drag on the living map writes an org draft whose change is
+     * move_circle (0208). The move is raw SQL inside the publish transaction,
+     * and `circlesRepo.all()` never re-reads the table, so without the reload
+     * the publish route now performs every surface would keep drawing the old
+     * shape until a restart. /api/org is read straight after publish to prove it.
+     */
+    const outer = await call("POST", "/api/admin/circles", { name: "Arranging Outer Circle" });
+    const inner = await call("POST", "/api/admin/circles", { name: "Arranging Inner Circle" });
+    expect(outer.status, JSON.stringify(outer.json)).toBe(200);
+    expect(inner.status, JSON.stringify(inner.json)).toBe(200);
+    const oid = String(outer.json.id);
+    const iid = String(inner.json.id);
+    const sits = async (id: string) =>
+      ((await asStranger("/api/org")).json.circles ?? []).find((x: any) => x.id === id)?.parentCircleId ?? null;
+
+    const draft = await call("POST", "/api/admin/org/drafts", { title: "Arranging circles" });
+    expect(draft.status, JSON.stringify(draft.json)).toBe(200);
+    const did = String(draft.json.id);
+
+    const bad = await call("POST", `/api/admin/org/drafts/${did}/changes`, {
+      op: "move_circle", orgRoleId: iid, payload: { parentCircleId: oid },
+    });
+    expect(bad.status, "a move names its circle as circle:<id>").toBe(400);
+
+    const added = await call("POST", `/api/admin/org/drafts/${did}/changes`, {
+      op: "move_circle", orgRoleId: `circle:${iid}`, payload: { parentCircleId: oid },
+    });
+    expect(added.status, JSON.stringify(added.json)).toBe(200);
+
+    const published = await call("POST", `/api/admin/org/drafts/${did}/publish`, {});
+    expect(published.status, JSON.stringify(published.json)).toBe(200);
+    expect(await sits(iid), "redrawn at once, with no restart").toBe(oid);
+
+    const reverted = await call("POST", `/api/admin/org/drafts/${did}/revert`, {});
+    expect(reverted.status, JSON.stringify(reverted.json)).toBe(200);
+    expect(await sits(iid), "undone at once too").toBeNull();
+  });
+
   it("image alt text reaches /api/game/config, which is what every page reads", async () => {
     const saved = await call("PUT", "/api/admin/brand", {
       images: {

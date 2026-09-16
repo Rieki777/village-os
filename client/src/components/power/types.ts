@@ -114,7 +114,13 @@ export interface PowerData {
   relationTypes: PowerRelationType[];
   relations: PowerRelation[];
   season: { current: { id?: string; name?: string } | null; nextRollAt: string | null };
-  viewer: { viewPeople: boolean; canContact: boolean; mayDeclare?: string[] };
+  viewer: {
+    viewPeople: boolean;
+    canContact: boolean;
+    mayDeclare?: string[];
+    /** Arrange mode: this reader may drag circles into each other (0208). */
+    mayArrange?: boolean;
+  };
   vacantHighlight: boolean;
   conciergeEnabled: boolean;
 }
