@@ -8537,7 +8537,7 @@ function CyclesTab({ password }: { password: string }) {
                   </p>
                   <p className="text-sm text-gray-600 mt-1">
                     Split across everyone acknowledged that lunation, in proportion to what
-                    they received. Set by gratitude.pool_per_cycle, on the Gratitude card
+                    they received. Set by gratitude.pool_per_cycle, on its module card
                     under Modules.
                   </p>
                   {pending.pool.problem && (
@@ -8722,7 +8722,11 @@ function CyclesTab({ password }: { password: string }) {
               </div>
               {blocked && (
                 <p className="text-xs text-red-700 mt-2">
-                  Fix the pool setting on the Gratitude card under Modules first. The server
+                  {/* The card is named for the recognition token, and a village
+                      renames that token, so the sentence points at the card
+                      without spelling this village's word for it
+                      (scripts/check-village-facts.mjs). */}
+                  Fix the pool setting on its module card under Modules first. The server
                   refuses this close.
                 </p>
               )}
@@ -10187,7 +10191,7 @@ export default function Admin() {
           {activeTab === "modules" && <ModulesTab password={password} />}
           {activeTab === "housing" && <HousingAdminPanel password={password} />}
           {activeTab === "org-chart" && <OrgChartTab password={password} />}
-          {activeTab === "governance-weights" && <VotingWeightsPanel password={password} onOpenTab={setActiveTab} />}
+          {activeTab === "governance-weights" && <VotingWeightsPanel password={password} />}
           {activeTab === "brain" && <VillageBrainTab password={password} />}
           {activeTab === "drafts" && <DraftQueueTab password={password} />}
           {activeTab === "seasons-patterns" && <SeasonPatternsTab password={password} />}
