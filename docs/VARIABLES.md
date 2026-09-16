@@ -662,7 +662,7 @@ What it may be set to:
 
 ### Rate set here, per whole token
 
-What one whole token is worth in the first of this village's redemption currencies, read only while the rate above is set here rather than followed. A rate of 0 means there is no rate, so a request carries what the member asked for and no arithmetic, which is the honest state for a village redeeming into services or a share rather than cash. Works with: 'Where the rate comes from' and 'Currencies a member may redeem into'.
+What one whole token is worth in the first of this village's redemption currencies, read only while the rate above is set here instead of followed. A rate of 0 means there is no rate, so a request carries what the member asked for and no arithmetic, which is the honest state for a village that redeems into services or a share and prices neither. Works with: 'Where the rate comes from' and 'Currencies a member may redeem into'.
 
 | Fact | Value |
 | --- | --- |
@@ -705,7 +705,7 @@ A flat amount in the redemption's own currency, kept by the village on top of th
 
 ### Smallest redemption, in money
 
-The least a member may ask to redeem at once, counted in the redemption's own currency, so a village is not settling payments worth less than the transfer costs. 0 means there is no floor. A token with no rate cannot be measured against this, so while this is above 0 a request for an unpriced token is refused rather than let through unmeasured.
+The least a member may ask to redeem at once, counted in the redemption's own currency, so a village is not settling payments worth less than the transfer costs. 0 means there is no floor. A token with no rate cannot be measured against this, so while this is above 0 a request for an unpriced token is refused instead of passing unmeasured.
 
 | Fact | Value |
 | --- | --- |
@@ -719,7 +719,7 @@ The least a member may ask to redeem at once, counted in the redemption's own cu
 
 ### Most in one redemption, in money
 
-The most a member may ask for at once, counted in the redemption's own currency. 0 means there is no ceiling. Same rule as the floor: while this is above 0, a token with no rate is refused rather than let through unmeasured.
+The most a member may ask for at once, counted in the redemption's own currency. 0 means there is no ceiling. Same rule as the floor: while this is above 0, a token with no rate is refused instead of passing unmeasured.
 
 | Fact | Value |
 | --- | --- |

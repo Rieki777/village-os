@@ -354,7 +354,7 @@ A member asks for tokens they hold to become something real off the platform: ca
 | Requires | nothing |
 | Recommends | nothing |
 | Capabilities it adds | `redemption.confirm` |
-| Variable keys it owns | `redemption.confirmed_by`, `redemption.holds_on_propose`, `redemption.tokens`, `redemption.per_member_per_cycle`, `redemption.expires_after_days` |
+| Variable keys it owns | `redemption.confirmed_by`, `redemption.holds_on_propose`, `redemption.tokens`, `redemption.per_member_per_cycle`, `redemption.expires_after_days`, `redemption.currencies`, `redemption.rate_source`, `redemption.rate_per_token`, `redemption.fee_pct`, `redemption.fee_fixed`, `redemption.min_amount`, `redemption.max_per_request`, `redemption.max_per_member_per_cycle`, `redemption.max_village_per_cycle`, `redemption.process_text` |
 | API prefixes | `/api/redemptions`, `/api/admin/redemptions` |
 | Contract doc | [redemption.md](modules/redemption.md) |
 | Legal caution card | yes. Enabling shows it first, and preconditions can refuse outright |
@@ -634,7 +634,7 @@ Read the other way: `map` cannot be switched off while `resources` is on, `forum
 
 ## The dials a module owns
 
-Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 24 modules own 80 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
+Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 24 modules own 90 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
 
 Three keys are claimed by more than one module, so switching one module off leaves the dial owned by the other:
 
@@ -1083,7 +1083,17 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "redemption.holds_on_propose",
         "redemption.tokens",
         "redemption.per_member_per_cycle",
-        "redemption.expires_after_days"
+        "redemption.expires_after_days",
+        "redemption.currencies",
+        "redemption.rate_source",
+        "redemption.rate_per_token",
+        "redemption.fee_pct",
+        "redemption.fee_fixed",
+        "redemption.min_amount",
+        "redemption.max_per_request",
+        "redemption.max_per_member_per_cycle",
+        "redemption.max_village_per_cycle",
+        "redemption.process_text"
       ],
       "apiPrefixes": [
         "/api/redemptions",
