@@ -73,7 +73,8 @@ export const KIND_LABELS: Record<string, string> = {
 // ── What the hub's numbers can and cannot be asked to mean ───────────────────
 
 /**
- * THE HUB'S PLEDGED TOTAL IS A FLOOR AND NOT A TOTAL, SO THIS PAGE SAYS SO.
+ * ON AN OLDER HUB THE PLEDGED TOTAL IS A FLOOR, SO THIS PAGE ASKS WHICH HUB IT
+ * IS READING AND SAYS SO WHEN IT IS THE OLDER ONE.
  *
  * Measured by the Crowdpooling session on 2026-09-04 against a scratch
  * database of their own, and relayed to this lane: the hub sums a campaign's
@@ -95,9 +96,9 @@ export const KIND_LABELS: Record<string, string> = {
  * floor, and the growth strip refuses to describe the impossible relation
  * (delivered running ahead of pooled) as a healthy one.
  *
- * THE HUB LANDED ITS FIX ON 2026-09-05, so this is false and the language is
- * gone with it. That was the whole undo, and it is why the language read off a
- * constant instead of being typed into six places.
+ * THE HUB LANDED ITS FIX ON 2026-09-05, and every sentence that hedges reads
+ * one answer instead of being typed into six places, which is what made the
+ * undo a single switch.
  *
  * Their commit b835c28: the pledged total now counts accepted, fulfilled AND
  * thanked, so delivered value stays in the number this page divides, and it no
@@ -107,43 +108,72 @@ export const KIND_LABELS: Record<string, string> = {
  * while chasing the deferral: their expiry sweep marked a claim expired and let
  * its value go on counting as pledged indefinitely.
  *
- * WHAT WE ARE ASSERTING, precisely, because they were careful to hand us the
- * weaker true claim rather than the stronger convenient one. Their CI ran the
- * suite against real MySQL and their deploy succeeded. Neither of us has read
- * the rendered number off a live campaign since. The residual after that is
- * OURS and not theirs: this bridge caches for ninety seconds and a sync job
- * writes a snapshot every ten minutes, so a floored figure can survive here for
- * one sync window after their fix went live. It is self-healing and it only
- * ever reads LOW, which is why flipping now is safe and leaving the hedge up
- * would not have been: a qualifier that has stopped being true is the same
- * stale sentence this build kept finding, just one we wrote ourselves.
+ * THAT SWITCH WAS A MODULE CONSTANT, AND A CONSTANT COULD NOT TELL HUBS APART.
+ * `HUB_PLEDGED_TOTAL_IS_A_FLOOR` was switched off by 7c83ef4 for every hub at
+ * once, so a fork pointed at a hub older than b835c28 printed a floor as a
+ * total. Rye ruled on 2026-09-14 to add a version number, and the hub publishes
+ * one: `meta.contract` (hub commit 3c70b12c), history in the hub's
+ * docs/CROWDPOOL_HUB_CONTRACT.md section 10. At crowdpool 1 the pledged total
+ * sums accepted pledges only; at crowdpool 2 it counts fulfilled and thanked
+ * too. The game server reads it every sync and serves it on each campaign as
+ * `hubContract`, and `pledgedIsFloor` below is the ONE reading of it. Every
+ * piece that words the figure takes that answer as an argument, so the compiler
+ * finds a surface that forgot to ask.
+ *
+ * ABSENT IS A FLOOR. A payload with no `hubContract` came from a server or a
+ * snapshot that read no version, and the rule the hedge served still holds: a
+ * floor is never shown as a total. A total worded as a floor only understates.
+ *
+ * WHAT WE ARE ASSERTING, precisely, because the hub session was careful to hand
+ * us the weaker true claim rather than the stronger convenient one. Their CI ran
+ * the suite against real MySQL and their deploy succeeded, and the coordinator
+ * read `{"crowdpool":2}` off the live hub on 2026-09-14. The residual is OURS:
+ * a snapshot keeps the version it was fetched with, and this bridge caches for
+ * ninety seconds and syncs every ten minutes, so a hub that moves to 2 reads as
+ * a floor here for up to one sync window. That only ever reads LOW.
  */
-export const HUB_PLEDGED_TOTAL_IS_A_FLOOR = false;
+export const HUB_CONTRACT_COUNTS_DELIVERED = 2;
+
+/**
+ * Is the pledged figure a floor for this campaign? True unless the served
+ * `hubContract.crowdpool` is an integer at or above 2. Absent, malformed, and
+ * version 1 are all a floor.
+ */
+export function pledgedIsFloor(hubContract: { crowdpool?: unknown } | null | undefined): boolean {
+  const v = hubContract?.crowdpool;
+  return !(typeof v === "number" && Number.isInteger(v) && v >= HUB_CONTRACT_COUNTS_DELIVERED);
+}
 
 /** The plain mechanics behind the word "pooled", on any surface. */
-export const PLEDGED_FLOOR_TIP = HUB_PLEDGED_TOTAL_IS_A_FLOOR
-  ? "The hub counts a pledge in this total only while it waits to be delivered, so confirmed deliveries drop out of it. Read the figure as a floor: the real pool is this much or more. The hub is repairing that."
-  : "This is everything pledged to the raising so far.";
+export function pledgedFloorTip(floor: boolean): string {
+  return floor
+    ? "The hub has not confirmed that this total keeps a pledge once it is delivered, and older hubs drop delivered pledges out of it. Read the figure as a floor: the real pool is this much or more."
+    : "This is everything pledged to the raising so far.";
+}
 
 /** The campaign page's plaque: what the two arcs mean, then the floor. */
-export const RING_TIP = `The gold ring is everything pledged so far and the quieter green arc inside it is what has actually arrived. ${PLEDGED_FLOOR_TIP}`;
+export function ringTip(floor: boolean): string {
+  return `The gold ring is what has been pledged so far and the quieter green arc inside it is what has actually arrived. ${pledgedFloorTip(floor)}`;
+}
 
 /**
  * The plain-language paragraph, for the "What this pool is" plaque. Null when
- * the hub has landed its fix, so the sentence leaves the page with the rest of
- * the floor language and nobody has to remember it is there.
+ * the hub has confirmed the total counts delivered pledges, so the sentence
+ * leaves the page with the rest of the floor language.
  */
-export const PLEDGED_FLOOR_PARAGRAPH: string | null = HUB_PLEDGED_TOTAL_IS_A_FLOOR
-  ? "Every figure here is the hub's own, kept as it was given. The pooled total is one the hub is still repairing: it drops a pledge out of the count once a delivery is confirmed, so what this page shows is a floor and the true pool is that much or more."
-  : null;
+export function pledgedFloorParagraph(floor: boolean): string | null {
+  return floor
+    ? "Every figure here is the hub's own, kept as it was given. The hub has not confirmed that its pooled total keeps a pledge once the delivery is confirmed, and older hubs drop it from the count, so what this page shows is a floor and the true pool is that much or more."
+    : null;
+}
 
 /**
  * One spelling of the pooled money line, so the list card and the campaign
  * page cannot drift apart on the qualifier.
  */
-export function pooledLine(pledged: number, total: number, currency: string): string {
+export function pooledLine(pledged: number, total: number, currency: string, floor: boolean): string {
   const figures = `${money(pledged, currency)} of ${money(total, currency)}`;
-  return HUB_PLEDGED_TOTAL_IS_A_FLOOR ? `at least ${figures}` : figures;
+  return floor ? `at least ${figures}` : figures;
 }
 
 /**
@@ -165,10 +195,11 @@ export function isOverDelivered(n: { quantityWanted: number; quantityDelivered: 
 // ── The phase label: the map's own words ─────────────────────────────────────
 
 /**
- * The 50% cut here reads the hub's pledged share, which is the floor described
- * above, so a village genuinely past half can still be labelled "Gathering the
- * pool". That is the honest direction to be wrong in: it understates a village
- * doing well and never overstates one that is not.
+ * The 50% cut here reads the hub's pledged share, and on a hub that has not
+ * confirmed crowdpool contract 2 that share is the floor described above, so a
+ * village genuinely past half can still be labelled "Gathering the pool". That
+ * is the honest direction to be wrong in: it understates a village doing well
+ * and never overstates one that is not.
  */
 export function phaseLabel(status: string, percentPledged: number): string {
   if (status === "draft" || status === "pending_review") return "Waiting to open";
@@ -232,12 +263,15 @@ export function GoldRing({
   label,
   size = 220,
   ripple = 0,
+  floor,
 }: {
   percentPledged: number;
   percentDelivered: number;
   label: string;
   size?: number;
   ripple?: number;
+  /** `pledgedIsFloor(campaign.hubContract)`. Required, so no caller can forget to ask. */
+  floor: boolean;
 }) {
   const r = 84;
   const rIn = 70;
@@ -246,7 +280,6 @@ export function GoldRing({
   const pledged = Math.min(100, Math.max(0, percentPledged));
   const delivered = Math.min(100, Math.max(0, percentDelivered));
   const landing = useMomentWindow(ripple, 3200);
-  const floor = HUB_PLEDGED_TOTAL_IS_A_FLOOR;
   const spoken = floor
     ? `at least ${pledged} percent pledged, ${delivered} percent delivered`
     : `${pledged} percent pledged, ${delivered} percent delivered`;
@@ -280,7 +313,7 @@ export function GoldRing({
         />
         <text x="100" y="97" textAnchor="middle" className="cp-ring-pct">{pledged}%</text>
         {/* The sub-label is where the floor is said inside the ring itself, so
-            the numeral is never read alone. See HUB_PLEDGED_TOTAL_IS_A_FLOOR. */}
+            the numeral is never read alone. See pledgedIsFloor. */}
         <text x="100" y="117" textAnchor="middle" className="cp-ring-sub">{floor ? "pooled or more" : "pooled"}</text>
       </svg>
       {landing && (
@@ -304,11 +337,11 @@ export function GoldRing({
  * own money line carries the floor qualifier in words (`pooledLine`); here
  * only the spoken label has room for it.
  */
-export function MiniRing({ percent, size = 64 }: { percent: number; size?: number }) {
+export function MiniRing({ percent, size = 64, floor }: { percent: number; size?: number; floor: boolean }) {
   const r = 26;
   const c = 2 * Math.PI * r;
   const p = Math.min(100, Math.max(0, percent));
-  const spoken = HUB_PLEDGED_TOTAL_IS_A_FLOOR ? `at least ${p} percent pooled` : `${p} percent pooled`;
+  const spoken = floor ? `at least ${p} percent pooled` : `${p} percent pooled`;
   return (
     <svg viewBox="0 0 64 64" width={size} height={size} role="img" aria-label={spoken}>
       <circle cx="32" cy="32" r={r} fill="none" stroke="rgba(201,162,94,.25)" strokeWidth="5" />
@@ -472,11 +505,11 @@ export function GrowthStrip({ percentDelivered, percentPledged }: { percentDeliv
         * this paragraph read "Delivered work is keeping pace with the pool: 40%
         * standing." Delivered value has to have been pledged first, so that
         * pair cannot both be true, and the page was narrating it as health.
-        * The cause is the hub's accepted-only pledged sum
-        * (HUB_PLEDGED_TOTAL_IS_A_FLOOR above), and the honest thing to print is
-        * the contradiction, never an arithmetic patch over it.
+        * The cause was the hub's accepted-only pledged sum (crowdpool contract
+        * 1, see `pledgedIsFloor` above), and the honest thing to print is the
+        * contradiction, never an arithmetic patch over it.
         *
-        * THIS BRANCH IS NOT GATED ON THAT CONSTANT AND MUST NOT BE. The hub
+        * THIS BRANCH IS NOT GATED ON THAT READING AND MUST NOT BE. The hub
         * fixed the cause we knew about on 2026-09-05, and the impossible pair
         * is still impossible: if it appears again the reason will be a new one.
         * What changed is the SENTENCE. It used to name the hub's defect and
@@ -485,7 +518,7 @@ export function GrowthStrip({ percentDelivered, percentPledged }: { percentDeliv
         * figures is wrong and this page does not know which, because the page
         * genuinely does not.
         *
-        * It was also the one surface the flip did not reach: six read the
+        * It was also the one surface the flip did not reach: six read the old
         * constant and this one carried the word on its own, so removing the
         * hedge everywhere else would have left it here alone, unqualified and
         * pointing at a repair that had already happened.

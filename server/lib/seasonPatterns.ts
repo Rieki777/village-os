@@ -185,8 +185,9 @@ export async function rewardMultiplierFor(
     if (Number.isFinite(v) && v > 0) m *= v;
   }
   // Multipliers compound, so a handful of generous badges could otherwise
-  // mint an unbounded amount from a faucet that cannot refuse it. The consent
-  // cap governs the quest; this governs the person.
+  // mint an unbounded amount from a faucet that cannot refuse it. This bounds
+  // the person across every quest; the consent cap also bounds what any one
+  // quest can pay, badges included (`payoutFor`, server/lib/questConsent.ts).
   return Math.min(m, MAX_REWARD_MULTIPLIER);
 }
 
