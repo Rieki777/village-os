@@ -3739,9 +3739,17 @@ function hasMembership(user: any): boolean {
 /**
  * Compute the highest stage the player has earned, per gameConfig rules.
  * PURE and synchronous: the consented-quest count is a parameter (S10 moved
- * claims to MySQL), so callers that already hold counts — like the players
- * list, which fetches them grouped in one query — pay nothing extra.
+ * claims to MySQL), so callers that already hold counts (the players list
+ * fetches them grouped in one query) pay nothing extra.
  * Single-member callers use stageOf(), which fetches the count and delegates.
+ *
+ * FOUR FACTS, AND `paidByVillage` HAD A DEFAULT UNTIL 2026-09-15. It carries
+ * the Contributor rung alone, so `= false` meant a caller that passed three
+ * arguments compiled, ran, and answered a rung too low for everybody the
+ * village had paid. Two did: the admin roster and the `members_at_stage`
+ * vision metric. The default is gone, so the compiler asks the question now.
+ * List callers batch it with `paidByVillageMany` (lib/ledger.ts) rather than
+ * asking per member; single-member callers use stageOf().
  */
 /** Server-recorded completions against the live catalogue. See lib/trainingRecord.ts. */
 const trainingDoneHere = (done: readonly string[]): boolean =>
@@ -3759,7 +3767,7 @@ const rungRule = (user: any, consentedQuests: number, trainingDone: readonly str
   }
 };
 
-function computeStage(user: any, consentedQuests: number, trainingDone: readonly string[], paidByVillage = false): string {
+function computeStage(user: any, consentedQuests: number, trainingDone: readonly string[], paidByVillage: boolean): string {
   return climbLadder(GAME_CONFIG.stages, user, rungRule(user, consentedQuests, trainingDone, paidByVillage));
 }
 
@@ -25975,6 +25983,7 @@ ${inner}
       isExampleUser,
       computeStage,
       trainingCompletions: (ids: readonly string[]) => completionsForMany(getPool(), ids),
+      paidByVillage: (ids: readonly string[]) => paidByVillageMany(getPool(), ids, contributionTokens()),
       seasonsCompleted: () => {
         const st = seasonState();
         return st.seasons.filter((x: any) => x.endsOn && x.endsOn <= st.today).length;
@@ -26587,6 +26596,7 @@ ${inner}
   registerPlayersRoutes(app, {
     isAdmin, members, claimsRepo, computeStage, hasMembership, stageOf, recordStageEvent,
     trainingCompletions: (ids: readonly string[]) => completionsForMany(getPool(), ids),
+    paidByVillage: (ids: readonly string[]) => paidByVillageMany(getPool(), ids, contributionTokens()),
   });
 
   // S18: "delete" a member = anonymize them. Value rows persist (the ledger
