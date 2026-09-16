@@ -169,7 +169,7 @@ export default function ExitPolicy() {
                 identity is removed at the end, when everything is settled.
               </p>
               <div className="space-y-2">
-                <IdentityConfirmField state={identity} action="request-exit" next="/exit-policy"
+                <IdentityConfirmField state={identity} action="request-exit"
                   password={password} onPassword={setPassword}
                   placeholder="Confirm with your password"
                   inputClassName="w-full text-sm border border-border rounded-lg px-3 py-2" />

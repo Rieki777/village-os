@@ -244,7 +244,7 @@ export function register(app: Express, deps: GoogleAuthDeps): void {
     const confirm = state && isConfirmAction(state.confirm) ? state.confirm : null;
     const fail = (reason: string): void => {
       if (!confirm) return failTo(res, reason);
-      res.redirect(302, confirmReturnUrl(state!.next, confirm, `google_confirm=error&for=${confirm}&reason=${encodeURIComponent(reason)}`));
+      res.redirect(302, confirmReturnUrl(confirm, `google_confirm=error&for=${confirm}&reason=${encodeURIComponent(reason)}`));
     };
 
     const avail = deps.availability();
@@ -344,7 +344,7 @@ export function register(app: Express, deps: GoogleAuthDeps): void {
      * is sent back to it, because this path exists for the member who has none.
      */
     if (confirm) {
-      const back = (query: string) => res.redirect(302, confirmReturnUrl(state.next, confirm, query));
+      const back = (query: string) => res.redirect(302, confirmReturnUrl(confirm, query));
       if (!bySub) return back(`google_confirm=error&for=${confirm}&reason=not_linked`);
       if (bySub.passwordHash) return back(`google_confirm=error&for=${confirm}&reason=has_password`);
       const minted = mintConfirmation(deps.authSecret, bySub.id, confirm, Number(bySub.tokenVersion ?? 0));

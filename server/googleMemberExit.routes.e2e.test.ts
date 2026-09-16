@@ -120,8 +120,12 @@ async function googleRoundTrip(query: string, who: { sub: string; email: string;
 
 function cookieValue(setCookies: string[], name: string): string {
   for (const c of setCookies) {
-    const m = new RegExp(`(?:^|;\\s*)${name.replace(/[-]/g, "\\-")}=([^;]*)`).exec(c);
-    if (m && m[1]) return m[1];
+    // Split rather than build a regex out of the name. The cookie itself is
+    // the first pair of a Set-Cookie header, and escaping a name into a
+    // pattern is one more thing to get wrong.
+    const pair = c.split(";")[0] ?? "";
+    const eq = pair.indexOf("=");
+    if (eq > 0 && pair.slice(0, eq).trim() === name) return pair.slice(eq + 1).trim();
   }
   return "";
 }

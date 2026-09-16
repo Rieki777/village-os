@@ -334,7 +334,6 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
               <IdentityConfirmField
                 state={identity}
                 action="delete-account"
-                next="/profile"
                 password={password}
                 onPassword={setPassword}
                 placeholder="Confirm your password"

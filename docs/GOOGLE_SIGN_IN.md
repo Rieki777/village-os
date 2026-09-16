@@ -188,8 +188,10 @@ In short:
 1. The screen asks `GET /api/auth/confirm-methods` and draws a password box, a
    Confirm with Google button, or a sentence sending the member to set a
    password.
-2. The button goes to `/api/auth/google/start?confirm=<action>&next=<screen>`.
-   The action rides inside the signed state.
+2. The button goes to `/api/auth/google/start?confirm=<action>`. The action
+   rides inside the signed state, and no destination is sent: a confirmation
+   returns to the action's own screen, so a redirect on this path never carries
+   a value that came off the request.
 3. The callback runs every check a sign-in runs, then accepts ONLY the Google
    subject already linked to an account. It never creates or links an account
    on this path, and it sends a member who has a password back to it.

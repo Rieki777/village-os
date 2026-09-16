@@ -291,11 +291,9 @@ describe("the pieces around the gate", () => {
     expect(readOAuthState(SECRET, `${Buffer.from(JSON.stringify(p)).toString("base64url")}.${sig}`, T0)).toBeNull();
   });
 
-  it("the return address goes back to the screen, with or without a query already on it", () => {
-    expect(confirmReturnUrl(null, "request-exit", "google_confirm=request-exit")).toBe("/exit-policy?google_confirm=request-exit");
-    expect(confirmReturnUrl("/profile?tab=data", "delete-account", "google_confirm=delete-account")).toBe(
-      "/profile?tab=data&google_confirm=delete-account",
-    );
+  it("the return address is the action's own screen, and never a value off the request", () => {
+    expect(confirmReturnUrl("request-exit", "google_confirm=request-exit")).toBe("/exit-policy?google_confirm=request-exit");
+    expect(confirmReturnUrl("delete-account", "google_confirm=delete-account")).toBe("/profile?google_confirm=delete-account");
   });
 
   it("reads one cookie out of a header", () => {

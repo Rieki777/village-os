@@ -97,8 +97,9 @@ export function useIdentityConfirm(action: ConfirmAction): IdentityConfirmState 
  * A plain anchor and a full page navigation, like the sign-in button: this
  * starts a redirect to Google, so there is nothing for the router to do.
  */
-export function ConfirmWithGoogleButton({ action, next }: { action: ConfirmAction; next: string }) {
-  const href = `/api/auth/google/start?confirm=${action}&next=${encodeURIComponent(next)}`;
+export function ConfirmWithGoogleButton({ action }: { action: ConfirmAction }) {
+  // No destination is sent: the callback returns to the action's own screen.
+  const href = `/api/auth/google/start?confirm=${action}`;
   return (
     <a
       href={href}
@@ -114,7 +115,6 @@ export function ConfirmWithGoogleButton({ action, next }: { action: ConfirmActio
 export function IdentityConfirmField({
   state,
   action,
-  next,
   password,
   onPassword,
   placeholder,
@@ -122,7 +122,6 @@ export function IdentityConfirmField({
 }: {
   state: IdentityConfirmState;
   action: ConfirmAction;
-  next: string;
   password: string;
   onPassword(value: string): void;
   placeholder: string;
@@ -132,7 +131,7 @@ export function IdentityConfirmField({
     return state.confirmed ? (
       <p role="status" className="text-xs text-card-foreground">{CONFIRMED_WITH_GOOGLE}</p>
     ) : (
-      <ConfirmWithGoogleButton action={action} next={next} />
+      <ConfirmWithGoogleButton action={action} />
     );
   }
   if (state.confirmWith === "none") {

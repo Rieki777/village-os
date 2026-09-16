@@ -218,10 +218,20 @@ export function readCookieValue(header: string | undefined, name: string): strin
   return null;
 }
 
-/** Back to the screen the member came from, with a word the page turns into a sentence. */
-export function confirmReturnUrl(next: string | null, action: ConfirmAction | null, query: string): string {
-  const base = next || (action ? CONFIRM_HOME[action] : "/profile");
-  return `${base}${base.includes("?") ? "&" : "?"}${query}`;
+/**
+ * Back to the action's own screen, with a word the page turns into a sentence.
+ *
+ * THE DESTINATION IS NOT TAKEN FROM THE REQUEST, and that is deliberate. An
+ * ordinary sign-in carries a `next` through the signed state, because a member
+ * may have been heading anywhere when they were asked to sign in. A
+ * confirmation has exactly one screen it can belong to, so reading a
+ * destination off the round trip would put an attacker-influenced value in a
+ * redirect and buy no behaviour anybody wanted. CodeQL flagged the first
+ * version of this (js/server-side-unvalidated-url-redirection); the value was
+ * normalised twice over and safe, and this version needs no argument at all.
+ */
+export function confirmReturnUrl(action: ConfirmAction, query: string): string {
+  return `${CONFIRM_HOME[action]}?${query}`;
 }
 
 export type ConfirmWith = "password" | "google" | "none";
