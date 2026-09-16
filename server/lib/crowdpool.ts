@@ -2,13 +2,14 @@
  * Crowdpool (R44/R45): the bridge between this village's game surface and the
  * hub's public crowdpool campaigns.
  *
- * The hub serves a public, no-auth tRPC API at `/api/trpc` with five reads
- * this module cares about, measured live on 2026-08-22. Four of them are the
- * per-campaign bundle `fetchCampaignBundle` dials in parallel; `campaigns.list`
- * is the fifth and runs only to resolve a slug that carries no id. This line
- * said FOUR and listed five from the day it shipped, in this file and in
- * `docs/modules/crowdpool.md` both, which is the count a reader integrating
- * against this module would take at face value:
+ * The hub serves a public, no-auth tRPC API at `/api/trpc` with six reads
+ * this module cares about. Five were measured live on 2026-08-22 and the sixth,
+ * `meta.contract`, joined on 2026-09-14. Four of them are the per-campaign
+ * bundle `fetchCampaignBundle` dials in parallel, and `meta.contract` goes out
+ * beside those four on every sync; `campaigns.list` runs only to resolve a slug
+ * that carries no id. This line said FOUR and listed five from the day it
+ * shipped, in this file and in `docs/modules/crowdpool.md` both, which is the
+ * count a reader integrating against this module would take at face value:
  *
  *   campaigns.list            -> every published campaign (input: {})
  *   campaigns.getById         -> one flat campaign record with items, images,
@@ -17,6 +18,8 @@
  *   campaigns.getActivity     -> the public activity feed (input: {campaignId})
  *   campaigns.getPartnerLinks -> partner funders with cached raised/percent/
  *                                count (input: {campaignId})
+ *   meta.contract             -> the hub's contract versions, one integer per
+ *                                surface (input: {}); see item 1 below
  *
  * The hub sends no CORS headers, so a browser cannot read any of this
  * cross-origin. That is WHY this proxy exists: the game server dials the hub
@@ -52,19 +55,34 @@
  * their own on 2026-09-04 and relayed here. This side re-verified only what is
  * verifiable from this side, which is what OUR code does with the answers.
  *
- * 1. `pledgedTotal` WAS A FLOOR UNTIL 2026-09-05, AND THE HUB FIXED IT. The
- *    hub summed a campaign's pledged value filtering on the ACCEPTED status
- *    alone, so the moment a steward confirmed a delivery that value left the
- *    number. Their measurement: accept ten thousand, deliver it, accept five
- *    thousand more, and the campaign reported five thousand where the honest
- *    figure was fifteen, the drop deferred to a later, unrelated acceptance.
- *    The hub's commit b835c28 counts accepted, fulfilled and thanked, confirmed
- *    live on their main with CI and the deploy green, and 7c83ef4 switched
- *    `HUB_PLEDGED_TOTAL_IS_A_FLOOR` in `client/src/components/crowdpool/PoolPieces.tsx`
- *    off. `percentPledged` below divides by the hub's number, as it always did,
- *    because inventing a correction here would be worse than an honest gap.
- *    This side reads no hub contract version, so a fork pointed at a hub older
- *    than b835c28 would show a floor as a total; that flag is the one switch.
+ * 1. `pledgedTotal` IS A FLOOR ON AN OLDER HUB, AND THIS FILE NOW ASKS THE HUB
+ *    WHICH ONE IT IS. The hub summed a campaign's pledged value filtering on the
+ *    ACCEPTED status alone, so the moment a steward confirmed a delivery that
+ *    value left the number. Their measurement: accept ten thousand, deliver it,
+ *    accept five thousand more, and the campaign reported five thousand where
+ *    the honest figure was fifteen, the drop deferred to a later, unrelated
+ *    acceptance. The hub's commit b835c28 (2026-09-05) counts accepted,
+ *    fulfilled and thanked, confirmed live on their main with CI and the deploy
+ *    green. `percentPledged` below divides by the hub's number, as it always
+ *    did, because inventing a correction here would be worse than an honest gap.
+ *
+ *    WHICH OF THE TWO A HUB SENDS IS READ OFF THE HUB. It publishes
+ *    `meta.contract` (hub commit 3c70b12c), a map of integers with one per
+ *    surface, and keeps the history in its docs/CROWDPOOL_HUB_CONTRACT.md
+ *    section 10: crowdpool 1 sums accepted pledges only, a floor; crowdpool 2 is
+ *    b835c28's total. The number rises only when a field a village already
+ *    reads changes meaning. `fetchCampaignBundle` dials it beside the four
+ *    reads, a failure there never fails or holds the bundle, and the answer
+ *    rides on the campaign as `hubContract`, so a snapshot keeps the version it
+ *    was fetched with. The client words the figure as a floor whenever that
+ *    version is below 2 or absent (`pledgedIsFloor` in
+ *    `client/src/components/crowdpool/PoolPieces.tsx`).
+ *
+ *    This replaced a module constant, `HUB_PLEDGED_TOTAL_IS_A_FLOOR`, which
+ *    7c83ef4 switched off for every hub at once. Until 2026-09-14 this side read
+ *    no hub contract version, so a fork pointed at a hub older than b835c28
+ *    showed a floor as a total. Rye ruled that day to add the version, for the
+ *    reason that both sides will change fast over the coming months.
  *
  * 2. THE THREE-SLOT METER CAN ARRIVE WITH DELIVERED ABOVE WANTED. Their fulfil
  *    path is not idempotent despite a comment claiming it is: two stewards at
@@ -185,9 +203,10 @@ export interface CrowdpoolCampaign {
   currency: string;
   totalValue: number;
   /**
-   * The hub's campaign-wide pledged value: accepted, fulfilled and thanked
-   * pledges, since the hub's b835c28 on 2026-09-05. It was a floor before that;
-   * see item 1 at the top of this file.
+   * The hub's campaign-wide pledged value. On a hub at crowdpool contract 2
+   * (b835c28, 2026-09-05) that is accepted, fulfilled and thanked pledges; at
+   * contract 1 it is accepted pledges only, a floor. `hubContract` below says
+   * which one this campaign was fetched under; see item 1 at the top of this file.
    */
   pledgedTotal: number;
   financialTarget: number;
@@ -212,6 +231,46 @@ export interface CrowdpoolCampaign {
   needs: CrowdpoolNeed[];
   partners: CrowdpoolPartner[];
   events: CrowdpoolEvent[];
+  /**
+   * The hub contract this campaign was fetched under, read off `meta.contract`
+   * in the same sync as the numbers above. It travels inside the campaign so a
+   * stale snapshot keeps the version its numbers were read with.
+   */
+  hubContract: HubContract;
+}
+
+/** The hub's `meta.contract` answer, narrowed to the surface this module reads. */
+export interface HubContract {
+  /** 1: `pledgedTotal` is accepted pledges only, a floor. 2: accepted,
+   *  fulfilled and thanked. See item 1 at the top of this file. */
+  crowdpool: number;
+}
+
+/**
+ * THE VERSION A HUB IS READ AS WHEN IT DOES NOT SAY.
+ *
+ * Rye ruled on 2026-09-14 that this side reads the hub's contract version. The
+ * hub's docs/CROWDPOOL_HUB_CONTRACT.md section 10 starts the crowdpool history
+ * at 1, the accepted-only pledged sum, and a hub that predates `meta.contract`
+ * is by definition that older contract. So a missing procedure, an error
+ * envelope, a dial that throws or times out, a non-object answer, a missing key
+ * and any value that is not a positive integer all read as this one number.
+ *
+ * It is also the direction that cannot overstate a village: at 1 the page calls
+ * the figure a floor, and a total worded as a floor only understates.
+ */
+export const HUB_CONTRACT_CROWDPOOL_FALLBACK = 1;
+
+/** One validator for every place a contract reading enters: the live answer,
+ *  a caller's option, and a snapshot persisted before the field existed. */
+export function hubContractFrom(json: unknown): HubContract {
+  if (!json || typeof json !== "object" || Array.isArray(json)) {
+    return { crowdpool: HUB_CONTRACT_CROWDPOOL_FALLBACK };
+  }
+  const v = (json as Record<string, unknown>).crowdpool;
+  return {
+    crowdpool: typeof v === "number" && Number.isInteger(v) && v >= 1 ? v : HUB_CONTRACT_CROWDPOOL_FALLBACK,
+  };
 }
 
 // ── tRPC plumbing ────────────────────────────────────────────────────────────
@@ -387,7 +446,7 @@ export function normalizeCampaign(
   items: any,
   activity: any,
   partnerLinks: any,
-  opts: { baseUrl: string; slug?: string; now?: number },
+  opts: { baseUrl: string; slug?: string; now?: number; hubContract?: HubContract },
 ): CrowdpoolCampaign {
   if (!byId || typeof byId !== "object") throw new Error("campaign not found on the hub");
   const started = iso(byId.startedAt);
@@ -443,6 +502,9 @@ export function normalizeCampaign(
     needs,
     partners: normalizePartners(partnerLinks),
     events: normalizeEvents(activity),
+    // A campaign normalized with no contract reading was read under no stated
+    // version, which is version 1.
+    hubContract: hubContractFrom(opts.hubContract),
   };
 }
 
@@ -467,24 +529,77 @@ export async function resolveCampaignId(
   return hit ? num(hit.id) : null;
 }
 
-/** The four reads, in parallel. Throws on any envelope failure; the caller
- *  decides whether a snapshot stands in. */
+/**
+ * The hub's contract answer, unwrapped and validated. Anything that is not a
+ * tRPC result carrying a positive integer `crowdpool` reads as
+ * `HUB_CONTRACT_CROWDPOOL_FALLBACK`, including an error envelope, which is what
+ * a hub with no `meta.contract` procedure answers.
+ */
+export function readHubContract(payload: unknown): HubContract {
+  try {
+    return hubContractFrom(unwrapTrpc(payload));
+  } catch {
+    return hubContractFrom(null);
+  }
+}
+
+/** Dial `meta.contract`. NEVER rejects: whether the dialer throws on a 404 or
+ *  hands back the error envelope, the answer is version 1. */
+export async function fetchHubContract(deps: CrowdpoolDeps, baseUrl: string): Promise<HubContract> {
+  try {
+    return readHubContract(await deps.fetchJson(trpcQueryUrl(baseUrl, "meta.contract", {}), TIMEOUT_MS));
+  } catch {
+    return hubContractFrom(null);
+  }
+}
+
+/**
+ * How long a contract read still in flight may keep a campaign waiting AFTER
+ * its four reads have all landed. Then it reads as version 1.
+ *
+ * WHY THERE IS A GRACE AT ALL, when the rule is that the contract never slows
+ * the campaign. With none, the version would be decided by which of five
+ * parallel dials to one host happened to land last, so a hub at version 2 would
+ * flip between a total and a floor from one sync to the next. The grace starts
+ * only once the campaign is otherwise ready, so a contract read that answers,
+ * errors or throws before then costs nothing, and only a read that hangs costs
+ * this much. The four reads themselves may each take up to TIMEOUT_MS.
+ */
+export const HUB_CONTRACT_GRACE_MS = 500;
+
+/** The four reads in parallel, with `meta.contract` beside them. Throws on any
+ *  envelope failure of the four; the contract read can never throw here. The
+ *  caller decides whether a snapshot stands in. */
 export async function fetchCampaignBundle(
   deps: CrowdpoolDeps,
   baseUrl: string,
   id: number,
   slug?: string,
 ): Promise<CrowdpoolCampaign> {
+  // Started first and caught inside, so it is already travelling beside the
+  // four and a failure of the four leaves no unhandled rejection behind.
+  const contract = fetchHubContract(deps, baseUrl);
   const [byId, items, activity, partners] = await Promise.all([
     deps.fetchJson(trpcQueryUrl(baseUrl, "campaigns.getById", { id }), TIMEOUT_MS),
     deps.fetchJson(trpcQueryUrl(baseUrl, "campaigns.getItems", { campaignId: id }), TIMEOUT_MS),
     deps.fetchJson(trpcQueryUrl(baseUrl, "campaigns.getActivity", { campaignId: id }), TIMEOUT_MS),
     deps.fetchJson(trpcQueryUrl(baseUrl, "campaigns.getPartnerLinks", { campaignId: id }), TIMEOUT_MS),
   ]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<HubContract>((resolve) => {
+    timer = setTimeout(() => resolve(hubContractFrom(null)), HUB_CONTRACT_GRACE_MS);
+  });
+  let hubContract: HubContract;
+  try {
+    hubContract = await Promise.race([contract, late]);
+  } finally {
+    clearTimeout(timer);
+  }
   return normalizeCampaign(unwrapTrpc(byId), unwrapTrpc(items), unwrapTrpc(activity), unwrapTrpc(partners), {
     baseUrl,
     slug,
     now: deps.now?.(),
+    hubContract,
   });
 }
 
@@ -619,14 +734,17 @@ export function snapshotExport(): Record<string, CrowdpoolSnapshot> {
 }
 
 /** Snapshots back in at boot. Existing in-memory state wins: a reboot loads
- *  before any fetch, so this only ever fills empty keys. */
+ *  before any fetch, so this only ever fills empty keys. A snapshot persisted
+ *  before `hubContract` existed was fetched under no stated version, so it
+ *  comes back as version 1 instead of carrying a missing field. */
 export function snapshotImport(doc: Record<string, CrowdpoolSnapshot> | null | undefined): number {
   let n = 0;
   for (const [key, snap] of Object.entries(doc ?? {})) {
     if (!snap || typeof snap !== "object" || !snap.data || !snap.lastSyncAt) continue;
     const s = stateFor(key);
     if (!s.snapshot) {
-      s.snapshot = { key, data: snap.data, lastSyncAt: snap.lastSyncAt };
+      const data = { ...snap.data, hubContract: hubContractFrom(snap.data.hubContract) };
+      s.snapshot = { key, data, lastSyncAt: snap.lastSyncAt };
       n += 1;
     }
   }

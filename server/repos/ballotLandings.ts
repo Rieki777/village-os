@@ -343,6 +343,39 @@ export async function releaseClaimToPending(pool: Pool, ballotId: string): Promi
   await pool.query("UPDATE ballots SET landing_status = 'pending' WHERE id = ? AND landing_status = 'applying'", [ballotId]);
 }
 
+/**
+ * A landing that failed INSIDE the close, handed to the landing job.
+ *
+ * `lands_at` becomes the instant it failed, so `dueBallotIds` selects it on the
+ * next tick and the job's own claim runs it. The guard is the shape the close
+ * path wrote a moment earlier (`not_applicable` with no instant), so a row that
+ * anything else has moved since is left alone, and zero says so.
+ * `server/lib/atCloseLanding.ts` holds the rule for which rows come here.
+ */
+export async function queueFailedAtCloseLanding(pool: Pool, ballotId: string, at: Date): Promise<number> {
+  const [res] = await pool.query<ResultSetHeader>(
+    "UPDATE ballots SET lands_at = ?, veto_closes_at = ?, landing_status = 'pending' " +
+      "WHERE id = ? AND status = 'passed' AND landing_status = 'not_applicable' AND lands_at IS NULL",
+    [sqlInstant(at), sqlInstant(at), ballotId],
+  );
+  return Number(res.affectedRows);
+}
+
+/**
+ * A landing that failed inside the close and is not safe to run twice.
+ *
+ * `stalled` with `lands_at` left NULL. Every selector the landing job has
+ * requires an instant, so no job runs this row again. Same guard as above.
+ */
+export async function stallFailedAtCloseLanding(pool: Pool, ballotId: string): Promise<number> {
+  const [res] = await pool.query<ResultSetHeader>(
+    "UPDATE ballots SET landing_status = 'stalled' " +
+      "WHERE id = ? AND status = 'passed' AND landing_status = 'not_applicable' AND lands_at IS NULL",
+    [ballotId],
+  );
+  return Number(res.affectedRows);
+}
+
 /** A passed row still waiting, with the two fields the write-off sentence needs. */
 export interface ExpiryCandidate {
   id: string;
@@ -513,4 +546,42 @@ export async function vetoedBallotCount(pool: Pool, proposalId: string): Promise
     [proposalId],
   );
   return Number(rows[0]?.n ?? 0);
+}
+
+/**
+ * Each ballot's `landing_status`, for the failed-actions report
+ * (server/lib/failedActions.ts), which lists an unfinished landing attempt only
+ * while its decision is still owed a landing. An id with no ballot is simply
+ * absent from the map.
+ *
+ * A read by bound ids rather than a join from `governance_executor_pending`, so
+ * no comparison crosses two tables' collations on a village whose alignment has
+ * not run yet.
+ */
+export async function landingStatusesFor(pool: Pool, ballotIds: readonly string[]): Promise<Map<string, string>> {
+  if (ballotIds.length === 0) return new Map();
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT id, landing_status FROM ballots WHERE id IN (${ballotIds.map(() => "?").join(",")})`,
+    [...ballotIds],
+  );
+  return new Map(rows.map((r) => [String(r.id), String(r.landing_status)] as [string, string]));
+}
+
+/**
+ * Which of these ballots still have a landing time, for the same report, which
+ * words an unfinished landing by it. The landing job only ever selects a row
+ * with `lands_at` set (`dueBallotIds` above), so a decision with one is tried
+ * again and a decision without one is left alone, whatever its status says. A
+ * release that parks an at-close failure with a landing time, to retry it, and
+ * one that parks it without, to leave it, both read correctly off this column.
+ *
+ * Bound ids, for the collation reason `landingStatusesFor` gives.
+ */
+export async function scheduledLandings(pool: Pool, ballotIds: readonly string[]): Promise<Set<string>> {
+  if (ballotIds.length === 0) return new Set();
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT id FROM ballots WHERE lands_at IS NOT NULL AND id IN (${ballotIds.map(() => "?").join(",")})`,
+    [...ballotIds],
+  );
+  return new Set(rows.map((r) => String(r.id)));
 }

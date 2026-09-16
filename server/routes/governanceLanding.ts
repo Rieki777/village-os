@@ -31,6 +31,7 @@ import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { numberVar, boolVar } from "../lib/variables";
 import { landingRow } from "../lib/applyDue";
+import { notYetInEffectFor } from "../lib/atCloseLanding";
 import { activeClock } from "../lib/gratitude-cycles";
 import { dryRunProposal } from "../lib/proposalDryRun";
 import { changeSetSnapsToBoundary, elementsFor, type ChangesetDeps } from "../lib/changeset";
@@ -75,6 +76,8 @@ export function register(app: Express, deps: Deps): void {
       vetoLocked: row.vetoLocked,
       lockedByConsent: row.lockedByConsent,
       countdownSentence: countdownSentence(row.lockedByConsent ? 2 : row.vetoLocked ? 1 : 0),
+      // A carried decision whose landing failed, in plain words, or null.
+      notYetInEffect: await notYetInEffectFor(getPool(), row),
       elements: await elementsFor(getPool(), req.params.id),
     });
   });

@@ -62,6 +62,27 @@ export async function attemptCount(pool: Pool, ballotId: string): Promise<number
 }
 
 /**
+ * The newest attempt on this ballot, or null when there has been none.
+ *
+ * Read for the sentence a member sees on the decision page
+ * (`server/lib/atCloseLanding.ts`): an open newest attempt carrying an error is
+ * a landing that has not happened yet. The NEWEST and never any, because an
+ * older failure stays open after a later attempt lands.
+ */
+export async function newestAttemptOf(
+  pool: Pool,
+  ballotId: string,
+): Promise<{ lastError: string | null; cleared: boolean } | null> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT last_error, cleared_at FROM governance_executor_pending WHERE ballot_id = ? ORDER BY id DESC LIMIT 1",
+    [ballotId],
+  );
+  const r = rows[0];
+  if (!r) return null;
+  return { lastError: r.last_error == null ? null : String(r.last_error), cleared: r.cleared_at != null };
+}
+
+/**
  * Open an attempt.
  *
  * `claimedAt` is a UTC instant from Node and NEVER `NOW()`. `sqlInstant` in
@@ -128,4 +149,48 @@ export async function unclearedBallotIds(pool: Pool, claimedAtOrBefore: Date): P
     [sqlInstant(claimedAtOrBefore)],
   );
   return rows.map((r) => String(r.ballot_id));
+}
+
+export interface StuckLanding {
+  ballotId: string;
+  attempts: number;
+  lastError: string | null;
+}
+
+/**
+ * Decisions whose NEWEST landing attempt started and never finished.
+ *
+ * THE NEWEST ROW PER BALLOT, NEVER ANY ROW. A ballot that failed once and then
+ * landed keeps its failed attempt open forever, by design, because this table
+ * records every attempt. "Any uncleared row" would report a landing that already
+ * happened as a failure for good, which is what `unclearedBallotIds` above does
+ * and why the failed-actions report does not use it.
+ *
+ * AND THE ERROR COLUMN IS NOT THE TEST. A process that died mid-attempt wrote no
+ * error at all, which is exactly the case a report most needs to show.
+ *
+ * AN ATTEMPT THAT RECORDED AN ERROR IS STUCK AT ONCE; ONE THAT RECORDED NOTHING
+ * GETS UNTIL `claimedAtOrBefore`. A scheduled landing that keeps failing is
+ * attempted again every five minutes, and each attempt adds a fresh row, so its
+ * newest row is never ten minutes old: an age test alone never saw it. The grace
+ * is for an attempt still running, which has written no error yet, and an
+ * attempt with no error long after it began most likely met a restart.
+ *
+ * The bound goes through `sqlInstant`, the way `insertAttempt` writes
+ * `claimed_at`, so both sides of the comparison are on the same footing.
+ */
+export async function stuckLandings(pool: Pool, claimedAtOrBefore: Date, limit = 100): Promise<StuckLanding[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT p.ballot_id, p.attempts, p.last_error FROM governance_executor_pending p " +
+      "JOIN (SELECT ballot_id, MAX(id) AS newest FROM governance_executor_pending GROUP BY ballot_id) n " +
+      "ON n.ballot_id = p.ballot_id AND n.newest = p.id " +
+      "WHERE p.cleared_at IS NULL AND (p.last_error IS NOT NULL OR p.claimed_at <= ?) " +
+      "ORDER BY p.claimed_at, p.ballot_id LIMIT ?",
+    [sqlInstant(claimedAtOrBefore), Math.max(1, Math.min(500, Math.trunc(limit)))],
+  );
+  return rows.map((r) => ({
+    ballotId: String(r.ballot_id),
+    attempts: Number(r.attempts ?? 0),
+    lastError: r.last_error == null ? null : String(r.last_error),
+  }));
 }

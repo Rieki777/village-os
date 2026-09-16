@@ -28,6 +28,10 @@
  * payout obligation are different powers, and a village should be able to hand
  * out the first without the second.
  *
+ * The queue READ answers either key and returns each caller only the half
+ * their key reads: `intake.moderate` reads both halves, `quest.approve` alone
+ * reads the quest half. The queue handler says why.
+ *
  * ── WHAT ACCEPTING DOES, WHICH IS NEVER A DIRECT WRITE ───────────────────
  *
  * An accepted org proposal becomes an ORG DRAFT. Not a seat. The draft
@@ -108,6 +112,7 @@ type Deps = Pick<
   | "authedUser"
   | "guardCapability"
   | "mayAct"
+  | "mayStillSee"
   | "adminActor"
   | "getPool"
   | "members"
@@ -215,7 +220,7 @@ function proposedChangeCount(items: ReturnType<typeof toCard>[], circles: readon
 }
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, guardCapability, getPool, members, questsRepo, adminActor, circlesRepo, isAdmin } = deps;
+  const { authedUser, guardCapability, mayStillSee, getPool, members, questsRepo, adminActor, circlesRepo, isAdmin } = deps;
 
   const actorId = async (req: any): Promise<string | null> =>
     (await authedUser(req))?.id ?? adminActor(req)?.id ?? null;
@@ -245,16 +250,39 @@ export function register(app: Express, deps: Deps): void {
    * used to remember one such draft, from the last accept only, so a second
    * blocked accept or a reload left the first with no way out on any screen.
    * Listed here, every one of them has its card and its withdraw button.
+   *
+   * EITHER KEY OPENS IT, AND EACH KEY OPENS ITS OWN HALF (the governance lane's
+   * reading, 2026-09-14). This used to ask `intake.moderate` alone while
+   * accepting and rejecting a proposed quest asked `quest.approve`, so a holder
+   * of `quest.approve` could accept a proposal they were not allowed to list.
+   * `intake.moderate` still reads both halves, because reading is exactly the
+   * power that key grants and reading a quest proposal creates no obligation.
+   * `quest.approve` alone reads the quest half. The drops and the stuck drafts
+   * belong to the proposal half, so a reader given the quest half alone gets
+   * neither, and none of their reads run. `scope` says which halves came back,
+   * so a page never shows "not yours to see" as "empty".
+   *
+   * A READ ASKS `mayStillSee` AND NEVER `mayAct`, the rule the consent queue
+   * follows too: opening a list is looking, and there is no break-glass on a
+   * GET. Neither key answers the 401 `guardCapability` sent here before, which
+   * the page already reads as "not open to you".
    */
   app.get("/api/review/queue", async (req, res) => {
-    if (!(await guardCapability(req, res, "intake.moderate"))) return;
+    const [readsProposals, readsQuestsAlone] = await Promise.all([
+      mayStillSee(req, "intake.moderate"),
+      mayStillSee(req, "quest.approve"),
+    ]);
+    if (!readsProposals && !readsQuestsAlone) return res.status(401).json({ error: "auth_required" });
+    const readsQuests = readsProposals || readsQuestsAlone;
     const pool = getPool();
     const [proposals, quests, drops, drafts, previewContext] = await Promise.all([
-      proposalQueue(pool, "proposed"),
-      questProposalQueue(pool, "proposed"),
-      recentDrops(pool, 30),
-      listDrafts(pool),
-      loadPreviewContext(pool),
+      readsProposals ? proposalQueue(pool, "proposed") : Promise.resolve([] as ExternalProposalRow[]),
+      readsQuests
+        ? questProposalQueue(pool, "proposed")
+        : Promise.resolve([] as Awaited<ReturnType<typeof questProposalQueue>>),
+      readsProposals ? recentDrops(pool, 30) : Promise.resolve([] as Awaited<ReturnType<typeof recentDrops>>),
+      readsProposals ? listDrafts(pool) : Promise.resolve(null),
+      readsProposals ? loadPreviewContext(pool) : Promise.resolve(null),
     ]);
 
     const batches = new Map<string, ReturnType<typeof toCard>[]>();
@@ -268,7 +296,8 @@ export function register(app: Express, deps: Deps): void {
 
     // Every open draft this queue made that is blocked, previewed against the
     // one read above, and listed even when its preview throws (stuckQueueDrafts).
-    const stuckDrafts = stuckQueueDrafts(drafts, previewContext, proposalChangeLimit);
+    // A reader given the quest half alone read no drafts, so it lists none.
+    const stuckDrafts = drafts && previewContext ? stuckQueueDrafts(drafts, previewContext, proposalChangeLimit) : [];
     const circles = circlesRepo.all() as LiveCircle[];
 
     res.json({
@@ -300,6 +329,7 @@ export function register(app: Express, deps: Deps): void {
       drops,
       stuckDrafts,
       counts: { proposals: proposals.length, quests: quests.length },
+      scope: { proposals: readsProposals, quests: readsQuests },
     });
   });
 

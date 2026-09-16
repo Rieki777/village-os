@@ -40,6 +40,12 @@ export const RETRY_DELAYS_MS = [60_000, 5 * 60_000, 30 * 60_000, 2 * 60 * 60_000
 export const MAX_ATTEMPTS = RETRY_DELAYS_MS.length;
 export const DISABLE_AFTER_FAILURES = 10;
 export const SIGNATURE_HEADER = "X-Village-Signature";
+/**
+ * What a dropped delivery records when this deployment has no member-secrets
+ * key. Exported because the failed-actions report counts drops by this exact
+ * text, and two copies of one sentence drift apart.
+ */
+export const NO_MEMBER_SECRETS_KEY = "no member-secrets key";
 
 export interface InboxRow {
   id: string;
@@ -312,7 +318,7 @@ export async function drainDeliveries(pool: Pool, deps: DrainDeps, batch = 50): 
     const inboxUserId = String(r.inbox_user_id);
     let error: string | null = null;
     if (!secret) {
-      error = "no member-secrets key";
+      error = NO_MEMBER_SECRETS_KEY;
     } else {
       const wire = buildDelivery(secret, { id: row.id, kind: row.kind, sentAt: now.toISOString(), data: row.payload });
       try {
