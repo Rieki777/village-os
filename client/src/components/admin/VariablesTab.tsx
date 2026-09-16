@@ -41,7 +41,7 @@
  * palette, taken across the whole page at once. The ratchet still only turns
  * down, so this file cannot grow a seventeenth.
  */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import { stalemateWarningFor } from "@shared/ballotSubjects";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
@@ -58,6 +58,9 @@ import HyphaModulePanel from "@/components/admin/HyphaModulePanel";
  * than leaving it exported-but-uncalled is the point: an unreferenced
  * panel is a second way in that nobody is testing.
  */
+
+/** What an admin does that ends the settling scroll: the page is theirs again. */
+const ADMIN_MOVES = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
 
 export default function VariablesTab({ password }: { password: string }) {
   const [vars, setVars] = useState<any[]>([]);
@@ -91,9 +94,40 @@ export default function VariablesTab({ password }: { password: string }) {
   }, [password]);
 
   useEffect(() => { load(); }, [load]);
+  /*
+   * SCROLLED TO ONCE. Every Save reloads the list, and a scroll tied to each
+   * load jumped the admin back to this dial after saving any other one. The key
+   * then leaves the address, so a refresh opens the tab at its top. The Hypha
+   * panel above loads on its own clock and pushes the list down when it does,
+   * so the dial is kept centred while the page settles, until the admin
+   * scrolls, types or clicks, or three seconds pass.
+   */
+  const scrolledToFocus = useRef(false);
   useEffect(() => {
-    if (loading || !focusKey) return;
-    document.getElementById(`variable-${focusKey}`)?.scrollIntoView?.({ block: "center" });
+    if (loading || !focusKey || scrolledToFocus.current) return;
+    const dial = document.getElementById(`variable-${focusKey}`);
+    if (!dial) return;
+    scrolledToFocus.current = true;
+    const centre = () => dial.scrollIntoView?.({ block: "center" });
+    centre();
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("variable");
+      window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    } catch {
+      // The address is a convenience; the dial is already marked and in view.
+    }
+    if (typeof ResizeObserver === "undefined") return;
+    const shifts = new ResizeObserver(centre);
+    const stop = () => {
+      shifts.disconnect();
+      window.clearTimeout(timer);
+      for (const e of ADMIN_MOVES) window.removeEventListener(e, stop);
+    };
+    const timer = window.setTimeout(stop, 3000);
+    for (const e of ADMIN_MOVES) window.addEventListener(e, stop, { passive: true });
+    shifts.observe(document.body);
+    return stop;
   }, [loading, focusKey]);
 
   const save = async (key: string, value: string) => {

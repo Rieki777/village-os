@@ -395,11 +395,43 @@ describe("accountabilities", () => {
     for (const abbr of [
       "lic.", "licda.", "ing.", "prof.", "profa.", "dra.", "sra.", "srta.", "arq.", "dpto.", "depto.", "admón.", "gral.",
       "hrs.", "hr.", "dept.", "govt.", "est.", "mgr.", "asst.",
-      "lun.", "mar.", "mié.", "jue.", "vie.", "sáb.", "dom.",
+      "lun.", "mié.", "jue.", "vie.", "sáb.", "dom.",
     ]) {
       const duty = `Meet ${abbr} Vargas monthly`;
       expect(normaliseAccountabilities(`${duty}. File the minutes.`), abbr).toEqual([duty, "File the minutes"]);
     }
+  });
+
+  it("ends a duty at a word that is also an abbreviation, and at a unit after a number", () => {
+    // Each of these merged two duties into one while its word sat on the
+    // abbreviation list.
+    expect(normaliseAccountabilities("Stock gloves, bags, etc. Report damage.")).toEqual(["Stock gloves, bags, etc", "Report damage"]);
+    expect(normaliseAccountabilities("Turn down late changes with a clear no. Log each request.")).toEqual([
+      "Turn down late changes with a clear no",
+      "Log each request",
+    ]);
+    expect(normaliseAccountabilities("Limpiar la orilla del mar. Reportar la basura.")).toEqual([
+      "Limpiar la orilla del mar",
+      "Reportar la basura",
+    ]);
+    expect(normaliseAccountabilities("Walk the boundary for 2 hrs. Log what you find.")).toEqual([
+      "Walk the boundary for 2 hrs",
+      "Log what you find",
+    ]);
+    expect(normaliseAccountabilities("Rest 10 min. Resume the survey.")).toEqual(["Rest 10 min", "Resume the survey"]);
+  });
+
+  it("strips the marker off an item that mentions the next number in its words", () => {
+    // " 2. " after "and" read as the next marker, so this one item kept its "1."
+    expect(normaliseAccountabilities(["1. Survey lots 1 and 2. Then stake the corners", "2. File the plat"])).toEqual([
+      "Survey lots 1 and 2. Then stake the corners",
+      "File the plat",
+    ]);
+    expect(normaliseAccountabilities("1. Survey lots 1 and 2. Then stake the corners")).toEqual([
+      "Survey lots 1 and 2. Then stake the corners",
+    ]);
+    // A run with no sentence ends is still a run once its third number follows.
+    expect(normaliseAccountabilities("1. Keep the site 2. Update it 3. Report")).toEqual(["1. Keep the site 2. Update it 3. Report"]);
   });
 
   it("keeps a quoted motto whole, and a time, a weekday, a company and a volume inside their duty", () => {
