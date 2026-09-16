@@ -152,6 +152,12 @@ export interface OAuthState {
   next: string | null;
   /** Bound into the id_token by Google, which is what ties the answer to this request. */
   nonce: string;
+  /**
+   * Set when this round trip confirms a signed-in member for one destructive
+   * action (server/lib/identityConfirm.ts) and signs nobody in. Carried as a
+   * plain word; the route decides whether it names a real action.
+   */
+  confirm: string | null;
 }
 
 /**
@@ -169,13 +175,19 @@ export interface OAuthState {
  * id_token Google returned answers THIS authorization request, and an id_token
  * is minted by Google against a nonce it was given, not by the holder of one.
  */
-export function makeOAuthState(secret: string, next: string | null, nowMs: number = Date.now()): string {
+export function makeOAuthState(
+  secret: string,
+  next: string | null,
+  nowMs: number = Date.now(),
+  confirm: string | null = null,
+): string {
   const payload = Buffer.from(
     JSON.stringify({
       purpose: "oauth-state",
       next: normalizeNext(next) ?? "",
       nonce: crypto.randomBytes(16).toString("hex"),
       t: nowMs,
+      ...(confirm ? { confirm } : {}),
     }),
   ).toString("base64url");
   return `${payload}.${signTokenPayload(secret, payload)}`;
@@ -197,7 +209,11 @@ export function readOAuthState(secret: string, state: string, nowMs: number = Da
     if (typeof decoded.t !== "number" || nowMs - decoded.t > OAUTH_STATE_TTL_MS) return null;
     // Re-normalised on the way out. A signature proves this server wrote the
     // value; it does not prove the value was safe when it was written.
-    return { next: normalizeNext(decoded.next), nonce: decoded.nonce };
+    return {
+      next: normalizeNext(decoded.next),
+      nonce: decoded.nonce,
+      confirm: typeof decoded.confirm === "string" && decoded.confirm ? decoded.confirm : null,
+    };
   } catch {
     return null;
   }
