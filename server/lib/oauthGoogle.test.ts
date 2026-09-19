@@ -175,7 +175,7 @@ describe("OAuth state is the login-CSRF token", () => {
 
   it("keeps only an id in the shape the village mints, so a token handed in is dropped", () => {
     const token = "A".repeat(43);
-    expect(readOAuthState(SECRET, makeOAuthState(SECRET, null, Date.now(), token))?.invite).toBeNull();
+    expect(readOAuthState(SECRET, makeOAuthState(SECRET, null, Date.now(), { invite: token }))?.invite).toBeNull();
   });
 
   it("puts the nonce on the authorization URL, where Google binds it into the id_token", () => {
