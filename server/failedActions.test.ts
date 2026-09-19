@@ -73,7 +73,7 @@ function deps(): ErasureDeps {
   return {
     members: { byId: (id: string) => real.byId(id), update: (id: string, fn: any) => real.update(id, fn) },
     submissionsRepo: { all: () => [], replaceAll: async () => undefined },
-    roleHoldersRepo: { replaceAll: async () => undefined },
+    roleHoldersRepo: { remove: async () => undefined },
     withRoleHolderLock: (fn) => fn(),
     loadRoleHolders: () => [],
     uploadsDir,

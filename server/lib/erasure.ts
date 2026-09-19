@@ -133,9 +133,9 @@ export type ErasureDeps = {
   /** Submissions, scrubbed of PII keys while the proposal content stays. */
   submissionsRepo: { all(): unknown[]; replaceAll(rows: unknown[]): Promise<unknown> };
   /** Permission holdings, which end here. The org chart is a different plane. */
-  roleHoldersRepo: { replaceAll(rows: unknown[]): Promise<unknown> };
+  roleHoldersRepo: { remove(ids: string[]): Promise<unknown> };
   withRoleHolderLock: <T>(fn: () => Promise<T>) => Promise<T>;
-  loadRoleHolders: () => Array<{ userId: string }>;
+  loadRoleHolders: () => Array<{ id: string; userId: string }>;
   /**
    * The uploads volume. A portrait's bytes outlive its row, and its address
    * needs no sign-in, so revoking a face means unlinking a file.
@@ -310,8 +310,15 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "role-holdings",
       run: async () => {
         await withRoleHolderLock(async () => {
-          const holders = loadRoleHolders().filter((h) => h.userId !== target.id);
-          await roleHoldersRepo.replaceAll(holders);
+          // By id (0123). A departing member who held the village's only
+          // permission seat left a filtered snapshot with no rows in it, and
+          // an empty payload carries no version stamp, so the whole-table
+          // write deleted every seat granted since the snapshot was taken.
+          // Called even with nothing to take, so a repository that refuses the
+          // write still fails this step loudly; `remove([])` is a no-op.
+          await roleHoldersRepo.remove(
+            loadRoleHolders().filter((h) => h.userId === target.id).map((h) => String(h.id)),
+          );
         });
       },
     },
