@@ -1847,11 +1847,14 @@ surfaces on the day it is seeded. The five constants stay where they were, used
 by `faucetFor`, which answers a different question (which faucet issues a given
 token) and is hand-written on purpose.
 
-**An empty result is a real answer here, and it is not a zero.** A database
-with no faucet row has not been migrated; it has not issued nothing. Both
-callers return an empty supply for it, which also keeps `IN ()` off the wire:
-MySQL refuses to parse that, so the public feed would have answered a SQL error
-to every reader the moment the derived list came back empty.
+**An empty result is a real answer here, and the two surfaces cannot tell it
+from a zero.** Both callers return an empty supply for it, which keeps `IN ()`
+off the wire: MySQL refuses to parse that, so the public feed would have
+answered a SQL error to every reader the moment the derived list came back
+empty. `GET /api/economy/supply` therefore answers `{"cycleKey": "...",
+"tokens": []}` both when no account carries the flag and when every faucet is
+present with nothing issued out of it, and **no field separates the two.**
+That is stated rather than fixed, for the reasons in the closing note below.
 
 **Measured.** `server/economyFaucetSet.test.ts`, over a scratch schema with no
 server booted, seeds a sixth faucet (`sys:probe-mint`), posts 700 of a probe
@@ -1862,6 +1865,30 @@ to be truthy"; against the fix, three cases pass. The tripwire that found this
 (`server/mintCap.e2e.test.ts`, "agrees with the hand-kept faucet list the
 supply surfaces use") is untouched and still true: the constants it compares
 still exist and still name the five seeded accounts.
+
+**Closing note, added later: the header promised a distinction the payload
+never made.** `publicSupply` opened its early return with "No faucet row at all
+is an unmigrated database, not a village that has issued nothing, and the two
+must not render the same", and then returned `{ cycleKey, tokens: [] }` for
+both, because `HAVING issued > 0` empties the result set for a village that has
+issued nothing. The admin breakdown twelve lines away said the opposite and
+said it honestly ("Nothing here can tell it from a village that has issued
+nothing"). **Three things decided it in favour of correcting the prose rather
+than adding a field.** Nothing reads the endpoint: `economy/supply` returns
+zero client references against a positive control of eight for `api/modules`
+from the same search, so no member and no fork is being shown a wrong figure
+today. The state is narrower than "unmigrated" sounds:
+`drizzle/0009_ledger_accounts_and_transfers.sql` creates `ledger_accounts` AND
+seeds `sys:gratitude-pool` and `sys:cycle-pool` with `faucet = 1` in the same
+file, so a database that has not run 0009 has no table and the read throws
+instead of returning empty, which makes an empty list a migrated database whose
+flag was cleared. And a public, unauthenticated feed whose entire stated
+character is publishing less than it knows is the wrong surface on which to
+start publishing schema health, especially while the authenticated admin
+breakdown publishes none. **Measured.** `server/economyFaucetSet.test.ts` now
+builds both states in one case and asserts the payloads are equal, and a second
+case outside the database-gated block reads `server/lib/economy.ts` and fails
+if the "must not render the same" promise is ever written back.
 
 ### 10.34 One quest consent could answer 200 twice. Fixed on `wt/econ-small`, measured.
 
