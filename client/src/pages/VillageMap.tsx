@@ -32,6 +32,7 @@ import SearchBar, { type SearchHit } from "@/components/power/SearchBar";
 import FilterChips from "@/components/power/FilterChips";
 import HolderCard from "@/components/power/HolderCard";
 import CircleCard from "@/components/power/CircleCard";
+import { phoneDepthFor } from "@/components/power/phoneDepth";
 import ShapePicker from "@/components/power/ShapePicker";
 import CurrencyPicker from "@/components/power/CurrencyPicker";
 import DecideLens, { DecideKey } from "@/components/power/DecideLens";
@@ -233,15 +234,18 @@ export default function VillageMap() {
   /*
    * HOW DEEP THE PHONE DRAWS.
    *
-   * The village root is depth -1, so this is 0 there: only the top-level
-   * circles. Step into one and it becomes 1, which is that circle's
-   * children. Undefined on desktop, where there is room for the whole nest.
+   * One level at a time, because seventeen circles and their children in a
+   * 375px square is a picture nobody can use: a grandchild is a few pixels
+   * across and its seats are smaller than a fingertip. Undefined on desktop,
+   * where there is room for the whole nest.
    *
-   * Seventeen circles and their children in a 375px square is a picture
-   * nobody can use: a grandchild is a few pixels across and its seats are
-   * smaller than a fingertip.
+   * The rule is `phoneDepthFor`, and it is NOT simply one level down from the
+   * camera: a level holding a single circle is descended past. Nesting this
+   * village under the General Coordinating Circle made the top level one disc,
+   * and the phone drew exactly that, correctly and uselessly. The helper
+   * carries the measurement that found it.
    */
-  const phoneMaxDepth = ((focusId ? layout?.circles.find((c) => c.id === focusId)?.depth : undefined) ?? -1) + 1;
+  const phoneMaxDepth = useMemo(() => phoneDepthFor(layout?.circles ?? [], focusId), [layout, focusId]);
 
   const mayDeclareVillage = !!data?.viewer.mayDeclare?.includes("village");
 
