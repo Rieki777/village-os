@@ -447,10 +447,31 @@ export function cycleWindow(at: Date = new Date()): { startsAt: Date; endsAt: Da
  * settlement pays out years of backlog at once. Nobody decided that; it would
  * simply be what the query returned.
  *
- * So every source query filters `confirmedAt >= economyEpoch`, and honouring
- * pre-epoch work is a deliberate, audited, keyed one-shot backfill an admin
- * runs on purpose. The default is the moment the epoch is first read and
- * written, which means "from now", which is the only safe default.
+ * WHAT ENFORCES THAT TODAY: nothing on a live path, and the sentence that
+ * stood here said otherwise for long enough to be worth correcting in place.
+ * It read "every source query filters `confirmedAt >= economyEpoch`, and
+ * honouring pre-epoch work is a deliberate, audited, keyed one-shot backfill
+ * an admin runs on purpose". Both halves are false, measured on this tree:
+ * there is no source query over quest claims at all (`runSettlement` sweeps
+ * `role.cycle` seats and the voice waning, and never reads a claim), and no
+ * admin backfill was ever built (nothing writes `economy-state` except
+ * `startEconomyEpoch` below). The only comparison against this stamp is in
+ * `mintForConfirmedClaim`, and #264 and #269 left that function with no
+ * production caller when the consent route moved to `owedForClaim`/`postOwed`.
+ *
+ * AND IT NEVER REFUSED ANYTHING IN PRODUCTION EVEN BEFORE THAT. The old
+ * consent route passed `confirmedAt: consented.resolvedAt`, and the same
+ * transaction had just stamped `resolvedAt` at `now`; boot stamps the epoch
+ * before the first request is served, and `startEconomyEpoch` refuses to stamp
+ * the future. So `at < epoch` was false at every production consent, and the
+ * split removed a branch production never took rather than a guard it leaned
+ * on. What actually keeps a flag flip from paying years of backlog is
+ * structural: an obligation only exists because a consent created it, and a
+ * consent is always now. Read that as the reason a guard here would be
+ * decoration, not as permission to add a query that walks old claims.
+ *
+ * The default is the moment the epoch is first read and written, which means
+ * "from now", which is the only safe default.
  */
 let epochCache: Date | null = null;
 
