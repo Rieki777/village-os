@@ -44,6 +44,10 @@ function messageFor(reason: string, catalyst: string): string {
       return `That account cannot be signed into. Ask ${catalyst} for help.`;
     case "not_configured":
       return "Google sign-in is not set up on this village. Use your email and password.";
+    case "invitation_required":
+      return "Joining this village is by invitation. Open the invitation link a member sent you, or send a request to join from the sign-up page.";
+    case "invitation_used":
+      return "That invitation has already been used. Ask the person who sent it for a new one.";
     case "bad_state":
       return "That sign-in link expired before it was finished. Start again.";
     case "rate_limited":

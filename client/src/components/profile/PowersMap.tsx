@@ -58,11 +58,29 @@
  * `@theme` and never redefined for night, so on a `bg-card` it measures 2.89:1,
  * which is why the twin fix in `GameDashboard` is only valid over its hardcoded
  * `bg-white`. Nothing here puts a frozen ink on a themed surface.
+ *
+ * ── WHICH CLASS A POWER SUITS ───────────────────────────────────────────────
+ *
+ * An entrusted row can carry `suits` and `recommended` off the payload
+ * (server/lib/powerAffinity.ts), and this file decides none of it. It prints
+ * "Suits The Architect" where the server named a class, and "Suits your
+ * Architect" only where the server marked the row recommended and the class
+ * the member's own, because the ruling holds that claim back until
+ * Contributor. A recommended row leads the entrusted list, and the sentence
+ * counting them counts the rows SHOWN.
+ *
+ * ── A HAND FOR A POWER ──────────────────────────────────────────────────────
+ *
+ * A row put to the member carries `PowerHand`, which raises a hand for the
+ * power and says where a hand that is up stands. The inbox, the rules and the
+ * answers are the server's (shared/powerHands.ts), and a hand asks for a power
+ * without ever granting it.
  */
 import { useState } from "react";
 import { Check, Circle, Lock, UserCheck } from "lucide-react";
 import type { GameStagePublic, ProgressionCapability } from "@/lib/gameApi";
 import type { StageRule } from "@shared/gameConfig";
+import PowerHand from "./PowerHand";
 
 /**
  * How each rung is reached, in the words a member would use.
@@ -177,6 +195,15 @@ function buildClimb(
  * nothing this payload cannot see: it does not guess WHICH badge or role did
  * it, because the payload does not carry that.
  */
+/** "The Architect", "The Architect and The Storyteller", "A, B and C". */
+function namesOf(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/** A class named as the member's own: "The Architect" reads "your Architect". */
+const asYours = (name: string): string => name.replace(/^the\s+/i, "");
+
 function PowerRow({ row, reached }: { row: ProgressionCapability; reached: boolean }) {
   // SILENCE WHERE THE STRUCTURE ALREADY SAID IT. A power under a rung nobody
   // has reached is visibly out of reach, and the entrusted block's own heading
@@ -185,6 +212,8 @@ function PowerRow({ row, reached }: { row: ProgressionCapability; reached: boole
   // kept for the two states that ARE news: it is yours, or your standing
   // reaches it and it is shut anyway.
   const standing = row.held ? "Open to you" : reached ? "Closed on your account" : "";
+  const suits = row.suits ?? [];
+  const yours = suits.filter((s) => s.yours).map((s) => asYours(s.name));
   return (
     <li className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 rounded-lg border border-border px-3 py-2">
       {/* The label is the words a member reads. The key stays as the title for
@@ -196,6 +225,24 @@ function PowerRow({ row, reached }: { row: ProgressionCapability; reached: boole
       {standing ? (
         <span className={`text-xs ${row.held ? "text-open" : "text-muted-foreground"}`}>{standing}</span>
       ) : null}
+      {/* WHICH CLASS IT SUITS, on its own line under the label. Put to the
+          member as THEIRS only when the server says so, which is from
+          Contributor, for a class they play, on a power they do not hold.
+          Below that it is the same fact said about the class, which is what
+          gives choosing a character something to mean. */}
+      {row.recommended && yours.length ? (
+        <span className="basis-full">
+          <span className="rounded-full bg-notice/15 px-2 py-0.5 text-xs font-semibold text-notice">
+            Suits your {namesOf(yours)}
+          </span>
+        </span>
+      ) : suits.length ? (
+        <span className="basis-full text-xs text-muted-foreground">Suits {namesOf(suits.map((s) => s.name))}</span>
+      ) : null}
+      {/* A HAND, where the server put the power to this member or a hand of
+          theirs is still up. PowerHand holds the button and the server's
+          answers, and renders nothing on a row with neither. */}
+      <PowerHand row={row} />
     </li>
   );
 }
@@ -244,7 +291,13 @@ export default function PowersMap({
   const rungs = showClosed
     ? climb
     : climb.map((r) => ({ ...r, powers: r.powers.filter((p) => p.held) })).filter((r) => r.powers.length > 0);
-  const appointedShown = showClosed ? appointed : appointed.filter((c) => c.held);
+  // What suits the member leads the entrusted list. The sort is stable, so the
+  // rest keep the order the server sent. The count is taken from the rows
+  // SHOWN, so hiding what is closed cannot leave a sentence about rows it hid.
+  const appointedShown = (showClosed ? appointed : appointed.filter((c) => c.held))
+    .slice()
+    .sort((a, b) => Number(!!b.recommended) - Number(!!a.recommended));
+  const suitsYou = appointedShown.filter((c) => c.recommended).length;
 
   return (
     <section aria-labelledby="powers-h" className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
@@ -363,6 +416,13 @@ export default function PowersMap({
           <p className="mt-0.5 text-sm text-muted-foreground">
             A role or a badge opens these. No amount of climbing reaches them.
           </p>
+          {suitsYou > 0 ? (
+            <p className="mt-1 text-sm font-medium text-notice">
+              {suitsYou === 1
+                ? "One of these suits a character you play."
+                : `${suitsYou} of these suit a character you play.`}
+            </p>
+          ) : null}
           <ul className="mt-3 space-y-1.5">
             {appointedShown.map((row) => (
               <PowerRow key={row.key} row={row} reached={false} />

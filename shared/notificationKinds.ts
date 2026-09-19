@@ -91,6 +91,16 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} votes carried.",
     celebrate: true,
   },
+  // A carried vote whose decision did not take effect at the close
+  // (server/lib/atCloseLanding.ts). Its own kind, because `ballot_carried` says
+  // what was voted on now applies and celebrates, and neither is true yet. The
+  // roll hears `ballot_carried` from the landing job once it is.
+  ballot_not_yet_in_effect: {
+    group: "decisions",
+    blurb: "The village said yes and the decision has not taken effect yet. The decision page says what happens next.",
+    many: "{n} carried votes have not taken effect yet.",
+    celebrate: false,
+  },
   ballot_failed: {
     group: "decisions",
     blurb: "The village said no. The closer wrote down the reasoning, and it stands on the record.",
@@ -217,8 +227,8 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   },
   submission: {
     group: "decisions",
-    blurb: "Somebody raised a hand for a seat, and the village owes them an answer.",
-    many: "{n} people raised a hand for a seat.",
+    blurb: "Somebody raised a hand for a seat or a power, and the village owes them an answer.",
+    many: "{n} people raised a hand for a seat or a power.",
     celebrate: false,
   },
   submission_status: {
@@ -286,6 +296,14 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     group: "economy",
     blurb: "Something about money needs a person: a hold lifted, a signature refused, a charge disputed.",
     many: "{n} money matters need a look.",
+    celebrate: false,
+  },
+  // The failed-actions report, at most once a day. Never celebrated: a list of
+  // what is broken is a chore to get through, not a moment.
+  failed_action: {
+    group: "village",
+    blurb: "Something in the village keeps failing, and the report says what to do about it.",
+    many: "{n} reports of things failing in the village.",
     celebrate: false,
   },
   stays: {

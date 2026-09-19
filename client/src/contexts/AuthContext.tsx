@@ -33,7 +33,7 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  register: (name: string, email: string, password: string, paths: string[]) => Promise<void>;
+  register: (name: string, email: string, password: string, paths: string[], invite?: string) => Promise<void>;
   updateProfile: (updates: Partial<Omit<User, "id" | "email" | "joinedAt">>) => Promise<void>;
 }
 
@@ -121,7 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     forgetExamplesCache();
   }
 
-  async function register(name: string, email: string, password: string, paths: string[]) {
+  async function register(name: string, email: string, password: string, paths: string[], invite?: string) {
     // Ahead of the request for a sharper reason than login has: registering
     // behind a blocked store would create an account the member cannot reach,
     // and then refuse them at the door of their own village.
@@ -129,7 +129,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password, paths }),
+      // The token from the invitation link somebody followed, when there was one.
+      body: JSON.stringify({ name, email, password, paths, ...(invite ? { invite } : {}) }),
     });
     if (!res.ok) {
       const err = await res.json();

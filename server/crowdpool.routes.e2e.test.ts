@@ -18,7 +18,8 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, E2E_BOOT_DEADLINE_MS, waitForPortFree } from "./db/testDb";
+import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { waitForHealth } from "./db/e2eBoot";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -30,7 +31,9 @@ const DIST = path.resolve(process.cwd(), "dist/index.js");
 // Its window is checked by scripts/check-e2e-ports.mjs, not claimed here: the
 // hand-written claims this replaces had gone stale and were describing a tree
 // that had moved on.
-const PORT = 9900 + (process.pid % 1200);
+// From 10081: 10080 is a port fetch() refuses to dial, so a pid landing on it
+// booted a server this suite could never reach. The gate now refuses it.
+const PORT = 10081 + (process.pid % 1019);
 const BASE = `http://localhost:${PORT}`;
 const ADMIN = "crowdpool-routes-admin";
 
@@ -98,19 +101,7 @@ beforeAll(async () => {
   child.stdout?.on("data", (d) => logs.push(String(d)));
   child.stderr?.on("data", (d) => logs.push(String(d)));
 
-  const deadline = Date.now() + E2E_BOOT_DEADLINE_MS;
-  for (;;) {
-    if (Date.now() > deadline) {
-      throw new Error(`server did not start in ${E2E_BOOT_DEADLINE_MS / 1000}s. Output:\n${logs.join("")}`);
-    }
-    try {
-      const res = await fetch(`${BASE}/health`); // module-review-ok: the boot probe against the spawned test server
-      if (res.ok) break;
-    } catch {
-      /* not up yet */
-    }
-    await new Promise((r) => setTimeout(r, 400));
-  }
+  await waitForHealth({ base: BASE, logs, child });
 
   const boot = await call("POST", "/api/admin/bootstrap", {
     password: ADMIN,

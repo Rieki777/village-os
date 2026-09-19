@@ -14,11 +14,18 @@
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { parseRewardRange } from "../../shared/questRewards";
+import { lostConcurrencyRace } from "../db/concurrency";
 import { calendarRemove, calendarUpsert } from "../lib/calendar";
 import { questCalendarInput } from "../lib/calendarProviders";
 
 /**
- * Retry a whole transaction that InnoDB killed as a deadlock victim.
+ * Retry a whole transaction that lost a concurrency race: a deadlock victim, a
+ * lock-wait timeout, or MariaDB's snapshot-isolation conflict. Which codes
+ * count is `lostConcurrencyRace`'s decision (server/db/concurrency.ts), so an
+ * engine difference is one edit there. Every caller below (`remove`,
+ * `moveUnderLock` and `openClaim`) rolls the
+ * transaction back itself before rethrowing, which is what makes a retry
+ * safe after a timeout that only rolled back its statement.
  *
  * The same three attempts `postTransfer` takes, for the same reason written
  * over it: perfect lock ordering does not stop InnoDB picking a victim under
@@ -30,14 +37,18 @@ import { questCalendarInput } from "../lib/calendarProviders";
  * every write inside these two is either an insert of a fresh row or an
  * idempotency-keyed post. Giving up after three keeps a pathological case
  * from hiding as latency.
+ *
+ * Exported for `settleOwedPosting` in server/repos/questOwedPostings.ts, whose
+ * transaction reaches the same faucet rows through `postOwedOn`, for the same
+ * reason and with the same safety: its only writes are the keyed posting and
+ * the owed row's own state.
  */
-async function withDeadlockRetry<T>(run: () => Promise<T>): Promise<T> {
+export async function withDeadlockRetry<T>(run: () => Promise<T>): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     try {
       return await run();
     } catch (e: any) {
-      const retryable = e?.code === "ER_LOCK_DEADLOCK" || e?.code === "ER_LOCK_WAIT_TIMEOUT";
-      if (!retryable || attempt >= 3) throw e;
+      if (!lostConcurrencyRace(e) || attempt >= 3) throw e;
       await new Promise((r) => setTimeout(r, 25 * attempt + Math.floor(Math.random() * 25)));
     }
   }
@@ -603,9 +614,9 @@ const REAL_CLAIM_JOIN =
   "WHERE COALESCE(q.is_example, 0) = 0 AND COALESCE(u.is_example, 0) = 0";
 
 const CLAIM_SELECT =
-  // confidence (0055) rides along so every read carries it. It is written by
-  // its own targeted UPDATE and is deliberately absent from the generic
-  // `update()` SET list below, which means no other write path can clobber it.
+  // confidence (0055) rides along so every read carries it. Only
+  // `setConfidence` writes it, and CLAIM_UPDATE below, the one SET list every
+  // claim transition shares, leaves it out, so no transition can clobber it.
   "SELECT id, quest_id, quest_title, user_id, user_name, status, artifact_url, note, amount, claimed_at, submitted_at, consented_at, consented_by, confidence, confidence_note, confidence_at FROM quest_claims";
 
 function rowToClaim(r: RowDataPacket): ClaimRecord {

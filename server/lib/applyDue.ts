@@ -129,16 +129,26 @@ import {
   newestBallotVeto,
   openBallotIdsPastClose,
   openVetoWindows,
+  queueFailedAtCloseLanding,
   recordVetoOnBallot,
   releaseClaimToPending,
   reopenStalledWindow,
   restampLateSettled,
+  stallFailedAtCloseLanding,
   stampBallotLanding,
   vetoAndLandingTally,
   vetoLockedOn,
   vetoedBallotCount,
   type LandingRow,
 } from "../repos/ballotLandings";
+import {
+  NOT_YET_NEEDS_A_PERSON,
+  NOT_YET_RETRYING,
+  atCloseFailureShape,
+  notYetInEffectVetoRefusalFor,
+  parkedAtCloseAndRetrying,
+  tellRollItTookEffect,
+} from "./atCloseLanding";
 import {
   rawChangeSet,
   returnProposalToProposer,
@@ -169,6 +179,8 @@ export interface CloseRouting {
   proposerTold: string | null;
   /** Set when the close itself changed the outcome, as a steward's no does. */
   outcome?: "passed" | "failed" | "no_quorum";
+  /** Set when a landing due at the close threw, naming the shape it waits in (`server/lib/atCloseLanding.ts`). */
+  landingFailed?: "retrying" | "stalled";
 }
 
 /**
@@ -187,11 +199,38 @@ export interface CloseRouting {
  * It lives beside the closer because the withdraw route used to carry its own
  * hardcoded list of subject types, which was a second routing table nobody
  * remembered to extend.
+ *
+ * `onUnlanded` is told that a decision CARRIED and will never take effect.
+ * `settle("passed")` already ran at the close, and then the landing was
+ * stopped before `execute` could run, so it is the one ending the other three
+ * hooks never hear. A subject that holds something while its vote runs (a
+ * redemption's held tokens) gives it back here, or the value is stranded.
+ * `closeUnlanded` below calls it, exactly once per ballot, from the two places
+ * that decide the state:
+ *
+ *   "vetoed"       a steward stopped it inside its window, alone or as the
+ *                  council majority (`recordVeto`, through `recordVetoOnBallot`)
+ *   "written_off"  it sat passed and unlanded through `landing_expiry_cycles`
+ *                  boundaries (`writeOffExpired`, through `markExpired`)
+ *
+ * The gate is the affected-rows count of the guarded UPDATE that moved the row,
+ * so a second veto, a second tick, and a veto racing the write-off each call it
+ * at most once between them. NOT called for a seated steward's no at the close
+ * (`failByStewardNo` also writes `vetoed`, but that ballot never carried in
+ * effect and `settle("failed")` already told the subject), nor for a
+ * withdrawal (`onWithdraw`), nor for an at-close stall a person finishes.
+ *
+ * A THROW DOES NOT UNDO THE VETO OR THE WRITE-OFF. It is logged, recorded as
+ * an open attempt carrying the error on `governance_executor_pending`, and
+ * never retried by any job: a person acts on it. The hook MUST BE IDEMPOTENT
+ * all the same, because that person may run the release again by hand after
+ * a throw that happened halfway through it.
  */
 export interface SubjectCloser {
   settle: (b: BallotRow, outcome: "passed" | "failed" | "no_quorum", outcomeNote: string, actorId: string) => Promise<CloseRouting>;
   execute?: (b: BallotRow, actorId: string) => Promise<CloseRouting>;
   onWithdraw?: (b: BallotRow) => Promise<void>;
+  onUnlanded?: (b: BallotRow, reason: "vetoed" | "written_off") => Promise<void>;
 }
 
 /** The narrow half: enough to read a landing and to stop one. */
@@ -473,7 +512,7 @@ export type VetoResult =
  * may claim the row, and a rule that allowed both would decide by tick phase.
  */
 export async function recordVeto(
-  deps: VetoDeps,
+  deps: VetoDeps & UnlandedDeps,
   input: { ballotId: string; stewardId: string; reason: string; councilOverride?: boolean },
 ): Promise<VetoResult> {
   const reason = String(input.reason ?? "").trim();
@@ -494,6 +533,10 @@ export async function recordVeto(
   if (row.landingStatus === "applied") {
     return { ok: false, error: "This one has already landed. Bringing it back is a new proposal." };
   }
+  // A landing that failed at the close, or failed and is being tried again, has
+  // not taken effect, and `server/lib/atCloseLanding.ts` says so.
+  const notYet = await notYetInEffectVetoRefusalFor(deps.pool, row, nowOf(deps));
+  if (notYet) return { ok: false, error: notYet };
   if (!row.landsAt) {
     return { ok: false, error: "This one took effect the moment it carried, so there is no window on it." };
   }
@@ -545,6 +588,8 @@ export async function recordVeto(
   if (moved === 0) {
     return { ok: false, error: "Somebody got to this one first, or it landed while you were reading it." };
   }
+  // The decision carried and now never lands. Gated on `moved`, so once.
+  await closeUnlanded(deps, b.id, "vetoed");
   /*
    * THE VETO LIVES ON THE BALLOT AND NOWHERE ELSE.
    *
@@ -776,6 +821,8 @@ export async function applyDueGovernance(deps: LandingDeps, at: Date = new Date(
       continue;
     }
 
+    // Read before the claim: the attempt the claim opens hides the failure.
+    const parkedAtClose = await parkedAtCloseAndRetrying(deps.pool, before);
     if (!(await claimDue(deps.pool, id, at))) continue;
     await openPending(deps.pool, id);
     const closer = deps.closerFor(b.subjectType);
@@ -792,6 +839,8 @@ export async function applyDueGovernance(deps: LandingDeps, at: Date = new Date(
       await clearPending(deps.pool, id);
       landed += 1;
       if (routing.held) notes.push(`${b.title}: ${routing.held}`);
+      // The close told this roll "not yet in effect"; it is now (atCloseLanding.ts).
+      if (parkedAtClose) await tellRollItTookEffect(deps, b, routing.proposerTold);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       // Back to pending, so the next tick tries again and a human can see the
@@ -844,8 +893,63 @@ async function writeOffExpired(deps: LandingDeps, at: Date, notes: string[]): Pr
       `${r.title}: this one carried and then sat unlanded through ${cycles} cycle(s), so it is closed. ` +
         "Withdraw and rewrite it to bring it back, and it keeps the people who backed it.",
     );
+    // Gated on `markExpired` moving the row, so once.
+    if ((await closeUnlanded(deps, r.id, "written_off")) === "failed") {
+      notes.push(`${r.title}: giving back what it held failed. The error is on its landing record, for a person to finish.`);
+    }
   }
   return expired;
+}
+
+/** Enough to find a subject's closer and record a hook that threw. */
+export type UnlandedDeps = Pick<LandingDeps, "pool" | "closerFor">;
+
+/**
+ * TELL THE SUBJECT A CARRIED DECISION WILL NEVER LAND. `SubjectCloser` says
+ * when, and why the two callers are the only ones.
+ *
+ * Takes the id and reads the ballot itself, AFTER the caller's guarded UPDATE
+ * moved the row, so the hook sees the ballot as it now stands and so nothing
+ * between that UPDATE and the hook can throw out of the caller.
+ *
+ * NEVER THROWS, and that is the rule rather than a convenience: the veto and
+ * the write-off have already happened, and a throw here would reach the veto
+ * route as a 500 over a decision that is stopped. A failure is logged and
+ * written as an open attempt with its error, the shape `atCloseLanding.ts`
+ * uses, and nothing selects it again. "no_hook" is the answer for every subject
+ * that holds nothing, which today is all of them.
+ *
+ * WHERE A FAILURE SURFACES, AND WHERE IT DOES NOT YET. The attempt row is read
+ * by `unfinishedLandings` above, which is what a person has today. It does NOT
+ * reach the failed-actions report (PR #247): that report keeps an attempt only
+ * while the ballot's `landing_status` is `not_applicable`, `pending`,
+ * `applying` or `stalled`, and by the time this runs the row is `vetoed` or
+ * `expired`, which it drops as governance's own record. So a failed release is
+ * recorded and is not on that tab. `applyDue.unlanded.test.ts` pins that gap
+ * with the report's own query, so widening it later is a visible change there.
+ */
+export async function closeUnlanded(
+  deps: UnlandedDeps,
+  ballotId: string,
+  reason: "vetoed" | "written_off",
+): Promise<"no_hook" | "called" | "failed"> {
+  try {
+    const b = await ballotById(deps.pool, ballotId);
+    const hook = b ? deps.closerFor(b.subjectType)?.onUnlanded : undefined;
+    if (!b || !hook) return "no_hook";
+    await hook(b, reason);
+    return "called";
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error(`[applyDue] ${ballotId} was ${reason} and onUnlanded threw. It is not retried:`, e);
+    try {
+      await openPending(deps.pool, ballotId);
+      await clearPending(deps.pool, ballotId, `onUnlanded(${reason}) threw: ${message}`);
+    } catch (recordError) {
+      console.error(`[applyDue] the onUnlanded failure on ${ballotId} could not be recorded:`, recordError);
+    }
+    return "failed";
+  }
 }
 
 /**
@@ -1259,15 +1363,16 @@ export async function routeOutcome(
   }
 
   if (landing.executesAtClose) {
-    await openPending(deps.pool, b.id);
     try {
+      await openPending(deps.pool, b.id);
       const done = await closer.execute(b, actorId);
       await markApplied(deps.pool, b.id);
       await clearPending(deps.pool, b.id);
       return { ...done, proposerTold: done.proposerTold ?? routing.proposerTold, outcome: effective };
     } catch (e) {
-      await clearPending(deps.pool, b.id, e instanceof Error ? e.message : String(e));
-      throw e;
+      // The vote stands and the close answers. Why, and which of the two
+      // shapes the row is parked in, is `server/lib/atCloseLanding.ts`.
+      return parkFailedAtCloseLanding(deps, b, routing, e);
     }
   }
 
@@ -1277,6 +1382,31 @@ export async function routeOutcome(
     : landing.because;
   if (landing.landsAt) await tellStewards(deps, b, landing.landsAt, "carry");
   return routing;
+}
+
+/**
+ * AN AT-CLOSE LANDING THAT THREW. The rule, the evidence per subject and the
+ * two shapes live in `server/lib/atCloseLanding.ts`; this is where they are
+ * spent. It never throws: recording the failure is itself allowed to fail, and
+ * then the row keeps the close path's own shape with an open attempt, which the
+ * failed-actions report lists once it has sat ten minutes.
+ */
+async function parkFailedAtCloseLanding(
+  deps: LandingDeps,
+  b: BallotRow,
+  routing: CloseRouting,
+  e: unknown,
+): Promise<CloseRouting> {
+  const message = e instanceof Error ? e.message : String(e);
+  const shape = atCloseFailureShape(b.subjectType);
+  try {
+    await clearPending(deps.pool, b.id, message);
+    if (shape === "retrying") await queueFailedAtCloseLanding(deps.pool, b.id, nowOf(deps));
+    else await stallFailedAtCloseLanding(deps.pool, b.id);
+  } catch (recordError) {
+    console.error(`[applyDue] a landing failed at the close of ${b.id} and could not be recorded:`, recordError);
+  }
+  return { ...routing, held: shape === "retrying" ? NOT_YET_RETRYING : NOT_YET_NEEDS_A_PERSON, landingFailed: shape };
 }
 
 /**
@@ -1343,8 +1473,9 @@ export async function autoSettleExpired(
         notes.push(`${b.title}: ${result.error ?? "could not be closed"}`);
         continue;
       }
-      await routeOutcome(deps, result.ballot, result.outcome, AUTO_CLOSE_NOTE, "governance", itemKinds);
+      const routing = await routeOutcome(deps, result.ballot, result.outcome, AUTO_CLOSE_NOTE, "governance", itemKinds);
       closed += 1;
+      if (routing.landingFailed) notes.push(`${b.title}: ${routing.held}`);
     } catch (e) {
       failed += 1;
       notes.push(`${b.title}: closing threw. ${e instanceof Error ? e.message : String(e)}`);
@@ -1433,6 +1564,8 @@ export async function vetoWindowOn(pool: Pool, ballotId: string, now: Date = new
   if (row.landingStatus === "applied") {
     return { open: false, known: true, error: "This one has already landed. Bringing it back is a new proposal." };
   }
+  const notYet = await notYetInEffectVetoRefusalFor(pool, row, now);
+  if (notYet) return { open: false, known: true, error: notYet };
   if (!row.landsAt) {
     return { open: false, known: true, error: "This one took effect the moment it carried, so there is no window on it." };
   }

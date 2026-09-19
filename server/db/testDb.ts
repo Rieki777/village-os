@@ -492,6 +492,25 @@ export interface ProvisionOptions {
    * proves both sides against a real database.
    */
   gameStarted?: boolean;
+  /**
+   * Whether this scratch village joins by invitation (`membership.invite_only`,
+   * Rye's ruling of 2026-09-09). Default FALSE here, for the reason
+   * `gameStarted` gives. The platform default is on, and some thirty-five
+   * suites make their accounts through `POST /api/auth/register` with nothing
+   * to do with invitations, so each would have to learn about them to keep
+   * signing people up.
+   *
+   * What that costs is the same too: the rest of the suite cannot see the
+   * closed door. The invitation's own suite (`server/invites.routes.e2e.test.ts`)
+   * provisions with `inviteOnly: true` and proves both sides against the built
+   * server.
+   *
+   * THE OPEN DOOR IS A STORED ROW. It writes `membership.invite_only` into
+   * `game_variables`, so a suite that counts that table's rows reads one it did
+   * not write. Such a suite provisions with `inviteOnly: true` as well, the way
+   * `server/lib/dryRunEconomyReader.test.ts` does, which CI caught on 2026-09-15.
+   */
+  inviteOnly?: boolean;
 }
 
 /**
@@ -604,6 +623,13 @@ export async function provisionTestDb(opts: ProvisionOptions = {}): Promise<Test
         note: "Provisioned by the S5 test harness as a village whose Game has already started.",
       }),
     ]);
+  }
+  // The fixture's second opinion. See `ProvisionOptions.inviteOnly`: the door
+  // is open here, and the invitation's own suite asks for it shut.
+  if (opts.inviteOnly !== true) {
+    await conn.query(
+      "INSERT IGNORE INTO game_variables (config_key, value, value_type) VALUES ('membership.invite_only', 'false', 'boolean')",
+    );
   }
   noteProvision({
     kind: cloned ? "clone" : "full",
@@ -744,4 +770,41 @@ export async function waitForPortFree(port: number, host = "127.0.0.1"): Promise
  * implementation is in ./distFreshness so vitest's globalSetup can call it
  * without pulling mysql2 into the main process.
  */
+/**
+ * Resolves once a transaction on the pool's own schema is waiting on a lock.
+ *
+ * A lock test puts a second actor behind a transaction that holds a row, and it
+ * has to know the second actor is really queued before the first one commits.
+ * A fixed sleep only makes that likely: on a loaded machine the second actor can
+ * arrive after the commit, meet no lock at all, and pass. This polls InnoDB's
+ * own transaction table instead, so the wait is a fact, and it throws when
+ * nothing ever waits, so a case whose second actor never met the lock fails
+ * instead of passing. The schema filter keeps another suite's lock on a shared
+ * server from answering for this one.
+ *
+ * It polls every 150 ms and never faster. InnoDB refills the buffer behind
+ * `information_schema.innodb_trx` only when more than 0.1 seconds have passed
+ * since the buffer was last read, so a faster poll keeps reading its first
+ * answer. A 5 ms poll on CI's MySQL 8 never saw a delete queue behind the lock
+ * it was waiting for, and gave up after ten seconds.
+ */
+export async function untilALockIsAwaited(
+  pool: { query(sql: string): Promise<unknown> },
+  timeoutMs = 10_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const [rows] = (await pool.query( // module-review-ok: InnoDB's own lock table, read for the scratch schema a lock test provisioned
+      "SELECT COUNT(*) AS n FROM information_schema.innodb_trx t " +
+        "JOIN information_schema.processlist p ON p.id = t.trx_mysql_thread_id " +
+        "WHERE t.trx_state = 'LOCK WAIT' AND p.db = DATABASE()",
+    )) as [Array<{ n: number | string }>, unknown];
+    if (Number(rows[0]?.n ?? 0) > 0) return;
+    if (Date.now() > deadline) {
+      throw new Error(`Nothing on this schema waited on a lock within ${timeoutMs} ms, so the second actor never met it.`);
+    }
+    await new Promise((r) => setTimeout(r, 150));
+  }
+}
+
 export { assertFreshDist, distFreshnessProblem } from "./distFreshness";
