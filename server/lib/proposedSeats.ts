@@ -152,6 +152,15 @@ const LIST_MARKER = /^(?:(?:\d{1,3}[.)]|[-*•])\s+)+/;
  * the marker, so "1. Survey Lot 3. Stake it" kept its "1." while the items
  * around it lost theirs, and a bullet was kept for the same "3.". A bullet has
  * no next number, so it is never kept.
+ *
+ * A NUMBER IN THE WORDS STILL READS AS THE NEXT MARKER, and that is chosen.
+ * "1. Survey lots 1 and 2. Then stake" keeps its "1." while the items around
+ * it lose theirs. Narrowing the rule to fix that (tried in #276) stripped the
+ * "1." off every two-item run without punctuation, "1. Water the trees 2. Mow
+ * the verge", which is the commoner shape; lost it from an array item whose
+ * lines wrap; and backtracked quadratically on a long crafted string. No
+ * pattern tells "lots 1 and 2." from "trees 2." apart, so the kept marker is
+ * the safer mistake: nothing is cut, and the steward edits it in the draft.
  */
 function numberedRun(s: string): string | null {
   const lead = LIST_MARKER.exec(s)?.[0] ?? "";
@@ -193,15 +202,34 @@ const SENTENCE_END = /\.\s+(?=[A-ZÀ-ÖØ-Þ])/g;
 /** An ordinary lowercase word, hyphens allowed inside: "logged", "one-pager". */
 const PLAIN_WORD = /^[a-zß-öø-ÿ][a-zß-öø-ÿ-]*[a-zß-öø-ÿ]$/;
 
-/** Lowercase words that are abbreviations, and a capital after them starts no sentence. */
+/**
+ * Lowercase words that are abbreviations, and a capital after them starts no sentence.
+ *
+ * NONE OF THEM IS ALSO A WORD THAT ENDS A SENTENCE. "etc", "no" and "mar"
+ * left the list: "gloves, bags, etc. Report damage", "say no. Log it" and
+ * "limpiar el mar. Reportar" each end a duty there, and two duties merged.
+ * "no" still holds a duty together where a reference follows it
+ * (`referenceAfterNo`), so "lot no. A-3 each week" is not cut at "no".
+ */
 const LOWERCASE_ABBREVIATIONS = new Set([
-  "etc", "vs", "approx", "aprox", "incl", "excl", "esp", "min", "max", "no", "nos", "tel", "ext", "cf", "ca", "pp",
+  "vs", "approx", "aprox", "incl", "excl", "esp", "min", "max", "nos", "tel", "ext", "cf", "ca", "pp",
   // Titles and offices written in lowercase, which cut "lic. Mora" off its duty.
   "lic", "licda", "ing", "prof", "profa", "dra", "sra", "srta", "arq", "dpto", "depto", "admón", "gral",
   "hrs", "hr", "dept", "govt", "est", "mgr", "asst",
   // Spanish weekdays.
-  "lun", "mar", "mié", "jue", "vie", "sáb", "dom",
+  "lun", "mié", "jue", "vie", "sáb", "dom",
 ]);
+
+/** Units written after a number. "Walk it for 2 hrs. Log it" ends the duty at the unit. */
+const UNITS_AFTER_A_NUMBER = new Set(["hrs", "hr", "min", "max", "est"]);
+
+/**
+ * "no." abbreviating "number": the word after it carries a digit, as in "lot
+ * no. A-3" or "no. B12". "say no. Log it" has none, so that duty still ends.
+ */
+function referenceAfterNo(word: string, after: string): boolean {
+  return word === "no" && /^\S*\d/.test(after);
+}
 
 /** A quote mark, or an apostrophe with no letter on one side of it ("parcel's" is not a quote). */
 const QUOTE = /["“”«»„]|(?<![A-Za-zÀ-ÖØ-öø-ÿ])['‘’]|['‘’](?![A-Za-zÀ-ÖØ-öø-ÿ])/;
@@ -227,8 +255,12 @@ function splitSentences(v: string): string[] {
   let from = 0;
   let m: RegExpExecArray | null;
   while ((m = ends.exec(v)) !== null) {
-    const word = /\S+$/.exec(v.slice(from, m.index))?.[0] ?? "";
-    if (!PLAIN_WORD.test(word) || LOWERCASE_ABBREVIATIONS.has(word)) continue;
+    const before = v.slice(from, m.index);
+    const word = /\S+$/.exec(before)?.[0] ?? "";
+    if (!PLAIN_WORD.test(word)) continue;
+    const unitAfterNumber = UNITS_AFTER_A_NUMBER.has(word) && /\d\s+\S+$/.test(before);
+    if (LOWERCASE_ABBREVIATIONS.has(word) && !unitAfterNumber) continue;
+    if (referenceAfterNo(word, v.slice(m.index + m[0].length))) continue;
     parts.push(v.slice(from, m.index));
     from = m.index + m[0].length;
   }

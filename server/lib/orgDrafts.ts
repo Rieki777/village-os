@@ -1457,11 +1457,13 @@ export async function revertDraft(
 export async function withdrawDraft(
   pool: Pool,
   draftId: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true } | { ok: false; error: string; status: string | null }> {
   if (await withdrawDraftRow(pool, draftId)) return { ok: true };
   // Say which of the two reasons it was, because "that did not work" on a
   // draft a steward is trying to unjam is the least useful sentence available.
+  // The status rides along too: the review page keeps what a published draft
+  // left out, and clears the cards of one that is withdrawn or gone.
   const status = await draftStatus(pool, draftId);
-  if (status === null) return { ok: false, error: "No such draft" };
-  return { ok: false, error: `This draft is ${status}, and only an open draft can be withdrawn` };
+  if (status === null) return { ok: false, error: "No such draft", status };
+  return { ok: false, error: `This draft is ${status}, and only an open draft can be withdrawn`, status };
 }
