@@ -780,7 +780,10 @@ export default function Review() {
             </h2>
             <p className="text-sm text-muted-foreground mt-2">
               {notRead.published
-                ? "That draft is live now, so these fields cannot ride in on a withdraw. If one belongs on a seat, write it onto that seat in the Org Chart. If none of them belongs on a seat, there is nothing to do."
+                ? `That draft is live now, so these fields cannot ride in on a withdraw. If one belongs on a seat, ${
+                    // The Org Chart is an admin screen, and a steward is often no admin: same signal as the limit's button.
+                    queue?.mayChangeProposalLimit === true ? "write it" : "ask an admin to write it"
+                  } onto that seat in the Org Chart. If none of them belongs on a seat, there is nothing to do.`
                 : "The draft publishes without them. If one belongs on a seat, withdraw the draft, which puts its proposals back in the queue, then write that value as text under a field the seat has and accept again. If none of them belongs on a seat, there is nothing to do."}
             </p>
             <ul className="text-sm text-muted-foreground mt-2 space-y-1">

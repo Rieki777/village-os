@@ -530,15 +530,33 @@ describe("what the review page says after an accept", () => {
     expect(screen.queryByText("Withdraw that draft")).toBeNull();
   });
 
-  it("keeps every card when the withdraw is refused for a power the village holds", async () => {
+  it("keeps what the accept left out when the withdraw is refused for a power the village holds", async () => {
     // The capability gate answers 409 to an admin who did not break the glass,
     // and nothing about the draft changed. Read as "already gone", it cleared
-    // cards that were still true and left the draft stuck with no way out.
-    const d7 = { draftId: "d7", blocked: 1, blockedLines: [{ reads: 'Create the seat "Mill Warden"', blocked: REASON }] };
+    // the fields-left-out card, which is the one card the queue reload cannot
+    // put back: the stuck card comes back from the server, so checking only
+    // that card passed with the defect in place.
+    let refused = false;
+    const d1 = { draftId: "d1", blocked: 1, blockedLines: [{ reads: 'Create the seat "Mill Warden"', blocked: REASON }] };
+    // The reload after the refusal names a different seat, so seeing it on screen
+    // IS the reload having rendered, with no pause standing in for it.
+    const reloaded = { draftId: "d1", blocked: 1, blockedLines: [{ reads: 'Create the seat "Kiln Keeper"', blocked: REASON }] };
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: { method?: string }) => {
-        if (init?.method === "POST" && url === "/api/review/drafts/d7/withdraw") {
+        if (init?.method === "POST" && url === "/api/review/batches/b1/accept") {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              success: true, accepted: 1, draftId: "d1", seats: 1, blocked: 1, noted: 0,
+              blockedLines: d1.blockedLines,
+              ignored: [{ proposalId: "p1", keys: ["vendor_rank"] }],
+            }),
+          };
+        }
+        if (init?.method === "POST" && url === "/api/review/drafts/d1/withdraw") {
+          refused = true;
           return {
             ok: false,
             status: 409,
@@ -550,14 +568,15 @@ describe("what the review page says after an accept", () => {
             }),
           };
         }
-        return { ok: true, status: 200, json: async () => ({ ...QUEUE, stuckDrafts: [d7] }) };
+        return { ok: true, status: 200, json: async () => ({ ...QUEUE, stuckDrafts: [refused ? reloaded : d1] }) };
       }),
     );
     renderReview();
-    expect(await screen.findByText(/"Milling Circle" yet/)).toBeTruthy();
+    fireEvent.click(await screen.findByText(/Accept all 1, with my edits/i));
+    expect(await screen.findByText(/Not read from/)).toBeTruthy();
     fireEvent.click(screen.getByText("Withdraw that draft"));
-    await new Promise((r) => setTimeout(r, 30));
-    expect(screen.getByText(/"Milling Circle" yet/)).toBeTruthy();
+    expect(await screen.findByText(/Kiln Keeper/)).toBeTruthy();
+    expect(screen.getByText(/Not read from/)).toBeTruthy();
     expect(screen.getByText("Withdraw that draft")).toBeTruthy();
   });
 
@@ -601,6 +620,8 @@ describe("what the review page says after an accept", () => {
     await waitFor(() => expect(screen.queryByText("Withdraw that draft")).toBeNull());
     expect(screen.getByText(/Not read from/)).toBeTruthy();
     expect(screen.getByText(/That draft is live now/)).toBeTruthy();
+    // This reader is no admin, and the Org Chart is an admin screen, so it is told who can.
+    expect(screen.getByText(/ask an admin to write it onto that seat in the Org Chart/)).toBeTruthy();
   });
 
   it("says a draft the server could not preview could not be checked, and counts no blocked seats", async () => {

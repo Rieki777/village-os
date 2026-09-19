@@ -421,17 +421,31 @@ describe("accountabilities", () => {
     expect(normaliseAccountabilities("Rest 10 min. Resume the survey.")).toEqual(["Rest 10 min", "Resume the survey"]);
   });
 
-  it("strips the marker off an item that mentions the next number in its words", () => {
-    // " 2. " after "and" read as the next marker, so this one item kept its "1."
-    expect(normaliseAccountabilities(["1. Survey lots 1 and 2. Then stake the corners", "2. File the plat"])).toEqual([
-      "Survey lots 1 and 2. Then stake the corners",
-      "File the plat",
+  it("keeps a duty whole where \"no.\" abbreviates a reference number", () => {
+    // Taking "no" off the abbreviation list cut this duty at "no".
+    expect(normaliseAccountabilities("Deliver to lot no. A-3 each week. Log the drop.")).toEqual([
+      "Deliver to lot no. A-3 each week",
+      "Log the drop",
     ]);
+    expect(normaliseAccountabilities("Service pump no. B12 monthly. Report leaks.")).toEqual([
+      "Service pump no. B12 monthly",
+      "Report leaks",
+    ]);
+  });
+
+  it("keeps the first number on a two-item run with no punctuation, and pins the lot-number case as the price", () => {
+    // A narrower run rule was tried in #276 and reverted: it stripped the "1."
+    // off both of these, publishing lists that counted from 2.
+    expect(normaliseAccountabilities("1. Water the trees 2. Mow the verge")).toEqual(["1. Water the trees 2. Mow the verge"]);
+    expect(normaliseAccountabilities(["1. Water the beds\n2. Weed the path\n   and the verge\n3. Lock the gate"])).toEqual([
+      "1. Water the beds\n2. Weed the path\n   and the verge\n3. Lock the gate",
+    ]);
+    // THE PRICE, chosen and written down: a lot number in the words reads as the
+    // next marker, so this item keeps its "1.". Nothing is cut, and the steward
+    // can edit it in the draft. No rule tells "lots 1 and 2." from "trees 2." apart.
     expect(normaliseAccountabilities("1. Survey lots 1 and 2. Then stake the corners")).toEqual([
-      "Survey lots 1 and 2. Then stake the corners",
+      "1. Survey lots 1 and 2. Then stake the corners",
     ]);
-    // A run with no sentence ends is still a run once its third number follows.
-    expect(normaliseAccountabilities("1. Keep the site 2. Update it 3. Report")).toEqual(["1. Keep the site 2. Update it 3. Report"]);
   });
 
   it("keeps a quoted motto whole, and a time, a weekday, a company and a volume inside their duty", () => {
