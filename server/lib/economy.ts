@@ -458,6 +458,11 @@ export function cycleWindow(at: Date = new Date()): { startsAt: Date; endsAt: Da
  * `startEconomyEpoch` below). The only comparison against this stamp is in
  * `mintForConfirmedClaim`, and #264 and #269 left that function with no
  * production caller when the consent route moved to `owedForClaim`/`postOwed`.
+ * The guard is not merely uncalled, it does not ship: esbuild drops the whole
+ * function, so after `pnpm build`,
+ * `grep -c "confirmed before the economy epoch" dist/index.js` answers 0 while
+ * the same grep over this file answers 2. Re-run those two rather than
+ * trusting this paragraph, which is prose and cannot fail a build.
  *
  * AND IT NEVER REFUSED ANYTHING IN PRODUCTION EVEN BEFORE THAT. The old
  * consent route passed `confirmedAt: consented.resolvedAt`, and the same
