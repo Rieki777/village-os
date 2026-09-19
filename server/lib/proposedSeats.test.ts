@@ -395,11 +395,57 @@ describe("accountabilities", () => {
     for (const abbr of [
       "lic.", "licda.", "ing.", "prof.", "profa.", "dra.", "sra.", "srta.", "arq.", "dpto.", "depto.", "admón.", "gral.",
       "hrs.", "hr.", "dept.", "govt.", "est.", "mgr.", "asst.",
-      "lun.", "mar.", "mié.", "jue.", "vie.", "sáb.", "dom.",
+      "lun.", "mié.", "jue.", "vie.", "sáb.", "dom.",
     ]) {
       const duty = `Meet ${abbr} Vargas monthly`;
       expect(normaliseAccountabilities(`${duty}. File the minutes.`), abbr).toEqual([duty, "File the minutes"]);
     }
+  });
+
+  it("ends a duty at a word that is also an abbreviation, and at a unit after a number", () => {
+    // Each of these merged two duties into one while its word sat on the
+    // abbreviation list.
+    expect(normaliseAccountabilities("Stock gloves, bags, etc. Report damage.")).toEqual(["Stock gloves, bags, etc", "Report damage"]);
+    expect(normaliseAccountabilities("Turn down late changes with a clear no. Log each request.")).toEqual([
+      "Turn down late changes with a clear no",
+      "Log each request",
+    ]);
+    expect(normaliseAccountabilities("Limpiar la orilla del mar. Reportar la basura.")).toEqual([
+      "Limpiar la orilla del mar",
+      "Reportar la basura",
+    ]);
+    expect(normaliseAccountabilities("Walk the boundary for 2 hrs. Log what you find.")).toEqual([
+      "Walk the boundary for 2 hrs",
+      "Log what you find",
+    ]);
+    expect(normaliseAccountabilities("Rest 10 min. Resume the survey.")).toEqual(["Rest 10 min", "Resume the survey"]);
+  });
+
+  it("keeps a duty whole where \"no.\" abbreviates a reference number", () => {
+    // Taking "no" off the abbreviation list cut this duty at "no".
+    expect(normaliseAccountabilities("Deliver to lot no. A-3 each week. Log the drop.")).toEqual([
+      "Deliver to lot no. A-3 each week",
+      "Log the drop",
+    ]);
+    expect(normaliseAccountabilities("Service pump no. B12 monthly. Report leaks.")).toEqual([
+      "Service pump no. B12 monthly",
+      "Report leaks",
+    ]);
+  });
+
+  it("keeps the first number on a two-item run with no punctuation, and pins the lot-number case as the price", () => {
+    // A narrower run rule was tried in #276 and reverted: it stripped the "1."
+    // off both of these, publishing lists that counted from 2.
+    expect(normaliseAccountabilities("1. Water the trees 2. Mow the verge")).toEqual(["1. Water the trees 2. Mow the verge"]);
+    expect(normaliseAccountabilities(["1. Water the beds\n2. Weed the path\n   and the verge\n3. Lock the gate"])).toEqual([
+      "1. Water the beds\n2. Weed the path\n   and the verge\n3. Lock the gate",
+    ]);
+    // THE PRICE, chosen and written down: a lot number in the words reads as the
+    // next marker, so this item keeps its "1.". Nothing is cut, and the steward
+    // can edit it in the draft. No rule tells "lots 1 and 2." from "trees 2." apart.
+    expect(normaliseAccountabilities("1. Survey lots 1 and 2. Then stake the corners")).toEqual([
+      "1. Survey lots 1 and 2. Then stake the corners",
+    ]);
   });
 
   it("keeps a quoted motto whole, and a time, a weekday, a company and a volume inside their duty", () => {

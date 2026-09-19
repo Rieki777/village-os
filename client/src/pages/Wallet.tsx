@@ -56,6 +56,9 @@ export default function Wallet() {
   const tokenName = useTokenName("Recognition");
   const modules = useModules();
   const exchangeModule = useModule("exchange");
+  // Redemption is its own module (ruling 22). Read above the early return
+  // below, so the hook count never changes when the catalogue loads.
+  const redemptionModule = useModule("redemption");
   const hypha = useHypha();
   const { user } = useAuth();
   const [data, setData] = useState<any>(null);
@@ -284,8 +287,8 @@ export default function Wallet() {
             * the profile's own Wallet section is the natural second home. It
             * was left alone here because another lane is in that file.
             */}
-          {user && <RedemptionPanel />}
-          <RedemptionQueue />
+          {user && redemptionModule && <RedemptionPanel />}
+          {redemptionModule && <RedemptionQueue />}
 
           <div className="bg-card border border-border rounded-xl p-5">
             <div className="flex items-center gap-2 mb-3">

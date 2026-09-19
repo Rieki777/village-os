@@ -5,16 +5,22 @@
  * that is all the document it replaced could hold. Twenty-five seats and a
  * dozen names, and nobody was ever going to sit down and re-enter them.
  *
- * So the first person to sign in under a matching name is offered the seating
- * and takes it with one tap. The row does not change identity when they do:
- * the same assignment becomes a member holding, so the seat's history does not
- * restart the day somebody finally signs up.
+ * So somebody signing in under a matching name is offered the seating and asks
+ * for it with one tap. The row does not change identity when a steward says
+ * yes: the same assignment becomes a member holding, so the seat's history does
+ * not restart the day somebody finally signs up.
+ *
+ * THE TAP ASKS, IT DOES NOT TAKE, and the reason is that both halves of the
+ * name match are typed by the person tapping. Registration takes a name and the
+ * profile editor rewrites it, and the name being matched against is published
+ * on the chart to every account. A holder of `org.seat` confirms, which is the
+ * power that decides who sits in the village's seats anyway.
  *
  * Three things this deliberately does not do:
  *
- *  - It never claims anything on somebody's behalf. A name match is a
- *    suggestion, and the server re-checks the match on the claim rather than
- *    trusting the id, so knowing an assignment id is not enough to take a seat.
+ *  - It never asks on somebody's behalf. A name match is a suggestion, and the
+ *    server re-checks the match on the ask, so knowing an assignment id is not
+ *    enough to put the question.
  *  - It offers "that is not me", because the alternative is a card that
  *    follows you around forever when the village recorded a different Ada.
  *  - It stays quiet when there is nothing to claim, which is every visit after
@@ -79,7 +85,7 @@ export default function SeatClaimCard() {
         toast.error(d?.error ?? "That role could not be confirmed");
         return;
       }
-      toast.success(`${s.roleName} is yours`);
+      toast.success(`Asked. A steward confirms ${s.roleName}.`);
       setSeats((prev) => prev.filter((x) => x.assignmentId !== s.assignmentId));
     } finally {
       setBusy("");
@@ -92,8 +98,9 @@ export default function SeatClaimCard() {
         {seats.length === 1 ? "A role is recorded under your name" : "Some roles are recorded under your name"}
       </p>
       <p className="text-xs text-muted-foreground mb-3">
-        The village wrote these down before you had an account here. Confirming
-        one links it to you, and the role keeps everything it already knew.
+        The village wrote these down before you had an account here. Say which
+        one is yours and a steward confirms it, and the role keeps everything it
+        already knew.
       </p>
       <div className="space-y-2">
         {seats.map((s) => (

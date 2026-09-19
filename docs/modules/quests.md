@@ -327,6 +327,9 @@ what runs first:
 4. Self-consent, unless the solo-founder window is open.
 5. The decline branch returns here, through `claimsRepo.declineOnce`: from `claimed` or
    `submitted` only, under the claim's row lock, and a resolved claim is refused with 409.
+   A claim that is already `declined` is the exception: the row and the request agree, so the
+   route answers the row with 200 and writes nothing, which is what a second press and a
+   retried request both want. Every other resolution, `consented` above all, is still 409.
 6. A consent of 0 is refused unless `quest.allow_zero_consent` is on or the quest itself
    advertises 0.
 7. If the cap mode is not `unlimited` and the label is unreadable, 409.
@@ -743,13 +746,24 @@ database error, logs "[abuse-guard] check failed (failing open)" and returns fal
 problem removes the only protection on the one route in this module that rasters an image for an
 anonymous caller.
 
-**The submit sweep runs inside the response path, unguarded.** In
+**The submit sweep runs inside the response path, and is guarded twice.** In
 `POST /api/game/quests/:id/submit` the claim is flipped and committed first, then the loop over
-`questConsentRecipients()` awaits `notify` for each one with no try/catch, and only then does
-`res.json(updated)` run. A notification failure therefore answers 500 to a member whose work is
-already `submitted`, and the sweep stops at the failing recipient, so the stewards after them are
-never rung. Every other best-effort call in this module is wrapped: the crew thread calls, the rule
-mint, the stay credit. This one is not.
+`questConsentRecipients()` rings each steward, and only then does `res.json(updated)` run. Until
+2026-09-19 that loop awaited `notify` with no try/catch, so a notification failure answered 500 to
+a member whose work was already `submitted`, and the sweep stopped at the failing recipient, so the
+stewards after them were never rung. The member then read the failure, submitted again, and the
+dedupe key correctly rang nobody twice: the skipped stewards stayed skipped.
+
+There are two guards now, because there were two failures. The inner one wraps each `notify`, so
+one recipient's failure costs the others nothing. The outer one wraps the read of who to ring,
+which is a database call and fails the same way. Neither can reach the response, and both log what
+did not happen, because a bell nobody hears leaves no other trace.
+`server/routes/questSubmitSweep.test.ts` drives all four cases through the real route, and its two
+controls fail one named case each: rethrowing from the inner guard loses the stewards after the
+failing one, and rethrowing from the outer guard answers 500 for work that is already in.
+
+Every other best-effort call in this module is wrapped the same way: the crew thread calls, the
+rule mint, the stay credit.
 
 **Crews touch no value, and that is structural rather than conventional.** Every member of a crew
 claims, submits and is consented to individually. There is no pooled claim, no shared reward, and

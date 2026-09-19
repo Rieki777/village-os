@@ -94,11 +94,8 @@ const buttonCls =
 
 export default function VotingWeightsPanel({
   password,
-  onOpenTab,
 }: {
   password: string;
-  /** Opens another admin tab. The weight mode itself lives in Game Mechanics. */
-  onOpenTab?: (tab: string) => void;
 }) {
   const auth = useMemo(() => ({ Authorization: `Bearer ${password}` }), [password]);
   const [data, setData] = useState<WeightsPayload | null>(null);
@@ -277,8 +274,11 @@ export default function VotingWeightsPanel({
       </div>
 
       {/* WHICH MODE IS LIVE, and where the dial that picks it lives. The mode
-          is a founder-ring game variable, so this points at Game Mechanics
-          instead of offering a second place to set it. */}
+          is a founder-ring game variable, so this points at the one place it
+          is set instead of offering a second place to set it. That place is
+          the Governance module's card now (Rye, 2026-09-15): a dial a module
+          owns is set up on that module's card, and `governance.weight_mode` is
+          owned by Governance, with Exchange reading it too. */}
       <div className="bg-white border border-gray-100 rounded-xl p-5 mb-4">
         <h3 className="flex items-center gap-2 font-semibold text-gray-900">
           <Scale className="w-4 h-4 text-teal-deep" aria-hidden="true" />
@@ -289,15 +289,12 @@ export default function VotingWeightsPanel({
           />
         </h3>
         <p className="text-sm text-gray-600 mt-1.5 leading-relaxed">{modeLine(data.mode, data.token)}</p>
-        {onOpenTab && (
-          <button
-            type="button"
-            onClick={() => onOpenTab("variables")}
-            className="mt-2 inline-flex items-center min-h-[44px] text-sm font-semibold text-teal-deep hover:underline focus:outline-none focus:ring-2 focus:ring-teal-deep rounded-lg"
-          >
-            Change how weight is assigned
-          </button>
-        )}
+        <a
+          href="/admin?tab=modules&module=governance"
+          className="mt-2 inline-flex items-center min-h-[44px] text-sm font-semibold text-teal-deep hover:underline focus:outline-none focus:ring-2 focus:ring-teal-deep rounded-lg"
+        >
+          Change how weight is assigned
+        </a>
       </div>
 
       {/* THE STANDING COUNT. Plain information about the current allocation.
