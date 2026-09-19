@@ -26,6 +26,11 @@ interface Props {
   next?: string;
   /** Override for a surface where "Sign in" reads oddly, such as a join page. */
   label?: string;
+  /**
+   * The invitation token from the link somebody followed. The server's start
+   * route checks it, and only the invitation's id travels to Google and back.
+   */
+  invite?: string;
 }
 
 /**
@@ -52,7 +57,7 @@ function GoogleMark() {
   );
 }
 
-export default function GoogleSignInButton({ next, label }: Props) {
+export default function GoogleSignInButton({ next, label, invite }: Props) {
   const [available, setAvailable] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -67,7 +72,11 @@ export default function GoogleSignInButton({ next, label }: Props) {
 
   if (available !== true) return null;
 
-  const href = `/api/auth/google/start${next ? `?next=${encodeURIComponent(next)}` : ""}`;
+  const query = new URLSearchParams();
+  if (next) query.set("next", next);
+  if (invite) query.set("invite", invite);
+  const search = query.toString();
+  const href = `/api/auth/google/start${search ? `?${search}` : ""}`;
 
   return (
     <div className="space-y-4">

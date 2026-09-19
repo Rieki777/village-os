@@ -119,6 +119,10 @@ export function outcomeFor(status: Ballot["status"], landing?: Landing | null, n
   if (landing.landingStatus === "vetoed" || landing.vetoedAt) {
     return { ...OUTCOME.failed, word: "Stopped by a steward" };
   }
+  // Its landing failed: carried, and not law until it actually takes effect.
+  if (landing.notYetInEffect) {
+    return { ...base, word: "Carried, not yet in effect", law: false };
+  }
   if (landing.landingStatus === "pending" && landing.landsAt && Date.parse(landing.landsAt) > nowMs) {
     return { ...base, word: "Carried, not yet in effect", law: false };
   }
@@ -168,6 +172,10 @@ export default function DecisionOutcome({
         </span>
 
         {counting && landing?.landsAt && <LandingClock landsAt={landing.landsAt} sentence={landing.countdownSentence} />}
+
+        {ballot.status === "passed" && landing?.notYetInEffect && (
+          <p className="mt-3 text-sm font-semibold text-stone-800">{landing.notYetInEffect}</p>
+        )}
 
         {/* The human sentence, at the size the sentence deserves. */}
         {ballot.outcomeNote ? (

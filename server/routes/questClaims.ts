@@ -2,11 +2,14 @@
  * Quest claims: the consent queue, the holder's own confidence flag, the
  * stewards' attention list, and the one human gate that releases value.
  *
- * Four routes, lifted out of server/index.ts unchanged:
+ * Four routes lifted out of server/index.ts unchanged, and two that pay what a
+ * consent still owes (drizzle/0210):
  *
  *   GET  /api/admin/quest-claims                the queue, a look and nothing more
  *   PUT  /api/game/quest-claims/:id/confidence  how it is going, said by the holder
  *   GET  /api/admin/quest-claims/attention      open claims somebody has flagged
+ *   GET  /api/admin/quest-claims/owed           what consents still owe, a look
+ *   POST /api/admin/quest-claims/:id/owed/pay   pay what one consent still owes
  *   POST /api/admin/quest-claims/:id/consent    the witness, and the release
  *
  * ORDER INSIDE THIS FILE IS LOAD-BEARING. `/api/admin/quest-claims/attention`
@@ -39,17 +42,25 @@ import type express from "express";
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { markAdminGate } from "../lib/adminGate";
-import { mintForConfirmedClaim, toLedgerUnits } from "../lib/economy";
+import { owedForClaim, toLedgerUnits } from "../lib/economy";
 import { recordEvent } from "../lib/events";
 import { EXAMPLE_REFUSAL_BODY, isExampleRow } from "../lib/examples";
 import { issuanceRefusal } from "../lib/gameStart";
 import { memberAccount, PLATFORM_TOKEN, postTransferOn, RECOGNITION_FAUCET } from "../lib/ledger";
 import { effectiveLifecycle } from "../lib/modules";
+import { checkConsentAmount, consentBounds, payoutFor } from "../lib/questConsent";
 import { rewardMultiplierFor } from "../lib/seasonPatterns";
-import { mintStayCredits, STAY_CREDIT } from "../lib/stays";
+import { STAY_CREDIT } from "../lib/stays";
 import { boolVar, numberVar, stringVar } from "../lib/variables";
+import {
+  owedPostingsFor,
+  recordOwed,
+  settleOwedForClaim,
+  unsettledOwedPostings,
+  type SettleOutcome,
+} from "../repos/questOwedPostings";
 import type { ClaimRecord } from "../repos/quests";
-import { describeRange, parseRewardRange } from "../../shared/questRewards";
+import { parseRewardRange } from "../../shared/questRewards";
 
 /**
  * What the consent gate answers.
@@ -139,12 +150,62 @@ export function register(app: Express, deps: Deps): void {
     return { ok: true };
   }
 
+  /**
+   * WHAT A MEMBER HEARS WHEN AN OWED POSTING LANDS, and what the log keeps when
+   * one does not.
+   *
+   * The stay credits' line is the one the direct path always sent, under the
+   * same dedupe key, so stay credits paid by a steward's press notify exactly
+   * once as well. Voice and credits minted by the rules never had a line of
+   * their own, and still do not: the consent's own notification is the news.
+   */
+  async function announceSettled(
+    claim: { id: string; userId: string; questTitle: string },
+    outcomes: SettleOutcome[],
+  ): Promise<void> {
+    for (const o of outcomes) {
+      if (o.outcome === "posted" && o.row.tokenSlug === STAY_CREDIT) {
+        const credits = Math.round(o.row.units / 10 ** o.row.decimals);
+        await notify({
+          userId: claim.userId,
+          type: "stays",
+          title: `+${credits} stay credit(s) for "${claim.questTitle}"`,
+          link: "/stay",
+          dedupeKey: `queststay:${claim.id}:notify`,
+        });
+      } else if (o.outcome === "still_owed" || o.outcome === "refused") {
+        console.error(`[economy] claim ${claim.id}: ${o.row.tokenSlug} ${o.outcome} (${o.reason}): ${o.message}`);
+      }
+    }
+  }
+
   app.get("/api/admin/quest-claims", async (req, res) => {
     const viewer = await consentQueueViewer(req);
     if (!viewer.ok) return res.status(viewer.status).json({ error: viewer.error });
-    const claims = await claimsRepo.all();
+    const [claims, quests] = await Promise.all([claimsRepo.all(), questsRepo.all()]);
     claims.sort((a, b) => new Date(b.claimedAt ?? 0).getTime() - new Date(a.claimedAt ?? 0).getTime());
-    res.json(claims);
+    /*
+     * WHAT EACH CLAIM'S QUEST LETS A STEWARD GRANT, beside the claim.
+     *
+     * The amount box opened at a hardcoded 50 and knew nothing about the quest,
+     * so under the shipped `posted` mode the first press on a quest paying 100
+     * to 200 was a guaranteed 409, and the number the steward needed was on
+     * another page. `consentBounds` reads the same definition the consent route
+     * below enforces, so the queue and the refusal are one reading of the dials.
+     * A claim whose quest was deleted carries no bounds: nothing is advertised.
+     */
+    const dials = {
+      capMode: stringVar("quest.consent_cap_mode"),
+      capMultiplier: numberVar("quest.consent_cap_multiplier"),
+      allowZero: boolVar("quest.allow_zero_consent"),
+    };
+    const questsById = new Map(quests.map((q) => [q.id, q]));
+    res.json(
+      claims.map((c) => {
+        const quest = questsById.get(c.questId);
+        return { ...c, bounds: quest ? consentBounds({ range: parseRewardRange(quest.gratitude), ...dials }) : null };
+      }),
+    );
   });
 
   /**
@@ -203,7 +264,7 @@ export function register(app: Express, deps: Deps): void {
           ? `${firstName(user.name)} is stuck on ${questTitle}`
           : `${firstName(user.name)} flagged a wobble on ${questTitle}`,
         `quest-confidence:${req.params.id}:${value}`,
-        "/admin?tab=quest-claims",
+        "/review",
       );
     }
     res.json({ success: true });
@@ -234,6 +295,82 @@ export function register(app: Express, deps: Deps): void {
     })));
   });
 
+  /**
+   * WHAT CONSENTS STILL OWE, a look and nothing more.
+   *
+   * Every posting a consent recorded and has not paid (drizzle/0210): rows still
+   * owed, which the press below pays, and rows the ledger refused for good, which
+   * say why no press can. The same gate as the queue, because it is the same
+   * panel's question and it writes nothing.
+   */
+  app.get("/api/admin/quest-claims/owed", async (req, res) => {
+    const viewer = await consentQueueViewer(req);
+    if (!viewer.ok) return res.status(viewer.status).json({ error: viewer.error });
+    const [rows, claims] = await Promise.all([unsettledOwedPostings(getPool()), claimsRepo.all()]);
+    const claimsById = new Map(claims.map((c) => [c.id, c]));
+    res.json(
+      rows.map((r) => {
+        const c = claimsById.get(r.claimId);
+        return {
+          key: r.idempotencyKey,
+          claimId: r.claimId,
+          questTitle: c?.questTitle ?? null,
+          holder: c ? firstName(c.userName) : null,
+          tokenSlug: r.tokenSlug,
+          units: r.units,
+          decimals: r.decimals,
+          state: r.state,
+          refusalReason: r.refusalReason,
+          lastError: r.lastError,
+          attempts: r.attempts,
+          createdAt: r.createdAt,
+        };
+      }),
+    );
+  });
+
+  /**
+   * PAY WHAT ONE CONSENT STILL OWES (Rye, 2026-09-14: a repair path, guarded
+   * against duplicate payments).
+   *
+   * The same transaction a consent runs straight after its commit, asked again
+   * by somebody the consent gate admits. It decides nothing: the witness fixed
+   * the amounts and the keys when the consent recorded them, so a press can only
+   * deliver what is owed, and a second press finds nothing owed. Why no press can
+   * pay twice is on server/repos/questOwedPostings.ts.
+   */
+  app.post("/api/admin/quest-claims/:id/owed/pay", async (req, res) => {
+    const actor = await consentActor(req);
+    if (!actor.ok) return res.status(actor.status).json(actor.body);
+    const claim = await claimsRepo.byId(req.params.id);
+    if (!claim) return res.status(404).json({ error: "Not found" });
+    const settled = await settleOwedForClaim(getPool(), claim.id);
+    await announceSettled(claim, settled);
+    const paidTokens = settled.flatMap((o) => (o.outcome === "posted" ? [o.row.tokenSlug] : []));
+    // Releasing value is always attributable, and the /api/admin audit
+    // middleware stamps admin actors only, as the consent route below says.
+    if (paidTokens.length > 0 && !actor.isAdminActor) {
+      void recordEvent(getPool(), {
+        kind: "audit",
+        text: `quest:owed-paid:${claim.id}:${paidTokens.join(",")}`,
+        actorUserId: actor.userId,
+        entityType: "quest_claim",
+        entityRef: claim.id,
+        audience: "admin",
+      });
+    }
+    res.json({
+      outcomes: settled.map((o) =>
+        o.outcome === "not_owed"
+          ? { key: o.key, outcome: o.outcome }
+          : o.outcome === "posted" || o.outcome === "duplicate"
+            ? { key: o.key, outcome: o.outcome, tokenSlug: o.row.tokenSlug }
+            : { key: o.key, outcome: o.outcome, tokenSlug: o.row.tokenSlug, reason: o.reason, message: o.message },
+      ),
+      rows: await owedPostingsFor(getPool(), claim.id),
+    });
+  });
+
   app.post("/api/admin/quest-claims/:id/consent", async (req, res) => {
     const actor = await consentActor(req);
     if (!actor.ok) return res.status(actor.status).json(actor.body);
@@ -260,6 +397,18 @@ export function register(app: Express, deps: Deps): void {
     // the witness rule applies to everyone, admins included. Stewards never
     // get the exception — role authority is not founder authority — and
     // tombstoned members do not count toward the size.
+    //
+    // WHETHER THIS REQUEST USED THE WINDOW is answered here and RECORDED LATER.
+    // The audit row used to be written the moment the window was found open,
+    // which is a whole decline branch and five refusals before anything
+    // happens. So the one trace the exception leaves said a founder had
+    // witnessed their own claim when the founder had DECLINED it, when the
+    // dials refused the amount, when the launch vote had not carried, and when
+    // another steward had already resolved the claim. `shared/constitution.ts`
+    // reads this row as "every such use is recorded", and a record of uses that
+    // did not happen is not that. It is written below, once the consent it
+    // attests to has committed.
+    let selfConsented = false;
     if (claim.userId === actor.userId) {
       const soloWindow = Math.max(0, numberVar("quest.self_consent_until_members"));
       // Neither tombstones nor standing examples are people, and three
@@ -274,14 +423,7 @@ export function register(app: Express, deps: Deps): void {
           error: "You cannot consent to your own claim. Someone else has to witness the work.",
         });
       }
-      void recordEvent(getPool(), {
-        kind: "audit",
-        text: `quest:self-consent:solo-founder:${claim.id}`,
-        actorUserId: actor.userId,
-        entityType: "quest_claim",
-        entityRef: claim.id,
-        audience: "admin",
-      });
+      selfConsented = true;
     }
     if (approve === false) {
       // From `claimed` or `submitted` only, under the claim's row lock. A stale
@@ -336,46 +478,24 @@ export function register(app: Express, deps: Deps): void {
     // so the quest board was not a contract. The ceiling is a village choice.
     const requested = Math.max(0, Number(amount) || 0);
     // Quests advertise a RANGE ("50-100"), not a number: the same work done
-    // thoroughly is worth more than done adequately, and the consenting admin
+    // thoroughly is worth more than done adequately, and the consenting steward
     // decides where in the range it landed. parseRewardRange is the one place
     // that knows the format.
     const consentedQuest = await questsRepo.byId(claim.questId);
     const range = parseRewardRange(consentedQuest?.gratitude);
-    const capMode = stringVar("quest.consent_cap_mode");
-    const granted = requested;
-    // Consent at 0 used to "succeed" while the failed ledger post zeroed the
-    // member's CACHED balance — the worst of both worlds. Now it is refused
-    // unless the village has explicitly opted into "acknowledged, no
-    // recognition" (quest.allow_zero_consent), in which case the claim
-    // completes with no ledger movement and the balance is left alone.
-    if (granted <= 0 && !boolVar("quest.allow_zero_consent")) {
-      return res.status(400).json({
-        error:
-          "Consent releases value: the amount must be at least 1. To allow consenting at zero (acknowledged, no recognition), enable 'Allow consenting at zero' in Admin → Variables → Quests.",
-      });
-    }
-    // A cap needs a number to cap, so BOTH capping modes have to refuse a label naming none. This used to sit inside the posted branch, which left "capped" to compute a multiple of the 0 an unreadable label parses to and answer with a ceiling-shaped error for a label-shaped problem. Only "unlimited" is exempt, because that village asked for no ceiling at all.
-    if (capMode !== "unlimited" && !range.valid) {
-      return res.status(409).json({ error: "This quest does not advertise a readable amount, so it cannot be consented while a cap is set. Give the quest a number on the board first." });
-    }
-    if (capMode === "posted") {
-      if (requested < range.min || requested > range.max) {
-        return res.status(409).json({
-          error: `${requested} is outside what this quest advertises (${describeRange(range)}). The board is the contract.`,
-          min: range.min,
-          max: range.max,
-        });
-      }
-    } else if (capMode === "capped") {
-      const ceiling = Math.round(range.max * numberVar("quest.consent_cap_multiplier"));
-      if (requested > ceiling) {
-        return res.status(409).json({
-          error: `${requested} is above the ceiling for this quest. It advertises ${describeRange(range)} and the bonus ceiling is ${ceiling}.`,
-          max: range.max,
-          ceiling,
-        });
-      }
-    }
+    // The zero rule, the readable-label rule and the range are decided in
+    // server/lib/questConsent.ts, as a pure function of the range and the three
+    // consent dials, so every combination is a row in a table test. The rulings
+    // they hold are in that file's header; read them before moving a comparison.
+    const verdict = checkConsentAmount({
+      requested,
+      range,
+      capMode: stringVar("quest.consent_cap_mode"),
+      capMultiplier: numberVar("quest.consent_cap_multiplier"),
+      allowZero: boolVar("quest.allow_zero_consent"),
+    });
+    if (!verdict.ok) return res.status(verdict.status).json(verdict.body);
+    const granted = verdict.granted;
     /*
      * ISSUANCE WAITS FOR THE VILLAGE (R67), ASKED BEFORE ANY WORK IS DONE.
      *
@@ -401,13 +521,17 @@ export function register(app: Express, deps: Deps): void {
     const claimant = await members.byId(claim.userId);
     const stageBefore = claimant ? await stageOf(claimant) : null;
 
-    // Applied AFTER the consent cap, on purpose; why, and why multiplied
-    // rather than added, is in `rewardMultiplierFor` (server/lib/seasonPatterns.ts).
+    // A standing badge lifts the grant toward the cap and never past it (Rye,
+    // 2026-09-14). Why multiplied rather than added is in `rewardMultiplierFor`
+    // (server/lib/seasonPatterns.ts); the bound is `payoutFor`.
     const multiplier =
       effectiveLifecycle("badges") === "off"
         ? 1
         : await rewardMultiplierFor(getPool(), claim.userId, await dormantBadgeIds());
-    const payout = multiplier === 1 ? granted : Math.floor(granted * multiplier);
+    const payout = payoutFor({ granted, multiplier, liftTop: verdict.liftTop });
+    // The quest's own stay-credit reward, in whole credits, owed by this consent
+    // at any grant. The post below records it.
+    const stayReward = Math.max(0, Math.floor(Number(consentedQuest?.stayCreditReward ?? 0)));
     // The recomputed balance, set by the post below and read after it commits.
     // At payout 0 (allow_zero_consent) nothing posts and this stays null, so
     // the cache write is skipped: the old code wrote the failed post's 0.
@@ -427,29 +551,54 @@ export function register(app: Express, deps: Deps): void {
         // once the request is over.
         c.consentedBy = actor.userId ?? null;
       },
-      // No member row means no account to credit, which is what the old
-      // `if (claimant && consented)` said. Same for a payout of zero.
-      !claimant || payout <= 0 ? null : async (conn) => {
-        // Through the ledger, not `+=`. The idempotency key is the claim, so a
-        // retried or double-clicked consent credits exactly once, and the balance
-        // column is RECOMPUTED from the ledger rather than incremented. S7:
-        // recognition issues from the faucet account, so issuance is visible.
-        const credit = await postTransferOn(conn, {
-          from: RECOGNITION_FAUCET,
-          to: memberAccount(claim.userId),
-          // MINOR units, which is `postTransfer`'s contract; `payout` is the
-          // human reward the quest names.
-          amount: toLedgerUnits(PLATFORM_TOKEN, payout),
-          source: "quest_consent",
-          sourceRef: claim.id,
-          description:
-            multiplier === 1
-              ? `Quest consented: ${claim.questTitle}`
-              : `Quest consented: ${claim.questTitle} (${granted} x${multiplier} for a standing badge)`,
-          idempotencyKey: `quest_consent:${claim.id}`,
+      // No member row means no account to credit and nobody to owe, which is
+      // what the old `if (claimant && consented)` said.
+      !claimant ? null : async (conn, c) => {
+        if (payout > 0) {
+          // Through the ledger, not `+=`. The idempotency key is the claim, so a
+          // retried or double-clicked consent credits exactly once, and the balance
+          // column is RECOMPUTED from the ledger rather than incremented. S7:
+          // recognition issues from the faucet account, so issuance is visible.
+          const credit = await postTransferOn(conn, {
+            from: RECOGNITION_FAUCET,
+            to: memberAccount(claim.userId),
+            // MINOR units, which is `postTransfer`'s contract; `payout` is the
+            // human reward the quest names.
+            amount: toLedgerUnits(PLATFORM_TOKEN, payout),
+            source: "quest_consent",
+            sourceRef: claim.id,
+            // Keyed on what moved, not on whether a badge exists: a badge at the
+            // top of the range lifts nothing, and saying otherwise misstates it.
+            description:
+              payout === granted
+                ? `Quest consented: ${claim.questTitle}`
+                : `Quest consented: ${claim.questTitle} (${granted}, lifted to ${payout} by a standing badge)`,
+            idempotencyKey: `quest_consent:${claim.id}`,
+          });
+          if (!credit.ok) return { ok: false as const, error: credit.error ?? "the ledger refused the credit" };
+          credited = credit.toBalance;
+        }
+        // WHAT ELSE THIS CONSENT OWES, recorded in this same commit (drizzle/0210).
+        //
+        // The rules' voice and credits, and the quest's own stay credits, used to
+        // post after the commit, best effort, and a failure was lost for good:
+        // consenting again is refused once a claim is consented. Priced here on
+        // the consent's own connection and recorded before the commit, what a
+        // consent owes exists exactly when the consent does, and the settle below
+        // the commit, or a steward's press on /review, pays it.
+        //
+        // A grant of 0 prices no rule inside `owedForClaim` (economics and
+        // governance, 2026-09-14), and the stay credits are still owed, because
+        // they are the quest's own payment, typed onto it by a person.
+        const priced = await owedForClaim(conn, {
+          id: c.id,
+          questId: c.questId,
+          userId: c.userId,
+          granted,
+          stay: stayReward > 0 ? { reward: stayReward, questTitle: c.questTitle } : undefined,
         });
-        if (!credit.ok) return { ok: false as const, error: credit.error ?? "the ledger refused the credit" };
-        credited = credit.toBalance;
+        if (priced.skipped) console.log(`[economy] claim ${c.id}: no rule priced (${priced.skipped})`);
+        await recordOwed(conn, c.id, priced.owed);
         return { ok: true as const };
       },
     );
@@ -471,62 +620,41 @@ export function register(app: Express, deps: Deps): void {
       });
     }
     const consented = outcome.claim;
+    // THE WHOLE TRACE OF THE EXCEPTION, written now that the consent it
+    // attests to exists. It sits outside the `claimant` block below, because a
+    // claim whose member row has gone still used the window, and it is written
+    // for an admin actor too: the window opens for nobody else, and the
+    // /api/admin middleware attributes the request without naming the rule
+    // that let it through.
+    if (selfConsented) {
+      void recordEvent(getPool(), {
+        kind: "audit",
+        text: `quest:self-consent:solo-founder:${consented.id}`,
+        actorUserId: actor.userId,
+        entityType: "quest_claim",
+        entityRef: consented.id,
+        audience: "admin",
+      });
+    }
     // Credit the player's balance
     if (claimant) {
       let after: any = claimant;
       if (credited !== null) {
         after = await members.update(claimant.id, (u: any) => { u.recognitionBalance = credited; });
       }
-      // Whatever else the village's rules say a confirmed contribution mints,
-      // which today is its voice token. Hearts are NOT re-minted here: the
-      // block above has posted them since S7 with the range, the cap and the
-      // standing multiplier, and a rule minting them again would pay twice for
-      // one piece of work.
-      //
-      // Deliberately not awaited into the response contract and never allowed
-      // to throw: a quest that was witnessed and credited must not fail because
-      // a secondary mint had a bad afternoon. The occurrence key makes a later
-      // repair-post safe.
+      // PAY WHAT THIS CONSENT OWES, now that its commit recorded it. Each row is
+      // its own transaction (`settleOwedPosting`, server/repos/questOwedPostings.ts).
+      // A row that cannot be paid stays owed for a steward to pay from /review, or
+      // is marked refused with the ledger's own reason. Never allowed to fail the
+      // consent: the work was witnessed and credited, and what it still owes is
+      // recorded where nothing can lose it.
+      let settled: SettleOutcome[] = [];
       try {
-        const extra = await mintForConfirmedClaim(getPool(), {
-          id: consented.id,
-          questId: consented.questId,
-          userId: consented.userId,
-          confirmedAt: consented.resolvedAt,
-        });
-        if (extra.skipped) {
-          console.log(`[economy] claim ${consented.id}: no rule mint (${extra.skipped})`);
-        }
+        settled = await settleOwedForClaim(getPool(), consented.id);
       } catch (err) {
-        console.error(`[economy] rule mint failed for claim ${consented.id}:`, err);
+        console.error(`[economy] claim ${consented.id}: paying what the consent owes stopped, and it stays owed:`, err);
       }
-      // S31 work-exchange (F2 firewall): a quest may ALSO carry stay credits,
-      // released by the same human consent — a separate column, a separate
-      // token, the same claim-keyed idempotency. Never blended with recognition.
-      const stayReward = Math.max(0, Math.floor(Number(consentedQuest?.stayCreditReward ?? 0)));
-      if (stayReward > 0) {
-        const stayCredit = await mintStayCredits(getPool(), {
-          userId: consented.userId,
-          // MINOR units: `mintStayCredits` takes the ledger's number and says
-          // the callers holding a human one convert at their own boundary.
-          amount: toLedgerUnits(STAY_CREDIT, stayReward),
-          source: "quest_stay_reward",
-          sourceRef: consented.id,
-          description: `Work exchange: ${consented.questTitle}`,
-          idempotencyKey: `queststay:${consented.id}`,
-        });
-        if (stayCredit.ok) {
-          await notify({
-            userId: consented.userId,
-            type: "stays",
-            title: `+${stayReward} stay credit(s) for "${consented.questTitle}"`,
-            link: "/stay",
-            dedupeKey: `queststay:${consented.id}:notify`,
-          });
-        } else {
-          console.error(`[stays] work-exchange release failed for claim ${consented.id}: ${stayCredit.error}`);
-        }
-      }
+      await announceSettled(consented, settled);
       await addActivity("quest", `${firstName(consented.userName)} completed the quest "${consented.questTitle}"`, { actorUserId: consented.userId, entityType: "quest", entityRef: consented.questId });
       await notify({
         userId: consented.userId,
@@ -535,7 +663,7 @@ export function register(app: Express, deps: Deps): void {
         // badge can multiply the two apart, and telling a member a number
         // their balance does not match is the fastest way to lose their
         // trust in the ledger.
-        title: multiplier === 1
+        title: payout === granted
           ? `Your quest was consented: ${consented.questTitle} (+${payout})`
           : `Your quest was consented: ${consented.questTitle} (+${payout}, including your badge bonus)`,
         link: `/quests/${consented.questId}`,
@@ -552,7 +680,7 @@ export function register(app: Express, deps: Deps): void {
           // moved. An audit row carrying only the first would misstate the
           // release it exists to attribute.
           kind: "audit",
-          text: multiplier === 1
+          text: payout === granted
             ? `quest:consented:${consented.id}:${payout}`
             : `quest:consented:${consented.id}:granted=${granted}:paid=${payout}:x${multiplier}`,
           actorUserId: actor.userId, entityType: "quest_claim", entityRef: consented.id, audience: "admin",

@@ -20,6 +20,7 @@ const PIPELINE_WORDS = ["new", "reviewing", "in-conversation", "accepted", "decl
 const SPEAKING = ["reviewing", "accepted", "declined"];
 const TYPES = [
   "role-application",
+  "power-application",
   "seat-claim",
   "work-with-us",
   "quest-proposal",
@@ -65,6 +66,22 @@ describe("submissionSubject", () => {
     );
     expect(submissionSubject("seat-claim", {})).toBe("your ask to be confirmed in a seat");
     expect(submissionSubject("seat-claim", null)).toBe("your ask to be confirmed in a seat");
+  });
+
+  it("names the power on a hand raised for one, in the words of its label", () => {
+    expect(submissionSubject("power-application", { powerLabel: "Keep the shared library and its loans" })).toBe(
+      "your offer to keep the shared library and its loans",
+    );
+    expect(
+      submissionStatusNotice("power-application", "accepted", { powerLabel: "Post announcements to the village feed" })!
+        .headline,
+    ).toBe("Yes to your offer to post announcements to the village feed");
+  });
+
+  it("falls back to the power-less phrase when the row carries no label", () => {
+    expect(submissionSubject("power-application", {})).toBe("your offer to take on a power");
+    expect(submissionSubject("power-application", { powerLabel: "  " })).toBe("your offer to take on a power");
+    expect(submissionSubject("power-application", null)).toBe("your offer to take on a power");
   });
 
   it("is plain instead of wrong for a form this platform has never seen", () => {

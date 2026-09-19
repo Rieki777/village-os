@@ -452,7 +452,7 @@ describe.skipIf(!configured)("the veto inside and outside the window", () => {
   it("stops a decision inside its window and records the name, the reason and the time", async () => {
     await seatSteward("u-steward");
     const b = await carriedAndStamped();
-    const out = await recordVeto({ pool }, { ballotId: b.id, stewardId: "u-steward", reason: "This moves the bar the same week we set it." });
+    const out = await recordVeto(deps(), { ballotId: b.id, stewardId: "u-steward", reason: "This moves the bar the same week we set it." });
     expect(out.ok).toBe(true);
     const row = await landingRow(pool, b.id);
     expect(row?.landingStatus).toBe("vetoed");
@@ -481,7 +481,7 @@ describe.skipIf(!configured)("the veto inside and outside the window", () => {
     expect(b.status, "the vote carried, so there is something to switch").toBe("passed");
     const noteWhenItCarried = b.outcomeNote;
 
-    const out = await recordVeto({ pool }, { ballotId: b.id, stewardId: "u-steward", reason: "The water budget is not answered." });
+    const out = await recordVeto(deps(), { ballotId: b.id, stewardId: "u-steward", reason: "The water budget is not answered." });
     expect(out.ok).toBe(true);
 
     const after = await reload(b.id);
@@ -506,7 +506,7 @@ describe.skipIf(!configured)("the veto inside and outside the window", () => {
 
   it("refuses a veto with no reason", async () => {
     const b = await carriedAndStamped();
-    const out = await recordVeto({ pool }, { ballotId: b.id, stewardId: "u-steward", reason: "   " });
+    const out = await recordVeto(deps(), { ballotId: b.id, stewardId: "u-steward", reason: "   " });
     expect(out.ok).toBe(false);
     expect(out.ok === false && out.error).toContain("carries a reason");
   });
@@ -515,7 +515,7 @@ describe.skipIf(!configured)("the veto inside and outside the window", () => {
     const b = await carriedAndStamped();
     const row = await landingRow(pool, b.id);
     const after = new Date(row!.landsAt!.getTime() + 1000);
-    const out = await recordVeto({ pool, now: () => after }, { ballotId: b.id, stewardId: "u-steward", reason: "too late" });
+    const out = await recordVeto(deps({ now: () => after }), { ballotId: b.id, stewardId: "u-steward", reason: "too late" });
     expect(out.ok).toBe(false);
     expect(out.ok === false && out.error).toContain(row!.landsAt!.toISOString());
   });
@@ -523,7 +523,7 @@ describe.skipIf(!configured)("the veto inside and outside the window", () => {
   it("stops the landing job from applying a vetoed row", async () => {
     await seatSteward("u-steward");
     const b = await carriedAndStamped();
-    await recordVeto({ pool }, { ballotId: b.id, stewardId: "u-steward", reason: "not yet" });
+    await recordVeto(deps(), { ballotId: b.id, stewardId: "u-steward", reason: "not yet" });
     await pool.query("UPDATE ballots SET lands_at = ? WHERE id = ?", [new Date(Date.now() - HOUR), b.id]);
     const report = await applyDueGovernance(deps());
     expect(report.ran).toBe(true);
@@ -565,7 +565,7 @@ describe.skipIf(!configured)("the veto inside and outside the window", () => {
     const closedAgain = await carry(again);
     await routeOutcome(deps(), closedAgain.ballot!, "passed", "carried", "u-a");
 
-    const stopped = await recordVeto({ pool }, { ballotId: again.id, stewardId: "u-steward", reason: "still no" });
+    const stopped = await recordVeto(deps(), { ballotId: again.id, stewardId: "u-steward", reason: "still no" });
     expect(stopped.ok).toBe(false);
     expect(stopped.ok === false && stopped.error).toContain("highest bar");
 
@@ -578,7 +578,7 @@ describe.skipIf(!configured)("the veto inside and outside the window", () => {
     const b = await openOne({ subjectType: "token_send", timing: "at_acceptance", subjectRef: `ts-${++n}` });
     const closed = await carry(b);
     await routeOutcome(deps(), closed.ballot!, "passed", "carried", "u-a");
-    const out = await recordVeto({ pool }, { ballotId: b.id, stewardId: "u-steward", reason: "undo it" });
+    const out = await recordVeto(deps(), { ballotId: b.id, stewardId: "u-steward", reason: "undo it" });
     expect(out.ok).toBe(false);
   });
 });

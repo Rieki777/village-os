@@ -142,6 +142,35 @@ describe("what the terminal handler answers", () => {
     expect(answer.detail).toContain("org_roles");
   });
 
+  // The other answer this handler gives, 503 for a lock the engine refused to
+  // wait for any longer, is proved in `server/lib/lockContention.test.ts`
+  // against an error a real database raised, for the reason above: a hand-made
+  // error object would prove only that the matcher matches itself.
+  /**
+   * THE OTHER 409, and a second branch rather than a widened matcher on
+   * purpose: a merge refusal carries a sentence about the village's own rules,
+   * and folding it into the stale-snapshot answer would tell a steward that
+   * somebody else changed this while dropping the part that says what the two
+   * changes together would have made.
+   */
+  it("answers a real MergeRefusedError with 409 and keeps the sentence the collection wrote", async () => {
+    const { MergeRefusedError } = await import("../repos/store-db");
+    const real = new MergeRefusedError(
+      "circles",
+      "Business Council and Finance Circle would end up inside each other.",
+    );
+    const answer = terminalAnswerFor(real);
+
+    expect(answer.status).toBe(409);
+    expect(answer.body.code).toBe("merge_refused");
+    expect(answer.level, "a refused merge is not a fault either").toBe("warn");
+    expect(answer.body.error).toContain("would end up inside each other");
+    expect(answer.body.error).toContain("Nothing was saved");
+    // The table name stays in the log, exactly as it does for a stale snapshot.
+    expect(answer.body.error).not.toContain("circles:");
+    expect(answer.detail).toContain("circles");
+  });
+
   it("still answers everything else with 500, which is the control", () => {
     // Without this, a matcher that returned 409 for every error would pass the
     // case above and break the whole surface.

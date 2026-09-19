@@ -21,6 +21,7 @@ import BreathingLoader from "@/components/natural/BreathingLoader";
 import { SeatSomebody } from "@/components/power/SeatSomebody";
 import { AppointToRole } from "@/components/admin/AppointToRole";
 import { RAISED_HAND_TERM_KEYS, RaisedHandTerm } from "@/components/admin/RaisedHandTerm";
+import { POWER_HAND_KEYS, PowerHandNote } from "@/components/admin/PowerHandNote";
 import { SeatClaimAsks, type SeatClaimAsk } from "@/components/admin/SeatClaimAsks";
 import Celebration from "@/components/natural/Celebration";
 import { useMomentWindow } from "@/components/natural/moments";
@@ -60,6 +61,7 @@ import TokenNamingLink from "@/components/admin/TokenNamingLink";
 import TokensTab from "@/components/admin/TokensTab";
 import SetupSection from "@/components/admin/SetupSection";
 import HandoverTab from "@/components/admin/HandoverTab";
+import FailuresTab from "@/components/admin/FailuresTab";
 import VariablesTab from "@/components/admin/VariablesTab";
 import VotingWeightsPanel from "@/components/admin/VotingWeightsPanel";
 import NeedsPanel, { NeedsSetupStep, useNeedsSetupObservation } from "@/components/admin/NeedsPanel";
@@ -71,7 +73,9 @@ import { ExampleChip, ExamplesBanner, forgetExamplesCache, RETIRES_WITH } from "
 // submissions on the site: a request to walk the land, and a signed 508(c)(1)(a)
 // membership. Both were reachable only by scrolling "All types". The strings are
 // the ones the pages actually POST, from Visit.tsx and LoveLetter.tsx.
-const FORM_TYPES = ["work-with-us", "quest-proposal", "visit-inquiry", "membership-508", "investor", "steward", "resident", "prosperity", "contact"] as const;
+// membership-request is somebody with no invitation asking to join, from
+// RequestMembership.tsx (Rye, 2026-09-09: requests sit in admin for a team to talk to them).
+const FORM_TYPES = ["work-with-us", "quest-proposal", "visit-inquiry", "membership-508", "membership-request", "investor", "steward", "resident", "prosperity", "contact"] as const;
 
 /**
  * THE SERVER'S OWN SENTENCE, WHEN IT HAS ONE.
@@ -991,10 +995,11 @@ function SubmissionsTab({ password }: { password: string }) {
                     )}
                   </div>
                   {s.type === "role-application" && <RaisedHandTerm data={s.data} />}
+                  {s.type === "power-application" && <PowerHandNote data={s.data} />}
                   <table className="w-full text-sm">
                     <tbody>
                       {Object.entries(s.data)
-                        .filter(([k]) => k !== "attachmentName" && !(s.type === "role-application" && RAISED_HAND_TERM_KEYS.includes(k)))
+                        .filter(([k]) => k !== "attachmentName" && !(s.type === "role-application" && RAISED_HAND_TERM_KEYS.includes(k)) && !(s.type === "power-application" && POWER_HAND_KEYS.includes(k)))
                         .map(([k, v]) => (
                         <tr key={k} className="border-b border-gray-100 last:border-0">
                           <td className="py-1.5 pr-4 font-medium text-gray-600 capitalize w-1/4 align-top">
@@ -2971,109 +2976,35 @@ function InvestorSummaryAdminTab({ password }: { password: string }) {
   );
 }
 
-// ── Game Admin: Quest Claims consent queue ────────────────────────────────────
+// ── Game Admin: Quest Claims, a door to /review ───────────────────────────────
 
-function QuestClaimsTab({ password }: { password: string }) {
-  const [claims, setClaims] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [amounts, setAmounts] = useState<Record<string, number>>({});
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/admin/quest-claims`, { headers: authHeaders(password) });
-      const data = await res.json();
-      setClaims(Array.isArray(data) ? data : []);
-    } catch { setClaims([]); }
-    setLoading(false);
-  }, [password]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const consent = async (id: string, approve: boolean) => {
-    try {
-      const res = await fetch(`${API_BASE}/admin/quest-claims/${id}/consent`, {
-        method: "POST",
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ approve, amount: amounts[id] ?? 50 }),
-      });
-      // Surface what the server actually said. The refusals here are the
-      // informative ones — no self-consent, work not submitted yet, amount
-      // outside what the board advertises — and "Action failed" taught the
-      // steward nothing about which rule they had just met.
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.error || "Action failed");
-      }
-      toast.success(approve ? "Consented and credited" : "Declined");
-      load();
-    } catch (e: any) { toast.error(e?.message || "Action failed"); }
-  };
-
-  const pending = claims.filter((c) => c.status === "submitted");
-  const active = claims.filter((c) => c.status === "claimed");
-  const resolved = claims.filter((c) => c.status === "consented" || c.status === "declined");
-
+/**
+ * The consent queue lives on /review now (client/src/components/review/ConsentQueue.tsx).
+ *
+ * This tab was the only consent screen for as long as the server has let a
+ * steward who is not an admin consent, and `AdminGate` refused every one of
+ * them. Its amount box also opened at a hardcoded 50, a certain 409 on any
+ * quest whose advertised range leaves 50 out. The screen on /review answers
+ * anybody holding `quest.consent`, opens each box on the quest's floor and
+ * refuses what the consent route would refuse, so this stays only as a door
+ * where admins already look for it.
+ */
+function QuestClaimsTab() {
   return (
     <div>
       <div className="mb-6">
         <h2 className="text-xl font-bold text-gray-900">Quest Claims</h2>
         <p className="text-sm text-gray-500 mt-1">Consent releases the reward. Value only moves with a human yes.</p>
       </div>
-      {loading ? <div className="text-center py-12 text-gray-400">Loading...</div> : (
-        <div className="space-y-8">
-          <div>
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Awaiting consent ({pending.length})</h3>
-            {pending.length === 0 && <p className="text-sm text-gray-400">Nothing waiting.</p>}
-            <div className="space-y-2">
-              {pending.map((c) => (
-                <div key={c.id} className="border border-gray-200 rounded-xl p-4">
-                  <div className="flex items-center justify-between gap-3 mb-1">
-                    <span className="font-medium text-gray-900">{c.userName}</span>
-                    <span className="text-xs text-gray-400">{new Date(c.submittedAt ?? c.claimedAt).toLocaleDateString()}</span>
-                  </div>
-                  <p className="text-sm text-gray-600 mb-1">{c.questTitle}</p>
-                  {c.note && <p className="text-sm text-gray-500 italic mb-1">"{c.note}"</p>}
-                  {c.artifactUrl && (
-                    <a href={c.artifactUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-teal-deep underline break-all">
-                      {c.artifactUrl}
-                    </a>
-                  )}
-                  <div className="flex items-center gap-2 mt-3">
-                    <input
-                      type="number"
-                      min={0}
-                      value={amounts[c.id] ?? 50}
-                      onChange={(e) => setAmounts({ ...amounts, [c.id]: parseInt(e.target.value) || 0 })}
-                      className="w-24 px-2 py-1.5 text-sm border border-gray-200 rounded-lg"
-                    />
-                    <button onClick={() => consent(c.id, true)} className="px-3 py-1.5 text-sm bg-teal-deep text-white rounded-lg">
-                      Consent + credit
-                    </button>
-                    <button onClick={() => consent(c.id, false)} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
-                      Decline
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div>
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">In progress ({active.length})</h3>
-            {active.map((c) => (
-              <p key={c.id} className="text-sm text-gray-600 py-1">{c.userName} · {c.questTitle}</p>
-            ))}
-          </div>
-          <div>
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Resolved ({resolved.length})</h3>
-            {resolved.slice(0, 10).map((c) => (
-              <p key={c.id} className="text-sm text-gray-400 py-1">
-                {c.userName} · {c.questTitle} · {c.status}{c.amount ? ` (+${c.amount})` : ""}
-              </p>
-            ))}
-          </div>
-        </div>
-      )}
+      <div className="bg-white border border-gray-100 rounded-xl p-5">
+        <p className="text-sm text-gray-700">
+          Finished work waiting for a witness is on the Review page, beside the other things a steward
+          decides. Stewards who are not admins can open it there.
+        </p>
+        <a href="/review" className="inline-block mt-3 text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium">
+          Open Review
+        </a>
+      </div>
     </div>
   );
 }
@@ -10154,7 +10085,7 @@ export default function Admin() {
           {activeTab === "uploaded-files" && <UploadedFilesTab password={password} />}
           {activeTab === "training-modules" && <TrainingModulesTab password={password} />}
           {activeTab === "quests-admin" && <QuestsTab password={password} />}
-          {activeTab === "quest-claims" && <QuestClaimsTab password={password} />}
+          {activeTab === "quest-claims" && <QuestClaimsTab />}
           {activeTab === "players" && <PlayersTab password={password} />}
           {activeTab === "game-roles" && <GameRolesTab password={password} />}
           {activeTab === "handover" && <HandoverTab password={password} />}
@@ -10164,6 +10095,7 @@ export default function Admin() {
           {activeTab === "org-chart" && <OrgChartTab password={password} />}
           {activeTab === "governance-weights" && <VotingWeightsPanel password={password} onOpenTab={setActiveTab} />}
           {activeTab === "brain" && <VillageBrainTab password={password} />}
+          {activeTab === "failures" && <FailuresTab password={password} />}
           {activeTab === "drafts" && <DraftQueueTab password={password} />}
           {activeTab === "seasons-patterns" && <SeasonPatternsTab password={password} />}
           {activeTab === "circles-map" && <CirclesMapTab password={password} />}

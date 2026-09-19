@@ -150,6 +150,23 @@ export const VARIABLES: VariableDef[] = [
     max: 20,
   },
   {
+    key: "membership.invite_only",
+    category: "Membership",
+    label: "Joining is by invitation",
+    /*
+     * Rye's ruling, 2026-09-09: "all members are by invitation". ON by default
+     * because that is the ruling. A dial because thirteen forks inherit this
+     * file, and a village that already welcomes anybody through its door keeps
+     * a way to say so. STRUCTURAL for the reason the bar above is: who may make
+     * an account here is not a routine change.
+     */
+    criticality: "structural",
+    description:
+      "When on, an account can only be made with an invitation link a member sent, by email sign-up or by Google. Anybody else can still look around, and is asked to send a request to join, which lands in the admin queue. When off, anybody can make an account, and an invitation link still counts as the inviter's vouch.",
+    type: "boolean",
+    default: "true",
+  },
+  {
     key: "arrival.greeter_role",
     category: "Membership",
     label: "The seat that greets a new arrival",
@@ -648,12 +665,12 @@ export const VARIABLES: VariableDef[] = [
     category: "Quests",
     label: "How much can be released at consent",
     description:
-      "Controls what an admin may award when consenting to finished work. Capping it at the posted amount keeps the quest board honest: what a quest advertises is what it pays.",
+      "Controls what a steward may award when consenting to finished work, and the most a consent can pay. A standing badge can lift a consent toward that top and never past it, so under the posted amount what a quest advertises is what it pays.",
     type: "choice",
     default: "posted",
     choices: [
       { value: "posted", label: "Exactly the posted amount", hint: "Safest. The board is the contract." },
-      { value: "capped", label: "Up to a multiple of the posted amount", hint: "Allows a bonus for exceptional work, within a ceiling." },
+      { value: "capped", label: "The posted range, with a bonus ceiling above it", hint: "Never below the posted floor. Exceptional work can earn up to a multiple of the posted top." },
       { value: "unlimited", label: "Any amount", hint: "No ceiling. Only sensible with a very small, very trusted admin group." },
     ],
   },
@@ -662,7 +679,7 @@ export const VARIABLES: VariableDef[] = [
     category: "Quests",
     label: "Bonus ceiling multiplier",
     description:
-      "When the cap mode is 'up to a multiple', this is the most that can be awarded as a multiple of the posted amount. 2 means a quest posted at 100 can pay at most 200.",
+      "When the cap mode allows a bonus ceiling, this is that ceiling as a multiple of the top of the posted range. 2 means a quest posted at 50-100 can pay at most 200, badges included.",
     type: "decimal",
     default: "2",
     min: 1,
@@ -683,7 +700,7 @@ export const VARIABLES: VariableDef[] = [
     category: "Quests",
     label: "Allow consenting at zero",
     description:
-      "When on, a claim can be consented with an amount of 0, meaning 'acknowledged, no recognition'. The claim completes and any stay-credit reward still releases, but no recognition moves. When off, consent must release at least 1.",
+      "When on, a steward may consent any claim at 0, meaning 'acknowledged, no recognition', whatever the quest advertises. The claim completes with no recognition, and no token the village's quest-completion rules would pay moves either, voice and credits included. A stay-credit reward the quest itself carries still releases, because a person set that payment on the quest, so in a village that weights votes by stay credits such a quest still moves weight. When off, 0 is possible only on a quest that advertises 0, such as one that pays in stay credits alone.",
     type: "boolean",
     default: "false",
   },

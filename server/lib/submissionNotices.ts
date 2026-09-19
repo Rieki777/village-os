@@ -20,6 +20,7 @@
  *    notification would arrive after the conversation it describes, telling
  *    somebody about a thread they are holding one end of.
  */
+import { asOffer } from "../../shared/powerHands";
 
 /**
  * The thing they sent, in their words, keyed by the pipeline's type string.
@@ -32,10 +33,12 @@ const WHAT_THEY_SENT: Record<string, string> = {
   // account here. Different from a raised hand, which offers to take on a
   // seat nobody is holding.
   "seat-claim": "your ask to be confirmed in a seat",
+  "power-application": "your offer to take on a power",
   "work-with-us": "your proposal to work together",
   "quest-proposal": "the quest you proposed",
   "visit-inquiry": "your request to visit",
   "membership-508": "your membership request",
+  "membership-request": "your request to join",
   "steward-interest": "your interest in stewarding",
   steward: "your interest in stewarding",
   resident: "your request to live here",
@@ -51,18 +54,23 @@ const FALLBACK = "what you sent us";
 
 /**
  * A raised hand names its seat, because a member may have raised several and
- * "your offer to hold a seat" would leave them guessing which one moved. An
- * ask to be confirmed in a seat names it for the same reason: a backfilled
- * chart can carry one person's name on several seatings. Only these two types
- * carry a name worth saying, because it is a seat the village itself wrote
- * down. The rest are free text a stranger typed, and quoting that back into
- * an email subject is a different decision.
+ * "your offer to hold a seat" would leave them guessing which one moved. A hand
+ * for a power names its power for the same reason, in the power's own label, and
+ * an ask to be confirmed in a seat names the seat because a backfilled chart can
+ * carry one person's name on several seatings. Only these three carry a name
+ * worth saying, because each one is something the village itself wrote down. The
+ * rest are free text a stranger typed, and quoting that back into an email
+ * subject is a different decision.
  */
 export function submissionSubject(type: string, data?: Record<string, unknown> | null): string {
   const base = WHAT_THEY_SENT[type] ?? FALLBACK;
   const seat = String((data as any)?.roleName ?? "").trim();
   if (type === "role-application" && seat) return `your offer to hold ${seat}`;
   if (type === "seat-claim" && seat) return `your ask to be confirmed as ${seat}`;
+  if (type === "power-application") {
+    const power = String((data as any)?.powerLabel ?? "").trim();
+    if (power) return `your offer to ${asOffer(power)}`;
+  }
   return base;
 }
 

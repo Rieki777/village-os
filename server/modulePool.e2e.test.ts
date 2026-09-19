@@ -25,7 +25,8 @@ import os from "os";
 import path from "path";
 import { spawn, type ChildProcess } from "child_process";
 import mysql from "mysql2/promise";
-import { E2E_BOOT_DEADLINE_MS, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { waitForHealth } from "./db/e2eBoot";
 import { sealCycle } from "./repos/moduleUsage";
 import { cycleIdFor } from "./lib/gratitude-cycles";
 import { verifyDocument } from "./lib/villageExport";
@@ -133,14 +134,9 @@ describe.skipIf(!DB_CONFIGURED)("the builders' pool, driven", () => {
     // letting the boot poll succeed against whatever else answers this port.
     child.on("exit", (code) => logs.push(`\n[the spawned server exited with code ${code}]\n`));
 
-    const deadline = Date.now() + E2E_BOOT_DEADLINE_MS;
-    for (;;) {
-      if (Date.now() > deadline) throw new Error(`server did not start in ${E2E_BOOT_DEADLINE_MS / 1000}s:\n${logs.join("")}`);
-      try {
-        if ((await fetch(`${BASE}/health`)).ok) break; // module-review-ok: the boot poll against the local test server
-      } catch { /* not up yet */ }
-      await new Promise((r) => setTimeout(r, 400));
-    }
+    // Reports the last /health answer and when the server logged that it was
+    // listening, and stops at once if the child died. See ./db/e2eBoot.ts.
+    await waitForHealth({ base: BASE, logs, child });
 
     /*
      * ASSERT EACH STEP WHERE ITS VALUE IS PRODUCED.

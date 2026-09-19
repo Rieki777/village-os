@@ -38,7 +38,11 @@
  * these members a second time, because they are already gone. So the re-ask has
  * to be something somebody presses, and it lives on the same screen as the
  * number, because the person reading the count is the person who wants to press
- * it. A scheduled job can come later, once anyone has watched this work.
+ * it. The failed-actions job (server/lib/failedActions.ts) now finishes one kind
+ * on its own: a sweep that stopped AFTER the account was closed, spaced hours
+ * apart, and never straight after somebody pressed this button. A sweep that
+ * stopped before the account was closed still waits for this button, because
+ * that account still works and somebody may be using it.
  *
  * ── WHY /review AND NOT THE ADMIN PANEL ──────────────────────────────────
  *

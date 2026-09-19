@@ -48,7 +48,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { provisionTestDb, testDbConfigured, untilALockIsAwaited, type TestDb } from "../db/testDb";
 import {
   claimsRepo,
   questsRepo,
@@ -207,10 +207,10 @@ describe.skipIf(!configured)("quest claims under concurrent actors (MySQL)", () 
         },
         async (_conn, c) => {
           asked.push({ amount: Number(c.amount ?? 0), by: String(c.consentedBy ?? "") });
-          // Hold the transaction open long enough that the other steward is
-          // demonstrably inside the window and blocked on the claim's row lock,
-          // instead of arriving politely after the commit.
-          await new Promise((r) => setTimeout(r, 60));
+          // Hold the transaction open until the other steward is demonstrably
+          // inside the window, blocked on the claim's row lock, instead of
+          // arriving politely after the commit.
+          await untilALockIsAwaited(pool);
           return { ok: true };
         },
       );
@@ -301,9 +301,9 @@ describe.skipIf(!configured)("quest claims under concurrent actors (MySQL)", () 
       },
       async () => {
         inside();
-        // Long enough that the second actor is queued on the row lock, not
-        // arriving politely after the commit.
-        await new Promise((r) => setTimeout(r, 60));
+        // Until the second actor is queued on the row lock, not arriving
+        // politely after the commit.
+        await untilALockIsAwaited(pool);
         return { ok: true };
       },
     );
@@ -353,9 +353,9 @@ describe.skipIf(!configured)("quest claims under concurrent actors (MySQL)", () 
         ["claim-held", "q-held", "Tend the swale", "u-ada", "Ada Wren"],
       );
       const removal = quests.remove("q-held");
-      // The delete is now queued on the quest row. A delete that counted
-      // outside the lock has already counted zero by the time this commits.
-      await new Promise((r) => setTimeout(r, 60));
+      // Commit only once the delete is queued on the quest row. A delete that
+      // counted outside the lock has counted zero by then.
+      await untilALockIsAwaited(pool);
       await holder.commit();
       expect(await removal).toMatchObject({ ok: false, reason: "in_flight", count: 1 });
     } finally {
