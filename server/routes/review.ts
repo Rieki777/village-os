@@ -197,26 +197,29 @@ function toCard(p: ExternalProposalRow) {
 }
 
 /**
- * How many changes accepting these cards whole would put into one draft, or
- * null when none of them is an org proposal.
+ * How many changes each org card would put into the batch's one draft, by
+ * proposal id. Empty when none of them is an org proposal.
  *
  * Counted with the reader and the flags `acceptInto` uses, because one
  * proposal can carry a list of seats and a count of cards would understate it.
  * A payload the reader cannot take counts as one: this runs inside the queue
  * read, and a throw here would empty the page of every batch at once.
+ *
+ * PER CARD, so the page can put a steward's edit in its card's place. Accepting
+ * uses the edited payloads, and a total counted only as sent could say a batch
+ * fits when the accept blocks part of it.
  */
-function proposedChangeCount(items: ReturnType<typeof toCard>[], circles: readonly LiveCircle[]): number | null {
+function proposedChangeShares(items: ReturnType<typeof toCard>[], circles: readonly LiveCircle[]): Record<string, number> {
   const org = items.filter((p) => ORG_KINDS.has(p.kind));
-  if (!org.length) return null;
-  let n = 0;
+  const shares: Record<string, number> = {};
   org.forEach((p, i) => {
     try {
-      n += readProposedSeats(p.payload, circles, { readsTitle: i === 0, readsRationale: org.length === 1 }).seats.length;
+      shares[p.id] = readProposedSeats(p.payload, circles, { readsTitle: i === 0, readsRationale: org.length === 1 }).seats.length;
     } catch {
-      n += 1;
+      shares[p.id] = 1;
     }
   });
-  return n;
+  return shares;
 }
 
 export function register(app: Express, deps: Deps): void {
@@ -301,16 +304,22 @@ export function register(app: Express, deps: Deps): void {
     const circles = circlesRepo.all() as LiveCircle[];
 
     res.json({
-      batches: Array.from(batches.entries()).map(([batchId, items]) => ({
-        batchId,
-        moduleId: items[0]?.moduleId ?? null,
-        receivedAt: items[0]?.receivedAt ?? null,
-        // How many changes accepting this batch whole would put in its draft,
-        // counted the way `acceptInto` counts them. Null when the batch holds no
-        // org proposals, so the page says nothing about a limit it cannot meet.
-        proposedChanges: proposedChangeCount(items, circles),
-        items,
-      })),
+      batches: Array.from(batches.entries()).map(([batchId, items]) => {
+        const shares = proposedChangeShares(items, circles);
+        const counted = Object.values(shares);
+        return {
+          batchId,
+          moduleId: items[0]?.moduleId ?? null,
+          receivedAt: items[0]?.receivedAt ?? null,
+          // How many changes accepting this batch whole would put in its draft,
+          // counted the way `acceptInto` counts them. Null when the batch holds no
+          // org proposals, so the page says nothing about a limit it cannot meet.
+          proposedChanges: counted.length ? counted.reduce((a, n) => a + n, 0) : null,
+          // Each org card's share of that count, so the page counts an edit in its place.
+          proposedChangesByItem: shares,
+          items,
+        };
+      }),
       proposalChangeLimit,
       // The same check GET /api/admin/variables makes, so a steward is offered
       // the admin page only when that page will open for them.
@@ -622,7 +631,9 @@ export function register(app: Express, deps: Deps): void {
     if (!actor) return res.status(401).json({ error: "auth_required", message: "Withdrawing a draft needs a named person" });
     const draftId = String(req.params.id);
     const r = await withdrawDraft(getPool(), draftId);
-    if (!r.ok) return res.status(409).json({ error: r.error });
+    // `draftStatus` tells this refusal apart from the break-glass one, which is
+    // also a 409 and changes nothing about the draft.
+    if (!r.ok) return res.status(409).json({ error: r.error, draftStatus: r.status });
     const reopened = await reopenProposalsFor(getPool(), draftId);
     void recordEvent(getPool(), {
       kind: "org",

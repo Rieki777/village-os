@@ -49,6 +49,8 @@ export function notReadLines(
 export interface NotRead {
   draftId: string | null;
   lines: NotReadLine[];
+  /** That draft went live, so these fields cannot ride in on a withdraw any more. */
+  published?: boolean;
 }
 
 export const NOTHING_LEFT_OUT: NotRead = { draftId: null, lines: [] };
