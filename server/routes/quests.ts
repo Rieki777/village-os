@@ -721,16 +721,41 @@ export function register(app: Express, deps: Deps): void {
      * so a steward who was not one was rung for work they could not reach.
      */
     const questTitle = String(active.questTitle ?? "a quest");
-    for (const recipientId of await questConsentRecipients()) {
-      if (recipientId === user.id) continue;
-      await notify({
-        userId: recipientId,
-        type: "quest_submitted",
-        title: `${firstName(user.name)} submitted work on ${questTitle}`,
-        body: "Read what they did and consent when you are ready. Value moves when a steward says so.",
-        link: "/review",
-        dedupeKey: `quest-submission:${active.id}:${recipientId}`,
-      });
+    /*
+     * A BELL THAT DOES NOT RING MUST NOT UNDO A SUBMISSION.
+     *
+     * The claim is `submitted` and committed before this loop starts. The
+     * loop awaited `notify` with nothing around it, so one recipient whose
+     * notification threw answered 500 to a member whose work HAD been handed
+     * in, and stopped the sweep where it stood, leaving every steward after
+     * that one unrung. The member reads the 500 and submits again, and the
+     * dedupe key then correctly rings nobody twice, so the stewards who were
+     * skipped stay skipped for good.
+     *
+     * Two guards, because there are two failures. The inner one keeps one
+     * recipient's failure off the others' bells. The outer one covers the
+     * read of who to ring at all, which is a database call and can fail the
+     * same way. Neither can reach the response, and both say loudly what did
+     * not happen, because a bell nobody hears is invisible everywhere else.
+     */
+    try {
+      for (const recipientId of await questConsentRecipients()) {
+        if (recipientId === user.id) continue;
+        try {
+          await notify({
+            userId: recipientId,
+            type: "quest_submitted",
+            title: `${firstName(user.name)} submitted work on ${questTitle}`,
+            body: "Read what they did and consent when you are ready. Value moves when a steward says so.",
+            link: "/review",
+            dedupeKey: `quest-submission:${active.id}:${recipientId}`,
+          });
+        } catch (bell) {
+          console.error(`[quests] claim ${active.id}: the submission bell for ${recipientId} did not send`, bell);
+        }
+      }
+    } catch (who) {
+      console.error(`[quests] claim ${active.id}: could not read who to ring about the submission`, who);
     }
     res.json(updated);
   });
