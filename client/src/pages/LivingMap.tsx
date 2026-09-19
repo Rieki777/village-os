@@ -378,6 +378,44 @@ export default function LivingMap() {
     }
   }, []);
 
+  /**
+   * The ground the map draws its village on.
+   *
+   * The artifact ships Amora's satellite plate baked in, and for a long time
+   * that was the ONLY ground a deployment could have: a new village's map
+   * needed a developer, three Python scripts and a redeploy of a 5.7 MB file.
+   * This push is what makes the ground data instead of code -- the village's
+   * own picture, fetched once into the uploads volume by
+   * `POST /api/admin/land/imagery` and served from there.
+   *
+   * ABSENT MEANS KEEP YOUR OWN, the same rule the walk and the scene follow.
+   * A village that has not placed itself answers `imageryUrl: null` and gets
+   * no message at all, so the map draws the seed it was built with. That is
+   * the ordinary state of a fresh fork and it is not a failure.
+   *
+   * No surround travels with it yet, and that is deliberate rather than
+   * unfinished: the wide plate is a second, wider fetch this route does not
+   * do today. The artifact already knows what to do in the meantime -- a
+   * village core with no surround of its own suppresses the SEED surround,
+   * because that seed is Amora's coastline and drawing it around somebody
+   * else's land would invent a sea. When the wider fetch lands it attaches
+   * here as `surround: { url, rect }`.
+   */
+  const pushGround = useCallback(async () => {
+    const win = frame.current?.contentWindow;
+    if (!win) return;
+    try {
+      const res = await fetch("/api/land");
+      if (!res.ok) return;
+      const body = await res.json();
+      const url = typeof body?.imageryUrl === "string" ? body.imageryUrl : "";
+      if (!url) return;
+      win.postMessage({ type: "ground", core: { url } }, window.location.origin);
+    } catch {
+      /* The map keeps the ground it is already standing on. */
+    }
+  }, []);
+
   const pushHand = useCallback(async () => {
     const win = frame.current?.contentWindow;
     if (!win) return;
@@ -617,11 +655,13 @@ export default function LivingMap() {
       if (!data || typeof data !== "object") return;
 
       if (data.type === "grounds-ready") {
-        // Two pushes, deliberately. The config is the same for everyone and
-        // needs no session; the hand depends on who is asking. Sending them
-        // separately means a signed-out visitor still gets the published land
-        // even though their hand request tells them they may do nothing.
+        // The config and the ground are the same for everyone and need no
+        // session; the hand depends on who is asking. Sending them separately
+        // means a signed-out visitor still gets the published land and the
+        // village's own photograph under it, even though their hand request
+        // tells them they may do nothing.
         pushConfig();
+        pushGround();
         pushHand();
         pushPhotos();
         // Third and last, because it is the only one nothing waits on: the org
@@ -649,7 +689,7 @@ export default function LivingMap() {
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [navigate, pushConfig, pushHand, pushPhotos, pushLens, exitApp, relayPromise, relayScene]);
+  }, [navigate, pushConfig, pushGround, pushHand, pushPhotos, pushLens, exitApp, relayPromise, relayScene]);
 
   /**
    * A save in the wizard retints an open map.
