@@ -46,6 +46,7 @@ import ArchetypesPanel from "@/components/admin/ArchetypesPanel";
 import EventsAdminPanel from "@/components/EventsAdminPanel";
 import ResourcesAdminPanel from "@/components/power/ResourcesAdminPanel";
 import { CrowdpoolAdminTab, ForumCategoriesEditor, ToolsCategoriesEditor } from "@/components/admin/ModuleConfigPanels";
+import ModuleSettingsSection from "@/components/admin/ModuleSettingsSection";
 import { CONTENT_SECTIONS, emptyContentFor } from "@/components/admin/contentSections";
 import { displayCurrencyProblem } from "@shared/money";
 import { formatTokenAmount } from "@/lib/tokenAmount";
@@ -3599,6 +3600,24 @@ function ModulesTab({ password }: { password: string }) {
   const [priceFilter, setPriceFilter] = useState("all");
   /** Which listing has its detail open. One at a time, so the page stays readable. */
   const [openId, setOpenId] = useState<string | null>(null);
+  /**
+   * Which listing has its SETTINGS open, and the deep link that opens one.
+   *
+   * `/admin?tab=modules&module=<id>` is the address Game Mechanics sends a
+   * founder to for a group of dials that lives on a card now, so the link has
+   * to land on the settings rather than on the catalog.
+   */
+  const [settingsId, setSettingsId] = useState<string | null>(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("module");
+    } catch {
+      return null;
+    }
+  });
+  useEffect(() => {
+    if (loading || !settingsId) return;
+    document.getElementById(`module-card-${settingsId}`)?.scrollIntoView?.({ block: "start" });
+  }, [loading, settingsId]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -3858,8 +3877,8 @@ function ModulesTab({ password }: { password: string }) {
             <h3 className="font-semibold text-gray-900 mb-1">Hypha integration</h3>
             <p className="text-xs text-gray-600 mb-3">
               All governance, voting, and equity live on your Hypha DHO; modules link
-              out and never rebuild it. Set the address in Game Mechanics → Hypha
-              (hypha.org_url). Blank hides every Hypha button.
+              out and never rebuild it. Set the address on the Hypha Bridge card below,
+              under Settings (hypha.org_url). Blank hides every Hypha button.
             </p>
             {data.hypha?.configured ? (
               <div className="flex flex-wrap gap-2">
@@ -3997,7 +4016,7 @@ function ModulesTab({ password }: { password: string }) {
                * vendor name, a licence key and a module id can all be one long
                * token too, and `overflow-wrap` inherits.
                */
-              <div key={m.id} className="border border-gray-200 rounded-xl p-5 min-w-0 break-words">
+              <div key={m.id} id={`module-card-${m.id}`} className="border border-gray-200 rounded-xl p-5 min-w-0 break-words">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="max-w-xl min-w-0">
                     <h3 className="font-semibold text-gray-900">
@@ -4088,6 +4107,17 @@ function ModulesTab({ password }: { password: string }) {
                     >
                       Library page
                     </Link>
+                    {/* Every setting this module reads, on the card, at any
+                        lifecycle (Rye, 2026-09-15). A button rather than a
+                        section that is always open: eighteen cards each
+                        unrolling their dials is a page nobody can scan. */}
+                    <button
+                      onClick={() => setSettingsId(settingsId === m.id ? null : m.id)}
+                      aria-expanded={settingsId === m.id}
+                      className="text-sm sm:text-xs font-medium text-teal-deep underline mt-2 min-h-[44px] sm:min-h-0 pr-3"
+                    >
+                      {settingsId === m.id ? "Hide settings" : "Settings"}
+                    </button>
                   </div>
                   {m.core ? (
                     /* This pill is a core module's whole lifecycle answer, so
@@ -4144,8 +4174,21 @@ function ModulesTab({ password }: { password: string }) {
                         already validates and nothing more: a value outside the
                         union still renders blank, exactly as it does today. */}
                     {LIFECYCLE_HINT[m.lifecycle as ModuleLifecycle]}
-                    {m.variableKeys.length > 0 && ` Tunables now visible in Game Mechanics: ${m.variableKeys.join(", ")}.`}
+                    {/* The sentence that used to follow sent a founder to Game
+                        Mechanics for this module's tunables. They are on this
+                        card now, under Settings, and they are there while the
+                        module is off as well. */}
                   </p>
+                )}
+
+                {settingsId === m.id && (
+                  <ModuleSettingsSection
+                    moduleId={m.id}
+                    moduleName={m.name}
+                    lifecycle={String(m.served ?? m.lifecycle ?? "off")}
+                    moduleNames={Object.fromEntries(all.map((x: any) => [x.id, x.name]))}
+                    password={password}
+                  />
                 )}
 
                 {/* The listing detail. Inline rather than a modal, so the list
@@ -4241,7 +4284,12 @@ function ModulesTab({ password }: { password: string }) {
                     <div className="flex flex-wrap gap-x-6 gap-y-1 text-gray-500">
                       {m.recommends.length > 0 && <span>works better with: {m.recommends.join(", ")}</span>}
                       {m.capabilities.length > 0 && <span>adds permissions: {m.capabilities.join(", ")}</span>}
-                      {m.variableKeys.length > 0 && <span>tunables: {m.variableKeys.length}</span>}
+                      {/* The count of tunables stood here. It read
+                          `variableKeys`, which is now only the keys a module
+                          owns OUTSIDE its own namespace, so the number would
+                          undercount every module that owns one. Settings has
+                          its own button above, and the section prints the
+                          whole list. */}
                     </div>
                   </div>
                 )}
@@ -8420,7 +8468,8 @@ function CyclesTab({ password }: { password: string }) {
                   </p>
                   <p className="text-sm text-gray-600 mt-1">
                     Split across everyone acknowledged that lunation, in proportion to what
-                    they received. Set by gratitude.pool_per_cycle in Game Mechanics.
+                    they received. Set by gratitude.pool_per_cycle, on its module card
+                    under Modules.
                   </p>
                   {pending.pool.problem && (
                     <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-2">
@@ -8604,7 +8653,12 @@ function CyclesTab({ password }: { password: string }) {
               </div>
               {blocked && (
                 <p className="text-xs text-red-700 mt-2">
-                  Fix the pool setting in Game Mechanics first. The server refuses this close.
+                  {/* The card is named for the recognition token, and a village
+                      renames that token, so the sentence points at the card
+                      without spelling this village's word for it
+                      (scripts/check-village-facts.mjs). */}
+                  Fix the pool setting on its module card under Modules first. The server
+                  refuses this close.
                 </p>
               )}
             </div>
@@ -10068,7 +10122,7 @@ export default function Admin() {
           {activeTab === "modules" && <ModulesTab password={password} />}
           {activeTab === "housing" && <HousingAdminPanel password={password} />}
           {activeTab === "org-chart" && <OrgChartTab password={password} />}
-          {activeTab === "governance-weights" && <VotingWeightsPanel password={password} onOpenTab={setActiveTab} />}
+          {activeTab === "governance-weights" && <VotingWeightsPanel password={password} />}
           {activeTab === "brain" && <VillageBrainTab password={password} />}
           {activeTab === "failures" && <FailuresTab password={password} />}
           {activeTab === "drafts" && <DraftQueueTab password={password} />}

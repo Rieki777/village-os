@@ -45,7 +45,6 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import { stalemateWarningFor } from "@shared/ballotSubjects";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
-import HyphaModulePanel from "@/components/admin/HyphaModulePanel";
 
 /*
  * IntegrateDaoPanel USED TO LIVE HERE and is deleted rather than kept
@@ -64,6 +63,8 @@ const ADMIN_MOVES = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
 
 export default function VariablesTab({ password }: { password: string }) {
   const [vars, setVars] = useState<any[]>([]);
+  /** One row per module holding settings, as the variables route reports them. */
+  const [moved, setMoved] = useState<Array<{ id: string; name: string; lifecycle: string; keys: string[] }>>([]);
   const [loading, setLoading] = useState(true);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
@@ -89,7 +90,8 @@ export default function VariablesTab({ password }: { password: string }) {
         ? data
         : (data.categories ?? []).flatMap((c: any) => c.variables ?? []);
       setVars(flat);
-    } catch { setVars([]); }
+      setMoved(Array.isArray(data) ? [] : (data.moduleSettings ?? []));
+    } catch { setVars([]); setMoved([]); }
     setLoading(false);
   }, [password]);
 
@@ -164,7 +166,14 @@ export default function VariablesTab({ password }: { password: string }) {
     ].join(" ").toLowerCase();
     return terms.every((t) => hay.includes(t));
   };
-  const filtered = vars.filter(matches);
+  /*
+   * A dial a module owns is edited on that module's card and is not listed
+   * twice (Rye, 2026-09-15). The server tags every dial with its owning
+   * modules, so this filter reads an answer rather than deciding one, and an
+   * untagged payload (an older server, or the flat array shape) leaves every
+   * dial here where it has always been.
+   */
+  const filtered = vars.filter((v) => !(v.modules ?? []).length).filter(matches);
   const byCategory: Record<string, any[]> = {};
   for (const v of filtered) (byCategory[v.category] ??= []).push(v);
 
@@ -178,16 +187,34 @@ export default function VariablesTab({ password }: { password: string }) {
           evolves. Every value is validated against its bounds before it lands.
         </p>
       </div>
-      {/* ONE PANEL, and two were stacked here. Rye: "there looks to be 2
-          modules for imputing tokens and contracts." IntegrateDaoPanel took a
-          token NAME and wrote the address into a variable with no contract
-          read; the Bridge lists what the account holds and reads name, symbol
-          and decimals off the contract before binding, which is what catches a
-          token minted to carry your exact name. The safer path survived and
-          the name box became a filter over the holdings. */}
-      <div className="mb-6">
-        <HyphaModulePanel password={password} vars={vars} onVariableSaved={load} />
-      </div>
+      {/*
+        WHERE THE MODULE DIALS WENT. Every setting a module reads is set up on
+        that module's own card now, including the Hypha Bridge panel that used
+        to sit at the top of this tab: a village configures a module before it
+        turns it on, and a dial that lives beside the switch is a dial somebody
+        can find. This list is the signpost, one line per module, and it names
+        the count so a founder can tell an empty card from a full one.
+      */}
+      {moved.length > 0 && (
+        <div className="mb-6 border border-gray-200 rounded-xl px-4 py-3">
+          <p className="text-sm font-medium text-gray-900">Settings that live on a module card</p>
+          <p className="text-xs text-gray-600 mt-0.5 mb-2">
+            Open the module in the Module Library and its settings are on the card, whether the
+            module is on or off.
+          </p>
+          <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-1">
+            {moved.map((m) => (
+              <li key={m.id} className="text-xs text-gray-700">
+                <a href={`/admin?tab=modules&module=${m.id}`} className="text-teal-deep underline">
+                  {m.name}
+                </a>{" "}
+                {m.keys.length} setting{m.keys.length === 1 ? "" : "s"}
+                {m.lifecycle === "off" ? ", module off" : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="mb-6">
         <div className="relative max-w-md">
           <input
