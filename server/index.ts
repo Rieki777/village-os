@@ -1689,17 +1689,37 @@ async function noteAssistantUsage(
   });
 }
 
-function legacySha256(password: string): string {
-  return crypto.createHash("sha256").update(password).digest("hex");
-}
-
 async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
 }
 
+/**
+ * A stored hash from before bcrypt: 64 hex characters, an unsalted SHA-256 of
+ * the password. Sign-in stopped accepting those on 2026-09-19, so a member
+ * still holding one has to set a password again before anything can confirm
+ * it. Sessions minted before that change still work, so such a member can be
+ * signed in and reach a password prompt they cannot satisfy.
+ *
+ * The two routes that CONFIRM a password use this to say so. Sign-in does NOT:
+ * it answers every failure the same way on purpose, because a different
+ * sentence for a known address tells a stranger which addresses exist.
+ */
+function storedHashNeedsReset(storedHash: string | null | undefined): boolean {
+  return /^[0-9a-f]{64}$/i.test(String(storedHash ?? ""));
+}
+
+const PASSWORD_RESET_NEEDED = "Your password needs setting again before you can confirm this. Ask for a set-password link, then try again.";
+
 async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
-  // Accept legacy SHA256 hashes for existing users (transparent upgrade on next save)
-  if (storedHash === legacySha256(password)) return true;
+  // Unsalted SHA-256 hashes are NOT accepted, as of 2026-09-19. They were kept
+  // working so an existing member would be re-hashed to bcrypt on their next
+  // sign-in, and that is why they persisted: the upgrade only ever reached
+  // members who signed in, so a dormant account kept an unsalted hash
+  // indefinitely. Unsalted means a leaked table is rainbow-table material for
+  // common passwords, and two members sharing a password store the same
+  // string. Rye ruled that those accounts go through a password reset
+  // instead. The set-password link is the door, and it works from any stored
+  // hash, including an empty one.
   try {
     return await bcrypt.compare(password, storedHash);
   } catch {
@@ -8128,12 +8148,6 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       await recordHit(acctBucket);
       return res.status(401).json({ error: "Invalid credentials" });
     }
-    // Transparent upgrade: if the user is still on a legacy SHA256 hash, re-hash with bcrypt
-    if (user.passwordHash === legacySha256(password)) {
-      const newHash = await hashPassword(password);
-      await members.update(user.id, (u: any) => { u.passwordHash = newHash; });
-      user.passwordHash = newHash;
-    }
     const token = encodeToken(AUTH_TOKEN_SECRET, user.id, email, user.tokenVersion ?? 0);
     res.json({ success: true, token, user: publicUser(user) });
   });
@@ -8381,7 +8395,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // was minted against; writing a new password invalidates it, so a link
     // that leaks (mail archive, forwarded thread, shared browser) cannot be
     // replayed inside its hour to take the account back.
-    if (claim.pw !== null && claim.pw !== passwordFingerprint(user.passwordHash)) {
+    if (claim.pw !== null && claim.pw !== passwordFingerprint(AUTH_TOKEN_SECRET, user.passwordHash)) {
       return res.status(401).json({ error: "This link has already been used. Ask for a new one." });
     }
     const hash = await hashPassword(String(password));
@@ -14756,6 +14770,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
     const { password, note } = req.body ?? {};
+    if (storedHashNeedsReset(user.passwordHash)) {
+      return res.status(403).json({ error: PASSWORD_RESET_NEEDED });
+    }
     if (!password || !(await verifyPassword(String(password), user.passwordHash))) {
       return res.status(403).json({ error: "Confirm with your password" });
     }
@@ -26543,6 +26560,9 @@ ${inner}
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
     const { password } = req.body ?? {};
+    if (storedHashNeedsReset(user.passwordHash)) {
+      return res.status(403).json({ error: PASSWORD_RESET_NEEDED });
+    }
     if (!password || !(await verifyPassword(String(password), user.passwordHash))) {
       return res.status(403).json({ error: "Confirm with your password to delete your account" });
     }
