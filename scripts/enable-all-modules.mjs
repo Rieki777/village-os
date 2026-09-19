@@ -52,6 +52,8 @@ const TARGETS = [
   ["resources", "public"],
   ["crowdpool", "public"],
   ["messaging", "members"],
+  // A member's request to be paid back is between them and the village.
+  ["redemption", "members"],
   // AFTER messaging, which it requires. Measured: with introductions ahead of
   // it the server answered 409 "requires messaging to be enabled first", the
   // module stayed off, and this script still exited 0. Order is load-bearing

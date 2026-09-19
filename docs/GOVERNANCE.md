@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `8edb31d6ced9a153`, which regenerating reproduces.
+It describes the sources at fingerprint `6f89503710f809cb`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -226,6 +226,7 @@ What closing a decision DOES, per subject type, and the one place that question 
 | Subject type | What a passed vote changes | How it reaches its executor |
 | --- | --- | --- |
 | `cycle_settlement` | Settles a moon that has ended and releases its cycle pool, at exactly the amounts the ballot showed. | its own entry in the close dispatcher |
+| `redemption` | Confirms that a member was paid off the platform for the tokens they asked to redeem, and destroys those tokens. Voting it down, or letting it lapse, gives them back. | its own entry in the close dispatcher |
 | `mechanics` | Moves the village's own dials, through the one amendment ledger that records every move. | its own entry in the close dispatcher |
 | `power_transfer` | Moves a power from the admin panel to a role the village names. | its own entry in the close dispatcher |
 | `power_grant` | Gives a role a power it does not carry yet. | its own entry in the close dispatcher |
@@ -237,7 +238,7 @@ What closing a decision DOES, per subject type, and the one place that question 
 | `governance_mode` | Changes how one vote is weighed, and which token carries the weight when it is a token. | its own entry in the close dispatcher |
 | `mint_rule` | Changes what the village mints and on what terms. It shares the dial executor and carries a higher quorum floor. | the same executor as `mechanics`, one executor and two subject types |
 
-11 subject types execute something. Whether a member's vote BINDS is derived from this same table, so the word on the decision page and the behaviour at the close cannot come apart.
+12 subject types execute something. Whether a member's vote BINDS is derived from this same table, so the word on the decision page and the behaviour at the close cannot come apart.
 
 ## Two kinds of decision, and when each one happens
 
@@ -538,7 +539,7 @@ What is broken today, by name. A document that only described the parts that wor
 - **A stored reason on a no vote is shown to nobody.** The widget invites a member to say why and the reader that serves votes drops it.
 - **The module lifecycle is edited by hand**, so a village turns its own governance on through the admin panel and never through a vote.
 - **Four displays about the hub bridge are false.** The sync flag is never set true so the card always says pending, the space check idles on every delivery, an outcome's source is hardcoded, and the card credits a hub with issuing a secret it does not issue.
-- **Two schema comments have drifted.** The engine's own migration lists five subject types in the column comment where the dispatcher now executes 11, and a later migration's header names the number of the one before it. Neither is edited, because a shipped migration file is never edited; both are stated here instead.
+- **Two schema comments have drifted.** The engine's own migration lists five subject types in the column comment where the dispatcher now executes 12, and a later migration's header names the number of the one before it. Neither is edited, because a shipped migration file is never edited; both are stated here instead.
 
 ## What is staged
 
@@ -1035,7 +1036,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "8edb31d6ced9a153",
+  "commit": "6f89503710f809cb",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -1152,6 +1153,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
   ],
   "executingSubjectTypes": [
     "cycle_settlement",
+    "redemption",
     "mechanics",
     "power_transfer",
     "power_grant",
@@ -2692,7 +2694,7 @@ The tables and columns the rules above rest on. The generator checks every one a
 | `delegations.accepted_at` | a delegation carries a choice only once the delegate accepts it |
 | `role_holder_terms` | a term survives an unrelated appointment |
 
-Checked against the 155 migration files in `drizzle/`.
+Checked against the 158 migration files in `drizzle/`.
 
 ## What this file is made from
 

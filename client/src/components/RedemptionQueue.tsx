@@ -22,6 +22,7 @@
  */
 import { useEffect, useState } from "react";
 import { authToken } from "@/lib/gameApi";
+import LongText from "@/components/LongText";
 import { formatHumanAmount } from "@/lib/tokenAmount";
 import { ClipboardCheck } from "lucide-react";
 
@@ -43,6 +44,17 @@ interface QueueRow {
   openedAt: string;
   expiresAt: string | null;
   warnings: Array<{ key: string; message: string }>;
+  /** Ruling 23: what this was worth the day it was asked for. Null when the
+   *  village put no number on it, which is a real state and not a gap. */
+  money: {
+    currency: string;
+    grossText: string;
+    feeText: string;
+    netText: string;
+    feePct: number;
+  } | null;
+  /** The village's own instructions, as they read that day. */
+  processText: string | null;
 }
 
 const day = (iso: string) =>
@@ -133,6 +145,31 @@ export default function RedemptionQueue() {
             to become {r.askedFor}, on {day(r.openedAt)}.
             {r.expiresAt ? ` It runs out on ${day(r.expiresAt)}.` : ""}
           </p>
+          {/* WHAT THE MEMBER AGREED TO, off the row and never off the live
+              dials: a rate changed since they asked must not change what this
+              says. Absent when the village put no number on it. */}
+          {r.money && (
+            <p className="text-sm text-foreground">
+              That came to <span className="font-semibold">{r.money.grossText}</span>
+              {r.money.feeText && r.money.feePct >= 0 && r.money.netText !== r.money.grossText ? (
+                <>
+                  , less a fee of {r.money.feeText}, so they receive{" "}
+                  <span className="font-semibold">{r.money.netText}</span>
+                </>
+              ) : (
+                <>, with no fee</>
+              )}
+              . The village pays that off the platform.
+            </p>
+          )}
+          {r.processText?.trim() && (
+            <div className="border border-border rounded-lg px-3 py-2">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                The process this was asked under
+              </p>
+              <LongText text={r.processText} className="text-xs text-muted-foreground" />
+            </div>
+          )}
           {r.warnings.map((w) => (
             <p key={w.key} className="text-xs text-muted-foreground">
               {w.message}

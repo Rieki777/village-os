@@ -97,7 +97,7 @@ import { freezeSeatTerm } from "./repos/ballotSeatTerms";
 import { roleVoteDays, seatVoteLandsAt, termForCarriedSeat } from "./lib/seatTermLanding";
 import { raisedHandTerm } from "./lib/raisedHandTerm";
 import { resolveSeatTerm, type SeatCalendar } from "../shared/seatTerms";
-import { decideRoleCapabilities, liveHolderCount, stewardSeatRefusal } from "./lib/roleGrants";
+import { decideRoleCapabilities, liveHolderCount, liveHoldersOfCapability, stewardSeatRefusal } from "./lib/roleGrants";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
 import { type ConsentActor, register as registerQuestClaimRoutes } from "./routes/questClaims";
 import { register as registerHousingRoutes } from "./routes/housing";
@@ -116,6 +116,8 @@ import { register as registerBrandUploadRoutes } from "./routes/brandUploads";
 import { register as registerNeedsRoutes } from "./routes/needs";
 import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
+import { REDEMPTION_SUBJECT, openRedemptionBallot, redemptionCloser } from "./lib/redemptionBallot";
+import { badgeCapabilityRows } from "./repos/badgeCapabilities";
 import { expireRedemptions, retiredSupply } from "./lib/redemptionStore";
 import { register as registerFeedbackRoutes } from "./routes/feedback";
 import { register as registerCharacterPortraitRoutes } from "./routes/characterPortraits";
@@ -3057,6 +3059,38 @@ function lapseContext(): LapseContext {
  * lines above the function it describes, over `servedStage`; it travelled
  * down with the move that emptied that neighbourhood.)
  */
+/**
+ * WHO HOLDS THE REDEMPTION KEY, for the door that has to know whether this
+ * village has a steward at all (Rye, 2026-09-15).
+ *
+ * The counting rule is `liveHoldersOfCapability`, which walks the gate's own
+ * planes and deliberately leaves out the admin short-circuit. This function is
+ * only the wire: the two caches this file owns, plus one read of the badge rows
+ * for the whole village.
+ *
+ * The badge half honours the SAME dormancy rule the gate does. A seasonally
+ * dormant badge grants nothing while its season is not running, and a deny is
+ * never dormant (0050), so a sleeping badge cannot make somebody a steward and
+ * a warning badge still takes it away.
+ */
+async function redemptionKeyHolders(): Promise<string[]> {
+  const badges: Record<string, { grants: string[]; denies: string[] }> = {};
+  if (effectiveLifecycle("badges") !== "off") {
+    const asleep = new Set(await dormantBadgeIds());
+    for (const r of await badgeCapabilityRows(getPool())) {
+      const userId = String((r as any).user_id);
+      const plane = (badges[userId] ??= { grants: [], denies: [] });
+      const parse = (v: unknown): string[] => {
+        if (Array.isArray(v)) return v.map(String);
+        try { const p = JSON.parse(String(v ?? "[]")); return Array.isArray(p) ? p.map(String) : []; } catch { return []; }
+      };
+      if (!asleep.has(String((r as any).badge_id))) plane.grants.push(...parse((r as any).capabilities));
+      plane.denies.push(...parse((r as any).denies));
+    }
+  }
+  return liveHoldersOfCapability(loadRoleHolders(), loadRoles(), "redemption.confirm", new Date(), badges);
+}
+
 async function capabilityCtx(user: any) {
   // S36: badge grants and denies join the one gate — but only while the
   // badges module is on. Off = zero queries, zero effect: the gate is
@@ -18867,7 +18901,18 @@ ${inner}
   registerBrandPreviewRoutes(app, { isAdmin, getPool, brandRepo });
   registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
   registerDryRunRoutes(app, { authedUser, isAdmin, overLimit, getPool });
-  registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit });
+  /**
+   * Put a redemption to the village, with the setup every village-wide vote
+   * uses. `roleBallotSetup` is the one home of the threshold arithmetic, and a
+   * second derivation here would differ from it by a copy eventually.
+   */
+  const openRedemptionVote = async (redemptionId: string): Promise<{ ok: boolean; error?: string }> => {
+    const setup = await roleBallotSetup();
+    if (setup.tokenProblem) return { ok: false, error: setup.tokenProblem };
+    const out = await openRedemptionBallot(getPool(), setup, redemptionId);
+    return out.ok ? { ok: true } : { ok: false, error: out.error };
+  };
+  registerRedemptionRoutes(app, { authedUser, brandRepo, getPool, guardCapability, members, notify, openRedemptionBallot: (id: string) => openRedemptionVote(id), overLimit, redemptionKeyHolders });
 
   // â”€â”€ Project Settings (village dues + other editable numbers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -22010,6 +22055,7 @@ ${inner}
      * literal and read at landing time, not at boot.
      */
     [CYCLE_SETTLEMENT]: settlementCloser(() => moonDeps()),
+    [REDEMPTION_SUBJECT]: redemptionCloser({ getPool, notify }),
     /*
      * Mechanics (GOV_DESIGN 2.6). Every step is a guarded update or an
      * idempotent apply, so a crash partway heals on the admin apply path

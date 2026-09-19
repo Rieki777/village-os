@@ -283,7 +283,8 @@ const TYPE_GLOSS = {
   percentage: "a percentage",
   boolean: "on or off",
   choice: "one of a fixed list",
-  text: "free text",
+  text: "free text, one line",
+  longtext: "free text, several lines, shown to members as plain words",
 };
 
 /** Who may move a dial. Every ring needs one. */
