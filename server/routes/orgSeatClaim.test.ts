@@ -303,6 +303,40 @@ describe.skipIf(!configured)("claiming a seat recorded under a name", () => {
     expect((await call(handlers, "GET /api/org/seat-claims")).body, "the queue is clear").toEqual([]);
   });
 
+  it("drains every open ask for the seat it just filled, so none is left unanswerable", async () => {
+    // The claim route reads the open asks and then inserts, with nothing in
+    // between, so two presses close enough together both pass the check and
+    // both file. The sibling raise-hand route serialises per member and power
+    // for exactly this reason. Reaching the race directly is the cheap way to
+    // ask the question that matters: what is the steward left holding.
+    const seating = await document("Wren Alder");
+    viewer = { id: "u-wren", name: "Wren Alder" };
+    await call(handlers, "POST /api/org/seatings/:id/claim", { params: { id: seating } });
+    await submissionsRepo.insert({
+      id: "twin-of-the-first-press",
+      type: "seat-claim",
+      status: "new",
+      rewarded: false,
+      data: { assignmentId: seating, roleId: "seat-water", roleName: "Water Steward", recordedName: "Wren Alder", name: "Wren Alder", email: null },
+      userId: "u-wren",
+      userName: "Wren Alder",
+      submittedAt: new Date().toISOString(),
+    } as any);
+    expect(await asksInTable(), "the race put two asks in front of the steward").toHaveLength(2);
+
+    expect((await call(handlers, "POST /api/org/seatings/:id/claim/confirm", {
+      params: { id: seating }, body: { userId: "u-wren" },
+    })).status).toBe(200);
+
+    // The seat has moved, so the twin can never be answered honestly: Confirm
+    // would be refused over a seat already filled, and Decline would tell the
+    // member no about a seat they are sitting in.
+    expect(
+      (await call(handlers, "GET /api/org/seat-claims")).body,
+      "a queue that keeps an ask nobody can answer is a queue that fills up",
+    ).toEqual([]);
+  });
+
   it("closes the ask on a decline and leaves the seating documented", async () => {
     const seating = await document("Wren Alder");
     viewer = { id: "u-wren", name: "Wren Alder" };

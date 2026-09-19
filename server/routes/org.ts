@@ -159,15 +159,28 @@ export function register(app: Express, deps: Deps): void {
    * carry the version they were read at so a concurrent insert is rebased
    * instead of overwritten. Never called with an empty list: `rows` always
    * holds at least the row being closed.
+   *
+   * EVERY MATCHING OPEN ROW CLOSES, not the first one found, because the
+   * claim route reads the open asks and then inserts with nothing in between.
+   * Two presses close enough together both pass that check and both file. If
+   * an accept closed only one, the seat would move and the twin would sit in
+   * the queue forever: Confirm on it is refused over a seat already filled,
+   * and Decline tells the member no about a seat they are sitting in. The row
+   * returned is the first one, which is the ask being answered; the rest are
+   * the same ask arriving twice and are closed quietly.
    */
   const closeSeatClaim = async (match: (s: any) => boolean, status: "accepted" | "declined") => {
     const rows = submissionsRepo.all() as any[];
-    const idx = rows.findIndex((s) => s.type === SEAT_CLAIM_TYPE && !CLOSED_STATUSES.has(String(s.status ?? "")) && match(s));
-    if (idx === -1) return null;
-    const closed = rows[idx];
-    rows[idx] = { ...closed, status };
+    let answered: any = null;
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.type !== SEAT_CLAIM_TYPE || CLOSED_STATUSES.has(String(row.status ?? "")) || !match(row)) continue;
+      if (!answered) answered = row;
+      rows[i] = { ...row, status };
+    }
+    if (!answered) return null;
     await submissionsRepo.replaceAll(rows);
-    return closed;
+    return answered;
   };
 
   /*
