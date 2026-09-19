@@ -2234,6 +2234,31 @@ choices, with the vote path refusing at the door while it is unbuilt
 that setting is told instead of being left with a stranded hold. Section 16
 carries both as questions.
 
+**2026-09-15, ruling 23: a redemption carries a number, and the village says what
+it will pay.** Eleven dials (a currency list, a rate that follows the exchange's
+posted price or is set by hand, a percentage and a fixed fee, four caps, and the
+village's own process text) are resolved once at the ask and snapshotted onto the
+row by `drizzle/0213_a_redemption_remembers_what_it_was_worth.sql`, so a dial moved later never changes what an open request is
+worth. The fee comes out of the payment the village makes off the platform and
+never off the burn: the tokens destroyed are the tokens asked for, in full, and no
+posting is derived from any of these figures. A token with no rate is a real state,
+and while any money cap is set a request that cannot be valued is refused instead
+of passing unmeasured.
+
+**2026-09-15: who confirms is derived, and a village with no steward votes.**
+`redemption.confirmed_by` is retired. The ask counts who holds `redemption.confirm`
+through the village's own powers, excluding the admin short-circuit, and routes to
+a steward or to a ballot on that. The ballot subject and its closer are built and
+registered, including the `onUnlanded` hook that gives the tokens back when a
+passed decision is vetoed or written off; the path stays refused at the door while
+`VOTE_PATH_BUILT` is false.
+
+**2026-09-15, ruling 22: redemption is a module that ships off.** Its routes now
+mount behind `requireModule("redemption")`, its open requests block switching it
+off, and `drizzle/0211_redemption_stays_on_where_it_was_used.sql` keeps it on for
+any village that already holds a redemption row, while expiry and the member's
+own withdraw keep running whatever the lifecycle, so a hold is never stranded.
+
 ### 10.39 A generated table said where value sits and named four of the eleven places. Fixed on `wt/econ`, measured.
 
 10.37's blind spot has a second form and this is it: a HAND-KEPT LIST inside the
@@ -2633,7 +2658,6 @@ display name as the member sees it.
 - `<name> buys one thing from the village, and that thing is what it is worth`
 - `<name> is not one of the tokens this village redeems. A steward can change that in the village's dials`
 - `This village is not taking redemptions just now. A steward can open them in the village's dials`
-- `This village has chosen that redemptions go to a village vote, and that path is still being finished. A steward can move it back to a steward confirming in the village's dials`
 - `You have a departure open, and what happens to your balance is being settled there`
 - `You have opened <openedThisCycle> redemptions this moon, which is what this village allows. The count starts again at the new moon`
 - `Ask for <name> in positive amounts with at most <decimals> decimal places`
