@@ -315,19 +315,23 @@ export default function VillageMap() {
         [data-power-map-box] { height: auto !important; }
       }`}</style>
 
-      <section className="py-10 bg-gradient-to-b from-teal-deep/5 to-background">
+      {/* WHAT A PHONE SPENDS BEFORE IT REACHES THE PICTURE.
+          Measured on the live site at 390x844: the site header took 135px,
+          this title and its subtitle 124, and the examples banner with the
+          walk invite another 210. The map began at 469 of 844 and its last
+          80px ran under the tab bar, so a reader met a third of a circle.
+
+          The title stays, because a page says what it is. The subtitle is a
+          second saying of the same thing and waits for the room to say it.
+          The two invitations moved BELOW the map, beside the search that
+          also acts on it. */}
+      <section className="py-6 sm:py-10 bg-gradient-to-b from-teal-deep/5 to-background">
         <div className="container text-center">
-          <h1 className="font-display text-4xl font-bold text-foreground mb-3">How Power Is Held</h1>
-          <p className="text-muted-foreground max-w-xl mx-auto">
+          <h1 className="font-display text-3xl sm:text-4xl font-bold text-foreground mb-2 sm:mb-3">How Power Is Held</h1>
+          <p className="hidden sm:block text-muted-foreground max-w-xl mx-auto">
             The village's shape, how each circle decides, who holds each seat, and the seats waiting
             for someone like you.
           </p>
-          {EXAMPLE_SETS.filter((s) => exampleModules.includes(s.id)).map((s) => (
-            <ExamplesBanner key={s.id} moduleId={s.id} noun={s.noun} />
-          ))}
-          <div className="max-w-2xl mx-auto text-left mt-4">
-            <FirstWalkInvite />
-          </div>
         </div>
       </section>
 
@@ -387,6 +391,18 @@ export default function VillageMap() {
                   </div>
                                 </div>
               )}
+
+              {/* THE TWO INVITATIONS, UNDER THE PICTURE THEY POINT AT.
+                  Above the map they cost a phone 210 of its 844 pixels
+                  before anything was drawn. The map block above is
+                  `sm:hidden`, so from `sm` up these sit exactly where they
+                  always did: above the standing canvas, under the title. */}
+              {EXAMPLE_SETS.filter((s) => exampleModules.includes(s.id)).map((s) => (
+                <ExamplesBanner key={s.id} moduleId={s.id} noun={s.noun} />
+              ))}
+              <div className="max-w-2xl mx-auto text-left mt-4 mb-2">
+                <FirstWalkInvite />
+              </div>
 
               <SearchBar data={data} onPick={pickFromSearch} />
 
