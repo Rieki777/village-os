@@ -1,6 +1,6 @@
 // The shell hands the map a ground, and the map must never invent a coastline.
 //
-// The Living Map artifact ships Amora's satellite plate baked in. Since the ground became
+// The Living Map artifact ships the first village's satellite plate baked in. Since the ground became
 // runtime data, the shell pushes `{type:'ground', core:{url}, surround:{url, rect}}` and a
 // village draws its own land instead. Nothing in `pnpm test` can see any of this: the
 // artifact is a 5.7 MB single file with no module boundary, the bridge is a postMessage,
@@ -59,7 +59,7 @@ const settle = (fn) => page.waitForFunction(fn, null, { timeout: 15_000 }).catch
 console.log(`\nground bridge · ${artifact}\n`);
 
 await fresh();
-check("the seed alone draws its core and Amora's surround",
+check("the seed alone draws its core and the seed surround",
   JSON.stringify(await page.evaluate(() => window.groundHas())).includes('"surround":true'),
   await page.evaluate(() => window.groundHas()));
 

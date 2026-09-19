@@ -291,6 +291,25 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   three files. `origin/main` reaches `0206`. The number is confirmed again at landing, and
   renumbering this file is safe until it runs anywhere but a scratch schema, because its one
   statement is a `CREATE TABLE IF NOT EXISTS`.
+- **ground lane (per-village map ground + parcels), 2026-09-19: holds 0214** for
+  `drizzle/0214_village_land_parcels.sql` on `wt/ground-runtime`. It adds three columns to
+  `village_land` (`slug`, `label`, `sort_order`, all NOT NULL with defaults) and swaps that
+  table's UNIQUE key from `(village_id)` to `(village_id, slug)`, so a project can hold more
+  than one parcel. Measured four ways at 11:30 PDT after `git fetch origin`: `origin/main`
+  reaches **0210**; all origin refs and all local refs reach **0213** (`0211` and `0213` on
+  `wt/redemption-module`, `0212` on both `wt/redemption-module` and `wt/module-settings-in-card`);
+  the `drizzle/` directories across every worktree on disk reach **0210**.
+  **IT CARRIES A `compat-ok` WAIVER AND THAT IS THE PART TO READ.** A new UNIQUE index on an
+  existing table is on CLAUDE.md's never-in-the-same-release list, and
+  `check-migration-compat.mjs` reports it. The argument for the exception is written in the
+  file: the previous release's only write to this table never names `slug`, the column defaults
+  to `'home'`, so `UNIQUE(village_id, slug)` is exactly as permissive as the key it replaces for
+  every row that release can write, and its `ON DUPLICATE KEY UPDATE` still collides on the row
+  it always collided on. The old key cannot simply be kept, because keeping it is precisely what
+  forbids a second parcel, and it cannot simply be dropped, because the upsert needs A unique key
+  to collide on. **If a reviewer disagrees with that argument, the fallback is two releases**:
+  this file lands with the columns only, uniqueness moves into code for one release, and the
+  UNIQUE key lands in the next. Say so before this merges rather than after.
 - **econ renumber lane 2, 2026-09-14: holds 0200 to 0206** on `wt/econ-renumber-2`, for the seven
   economics migrations that `wt/econ` still carried at or below main's ceiling after the merge at
   `fb2d94b`, kept in the same relative order: `0181`->`0200`, `0183`->`0201`, `0184`->`0202`,

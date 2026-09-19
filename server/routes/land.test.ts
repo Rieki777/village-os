@@ -412,3 +412,129 @@ describe("fetching the picture", () => {
     }
   });
 });
+/**
+ * A pool that answers with SEVERAL parcels.
+ *
+ * Separate from `stubPool` rather than folded into it, because "one row" and
+ * "several rows" are the two states the parcel work has to tell apart and a
+ * single helper with an optional array hides which one a test is exercising.
+ */
+function stubRows(rows: Array<Record<string, unknown>>) {
+  const writes: Array<{ sql: string; params: unknown[] }> = [];
+  const pool: any = {
+    async query(sql: string, params: unknown[]) {
+      if (/^\s*SELECT/i.test(sql)) return [rows, []];
+      writes.push({ sql, params });
+      return [{ affectedRows: 1 }, []];
+    },
+  };
+  return { pool, writes };
+}
+
+function mountRows(rows: Array<Record<string, unknown>>) {
+  const { app, handlers } = collect();
+  const { pool, writes } = stubRows(rows);
+  register(app, {
+    isAdmin: alwaysAdmin,
+    authedUser: async () => ({ id: "founder-1" }),
+    guardCapability: alwaysAllowed,
+    getPool: () => pool,
+    uploadsDir: "/tmp/does-not-matter",
+  } as any);
+  return { handlers, writes };
+}
+
+const RIDGE = {
+  ...SAVED,
+  slug: "the-ridge",
+  label: "The ridge",
+  sort_order: 1,
+  created_at: "2026-09-02 09:00:00",
+  imagery_filename: "land-ridge.jpg",
+};
+const HOME = { ...SAVED, slug: "home", label: "", sort_order: 0, created_at: "2026-09-01 09:00:00" };
+
+describe("a project may hold more than one piece of ground", () => {
+  it("answers every parcel, each with its own picture", async () => {
+    const { handlers } = mountRows([RIDGE, HOME]);
+    const r = await call(handlers, "GET /api/land");
+    expect(r.body.parcels.map((p: any) => p.slug)).toEqual(["home", "the-ridge"]);
+    expect(r.body.parcels[1].imageryUrl).toBe("/api/uploads/land-ridge.jpg");
+  });
+
+  it("opens the lowest sort_order regardless of the order the rows arrive in", async () => {
+    const { handlers } = mountRows([RIDGE, HOME]);
+    const r = await call(handlers, "GET /api/land");
+    // The top-level fields are the FIRST parcel, and 'home' sorts first.
+    expect(r.body.parcels[0].slug).toBe("home");
+  });
+
+  it("settles an equal sort_order by which parcel is older, not by row order", async () => {
+    const a = { ...HOME, slug: "later", sort_order: 0, created_at: "2026-09-05 09:00:00" };
+    const b = { ...HOME, slug: "earlier", sort_order: 0, created_at: "2026-09-01 09:00:00" };
+    const { handlers } = mountRows([a, b]);
+    const r = await call(handlers, "GET /api/land");
+    expect(r.body.parcels.map((p: any) => p.slug)).toEqual(["earlier", "later"]);
+  });
+
+  it("hides EVERY parcel's coordinates at hidden, not just the first", async () => {
+    const { handlers } = mountRows([
+      { ...HOME, visibility: "hidden" },
+      { ...RIDGE, visibility: "hidden" },
+    ]);
+    const r = await call(handlers, "GET /api/land");
+    expect(r.body.parcels.every((p: any) => p.centre === null)).toBe(true);
+  });
+
+  it("still serves every parcel's picture at hidden, which is the documented rule", async () => {
+    const { handlers } = mountRows([
+      { ...HOME, visibility: "hidden" },
+      { ...RIDGE, visibility: "hidden" },
+    ]);
+    const r = await call(handlers, "GET /api/land");
+    expect(r.body.parcels.every((p: any) => p.imageryUrl !== null)).toBe(true);
+  });
+
+  it("writes to 'home' when the caller says nothing about parcels", async () => {
+    const { handlers, writes } = mountRows([]);
+    const r = await call(handlers, "PUT /api/admin/land", { body: { text: "9.2345, -83.8412" } });
+    expect(r.status).toBe(200);
+    expect(r.body.slug).toBe("home");
+    expect(writes[0].params).toContain("home");
+  });
+
+  it("refuses a malformed parcel name instead of repairing it into a different address", async () => {
+    const { handlers, writes } = mountRows([]);
+    const r = await call(handlers, "PUT /api/admin/land", {
+      body: { text: "9.2345, -83.8412", slug: "North Field!" },
+    });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toBe("bad-parcel");
+    expect(writes).toHaveLength(0);
+  });
+
+  it("does not blank a parcel's name when only its coordinates are saved", async () => {
+    const { handlers, writes } = mountRows([RIDGE]);
+    await call(handlers, "PUT /api/admin/land", {
+      body: { text: "9.2345, -83.8412", slug: "the-ridge" },
+    });
+    // The upsert keeps the stored label when this call carried none.
+    expect(writes[0].sql).toContain("IF(VALUES(label) = '', label, VALUES(label))");
+  });
+
+  it("puts a new parcel after the ones that already exist", async () => {
+    const { handlers, writes } = mountRows([HOME, RIDGE]);
+    await call(handlers, "PUT /api/admin/land", {
+      body: { text: "9.2345, -83.8412", slug: "south-block", label: "South block" },
+    });
+    expect(writes[0].params).toContain(2);
+  });
+
+  it("points a picture fetch at the parcel it names, never at the whole village", async () => {
+    const { handlers } = mountRows([HOME, RIDGE]);
+    const r = await call(handlers, "POST /api/admin/land/imagery", { body: { slug: "not-a-parcel-here" } });
+    // No such parcel: the centre is unknown, so there is nothing to photograph.
+    expect(r.status).toBe(400);
+    expect(r.body.error).toBe("no-location");
+  });
+});

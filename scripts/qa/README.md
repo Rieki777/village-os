@@ -27,7 +27,7 @@ report, and you would believe it.
 | `contrast.mjs` | WCAG contrast from rendered pixels | yes |
 | `selftint.mjs` | an element that sets a tint and writes coloured text on itself | no |
 | `routes.mjs` | the route list, derived from `client/src/App.tsx` | no |
-| `ground-bridge.mjs` | the shell's ground push, and that a village never inherits Amora's coastline | yes |
+| `ground-bridge.mjs` | the shell's ground push, and that a village never inherits the seed's coastline | yes |
 
 ---
 
