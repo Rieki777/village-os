@@ -123,6 +123,7 @@ import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
 import { register as registerPowerAffinityRoutes, powersForClass, withPowerAffinity } from "./routes/powerAffinity";
 import { register as registerPowerHandRoutes } from "./routes/powerHands";
 import { resolveGoogleConfig } from "./lib/oauthGoogle";
+import { makeIdentityGate } from "./lib/identityConfirm";
 import {
   decodeToken,
   encodeToken,
@@ -1692,23 +1693,6 @@ async function noteAssistantUsage(
 async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
 }
-
-/**
- * A stored hash from before bcrypt: 64 hex characters, an unsalted SHA-256 of
- * the password. Sign-in stopped accepting those on 2026-09-19, so a member
- * still holding one has to set a password again before anything can confirm
- * it. Sessions minted before that change still work, so such a member can be
- * signed in and reach a password prompt they cannot satisfy.
- *
- * The two routes that CONFIRM a password use this to say so. Sign-in does NOT:
- * it answers every failure the same way on purpose, because a different
- * sentence for a known address tells a stranger which addresses exist.
- */
-function storedHashNeedsReset(storedHash: string | null | undefined): boolean {
-  return /^[0-9a-f]{64}$/i.test(String(storedHash ?? ""));
-}
-
-const PASSWORD_RESET_NEEDED = "Your password needs setting again before you can confirm this. Ask for a set-password link, then try again.";
 
 async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
   // Unsalted SHA-256 hashes are NOT accepted, as of 2026-09-19. They were kept
@@ -3901,6 +3885,8 @@ function deploymentOrigin(): string {
  */
 const googleSignInAvailability = () =>
   resolveGoogleConfig(process.env, String(process.env.FRONTEND_URL ?? ""));
+/** Exit and delete: a password, or a fresh Google sign-in for a member with none (server/lib/identityConfirm.ts). */
+const confirmIdentity = makeIdentityGate({ authSecret: AUTH_TOKEN_SECRET, verifyPassword, googleAvailable: () => googleSignInAvailability().available, members: { update: (id, mutate) => members.update(id, mutate) } });
 
 /**
  * S16: the notification spine's dependencies. The spine never imports the
@@ -8361,6 +8347,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     clientIp,
     recordAudit: recordAuthAudit,
     onMemberJoined: (user) => void joined(user), // every door in records the join and greets: register calls joined too
+    authedUser,
     invites: inviteDoor,
   });
 
@@ -14765,17 +14752,13 @@ Send an empty drafts array when you are still listening. A role payload is {name
     });
   });
 
-  /** A member opens their own departure. Password-confirmed, stranding-guarded. */
+  /** A member opens their own departure. Identity-confirmed (a password, or Google for a member with none), stranding-guarded. */
   app.post("/api/profile/request-exit", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
-    const { password, note } = req.body ?? {};
-    if (storedHashNeedsReset(user.passwordHash)) {
-      return res.status(403).json({ error: PASSWORD_RESET_NEEDED });
-    }
-    if (!password || !(await verifyPassword(String(password), user.passwordHash))) {
-      return res.status(403).json({ error: "Confirm with your password" });
-    }
+    const { note } = req.body ?? {};
+    const confirmed = await confirmIdentity(req, res, user, "request-exit");
+    if (!confirmed.ok) return res.status(403).json(confirmed.body);
     const stranding = await departureStrandingRefusal(user, true);
     if (stranding) return res.status(409).json({ error: stranding });
     const policy: any = readExitPolicy();
@@ -26555,17 +26538,12 @@ ${inner}
     res.json({ success: true, removed: { id: target.id, email: target.email }, anonymized: true, external });
   });
 
-  /** Member-initiated deletion (Law 8968 posture): same path, own account. */
+  /** Member-initiated deletion (Law 8968 posture): same path, own account. Identity-confirmed like request-exit. */
   app.post("/api/profile/delete-account", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
-    const { password } = req.body ?? {};
-    if (storedHashNeedsReset(user.passwordHash)) {
-      return res.status(403).json({ error: PASSWORD_RESET_NEEDED });
-    }
-    if (!password || !(await verifyPassword(String(password), user.passwordHash))) {
-      return res.status(403).json({ error: "Confirm with your password to delete your account" });
-    }
+    const confirmed = await confirmIdentity(req, res, user, "delete-account");
+    if (!confirmed.ok) return res.status(403).json(confirmed.body);
     const stranding = await departureStrandingRefusal(user, true);
     if (stranding) return res.status(409).json({ error: stranding });
     // S52: same lock as the admin path — settle blocking state first. The
