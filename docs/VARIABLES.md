@@ -36,7 +36,7 @@ Each dial also says WHEN a change lands. 180 of them as soon as it is saved, and
 
 ## At a glance
 
-206 dials in 32 categories. 120 carry a minimum and a maximum. By type: 90 integer, 14 decimal, 17 percentage, 24 boolean, 29 choice, 32 text.
+206 dials in 32 categories. 120 carry a minimum and a maximum. By type: 90 integer, 14 decimal, 17 percentage, 24 boolean, 29 choice, 32 text, 0 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -326,7 +326,7 @@ The role whose holders are told the moment somebody joins. Greeting belongs to a
 | Fact | Value |
 | --- | --- |
 | Key | `arrival.greeter_role` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -374,7 +374,7 @@ The token the cycle pool pays out, for example your village's credits. The list 
 | Fact | Value |
 | --- | --- |
 | Key | `gratitude.pool_token` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `credits` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -596,7 +596,7 @@ Leave this empty and every token this village issues as a spendable credit may b
 | Fact | Value |
 | --- | --- |
 | Key | `redemption.tokens` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -673,7 +673,7 @@ Four dates a year, one per season, as MM-DD separated by commas. The default fol
 | Fact | Value |
 | --- | --- |
 | Key | `economy.claims_week_starts` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `03-21,06-21,09-23,12-21` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -687,7 +687,7 @@ The DHO slug that voice claims are raised into, from app.hypha.earth. Until this
 | Fact | Value |
 | --- | --- |
 | Key | `economy.hypha_space` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -1524,7 +1524,7 @@ Base URL of the hub that listens to the chain for this village. When a proposal'
 | Fact | Value |
 | --- | --- |
 | Key | `governance.hub_url` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -1552,7 +1552,7 @@ A steward can stop a decision the village has already carried, inside the window
 | Fact | Value |
 | --- | --- |
 | Key | `governance.steward_subjects` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `all` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -1566,7 +1566,7 @@ Every decision carries a size: routine, structural, or constitutional. This name
 | Fact | Value |
 | --- | --- |
 | Key | `governance.steward_veto_tiers` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `constitutional` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -1668,7 +1668,7 @@ always_open lets anyone take a change set to the vote on any day. last_days_of_c
 | Fact | Value |
 | --- | --- |
 | Key | `governance.window_changeset` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `always_open` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -1682,7 +1682,7 @@ The window a minting change opens in, in the same words as the change set window
 | Fact | Value |
 | --- | --- |
 | Key | `governance.window_mint_rule` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `always_open` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -1696,7 +1696,7 @@ The window a vote-mode switch opens in, in the same words as the change set wind
 | Fact | Value |
 | --- | --- |
 | Key | `governance.window_governance_mode` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `always_open` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -1710,7 +1710,7 @@ The window a proposal that declares a new role opens in, in the same words as th
 | Fact | Value |
 | --- | --- |
 | Key | `governance.window_role_declare` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `always_open` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -1724,7 +1724,7 @@ The window a proposal that asks somebody to sit in a role opens in, in the same 
 | Fact | Value |
 | --- | --- |
 | Key | `governance.window_role_seat` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `always_open` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -1738,7 +1738,7 @@ The window a proposal that takes a seat back opens in, in the same words as the 
 | Fact | Value |
 | --- | --- |
 | Key | `governance.window_role_unseat` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `always_open` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -1752,7 +1752,7 @@ The window a proposal that moves a power from the admin panel to a role opens in
 | Fact | Value |
 | --- | --- |
 | Key | `governance.window_power_transfer` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `always_open` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -1766,7 +1766,7 @@ The window a proposal that grants a power to a role opens in, in the same words 
 | Fact | Value |
 | --- | --- |
 | Key | `governance.window_power_grant` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `always_open` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -1780,7 +1780,7 @@ The window a proposal that hands a power back to the admin panel opens in, in th
 | Fact | Value |
 | --- | --- |
 | Key | `governance.window_power_return` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `always_open` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -1829,7 +1829,7 @@ Which token weighs votes when the weight mode is token. Only tokens this platfor
 | Fact | Value |
 | --- | --- |
 | Key | `governance.weight_token` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `gratitude` |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2098,7 +2098,7 @@ The ERC-20 address for the project's equity token. The platform only ever READS 
 | Fact | Value |
 | --- | --- |
 | Key | `tokens.equity_address` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2112,7 +2112,7 @@ The ERC-20 address for the governance-weight token. Read-only here, exactly like
 | Fact | Value |
 | --- | --- |
 | Key | `tokens.voice_address` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2140,7 +2140,7 @@ Where balances are read from. A public endpoint is fine to start; a dedicated on
 | Fact | Value |
 | --- | --- |
 | Key | `tokens.base_rpc_url` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `https://mainnet.base.org` |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2158,7 +2158,7 @@ The one place this platform sends people for governance, proposals, treasury and
 | Fact | Value |
 | --- | --- |
 | Key | `hypha.org_url` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2172,7 +2172,7 @@ The numeric id of your DAO's space on Hypha's Base contracts. Every on-chain pro
 | Fact | Value |
 | --- | --- |
 | Key | `hypha.space_id` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2186,7 +2186,7 @@ The 0x address holding your DAO's treasury on Base. The Hypha Bridge module read
 | Fact | Value |
 | --- | --- |
 | Key | `hypha.treasury_address` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2200,7 +2200,7 @@ The 0x address that created your DAO and issued its first tokens on Base. The Hy
 | Fact | Value |
 | --- | --- |
 | Key | `hypha.founder_base_address` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2214,7 +2214,7 @@ Only if your DHO's governance page is not at the org root. Blank derives from th
 | Fact | Value |
 | --- | --- |
 | Key | `hypha.link_governance` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2228,7 +2228,7 @@ Only if your DHO's proposals page is not at /agreements. Blank derives from the 
 | Fact | Value |
 | --- | --- |
 | Key | `hypha.link_proposals` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2242,7 +2242,7 @@ Only if your DHO's treasury page is not at /treasury. Blank derives from the DHO
 | Fact | Value |
 | --- | --- |
 | Key | `hypha.link_treasury` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2256,7 +2256,7 @@ Only if your DHO's members page is not at /members. Blank derives from the DHO a
 | Fact | Value |
 | --- | --- |
 | Key | `hypha.link_members` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2786,7 +2786,7 @@ The feed is a LENS over one forum category plus the village's system events. It 
 | Fact | Value |
 | --- | --- |
 | Key | `feed.category_slug` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `village-life` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -2950,7 +2950,7 @@ Quests carrying this tag appear on the Stay page as ways to EARN credits. The re
 | Fact | Value |
 | --- | --- |
 | Key | `stay.work_exchange_tag` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `work-exchange` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -3280,7 +3280,7 @@ Leave blank and Moon 1 is the moon your village launched under, which is what al
 | Fact | Value |
 | --- | --- |
 | Key | `village.first_moon_at` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |

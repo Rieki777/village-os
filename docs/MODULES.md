@@ -139,7 +139,7 @@ Recognition sends, lunar cycles, and the value pool distributed at each close.
 | Requires | nothing |
 | Recommends | nothing |
 | Capabilities it adds | none |
-| Variable keys it owns | `gratitude.base_budget`, `gratitude.require_message`, `gratitude.full_sends_per_cycle`, `gratitude.pool_per_cycle`, `gratitude.pool_token`, `gratitude.proposal_accept_award` |
+| Variable keys it owns | `cycle.mode`, `cycle.settlement_mode`, `cycle.settlement_vote_days`, `feed.max_hearts_per_recipient_per_cycle`, `health.alert_change_pct` |
 | API prefixes | `/api/game/gratitude`, `/api/game/cycle`, `/api/admin/cycles` |
 | Contract doc | [gratitude.md](modules/gratitude.md) |
 
@@ -202,7 +202,7 @@ The weekly call becomes assigned work, not content distribution: recordings in, 
 | Requires | nothing |
 | Recommends | `forum` |
 | Capabilities it adds | none |
-| Variable keys it owns | none |
+| Variable keys it owns | `assistant.synthesis_batch` |
 | API prefixes | `/api/recordings` |
 | Contract doc | none yet |
 | Config it seeds | `youtubeChannelId`, `maxReadyQueue`, `forumCategory` |
@@ -332,7 +332,7 @@ Buy the village's own platform tokens for fiat, out of a stocked treasury, buy-o
 | Requires | nothing |
 | Recommends | nothing |
 | Capabilities it adds | `exchange.buy`, `exchange.swap`, `exchange.manage` |
-| Variable keys it owns | `exchange.price_change_max_pct`, `exchange.swap_spread_bps`, `exchange.swap_fiat_hold_days`, `exchange.swap_max_receive_per_order`, `payments.purchase_limit_per_order_usd`, `payments.purchase_limit_30d_usd`, `payments.purchase_limit_annual_usd` |
+| Variable keys it owns | `payments.purchase_limit_per_order_usd`, `payments.purchase_limit_30d_usd`, `payments.purchase_limit_annual_usd`, `governance.weight_mode`, `governance.weight_token` |
 | API prefixes | `/api/exchange` |
 | Contract doc | [internal-exchange.md](modules/internal-exchange.md) |
 | Config it seeds | `tradingEnabled` |
@@ -353,7 +353,7 @@ Every payment your project issues or receives, as products you define: applicati
 | Requires | nothing |
 | Recommends | nothing |
 | Capabilities it adds | none |
-| Variable keys it owns | none |
+| Variable keys it owns | `payments.donation_max_usd` |
 | API prefixes | `/api/products` |
 | Contract doc | none yet |
 | Legal caution card | yes. Enabling shows it first, and preconditions can refuse outright |
@@ -377,7 +377,7 @@ The living org chart: circles, the roles that orbit them, who holds each seat, w
 | Requires | nothing |
 | Recommends | nothing |
 | Capabilities it adds | `map.viewPeople`, `map.contact`, `map.photograph`, `map.curatePhotos` |
-| Variable keys it owns | `map.public_structure`, `map.concierge_enabled`, `map.contact_daily_cap`, `map.contact_recipient_daily_cap`, `map.show_quests`, `map.vacant_highlight`, `map.contact_retention_days`, `map.photo_max_mb`, `map.photos_per_place`, `map.photos_per_member_daily`, `map.photo_report_hide_threshold`, `map.photo_tombstone_days` |
+| Variable keys it owns | `events.rsvp_enabled`, `map.public_structure`, `map.concierge_enabled`, `map.contact_daily_cap`, `map.contact_recipient_daily_cap`, `map.show_quests`, `map.vacant_highlight`, `map.contact_retention_days`, `map.photo_max_mb`, `map.photos_per_place`, `map.photos_per_member_daily`, `map.photo_report_hide_threshold`, `map.photo_tombstone_days` |
 | API prefixes | `/api/map`, `/api/circles`, `/api/places`, `/api/admin/places` |
 | Contract doc | [village-map.md](modules/village-map.md) |
 | Switching it off is blocked by | `resources`, which requires it while non-off |
@@ -397,7 +397,7 @@ A declared map of how money and resources are governed: who may spend what, with
 | Requires | `map` |
 | Recommends | `forum` |
 | Capabilities it adds | none |
-| Variable keys it owns | none |
+| Variable keys it owns | `map.public_structure`, `ledger.admin_mint_cosign_over` |
 | API prefixes | `/api/resources` |
 | Contract doc | [how-resources-flow.md](modules/how-resources-flow.md) |
 | Config it seeds | `requestCategory`, `measuredVisibleTo`, `labels` |
@@ -417,7 +417,7 @@ Village conversations: threads by circle-of-life category, @mentions, thread fol
 | Requires | nothing |
 | Recommends | `map` |
 | Capabilities it adds | `forum.post`, `forum.moderate` |
-| Variable keys it owns | `forum.report_hide_threshold` |
+| Variable keys it owns | `feed.category_slug` |
 | API prefixes | `/api/forum` |
 | Contract doc | none yet |
 | Switching it off is blocked by | `feed`, which requires it while non-off |
@@ -438,7 +438,7 @@ The village's vital signs: per-lunation snapshots frozen at each cycle close, th
 | Requires | nothing |
 | Recommends | `gratitude`, `quests` |
 | Capabilities it adds | `health.record` |
-| Variable keys it owns | `health.alert_change_pct` |
+| Variable keys it owns | `gratitude.base_budget` |
 | API prefixes | `/api/health` |
 | Contract doc | [health-dashboard.md](modules/health-dashboard.md) |
 
@@ -476,7 +476,7 @@ Your DAO on Hypha, read from Base and shown here: the contracts this village act
 | Requires | nothing |
 | Recommends | `governance`, `tools` |
 | Capabilities it adds | none |
-| Variable keys it owns | `hypha.treasury_address` |
+| Variable keys it owns | `tokens.base_rpc_url`, `tokens.equity_address`, `tokens.voice_address`, `governance.default_method` |
 | API prefixes | `/api/hypha`, `/api/admin/hypha` |
 | Contract doc | [hypha.md](modules/hypha.md) |
 | Display only | yes. Deep links to Base, and never a mint path |
@@ -613,12 +613,19 @@ Read the other way: `map` cannot be switched off while `resources` is on, `forum
 
 ## The dials a module owns
 
-Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 23 modules own 75 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
+Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 23 modules own 80 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
 
-Three keys are claimed by more than one module, so switching one module off leaves the dial owned by the other:
+Ten keys are claimed by more than one module, so switching one module off leaves the dial owned by the other:
 
 | Key | Claimed by |
 | --- | --- |
+| `events.rsvp_enabled` | `map`, `events` |
+| `feed.category_slug` | `forum`, `feed` |
+| `feed.max_hearts_per_recipient_per_cycle` | `gratitude`, `feed` |
+| `governance.default_method` | `governance`, `hypha` |
+| `governance.weight_mode` | `exchange`, `governance` |
+| `governance.weight_token` | `exchange`, `governance` |
+| `map.public_structure` | `map`, `resources` |
 | `payments.purchase_limit_30d_usd` | `stays`, `exchange` |
 | `payments.purchase_limit_annual_usd` | `stays`, `exchange` |
 | `payments.purchase_limit_per_order_usd` | `stays`, `exchange` |
@@ -695,12 +702,11 @@ The same facts, for anything that would rather parse than read. Regenerated with
       "recommends": [],
       "capabilities": [],
       "variableKeys": [
-        "gratitude.base_budget",
-        "gratitude.require_message",
-        "gratitude.full_sends_per_cycle",
-        "gratitude.pool_per_cycle",
-        "gratitude.pool_token",
-        "gratitude.proposal_accept_award"
+        "cycle.mode",
+        "cycle.settlement_mode",
+        "cycle.settlement_vote_days",
+        "feed.max_hearts_per_recipient_per_cycle",
+        "health.alert_change_pct"
       ],
       "apiPrefixes": [
         "/api/game/gratitude",
@@ -767,6 +773,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "map.curatePhotos"
       ],
       "variableKeys": [
+        "events.rsvp_enabled",
         "map.public_structure",
         "map.concierge_enabled",
         "map.contact_daily_cap",
@@ -804,7 +811,10 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "forum"
       ],
       "capabilities": [],
-      "variableKeys": [],
+      "variableKeys": [
+        "map.public_structure",
+        "ledger.admin_mint_cosign_over"
+      ],
       "apiPrefixes": [
         "/api/resources"
       ],
@@ -828,7 +838,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "forum.moderate"
       ],
       "variableKeys": [
-        "forum.report_hide_threshold"
+        "feed.category_slug"
       ],
       "apiPrefixes": [
         "/api/forum"
@@ -934,7 +944,9 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "forum"
       ],
       "capabilities": [],
-      "variableKeys": [],
+      "variableKeys": [
+        "assistant.synthesis_batch"
+      ],
       "apiPrefixes": [
         "/api/recordings"
       ],
@@ -958,7 +970,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "health.record"
       ],
       "variableKeys": [
-        "health.alert_change_pct"
+        "gratitude.base_budget"
       ],
       "apiPrefixes": [
         "/api/health"
@@ -1029,13 +1041,11 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "exchange.manage"
       ],
       "variableKeys": [
-        "exchange.price_change_max_pct",
-        "exchange.swap_spread_bps",
-        "exchange.swap_fiat_hold_days",
-        "exchange.swap_max_receive_per_order",
         "payments.purchase_limit_per_order_usd",
         "payments.purchase_limit_30d_usd",
-        "payments.purchase_limit_annual_usd"
+        "payments.purchase_limit_annual_usd",
+        "governance.weight_mode",
+        "governance.weight_token"
       ],
       "apiPrefixes": [
         "/api/exchange"
@@ -1054,7 +1064,9 @@ The same facts, for anything that would rather parse than read. Regenerated with
       "requires": [],
       "recommends": [],
       "capabilities": [],
-      "variableKeys": [],
+      "variableKeys": [
+        "payments.donation_max_usd"
+      ],
       "apiPrefixes": [
         "/api/products"
       ],
@@ -1226,7 +1238,10 @@ The same facts, for anything that would rather parse than read. Regenerated with
       ],
       "capabilities": [],
       "variableKeys": [
-        "hypha.treasury_address"
+        "tokens.base_rpc_url",
+        "tokens.equity_address",
+        "tokens.voice_address",
+        "governance.default_method"
       ],
       "apiPrefixes": [
         "/api/hypha",

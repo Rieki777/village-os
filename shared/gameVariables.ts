@@ -25,7 +25,51 @@ import { TIER_FLOORS, type Criticality } from "./governanceEngine";
 import { MINT_RULE, SUBJECT_THRESHOLDS, VILLAGE_LAUNCH } from "./ballotSubjects";
 import { isAnchorDateAcceptable } from "./villageMoon";
 
-export type VariableType = "integer" | "decimal" | "percentage" | "boolean" | "choice" | "text";
+export type VariableType = "integer" | "decimal" | "percentage" | "boolean" | "choice" | "text" | "longtext";
+
+/**
+ * How long a `longtext` value may be, in characters.
+ *
+ * `text` stops at 255 because that is what `game_variables`.`value` held.
+ * Migration 0212 widened that column to TEXT, which is 65,535 BYTES, and a
+ * character is up to four of them under utf8mb4. 4,000 characters therefore
+ * cannot overflow the column even when every character is an emoji, which is
+ * the property worth having: MySQL in strict mode REFUSES an oversized write
+ * rather than truncating it, so a cap that could be wrong would show up as a
+ * village losing a paragraph it had already typed.
+ */
+export const LONGTEXT_MAX = 4000;
+
+/**
+ * What a `longtext` value becomes before it is validated, stored, or compared.
+ *
+ * Three things happen here and each one is a decision:
+ *
+ *   1. CRLF and a lone CR become one newline. The founders editing these
+ *      paragraphs are on Windows browsers, a textarea submits CRLF, and a
+ *      value that round-trips through the database with a carriage return in
+ *      it compares unequal to the same words typed on a Mac. `setVariable`
+ *      stores deltas only and DELETES the row when the value equals the
+ *      platform default, so an invisible CR is the difference between a
+ *      village inheriting future defaults and being frozen on today's.
+ *   2. Control characters go, and newlines and tabs stay. A NUL or an escape
+ *      sequence in a value that is rendered to members is never something a
+ *      person typed on purpose; \n and \t are, and they are the whole reason
+ *      this type exists.
+ *   3. The bidi overrides and isolates go (U+202A-U+202E, U+2066-U+2069).
+ *      They are not control characters in the Cc sense and are worth naming
+ *      separately: they reorder the characters AROUND them when rendered, so
+ *      a value carrying one can display words in an order nobody wrote. They
+ *      are stripped here rather than escaped at render time because there are
+ *      several render sites and one write path.
+ */
+export function normaliseLongText(raw: string): string {
+  return String(raw ?? "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\x00---]/g, "")
+    .replace(/[‪-‮⁦-⁩]/g, "")
+    .trim();
+}
 
 /**
  * THE THREE RINGS (Game Mechanics initiative, decided 2026-07-31).
@@ -2979,6 +3023,27 @@ export function validateVariable(def: VariableDef, raw: string): string | null {
   if (def.type === "choice") {
     const allowed = (def.choices ?? []).map((c) => c.value);
     return allowed.includes(raw) ? null : `Must be one of: ${allowed.join(", ")}.`;
+  }
+  /*
+   * A paragraph, judged on what will actually be STORED.
+   *
+   * The length is measured after normalising rather than before, because the
+   * write path normalises too: judging the raw string would refuse a value
+   * that is under the cap the moment its carriage returns come off, and a
+   * refusal a person cannot see the cause of is the worst kind.
+   *
+   * No per-key grammar below it, on purpose. The rules under `text` exist for
+   * values that are addresses, URLs and windows; a paragraph is prose, and the
+   * only thing the platform has to promise about prose is that it is stored as
+   * typed and rendered as text rather than as markup. That promise is kept at
+   * the render sites (client/src/components/LongText.tsx).
+   */
+  if (def.type === "longtext") {
+    const stored = normaliseLongText(raw);
+    if (stored.length > LONGTEXT_MAX) {
+      return `Too long (${LONGTEXT_MAX} characters maximum, this is ${stored.length}).`;
+    }
+    return null;
   }
   if (def.type === "text") {
     if (raw.length > 255) return "Too long (255 characters maximum).";
