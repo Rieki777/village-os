@@ -22,6 +22,7 @@ import { SeatSomebody } from "@/components/power/SeatSomebody";
 import { AppointToRole } from "@/components/admin/AppointToRole";
 import { RAISED_HAND_TERM_KEYS, RaisedHandTerm } from "@/components/admin/RaisedHandTerm";
 import { POWER_HAND_KEYS, PowerHandNote } from "@/components/admin/PowerHandNote";
+import { SeatClaimAsks, type SeatClaimAsk } from "@/components/admin/SeatClaimAsks";
 import Celebration from "@/components/natural/Celebration";
 import { useMomentWindow } from "@/components/natural/moments";
 import { playMoment } from "@/lib/sound";
@@ -4704,6 +4705,10 @@ function OrgChartTab({ password }: { password: string }) {
   // Mandates that have run out or are about to. Sorted most overdue first by
   // the server, which is the only order that makes this list get acted on.
   const [expiring, setExpiring] = useState<any[]>([]);
+  // Members asking to be confirmed in a seat the village recorded under their
+  // name. Answered on the seat itself, which is where a steward can see what
+  // they are answering about.
+  const [seatAsks, setSeatAsks] = useState<SeatClaimAsk[]>([]);
   const inputCls = "border border-gray-200 rounded-lg px-2 py-1.5 text-sm";
 
   const openJournal = async (id: string) => {
@@ -4719,16 +4724,23 @@ function OrgChartTab({ password }: { password: string }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [o, m, e] = await Promise.all([
+      const [o, m, e, asks] = await Promise.all([
         fetch(`${API_BASE}/org`, { headers: authHeaders(password) }).then((r) => r.json()),
         fetch(`${API_BASE}/admin/players`, { headers: authHeaders(password) }).then((r) => (r.ok ? r.json() : [])),
         fetch(`${API_BASE}/admin/org/expiring?days=45`, { headers: authHeaders(password) })
+          .then((r) => (r.ok ? r.json() : []))
+          .catch(() => []),
+        // A reader without `org.seat` gets a 401 here and the rest of the tab
+        // still draws. The queue is the only part of this screen that power
+        // gates, so it is the only part that disappears.
+        fetch(`${API_BASE}/org/seat-claims`, { headers: authHeaders(password) })
           .then((r) => (r.ok ? r.json() : []))
           .catch(() => []),
       ]);
       setOrg(o);
       setMembers(Array.isArray(m) ? m : []);
       setExpiring(Array.isArray(e) ? e : []);
+      setSeatAsks(Array.isArray(asks) ? asks : []);
     } catch { setOrg(null); }
     setLoading(false);
   }, [password]);
@@ -5036,6 +5048,19 @@ function OrgChartTab({ password }: { password: string }) {
                         ))}
                         {(r.holders ?? []).length === 0 && <span className="text-xs text-gray-400">Nobody holds this yet.</span>}
                       </div>
+
+                      {/*
+                        The asks waiting on this seat, on the seat itself. A
+                        claim files a row and never moves a seating, because a
+                        name on an account is typed by whoever holds it; this
+                        is where a person decides. Nothing draws when the seat
+                        has no ask, which is every seat most days.
+                      */}
+                      <SeatClaimAsks
+                        asks={seatAsks.filter((a) => a.roleId === r.id)}
+                        call={call}
+                        onDone={(said) => { toast.success(said); void load(); }}
+                      />
 
                       <div className="mt-2 flex flex-wrap gap-2 items-end">
                         <SeatSomebody
