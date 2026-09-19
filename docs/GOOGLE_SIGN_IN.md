@@ -176,6 +176,37 @@ would have needed different code, and it is the one we are not building.
 5. The page POSTs to `/api/auth/google/exchange`, which trades the cookie for a
    session token once and clears it.
 
+## Confirming a destructive action without a password
+
+A member who joined through Google has no password, and leaving the village
+(`POST /api/profile/request-exit`) and deleting the account
+(`POST /api/profile/delete-account`) used to accept nothing else. Both routes
+now take a fresh Google sign-in from a member with no password. The mechanism
+and its security argument live in the header of `server/lib/identityConfirm.ts`.
+In short:
+
+1. The screen asks `GET /api/auth/confirm-methods` and draws a password box, a
+   Confirm with Google button, or a sentence sending the member to set a
+   password.
+2. The button goes to `/api/auth/google/start?confirm=<action>`. The action
+   rides inside the signed state, and no destination is sent: a confirmation
+   returns to the action's own screen, so a redirect on this path never carries
+   a value that came off the request.
+3. The callback runs every check a sign-in runs, then accepts ONLY the Google
+   subject already linked to an account. It never creates or links an account
+   on this path, and it sends a member who has a password back to it.
+4. It writes a digest of a random id into that member's row, sets a five-minute
+   HttpOnly cookie scoped to `/api/profile` that names the member, the action
+   and the session generation, and redirects back to the screen.
+5. The route spends the record under the member's row lock, so a confirmation
+   works exactly once, and clears the cookie.
+
+A member with a password keeps the password prompt exactly as it was. On a
+village with Google off, a member with no password is refused in a sentence
+that sends them to set one. Google publishes no `auth_time` claim, so this
+cannot tell a Google session typed a minute ago from one the browser has kept
+for a week. The account chooser is always shown.
+
 ## Account linking, and the security argument
 
 **A Google sign-in whose verified email matches an existing account is linked
