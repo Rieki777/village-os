@@ -327,6 +327,9 @@ what runs first:
 4. Self-consent, unless the solo-founder window is open.
 5. The decline branch returns here, through `claimsRepo.declineOnce`: from `claimed` or
    `submitted` only, under the claim's row lock, and a resolved claim is refused with 409.
+   A claim that is already `declined` is the exception: the row and the request agree, so the
+   route answers the row with 200 and writes nothing, which is what a second press and a
+   retried request both want. Every other resolution, `consented` above all, is still 409.
 6. A consent of 0 is refused unless `quest.allow_zero_consent` is on or the quest itself
    advertises 0.
 7. If the cap mode is not `unlimited` and the label is unreadable, 409.
