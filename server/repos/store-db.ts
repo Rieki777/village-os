@@ -76,6 +76,50 @@
  * job, not when the job succeeds. Rebasing answers both writers truthfully
  * and loses nothing that was not written by two people to the same field.
  *
+ * THE FIRST HALF OF THAT PARAGRAPH IS NOW OUT OF DATE, and it is left standing
+ * because the conclusion still holds for a different reason. `package.json`
+ * pins `express: ^5.2.1` and 5.2.1 is what installs, and Express 5 forwards a
+ * rejected promise returned by an async handler to the error middleware, so a
+ * throw out of `replaceAll` answers 500 today and does not hang. What survives
+ * is the second reason: a refusal hands a background job a lost day and hands
+ * a steward an error where a merge would have been truthful. Rebasing is still
+ * the right default for a payload that CAN say what its author saw.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * THE DOOR THE COUNTER LEFT OPEN, AND THE PRIMITIVE THAT CLOSES IT (0123)
+ * ────────────────────────────────────────────────────────────────────────────
+ *
+ * The stale check reads the stamp off the ROWS it is handed. An array with no
+ * rows carries nothing to read, so `payloadSnapshot` answers undefined, which
+ * is the signature of a payload built from scratch: the boot seeding path,
+ * unguarded on purpose. `replaceAll([])` therefore skipped the stale check AND
+ * the rebase and ran `DELETE FROM <table>` against whatever the table held at
+ * that moment.
+ *
+ * The removal idiom, `replaceAll(all().filter(...))`, produces exactly that
+ * array the moment it removes the LAST row, and every admin delete in this
+ * codebase was written that way. An admin deleting the only submission while a
+ * member raised a hand (`POST /api/map/roles/:id/raise-hand`) erased the raised
+ * hand, and both requests answered 200. It is the same lost update the counter
+ * closed, through the one door the counter could not see.
+ *
+ * Two things close it, and they are different jobs:
+ *
+ *   - `remove(ids)` deletes BY ID, under the same `SELECT ... FOR UPDATE` lock
+ *     `insert` takes, bumps the counter so every outstanding snapshot rebases,
+ *     and refreshes the cache from the table. A list of ids is COMPLETE
+ *     intent, so it needs no snapshot and can never reach a row it was not
+ *     handed. Every removal in this codebase goes through it now, which also
+ *     means a member-triggered removal stops rewriting a whole table.
+ *   - `replaceAll` REFUSES an unstamped empty payload while the table still
+ *     holds rows (`EmptyPayloadError`, nothing written), because an empty
+ *     array is the one payload that cannot say what its author saw, and every
+ *     answer to "which rows did they mean" would be a guess about somebody
+ *     else's data. That is the same call the HISTORY_DEPTH refusal makes.
+ *     An empty payload against an already-empty table is still accepted, so a
+ *     seed of nothing costs nothing and boot is untouched. Every seeder in
+ *     `server/index.ts` is guarded by `seed.length` anyway.
+ *
  * The one case that still throws is a snapshot older than `HISTORY_DEPTH`
  * writes, where there is no baseline to rebase against and any guess would be
  * a guess about somebody's data. That is loud on purpose.
@@ -92,7 +136,7 @@
  * `server/lib/orgChart.ts` and `server/lib/seasonPatterns.ts` write `circles`
  * raw and do NOT reload, so they are outside this and always were.
  */
-import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
+import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 
 export type Row = Record<string, any>;
 
@@ -157,6 +201,18 @@ export interface DbCollection<T extends Row = Row> {
   replaceAll(rows: T[]): Promise<void>;
   /** Append one row. */
   insert(row: T): Promise<T>;
+  /**
+   * Delete the named rows and nothing else, under the same version lock
+   * `insert` takes. This is the removal primitive: a list of ids says exactly
+   * what the caller means, so it needs no snapshot, it cannot reach a row that
+   * arrived after the caller read, and it does not rewrite the whole table to
+   * take one row out of it. Ids that are not there are not an error.
+   *
+   * Answers how many rows were actually removed, which is what a caller needs
+   * to tell a delete from a 404. A removal of nothing writes nothing and does
+   * not move the counter.
+   */
+  remove(ids: string[]): Promise<number>;
 }
 
 /**
@@ -195,6 +251,31 @@ export class StaleSnapshotError extends Error {
         `collection again and re-apply the change.`,
     );
     this.name = "StaleSnapshotError";
+  }
+}
+
+/**
+ * Thrown when a whole-table write is handed an empty payload with no version
+ * stamp while the table still holds rows.
+ *
+ * Nothing was written. An empty array is the one payload that cannot say what
+ * its author read, so honouring it would delete rows nobody looked at. Use
+ * `remove(ids)` to delete named rows.
+ */
+export class EmptyPayloadError extends Error {
+  readonly code = "empty_payload";
+  constructor(
+    readonly table: string,
+    readonly heldRows: number,
+  ) {
+    super(
+      `${table} holds ${heldRows} row(s) and this write was handed an empty payload carrying no ` +
+        `version stamp, so there is no way to tell a caller that read the table and removed every ` +
+        `row it saw from a seeder that built the payload from scratch. Honouring it would delete ` +
+        `rows the caller may never have seen. Nothing was written. Call remove(ids) to delete ` +
+        `named rows.`,
+    );
+    this.name = "EmptyPayloadError";
   }
 }
 
@@ -299,6 +380,7 @@ export function dbCollection<T extends Row = Row>(pool: Pool, spec: CollectionSp
   const placeholders = spec.columns.map(() => "?").join(",");
   const orderBy = spec.orderBy ?? `\`${spec.columns[0].db}\``;
   const keyJs = spec.key ?? spec.columns[0].js;
+  const keyDb = (spec.columns.find((c) => c.js === keyJs) ?? spec.columns[0]).db;
 
   const rowToItem = (r: RowDataPacket): T => {
     const item: Row = {};
@@ -444,6 +526,12 @@ export function dbCollection<T extends Row = Row>(pool: Pool, spec: CollectionSp
     return rows.map(rowToItem);
   }
 
+  /** How many rows the table holds, read under the lock the caller already has. */
+  async function countRows(conn: PoolConnection): Promise<number> {
+    const [rows] = await conn.query<RowDataPacket[]>(`SELECT COUNT(*) AS n FROM \`${spec.table}\``);
+    return Number(rows[0]?.n ?? 0);
+  }
+
   return {
     async load() {
       await ensureVersionRow();
@@ -531,6 +619,20 @@ export function dbCollection<T extends Row = Row>(pool: Pool, spec: CollectionSp
         const dbVersion = await readVersionForUpdate(conn);
         const snapshot = payloadSnapshot(rows);
 
+        /*
+         * AN EMPTY PAYLOAD CANNOT SAY WHAT ITS AUTHOR SAW. No rows means no
+         * stamp, which reads here as "built from scratch" and takes the
+         * unguarded seeding path, so `replaceAll(all().filter(...))` that
+         * removes the last row used to DELETE whatever the table held by then,
+         * including rows another writer inserted in the gap. Refuse instead,
+         * and only while there is something to lose: an empty payload against
+         * an empty table is a seed of nothing and costs nothing.
+         */
+        if (rows.length === 0 && snapshot === undefined) {
+          const held = await countRows(conn);
+          if (held > 0) throw new EmptyPayloadError(spec.table, held);
+        }
+
         let write: T[] = rows;
         let conflicts: string[] = [];
         let rebased = false;
@@ -605,6 +707,53 @@ export function dbCollection<T extends Row = Row>(pool: Pool, spec: CollectionSp
         else cache.push(row);
         remember(version, cache);
         return row;
+      } catch (e) {
+        await conn.rollback();
+        throw e;
+      } finally {
+        conn.release();
+      }
+    },
+
+    async remove(ids) {
+      const seen = new Set<string>();
+      const wanted: string[] = [];
+      for (const raw of ids) {
+        const id = String(raw);
+        if (!id.length || seen.has(id)) continue;
+        seen.add(id);
+        wanted.push(id);
+      }
+      if (!wanted.length) return 0;
+      await ensureVersionRow();
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+        const dbVersion = await readVersionForUpdate(conn);
+        const [res] = await conn.query<ResultSetHeader>(
+          `DELETE FROM \`${spec.table}\` WHERE \`${keyDb}\` IN (${wanted.map(() => "?").join(",")})`,
+          wanted,
+        );
+        const removed = Number(res?.affectedRows ?? 0);
+        if (removed) {
+          await conn.query("UPDATE collection_versions SET version = version + 1 WHERE collection = ?", [
+            spec.table,
+          ]);
+        }
+        /*
+         * Re-read whenever anything moved, ours or somebody else's. Filtering
+         * the cache in place would leave it missing rows another writer added
+         * since this process loaded while claiming to be current, which is the
+         * exact state the next whole-table write erases (see `insert`).
+         */
+        const fresh = removed || dbVersion !== version ? await readRows(conn) : null;
+        await conn.commit();
+        version = removed ? dbVersion + 1 : dbVersion;
+        if (fresh) {
+          cache = fresh;
+          remember(version, cache);
+        }
+        return removed;
       } catch (e) {
         await conn.rollback();
         throw e;

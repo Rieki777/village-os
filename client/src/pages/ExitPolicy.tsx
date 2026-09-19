@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
 import { DoorOpen, HeartHandshake, ShieldQuestion } from "lucide-react";
+import { IdentityConfirmField, identityBody, identityReady, useIdentityConfirm } from "@/components/auth/ConfirmWithGoogle";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -22,23 +23,28 @@ export default function ExitPolicy() {
   const [intake, setIntake] = useState("");
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
+  // A member with no password confirms with Google (components/auth/ConfirmWithGoogle.tsx).
+  const identity = useIdentityConfirm("request-exit");
 
   useEffect(() => {
     fetch("/api/exit-policy").then((r) => r.json()).then(setData).catch(() => {});
   }, []);
 
   const policy = data?.policy;
+  const shownError = error || identity.returnError;
 
   const requestExit = () => {
     setError(""); setMsg("");
     fetch("/api/profile/request-exit", {
-      method: "POST", headers: headers(), body: JSON.stringify({ password, note }),
+      method: "POST", headers: headers(), body: JSON.stringify({ ...identityBody(identity, password), note }),
     })
       .then(async (r) => {
         const d = await r.json();
-        if (!r.ok) throw new Error(d.message ?? d.error ?? "Could not open the process");
+        // A refused Google confirmation is spent or stale either way, so the
+        // button to confirm again comes back.
+        if (!r.ok) { identity.reset(); throw new Error(d.message ?? d.error ?? "Could not open the process"); }
         setMsg("Your departure process is open. The stewards will walk each step with you. Nothing happens automatically.");
-        setPassword(""); setNote("");
+        setPassword(""); setNote(""); identity.reset();
       })
       .catch((e) => setError(e.message));
   };
@@ -79,7 +85,7 @@ export default function ExitPolicy() {
             </p>
           )}
           {msg && <p role="status" className="text-sm text-teal-deep bg-teal-deep/10 rounded-lg px-4 py-2.5">{msg}</p>}
-          {error && <p role="alert" className="text-sm text-red-600 bg-red-50 rounded-lg px-4 py-2.5">{error}</p>}
+          {shownError && <p role="alert" className="text-sm text-red-600 bg-red-50 rounded-lg px-4 py-2.5">{shownError}</p>}
 
           <div className="bg-card border border-border rounded-xl p-5">
             <div className="flex items-center gap-2 mb-2">
@@ -163,13 +169,14 @@ export default function ExitPolicy() {
                 identity is removed at the end, when everything is settled.
               </p>
               <div className="space-y-2">
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                <IdentityConfirmField state={identity} action="request-exit"
+                  password={password} onPassword={setPassword}
                   placeholder="Confirm with your password"
-                  className="w-full text-sm border border-border rounded-lg px-3 py-2" />
+                  inputClassName="w-full text-sm border border-border rounded-lg px-3 py-2" />
                 <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2}
                   placeholder="Anything you want the stewards to know (optional)"
                   className="w-full text-sm border border-border rounded-lg px-3 py-2" />
-                <button onClick={requestExit} disabled={!password}
+                <button onClick={requestExit} disabled={!identityReady(identity, password)}
                   className="text-sm border border-red-300 text-red-600 rounded-lg px-4 py-2 font-medium hover:bg-red-50 disabled:opacity-40">
                   Open my departure process
                 </button>

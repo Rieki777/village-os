@@ -816,8 +816,16 @@ const CARRIES: Partial<Record<Capability, readonly Capability[]>> = {
   "member.superVouch": ["member.vouch"],
 };
 
-/** Does anything the actor holds carry `cap`? */
-function carriedBy(held: readonly string[], cap: Capability): boolean {
+/**
+ * Does anything the actor holds carry `cap`?
+ *
+ * EXPORTED so a counter of holders can ask the same question the gate asks.
+ * `liveHoldersOfCapability` (server/lib/roleGrants.ts) answers "has the village
+ * given this power to anybody", and a second spelling of the carry rule there
+ * would be a twin that drifts: the gate would let a `member.superVouch` holder
+ * vouch while the counter reported nobody could.
+ */
+export function carriedBy(held: readonly string[], cap: Capability): boolean {
   return held.some((k) => (CARRIES[k as Capability] ?? []).includes(cap));
 }
 

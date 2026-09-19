@@ -3,10 +3,11 @@
  * event family, the global email switch, and the two Law-8968 surfaces —
  * export everything, or leave and be anonymized.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Bell, Download, ShieldOff } from "lucide-react";
 import { authToken, clearAuthToken } from "@/lib/gameApi";
 import { actionError } from "@/lib/actionOutcome";
+import { IdentityConfirmField, identityBody, identityReady, useIdentityConfirm } from "@/components/auth/ConfirmWithGoogle";
 
 const CADENCES: Record<string, Array<{ v: string; label: string }>> = {
   questsEmail: [
@@ -79,6 +80,20 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
   const [notifyNote, setNotifyNote] = useState("");
   /** Set only when an outside store did not confirm. Holds the redirect open. */
   const [farewell, setFarewell] = useState("");
+  /**
+   * A member with no password confirms with Google. Google sends them back to
+   * this page, so a confirmation, or its refusal, reopens the delete panel
+   * where they left it and brings it into view.
+   */
+  const identity = useIdentityConfirm("delete-account");
+  const deletePanel = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (identity.confirmed || identity.returnError) setConfirming(true);
+    if (identity.returnError) setError(identity.returnError);
+  }, [identity.confirmed, identity.returnError]);
+  useEffect(() => {
+    if (confirming && identity.confirmed) deletePanel.current?.scrollIntoView?.({ block: "center" });
+  }, [confirming, identity.confirmed, prefs]);
 
   const headers = () => ({ Authorization: `Bearer ${authToken()}`, "Content-Type": "application/json" });
 
@@ -142,11 +157,13 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
     fetch("/api/profile/delete-account", {
       method: "POST",
       headers: headers(),
-      body: JSON.stringify({ password }),
+      body: JSON.stringify(identityBody(identity, password)),
     })
       .then(async (r) => {
         const d = await r.json();
-        if (!r.ok) throw new Error(d.message ?? d.error ?? "Could not delete");
+        // A refused Google confirmation is spent or stale, so the button to
+        // confirm again comes back.
+        if (!r.ok) { identity.reset(); throw new Error(d.message ?? d.error ?? "Could not delete"); }
         clearAuthToken();
         onDeleted?.();
         /*
@@ -307,21 +324,22 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
             Delete my account
           </button>
         ) : (
-          <div className="rounded-xl border border-destructive/70 bg-destructive/10 p-4">
+          <div ref={deletePanel} className="rounded-xl border border-destructive/70 bg-destructive/10 p-4">
             <p className="text-xs text-destructive mb-2">
               This anonymizes you permanently: your name, contact details and profile are
               scrubbed everywhere. The village's shared history (settlements, quest
               records) keeps its numbers, without your name on them. This cannot be undone.
             </p>
             <div className="flex flex-wrap items-center gap-2">
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+              <IdentityConfirmField
+                state={identity}
+                action="delete-account"
+                password={password}
+                onPassword={setPassword}
                 placeholder="Confirm your password"
-                className="text-sm border border-destructive/70 rounded-lg px-3 py-1.5"
+                inputClassName="text-sm border border-destructive/70 rounded-lg px-3 py-1.5"
               />
-              <button onClick={deleteAccount} disabled={!password}
+              <button onClick={deleteAccount} disabled={!identityReady(identity, password)}
                 className="text-sm bg-destructive text-destructive-foreground rounded-lg px-3 py-1.5 font-medium disabled:opacity-40">
                 Delete forever
               </button>

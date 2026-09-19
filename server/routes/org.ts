@@ -1,10 +1,10 @@
 /**
  * The org chart: links, structural drafts, seat history, and the admin edits.
  *
- * Twenty routes. Nineteen were lifted out of server/index.ts unchanged and
- * are grouped as they were grouped there, because they were already one
- * contiguous run. The twentieth is marked below and is the only one that was
- * not a move:
+ * Twenty-three routes. Nineteen were lifted out of server/index.ts unchanged
+ * and are grouped as they were grouped there, because they were already one
+ * contiguous run. Four are marked below and were not moves: the needs read,
+ * and the three doors that turned claiming a seat into asking for one.
  *
  *   links       GET  /api/org/relations
  *               GET  /api/org/:kind/:id/relations
@@ -23,6 +23,9 @@
  *   needs       GET  /api/org/roles/:id/needs
  *   claiming    GET  /api/org/my-unclaimed-seats
  *               POST /api/org/seatings/:id/claim
+ *               GET  /api/org/seat-claims
+ *               POST /api/org/seatings/:id/claim/confirm
+ *               POST /api/org/seat-claims/:id/decline
  *   editing     POST /api/admin/org/roles
  *               PUT  /api/admin/org/roles/:id
  *               POST /api/admin/org/roles/:id/holders
@@ -61,6 +64,7 @@ import {
   createOrgRole,
   describeOrgChange,
   expiringSeatings,
+  listOrgAssignments,
   listOrgRoles,
   orgRoleHistory,
   seatHolder,
@@ -88,6 +92,7 @@ import {
   type NodeKind,
 } from "../lib/orgRelations";
 import { captureIntoCurrentPattern } from "../lib/seasonPatterns";
+import { submissionStatusNotice } from "../lib/submissionNotices";
 import { resolveSeatTerm } from "../../shared/seatTerms";
 
 type Deps = Pick<
@@ -104,6 +109,8 @@ type Deps = Pick<
   | "seasonState"
   | "notify"
   | "circlesRepo"
+  | "notifyAdmins"
+  | "submissionsRepo"
 >;
 
 export function register(app: Express, deps: Deps): void {
@@ -120,7 +127,61 @@ export function register(app: Express, deps: Deps): void {
     seasonState,
     notify,
     circlesRepo,
+    notifyAdmins,
+    submissionsRepo,
   } = deps;
+
+  /*
+   * ── The stewards' inbox, as this module uses it ──────────────────────────
+   *
+   * `seat-claim` rows are filed by the claim route and answered by the two
+   * `org.seat` doors below. The type string is the one the admin inbox
+   * filters on and the one `submissionNotices.ts` words for the member, so it
+   * is named once here.
+   *
+   * OPEN means a steward has not decided yet. The pipeline's five words are
+   * `new`, `reviewing`, `in-conversation`, `accepted` and `declined`, and the
+   * last two are the only ones that close a row. Reading it that way round,
+   * instead of listing the open ones, means a village that adds a status word
+   * does not silently lose its pending asks out of this queue.
+   */
+  const SEAT_CLAIM_TYPE = "seat-claim";
+  const CLOSED_STATUSES = new Set(["accepted", "declined"]);
+  const openSeatClaims = (): any[] =>
+    (submissionsRepo.all() as any[]).filter(
+      (s) => s.type === SEAT_CLAIM_TYPE && !CLOSED_STATUSES.has(String(s.status ?? "")),
+    );
+
+  /**
+   * Close one ask, through the one repository the admin inbox reads.
+   *
+   * THE WHOLE LIST GOES BACK, which is what `replaceAll` takes, and the rows
+   * carry the version they were read at so a concurrent insert is rebased
+   * instead of overwritten. Never called with an empty list: `rows` always
+   * holds at least the row being closed.
+   *
+   * EVERY MATCHING OPEN ROW CLOSES, not the first one found, because the
+   * claim route reads the open asks and then inserts with nothing in between.
+   * Two presses close enough together both pass that check and both file. If
+   * an accept closed only one, the seat would move and the twin would sit in
+   * the queue forever: Confirm on it is refused over a seat already filled,
+   * and Decline tells the member no about a seat they are sitting in. The row
+   * returned is the first one, which is the ask being answered; the rest are
+   * the same ask arriving twice and are closed quietly.
+   */
+  const closeSeatClaim = async (match: (s: any) => boolean, status: "accepted" | "declined") => {
+    const rows = submissionsRepo.all() as any[];
+    let answered: any = null;
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.type !== SEAT_CLAIM_TYPE || CLOSED_STATUSES.has(String(row.status ?? "")) || !match(row)) continue;
+      if (!answered) answered = row;
+      rows[i] = { ...row, status };
+    }
+    if (!answered) return null;
+    await submissionsRepo.replaceAll(rows);
+    return answered;
+  };
 
   /*
    * ── Links between seats and circles (0054) ───────────────────────────
@@ -492,8 +553,8 @@ export function register(app: Express, deps: Deps): void {
   /**
    * WHAT NEEDS THIS SEAT IS HELD FOR (R1, R18, migration 0204).
    *
-   * THE TWENTIETH ROUTE, and the only one in this file that was not a move
-   * out of server/index.ts. It exists because the seat's own read payload is
+   * THE TWENTIETH ROUTE, and the first of the two in this file that were not
+   * a move out of server/index.ts. It exists because the seat's own read payload is
    * assembled inside `GET /api/org`, which lives at server/index.ts:26911
    * under a ratchet that only turns down, and a lane that cannot add a line
    * there cannot put the links where they belong. So the answer comes on its
@@ -548,6 +609,48 @@ export function register(app: Express, deps: Deps): void {
     );
   });
 
+  /**
+   * ASKING FOR A SEAT. A TYPED NAME IS NOT A CREDENTIAL.
+   *
+   * This route used to seat whoever pressed it, on the strength of the name
+   * on their account matching the name an admin had typed on the seating.
+   * Both halves of that comparison are typed by the person doing the
+   * claiming: `POST /api/auth/register` takes a name, `PUT /api/profile`
+   * rewrites it with no uniqueness check, and the name being matched against
+   * is published to them. `map.viewPeople` opens at the `guest` rung, which
+   * every account holds the moment it exists, and the member tier of
+   * `GET /api/org` carries a documented holder's full recorded name. Read
+   * the chart, set your own name to a holder's, press the button.
+   *
+   * WHAT THAT REACHED, because a seat is not a label on a picture. Flipping a
+   * seating to `holder_kind = 'member'` with a `user_id` is the exact
+   * combination `seatHolder` refuses for an agent, and for the reasons it
+   * states there: the moon settlement pays live member seatings
+   * (`server/lib/economy.ts`), and a seat flagged `represents_circle` opens
+   * `mayDeclare` for its circle, the one bridge from the seat plane to a
+   * permission. Two more ride along: `visibleRules` in server/lib/resources.ts
+   * shows a holder the spending rules a village keeps for holders of that
+   * seat, and `greetersFor` in server/lib/arrival.ts routes every arrival,
+   * carrying a new member's name, to whoever holds the greeter seat.
+   *
+   * SO THE CLAIM ASKS. The offer still stands on a name match, because a
+   * chart backfilled from a document has nothing else to go on, and the name
+   * remains a good enough reason to put the question in front of somebody.
+   * What it stopped being is the answer. `org.seat` is the power that decides
+   * who sits in the village's seats, and the sibling route below is where it
+   * is exercised.
+   *
+   * THE ASK IS A ROW IN THE STEWARDS' INBOX, type `seat-claim`, which is the
+   * shape a raised hand already uses (`POST /api/map/roles/:id/raise-hand`).
+   * An alert and a journal line alone would have left a steward with a bell
+   * and nothing to act on, which is the "API complete, UI absent" shape this
+   * repo has paid for before. The row carries what the control below needs to
+   * draw the decision, and `org.seat` reads it at `GET /api/org/seat-claims`.
+   *
+   * A SECOND OPEN ASK FOR THE SAME SEATING IS REFUSED, and says so, the way a
+   * second raised hand is. The seat's own journal keeps every ask, so nothing
+   * is lost by not filing the duplicate.
+   */
   app.post("/api/org/seatings/:id/claim", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in first" });
@@ -558,22 +661,175 @@ export function register(app: Express, deps: Deps): void {
     if (await isExampleRow(getPool(), "org_role_assignments", req.params.id)) {
       return res.status(409).json(EXAMPLE_REFUSAL_BODY);
     }
-    // Only a seating whose recorded name matches this member may be claimed,
-    // checked server-side: the id alone must never be enough to take a seat.
+    // Only a seating whose recorded name matches this member may be asked
+    // for, checked server-side: the id alone must never put the question.
     const mine = await unclaimedSeatingsFor(getPool(), user.name);
-    if (!mine.some((a) => a.id === req.params.id)) {
+    const wanted = mine.find((a) => a.id === req.params.id);
+    if (!wanted) {
       return res.status(403).json({ error: "That seat is not recorded under your name" });
     }
-    const ok = await claimSeating(getPool(), req.params.id, user.id);
-    if (!ok) return res.status(409).json({ error: "That seating has already been claimed or ended" });
+    const roles = await listOrgRoles(getPool());
+    const seatName = roles.find((r) => r.id === wanted.orgRoleId)?.name ?? wanted.orgRoleId;
+    if (openSeatClaims().some((s) => s.data?.assignmentId === req.params.id && s.userId === user.id)) {
+      return res.status(409).json({
+        error: "You have already asked for this seat, and a steward has it in front of them",
+      });
+    }
+    const entry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      type: SEAT_CLAIM_TYPE,
+      status: "new",
+      rewarded: false,
+      data: {
+        assignmentId: req.params.id,
+        roleId: wanted.orgRoleId,
+        roleName: seatName,
+        recordedName: wanted.displayName ?? "",
+        name: user.name,
+        email: user.email ?? null,
+      },
+      userId: user.id,
+      userName: user.name,
+      submittedAt: new Date().toISOString(),
+    };
+    await submissionsRepo.insert(entry as any);
     await recordEvent(getPool(), {
       kind: "role",
-      text: `${firstName(user.name)} confirmed a seat`,
+      text: `${firstName(user.name)} asks to be confirmed as the holder recorded "${wanted.displayName ?? ""}"`,
       actorUserId: user.id,
-      entityType: "org_role_assignment",
-      entityRef: req.params.id,
+      entityType: "org_role",
+      entityRef: wanted.orgRoleId,
       audience: "admin",
     });
+    // A request nobody hears is the failure this repo has already paid for on
+    // the raised-hand path and on both seating paths. Same shape as the
+    // raised hand: the stewards' alert, and a link to where they act.
+    await notifyAdmins(
+      "submission",
+      `${firstName(user.name)} asks to be confirmed as ${seatName}`,
+      `seat-claim:${req.params.id}:${user.id}`,
+      "/admin?tab=org-chart",
+    );
+    res.json({
+      success: true,
+      pending: true,
+      message: "Asked. A steward confirms it, and the seat keeps everything it already knew.",
+    });
+  });
+
+  /**
+   * THE ASKS A STEWARD HAS IN FRONT OF THEM, behind the power that answers
+   * them. Trimmed to what the control draws: which seating, which seat, who
+   * asked, and the name the village had written down.
+   */
+  app.get("/api/org/seat-claims", async (req, res) => {
+    if (!(await guardCapability(req, res, "org.seat"))) return;
+    res.json(
+      openSeatClaims().map((s) => ({
+        claimId: s.id,
+        assignmentId: String(s.data?.assignmentId ?? ""),
+        roleId: String(s.data?.roleId ?? ""),
+        roleName: String(s.data?.roleName ?? ""),
+        recordedName: String(s.data?.recordedName ?? ""),
+        userId: s.userId,
+        userName: s.userName,
+        askedAt: s.submittedAt,
+      })),
+    );
+  });
+
+  /**
+   * CONFIRMING ONE, which is `org.seat` and nothing weaker.
+   *
+   * This grants no power that `POST /api/admin/org/roles/:id/holders` above
+   * did not already carry: a holder of `org.seat` could always seat anybody.
+   * What it adds is doing it IN PLACE. `claimSeating` turns the documented
+   * row into a member holding, so the seating keeps its id and its start
+   * date, and the seat's history does not restart the day somebody finally
+   * signs up. Seating the member through the route above instead would leave
+   * the documented row live beside them and read as two holders.
+   *
+   * The member is told, with the same words and the same `org-seat:` dedupe
+   * key both seating paths use, because it is the same act by a third door.
+   *
+   * THE ASK IS CLOSED AFTER THE SEAT MOVES, never before: a row marked
+   * accepted over a `claimSeating` that refused would take the decision off
+   * the steward's queue and leave the seat where it was. A confirm with no ask
+   * behind it still works, because seating somebody is this power's to use
+   * whether or not they wrote in.
+   */
+  app.post("/api/org/seatings/:id/claim/confirm", async (req, res) => {
+    if (!(await guardCapability(req, res, "org.seat"))) return;
+    if (await isExampleRow(getPool(), "org_role_assignments", req.params.id)) {
+      return res.status(409).json(EXAMPLE_REFUSAL_BODY);
+    }
+    const userId = String(req.body?.userId ?? "").trim();
+    if (!userId) return res.status(400).json({ error: "Name the member this seat is being confirmed for" });
+    // Read for the seat's NAME, before the flip, and never to decide the
+    // outcome: `claimSeating`'s own WHERE clause is what refuses a seating
+    // that has ended, is an example, belongs to an agent or is already held.
+    const before = (await listOrgAssignments(getPool(), lapseContext())).find((a) => a.id === req.params.id);
+    const roles = await listOrgRoles(getPool());
+    const seatName = roles.find((r) => r.id === before?.orgRoleId)?.name ?? "a seat";
+    const ok = await claimSeating(getPool(), req.params.id, userId);
+    if (!ok) return res.status(409).json({ error: "That seating has already been claimed or ended" });
+    const actor = await authedUser(req);
+    await recordEvent(getPool(), {
+      kind: "role",
+      text: `confirmed: the holder recorded "${before?.displayName ?? ""}" is a member here`,
+      actorUserId: actor?.id ?? null,
+      entityType: "org_role",
+      entityRef: before?.orgRoleId ?? req.params.id,
+      audience: "admin",
+    });
+    await closeSeatClaim((s) => s.data?.assignmentId === req.params.id && s.userId === userId, "accepted");
+    await notify({
+      userId,
+      type: "role_appointed",
+      title: `You were seated as ${seatName}`,
+      body: null,
+      link: "/map/circles",
+      actorUserId: actor?.id ?? null,
+      dedupeKey: `org-seat:${req.params.id}`,
+    });
+    res.json({ success: true });
+  });
+
+  /**
+   * SAYING NO TO ONE, which is the same power and touches no seating.
+   *
+   * A queue with only a yes on it is a queue that fills up with asks nobody
+   * can clear, and the member is left waiting on a decision that was made in
+   * somebody's head. The row closes as `declined`, the seat stays exactly as
+   * it was, and the member hears the sentence
+   * `server/lib/submissionNotices.ts` already owns for a declined submission,
+   * so a no reads the same whichever door it came through.
+   */
+  app.post("/api/org/seat-claims/:id/decline", async (req, res) => {
+    if (!(await guardCapability(req, res, "org.seat"))) return;
+    const closed = await closeSeatClaim((s) => s.id === req.params.id, "declined");
+    if (!closed) return res.status(404).json({ error: "That ask has already been answered" });
+    const actor = await authedUser(req);
+    await recordEvent(getPool(), {
+      kind: "role",
+      text: `declined: the seat stays recorded under "${String(closed.data?.recordedName ?? "")}"`,
+      actorUserId: actor?.id ?? null,
+      entityType: "org_role",
+      entityRef: String(closed.data?.roleId ?? ""),
+      audience: "admin",
+    });
+    const words = submissionStatusNotice(SEAT_CLAIM_TYPE, "declined", closed.data ?? null);
+    if (closed.userId && words) {
+      await notify({
+        userId: String(closed.userId),
+        type: "submission",
+        title: words.headline,
+        body: words.line,
+        link: "/roles",
+        actorUserId: actor?.id ?? null,
+        dedupeKey: `seat-claim-declined:${closed.id}`,
+      });
+    }
     res.json({ success: true });
   });
 

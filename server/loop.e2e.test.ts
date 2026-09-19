@@ -5449,8 +5449,10 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     }
 
     // The member arrives, is offered the seating recorded under their name,
-    // and takes it. The row keeps its display_name through the claim, which
-    // is exactly why a tombstone on the users row does not reach it.
+    // asks for it, and a holder of `org.seat` confirms. The tap asks rather
+    // than takes, because both halves of a name match are typed by the person
+    // tapping. The row keeps its display_name through the confirm, which is
+    // exactly why a tombstone on the users row does not reach it.
     const leaver = { email: `seat-leaver-${PORT}@example.test`, password: "LoopTest123!", name: leaverName };
     const reg = await api("POST", "/api/auth/register", { ...leaver, paths: ["resident"] });
     expect(reg.status, JSON.stringify(reg.json)).toBe(200);
@@ -5460,7 +5462,18 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const offered = await api("GET", "/api/org/my-unclaimed-seats", undefined, leaverToken);
     const mine = offered.json.find((o: any) => o.roleId === seatId);
     expect(mine, "the seating recorded under their name is offered").toBeTruthy();
-    expect((await api("POST", `/api/org/seatings/${mine.assignmentId}/claim`, {}, leaverToken)).status).toBe(200);
+    const asked = await api("POST", `/api/org/seatings/${mine.assignmentId}/claim`, {}, leaverToken);
+    expect(asked.status, JSON.stringify(asked.json)).toBe(200);
+    expect(asked.json.pending, "asking never seats anybody on its own").toBe(true);
+    const seatedByClaim = await api("GET", "/api/org", undefined, founderToken);
+    expect(
+      seatedByClaim.json.roles.find((r: any) => r.id === seatId).holders.some((h: any) => h.userId === leaverId),
+      "the seat is nobody's until a steward says so",
+    ).toBe(false);
+    const confirmed = await api(
+      "POST", `/api/org/seatings/${mine.assignmentId}/claim/confirm`, { userId: leaverId }, founderToken,
+    );
+    expect(confirmed.status, JSON.stringify(confirmed.json)).toBe(200);
 
     // Both names are visible at the people tier before any of this.
     const before = await api("GET", "/api/org", undefined, doerToken);
