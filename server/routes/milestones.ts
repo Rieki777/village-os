@@ -72,10 +72,13 @@ export function register(app: Express, deps: Deps): void {
 
   app.delete("/api/admin/milestones/:id", async (req, res) => {
     if (!(await guardCapability(req, res, "story.tell"))) return;
-    const mils: any[] = milestonesRepo.all();
-    const filtered = mils.filter((m) => m.id !== req.params.id);
-    if (filtered.length === mils.length) return res.status(404).json({ error: "Not found" });
-    await milestonesRepo.replaceAll(filtered);
+    // By id. `replaceAll(all().filter(...))` writes an EMPTY array when it
+    // removes the last milestone, and an empty array carries no version stamp,
+    // so the store reads it as boot seeding and deletes the table as it stands
+    // (server/repos/store-db.ts, 0123).
+    if (!(await milestonesRepo.remove([String(req.params.id)]))) {
+      return res.status(404).json({ error: "Not found" });
+    }
     res.json({ success: true });
   });
 }

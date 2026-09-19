@@ -19,6 +19,26 @@
  * export that touches Express, and `deps` is a `Pick<AppDeps, ...>` so the
  * module's own signature says what it can reach.
  *
+ * ── A MODULE THAT SHIPS OFF (ruling 22, 2026-09-15) ───────────────────────
+ *
+ * Both prefixes mount behind `requireModule("redemption")`, and the gate lines
+ * live HERE rather than in server/index.ts for the ratchet reason above, the
+ * shape server/routes/stays.ts already has. Off is a 404 for every door but one.
+ *
+ * WITHDRAW IS REGISTERED ABOVE THE GATE, DELIBERATELY. It is the member's own
+ * refund door, and stays' settlement webhook is the precedent: value that is
+ * already held has to be able to come home even when the module is served off.
+ * `openStateCheck` refuses to switch the module off while anything is open, so
+ * this matters only when a module is served off with rows open anyway, by a
+ * quarantine or a hand-edited settings row, and then it is the one way a member
+ * gets their tokens back before expiry, or at all if the village set expiry to
+ * never. It reveals nothing about the lifecycle: an outsider gets the same 401
+ * or "no such redemption" whether the module is on or off. Expiry itself runs
+ * lifecycle-blind for the same reason (`expireRedemptions`).
+ *
+ * `openStateCheck` is attached in `register` below, which runs once at boot.
+ * It needs the pool, so the shared registry stays import-clean for the client.
+ *
  * ── WHO CONFIRMS, AND WHY IT IS A CAPABILITY ──────────────────────────────
  *
  * The founder's words are "confirmed by a steward or a vote (if no stewards are
@@ -51,7 +71,9 @@
  * machinery that word points at.
  */
 import type { Express } from "express";
+import { MODULES_BY_ID } from "../../shared/modules";
 import type { AppDeps } from "../lib/appDeps";
+import { requireModule } from "../lib/modules";
 import { recordEvent } from "../lib/events";
 import { allTokens, tokenDef } from "../lib/ledger";
 import { cycleWindow, decimalsFor, finerThanScale, fromLedgerUnits, toLedgerUnits } from "../lib/economy";
@@ -59,19 +81,30 @@ import { isListedForTrade } from "../lib/exchange";
 import { openExitFor } from "../lib/exit";
 import {
   canSettleRedemption,
+  confirmModeFor,
   confirmRefusal,
   redeemableTokens,
+  redemptionCurrencies,
+  redemptionQuote,
+  redemptionRateSource,
   redemptionWarnings,
+  resolveRedemptionRate,
+  setRateAboveExchange,
   VOTE_PATH_BUILT,
   type ConfirmAsk,
+  type RedemptionQuote,
   type RedemptionState,
 } from "../lib/redemption";
+import { latestPrice } from "../lib/exchange";
+import { latestRates } from "../lib/fxRates";
+import { convertMinor, crossRate, exponentOf, formatMoney } from "../../shared/money";
 import {
   heldForRedemption,
   holdsOnPropose,
   openRedemptionsFor,
   redemptionById,
   redemptionHistory,
+  redemptionOpenState,
   redemptionQueue,
   redemptionsOpenedSince,
   requestRedemption,
@@ -80,7 +113,44 @@ import {
 import { balanceOf, memberAccount } from "../lib/ledger";
 import { numberVar, stringVar } from "../lib/variables";
 
-type Deps = Pick<AppDeps, "authedUser" | "getPool" | "guardCapability" | "members" | "notify" | "overLimit">;
+type Deps = Pick<
+  AppDeps,
+  "authedUser" | "brandRepo" | "getPool" | "guardCapability" | "members" | "notify" | "overLimit"
+> & {
+  /**
+   * Put a redemption to the village, when nobody holds the key.
+   *
+   * Handed in for the same reason the holder count is: opening a ballot needs
+   * the electorate, the weight snapshot and the threshold dials, and those are
+   * gathered once in server/index.ts (`roleBallotSetup`). Null while this build
+   * cannot carry a redemption to a vote.
+   */
+  openRedemptionBallot?: (redemptionId: string) => Promise<{ ok: boolean; error?: string }>;
+
+  /**
+   * Who can actually confirm a redemption in this village right now.
+   *
+   * Handed in rather than computed here, because counting holders needs the
+   * roles cache and the role_holders cache, both of which live in
+   * server/index.ts, plus one read of the badge rows. `liveHoldersOfCapability`
+   * does the counting; this is only the wire.
+   */
+  redemptionKeyHolders: () => Promise<string[]>;
+};
+
+/**
+ * WHAT THE EXCHANGE'S POSTED PRICE IS DENOMINATED IN, measured rather than
+ * assumed. `currency_prices` carries `price_minor` and no currency column, and
+ * `/api/exchange/buy` hands `createCheckout` no currency, so Stripe is charged
+ * in the `"usd"` default in server/lib/payments.ts. Following the exchange
+ * therefore means following a USD price, converted through the daily table.
+ *
+ * A village with the exchange module OFF may still have a posted price sitting
+ * in that table from before. That is the honest answer to "what does this
+ * village sell it for": the last price it posted. A village that means to stop
+ * offering that number clears the price or sets its own rate.
+ */
+const EXCHANGE_PRICE_CURRENCY = "USD";
 
 /** What one redemption looks like to a person, with every amount human. */
 function forReading(row: {
@@ -95,9 +165,35 @@ function forReading(row: {
   decidedAt: string | null;
   expiresAt: string | null;
   createdAt: string;
+  currency?: string | null;
+  rateMinor?: number | null;
+  rateSource?: string | null;
+  feePct?: number | null;
+  grossMinor?: number | null;
+  feeMinor?: number | null;
+  netMinor?: number | null;
+  processText?: string | null;
 }) {
   const def = tokenDef(row.tokenSlug);
+  const money = row.currency && row.grossMinor !== null && row.grossMinor !== undefined
+    ? {
+        currency: row.currency,
+        grossMinor: row.grossMinor,
+        feeMinor: row.feeMinor ?? 0,
+        netMinor: row.netMinor ?? 0,
+        rateMinor: row.rateMinor ?? 0,
+        rateSource: row.rateSource ?? null,
+        feePct: row.feePct ?? 0,
+        // FORMATTED ON THE SERVER, once. Every surface that prints these has to
+        // agree, and `shared/money.ts` is the one place money becomes words.
+        grossText: formatMoney(row.grossMinor, row.currency),
+        feeText: formatMoney(row.feeMinor ?? 0, row.currency),
+        netText: formatMoney(row.netMinor ?? 0, row.currency),
+      }
+    : null;
   return {
+    money,
+    processText: row.processText ?? null,
     id: row.id,
     userId: row.userId,
     token: row.tokenSlug,
@@ -117,7 +213,132 @@ function forReading(row: {
 }
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, getPool, guardCapability, members, notify, overLimit } = deps;
+  const { authedUser, brandRepo, getPool, guardCapability, members, notify, openRedemptionBallot, overLimit, redemptionKeyHolders } = deps;
+
+  /**
+   * WHO DECIDES, derived at the moment of asking (Rye, 2026-09-15).
+   *
+   * "A steward confirms but if there isn't a steward the village can vote on
+   * these things." So this counts the people who hold `redemption.confirm`
+   * through the village's own powers, and `confirmModeFor` turns that number
+   * into the mode. A failed count answers STEWARD, deliberately: the vote path
+   * is the wider consequence (a public ballot, permanently), and a database
+   * hiccup must never be what routes somebody's private request into public.
+   */
+  const confirmMode = async (): Promise<"steward" | "vote"> => {
+    try {
+      return confirmModeFor((await redemptionKeyHolders()).length);
+    } catch (e) {
+      console.error("[redemption] could not count who holds the redemption key; treating it as a steward's", e);
+      return "steward";
+    }
+  };
+
+  MODULES_BY_ID["redemption"].openStateCheck = () => redemptionOpenState(getPool());
+
+  /**
+   * WHAT THIS VILLAGE HAS DECIDED ABOUT MONEY, resolved for one token and one
+   * currency (ruling 23).
+   *
+   * Every figure a member or a steward reads comes from here, and so does the
+   * snapshot written onto the row, so the number on the screen and the number
+   * in the record are the same number by construction.
+   *
+   * THE CAPS ARE CONVERTED ONCE, HERE. A cap is typed in whole money and stored
+   * that way; everything below the route boundary is minor units, the same rule
+   * the token amounts already follow.
+   */
+  async function moneyContext(slug: string, wanted?: unknown) {
+    const pool = getPool();
+    const project = ((brandRepo.get() as any)?.project ?? {}) as { fiatCurrency?: string };
+    const currencies = redemptionCurrencies(String(project.fiatCurrency ?? ""));
+    const asked = String(wanted ?? "").trim().toUpperCase();
+    const currency = currencies.includes(asked) ? asked : currencies[0];
+    const source = redemptionRateSource();
+    // Both reads are outside the ask's transaction on purpose: they are another
+    // module's table and a cache of a daily feed, and neither is a figure this
+    // request may hold a lock over.
+    const posted = await latestPrice(pool, slug).catch(() => null);
+    const table = await latestRates(pool).catch(() => ({ base: "EUR", asOf: null, rates: {} as Record<string, number> }));
+    const convert = (amountMinor: number, from: string, to: string) => {
+      const r = crossRate(table.rates, from, to);
+      return r === null ? null : convertMinor(amountMinor, from, to, r);
+    };
+    const common = {
+      currency,
+      postedPriceMinor: posted?.priceMinor ?? null,
+      postedCurrency: EXCHANGE_PRICE_CURRENCY,
+      setRatePerToken: numberVar("redemption.rate_per_token"),
+      setRateCurrency: currencies[0],
+      convert,
+    };
+    const rate = resolveRedemptionRate({ ...common, source });
+    // What the village SELLS it for, whatever it pays to redeem. Read for the
+    // warning alone, and it costs no extra query.
+    const exchangeRate = resolveRedemptionRate({ ...common, source: "exchange" });
+    const minorOf = (human: number) => Math.round(Math.max(0, human) * Math.pow(10, exponentOf(currency)));
+    return {
+      currencies,
+      currency,
+      rate,
+      exchangeRate,
+      source,
+      feePct: numberVar("redemption.fee_pct"),
+      feeFixed: numberVar("redemption.fee_fixed"),
+      minMinor: minorOf(numberVar("redemption.min_amount")),
+      maxPerRequestMinor: minorOf(numberVar("redemption.max_per_request")),
+      memberCapMinor: minorOf(numberVar("redemption.max_per_member_per_cycle")),
+      villageCapMinor: minorOf(numberVar("redemption.max_village_per_cycle")),
+      processText: String(stringVar("redemption.process_text") ?? ""),
+    };
+  }
+
+  /** The money half of a payload, as every surface prints it. */
+  const moneyPayload = (ctx: Awaited<ReturnType<typeof moneyContext>>) => ({
+    currencies: ctx.currencies,
+    currency: ctx.currency,
+    rateSource: ctx.source,
+    rateMinor: ctx.rate?.minorPerToken ?? null,
+    feePct: ctx.feePct,
+    feeFixedMinor: Math.round(Math.max(0, ctx.feeFixed) * Math.pow(10, exponentOf(ctx.currency))),
+    minMinor: ctx.minMinor,
+    maxPerRequestMinor: ctx.maxPerRequestMinor,
+    memberCapMinor: ctx.memberCapMinor,
+    villageCapMinor: ctx.villageCapMinor,
+    processText: ctx.processText,
+  });
+
+  /**
+   * Take it back. The member's own act, and the only ending they can reach.
+   *
+   * It carries no reason, deliberately: a confirmation and a refusal are
+   * decisions ABOUT somebody and owe them a stated reason, and changing your
+   * own mind owes nobody one.
+   *
+   * ABOVE THE GATE, on purpose: see the header. Express answers in
+   * registration order, so this handler replies before the `app.use` below is
+   * ever consulted for this path.
+   */
+  app.post("/api/redemptions/:id/withdraw", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    const pool = getPool();
+    const row = await redemptionById(pool, String(req.params.id));
+    if (!row || row.userId !== user.id) return res.status(404).json({ error: "no such redemption" });
+    const out = await settleRedemption(pool, {
+      id: row.id,
+      to: "withdrawn",
+      actorUserId: user.id,
+      note: "Withdrawn by the member who asked",
+    });
+    if (!out.ok) {
+      return res.status(out.reason === "raced" || out.reason === "terminal" ? 409 : 500).json({ error: out.error });
+    }
+    res.json({ redemption: forReading(out.row), released: out.released });
+  });
+
+  app.use("/api/redemptions", requireModule("redemption"));
+  app.use("/api/admin/redemptions", requireModule("redemption"));
 
   /**
    * What this member has open, what they may ask for, and what is held.
@@ -141,15 +362,27 @@ export function register(app: Express, deps: Deps): void {
       history: (await redemptionHistory(pool, user.id)).map(forReading),
       held,
       holds: holdsOnPropose(),
-      confirmedBy: String(stringVar("redemption.confirmed_by") ?? "steward"),
+      confirmedBy: await confirmMode(),
       votePathBuilt: VOTE_PATH_BUILT,
       perCycle,
       openedThisCycle,
-      tokens: redeemableTokens(allTokens()).map((t) => ({
-        slug: t.slug,
-        name: t.name,
-        decimals: t.decimals,
-      })),
+      // ONE RESOLUTION PER TOKEN, so the form can show what each is worth
+      // before a member picks one. `moneyContext` reads the posted price for
+      // that token and the one daily rate table.
+      tokens: await Promise.all(
+        redeemableTokens(allTokens()).map(async (t) => {
+          const ctx = await moneyContext(t.slug, req.query.currency);
+          return {
+            slug: t.slug,
+            name: t.name,
+            decimals: t.decimals,
+            rateMinor: ctx.rate?.minorPerToken ?? null,
+            rateSource: ctx.rate?.source ?? null,
+            currency: ctx.currency,
+          };
+        }),
+      ),
+      money: moneyPayload(await moneyContext(redeemableTokens(allTokens())[0]?.slug ?? "", req.query.currency)),
     });
   });
 
@@ -199,6 +432,16 @@ export function register(app: Express, deps: Deps): void {
     }
     const pool = getPool();
     const exit = await openExitFor(pool, user.id);
+    // Ruling 23: what this comes to, resolved once here and snapshotted onto
+    // the row inside the transaction, so a dial moved later never changes it.
+    const ctx = await moneyContext(slug, body.currency);
+    const quote = redemptionQuote({
+      amountUnits: units,
+      decimals: decimalsFor(slug),
+      rate: ctx.rate,
+      feePct: ctx.feePct,
+      feeFixed: ctx.feeFixed,
+    });
     const out = await requestRedemption(pool, {
       userId: user.id,
       tokenSlug: slug,
@@ -206,8 +449,50 @@ export function register(app: Express, deps: Deps): void {
       askedFor: String(body.askedFor ?? ""),
       exitOpen: !!exit,
       cycleStart: cycleWindow().startsAt,
+      confirmedBy: await confirmMode(),
+      money: {
+        currency: ctx.currency,
+        quote,
+        processText: ctx.processText,
+        minMinor: ctx.minMinor,
+        maxPerRequestMinor: ctx.maxPerRequestMinor,
+        memberCapMinor: ctx.memberCapMinor,
+        villageCapMinor: ctx.villageCapMinor,
+        feePct: ctx.feePct,
+        feeFixed: ctx.feeFixed,
+      },
     });
     if (!out.ok) return res.status(out.status).json({ error: out.error });
+    /*
+     * A VOTE-MODE REQUEST MUST NOT EXIST WITHOUT ITS BALLOT.
+     *
+     * The hold is already posted by here, so if the ballot cannot be opened the
+     * request has tokens held and nothing that will ever decide it. The reaper
+     * would free them eventually, and "eventually" is wrong when the village
+     * can simply be told now: the request is closed, the tokens go back, and
+     * the member reads why.
+     *
+     * Dead while `VOTE_PATH_BUILT` is false, because the refusal above turns a
+     * vote-mode ask away before anything is held.
+     */
+    if (out.row.confirmedByMode === "vote" && VOTE_PATH_BUILT && openRedemptionBallot) {
+      const opened = await openRedemptionBallot(out.row.id).catch((e) => ({
+        ok: false,
+        error: String(e?.message ?? e),
+      }));
+      if (!opened.ok) {
+        await settleRedemption(pool, {
+          id: out.row.id,
+          to: "refused",
+          actorUserId: null,
+          note: "The village could not open a vote on this, so the tokens came back",
+        });
+        return res.status(503).json({
+          error: `This one goes to a village vote and the vote could not be opened: ${opened.error ?? "unknown"}. Your tokens are back in your wallet.`,
+        });
+      }
+    }
+
     void recordEvent(pool, {
       kind: "audit",
       text: `redemption:opened:${out.row.amountUnits}:${slug}`,
@@ -217,31 +502,6 @@ export function register(app: Express, deps: Deps): void {
       audience: "admin",
     });
     res.status(201).json({ redemption: forReading(out.row), holds: !!out.row.heldAccount });
-  });
-
-  /**
-   * Take it back. The member's own act, and the only ending they can reach.
-   *
-   * It carries no reason, deliberately: a confirmation and a refusal are
-   * decisions ABOUT somebody and owe them a stated reason, and changing your
-   * own mind owes nobody one.
-   */
-  app.post("/api/redemptions/:id/withdraw", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required" });
-    const pool = getPool();
-    const row = await redemptionById(pool, String(req.params.id));
-    if (!row || row.userId !== user.id) return res.status(404).json({ error: "no such redemption" });
-    const out = await settleRedemption(pool, {
-      id: row.id,
-      to: "withdrawn",
-      actorUserId: user.id,
-      note: "Withdrawn by the member who asked",
-    });
-    if (!out.ok) {
-      return res.status(out.reason === "raced" || out.reason === "terminal" ? 409 : 500).json({ error: out.error });
-    }
-    res.json({ redemption: forReading(out.row), released: out.released });
   });
 
   /**
@@ -258,20 +518,47 @@ export function register(app: Express, deps: Deps): void {
     const pool = getPool();
     const queue = await redemptionQueue(pool);
     const rows = [];
+    /*
+     * ONE RESOLUTION PER TOKEN IN THE QUEUE, not one per row. A hundred waiting
+     * requests would otherwise read the posted price and the daily table a
+     * hundred times over to answer one question about the village's dials.
+     */
+    const rateWarnings = new Map<string, string | null>();
+    const warningFor = async (slug: string, tokenName: string): Promise<string | null> => {
+      if (!rateWarnings.has(slug)) {
+        const ctx = await moneyContext(slug);
+        rateWarnings.set(
+          slug,
+          setRateAboveExchange({
+            setMinorPerToken: ctx.source === "set" ? ctx.rate?.minorPerToken ?? null : null,
+            exchangeMinorPerToken: ctx.exchangeRate?.minorPerToken ?? null,
+            tokenName,
+          }),
+        );
+      }
+      return rateWarnings.get(slug) ?? null;
+    };
     for (const row of queue) {
       const person = await members.byId(row.userId).catch(() => null);
       const totalHeldUnits =
         (await balanceOf(pool, memberAccount(row.userId), row.tokenSlug)) + row.amountUnits;
+      const tokenName = tokenDef(row.tokenSlug)?.name ?? row.tokenSlug;
+      const warnings = redemptionWarnings({
+        tokenName,
+        listedForTrade: isListedForTrade(row.tokenSlug),
+        amountUnits: row.amountUnits,
+        totalHeldUnits,
+        redemptionsThisMoon: await redemptionsOpenedSince(pool, row.userId, cycleWindow().startsAt),
+      });
+      // Ruling 23's warning rides the same list and blocks nothing, like every
+      // other one here. It is about the DIAL as it stands now, not about this
+      // row, so it reads the same on every row of a queue.
+      const rateWarning = await warningFor(row.tokenSlug, tokenName);
+      if (rateWarning) warnings.push({ key: "rate-above-exchange", message: rateWarning });
       rows.push({
         ...forReading(row),
         memberName: person?.name ?? row.userId,
-        warnings: redemptionWarnings({
-          tokenName: tokenDef(row.tokenSlug)?.name ?? row.tokenSlug,
-          listedForTrade: isListedForTrade(row.tokenSlug),
-          amountUnits: row.amountUnits,
-          totalHeldUnits,
-          redemptionsThisMoon: await redemptionsOpenedSince(pool, row.userId, cycleWindow().startsAt),
-        }),
+        warnings,
       });
     }
     res.json({ redemptions: rows, holds: holdsOnPropose() });

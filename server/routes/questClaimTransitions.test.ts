@@ -264,6 +264,37 @@ describe.skipIf(!configured)("the doors that move a quest claim (MySQL)", () => 
     expect((await call("POST", "/api/game/quests/q-decline-waiting/claim")).status).toBe(200);
   });
 
+  it("a second decline answers the row it already wrote instead of refusing", async () => {
+    await addQuest("q-decline-twice");
+    const claimId = await claimAndSubmit("q-decline-twice");
+
+    as(TOMAS);
+    const first = await call("POST", `/api/admin/quest-claims/${claimId}/consent`, { approve: false });
+    expect(first.status).toBe(200);
+    rung = [];
+
+    // The same press again: a double click, or a retry after an answer that
+    // never arrived. The steward wants what the row already says.
+    const second = await call("POST", `/api/admin/quest-claims/${claimId}/consent`, { approve: false });
+    expect(second.status, "the row already says what the steward asked for").toBe(200);
+    expect(second.body.id).toBe(claimId);
+    expect(second.body.status).toBe("declined");
+    // And it wrote nothing. No second bell, and the row is where it was.
+    expect(rung).toEqual([]);
+    expect((await claimRow(claimId))?.status).toBe("declined");
+
+    // THE CONTROL, in the same case, because that 200 is only correct while
+    // every OTHER resolution is still refused: consented work stays 409, which
+    // is the whole reason `declineOnce` compares the status under the lock.
+    await addQuest("q-decline-paid");
+    const paidClaim = await claimAndSubmit("q-decline-paid");
+    expect((await consentAs(MARA, paidClaim, 60)).ok).toBe(true);
+    as(TOMAS);
+    const paid = await call("POST", `/api/admin/quest-claims/${paidClaim}/consent`, { approve: false });
+    expect(paid.status).toBe(409);
+    expect(paid.body.status).toBe("consented");
+  });
+
   // ── Submit ─────────────────────────────────────────────────────────────────
 
   it("evidence that arrives after a consent does not reopen the claim", async () => {

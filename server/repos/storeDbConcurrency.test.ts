@@ -69,6 +69,22 @@ const TOOLS_SPEC: CollectionSpec = {
   ],
 };
 
+/** The submissions spec from server/index.ts, copied for the same reason. */
+const SUBMISSIONS_SPEC: CollectionSpec = {
+  table: "submissions",
+  orderBy: "`submitted_at`, `id`",
+  columns: [
+    { js: "id", db: "id" },
+    { js: "type", db: "type" },
+    { js: "status", db: "status" },
+    { js: "data", db: "data", kind: "json" },
+    { js: "rewarded", db: "rewarded", kind: "bool" },
+    { js: "userId", db: "user_id" },
+    { js: "userName", db: "user_name" },
+    { js: "submittedAt", db: "submitted_at", kind: "time" },
+  ],
+};
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe.skipIf(!configured)("replaceAll under two concurrent writers", () => {
@@ -266,6 +282,182 @@ describe.skipIf(!configured)("replaceAll under two concurrent writers", () => {
     expect((await toolRow("t1")).name).toBe("Village Site");
     const [rows] = await pool.query<any[]>("SELECT purpose FROM tools ORDER BY sort_order, name");
     expect(rows.some((r) => r.purpose === "pass 8")).toBe(true);
+  });
+});
+
+/**
+ * THE EMPTY PAYLOAD, which the version counter above cannot see.
+ *
+ * `replaceAll` decides whether a snapshot is stale from stamps carried ON THE
+ * ROWS it is handed. An array with no rows carries no stamp, so `payloadSnapshot`
+ * answers undefined, which is the signature of the boot seeding path: built from
+ * scratch, never read, unguarded on purpose. The write therefore skips the stale
+ * check and the rebase and runs `DELETE FROM <table>` against whatever the table
+ * holds NOW.
+ *
+ * The removal idiom every admin delete uses, `replaceAll(all().filter(...))`,
+ * produces exactly that array the moment it removes the LAST row. The reachable
+ * case is `DELETE /api/admin/submissions/:id` in a village whose queue holds one
+ * item, while a member raises a hand (`POST /api/map/roles/:id/raise-hand`) or a
+ * stranger posts the public form. Both requests answer 200 and the new row is
+ * gone, which is the same lost update 0122 closed, through the one door it left
+ * open.
+ *
+ * Written against the real `submissions` spec for the same reason the block
+ * above is written against the real `tools` spec: that is where it is reachable.
+ */
+describe.skipIf(!configured)("replaceAll when the payload came back empty", () => {
+  let db: TestDb;
+  let pool: mysql.Pool;
+
+  beforeAll(async () => {
+    db = await provisionTestDb();
+    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 8 });
+    await pool.query("SET time_zone = '+00:00'");
+  }, 300_000);
+
+  afterAll(async () => {
+    await pool?.end();
+    await db?.drop();
+  });
+
+  beforeEach(async () => {
+    await pool.query("DELETE FROM submissions");
+    await pool.query("DELETE FROM collection_versions WHERE collection = 'submissions'");
+    await pool.query(
+      "INSERT INTO submissions (id, type, status, data, submitted_at) VALUES (?,?,?,?,?)",
+      ["s1", "work-with-us", "new", JSON.stringify({ note: "the one already in the queue" }), "2026-09-01 10:00:00"],
+    );
+  });
+
+  const freshRepo = async () => {
+    const repo = dbCollection(pool, SUBMISSIONS_SPEC);
+    await repo.load();
+    return repo;
+  };
+
+  const idsInTable = async () => {
+    const [rows] = await pool.query<any[]>("SELECT id FROM submissions ORDER BY id");
+    return rows.map((r) => String(r.id));
+  };
+
+  /** What POST /api/map/roles/:id/raise-hand inserts. */
+  const raisedHand = (id: string) =>
+    ({
+      id,
+      type: "role-interest",
+      status: "new",
+      data: { roleId: "r1" },
+      userId: "u9",
+      userName: "A Member",
+      submittedAt: new Date().toISOString(),
+    }) as any;
+
+  it("keeps a submission that arrived while an admin was deleting the last one", async () => {
+    const repo = await freshRepo();
+
+    // DELETE /api/admin/submissions/:id reads the whole table...
+    const snapshot: any[] = repo.all();
+    // ...and a raised hand lands in the gap before it writes back.
+    await repo.insert(raisedHand("s2"));
+
+    const filtered = snapshot.filter((s) => s.id !== "s1");
+    expect(filtered, "removing the last row a caller saw leaves nothing to stamp").toHaveLength(0);
+
+    const outcome = await repo.replaceAll(filtered).then(() => "written", (e) => e);
+
+    expect(await idsInTable(), "nothing is written, so the hand that landed mid-flight survives").toEqual([
+      "s1",
+      "s2",
+    ]);
+    expect(outcome, "and an emptied payload is refused, never honoured blind").not.toBe("written");
+    expect((outcome as any).code).toBe("empty_payload");
+  });
+
+  it("removes only the row it was handed, keeping one that arrived after the read", async () => {
+    const repo = await freshRepo();
+    const snapshot: any[] = repo.all();
+    await repo.insert(raisedHand("s2"));
+
+    const gone = snapshot.filter((s) => s.id === "s1").map((s) => String(s.id));
+    expect(await repo.remove(gone), "it says how many rows it took").toBe(1);
+
+    expect(await idsInTable(), "the admin's delete lands and the new hand stays").toEqual(["s2"]);
+    expect(repo.all().map((r: any) => r.id), "and the cache says the same").toEqual(["s2"]);
+  });
+
+  it("stales every outstanding snapshot, so a removed row is not put back", async () => {
+    const repo = await freshRepo();
+    await repo.insert(raisedHand("s2"));
+    const inFlight: any[] = repo.all(); // holds s1 and s2
+
+    await repo.remove(["s2"]);
+
+    inFlight[inFlight.findIndex((s) => s.id === "s1")].status = "reviewing";
+    await repo.replaceAll(inFlight);
+
+    expect(await idsInTable(), "the removed row stays removed").toEqual(["s1"]);
+    const [rows] = await pool.query<any[]>("SELECT status FROM submissions WHERE id = 's1'");
+    expect(rows[0].status, "and the stale writer's own edit still lands").toBe("reviewing");
+  });
+
+  it("takes no version and writes nothing when asked to remove ids that are not there", async () => {
+    const repo = await freshRepo();
+    const before: any[] = repo.all();
+    expect(await repo.remove(["nope", "also-nope"])).toBe(0);
+    expect(await idsInTable()).toEqual(["s1"]);
+    // The snapshot taken before the no-op is still current, so writing it back
+    // is the plain path and not a rebase.
+    before[0].status = "reviewing";
+    await repo.replaceAll(before);
+    const [rows] = await pool.query<any[]>("SELECT status FROM submissions WHERE id = 's1'");
+    expect(rows[0].status).toBe("reviewing");
+  });
+
+  it("still accepts an empty payload against an empty table, which is what a seed of nothing is", async () => {
+    const repo = await freshRepo();
+    await pool.query("DELETE FROM submissions");
+    await repo.load();
+    await expect(repo.replaceAll([]), "there is no row here to lose").resolves.toBeUndefined();
+    expect(await idsInTable()).toEqual([]);
+  });
+
+  /**
+   * PINNING THE REBASE, because a removal is the shape that exercises it and
+   * nothing asserted this half before. This is what the code DOES; whether it
+   * is what a reader wants is argued in the PR body, not changed here.
+   */
+  it("lets a removal prepared first delete a row somebody else has since moved along", async () => {
+    const repo = await freshRepo();
+    await repo.insert(raisedHand("s2"));
+
+    // The admin reads the queue and decides to drop s1. The payload keeps s2,
+    // so it is NOT empty and the stale check above does fire.
+    const adminPayload: any[] = repo.all().filter((s: any) => s.id !== "s1");
+
+    // A steward moves s1 along the pipeline and commits first.
+    const steward: any[] = repo.all();
+    steward[steward.findIndex((s) => s.id === "s1")].status = "in-conversation";
+    await repo.replaceAll(steward);
+
+    const warnings: string[] = [];
+    const realWarn = console.warn;
+    console.warn = (...args: unknown[]) => void warnings.push(args.map(String).join(" "));
+    try {
+      await repo.replaceAll(adminPayload);
+    } finally {
+      console.warn = realWarn;
+    }
+
+    // A row present in the baseline and absent from the payload reads as one
+    // the caller deleted, so the delete wins and the status change goes with
+    // the row it was made on.
+    expect(await idsInTable(), "freshly changed or not, the dropped row is deleted").toEqual(["s2"]);
+    expect(warnings.join("\n"), "the merge is announced").toContain("merged a write read at version");
+    expect(
+      warnings.join("\n"),
+      "and the change that went with the row is named nowhere: conflicts only cover surviving rows",
+    ).not.toContain("s1.status");
   });
 });
 

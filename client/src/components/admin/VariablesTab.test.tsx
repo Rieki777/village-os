@@ -28,7 +28,7 @@
  * tests.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -73,6 +73,26 @@ const VARIABLES = {
         },
       ],
     },
+    {
+      name: "Forum",
+      variables: [
+        {
+          key: "forum.report_hide_threshold",
+          label: "Report hide threshold",
+          description: "How many reports hide a thread",
+          category: "Forum",
+          type: "int",
+          value: "3",
+          default: "3",
+          isDefault: true,
+          // Owned by a module, so this tab leaves it to that module's card.
+          modules: ["forum"],
+        },
+      ],
+    },
+  ],
+  moduleSettings: [
+    { id: "forum", name: "Forum & Decisions", core: false, lifecycle: "off", keys: ["forum.report_hide_threshold"] },
   ],
 };
 
@@ -143,28 +163,38 @@ describe("VariablesTab", () => {
     expect(put![1].headers.Authorization).toBe("Bearer secret");
   });
 
-  it("carries ONE token panel, not the two that were stacked here", async () => {
+  it("sends the token panel to the module card it configures, and keeps a door to it", async () => {
     /*
-     * THIS TEST ASSERTED THE OPPOSITE and is rewritten rather than deleted,
-     * because the thing it was really protecting still needs protecting: this
-     * tab is the only caller of whatever token panel it renders, so a panel
-     * that quietly disappears from here disappears from the product.
+     * THIS TEST HAS NOW ASSERTED THREE THINGS, and what it protects has never
+     * changed: the Hypha Bridge panel has exactly one caller, and a panel that
+     * silently loses its caller is a panel that leaves the product.
      *
-     * What changed is which panel. Rye, on the merged tree: "there looks to be
-     * 2 modules for imputing tokens and contracts." IntegrateDaoPanel took a
-     * token NAME and wrote an address into a variable with no contract read;
-     * the Bridge lists what the account actually holds and reads name, symbol
-     * and decimals off the contract before binding, which is what catches a
-     * token minted to carry your exact name. The safer one survived.
+     * It asserted two panels, then one, and now none HERE. The caller moved
+     * (Rye, 2026-09-15): a module's settings belong on the module's own card,
+     * where a village sets it up before switching it on, so the panel is
+     * rendered by ModuleSettingsSection for the hypha card and
+     * ModuleSettingsSection.test.tsx holds that end down. What this file
+     * protects is the other half: the panel is GONE from Game Mechanics, and
+     * this tab still says where it went.
      */
     render(<VariablesTab password="secret" />);
-    expect(await screen.findByRole("heading", { name: "Hypha Bridge" })).toBeInTheDocument();
-    // The retired panel's own two marks are gone, which is the half that would
-    // otherwise leave a dead second door on the page.
+    await screen.findByText("Agreement needed");
+    expect(screen.queryByRole("heading", { name: "Hypha Bridge" })).toBeNull();
+    // The retired IntegrateDaoPanel's own two marks stay gone as well.
     expect(
       screen.queryByRole("heading", { name: "Integrate DAO: find a token's contract on Base" }),
     ).toBeNull();
     expect(screen.queryByPlaceholderText("Exact on-chain token name")).toBeNull();
+  });
+
+  it("leaves a module's own dials to its card, and links there", async () => {
+    render(<VariablesTab password="secret" />);
+    await screen.findByText("Agreement needed");
+    // The server tagged this one as owned by a module, so it is edited there.
+    expect(screen.queryByText("Report hide threshold")).toBeNull();
+    const link = screen.getByRole("link", { name: "Forum & Decisions" });
+    expect(link.getAttribute("href")).toBe("/admin?tab=modules&module=forum");
+    expect(screen.getByText(/1 setting, module off/)).toBeInTheDocument();
   });
 
   it("opens at the one dial a deep link names, scrolled to and marked, and marks no other", async () => {
@@ -182,8 +212,96 @@ describe("VariablesTab", () => {
       expect(named.getAttribute("aria-current")).toBe("true");
       const other = screen.getByText("Agreement needed").closest("[id]") as HTMLElement;
       expect(other.getAttribute("aria-current")).toBeNull();
-      expect(scrolled).toHaveBeenCalled();
+      await waitFor(() => expect(scrolled).toHaveBeenCalled());
       expect(scrolled.mock.contexts[0]).toBe(named);
+    } finally {
+      Element.prototype.scrollIntoView = original;
+      window.history.pushState({}, "", "/");
+    }
+  });
+
+  it("scrolls to the linked dial once, so saving another dial does not jump back to it", async () => {
+    // Every Save reloads the list, and the scroll ran again on every load.
+    //
+    // THE RELOAD IS WAITED FOR BY ITS OWN EVIDENCE. A fixed pause here made this
+    // test pass against the defect on one run in two: it asserted the count
+    // before the reloaded list had rendered. The second read answers a changed
+    // cap, so the new number on screen IS the reload having happened.
+    const reloaded = JSON.parse(JSON.stringify(VARIABLES));
+    reloaded.categories[1].variables[0].value = "41";
+    let saved = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: { method?: string }) => {
+        const u = String(url);
+        if (init?.method === "PUT") {
+          saved = true;
+          return { status: 200, ok: true, json: async () => ({ success: true }) };
+        }
+        if (u.includes("/admin/hypha/status")) return { status: 404, ok: false, json: async () => ({}) };
+        if (u.includes("/admin/variables")) {
+          // A TICK OF DELAY, because the defect needs one. A read that resolves
+          // in the same tick never renders the loading state, so the effect
+          // never re-runs and the second scroll cannot happen even with nothing
+          // stopping it. A real server always takes longer than a microtask.
+          await new Promise((r) => setTimeout(r, 5));
+          return { status: 200, ok: true, json: async () => (saved ? reloaded : VARIABLES) };
+        }
+        return { status: 200, ok: true, json: async () => ({}) };
+      }),
+    );
+    const scrolled = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrolled;
+    window.history.pushState({}, "", "/admin?tab=variables&variable=gratitude.cap");
+    try {
+      render(<VariablesTab password="secret" />);
+      await screen.findByText("Gratitude cap");
+      await waitFor(() => expect(scrolled).toHaveBeenCalledTimes(1));
+      // The key leaves the address and the tab stays, so a refresh opens the tab at its top.
+      expect(window.location.search).toBe("?tab=variables");
+      fireEvent.change(screen.getByDisplayValue("70"), { target: { value: "80" } });
+      fireEvent.click(screen.getAllByRole("button", { name: "Save" })[0]!);
+      // The reloaded list is on screen, which is what the scroll used to follow.
+      expect(await screen.findByDisplayValue("41")).toBeInTheDocument();
+      await act(async () => { await Promise.resolve(); });
+      expect(scrolled).toHaveBeenCalledTimes(1);
+      // Still marked: the address is gone, the dial it named is not.
+      expect(screen.getByText("Gratitude cap").closest("[id]")!.getAttribute("aria-current")).toBe("true");
+    } finally {
+      Element.prototype.scrollIntoView = original;
+      window.history.pushState({}, "", "/");
+    }
+  });
+
+  it("keeps the linked dial centred while the page above it settles, and stops when the admin moves", async () => {
+    // The Hypha panel above loads on its own clock and pushed the dial off screen.
+    const scrolled = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrolled;
+    const observer = { shift: (): void => undefined, disconnected: 0 };
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(cb: () => void) {
+          observer.shift = cb;
+        }
+        observe() {}
+        disconnect() {
+          observer.disconnected += 1;
+        }
+      },
+    );
+    window.history.pushState({}, "", "/admin?tab=variables&variable=gratitude.cap");
+    try {
+      render(<VariablesTab password="secret" />);
+      await screen.findByText("Gratitude cap");
+      await waitFor(() => expect(scrolled).toHaveBeenCalledTimes(1));
+      observer.shift();
+      expect(scrolled).toHaveBeenCalledTimes(2);
+      expect(observer.disconnected).toBe(0);
+      window.dispatchEvent(new Event("wheel"));
+      expect(observer.disconnected).toBe(1);
     } finally {
       Element.prototype.scrollIntoView = original;
       window.history.pushState({}, "", "/");

@@ -97,7 +97,7 @@ import { freezeSeatTerm } from "./repos/ballotSeatTerms";
 import { roleVoteDays, seatVoteLandsAt, termForCarriedSeat } from "./lib/seatTermLanding";
 import { raisedHandTerm } from "./lib/raisedHandTerm";
 import { resolveSeatTerm, type SeatCalendar } from "../shared/seatTerms";
-import { decideRoleCapabilities, liveHolderCount, stewardSeatRefusal } from "./lib/roleGrants";
+import { decideRoleCapabilities, liveHolderCount, liveHoldersOfCapability, stewardSeatRefusal } from "./lib/roleGrants";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
 import { type ConsentActor, register as registerQuestClaimRoutes } from "./routes/questClaims";
 import { register as registerHousingRoutes } from "./routes/housing";
@@ -116,6 +116,8 @@ import { register as registerBrandUploadRoutes } from "./routes/brandUploads";
 import { register as registerNeedsRoutes } from "./routes/needs";
 import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
+import { REDEMPTION_SUBJECT, openRedemptionBallot, redemptionCloser } from "./lib/redemptionBallot";
+import { badgeCapabilityRows } from "./repos/badgeCapabilities";
 import { expireRedemptions, retiredSupply } from "./lib/redemptionStore";
 import { register as registerFeedbackRoutes } from "./routes/feedback";
 import { register as registerCharacterPortraitRoutes } from "./routes/characterPortraits";
@@ -123,6 +125,7 @@ import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
 import { register as registerPowerAffinityRoutes, powersForClass, withPowerAffinity } from "./routes/powerAffinity";
 import { register as registerPowerHandRoutes } from "./routes/powerHands";
 import { resolveGoogleConfig } from "./lib/oauthGoogle";
+import { makeIdentityGate } from "./lib/identityConfirm";
 import {
   decodeToken,
   encodeToken,
@@ -753,7 +756,7 @@ import {
   webhookSecretConfigured,
 } from "./lib/payments";
 import {
-  LIFECYCLE_RANK, MODULES, MODULES_BY_ID, priceLine, supportRoute, vendorModules,
+  LIFECYCLE_RANK, MODULES, MODULES_BY_ID, modulesOwning, priceLine, supportRoute, vendorModules,
   type ModuleLifecycle,
 } from "../shared/modules";
 import { poolStatus } from "../shared/modulePool";
@@ -1689,17 +1692,20 @@ async function noteAssistantUsage(
   });
 }
 
-function legacySha256(password: string): string {
-  return crypto.createHash("sha256").update(password).digest("hex");
-}
-
 async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
 }
 
 async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
-  // Accept legacy SHA256 hashes for existing users (transparent upgrade on next save)
-  if (storedHash === legacySha256(password)) return true;
+  // Unsalted SHA-256 hashes are NOT accepted, as of 2026-09-19. They were kept
+  // working so an existing member would be re-hashed to bcrypt on their next
+  // sign-in, and that is why they persisted: the upgrade only ever reached
+  // members who signed in, so a dormant account kept an unsalted hash
+  // indefinitely. Unsalted means a leaked table is rainbow-table material for
+  // common passwords, and two members sharing a password store the same
+  // string. Rye ruled that those accounts go through a password reset
+  // instead. The set-password link is the door, and it works from any stored
+  // hash, including an empty one.
   try {
     return await bcrypt.compare(password, storedHash);
   } catch {
@@ -3057,6 +3063,38 @@ function lapseContext(): LapseContext {
  * lines above the function it describes, over `servedStage`; it travelled
  * down with the move that emptied that neighbourhood.)
  */
+/**
+ * WHO HOLDS THE REDEMPTION KEY, for the door that has to know whether this
+ * village has a steward at all (Rye, 2026-09-15).
+ *
+ * The counting rule is `liveHoldersOfCapability`, which walks the gate's own
+ * planes and deliberately leaves out the admin short-circuit. This function is
+ * only the wire: the two caches this file owns, plus one read of the badge rows
+ * for the whole village.
+ *
+ * The badge half honours the SAME dormancy rule the gate does. A seasonally
+ * dormant badge grants nothing while its season is not running, and a deny is
+ * never dormant (0050), so a sleeping badge cannot make somebody a steward and
+ * a warning badge still takes it away.
+ */
+async function redemptionKeyHolders(): Promise<string[]> {
+  const badges: Record<string, { grants: string[]; denies: string[] }> = {};
+  if (effectiveLifecycle("badges") !== "off") {
+    const asleep = new Set(await dormantBadgeIds());
+    for (const r of await badgeCapabilityRows(getPool())) {
+      const userId = String((r as any).user_id);
+      const plane = (badges[userId] ??= { grants: [], denies: [] });
+      const parse = (v: unknown): string[] => {
+        if (Array.isArray(v)) return v.map(String);
+        try { const p = JSON.parse(String(v ?? "[]")); return Array.isArray(p) ? p.map(String) : []; } catch { return []; }
+      };
+      if (!asleep.has(String((r as any).badge_id))) plane.grants.push(...parse((r as any).capabilities));
+      plane.denies.push(...parse((r as any).denies));
+    }
+  }
+  return liveHoldersOfCapability(loadRoleHolders(), loadRoles(), "redemption.confirm", new Date(), badges);
+}
+
 async function capabilityCtx(user: any) {
   // S36: badge grants and denies join the one gate — but only while the
   // badges module is on. Off = zero queries, zero effect: the gate is
@@ -3757,9 +3795,17 @@ function hasMembership(user: any): boolean {
 /**
  * Compute the highest stage the player has earned, per gameConfig rules.
  * PURE and synchronous: the consented-quest count is a parameter (S10 moved
- * claims to MySQL), so callers that already hold counts — like the players
- * list, which fetches them grouped in one query — pay nothing extra.
+ * claims to MySQL), so callers that already hold counts (the players list
+ * fetches them grouped in one query) pay nothing extra.
  * Single-member callers use stageOf(), which fetches the count and delegates.
+ *
+ * FOUR FACTS, AND `paidByVillage` HAD A DEFAULT UNTIL 2026-09-15. It carries
+ * the Contributor rung alone, so `= false` meant a caller that passed three
+ * arguments compiled, ran, and answered a rung too low for everybody the
+ * village had paid. Two did: the admin roster and the `members_at_stage`
+ * vision metric. The default is gone, so the compiler asks the question now.
+ * List callers batch it with `paidByVillageMany` (lib/ledger.ts) rather than
+ * asking per member; single-member callers use stageOf().
  */
 /** Server-recorded completions against the live catalogue. See lib/trainingRecord.ts. */
 const trainingDoneHere = (done: readonly string[]): boolean =>
@@ -3777,7 +3823,7 @@ const rungRule = (user: any, consentedQuests: number, trainingDone: readonly str
   }
 };
 
-function computeStage(user: any, consentedQuests: number, trainingDone: readonly string[], paidByVillage = false): string {
+function computeStage(user: any, consentedQuests: number, trainingDone: readonly string[], paidByVillage: boolean): string {
   return climbLadder(GAME_CONFIG.stages, user, rungRule(user, consentedQuests, trainingDone, paidByVillage));
 }
 
@@ -3881,6 +3927,8 @@ function deploymentOrigin(): string {
  */
 const googleSignInAvailability = () =>
   resolveGoogleConfig(process.env, String(process.env.FRONTEND_URL ?? ""));
+/** Exit and delete: a password, or a fresh Google sign-in for a member with none (server/lib/identityConfirm.ts). */
+const confirmIdentity = makeIdentityGate({ authSecret: AUTH_TOKEN_SECRET, verifyPassword, googleAvailable: () => googleSignInAvailability().available, members: { update: (id, mutate) => members.update(id, mutate) } });
 
 /**
  * S16: the notification spine's dependencies. The spine never imports the
@@ -4406,7 +4454,9 @@ async function runRetentionSweep(): Promise<string> {
           /* already gone, or never written — the row still goes */
         }
       }
-      await submissionsRepo.replaceAll(keep);
+      // By id, so a sweep that ages out the whole queue cannot take a
+      // submission that arrived while it was unlinking files (store-db.ts, 0123).
+      await submissionsRepo.remove(dropped.map((s: any) => String(s.id)));
       parts.push(`${before.length - keep.length} submission(s)`);
     }
   }
@@ -7855,12 +7905,14 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     if (!(await isAdmin(req))) {
       return res.status(401).json({ error: "auth_required" });
     }
-    const submissions: any[] = submissionsRepo.all();
-    const filtered = submissions.filter((s) => s.id !== req.params.id);
-    if (filtered.length === submissions.length) {
+    // remove(), never replaceAll of a filtered snapshot. Deleting the LAST row
+    // that way hands the store an empty array, which carries no version stamp
+    // and used to DELETE the whole table: a raised hand arriving in the gap
+    // was erased and both requests answered 200 (store-db.ts, 0123). The 404
+    // now comes from the delete itself, so the cache cannot disagree with it.
+    if (!(await submissionsRepo.remove([String(req.params.id)]))) {
       return res.status(404).json({ error: "Not found" });
     }
-    await submissionsRepo.replaceAll(filtered);
     res.json({ success: true });
   });
 
@@ -8128,12 +8180,6 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       await recordHit(acctBucket);
       return res.status(401).json({ error: "Invalid credentials" });
     }
-    // Transparent upgrade: if the user is still on a legacy SHA256 hash, re-hash with bcrypt
-    if (user.passwordHash === legacySha256(password)) {
-      const newHash = await hashPassword(password);
-      await members.update(user.id, (u: any) => { u.passwordHash = newHash; });
-      user.passwordHash = newHash;
-    }
     const token = encodeToken(AUTH_TOKEN_SECRET, user.id, email, user.tokenVersion ?? 0);
     res.json({ success: true, token, user: publicUser(user) });
   });
@@ -8347,6 +8393,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     clientIp,
     recordAudit: recordAuthAudit,
     onMemberJoined: (user) => void joined(user), // every door in records the join and greets: register calls joined too
+    authedUser,
     invites: inviteDoor,
   });
 
@@ -8381,7 +8428,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // was minted against; writing a new password invalidates it, so a link
     // that leaks (mail archive, forwarded thread, shared browser) cannot be
     // replayed inside its hour to take the account back.
-    if (claim.pw !== null && claim.pw !== passwordFingerprint(user.passwordHash)) {
+    if (claim.pw !== null && claim.pw !== passwordFingerprint(AUTH_TOKEN_SECRET, user.passwordHash)) {
       return res.status(401).json({ error: "This link has already been used. Ask for a new one." });
     }
     const hash = await hashPassword(String(password));
@@ -11113,11 +11160,12 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     if (await isExampleRow(getPool(), "tools", req.params.id)) {
       return res.status(409).json(EXAMPLE_REFUSAL_BODY);
     }
-    const all = toolsRepo.all();
-    const filtered = all.filter((t: any) => t.id !== req.params.id);
-    if (filtered.length === all.length) return res.status(404).json({ error: "Not found" });
     // Click rows survive on purpose: analytics history is orphan-tolerated.
-    await toolsRepo.replaceAll(filtered);
+    // By id, because removing the last tool through a filtered snapshot hands
+    // the store an unstamped empty array (store-db.ts, 0123).
+    if (!(await toolsRepo.remove([String(req.params.id)]))) {
+      return res.status(404).json({ error: "Not found" });
+    }
     res.json({ success: true });
   });
 
@@ -14751,14 +14799,13 @@ Send an empty drafts array when you are still listening. A role payload is {name
     });
   });
 
-  /** A member opens their own departure. Password-confirmed, stranding-guarded. */
+  /** A member opens their own departure. Identity-confirmed (a password, or Google for a member with none), stranding-guarded. */
   app.post("/api/profile/request-exit", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
-    const { password, note } = req.body ?? {};
-    if (!password || !(await verifyPassword(String(password), user.passwordHash))) {
-      return res.status(403).json({ error: "Confirm with your password" });
-    }
+    const { note } = req.body ?? {};
+    const confirmed = await confirmIdentity(req, res, user, "request-exit");
+    if (!confirmed.ok) return res.status(403).json(confirmed.body);
     const stranding = await departureStrandingRefusal(user, true);
     if (stranding) return res.status(409).json({ error: stranding });
     const policy: any = readExitPolicy();
@@ -18394,10 +18441,10 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const docs: any[] = investorDocsRepo.all();
     const target = docs.find((d) => d.id === req.params.id);
     if (!target) return res.status(404).json({ error: "Not found" });
-    // `replaceAll` is the only write this repo offers besides `insert`, and the
-    // delete route beside this one already uses it. A whole-table rewrite can
-    // race a concurrent writer; on a vault an admin edits by hand, a few rows
-    // at a time, that is the trade the available primitive forces.
+    // An EDIT still goes through the whole-table write, which is the only
+    // update this repo offers besides `insert` and `remove`. The payload is
+    // never empty here, so it carries a version stamp and a concurrent writer
+    // is rebased onto, never overwritten (store-db.ts).
     await investorDocsRepo.replaceAll(
       docs.map((d) => (d.id === req.params.id ? { ...d, inPacket } : d)),
     );
@@ -18411,8 +18458,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const docs: any[] = investorDocsRepo.all();
     const target = docs.find((d) => d.id === req.params.id);
     if (!target) return res.status(404).json({ error: "Not found" });
-    const filtered = docs.filter((d) => d.id !== req.params.id);
-    await investorDocsRepo.replaceAll(filtered);
+    // By id: a vault holding one document would otherwise be emptied through
+    // an unstamped payload and take a concurrent upload with it (0123).
+    await investorDocsRepo.remove([String(req.params.id)]);
     // `target.filename` was never a column, so this read undefined and joined
     // it into a path. Only a row whose url points into our own uploads volume
     // has a file to remove; an imported row pointing at an external address
@@ -18867,7 +18915,18 @@ ${inner}
   registerBrandPreviewRoutes(app, { isAdmin, getPool, brandRepo });
   registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
   registerDryRunRoutes(app, { authedUser, isAdmin, overLimit, getPool });
-  registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit });
+  /**
+   * Put a redemption to the village, with the setup every village-wide vote
+   * uses. `roleBallotSetup` is the one home of the threshold arithmetic, and a
+   * second derivation here would differ from it by a copy eventually.
+   */
+  const openRedemptionVote = async (redemptionId: string): Promise<{ ok: boolean; error?: string }> => {
+    const setup = await roleBallotSetup();
+    if (setup.tokenProblem) return { ok: false, error: setup.tokenProblem };
+    const out = await openRedemptionBallot(getPool(), setup, redemptionId);
+    return out.ok ? { ok: true } : { ok: false, error: out.error };
+  };
+  registerRedemptionRoutes(app, { authedUser, brandRepo, getPool, guardCapability, members, notify, openRedemptionBallot: (id: string) => openRedemptionVote(id), overLimit, redemptionKeyHolders });
 
   // â”€â”€ Project Settings (village dues + other editable numbers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -20526,16 +20585,46 @@ ${inner}
 
   app.get("/api/admin/variables", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    // S13: a module's tunables only appear while the module is non-off — an
-    // off module contributes zero admin surface, variables included.
-    const hiddenKeys = new Set(
-      MODULES.filter((m) => !m.core && effectiveLifecycle(m.id) === "off").flatMap((m) => m.variableKeys),
-    );
-    const all = allVariables().filter((v) => !hiddenKeys.has(v.key)).map(decorateChoices);
+    /*
+     * EVERY DIAL, WHATEVER ITS MODULE IS DOING (Rye, 2026-09-15). This route
+     * filtered out the tunables of every off module, under S13's rule that an
+     * off module contributes zero admin surface. Setting a module up happens
+     * BEFORE it is turned on, so that rule hid exactly the settings a founder
+     * needs while they are needed, and the module card now renders them at any
+     * lifecycle. Nothing else here decided visibility, so lifting the filter is
+     * the whole change; `modules` below is what lets a surface sort them.
+     *
+     * The public snapshot at /api/game/mechanics still hides an off module's
+     * own dials. That is a different question (what a village not playing this
+     * game should read) with a different answer, and it stays keyed on the
+     * listed `variableKeys` rather than on ownership.
+     */
+    const all = allVariables()
+      .map(decorateChoices)
+      .map((v) => ({
+        ...v,
+        // The ring and the timing travel with the dial so an editor can show
+        // who may turn it and when a change lands without importing the
+        // registry into the client bundle.
+        ring: ringOf(v),
+        applyTiming: applyTimingOf(v),
+        // Which module cards this dial belongs on. Empty means no module owns
+        // it, which is what keeps it in Game Mechanics.
+        modules: modulesOwning(v.key),
+      }));
     const categories: Record<string, typeof all> = {};
     for (const v of all) (categories[v.category] ??= []).push(v);
     res.json({
       categories: Object.entries(categories).map(([name, variables]) => ({ name, variables })),
+      // One row per module holding settings, so Game Mechanics can say where a
+      // moved group went and link to it without a second request.
+      moduleSettings: MODULES.map((m) => ({
+        id: m.id,
+        name: m.name,
+        core: !!m.core,
+        lifecycle: m.core ? "public" : effectiveLifecycle(m.id),
+        keys: all.filter((v) => v.modules.includes(m.id)).map((v) => v.key),
+      })).filter((m) => m.keys.length > 0),
       customized: all.filter((v) => !v.isDefault).length,
       total: all.length,
     });
@@ -20995,10 +21084,20 @@ ${inner}
     // non-admins everywhere else (the identical-404 rule), and this page is
     // anonymous — listing a preview module's dials would leak what the
     // village is trying before it decided. Same idiom as /api/platform/info.
+    /*
+     * A dial two modules list is hidden only when BOTH are hidden. The old
+     * reading hid a key as soon as ANY module listing it was below members, so
+     * a village running a public exchange with stays switched off published no
+     * purchase limits at all: the pair `payments.purchase_limit_*` sits on both.
+     * Shared keys were rare enough for that to go unnoticed and are not rare
+     * now.
+     */
+    const shown = (m: { id: string; core?: boolean }) =>
+      !!m.core || LIFECYCLE_RANK[effectiveLifecycle(m.id)] >= LIFECYCLE_RANK.members;
     const hiddenKeys = new Set(
-      MODULES.filter(
-        (m) => !m.core && LIFECYCLE_RANK[effectiveLifecycle(m.id)] < LIFECYCLE_RANK.members,
-      ).flatMap((m) => m.variableKeys),
+      MODULES.filter((m) => !shown(m))
+        .flatMap((m) => m.variableKeys)
+        .filter((key) => !MODULES.some((m) => m.variableKeys.includes(key) && shown(m))),
     );
     res.json({
       constitution: CONSTITUTION,
@@ -22010,6 +22109,7 @@ ${inner}
      * literal and read at landing time, not at boot.
      */
     [CYCLE_SETTLEMENT]: settlementCloser(() => moonDeps()),
+    [REDEMPTION_SUBJECT]: redemptionCloser({ getPool, notify }),
     /*
      * Mechanics (GOV_DESIGN 2.6). Every step is a guarded update or an
      * idempotent apply, so a crash partway heals on the admin apply path
@@ -22781,11 +22881,12 @@ ${inner}
 
       let removed = false;
       await withRoleHolderLock(async () => {
-        const holders = loadRoleHolders();
-        const keep = holders.filter((h) => !(h.roleId === asked.roleId && h.userId === asked.userId));
-        if (keep.length === holders.length) return;
-        removed = true;
-        await roleHoldersRepo.replaceAll(keep);
+        // By id (0123): unseating the village's last holder through a filtered
+        // snapshot writes an unstamped empty payload, which the store refuses.
+        const gone = loadRoleHolders()
+          .filter((h) => h.roleId === asked.roleId && h.userId === asked.userId)
+          .map((h) => String(h.id));
+        removed = gone.length > 0 && (await roleHoldersRepo.remove(gone)) > 0;
       });
 
       const role = rolesRepo.all().find((r: any) => r.id === asked.roleId) as any;
@@ -25897,6 +25998,7 @@ ${inner}
       isExampleUser,
       computeStage,
       trainingCompletions: (ids: readonly string[]) => completionsForMany(getPool(), ids),
+      paidByVillage: (ids: readonly string[]) => paidByVillageMany(getPool(), ids, contributionTokens()),
       seasonsCompleted: () => {
         const st = seasonState();
         return st.seasons.filter((x: any) => x.endsOn && x.endsOn <= st.today).length;
@@ -26215,7 +26317,8 @@ ${inner}
   // answer each other's requests if the order moved.
   registerOrgRoutes(app, {
     isAdmin, authedUser, guardCapability, getPool, members, firstName,
-    capabilityCtx, lapseContext, currentPatternId, seasonState, notify, circlesRepo,
+    capabilityCtx, lapseContext, currentPatternId, seasonState, notify, notifyAdmins, circlesRepo,
+    submissionsRepo,
   });
 
   // The steward review surface (0140-0141). Mounted here beside the org
@@ -26482,11 +26585,15 @@ ${inner}
           holders.push(row);
           appointedHolderId = row.id;
         }
-      } else {
-        holders = holders.filter((h) => !(h.roleId === role.id && h.userId === userId));
+        await roleHoldersRepo.replaceAll(holders);
+        return holders;
       }
-      await roleHoldersRepo.replaceAll(holders);
-      return holders;
+      // A REMOVAL GOES BY ID (0123). Taking the village's last seat back
+      // through a filtered snapshot writes an unstamped empty payload, which
+      // reads as a seed and used to DELETE every row the table had gained.
+      const gone = holders.filter((h) => h.roleId === role.id && h.userId === userId);
+      if (gone.length) await roleHoldersRepo.remove(gone.map((h) => String(h.id)));
+      return holders.filter((h) => !gone.includes(h));
     });
     if (appointedHolderId) {
       await addActivity("role", `${firstName(member.name)} joined the ${role.name}`, { actorUserId: appointer, entityType: "role", entityRef: role.id });
@@ -26510,6 +26617,7 @@ ${inner}
   registerPlayersRoutes(app, {
     isAdmin, members, claimsRepo, computeStage, hasMembership, stageOf, recordStageEvent,
     trainingCompletions: (ids: readonly string[]) => completionsForMany(getPool(), ids),
+    paidByVillage: (ids: readonly string[]) => paidByVillageMany(getPool(), ids, contributionTokens()),
   });
 
   // S18: "delete" a member = anonymize them. Value rows persist (the ledger
@@ -26538,14 +26646,12 @@ ${inner}
     res.json({ success: true, removed: { id: target.id, email: target.email }, anonymized: true, external });
   });
 
-  /** Member-initiated deletion (Law 8968 posture): same path, own account. */
+  /** Member-initiated deletion (Law 8968 posture): same path, own account. Identity-confirmed like request-exit. */
   app.post("/api/profile/delete-account", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
-    const { password } = req.body ?? {};
-    if (!password || !(await verifyPassword(String(password), user.passwordHash))) {
-      return res.status(403).json({ error: "Confirm with your password to delete your account" });
-    }
+    const confirmed = await confirmIdentity(req, res, user, "delete-account");
+    if (!confirmed.ok) return res.status(403).json(confirmed.body);
     const stranding = await departureStrandingRefusal(user, true);
     if (stranding) return res.status(409).json({ error: stranding });
     // S52: same lock as the admin path — settle blocking state first. The

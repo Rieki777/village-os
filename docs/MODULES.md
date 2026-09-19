@@ -1,6 +1,6 @@
 # Modules
 
-Everything a village can run: 23 modules, what each one is, what it needs, what it adds to the one capability gate, which dials it owns, and where its routes live.
+Everything a village can run: 24 modules, what each one is, what it needs, what it adds to the one capability gate, which dials it owns, and where its routes live.
 
 This is the registry, read out loud. It describes the platform a fork inherits, and it says nothing about any one village: which modules are actually on is a village's own decision, held in its `module_settings` table.
 
@@ -41,7 +41,7 @@ The four core modules sit outside that. They are always public and the lifecycle
 | `connected` | the vendor bills the village directly and answers for the service; the platform answers for the connector. The credential is a secrets-store entry the village holds and can see as source and last4. That visibility IS the tier: the village has its own account and can revoke it unaided. |
 | `managed` | the platform bills and takes the first call; the vendor sits behind a private escalation the village never sees. The credential is platform-held, env-only, and never returned to a village even masked, because it is not the village's to see. This is the PLATFORM_ASSISTANT_KEY posture generalised, and it is settled policy under hub ADR-49. |
 
-Today the registry holds 23 at `included`. The tier is a label and never a gate: enabling a module makes no network call, reads no secret and checks no licence. Listings are accepted under contract version 1.2.
+Today the registry holds 24 at `included`. The tier is a label and never a gate: enabling a module makes no network call, reads no secret and checks no licence. Listings are accepted under contract version 1.2.
 
 ### The data a module holds
 
@@ -51,13 +51,13 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | --- | --- |
 | `none` | none |
 | `village-content` | five: `resources`, `health`, `network`, `crowdpool`, `hypha` |
-| `member-pii` | eighteen: `quests`, `gratitude`, `progression`, `profiles`, `map`, `forum`, `feed`, `messaging`, `stays`, `automation`, `library`, `badges`, `exchange`, `commerce`, `tools`, `events`, `introductions`, `governance` |
+| `member-pii` | nineteen: `quests`, `gratitude`, `progression`, `profiles`, `map`, `forum`, `feed`, `messaging`, `stays`, `automation`, `library`, `badges`, `exchange`, `redemption`, `commerce`, `tools`, `events`, `introductions`, `governance` |
 
 ### What standing one up looks like
 
 | Setup | What it means | Modules |
 | --- | --- | --- |
-| `none` | works the moment it is on. The Go-live card offers itself right after Turn on. | `quests`, `gratitude`, `progression`, `profiles`, `forum`, `feed`, `messaging`, `network`, `events`, `introductions`, `governance` |
+| `none` | works the moment it is on. The Go-live card offers itself right after Turn on. | `quests`, `gratitude`, `progression`, `profiles`, `forum`, `feed`, `messaging`, `redemption`, `network`, `events`, `introductions`, `governance` |
 | `optional` | better with content, honest without it. | `map`, `resources`, `automation`, `health`, `badges`, `crowdpool`, `tools` |
 | `required` | needs real content before going live (a room and a price, a stocked treasury), and the Go-live card waits for readiness. | `stays`, `library`, `exchange`, `commerce`, `hypha` |
 
@@ -67,7 +67,7 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | --- | --- | --- | --- |
 | Coordinate | `coordinate` | Plan the work and the days: quests, the calendar, calls, tools. | 4 |
 | Recognise | `recognise` | See people: gratitude, the path from guest to co-creator, badges. | 3 |
-| Host and earn | `host-and-earn` | Value moving with care: stays, the shelves, the exchange, payments. | 4 |
+| Host and earn | `host-and-earn` | Value moving with care: stays, the shelves, the exchange, payments. | 5 |
 | Know and decide | `know-and-decide` | How the village understands itself: conversations, decisions, power, health. | 6 |
 | Connect | `connect` | People finding people: profiles, messages, the feed, other villages. | 6 |
 
@@ -90,6 +90,7 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | Material Library | `library` | Host and earn | no | included | member-pii | required | [material-library.md](modules/material-library.md) |
 | Badges & Skills | `badges` | Recognise | no | included | member-pii | optional | [badges.md](modules/badges.md) |
 | Exchange | `exchange` | Host and earn | no | included | member-pii | required | [internal-exchange.md](modules/internal-exchange.md) |
+| Redemption | `redemption` | Host and earn | no | included | member-pii | none | [redemption.md](modules/redemption.md) |
 | Payments & Donations | `commerce` | Host and earn | no | included | member-pii | required | none yet |
 | Village Network | `network` | Connect | no | included | village-content | none | none yet |
 | Crowdpool | `crowdpool` | Connect | no | included | village-content | optional | [crowdpool.md](modules/crowdpool.md) |
@@ -99,7 +100,7 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | Governance | `governance` | Know and decide | no | included | member-pii | none | none yet |
 | Hypha Bridge | `hypha` | Know and decide | no | included | village-content | required | [hypha.md](modules/hypha.md) |
 
-That is 23 modules, four of them core. Seventeen carry a contract doc under `docs/modules/` and six do not yet; `node scripts/check-module-docs.mjs` holds that second number to a ratchet that only ever falls. Filenames there do not follow module ids, so the mapping is real data and lives in `MODULE_DOCS` in `server/lib/knowledge.ts`, which is where this table reads it.
+That is 24 modules, four of them core. Eighteen carry a contract doc under `docs/modules/` and six do not yet; `node scripts/check-module-docs.mjs` holds that second number to a ratchet that only ever falls. Filenames there do not follow module ids, so the mapping is real data and lives in `MODULE_DOCS` in `server/lib/knowledge.ts`, which is where this table reads it.
 
 ## The four core modules
 
@@ -139,7 +140,7 @@ Recognition sends, lunar cycles, and the value pool distributed at each close.
 | Requires | nothing |
 | Recommends | nothing |
 | Capabilities it adds | none |
-| Variable keys it owns | `gratitude.base_budget`, `gratitude.require_message`, `gratitude.full_sends_per_cycle`, `gratitude.pool_per_cycle`, `gratitude.pool_token`, `gratitude.proposal_accept_award` |
+| Variable keys it owns | `cycle.mode`, `cycle.settlement_mode`, `cycle.settlement_vote_days`, `feed.max_hearts_per_recipient_per_cycle`, `health.alert_change_pct` |
 | API prefixes | `/api/game/gratitude`, `/api/game/cycle`, `/api/admin/cycles` |
 | Contract doc | [gratitude.md](modules/gratitude.md) |
 
@@ -202,7 +203,7 @@ The weekly call becomes assigned work, not content distribution: recordings in, 
 | Requires | nothing |
 | Recommends | `forum` |
 | Capabilities it adds | none |
-| Variable keys it owns | none |
+| Variable keys it owns | `assistant.synthesis_batch` |
 | API prefixes | `/api/recordings` |
 | Contract doc | none yet |
 | Config it seeds | `youtubeChannelId`, `maxReadyQueue`, `forumCategory` |
@@ -332,10 +333,30 @@ Buy the village's own platform tokens for fiat, out of a stocked treasury, buy-o
 | Requires | nothing |
 | Recommends | nothing |
 | Capabilities it adds | `exchange.buy`, `exchange.swap`, `exchange.manage` |
-| Variable keys it owns | `exchange.price_change_max_pct`, `exchange.swap_spread_bps`, `exchange.swap_fiat_hold_days`, `exchange.swap_max_receive_per_order`, `payments.purchase_limit_per_order_usd`, `payments.purchase_limit_30d_usd`, `payments.purchase_limit_annual_usd` |
+| Variable keys it owns | `payments.purchase_limit_per_order_usd`, `payments.purchase_limit_30d_usd`, `payments.purchase_limit_annual_usd`, `governance.weight_mode`, `governance.weight_token` |
 | API prefixes | `/api/exchange` |
 | Contract doc | [internal-exchange.md](modules/internal-exchange.md) |
 | Config it seeds | `tradingEnabled` |
+| Legal caution card | yes. Enabling shows it first, and preconditions can refuse outright |
+
+### Redemption
+
+A member asks for tokens they hold to become something real off the platform: cash, a service, a share. Asking holds the tokens, a steward confirms once the village has paid, and only then are the tokens destroyed; a refusal, a withdrawal or an expiry gives them back in full. Funds-bearing: read the legal card before enabling.
+
+| Fact | Value |
+| --- | --- |
+| Id | `redemption` |
+| Shelf | Host and earn (`host-and-earn`) |
+| A village can switch it off | yes, and it ships off. An admin moves it to `preview`, `members`, `public` |
+| Tier | `included` |
+| Data it holds | `member-pii` |
+| Standing it up | `none`, works the moment it is on. The Go-live card offers itself right after Turn on. |
+| Requires | nothing |
+| Recommends | nothing |
+| Capabilities it adds | `redemption.confirm` |
+| Variable keys it owns | `redemption.holds_on_propose`, `redemption.tokens`, `redemption.per_member_per_cycle`, `redemption.expires_after_days`, `redemption.currencies`, `redemption.rate_source`, `redemption.rate_per_token`, `redemption.fee_pct`, `redemption.fee_fixed`, `redemption.min_amount`, `redemption.max_per_request`, `redemption.max_per_member_per_cycle`, `redemption.max_village_per_cycle`, `redemption.process_text` |
+| API prefixes | `/api/redemptions`, `/api/admin/redemptions` |
+| Contract doc | [redemption.md](modules/redemption.md) |
 | Legal caution card | yes. Enabling shows it first, and preconditions can refuse outright |
 
 ### Payments & Donations
@@ -353,7 +374,7 @@ Every payment your project issues or receives, as products you define: applicati
 | Requires | nothing |
 | Recommends | nothing |
 | Capabilities it adds | none |
-| Variable keys it owns | none |
+| Variable keys it owns | `payments.donation_max_usd` |
 | API prefixes | `/api/products` |
 | Contract doc | none yet |
 | Legal caution card | yes. Enabling shows it first, and preconditions can refuse outright |
@@ -377,7 +398,7 @@ The living org chart: circles, the roles that orbit them, who holds each seat, w
 | Requires | nothing |
 | Recommends | nothing |
 | Capabilities it adds | `map.viewPeople`, `map.contact`, `map.photograph`, `map.curatePhotos` |
-| Variable keys it owns | `map.public_structure`, `map.concierge_enabled`, `map.contact_daily_cap`, `map.contact_recipient_daily_cap`, `map.show_quests`, `map.vacant_highlight`, `map.contact_retention_days`, `map.photo_max_mb`, `map.photos_per_place`, `map.photos_per_member_daily`, `map.photo_report_hide_threshold`, `map.photo_tombstone_days` |
+| Variable keys it owns | `events.rsvp_enabled`, `map.public_structure`, `map.concierge_enabled`, `map.contact_daily_cap`, `map.contact_recipient_daily_cap`, `map.show_quests`, `map.vacant_highlight`, `map.contact_retention_days`, `map.photo_max_mb`, `map.photos_per_place`, `map.photos_per_member_daily`, `map.photo_report_hide_threshold`, `map.photo_tombstone_days` |
 | API prefixes | `/api/map`, `/api/circles`, `/api/places`, `/api/admin/places` |
 | Contract doc | [village-map.md](modules/village-map.md) |
 | Switching it off is blocked by | `resources`, which requires it while non-off |
@@ -397,7 +418,7 @@ A declared map of how money and resources are governed: who may spend what, with
 | Requires | `map` |
 | Recommends | `forum` |
 | Capabilities it adds | none |
-| Variable keys it owns | none |
+| Variable keys it owns | `map.public_structure`, `ledger.admin_mint_cosign_over` |
 | API prefixes | `/api/resources` |
 | Contract doc | [how-resources-flow.md](modules/how-resources-flow.md) |
 | Config it seeds | `requestCategory`, `measuredVisibleTo`, `labels` |
@@ -417,7 +438,7 @@ Village conversations: threads by circle-of-life category, @mentions, thread fol
 | Requires | nothing |
 | Recommends | `map` |
 | Capabilities it adds | `forum.post`, `forum.moderate` |
-| Variable keys it owns | `forum.report_hide_threshold` |
+| Variable keys it owns | `feed.category_slug` |
 | API prefixes | `/api/forum` |
 | Contract doc | none yet |
 | Switching it off is blocked by | `feed`, which requires it while non-off |
@@ -438,7 +459,7 @@ The village's vital signs: per-lunation snapshots frozen at each cycle close, th
 | Requires | nothing |
 | Recommends | `gratitude`, `quests` |
 | Capabilities it adds | `health.record` |
-| Variable keys it owns | `health.alert_change_pct` |
+| Variable keys it owns | `gratitude.base_budget` |
 | API prefixes | `/api/health` |
 | Contract doc | [health-dashboard.md](modules/health-dashboard.md) |
 
@@ -476,7 +497,7 @@ Your DAO on Hypha, read from Base and shown here: the contracts this village act
 | Requires | nothing |
 | Recommends | `governance`, `tools` |
 | Capabilities it adds | none |
-| Variable keys it owns | `hypha.treasury_address` |
+| Variable keys it owns | `tokens.base_rpc_url`, `tokens.equity_address`, `tokens.voice_address`, `governance.default_method` |
 | API prefixes | `/api/hypha`, `/api/admin/hypha` |
 | Contract doc | [hypha.md](modules/hypha.md) |
 | Display only | yes. Deep links to Base, and never a mint path |
@@ -613,19 +634,26 @@ Read the other way: `map` cannot be switched off while `resources` is on, `forum
 
 ## The dials a module owns
 
-Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 23 modules own 75 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
+Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 24 modules own 94 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
 
-Three keys are claimed by more than one module, so switching one module off leaves the dial owned by the other:
+Ten keys are claimed by more than one module, so switching one module off leaves the dial owned by the other:
 
 | Key | Claimed by |
 | --- | --- |
+| `events.rsvp_enabled` | `map`, `events` |
+| `feed.category_slug` | `forum`, `feed` |
+| `feed.max_hearts_per_recipient_per_cycle` | `gratitude`, `feed` |
+| `governance.default_method` | `governance`, `hypha` |
+| `governance.weight_mode` | `exchange`, `governance` |
+| `governance.weight_token` | `exchange`, `governance` |
+| `map.public_structure` | `map`, `resources` |
 | `payments.purchase_limit_30d_usd` | `stays`, `exchange` |
 | `payments.purchase_limit_annual_usd` | `stays`, `exchange` |
 | `payments.purchase_limit_per_order_usd` | `stays`, `exchange` |
 
 ## Capabilities
 
-A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which holds 34 keys in total. It never becomes a second permission mechanism. The order of the one gate is admin, then badge denies, then role, then badge grants, then stage: a badge deny beats role and stage, and only admin outranks it. Eleven modules add keys:
+A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which holds 34 keys in total. It never becomes a second permission mechanism. The order of the one gate is admin, then badge denies, then role, then badge grants, then stage: a badge deny beats role and stage, and only admin outranks it. Twelve modules add keys:
 
 | Module | Capabilities |
 | --- | --- |
@@ -638,6 +666,7 @@ A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which
 | `stays` | `stay.member_rate` |
 | `health` | `health.record` |
 | `exchange` | `exchange.buy`, `exchange.swap`, `exchange.manage` |
+| `redemption` | `redemption.confirm` |
 | `events` | `event.rsvp`, `event.manage` |
 | `governance` | `ballot.vote`, `member.vouch` |
 
@@ -647,7 +676,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
 
 ```json
 {
-  "moduleCount": 23,
+  "moduleCount": 24,
   "coreCount": 4,
   "lifecycle": {
     "off": 0,
@@ -695,12 +724,11 @@ The same facts, for anything that would rather parse than read. Regenerated with
       "recommends": [],
       "capabilities": [],
       "variableKeys": [
-        "gratitude.base_budget",
-        "gratitude.require_message",
-        "gratitude.full_sends_per_cycle",
-        "gratitude.pool_per_cycle",
-        "gratitude.pool_token",
-        "gratitude.proposal_accept_award"
+        "cycle.mode",
+        "cycle.settlement_mode",
+        "cycle.settlement_vote_days",
+        "feed.max_hearts_per_recipient_per_cycle",
+        "health.alert_change_pct"
       ],
       "apiPrefixes": [
         "/api/game/gratitude",
@@ -767,6 +795,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "map.curatePhotos"
       ],
       "variableKeys": [
+        "events.rsvp_enabled",
         "map.public_structure",
         "map.concierge_enabled",
         "map.contact_daily_cap",
@@ -804,7 +833,10 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "forum"
       ],
       "capabilities": [],
-      "variableKeys": [],
+      "variableKeys": [
+        "map.public_structure",
+        "ledger.admin_mint_cosign_over"
+      ],
       "apiPrefixes": [
         "/api/resources"
       ],
@@ -828,7 +860,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "forum.moderate"
       ],
       "variableKeys": [
-        "forum.report_hide_threshold"
+        "feed.category_slug"
       ],
       "apiPrefixes": [
         "/api/forum"
@@ -934,7 +966,9 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "forum"
       ],
       "capabilities": [],
-      "variableKeys": [],
+      "variableKeys": [
+        "assistant.synthesis_batch"
+      ],
       "apiPrefixes": [
         "/api/recordings"
       ],
@@ -958,7 +992,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "health.record"
       ],
       "variableKeys": [
-        "health.alert_change_pct"
+        "gratitude.base_budget"
       ],
       "apiPrefixes": [
         "/api/health"
@@ -1029,18 +1063,52 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "exchange.manage"
       ],
       "variableKeys": [
-        "exchange.price_change_max_pct",
-        "exchange.swap_spread_bps",
-        "exchange.swap_fiat_hold_days",
-        "exchange.swap_max_receive_per_order",
         "payments.purchase_limit_per_order_usd",
         "payments.purchase_limit_30d_usd",
-        "payments.purchase_limit_annual_usd"
+        "payments.purchase_limit_annual_usd",
+        "governance.weight_mode",
+        "governance.weight_token"
       ],
       "apiPrefixes": [
         "/api/exchange"
       ],
       "contractDoc": "docs/modules/internal-exchange.md"
+    },
+    {
+      "id": "redemption",
+      "name": "Redemption",
+      "description": "A member asks for tokens they hold to become something real off the platform: cash, a service, a share. Asking holds the tokens, a steward confirms once the village has paid, and only then are the tokens destroyed; a refusal, a withdrawal or an expiry gives them back in full. Funds-bearing: read the legal card before enabling.",
+      "core": false,
+      "tier": "included",
+      "dataClass": "member-pii",
+      "group": "host-and-earn",
+      "setup": "none",
+      "requires": [],
+      "recommends": [],
+      "capabilities": [
+        "redemption.confirm"
+      ],
+      "variableKeys": [
+        "redemption.holds_on_propose",
+        "redemption.tokens",
+        "redemption.per_member_per_cycle",
+        "redemption.expires_after_days",
+        "redemption.currencies",
+        "redemption.rate_source",
+        "redemption.rate_per_token",
+        "redemption.fee_pct",
+        "redemption.fee_fixed",
+        "redemption.min_amount",
+        "redemption.max_per_request",
+        "redemption.max_per_member_per_cycle",
+        "redemption.max_village_per_cycle",
+        "redemption.process_text"
+      ],
+      "apiPrefixes": [
+        "/api/redemptions",
+        "/api/admin/redemptions"
+      ],
+      "contractDoc": "docs/modules/redemption.md"
     },
     {
       "id": "commerce",
@@ -1054,7 +1122,9 @@ The same facts, for anything that would rather parse than read. Regenerated with
       "requires": [],
       "recommends": [],
       "capabilities": [],
-      "variableKeys": [],
+      "variableKeys": [
+        "payments.donation_max_usd"
+      ],
       "apiPrefixes": [
         "/api/products"
       ],
@@ -1226,7 +1296,10 @@ The same facts, for anything that would rather parse than read. Regenerated with
       ],
       "capabilities": [],
       "variableKeys": [
-        "hypha.treasury_address"
+        "tokens.base_rpc_url",
+        "tokens.equity_address",
+        "tokens.voice_address",
+        "governance.default_method"
       ],
       "apiPrefixes": [
         "/api/hypha",

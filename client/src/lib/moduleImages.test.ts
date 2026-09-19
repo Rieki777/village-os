@@ -37,8 +37,43 @@ describe("module images", () => {
     expect(images.size).toBeGreaterThan(10);
   });
 
-  it("gives every module an image", () => {
-    const missing = ids.filter((id) => !images.has(id));
+  /*
+   * MODULES THAT SHIP THE DRAWN FALLBACK INSTEAD OF A FILE.
+   *
+   * Two gates in this repository meet here, and on 2026-09-15 they had no
+   * overlap left. `scripts/image-budget-baseline.json` is a RATCHET: its header
+   * says the number "may only ever go DOWN" and `--update-baseline` refuses to
+   * raise it. Measured that day, the shipped total was 2161446 bytes against a
+   * baseline of 2161446: zero headroom, so ANY new file fails that gate, at any
+   * size. A module added after that point therefore cannot carry bundled art
+   * without either compressing somebody else's or bypassing a ratchet.
+   *
+   * It does not need to. `ModuleArt` walks its sources and falls through to
+   * `FallbackArt` on error, a gradient from the module's catalog hue plus its
+   * lucide emblem, and its own header says that fallback "costs zero image
+   * budget". `ModuleArt.fallback.test.tsx` proves the card really draws it.
+   * Art a founder chooses later goes in the uploads volume, which the budget
+   * gate's header names as the place art that needs to grow belongs, and which
+   * `ModuleArt` already prefers over the bundled file.
+   *
+   * So this list is narrow and it is checked: every id here must be a real
+   * module, and every module NOT here must still ship its file. The original
+   * failure this suite was written for (five modules rendering as broken
+   * images) stays caught for everything else.
+   */
+  const DRAWN_FALLBACK = new Set(["redemption"]);
+
+  it("keeps the fallback list pointed at real modules", () => {
+    const stale = [...DRAWN_FALLBACK].filter((id) => !ids.includes(id));
+    expect(stale, `fallback list names no such module: ${stale.join(", ")}`).toEqual([]);
+    // A module on this list must not also ship a file: that would be an
+    // exemption nobody needs, quietly costing the budget.
+    const both = [...DRAWN_FALLBACK].filter((id) => images.has(id));
+    expect(both, `on the fallback list AND shipping art: ${both.join(", ")}`).toEqual([]);
+  });
+
+  it("gives every module an image, or the drawn fallback", () => {
+    const missing = ids.filter((id) => !images.has(id) && !DRAWN_FALLBACK.has(id));
     expect(missing, `modules with no image: ${missing.join(", ")}`).toEqual([]);
   });
 

@@ -111,9 +111,19 @@ export function decodeToken(
  * the hash, so the fingerprint no longer matches and a replayed link is
  * refused. Stateless, which is how the route is written; an empty hash (a
  * claim-pending account) fingerprints just as well as a real one.
+ *
+ * WHY THIS IS AN HMAC AND NOT A BARE HASH. The input is the STORED hash, so
+ * over a bcrypt string a plain digest would tell an attacker nothing. It was
+ * not bcrypt everywhere: an account dormant since the bcrypt migration could
+ * still hold an unsalted SHA-256 of the password itself, and for that account
+ * a bare digest puts sha256(sha256(password)) into a link that travels by
+ * email, where whoever holds it can guess candidates offline until one
+ * matches. Keying the digest with the server secret removes that: the
+ * fingerprint still changes when the hash changes, and it can no longer be
+ * reproduced from a password guess alone. CodeQL alert 36 named this.
  */
-export function passwordFingerprint(passwordHash: string | null | undefined): string {
-  return crypto.createHash("sha256").update(String(passwordHash ?? "")).digest("hex").slice(0, 16);
+export function passwordFingerprint(secret: string, passwordHash: string | null | undefined): string {
+  return crypto.createHmac("sha256", secret).update(String(passwordHash ?? "")).digest("hex").slice(0, 16);
 }
 
 /**
@@ -130,7 +140,7 @@ export function makeSetPasswordToken(
     JSON.stringify({
       userId,
       purpose: "set-password",
-      pw: passwordFingerprint(currentPasswordHash),
+      pw: passwordFingerprint(secret, currentPasswordHash),
       exp: Date.now() + SET_PASSWORD_TTL_MS,
     }),
   ).toString("base64url");

@@ -224,7 +224,7 @@ Three columns need a word before the tables:
 
 | Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
 | --- | --- | --- | --- | --- | --- |
-| `redemption.confirm` | Confirm that a member was paid, and destroy the tokens they redeemed | yes | yes | no rung | no module |
+| `redemption.confirm` | Confirm that a member was paid, and destroy the tokens they redeemed | yes | yes | no rung | Redemption |
 
 ### `steward`
 
@@ -259,10 +259,11 @@ A module's `capabilities` array in `shared/modules.ts` is what that module ADDS 
 | Stays | `stays` | `stay.member_rate` |
 | Village Health | `health` | `health.record` |
 | Exchange | `exchange` | `exchange.buy`, `exchange.swap`, `exchange.manage` |
+| Redemption | `redemption` | `redemption.confirm` |
 | Village Calendar | `events` | `event.rsvp`, `event.manage` |
 | Governance | `governance` | `ballot.vote`, `member.vouch` |
 
-14 keys are declared by no module: `map.edit`, `map.publish`, `mechanics.propose`, `org.declare`, `member.superVouch`, `org.seat`, `org.seatAgent`, `intake.moderate`, `library.keep`, `story.tell`, `dial.set`, `quest.approve`, `redemption.confirm` and `steward.veto`. That is a fact about the registry and never a sign the key is dead. A key reaches the gate from any route that asks for it, and the admin surfaces the handover keys cover sit outside every module.
+13 keys are declared by no module: `map.edit`, `map.publish`, `mechanics.propose`, `org.declare`, `member.superVouch`, `org.seat`, `org.seatAgent`, `intake.moderate`, `library.keep`, `story.tell`, `dial.set`, `quest.approve` and `steward.veto`. That is a fact about the registry and never a sign the key is dead. A key reaches the gate from any route that asks for it, and the admin surfaces the handover keys cover sit outside every module.
 
 ## Machine-readable
 
@@ -276,7 +277,7 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
     "voices": 5,
     "villageHoldable": 19,
     "climbable": 13,
-    "undeclared": 14
+    "undeclared": 13
   },
   "resolutionOrder": [
     {
@@ -679,7 +680,9 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
       "transferable": true,
       "stageUnlock": null,
       "stageRung": null,
-      "modules": []
+      "modules": [
+        "redemption"
+      ]
     },
     {
       "key": "steward.veto",

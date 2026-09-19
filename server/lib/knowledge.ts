@@ -305,6 +305,9 @@ export const MODULE_DOCS: Readonly<Record<string, string>> = {
   // the assistant could not reach it and the module read as undocumented. Its
   // own header names the registry id.
   messaging: "messaging.md",
+  // Shipped with its module (ruling 22, 2026-09-15), so the gap ratchet never
+  // counts it.
+  redemption: "redemption.md",
   // The four CORE modules. A village cannot switch these off, so their
   // contract docs are the ones a fork operator most needs and the last ones
   // written: the gap ratchet counted all four until 2026-09-06.
