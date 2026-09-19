@@ -290,7 +290,8 @@ export const MODULE_CATALOG: Record<string, ModuleCatalogEntry> = {
       "The confirming key can be handed to a named role",
     ],
     forWhom: "Villages that will pay members back, in cash, services or shares, for tokens they earned.",
-    setupSummary: "Nothing to set up to switch it on. The legal card comes first.",
+    setupSummary:
+      "Write how a member actually gets paid, pick the currency, follow the exchange's price or set your own, and set the limits before going live. The legal card comes first.",
     dataSummary: "Each member's requests, what they asked for, and who decided, tied to named members.",
     hue: 40,
     emblem: "Landmark",

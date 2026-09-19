@@ -165,6 +165,77 @@ describe("ModuleSettingsSection", () => {
     expect(screen.getByText("founder held")).toBeInTheDocument();
   });
 
+  /**
+   * Ruling 11: warn loudly, never refuse. `redemption.process_text` ships
+   * empty and an empty one shows a member no card at all, so a live
+   * redemption module with nothing written is a member asking to cash out and
+   * reading no instructions anywhere. The dial that fixes it is on this card,
+   * so the warning belongs on this card.
+   */
+  const REDEMPTION = (processText: string) => ({
+    categories: [
+      {
+        name: "Ledger",
+        variables: [
+          {
+            key: "redemption.process_text",
+            label: "How redemption works here",
+            description: "The village's own words for what happens after a member asks",
+            category: "Ledger",
+            type: "longtext",
+            value: processText,
+            default: "",
+            isDefault: processText === "",
+            ring: "founder",
+            applyTiming: "instant",
+            modules: ["redemption"],
+          },
+        ],
+      },
+    ],
+  });
+
+  const withRedemption = (processText: string) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: any) => {
+        if (init?.method === "PUT") return { status: 200, ok: true, json: async () => ({ ok: true }) };
+        if (String(url).includes("/admin/variables")) {
+          return { status: 200, ok: true, json: async () => REDEMPTION(processText) };
+        }
+        return { status: 404, ok: false, json: async () => ({}) };
+      }),
+    );
+  };
+
+  it("warns when redemption is live and nobody has written how a member gets paid", async () => {
+    withRedemption("");
+    renderSection({ moduleId: "redemption", moduleName: "Redemption", lifecycle: "members" });
+    const warned = await screen.findByText(/shown no instructions at all/);
+    expect(warned).toBeInTheDocument();
+    // A warning and never a refusal. It is a status rather than an alert, and
+    // the dial it is about is still there and still editable: nothing on this
+    // card is withheld because the value is empty.
+    expect(warned).toHaveAttribute("role", "status");
+    expect(screen.getByText("How redemption works here")).toBeInTheDocument();
+    expect(screen.getByRole("textbox")).not.toBeDisabled();
+  });
+
+  it("does not warn once the process is written", async () => {
+    withRedemption("Ask Suzy in the office, bring your bank details.");
+    renderSection({ moduleId: "redemption", moduleName: "Redemption", lifecycle: "members" });
+    await screen.findByText("How redemption works here");
+    expect(screen.queryByText(/shown no instructions at all/)).toBeNull();
+  });
+
+  it("does not warn while redemption is still off, because the off notice already says it", async () => {
+    withRedemption("");
+    renderSection({ moduleId: "redemption", moduleName: "Redemption", lifecycle: "off" });
+    await screen.findByText("How redemption works here");
+    expect(screen.queryByText(/shown no instructions at all/)).toBeNull();
+    expect(screen.getByText(/Redemption is off\. You can set it up now/)).toBeInTheDocument();
+  });
+
   it("says plainly when a module has no settings of its own", async () => {
     renderSection({ moduleId: "network", moduleName: "Village Network", lifecycle: "public" });
     expect(await screen.findByText("Village Network has no settings of its own.")).toBeInTheDocument();
