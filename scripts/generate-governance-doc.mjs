@@ -1783,6 +1783,9 @@ const SUBJECT_WORDS = {
   // The one subject no member opens. The moon posts it when a cycle ends,
   // and the village decides whether that cycle's value is released.
   cycle_settlement: "Settles a moon that has ended and releases its cycle pool, at exactly the amounts the ballot showed.",
+  // A member asked for their tokens to become something real, and nobody in
+  // the village holds the key that confirms one, so the village decides it.
+  redemption: "Confirms that a member was paid off the platform for the tokens they asked to redeem, and destroys those tokens. Voting it down, or letting it lapse, gives them back.",
 };
 
 /**

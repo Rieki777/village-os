@@ -183,9 +183,13 @@ export function register(app: Express, deps: Deps): void {
     // 0200: nor with a treasury that the delete would strand.
     const stranded = await circleDeleteProblem(getPool(), String(req.params.id), await listBudgets(getPool()), circlesRepo);
     if (stranded) return res.status(409).json({ error: stranded });
-    const remaining = circlesRepo.all().filter((c: any) => c.id !== req.params.id);
-    if (remaining.length === circlesRepo.all().length) return res.status(404).json({ error: "Not found" });
-    await circlesRepo.replaceAll(remaining);
+    // By id, never a filtered whole-table write: removing the LAST circle that
+    // way hands the store an empty array, which carries no version stamp, reads
+    // as boot seeding and DELETEs whatever the table holds by then, a circle
+    // another writer created in the gap included (server/repos/store-db.ts).
+    if (!(await circlesRepo.remove([String(req.params.id)]))) {
+      return res.status(404).json({ error: "Not found" });
+    }
     res.json({ success: true });
   });
 }

@@ -253,11 +253,32 @@ export interface AppDeps {
    * nothing. `trainingDone` is the SERVER's record of completed modules and
    * never a field the member can write; batch it with `trainingCompletions`
    * rather than reading per member inside a loop.
+   *
+   * FOUR FACTS, AND THE FOURTH WAS EASY TO DROP. `paidByVillage` carries the
+   * Contributor rung on its own, and until 2026-09-15 the implementation
+   * defaulted it to false, so a caller that handed over three arguments
+   * compiled and answered a rung too low for everybody the village had paid.
+   * Two did. The default is gone and this declaration is REQUIRED, which is
+   * two ways of saying the same thing on purpose: a dep passed as a value
+   * loses the implementation's signature, so the omission can only become a
+   * compiler error here. Batch it with `paidByVillage` below.
    */
-  computeStage(user: MemberRecord, consentedQuests: number, trainingDone: readonly string[]): string;
+  computeStage(user: MemberRecord, consentedQuests: number, trainingDone: readonly string[], paidByVillage: boolean): string;
 
   /** Completed training modules for many members, in one query. */
   trainingCompletions(userIds: readonly string[]): Promise<Map<string, string[]>>;
+
+  /**
+   * Which of these members the village has ever paid for something they
+   * brought it, in ONE query. The ids it answers with are the paid ones.
+   *
+   * The fourth fact `computeStage` wants, for a whole list. Every surface that
+   * computes a stage for more than one person reads it this way: the roster
+   * lists every member, so a per-member `hasBeenPaidByVillage` inside the loop
+   * would turn one page into N queries. Same discipline as `consentedCounts`
+   * and `trainingCompletions`, and for the same reason.
+   */
+  paidByVillage(userIds: readonly string[]): Promise<Set<string>>;
 
   /** `computeStage` with the quest count looked up for you. One read. */
   stageOf(user: MemberRecord): Promise<string>;
