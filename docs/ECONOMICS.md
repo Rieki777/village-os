@@ -91,7 +91,7 @@ subtlety in this system; see section 7.
 
 | Trigger | Path | Notes |
 |---|---|---|
-| A steward confirms a quest | consent route (`server/index.ts`), then `mintForConfirmedClaim` | Gratitude is posted by the route; the rule engine deliberately SKIPS the gratitude slug so one piece of work cannot pay twice |
+| A steward confirms a quest | consent route (`server/routes/questClaims.ts`), then `owedForClaim`, `recordOwed`, `settleOwedForClaim` | Gratitude is posted by the route inside the claim's own commit; the rule engine deliberately SKIPS the gratitude slug so one piece of work cannot pay twice. What else the consent owes is priced and recorded in that same commit and posted after it, so a crash between the two cannot lose the obligation. A steward can ask again at `POST /api/admin/quest-claims/:id/owed/pay` |
 | A moon closes | `runSettlement` | Pays seat holders per `mint_rules` on `role.cycle` |
 | A cycle is closed by an admin | the cycle-close route | Splits `gratitude.pool_per_cycle` of the pool token by recognition received. A human act, never a job |
 | A member thanks another | `give()`, or `sendGratitude()` for a heart | Spends the member's cycle allowance |
@@ -243,6 +243,25 @@ losing its own payout by about twenty milliseconds. Fixed: `startEconomyEpoch` i
 now called at boot. Amora's epoch carries a boot timestamp and its ledger is
 empty, which proves it was stamped by the boot and not by a lost quest. **Amora
 never lost a payout, because Amora has never confirmed a quest.**
+
+**The epoch now decides nothing, and this is the open question rather than a
+finished state.** Audited 2026-09-19 against `116d3bb`. The stamp is written at
+boot and read by exactly one function, `mintForConfirmedClaim`, and PRs #264 and
+#269 left that function with no production caller when the consent route moved
+onto `owedForClaim` and `postOwed`. Every live path that pays a quest claim now
+reaches the ledger without consulting the epoch. The header in
+`server/lib/economy.ts` used to claim that every source query filters on the
+epoch and that an admin backfill honours pre-epoch work on purpose: neither is
+true and neither has ever had a line of code, since `runSettlement` sweeps
+`role.cycle` seats and the voice waning and never reads a claim, and nothing
+writes `app_config.economy-state` except `startEconomyEpoch` itself. The guard
+also never refused anything in production before the split, because the old
+consent route measured the claim against the epoch using a `resolvedAt` that the
+same transaction had just stamped at `now`. What keeps a flag flip from paying
+years of backlog is structural rather than guarded: an obligation exists only
+because a consent created it, and a consent is always now. Whether this village
+wants a real epoch guard, and where it could live without stamping inside a
+transaction that may roll back, is an open decision for the economics lane.
 
 ---
 
