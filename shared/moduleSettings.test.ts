@@ -108,10 +108,13 @@ describe("the dials no module owns", () => {
       "arrival.greeter_role",
       "ledger.admin_mint_cycle_cap",
       "tokens.show_economics_section",
-      // The redemption dials are a live lane's, and this change deliberately
-      // does not claim them: there is no redemption module in the registry
-      // yet, so they stay platform dials until that lane lands one.
-      "redemption.per_member_per_cycle",
+      // The redemption dials WERE here, with the note that they stayed platform
+      // dials "until that lane lands one". That lane landed in the same batch as
+      // this change: redemption is a module in the registry now and owns its own
+      // dials, so `redemption.per_member_per_cycle` belongs on its card and not
+      // in Game Mechanics. Removed by the integrator composing the two, with the
+      // economics lane told. This pin is what caught it: neither branch is wrong
+      // alone, and only the composed tree shows the sum.
     ];
     for (const key of platform) {
       expect(VARIABLES_BY_KEY[key], key).toBeTruthy();
