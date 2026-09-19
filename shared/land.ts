@@ -503,6 +503,40 @@ export function boundsFor(centre: LatLon, spanM: number): Bounds {
  * founder asking for a 50 metre span gets the deepest zoom that exists
  * instead of a request nothing answers.
  */
+/**
+ * The map's world rect, as a ratio: 2400 by 1600.
+ *
+ * The number lives here because it decides the SHAPE OF THE GROUND a provider
+ * is asked for, and a picture whose ground is a different shape from the frame
+ * it is drawn into has to be stretched to fit. Stretching a georeferenced
+ * photograph moves every structure off the ground it stands on, which is the
+ * one thing this map may not do, and it does it silently.
+ */
+export const MAP_WORLD_ASPECT = 2400 / 1600;
+
+/**
+ * The ground a provider is asked for, in the frame's own proportions.
+ *
+ * `boundsFor` makes a SQUARE, which is right for a provider being asked for a
+ * square image and wrong for the map, whose world is 3:2. `spanM` stays the
+ * WIDTH across, which is the number a founder typed and understands; the
+ * height follows from the aspect.
+ */
+export function boundsForAspect(centre: LatLon, spanM: number, aspect: number): Bounds {
+  const halfW = spanM / 2;
+  const halfH = spanM / (2 * (aspect > 0 ? aspect : 1));
+  const dLat = halfH / METRES_PER_DEG_LAT;
+  const cos = Math.max(Math.cos((centre.lat * Math.PI) / 180), 0.01);
+  const dLon = halfW / (METRES_PER_DEG_LAT * cos);
+  const wrap = (lon: number): number => ((((lon + 180) % 360) + 360) % 360) - 180;
+  return {
+    west: wrap(centre.lon - dLon),
+    south: Math.max(centre.lat - dLat, -90),
+    east: wrap(centre.lon + dLon),
+    north: Math.min(centre.lat + dLat, 90),
+  };
+}
+
 export function zoomFor(centre: LatLon, spanM: number, pixels: number): number {
   const cos = Math.max(Math.cos((centre.lat * Math.PI) / 180), 0.01);
   const worldMetres = 2 * Math.PI * 6378137 * cos;

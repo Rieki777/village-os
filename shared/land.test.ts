@@ -26,6 +26,7 @@ import {
   validateSpan,
   zoomFor,
 } from "./land";
+import { boundsForAspect, MAP_WORLD_ASPECT } from "./land";
 import { parcelSlug, isParcelSlug, orderParcels, DEFAULT_PARCEL_SLUG } from "./land";
 
 /** Dominicalito, Costa Rica: roughly where the first village sits. */
@@ -427,5 +428,47 @@ describe("which parcel opens", () => {
     const rows = [p("b", 2, "x"), p("a", 1, "x")];
     orderParcels(rows);
     expect(rows.map((r) => r.slug)).toEqual(["b", "a"]);
+  });
+});
+describe("the ground a provider is asked for has the frame's own shape", () => {
+  const CENTRE = { lat: 9.2345, lon: -83.8412 };
+  /** Metres across a bounds, measured the way boundsFor builds one. */
+  const size = (b: { west: number; east: number; south: number; north: number }, lat: number) => {
+    const mPerDegLat = 111_320;
+    const w = (b.east - b.west) * mPerDegLat * Math.cos((lat * Math.PI) / 180);
+    const h = (b.north - b.south) * mPerDegLat;
+    return { w, h };
+  };
+
+  it("keeps spanM as the WIDTH, which is the number a founder typed", () => {
+    const { w } = size(boundsForAspect(CENTRE, 800, MAP_WORLD_ASPECT), CENTRE.lat);
+    expect(w).toBeCloseTo(800, 0);
+  });
+
+  it("makes the ground the same shape as the map's world rect", () => {
+    const { w, h } = size(boundsForAspect(CENTRE, 800, MAP_WORLD_ASPECT), CENTRE.lat);
+    expect(w / h).toBeCloseTo(MAP_WORLD_ASPECT, 5);
+  });
+
+  it("gives the same metres per pixel on both axes, which is what stops the stretch", () => {
+    // A 3:2 image over a 3:2 ground. If either half changed alone, a structure
+    // would sit off the ground it stands on and nothing would report it.
+    const pixelsW = 1024;
+    const pixelsH = Math.round(pixelsW / MAP_WORLD_ASPECT);
+    const { w, h } = size(boundsForAspect(CENTRE, 800, MAP_WORLD_ASPECT), CENTRE.lat);
+    expect(w / pixelsW).toBeCloseTo(h / pixelsH, 2);
+  });
+
+  it("still makes a square when the aspect is 1, matching boundsFor", () => {
+    const a = boundsForAspect(CENTRE, 800, 1);
+    const b = boundsFor(CENTRE, 800);
+    expect(a.north).toBeCloseTo(b.north, 9);
+    expect(a.west).toBeCloseTo(b.west, 9);
+  });
+
+  it("does not divide by zero on a nonsense aspect", () => {
+    expect(() => boundsForAspect(CENTRE, 800, 0)).not.toThrow();
+    const { w, h } = size(boundsForAspect(CENTRE, 800, 0), CENTRE.lat);
+    expect(Number.isFinite(w) && Number.isFinite(h)).toBe(true);
   });
 });
