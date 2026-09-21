@@ -13,7 +13,7 @@
  * number wearing a real currency's clothes.
  */
 import { useEffect, useState } from "react";
-import { authToken } from "@/lib/gameApi";
+import { authToken, useGameConfig } from "@/lib/gameApi";
 import { removeStored, storedText, writeStored } from "@/lib/safeStorage";
 import { defaultDisplayCurrency } from "@shared/money";
 
@@ -43,19 +43,23 @@ export default function CurrencyPicker({
   onChange?: (currency: string, rates: FxTable | null) => void;
 }) {
   const [table, setTable] = useState<FxTable | null>(null);
-  const [projectCurrency, setProjectCurrency] = useState<string>("CHF");
+  /*
+   * THE VILLAGE'S OWN CURRENCY, ONCE THE VILLAGE HAS SAID IT. This started as
+   * "CHF" and held it until /api/game/config answered, and for good when that
+   * request failed, so a village that trades in colones was first told its own
+   * currency was Swiss francs (measured on the live map, 2026-09-21: the config
+   * says CRC). Until the config is known there is no village currency to name,
+   * and the picker says "this village's own" instead of guessing one. The
+   * config comes through the app's one cached read, not a second request.
+   */
+  const config = useGameConfig();
+  const projectCurrency = config?.project ? defaultDisplayCurrency(config.project) : "";
   const [choice, setChoice] = useState<string>(() => storedDisplayCurrency());
 
   useEffect(() => {
     fetch("/api/fx/rates")
       .then((r) => (r.ok ? r.json() : null))
       .then(setTable)
-      .catch(() => {});
-    fetch("/api/game/config")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((cfg) => {
-        if (cfg?.project) setProjectCurrency(defaultDisplayCurrency(cfg.project));
-      })
       .catch(() => {});
     if (authToken()) {
       fetch("/api/profile", { headers: headers() })
@@ -71,12 +75,13 @@ export default function CurrencyPicker({
   const resolved = choice || projectCurrency;
 
   useEffect(() => {
-    onChange?.(resolved, table);
+    // Nothing to report until there is a currency to name.
+    if (resolved) onChange?.(resolved, table);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolved, table]);
 
   const options = Array.from(
-    new Set([projectCurrency, "CHF", "EUR", ...Object.keys(table?.rates ?? {})]),
+    new Set([projectCurrency, "CHF", "EUR", ...Object.keys(table?.rates ?? {})].filter(Boolean)),
   ).sort();
 
   const covered = (code: string) => code === "EUR" || !!table?.rates?.[code];
@@ -107,7 +112,7 @@ export default function CurrencyPicker({
           onChange={(e) => save(e.target.value)}
           className="text-xs border border-border rounded-full px-2 py-1 bg-background max-w-32"
         >
-          <option value="">{projectCurrency} (this village's)</option>
+          <option value="">{projectCurrency ? `${projectCurrency} (this village's)` : "This village's own"}</option>
           {options
             .filter((c) => c !== projectCurrency)
             .map((c) => (
@@ -117,7 +122,7 @@ export default function CurrencyPicker({
             ))}
         </select>
       </label>
-      {!covered(resolved) && (
+      {!!resolved && !covered(resolved) && (
         <p className="text-[10px] text-muted-foreground mt-1">
           No daily rate for {resolved} yet, so amounts in other currencies show unconverted.
         </p>
