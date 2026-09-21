@@ -32,6 +32,8 @@ import SearchBar, { type SearchHit } from "@/components/power/SearchBar";
 import FilterChips from "@/components/power/FilterChips";
 import HolderCard from "@/components/power/HolderCard";
 import CircleCard from "@/components/power/CircleCard";
+import CirclePeek from "@/components/power/CirclePeek";
+import SeatSheet from "@/components/power/SeatSheet";
 import { phoneDepthFor } from "@/components/power/phoneDepth";
 import { phoneKeysFor } from "@/components/power/phoneKeys";
 import ShapePicker from "@/components/power/ShapePicker";
@@ -254,9 +256,16 @@ export default function VillageMap() {
    * counted clockwise from twelve o'clock (`phoneKeysFor`), and a list under
    * the map names every number. The first tap on a numbered circle names it on
    * the map; the second steps in. Stepping anywhere clears the name.
+   *
+   * Stepping in shows the circle as a peek under the map, and its full card
+   * only once asked for (`sheetOpen`), so every step starts from the peek.
    */
   const [namedId, setNamedId] = useState<string | null>(null);
-  useEffect(() => setNamedId(null), [focusId]);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  useEffect(() => {
+    setNamedId(null);
+    setSheetOpen(false);
+  }, [focusId]);
   const phoneKeys = useMemo(() => {
     if (!layout || !data) return [];
     const parent = new Map(data.circles.map((c) => [c.id, (c.parentCircleId as string | null) ?? null]));
@@ -440,7 +449,7 @@ export default function VillageMap() {
                       })}
                     </ol>
                   )}
-                                </div>
+                </div>
               )}
 
               {/* THE TWO INVITATIONS, UNDER THE PICTURE THEY POINT AT.
@@ -728,12 +737,18 @@ export default function VillageMap() {
               </div>
 
               {/* The card as a bottom sheet wherever the standing panel is
-                  not. A tapped SEAT wins; otherwise the circle you stepped
-                  into gets the sheet, so a phone reaches the inspector the
-                  same way a desktop reaches the panel. */}
-              {(selectedSeat || focusedCircle) && (
+                  not. A tapped SEAT opens straight into it. A circle you step
+                  into does NOT: it opened here on every step-in and covered
+                  the map the step was taken to see (measured live, 169px to
+                  the bottom of an 844px screen). The circle's card waits for
+                  the peek below to ask for it, and closing it goes back to
+                  the peek, not out of the circle. */}
+              {(selectedSeat || (focusedCircle && sheetOpen)) && (
                 <div className="md:hidden">
-                  <SeatSheet onClose={() => (selectedSeat ? setSelected(null) : focusTo(null))}>
+                  <SeatSheet
+                    label={selectedSeat ? selectedSeat.name : focusedCircle!.name}
+                    onClose={() => (selectedSeat ? setSelected(null) : setSheetOpen(false))}
+                  >
                     {selectedSeat ? (
                       <HolderCard seat={selectedSeat} circle={selectedCircle} data={data} onPickPerson={pickPerson} />
                     ) : (
@@ -749,6 +764,19 @@ export default function VillageMap() {
               )}
 
               {walkOpen && <SetupWalk data={data} onClose={() => setWalkOpen(false)} onChanged={refetchMap} />}
+
+              {/* Last in the section, because it is sticky: it rides the
+                  bottom of the screen while the map section is in view, then
+                  settles above the footer instead of covering it. */}
+              {focusedCircle && (
+                <CirclePeek
+                  circle={focusedCircle}
+                  data={data}
+                  outTo={data.circles.find((c) => c.id === focusedCircle.parentCircleId)?.name ?? "the village"}
+                  onOut={() => focusTo((focusedCircle.parentCircleId as string | null) ?? null)}
+                  onExpand={() => setSheetOpen(true)}
+                />
+              )}
             </>
           )}
         </div>
@@ -808,43 +836,6 @@ function VillageSummary({
       {mayDeclareVillage && (
         <ShapePicker power={data.power} preview={shapePreview} onPreview={onPreview} onSaved={onSaved} />
       )}
-    </div>
-  );
-}
-
-/** The bottom sheet, focus-managed exactly as the old card was. */
-function SeatSheet({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  const panelRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    panelRef.current?.focus();
-    return () => previous?.focus?.();
-  }, []);
-  return (
-    <div
-      className="fixed inset-0 z-[70] flex items-end justify-center bg-black/30"
-      onClick={onClose}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") onClose();
-      }}
-    >
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Role"
-        tabIndex={-1}
-        data-scroll-contain
-        className="bg-white w-full rounded-t-2xl p-6 pb-[calc(1.5rem+var(--tabbar-h))] max-h-[80vh] overflow-y-auto focus:outline-none"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex justify-end mb-2">
-          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-gray-600">
-            <X className="w-5 h-5" aria-hidden="true" />
-          </button>
-        </div>
-        {children}
-      </div>
     </div>
   );
 }
