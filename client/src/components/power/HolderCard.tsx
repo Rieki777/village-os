@@ -318,7 +318,7 @@ export default function HolderCard({
           <button
             type="button"
             onClick={() => setRaising(true)}
-            className="inline-flex items-center gap-2 text-sm bg-amber/90 text-teal-deep rounded-lg px-4 py-2 font-semibold"
+            className="inline-flex items-center gap-2 text-sm bg-amber/90 text-primary-foreground rounded-lg px-4 py-2 font-semibold"
           >
             <Hand className="w-4 h-4" aria-hidden="true" /> This role is open, raise your hand
           </button>
