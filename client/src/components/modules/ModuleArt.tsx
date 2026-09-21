@@ -18,9 +18,12 @@
  *
  * The manifest beside the images already records which modules have art (the
  * image budget gate's header names it as the place a runtime-built path is
- * declared). It is imported here, so the bundler inlines it at BUILD time:
- * no fetch, and no second copy of the fact to drift. `moduleImages.test.ts`
- * holds this function to the files on disk for every module in the registry.
+ * declared). Its file names reach this component at BUILD time through
+ * `bundledModuleArt.ts`, generated from it by `scripts/gen-module-art.mjs`:
+ * no fetch. Importing the manifest directly works too, but the vite dev server
+ * warns on every import from `client/public`, and it would inline metadata
+ * the card never reads. `moduleImages.test.ts` holds this function to the
+ * files on disk for every module in the registry, and the list to the manifest.
  *
  * The emblem map is explicit instead of a dynamic lucide lookup so the lazy
  * chunk carries only the icons the catalog actually names; a name the map
@@ -32,7 +35,7 @@ import {
   Handshake, Heart, Landmark, MessageCircle, MessagesSquare, Mic, Newspaper,
   Sparkles, TrendingUp, Users, Wrench, type LucideIcon,
 } from "lucide-react";
-import artManifest from "../../../public/images/modules/manifest.json";
+import { BUNDLED_MODULE_ART } from "./bundledModuleArt";
 
 const EMBLEMS: Record<string, LucideIcon> = {
   Activity, Award, BedDouble, CalendarDays, Coins, Globe, Hammer, Handshake,
@@ -40,12 +43,10 @@ const EMBLEMS: Record<string, LucideIcon> = {
   TrendingUp, Users, Wrench,
 };
 
-const BUNDLED: Record<string, { file?: unknown }> = artManifest.assets;
-
 /** The platform art this build ships for a module, or null when it ships none. */
 export function bundledArtPath(id: string): string | null {
-  const file = Object.prototype.hasOwnProperty.call(BUNDLED, id) ? BUNDLED[id].file : undefined;
-  return typeof file === "string" && file ? `/images/modules/${file}` : null;
+  const file = Object.prototype.hasOwnProperty.call(BUNDLED_MODULE_ART, id) ? BUNDLED_MODULE_ART[id] : "";
+  return file ? `/images/modules/${file}` : null;
 }
 
 export function FallbackArt({ hue, emblem, className = "" }: { hue: number; emblem: string; className?: string }) {

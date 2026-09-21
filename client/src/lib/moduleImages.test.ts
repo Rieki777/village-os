@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { MODULES } from "@shared/modules";
 import { bundledArtPath } from "@/components/modules/ModuleArt";
+import { BUNDLED_MODULE_ART } from "@/components/modules/bundledModuleArt";
 
 /**
  * Every module in the registry has an image, and every image has a module.
@@ -111,6 +112,13 @@ describe("module images", () => {
       .filter(([id, a]) => !ids.includes(id) || a.file !== `${id}.webp` || !images.has(id))
       .map(([id, a]) => `${id} -> ${String(a.file)}`);
     expect(bad, `manifest entries with no module or no file: ${bad.join(", ")}`).toEqual([]);
+    // The card reads a generated copy of the file names, so the copy is held
+    // to the manifest here, whole.
+    const fromManifest = Object.fromEntries(entries.map(([id, a]) => [id, a.file]));
+    expect(
+      { ...BUNDLED_MODULE_ART },
+      "bundledModuleArt.ts is stale: run node scripts/gen-module-art.mjs",
+    ).toEqual(fromManifest);
   });
 
   it("leaves no image without a module", () => {
