@@ -23,6 +23,7 @@ import { AppointToRole } from "@/components/admin/AppointToRole";
 import { RAISED_HAND_TERM_KEYS, RaisedHandTerm } from "@/components/admin/RaisedHandTerm";
 import { POWER_HAND_KEYS, PowerHandNote } from "@/components/admin/PowerHandNote";
 import { SeatClaimAsks, type SeatClaimAsk } from "@/components/admin/SeatClaimAsks";
+import { UndrawnSeatAsks } from "@/components/admin/UndrawnSeatAsks";
 import Celebration from "@/components/natural/Celebration";
 import { useMomentWindow } from "@/components/natural/moments";
 import { playMoment } from "@/lib/sound";
@@ -4692,7 +4693,7 @@ function DraftQueueTab({ password }: { password: string }) {
   );
 }
 
-function OrgChartTab({ password }: { password: string }) {
+export function OrgChartTab({ password }: { password: string }) {
   const [org, setOrg] = useState<any>(null);
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -4771,6 +4772,8 @@ function OrgChartTab({ password }: { password: string }) {
     const k = r.circleId ?? "";
     byCircle.set(k, [...(byCircle.get(k) ?? []), r]);
   }
+  // The seats drawn as cards below. UndrawnSeatAsks catches every ask for any other seat.
+  const drawnSeatIds = new Set(circles.flatMap((c) => (byCircle.get(c.id) ?? []).map((r) => String(r.id))));
 
   const STATE_LABEL: Record<string, string> = {
     filled: "Filled", partial: "Partially filled", open: "Open seat", forming: "Forming",
@@ -4827,6 +4830,15 @@ function OrgChartTab({ password }: { password: string }) {
           </ul>
         </div>
       )}
+
+      <UndrawnSeatAsks
+        asks={seatAsks}
+        drawnSeatIds={drawnSeatIds}
+        roles={roles}
+        circles={circles}
+        call={call}
+        onDone={(said) => { toast.success(said); void load(); }}
+      />
 
       <div className="space-y-6">
         {circles.map((c) => {
