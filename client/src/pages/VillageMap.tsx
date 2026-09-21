@@ -820,7 +820,7 @@ function VillageSummary({
           type="button"
           onClick={onOpenWalk}
           data-power-walk-launch
-          className="w-full text-sm bg-amber/90 text-teal-deep rounded-lg px-4 py-2 font-semibold"
+          className="w-full text-sm bg-amber/90 text-primary-foreground rounded-lg px-4 py-2 font-semibold"
         >
           Walk the setup: seats, methods, shape
         </button>
@@ -860,7 +860,10 @@ function CircleAccordion({
         const isOpen = open === c.id;
         const method = decideLabel(c.decidesBy) ?? decideLabel(data.power.decidesBy);
         return (
-          <div key={c.id} className={`bg-card border border-border rounded-xl ${c.status === "forming" ? "opacity-60" : ""}`}>
+          // A forming circle reads quieter by its dashed edge and its "(forming)"
+          // word. It was faded whole, text included, which put "(forming)" at
+          // 3.12:1 and its decision badge at 3.32:1 (measured 2026-09-21).
+          <div key={c.id} className={`bg-card border border-border rounded-xl ${c.status === "forming" ? "border-dashed" : ""}`}>
             <button type="button" className="w-full flex items-center justify-between px-4 py-3" onClick={() => {
               const next = isOpen ? "" : c.id;
               setOpen(next);

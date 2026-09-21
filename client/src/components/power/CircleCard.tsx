@@ -172,7 +172,7 @@ export default function CircleCard({
               <button
                 type="button"
                 onClick={() => onSelectSeat(s.id)}
-                className="w-full flex items-center gap-2 text-left text-sm py-1.5 px-2 -mx-2 rounded hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                className="w-full flex items-center gap-2 text-left text-sm py-1.5 px-2 -mx-2 rounded hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" className="shrink-0">
                   <SeatGlyph
