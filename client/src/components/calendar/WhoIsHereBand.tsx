@@ -8,6 +8,7 @@
  * nothing at all, which is the module posture everywhere.
  */
 import { useEffect, useState } from "react";
+import { useModuleOn } from "@/modules/ModuleProvider";
 import { authToken } from "@/lib/gameApi";
 import type { CivilDay } from "./calendarTime";
 
@@ -33,15 +34,17 @@ export default function WhoIsHereBand({ days }: { days: CivilDay[] }) {
   const from = days[0]?.key;
   const to = days[days.length - 1]?.key;
 
+  // Events is optional; loading it when off is a 404. Only mounted inside the events page today, so this is quiet insurance for a future mount. See useModuleOn.
+  const eventsOn = useModuleOn("events");
   useEffect(() => {
-    if (!from || !to) return;
+    if (!eventsOn || !from || !to) return;
     let alive = true;
     fetch(`/api/events/who-is-here?from=${from}&to=${to}`, { headers: headers() })
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((d) => { if (alive) setData(d); })
       .catch(() => { if (alive) setData(null); });
     return () => { alive = false; };
-  }, [from, to]);
+  }, [eventsOn, from, to]);
 
   if (!data) return null;
   const byDate = (list: DayEntry[]) => new Map(list.map((e) => [e.date, e]));
