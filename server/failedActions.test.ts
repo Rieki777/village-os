@@ -612,8 +612,9 @@ describe.skipIf(!configured)("the failed-actions report, against a real database
 
       await run();
 
-      const [item] = await governanceRows();
-      expect(item.item_key).toBe("give-back:bal-vetoed-give-back");
+      const rows = await governanceRows();
+      expect(rows.map((r) => r.item_key)).toEqual(["give-back:bal-vetoed-give-back"]);
+      const [item] = rows;
       expect(item.title).toBe(
         "A decision the village carried was stopped before it took effect, and giving back what it held failed (ballot bal-vetoed-give-back)",
       );
