@@ -252,7 +252,7 @@ export default function ProsperityJourney() {
               >
                 <Sparkles className="w-6 h-6 text-white" />
               </motion.div>
-              <span className="text-muted-foreground font-medium tracking-wide uppercase text-sm">Prosperity Creator Journey</span>
+              <span className="text-gold font-medium tracking-wide uppercase text-sm">Prosperity Creator Journey</span>
             </motion.div>
 
             <motion.h1

@@ -336,7 +336,7 @@ export default function InvestorJourney() {
               >
                 <TrendingUp className="w-6 h-6 text-white" />
               </motion.div>
-              <span className="text-muted-foreground font-medium tracking-wide uppercase text-sm">Capital Contributor Journey</span>
+              <span className="text-gold font-medium tracking-wide uppercase text-sm">Capital Contributor Journey</span>
             </motion.div>
 
             <motion.h1

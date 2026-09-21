@@ -65,6 +65,9 @@ const buildHyphaActions = (villageName: string, tokenName: string) => [
       `Before you begin any new type of contribution, a seasonal role, a quest, or a new initiative, you open it to the community with an Agreement. Describe what you're bringing, what ${villageName} receives, and what you're requesting in return. The community votes. Value in = value out.`,
     cta: "Create Agreement",
     suffix: "/agreements/create",
+    color: "border-teal-deep/30 bg-teal-deep/5",
+    iconColor: "text-teal-deep",
+    iconBg: "bg-teal-deep/10",
   },
   {
     icon: Receipt,
@@ -74,6 +77,9 @@ const buildHyphaActions = (villageName: string, tokenName: string) => [
       `When you've done the work, completed a quest, finished a season as a role holder, or reached a milestone, you come back and propose a Contribution Claim. Detail what you delivered, what ${villageName} gained, and claim your ${tokenName}. This is how the value you create becomes visible and rewarded.`,
     cta: "Propose a Contribution",
     suffix: "/agreements/create/propose-contribution",
+    color: "border-sage/30 bg-sage/5",
+    iconColor: "text-sage",
+    iconBg: "bg-sage/10",
   },
   {
     icon: DollarSign,
@@ -83,6 +89,9 @@ const buildHyphaActions = (villageName: string, tokenName: string) => [
       "If your contribution requires purchasing materials, covering travel, or paying for services that benefit the community, you can propose those expenses for reimbursement. Be transparent and specific, the community is the budget committee here, and your integrity in how you handle shared resources is part of your contribution.",
     cta: "Pay for Expenses",
     suffix: "/agreements/create/pay-for-expenses",
+    color: "border-amber/30 bg-amber/5",
+    iconColor: "text-amber-700",
+    iconBg: "bg-amber/10",
   },
   {
     icon: UserCheck,
@@ -92,6 +101,9 @@ const buildHyphaActions = (villageName: string, tokenName: string) => [
       `Your voice is your governance power, it grows as you contribute. If you trust another member to represent your perspective while you're away or unavailable, you can delegate your voice to them. Choose someone whose judgment aligns with yours and whose commitment to ${villageName} you trust deeply.`,
     cta: "View Members",
     suffix: "/members",
+    color: "border-coral/30 bg-coral/5",
+    iconColor: "text-coral",
+    iconBg: "bg-coral/10",
   },
 ];
 
@@ -799,32 +811,30 @@ export default function CoCreatorsGuide() {
               </div>
             </div>
 
-            {/* 4 Action Cards, on the band's own measured pair: white and the accent
-                on bg-teal-band, derived per seed in shared/brandTokens.ts. They used to
-                carry light-page ink here, 1.17:1. CoCreatorsGuide.contrast.test.tsx. */}
-            <ul className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+            {/* 4 Action Cards */}
+            <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
               {hyphaActions.map((action, idx) => {
                 const Icon = action.icon;
                 const href = hypha.configured ? hypha.orgUrl + action.suffix : "";
                 return (
-                  <motion.li
+                  <motion.div
                     key={action.title}
                     initial={{ opacity: 0, y: 20 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true }}
                     transition={{ delay: idx * 0.08 }}
-                    className="rounded-2xl border-2 border-white/15 bg-teal-band p-6"
+                    className={`rounded-2xl border-2 p-6 ${action.color}`}
                   >
                     <div className="flex items-start gap-4 mb-4">
-                      <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center flex-shrink-0">
-                        <Icon className="w-5 h-5 text-amber-on-band" />
+                      <div className={`w-10 h-10 rounded-xl ${action.iconBg} flex items-center justify-center flex-shrink-0`}>
+                        <Icon className={`w-5 h-5 ${action.iconColor}`} />
                       </div>
                       <div>
-                        <h3 className="font-semibold text-white">{action.title}</h3>
-                        <p className="text-xs font-medium text-amber-on-band">{action.subtitle}</p>
+                        <h3 className="font-semibold text-foreground">{action.title}</h3>
+                        <p className={`text-xs font-medium ${action.iconColor}`}>{action.subtitle}</p>
                       </div>
                     </div>
-                    <p className="text-white text-sm leading-relaxed mb-5">
+                    <p className="text-muted-foreground text-sm leading-relaxed mb-5">
                       {action.description}
                     </p>
                     {href ? (
@@ -832,20 +842,20 @@ export default function CoCreatorsGuide() {
                       href={href}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-sm font-semibold text-amber-on-band hover:underline"
+                      className="inline-flex items-center gap-2 text-sm font-semibold text-teal-deep hover:underline"
                     >
                       {action.cta}
                       <ExternalLink className="w-4 h-4 opacity-60" />
                     </a>
                     ) : (
-                      <p className="text-xs text-white italic">
+                      <p className="text-xs text-muted-foreground italic">
                         Available once your village's Hypha space is connected.
                       </p>
                     )}
-                  </motion.li>
+                  </motion.div>
                 );
               })}
-            </ul>
+            </div>
 
             {/* The loop */}
             <div className="mt-14 max-w-3xl mx-auto">
