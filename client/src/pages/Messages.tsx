@@ -78,6 +78,13 @@ function Inbox() {
   const [composing, setComposing] = useState(false);
 
   const load = useCallback(() => {
+    // Signed out, the inbox is the sign-in card below and the route would
+    // answer 401. Asking anyway was a failed request the browser logged on
+    // every signed-out visit, so a visitor with no session does not ask.
+    if (!authToken()) {
+      setLoading(false);
+      return;
+    }
     fetch("/api/messages", { headers: headers() })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setConversations(Array.isArray(d?.conversations) ? d.conversations : []))

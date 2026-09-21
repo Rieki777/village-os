@@ -216,3 +216,65 @@ describe.skipIf(!DB_CONFIGURED)("the seeded quest board", () => {
     expect(firstMiss, `a seeded quest still names an upload: ${firstMiss}`).toBeUndefined();
   });
 });
+
+/*
+ * A PATH THAT LOOKS LIKE A FILE FAILS LIKE ONE.
+ *
+ * A missing image under /images, and a missing root-level file such as
+ * /favicon.png, answered the app's own HTML with a 200. A broken image read as
+ * served, and an uptime check pointed at a missing file stayed green forever.
+ * Both now answer 404 text/plain, the way /assets already did.
+ *
+ * The rule sits AFTER express.static and after every generated file, so the
+ * half of this block that matters as much as the 404s is the first test: every
+ * real file still answers, and every real page still gets the shell. A 404 rule
+ * registered one line too early would pass the second test and break the site.
+ */
+describe.skipIf(!DB_CONFIGURED)("a path that looks like a file fails like one", () => {
+  const SHELL = "<div id=\"root\">";
+  const IMAGES = path.resolve(process.cwd(), "dist/public/images/modules");
+
+  it("still serves every real file, static and generated", async () => {
+    const art = fs.readdirSync(IMAGES).find((f) => f.endsWith(".webp"));
+    expect(art, "dist/public/images/modules must hold module art; run pnpm build").toBeTruthy();
+    const real: Array<[string, RegExp]> = [
+      [`/images/modules/${art}`, /image\/webp/],
+      ["/images/modules/manifest.json", /json/],
+      ["/assets/images/platform-favicon.svg", /svg/],
+      ["/sw.js", /javascript/],
+      ["/robots.txt", /text\/plain/],
+      ["/sitemap.xml", /xml/],
+      ["/manifest.webmanifest", /manifest\+json/],
+      ["/grounds/manifest.json", /json/],
+    ];
+    for (const [route, type] of real) {
+      const res = await fetch(BASE + route);
+      expect(res.status, `${route} is a real file`).toBe(200);
+      expect(res.headers.get("content-type") ?? "", `${route} content type`).toMatch(type);
+    }
+  });
+
+  it("answers 404 for a missing file, never the shell with a 200", async () => {
+    for (const route of [
+      "/images/modules/zzz-does-not-exist.webp",
+      "/images/nope",
+      "/favicon-definitely-missing.png",
+      "/apple-touch-icon.png",
+      "/wp-login.php",
+    ]) {
+      const res = await fetch(BASE + route);
+      expect(res.status, `${route} is a missing file`).toBe(404);
+      expect(res.headers.get("content-type") ?? "").toMatch(/text\/plain/);
+      expect(await res.text(), `${route} must not be answered with the app`).not.toContain(SHELL);
+    }
+  });
+
+  it("still gives every real page the shell, a dotted profile handle included", async () => {
+    for (const route of ["/", "/investor", "/quests", "/profile/ada.lovelace", "/no-such-page"]) {
+      const res = await fetch(BASE + route);
+      expect(res.status, `${route} is a page`).toBe(200);
+      expect(res.headers.get("content-type") ?? "").toMatch(/text\/html/);
+      expect(await res.text()).toContain(SHELL);
+    }
+  });
+});

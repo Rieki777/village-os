@@ -104,6 +104,7 @@ const FOREIGN_MEDIA = "amora.cr/wp-content"; // brand-ok: asserted absent, never
 const PUBLIC_ROUTES = [
   "/api/org",
   "/api/org/vision",
+  "/api/content",
   "/api/content/team",
   "/api/content/roles",
   "/api/content/circles",
@@ -410,5 +411,57 @@ describe.skipIf(!DB_CONFIGURED)("a village with its own people still publishes t
       (anon ?? []).map((c: any) => c.name),
       "a village that wrote a team page publishes it",
     ).toContain("Rowan Ashfield");
+  });
+});
+
+/**
+ * THE SECTION LISTING AND THE SECTION READER MUST AGREE.
+ *
+ * Public pages learn which content sections exist from `GET /api/content` and
+ * request only those, because every blind request for an unwritten section
+ * was a 404 the browser logged on every visit. The pair has to agree in both
+ * directions or the fix does harm: a name listed but unreadable brings the red
+ * console back, and a written section left off the list hides a village's own
+ * words behind a placeholder.
+ *
+ * The 404 itself must not move. The admin content editor reads
+ * `404 {"error":"Section not found"}` as "not written yet"
+ * (client/src/components/admin/ContentEditorTab.tsx), so this asserts the
+ * exact status and body, not only "not ok".
+ */
+describe.skipIf(!DB_CONFIGURED)("the content listing agrees with the section reader", () => {
+  const UNWRITTEN_ON_A_FRESH_FORK = ["legal", "money", "covenant"];
+
+  it("lists names only, each one readable, and leaves the unwritten ones off", async () => {
+    const res = await http("/api/content");
+    expect(res.status, "the listing answers a stranger").toBe(200);
+    const body = await res.json();
+    expect(Object.keys(body), "names only, never a section's words").toEqual(["sections"]);
+    expect(Array.isArray(body.sections)).toBe(true);
+    for (const name of body.sections) {
+      expect(typeof name).toBe("string");
+      const read = await http(`/api/content/${encodeURIComponent(name)}`);
+      expect(read.status, `${name} is listed, so it must be readable`).toBe(200);
+    }
+    for (const name of UNWRITTEN_ON_A_FRESH_FORK) {
+      if (body.sections.includes(name)) continue;
+      const read = await http(`/api/content/${name}`);
+      expect(read.status, `${name} is unlisted, so the reader must still refuse it`).toBe(404);
+      expect(await read.json(), "the editor's 'not written' signal is unchanged").toEqual({
+        error: "Section not found",
+      });
+    }
+  });
+
+  it("lists a section the moment a founder writes it", async () => {
+    expect(founderToken, "the founder session from the suite above").toBeTruthy();
+    const before = await http("/api/content").then((r) => r.json());
+    expect(before.sections, "covenant starts unwritten on a fresh fork").not.toContain("covenant");
+    const put = await call("PUT", "/api/admin/content/covenant", { opening: "Dear neighbours," });
+    expect(put.status).toBe(200);
+    const after = await http("/api/content").then((r) => r.json());
+    expect(after.sections, "a written section is listed at once").toContain("covenant");
+    const read = await http("/api/content/covenant").then((r) => r.json());
+    expect(read.opening).toBe("Dear neighbours,");
   });
 });

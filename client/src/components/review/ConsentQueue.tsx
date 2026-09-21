@@ -33,6 +33,7 @@
  */
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
+import { authToken } from "@/lib/gameApi";
 import { canGrant, type ConsentBounds, type ConsentCapMode } from "@shared/questConsentBounds";
 
 /** One row of `GET /api/admin/quest-claims`: `ClaimRecord` in server/repos/quests.ts, plus `bounds`. */
@@ -312,6 +313,15 @@ export function useConsentClaims(headers: () => Record<string, string>) {
   const [refused, setRefused] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const load = useCallback(async () => {
+    // Signed out, the refusal is already known: the route answers a stranger
+    // 401. Asking anyway was a failed request the browser logged on every
+    // signed-out visit to /review, so the answer is recorded without the call.
+    if (!authToken()) {
+      setRefused(true);
+      setError(null);
+      setClaims(null);
+      return;
+    }
     try {
       const r = await fetch("/api/admin/quest-claims", { headers: headers() });
       if (r.status === 401 || r.status === 403 || r.status === 409) {
