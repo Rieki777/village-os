@@ -811,7 +811,7 @@ export default function CoCreatorsGuide() {
               </div>
             </div>
 
-            {/* 4 Action Cards */}
+            {/* 4 Action Cards. All their text is white: each card is a 5% tint of the dark band, where light-page ink read at 1.00 to 1.96:1. The icons keep the per-card colours. CoCreatorsGuide.contrast.test.tsx */}
             <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
               {hyphaActions.map((action, idx) => {
                 const Icon = action.icon;
@@ -830,11 +830,11 @@ export default function CoCreatorsGuide() {
                         <Icon className={`w-5 h-5 ${action.iconColor}`} />
                       </div>
                       <div>
-                        <h3 className="font-semibold text-foreground">{action.title}</h3>
-                        <p className={`text-xs font-medium ${action.iconColor}`}>{action.subtitle}</p>
+                        <h3 className="font-semibold text-white">{action.title}</h3>
+                        <p className="text-xs font-medium text-white">{action.subtitle}</p>
                       </div>
                     </div>
-                    <p className="text-muted-foreground text-sm leading-relaxed mb-5">
+                    <p className="text-white text-sm leading-relaxed mb-5">
                       {action.description}
                     </p>
                     {href ? (
@@ -842,13 +842,13 @@ export default function CoCreatorsGuide() {
                       href={href}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-sm font-semibold text-teal-deep hover:underline"
+                      className="inline-flex items-center gap-2 text-sm font-semibold text-white hover:underline"
                     >
                       {action.cta}
                       <ExternalLink className="w-4 h-4 opacity-60" />
                     </a>
                     ) : (
-                      <p className="text-xs text-muted-foreground italic">
+                      <p className="text-xs text-white italic">
                         Available once your village's Hypha space is connected.
                       </p>
                     )}

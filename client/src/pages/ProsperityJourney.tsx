@@ -252,7 +252,13 @@ export default function ProsperityJourney() {
               >
                 <Sparkles className="w-6 h-6 text-white" />
               </motion.div>
-              <span className="text-gold font-medium tracking-wide uppercase text-sm">Prosperity Creator Journey</span>
+              {/* The eyebrow sits on an opaque chip of the page's own ground, the
+                  way the Home and Master Plan heroes put their copy on an opaque
+                  band: at 393px the photograph shows through the gradient under
+                  its right end, and no ink clears 4.5:1 on a photograph. On the
+                  chip, amber-ink is two named colours whatever the picture is,
+                  and with no picture the chip is the colour it sits on. */}
+              <span className="rounded-lg bg-background px-3 py-1 text-amber-ink font-medium tracking-wide uppercase text-sm">Prosperity Creator Journey</span>
             </motion.div>
 
             <motion.h1
