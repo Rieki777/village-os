@@ -214,6 +214,43 @@ describe("a missing file", () => {
   });
 });
 
+/**
+ * A BLOCKED AUTOPLAY IS NOT A MISSING FILE.
+ *
+ * A browser refuses `play()` with a `NotAllowedError` until the page has had a
+ * gesture, and lifts that the moment the member taps anything. It used to land
+ * in the same catch as a 404 and mark the moment broken for the visit, so a
+ * celebration that fired on load silenced every later sound of that moment,
+ * after the tap too. The gratitude bloom on /profile fires on load, before any
+ * tap, so it silenced gratitude for the whole visit.
+ *
+ * Real `DOMException`s, because that is what a browser throws, and because the
+ * tempting wrong fix is `e instanceof DOMException`: a missing or undecodable
+ * file is ALSO a DOMException, so that fix would retry a file that is not there
+ * on every celebration forever. The second case is the guard against it.
+ */
+describe("an autoplay block", () => {
+  it("is reported as blocked and not remembered, so the moment plays once the member has tapped", async () => {
+    let mayPlay = false;
+    const play = vi.fn(() =>
+      mayPlay ? Promise.resolve() : Promise.reject(new DOMException("no gesture yet", "NotAllowedError")),
+    );
+    configureSounds({ files: FILES, createAudio: () => ({ play }) });
+    await expect(playSound("gratitude")).resolves.toBe("blocked");
+    mayPlay = true; // the member taps something
+    await expect(playSound("gratitude")).resolves.toBe("played");
+    expect(play).toHaveBeenCalledTimes(2);
+  });
+
+  it("still remembers a file that genuinely cannot play, which is a DOMException too", async () => {
+    const play = vi.fn(() => Promise.reject(new DOMException("no supported source", "NotSupportedError")));
+    configureSounds({ files: FILES, createAudio: () => ({ play }) });
+    await expect(playSound("gratitude")).resolves.toBe("unavailable");
+    await expect(playSound("gratitude")).resolves.toBe("unavailable");
+    expect(play).toHaveBeenCalledTimes(1);
+  });
+});
+
 // ── Mute ────────────────────────────────────────────────────────────────────
 
 describe("mute", () => {
