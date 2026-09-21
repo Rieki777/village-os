@@ -180,7 +180,16 @@ describe("set-password claim tokens", () => {
     // on purpose: whoever adds one says what it is derived from.
     const claim = makeSetPasswordToken(SECRET, "u-1", 3);
     expect(Object.keys(claimsOf(claim)).sort()).toEqual(["exp", "purpose", "userId", "v"]);
-    expect(claimsOf(claim)).toMatchObject({ userId: "u-1", purpose: "set-password", v: 3 });
+    expect(claimsOf(claim)).toMatchObject({ userId: "u-1", purpose: "set-password-2", v: 3 });
+  });
+
+  it("is a purpose the previous release refuses outright, so rolling the image back fails closed", () => {
+    // The previous release's reader, verbatim, gated on exactly this:
+    //   if (decoded.purpose !== "set-password" || !decoded.userId) return null;
+    // and its route skipped the single-use compare for a claim with no `pw`.
+    // Under that name, a rollback would accept every link from the hour before
+    // it with no single-use check at all.
+    expect(claimsOf(makeSetPasswordToken(SECRET, "u-1", 0)).purpose).not.toBe("set-password");
   });
 
   it("refuses to mint when handed a stored hash where the tokenVersion goes", () => {
@@ -306,16 +315,24 @@ describe("a set-password link works once, and never outlives a password change",
 
   it("retires an old-shape link even for an account that never signed out, which is where `?? 0` would let it through", () => {
     // The trap this pins: reading a missing `v` as 0 matches the tokenVersion
-    // of every account that has never signed out or reset.
+    // of every account that has never signed out or reset. The purpose
+    // decides, so an old-purpose claim is retired even carrying a numeric `v`.
     for (const shape of [
       { userId: "u-1", purpose: "set-password", exp: Date.now() + 60_000 },
       { userId: "u-1", purpose: "set-password", pw: null, exp: Date.now() + 60_000 },
+      { userId: "u-1", purpose: "set-password", v: 0, exp: Date.now() + 60_000 },
       { userId: "u-1", purpose: "set-password", v: "0", exp: Date.now() + 60_000 },
-      { userId: "u-1", purpose: "set-password", v: -1, exp: Date.now() + 60_000 },
     ]) {
       const claim = readSetPasswordToken(SECRET, signed(shape));
       expect(claim?.v, JSON.stringify(shape)).toBeNull();
       expect(setPasswordLinkRefusal(claim!, 0), JSON.stringify(shape)).toBe(SET_PASSWORD_LINK_REFUSAL.retired);
+    }
+  });
+
+  it("refuses a current-shape claim whose tokenVersion is missing or not a whole number, as invalid", () => {
+    for (const v of [undefined, null, "0", -1, 1.5, Number.MAX_SAFE_INTEGER + 2]) {
+      const shape = { userId: "u-1", purpose: "set-password-2", v, exp: Date.now() + 60_000 };
+      expect(readSetPasswordToken(SECRET, signed(shape)), JSON.stringify(shape)).toBeNull();
     }
   });
 });

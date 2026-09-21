@@ -779,7 +779,7 @@ describe.skipIf(!DB_CONFIGURED)("a set-password link works once, and never outli
 
   it("refuses an expired link and a link edited to name another account", async () => {
     const { version } = await stored(rowan.id);
-    const expired = signed({ userId: rowan.id, purpose: "set-password", v: version, exp: Date.now() - 1000 });
+    const expired = signed({ userId: rowan.id, purpose: "set-password-2", v: version, exp: Date.now() - 1000 });
     const lapsed = await setPassword(expired, "sixth-password-6");
     expect(lapsed.status).toBe(401);
     expect(lapsed.json?.error).toBe("This link is invalid or has expired");

@@ -158,6 +158,14 @@ export function decodeToken(
  * tokenVersion moves on every password change as well, and is derived from
  * nothing. CodeQL alert 36 named the fingerprint; see signTokenPayload.
  *
+ * WHY THE PURPOSE IS "set-password-2" AND NOT "set-password". Rolling the
+ * image back is the one recovery lever a village has, so the previous release
+ * will meet these links. Its reader accepts any "set-password" claim and its
+ * route skips the single-use compare when `pw` is absent, so under the old
+ * name every link from the hour before a rollback would be replayable until it
+ * expired. Under this name the previous release refuses them outright, as
+ * invalid: a rollback fails closed.
+ *
  * The third argument used to be the stored hash. A caller still passing one
  * must fail here, loudly, and never mint: a string is refused, not coerced.
  */
@@ -168,7 +176,7 @@ export function makeSetPasswordToken(secret: string, userId: string, tokenVersio
   const payload = Buffer.from(
     JSON.stringify({
       userId,
-      purpose: "set-password",
+      purpose: "set-password-2",
       v: tokenVersion,
       exp: Date.now() + SET_PASSWORD_TTL_MS,
     }),
@@ -178,8 +186,8 @@ export function makeSetPasswordToken(secret: string, userId: string, tokenVersio
 
 /**
  * A verified set-password claim. `v` is null for a claim this server signed in
- * the shape it used before 2026-09-21, which carried `pw` and no `v`. Those are
- * retired, by name, in setPasswordLinkRefusal.
+ * the shape it used before 2026-09-21 (purpose "set-password", a `pw`
+ * fingerprint, no `v`). Those are retired, by name, in setPasswordLinkRefusal.
  */
 export interface SetPasswordClaim {
   userId: string;
@@ -196,13 +204,15 @@ export function readSetPasswordToken(secret: string, token: string): SetPassword
     if (provided.length !== expected.length) return null;
     if (!crypto.timingSafeEqual(provided, expected)) return null;
     const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8"));
-    if (decoded.purpose !== "set-password" || !decoded.userId) return null;
+    const current = decoded.purpose === "set-password-2";
+    if ((!current && decoded.purpose !== "set-password") || !decoded.userId) return null;
     if (typeof decoded.exp !== "number" || Date.now() > decoded.exp) return null;
-    // STRICT, and the strictness is the retirement. `Number(decoded.v ?? 0)`
-    // would read an old claim's missing `v` as 0, which IS the tokenVersion of
-    // every account that never signed out, and would let those links through.
-    const v = Number.isSafeInteger(decoded.v) && decoded.v >= 0 ? (decoded.v as number) : null;
-    return { userId: decoded.userId, v };
+    // The old shape is retired whatever else it carries. The PURPOSE decides,
+    // never the presence of `v`: reading a missing `v` as `?? 0` would match
+    // every account that never signed out, and let those links through.
+    if (!current) return { userId: decoded.userId, v: null };
+    if (!Number.isSafeInteger(decoded.v) || decoded.v < 0) return null;
+    return { userId: decoded.userId, v: decoded.v };
   } catch {
     return null;
   }
