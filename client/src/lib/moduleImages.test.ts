@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { MODULES } from "@shared/modules";
+import { bundledArtPath } from "@/components/modules/ModuleArt";
 
 /**
  * Every module in the registry has an image, and every image has a module.
@@ -75,6 +76,41 @@ describe("module images", () => {
   it("gives every module an image, or the drawn fallback", () => {
     const missing = ids.filter((id) => !images.has(id) && !DRAWN_FALLBACK.has(id));
     expect(missing, `modules with no image: ${missing.join(", ")}`).toEqual([]);
+  });
+
+  /*
+   * THE MANIFEST IS WHAT THE CARD READS, SO IT MUST AGREE WITH THIS DIRECTORY.
+   *
+   * `ModuleArt` compiles in `client/public/images/modules/manifest.json` and
+   * requests bundled art only for a module the manifest names. Before that it
+   * guessed `/images/modules/<id>.webp` for every module, and redemption, which
+   * ships no file, cost a wasted request per card: the server answers a missing
+   * image with the SPA shell, 200 and text/html. A manifest that drifts from the
+   * files brings that back (an entry with no file), or hides art the budget is
+   * paying for (a file with no entry). Neither shows up as a broken card, since
+   * the drawing covers both, which is why it is checked here and not by eye.
+   *
+   * Compared for EVERY module in the registry at once, through the same
+   * function the card calls, against the directory listing above.
+   */
+  it("points every card at exactly the art on disk, and at nothing else", () => {
+    const expected = Object.fromEntries(
+      ids.map((id) => [id, images.has(id) ? `/images/modules/${id}.webp` : null]),
+    );
+    const actual = Object.fromEntries(ids.map((id) => [id, bundledArtPath(id)]));
+    expect(actual).toEqual(expected);
+    // Control: two maps of nothing but nulls would agree just as well.
+    expect(Object.values(actual).filter(Boolean).length).toBeGreaterThan(10);
+  });
+
+  it("keeps every manifest entry pointed at a real module and a real file", () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(IMAGE_DIR, "manifest.json"), "utf8"));
+    const entries = Object.entries(manifest.assets as Record<string, { file?: unknown }>);
+    expect(entries.length, "the manifest lists no art at all").toBeGreaterThan(10);
+    const bad = entries
+      .filter(([id, a]) => !ids.includes(id) || a.file !== `${id}.webp` || !images.has(id))
+      .map(([id, a]) => `${id} -> ${String(a.file)}`);
+    expect(bad, `manifest entries with no module or no file: ${bad.join(", ")}`).toEqual([]);
   });
 
   it("leaves no image without a module", () => {
