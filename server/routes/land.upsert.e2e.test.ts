@@ -22,7 +22,10 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
+import fs from "node:fs";
+import path from "node:path";
 import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { splitStatements } from "../db/migrate";
 
 const DB_CONFIGURED = testDbConfigured();
 const VILLAGE = "land-upsert-probe";
@@ -123,5 +126,74 @@ describe.skipIf(!DB_CONFIGURED)("the land upsert, on the schema 0214 produces", 
     await save("e", "south-block", "South block", 2, 9.6);
     const r = await rows();
     expect(r.map((x) => x.slug)).toEqual(["home", "the-ridge", "south-block"]);
+  });
+});
+/**
+ * THE CLASS, not the instance: at EVERY statement boundary of 0214, the
+ * previous release's write must still collide.
+ *
+ * An earlier draft of 0214 dropped the old unique key in one statement and
+ * added the new one in the next. Between them the table had no unique key at
+ * all, the previous release's ON DUPLICATE KEY UPDATE had nothing to collide
+ * on and INSERTed, and the ADD that followed died on the duplicate. Railway
+ * deploys by rolling, so the old container writing mid-migration is a real
+ * schedule, and a migration that fails at boot is a village that cannot
+ * start. The merge-conflict lane found it by reading the file.
+ *
+ * This asserts the property rather than the fix. It builds the table from
+ * 0123 itself, splits 0214 with the boot runner's OWN splitter (so a
+ * statement boundary here is a statement boundary in production), and issues
+ * the previous release's write before the file and after every statement. Any
+ * future edit that reopens a gap, by splitting the swap again or by any other
+ * route, makes this fail by name.
+ *
+ * It needs a table in the pre-0214 state, which the provisioned schema is
+ * not, so it builds its own sibling database on the same server and drops it.
+ */
+describe.skipIf(!DB_CONFIGURED)("0214 leaves no moment without a unique key", () => {
+  let side: mysql.Connection;
+  let sideName = "";
+
+  beforeAll(async () => {
+    if (!DB_CONFIGURED) return;
+    sideName = `land_window_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+    await conn.query(`CREATE DATABASE \`${sideName}\``);
+    side = await mysql.createConnection(testDb.url.replace(/\/[^/?]+(\?|$)/, `/${sideName}$1`));
+  });
+
+  afterAll(async () => {
+    if (!DB_CONFIGURED || !sideName) return;
+    await side?.end().catch(() => {});
+    await conn.query(`DROP DATABASE IF EXISTS \`${sideName}\``).catch(() => {});
+  });
+
+  const read = (f: string) => fs.readFileSync(path.join(process.cwd(), "drizzle", f), "utf8");
+  /** The previous release's write, in its real shape: it names no slug. */
+  const previousWrite = (id: string) =>
+    side.query(
+      `INSERT INTO village_land (id, village_id, centre_lat, centre_lon, span_m, visibility)
+       VALUES (?, 'local', 9.3, -83.8, 800, 'exact')
+       ON DUPLICATE KEY UPDATE centre_lat = VALUES(centre_lat)`,
+      [id],
+    );
+  const count = async () =>
+    Number(((await side.query("SELECT COUNT(*) n FROM village_land WHERE village_id = 'local'")) as any)[0][0].n);
+
+  it("keeps the previous release colliding before, between and after every statement", async () => {
+    for (const st of splitStatements(read("0123_village_land.sql"))) await side.query(st);
+    await previousWrite("seed");
+
+    const statements = splitStatements(read("0214_village_land_parcels.sql"));
+    expect(statements.length).toBeGreaterThan(0);
+
+    const trail: number[] = [await count()];
+    for (let i = 0; i < statements.length; i++) {
+      await side.query(statements[i]);
+      // The rolling deploy: the old container writes right here.
+      await previousWrite(`after-${i}`);
+      trail.push(await count());
+    }
+    // One row the whole way. A 2 anywhere names the boundary that had no key.
+    expect(trail).toEqual(trail.map(() => 1));
   });
 });

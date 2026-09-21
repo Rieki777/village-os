@@ -57,13 +57,31 @@ ALTER TABLE `village_land`
   -- then oldest. Existing rows take 0 and stay first.
   ADD COLUMN `sort_order` int NOT NULL DEFAULT 0;
 
--- The swap. Dropping first would leave a window with no uniqueness at all,
--- but this file runs inside one ALTER-per-statement boot sequence on a table
--- with at most a handful of rows per village, and MySQL cannot add the new
--- key while the old one still forbids the rows it is meant to allow. The
--- order here is drop-then-add because the new key is a superset: nothing that
--- the old key permitted becomes illegal.
-ALTER TABLE `village_land` DROP INDEX `village_land_village_uniq`;
-
+-- ── THE SWAP IS ONE STATEMENT, AND IT HAS TO BE ────────────────────────────
+--
+-- An earlier draft of this file dropped the old key in one statement and
+-- added the new one in the next, and excused the gap between them on row
+-- count. Row count was never the danger. Between those two statements the
+-- table has NO unique key, and the previous release's only write is an
+-- ON DUPLICATE KEY UPDATE, which with nothing to collide on quietly INSERTs.
+--
+-- Railway deploys by rolling: the old container keeps serving while the new
+-- one boots and runs this file. A founder saving their land in that gap
+-- writes a second (village_id, 'home') row, the ADD that follows then fails
+-- on the duplicate, and a migration that fails at boot is a village that
+-- cannot start. Rolling the image back does not remove the row, so the next
+-- deploy fails the same way, and the only recovery is deleting a row by hand
+-- in production.
+--
+-- Found by the merge-conflict lane reading this file before it merged, and
+-- reproduced before it was fixed: split, the gap write leaves two rows and
+-- the ADD dies with ER_DUP_ENTRY; combined, the same write collides on both
+-- sides and the ALTER succeeds on a populated table. MySQL applies every
+-- clause of one ALTER TABLE together, so there is no moment with no key.
+--
+-- server/routes/land.upsert.e2e.test.ts holds the class, not this instance:
+-- it applies this file through the boot runner's own statement splitter and
+-- issues the previous release's write at EVERY statement boundary.
 ALTER TABLE `village_land`
+  DROP INDEX `village_land_village_uniq`,
   ADD UNIQUE KEY `village_land_parcel_uniq` (`village_id`, `slug`);
