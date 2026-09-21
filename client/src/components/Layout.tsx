@@ -95,29 +95,8 @@ export default function Layout({ children }: LayoutProps) {
     return () => window.removeEventListener("open-mobile-menu", openMenu);
   }, []);
 
-  /*
-   * ROOM FOR THE BAR THAT FLOATS OVER EVERY PAGE.
-   *
-   * `MobileTabBar` is `position: fixed` at the bottom, 64px tall plus the home
-   * indicator inset, and it portals over the document. Nothing reserved that
-   * space, so the last 64px of EVERY page sat underneath it, and scrolling
-   * could not help because the bar travels with the viewport.
-   *
-   * Measured at 390x844 on the live site: the living map lost its lower edge,
-   * and at 360x640 the circles page hid its own "View Open Roles" link.
-   *
-   * Only where the bar actually shows: `isBareRoute` hides it on the arrival
-   * routes, and `md:pb-0` gives the space back at the width where the bar
-   * itself disappears.
-   */
-  const tabBarShows = !isBareRoute(location);
-
   return (
-    <div
-      className={`flex flex-col min-h-screen${
-        tabBarShows ? " pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:pb-0" : ""
-      }`}
-    >
+    <div className="flex flex-col min-h-screen">
       {/*
        * Skip link. Measured before it existed: 40 to 63 focus stops between the
        * first Tab and the page content, on every route, because the header nav
