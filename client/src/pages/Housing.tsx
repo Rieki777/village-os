@@ -317,7 +317,7 @@ export default function Housing() {
             </div>
             <Link
               href="/resident"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-teal text-white rounded-lg font-semibold hover:opacity-90 transition-opacity"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-teal-deep text-white rounded-lg font-semibold hover:opacity-90 transition-opacity"
             >
               Learn About Residency
               <ArrowRight className="w-5 h-5" />
@@ -343,7 +343,7 @@ export default function Housing() {
                   href={eventsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-8 py-4 bg-teal text-white rounded-lg font-semibold hover:opacity-90 transition-opacity flex items-center gap-2"
+                  className="px-8 py-4 bg-teal-deep text-white rounded-lg font-semibold hover:opacity-90 transition-opacity flex items-center gap-2"
                 >
                   <Calendar className="w-5 h-5" />
                   Join Community Call

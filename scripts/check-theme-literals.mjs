@@ -41,6 +41,18 @@
  * like a hex triplet) gets an inline `theme-ok: <reason>` on the line, same
  * spelling convention as check-brand-refs.mjs's `brand-ok:`.
  *
+ * A SECOND CHECK LIVES HERE, AND IT IS NOT A RATCHET: white text on the soft
+ * brand tone. `bg-teal` (and its alias `bg-ocean`) paints --tone-brand-soft,
+ * which shared/brandTokens.ts derives at a FIXED light lightness (L 0.66)
+ * for every seed, so no founder's colour can make white text legible on it.
+ * Measured with buildThemeCss across the nine seeds and six cards the token
+ * tests use, white on it is 1.67 to 3.00:1, and 2.52:1 on an unseeded fork.
+ * The pairing that does carry white is `bg-teal-deep` (--tone-brand, derived
+ * so white clears 4.5:1 for every seed), which is also the site's primary
+ * button convention. The theme layer can re-colour both tones; it cannot
+ * rescue this pairing, which is why it is refused outright here instead of
+ * counted down. The scan is described where PAIRING_HELD is declared below.
+ *
  * Usage:
  *   node scripts/check-theme-literals.mjs                    # the gate
  *   node scripts/check-theme-literals.mjs --json              # machine readable
@@ -165,6 +177,151 @@ function scanFile(file) {
   return { count, waived, hits };
 }
 
+/**
+ * THE SOFT-GROUND PAIRING SCAN (the second check; see the header).
+ *
+ * WHAT IT READS. Class lists, not lines: every double- or single-quoted
+ * string and every template literal in a .tsx file under client/src, after
+ * comments are blanked. A template contributes its static text, each quoted
+ * literal inside a `${...}` on its own, and each of those joined to the
+ * static text, because `bg-teal ${on ? "text-white" : ""}` renders the
+ * pairing on one branch. A pairing is an UNPREFIXED `bg-teal` or `bg-ocean`
+ * (an opacity suffix too) together with an unprefixed `text-white` (same) in
+ * one class list. `-deep`, `-light` and `-band` are different tokens and are
+ * never matched: `bg-teal-deep` is the pairing white text is meant for.
+ *
+ * WHAT IT DOES NOT READ, stated so nobody takes a green for more than it is:
+ *  - Variant-prefixed states. `hover:bg-teal` under white text fails the
+ *    same way while a pointer rests on it, and 17 primary buttons did that
+ *    when this check was written. That is a hover decision across the design
+ *    system, not the resting pairing refused here, so it is left out and was
+ *    reported with the change that added this check.
+ *  - A colour that arrives through data. `color: "bg-teal"` in an object,
+ *    rendered under a `text-white` icon somewhere else, is two literals in
+ *    two places, and no text scan can join them.
+ *  - Test files. A test may need to write the pairing down.
+ *
+ * THE FLOOR. A scan that silently finds nothing reads exactly like a clean
+ * tree, so every run prints its denominator (files and class lists) and how
+ * often it saw the CONVENTION, `bg-teal-deep` with `text-white`, which the
+ * site's primary buttons use by the hundred. If that known positive reads
+ * zero, the extractor is broken, and the check fails instead of passing.
+ *
+ * HELD FOR A RULING. An entry here is a known defect whose fix is a design
+ * call rather than a mechanical one, and it is printed on every run. The
+ * count is EXACT: one more fails, and one fewer fails too, so a hold cannot
+ * outlive the fix that makes it stale.
+ */
+const PAIRING_HELD = {
+  // The Housing hero: white type on the soft tone across a full-bleed
+  // section. Every passing fix restyles a hero (the deep or band tone, or
+  // dark type on the soft band), so the choice is Rye's. The measured options
+  // are in the pull request that added this check.
+  "client/src/pages/Housing.tsx": 1,
+};
+
+const SOFT_GROUND = /^bg-(?:teal|ocean)(?:\/\d+)?$/;
+const WHITE_INK = /^text-white(?:\/\d+)?$/;
+const QUOTED = /"([^"\n]*)"|'([^'\n]*)'/g;
+
+/**
+ * Replace every comment with spaces, keeping each newline where it was so an
+ * offset still maps to its line. String-aware, so `https://` inside a string
+ * is not a comment; a quote or apostrophe string ends at its line, so an
+ * apostrophe in JSX text ("don't") can cost the rest of its own line at most.
+ */
+function blankComments(src) {
+  let out = "";
+  let quote = null;
+  for (let i = 0; i < src.length; i += 1) {
+    const c = src[i];
+    if (quote) {
+      out += c;
+      if (c === "\\" && i + 1 < src.length) { out += src[i + 1]; i += 1; continue; }
+      if (c === quote || (c === "\n" && quote !== "`")) quote = null;
+      continue;
+    }
+    if (c === "/" && src[i + 1] === "/") {
+      while (i < src.length && src[i] !== "\n") { out += " "; i += 1; }
+      i -= 1; // hand the newline back to the loop
+      continue;
+    }
+    if (c === "/" && src[i + 1] === "*") {
+      const end = src.indexOf("*/", i + 2);
+      const stop = end === -1 ? src.length : end + 2;
+      for (; i < stop; i += 1) out += src[i] === "\n" ? "\n" : " ";
+      i -= 1;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") quote = c;
+    out += c;
+  }
+  return out;
+}
+
+/** Every class list in comment-blanked code, each with the offset it starts at. */
+function classLists(code) {
+  const lists = [];
+  const outsideTemplates = code.replace(/`(?:[^`\\]|\\[\s\S])*`/g, (whole, at) => {
+    const body = whole.slice(1, -1);
+    let staticText = "";
+    let expr = "";
+    let depth = 0;
+    const inner = [];
+    for (let i = 0; i < body.length; i += 1) {
+      const c = body[i];
+      if (depth === 0) {
+        if (c === "$" && body[i + 1] === "{") { depth = 1; expr = ""; staticText += " "; i += 1; continue; }
+        staticText += c;
+        continue;
+      }
+      if (c === "{") depth += 1;
+      if (c === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          for (const m of expr.matchAll(QUOTED)) inner.push(m[1] ?? m[2]);
+          continue;
+        }
+      }
+      expr += c;
+    }
+    lists.push({ text: staticText, at });
+    for (const s of inner) {
+      lists.push({ text: s, at });
+      lists.push({ text: `${staticText} ${s}`, at });
+    }
+    return whole.replace(/[^\n]/g, " ");
+  });
+  for (const m of outsideTemplates.matchAll(QUOTED)) lists.push({ text: m[1] ?? m[2], at: m.index });
+  return lists;
+}
+
+function scanPairings(allFiles) {
+  const result = { files: 0, testsSkipped: 0, lists: 0, convention: 0, hits: {} };
+  for (const file of allFiles) {
+    if (file.endsWith(".test.tsx")) { result.testsSkipped += 1; continue; }
+    result.files += 1;
+    const src = fs.readFileSync(file, "utf8");
+    const code = blankComments(src);
+    const paired = new Set();
+    const conventional = new Set();
+    for (const { text, at } of classLists(code)) {
+      result.lists += 1;
+      const tokens = text.split(/\s+/);
+      if (tokens.includes("bg-teal-deep") && tokens.includes("text-white")) conventional.add(at);
+      if (paired.has(at)) continue;
+      if (tokens.some((t) => SOFT_GROUND.test(t)) && tokens.some((t) => WHITE_INK.test(t))) {
+        paired.add(at);
+        const line = code.slice(0, at).split("\n").length;
+        (result.hits[rel(file)] ??= []).push({ line, text: src.split("\n")[line - 1].trim().slice(0, 140) });
+      }
+    }
+    result.convention += conventional.size;
+    result.hits[rel(file)]?.sort((a, b) => a.line - b.line);
+  }
+  return result;
+}
+
 const files = walk(SCAN_ROOT).sort();
 const counts = {};
 const details = {};
@@ -196,8 +353,48 @@ if (process.argv.includes("--update-baseline")) {
   process.exit(0);
 }
 
+const pairing = scanPairings(files);
+const pairingProblems = [];
+for (const [file, hits] of Object.entries(pairing.hits)) {
+  const held = PAIRING_HELD[file] ?? 0;
+  if (hits.length > held) {
+    pairingProblems.push({ file, reason: `${hits.length} white-on-soft pairing(s), ${held} held for a ruling`, hits });
+  }
+}
+for (const [file, held] of Object.entries(PAIRING_HELD)) {
+  const found = pairing.hits[file]?.length ?? 0;
+  if (found < held) {
+    pairingProblems.push({
+      file,
+      reason: `the hold is stale: ${held} held, ${found} found. Lower or delete its PAIRING_HELD entry in scripts/check-theme-literals.mjs`,
+      hits: [],
+    });
+  }
+}
+if (pairing.files === 0 || pairing.convention === 0) {
+  pairingProblems.push({
+    file: "client/src",
+    reason:
+      `the scan read ${pairing.files} file(s) and saw the bg-teal-deep + text-white convention ${pairing.convention} time(s). ` +
+      `A scan that cannot see a known positive is broken, and its zero proves nothing`,
+    hits: [],
+  });
+}
+
 if (process.argv.includes("--json")) {
-  console.log(JSON.stringify({ total, files: counts, waivers: totalWaivers }));
+  console.log(JSON.stringify({
+    total,
+    files: counts,
+    waivers: totalWaivers,
+    softGroundPairing: {
+      filesRead: pairing.files,
+      testFilesSkipped: pairing.testsSkipped,
+      classLists: pairing.lists,
+      conventionSeen: pairing.convention,
+      found: Object.fromEntries(Object.entries(pairing.hits).map(([f, h]) => [f, h.length])),
+      held: PAIRING_HELD,
+    },
+  }));
 }
 
 const baseline = fs.existsSync(BASELINE_PATH) ? JSON.parse(fs.readFileSync(BASELINE_PATH, "utf8")) : { totalLiterals: 0, files: {} };
@@ -230,10 +427,29 @@ if (failures.length) {
   }
   console.error(`\nIf a hit is a genuine false positive (not a rendered colour), add \`theme-ok: <reason>\` on that line.`);
   console.error(`If you REMOVED literals, lower the baseline: node scripts/check-theme-literals.mjs --update-baseline\n`);
-  process.exit(1);
 }
+
+if (pairingProblems.length) {
+  console.error("\nSOFT-GROUND PAIRING REFUSED: white text on bg-teal measures 1.67 to 3.00:1 across every seed measured.\n");
+  console.error("bg-teal is --tone-brand-soft, derived at a fixed light tone, so no village colour can carry white on it.");
+  console.error("Put white text on bg-teal-deep, the primary-button convention: --tone-brand is derived so white clears");
+  console.error("4.5:1 on it for every seed, in both colour schemes.\n");
+  for (const p of pairingProblems) {
+    console.error(`  ${p.file}: ${p.reason}`);
+    for (const h of p.hits.slice(0, 8)) console.error(`      ${p.file}:${h.line}: ${h.text}`);
+  }
+  console.error("");
+}
+
+if (failures.length || pairingProblems.length) process.exit(1);
 
 console.log(
   `Theme-literal guard passed. ${total} theme-bypassing colour literal(s) across ${Object.keys(counts).length} file(s) ` +
   `(baseline ${baselineTotal}); ${totalWaivers} waiver(s) in force.`,
+);
+const heldList = Object.entries(PAIRING_HELD).map(([f, n]) => `${f}: ${n}`).join(", ") || "none";
+console.log(
+  `Soft-ground pairing check passed. Read ${pairing.files} .tsx file(s) (${pairing.testsSkipped} test file(s) skipped) ` +
+  `and ${pairing.lists} class list(s). White on bg-teal/bg-ocean: 0 unheld, held for a ruling: ${heldList}. ` +
+  `Known positive, bg-teal-deep with text-white: seen ${pairing.convention} time(s).`,
 );
