@@ -150,7 +150,7 @@ const opportunities = [
 ];
 
 const statusColors: Record<string, string> = {
-  "Planning": "bg-teal-light/10 text-teal-light",
+  "Planning": "bg-teal-deep/10 text-foreground",
   "Future": "bg-muted text-muted-foreground",
   "Active": "bg-sage/10 text-sage",
 };
@@ -177,7 +177,7 @@ export default function Opportunities() {
               <h1 className="font-display text-4xl md:text-6xl font-bold mb-6">
                 Business Opportunities
               </h1>
-              <p className="text-xl text-white/80 leading-relaxed">
+              <p className="text-xl text-white leading-relaxed">
                 Join our thriving village economy. These opportunities align business 
                 success with community prosperity through our {tokenName} revenue sharing model.
               </p>

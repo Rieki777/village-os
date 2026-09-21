@@ -1219,7 +1219,7 @@ export default function ProjectHistory() {
                     (dec) => !serverState.decisions[dec.id] || serverState.decisions[dec.id]?.status === "open"
                   ).length;
                   return openCount > 0 ? (
-                    <span className="ml-auto text-xs bg-amber-400 text-white font-bold px-1.5 py-0.5 rounded-full">
+                    <span className="ml-auto text-xs bg-gold text-white font-bold px-1.5 py-0.5 rounded-full">
                       {openCount}
                     </span>
                   ) : null;
