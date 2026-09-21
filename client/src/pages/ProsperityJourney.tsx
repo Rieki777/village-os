@@ -239,11 +239,21 @@ export default function ProsperityJourney() {
         </div>
 
         <div className="container relative z-10">
-          <div className="max-w-2xl">
+          <div className="relative max-w-2xl">
+            {/* THE COPY SITS ON AN OPAQUE BAND, as on Home and Master Plan. A
+                photograph under text cannot promise a ratio: at 320 to 768px this
+                one showed through under the eyebrow, the heading and the
+                paragraph. On the band each is two named colours whatever the
+                picture is, and with no picture the band is the colour it sits
+                on. heroCopy.contrast.test.tsx */}
+            <div
+              aria-hidden="true"
+              className="absolute -inset-x-5 -inset-y-6 sm:-inset-x-8 sm:-inset-y-10 rounded-3xl bg-background"
+            />
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              className="flex items-center gap-3 mb-6"
+              className="relative flex items-center gap-3 mb-6"
             >
               <motion.div 
                 className="w-12 h-12 rounded-xl bg-gold flex items-center justify-center"
@@ -252,20 +262,18 @@ export default function ProsperityJourney() {
               >
                 <Sparkles className="w-6 h-6 text-white" />
               </motion.div>
-              {/* The eyebrow sits on an opaque chip of the page's own ground, the
-                  way the Home and Master Plan heroes put their copy on an opaque
-                  band: at 393px the photograph shows through the gradient under
-                  its right end, and no ink clears 4.5:1 on a photograph. On the
-                  chip, amber-ink is two named colours whatever the picture is,
-                  and with no picture the chip is the colour it sits on. */}
-              <span className="rounded-lg bg-background px-3 py-1 text-amber-ink font-medium tracking-wide uppercase text-sm">Prosperity Creator Journey</span>
+              {/* amber-ink, index.css's amber for text on light grounds: gold is 4.07:1 on the band. */}
+              <span className="text-amber-ink font-medium tracking-wide uppercase text-sm">Prosperity Creator Journey</span>
             </motion.div>
 
+            {/* 36px under 360px wide: at 48px "Regenerative" is one unbreakable word
+                that inked to x=333 at 320px, past the 304px column and the section's
+                overflow-hidden edge, so its end was cut off. From 360px up, unchanged. */}
             <motion.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="font-display text-5xl md:text-6xl font-semibold text-foreground mb-6"
+              className="relative font-display text-4xl min-[360px]:text-5xl md:text-6xl font-semibold text-foreground mb-6"
             >
               Create{" "}
               <span className="text-gold italic">Regenerative Prosperity</span>
@@ -275,7 +283,7 @@ export default function ProsperityJourney() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="text-xl text-muted-foreground leading-relaxed mb-8"
+              className="relative text-xl text-muted-foreground leading-relaxed mb-8"
             >
               Launch a business that serves the community and regenerates our ecosystem. 
               Every contribution is tracked in {tokenName}, our way of acknowledging value before
@@ -286,7 +294,7 @@ export default function ProsperityJourney() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
-              className="flex flex-wrap gap-4"
+              className="relative flex flex-wrap gap-4"
             >
               {packetHref && (
                 <a

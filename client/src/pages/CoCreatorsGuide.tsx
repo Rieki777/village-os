@@ -801,7 +801,7 @@ export default function CoCreatorsGuide() {
                     Value In = Value Out
                   </h3>
                   <p className="text-cream/80 text-sm leading-relaxed">
-                    Every proposal puts one question to the community: does this contribution serve
+                    Every proposal puts one question to the community: does this contribution serve{" "}
                     {villageName} at the level of {tokenName} being requested? Not hours logged, hours are
                     not a contribution. What matters is the actual value created, articulated
                     clearly, and assessed honestly by your peers. The more you contribute, the more
