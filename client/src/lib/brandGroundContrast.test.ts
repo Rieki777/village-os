@@ -98,6 +98,12 @@ const CSS = parseCss(fs.readFileSync(path.join(ROOT, "client/src/index.css"), "u
 const topLevel = (selector: string) => CSS.filter((r) => r.selector === selector);
 const THEME_DECLS = [...topLevel("@theme"), ...topLevel("@theme inline")];
 const themeHas = (name: string) => THEME_DECLS.some((r) => r.decls.has(name));
+/** Tailwind's own `@theme default` palette, the lowest layer: literals only, no var(). */
+const TAILWIND_PALETTE = new Map(
+  parseCss(fs.readFileSync(path.join(ROOT, "node_modules/tailwindcss/theme.css"), "utf8"))
+    .filter((r) => r.selector.startsWith("@theme default"))
+    .flatMap((r) => [...r.decls].filter(([k]) => k.startsWith("--color-"))),
+);
 
 /** `.bg-x { background-color: ... }` wherever index.css declares one, nested or not. */
 function componentRule(className: string, property: string): string | null {
@@ -196,14 +202,18 @@ function blend(fg: string, alpha: number, bg: string): string {
  * What a colour utility paints, the way Tailwind v4 and index.css decide it: a
  * name declared as --color-<name> in @theme generates `var(--color-<name>)`,
  * and utilities beat index.css's @layer components rules; a name with no theme
- * entry falls to the component rule; `white` is Tailwind's own. Anything else
- * is not a colour this test can speak for, and returns null.
+ * entry falls to the component rule; `white` is Tailwind's own. Last comes
+ * Tailwind's own default palette (`amber-800`, `stone-50`...), which no village
+ * theme touches and index.css does not redeclare. Anything else is not a
+ * colour this test can speak for, and returns null.
  */
 function utilityColour(prefix: "bg" | "text", name: string, vars: Map<string, string>): string | null {
   if (name === "white") return "#ffffff";
   if (themeHas(`--color-${name}`)) return literalToHex(resolveValue(`var(--color-${name})`, vars));
   const rule = componentRule(`${prefix}-${name}`, prefix === "bg" ? "background-color" : "color");
-  return rule ? literalToHex(resolveValue(rule, vars)) : null;
+  if (rule) return literalToHex(resolveValue(rule, vars));
+  const own = TAILWIND_PALETTE.get(`--color-${name}`);
+  return own ? literalToHex(own) : null;
 }
 
 /** Split `bg-teal-deep/90` into name and alpha; variant-prefixed tokens are not the resting state. */
@@ -556,11 +566,13 @@ function walkTsx(dir: string, out: string[] = []): string[] {
 
 /*
  * WHICH LISTS. White ink under the state, and a state ground that a village's
- * seed moves: the brand family. That leaves out white on bg-white/20 over a
- * dark band, a fixed red or sage, and every other ground no seed can reach,
- * which are not the pairing this ruling is about. It keeps the 25 buttons that
- * already hovered to bg-teal-deep-dark, whose hover colour this change moved
- * onto the derived tone, alongside the 60 it fixed.
+ * seed moves: the brand family. It keeps the 25 buttons that already hovered to
+ * bg-teal-deep-dark, whose hover colour this change moved onto the derived
+ * tone, alongside the 63 it fixed. It also keeps a white-on-GOLD button: gold
+ * is a fixed literal, but it carries white at 4.55:1, so a fade under the
+ * pointer fails for every village, Amora included. That leaves out white on
+ * bg-white/20 over a dark band, a fixed red, sage or coral (their fades still
+ * clear 4.5), and every other ground no seed can reach.
  */
 const UNSEEDED = VILLAGES[0];
 const POINTER_LISTS = (() => {
@@ -571,7 +583,7 @@ const POINTER_LISTS = (() => {
       const first = hoverReading(list.tokens, light(UNSEEDED));
       if (!first || first.ink !== WHITE) continue;
       const grounds = new Set(VILLAGES.map((v) => hoverReading(list.tokens, light(v))?.ground));
-      if (grounds.size < 2) continue;
+      if (grounds.size < 2 && !list.tokens.includes("bg-gold")) continue;
       const key = `${file}:${list.line}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -582,10 +594,10 @@ const POINTER_LISTS = (() => {
 })();
 
 /*
- * THE FLOOR. Per file, the number of hovers this change fixed there (60 in
- * all: 17 onto the soft tone, 16 translucent brands, 25 faded buttons, the
- * shadcn button and the badge). A reader that stopped seeing them would
- * otherwise pass by measuring nothing.
+ * THE FLOOR. Per file, the number of hovers this change fixed there (63 in
+ * all: 17 onto the soft tone, 16 translucent brands, 25 faded brand buttons,
+ * the shadcn button and the badge, and 3 faded gold buttons). A reader that
+ * stopped seeing them would otherwise pass by measuring nothing.
  */
 const FIXED: Record<string, number> = {
   "client/src/components/GuideChat.tsx": 2,
@@ -608,6 +620,7 @@ const FIXED: Record<string, number> = {
   "client/src/pages/NotFound.tsx": 1,
   "client/src/pages/Opportunities.tsx": 1,
   "client/src/pages/ProjectHistory.tsx": 5,
+  "client/src/pages/ProsperityJourney.tsx": 3,
   "client/src/pages/ProposeQuest.tsx": 2,
   "client/src/pages/QuestDetail.tsx": 1,
   "client/src/pages/Quests.tsx": 2,
@@ -622,11 +635,11 @@ const FIXED: Record<string, number> = {
 
 describe("under the pointer, a brand button stays readable and visibly moves, light only", () => {
   it(`reads every white-on-brand hover in client/src (${POINTER_LISTS.length}), and every one this change fixed`, () => {
-    expect(Object.values(FIXED).reduce((n, v) => n + v, 0)).toBe(60);
+    expect(Object.values(FIXED).reduce((n, v) => n + v, 0)).toBe(63);
     for (const [file, n] of Object.entries(FIXED)) {
       expect(POINTER_LISTS.filter((l) => l.file === file).length, `${file} hovers read`).toBeGreaterThanOrEqual(n);
     }
-    expect(POINTER_LISTS.length).toBeGreaterThanOrEqual(60 + 25);
+    expect(POINTER_LISTS.length).toBeGreaterThanOrEqual(63 + 25);
   });
 
   for (const list of POINTER_LISTS) {
@@ -672,4 +685,134 @@ describe("under the pointer, a brand button stays readable and visibly moves, li
     }
     expect(utilityColour("bg", "teal-deep-dark", light(UNSEEDED))).toBe("#262626");
   });
+
+  it("the resolver reads gold and its hover from the stylesheet and Tailwind's palette, not from this file", () => {
+    // Gold is index.css's literal; amber-800 is Tailwind's own. Neither moves with a seed.
+    expect(utilityColour("bg", "gold", light(UNSEEDED))).toBe("#a06b1c");
+    const hover = utilityColour("bg", "amber-800", light(UNSEEDED))!;
+    expect(contrastRatio("#a06b1c", hover)).toBeGreaterThan(HOVER_STEP);
+    expect(contrastRatio(WHITE, hover)).toBeGreaterThan(AA_BODY);
+  });
+});
+
+/*
+ * THE OPPORTUNITIES CTA AT REST. It sat on the mid tone, --tone-brand-mid,
+ * which is derived for white at 3:1 only: 3.00:1 worst and under 4.5 for 30
+ * of 55 villages, though an unseeded fork (Amora today) read 4.74. It now
+ * rests on the deep brand, the primary-button convention; its hover is read
+ * by the pointer sweep above with every other brand button.
+ */
+describe("the Opportunities CTA reads at rest for every village, light only", () => {
+  it(`Join Community Call reads at ${AA_BODY}:1 or better at rest over 55 villages`, () => {
+    const where = locate("client/src/pages/Opportunities.tsx", /Join Community Call/);
+    const below: string[] = [];
+    let worst = Infinity;
+    for (const village of VILLAGES) {
+      const { ground, ink, ratio } = measure(where, village, "light");
+      worst = Math.min(worst, ratio);
+      if (ratio < AA_BODY) below.push(`${village.name}: ${ratio.toFixed(2)}:1, ${ink} on ${ground}`);
+    }
+    expect(below, `worst ${worst.toFixed(2)}:1 over ${where.classes.join(" ")}`).toEqual([]);
+  });
+});
+
+// ── White on the band ────────────────────────────────────────────────────────
+
+/*
+ * Every element in client/src whose OWN ink is white, full or translucent,
+ * and whose nearest painted ground (itself, else the nearest ancestor that
+ * paints one) is the band. The band is derived for FULL white, 5.36:1 at
+ * worst; a translucent white composites toward it, and at /80 seven of the 54
+ * seeded themes fall under 4.5. The Housing, Governance, Visit, WorkWithUs,
+ * Decisions and Training paragraphs were translucent and are full white now.
+ *
+ * Classes are every string inside className, branches joined, which is what
+ * scripts/check-theme-literals.mjs's band scan reads too.
+ */
+interface BandInk { key: string; file: string; alpha: number }
+
+function whiteInksOnTheBand(): BandInk[] {
+  const out: BandInk[] = [];
+  const NOT_A_COLOUR = /^bg-(?:gradient|linear|radial|conic|\[|clip|origin|cover|contain|auto|center|top|bottom|left|right|no-repeat|repeat|fixed|local|scroll|none|blend)/;
+  for (const file of walkTsx("client/src").sort()) {
+    const src = fs.readFileSync(path.join(ROOT, file), "utf8");
+    const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const classesOf = (opening: ts.JsxOpeningLikeElement) => {
+      const texts: string[] = [];
+      for (const p of opening.attributes.properties) {
+        if (!ts.isJsxAttribute(p) || p.name.getText(sf) !== "className" || !p.initializer) continue;
+        const take = (n: ts.Node): void => {
+          if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) texts.push(n.text);
+          else if (ts.isTemplateExpression(n)) {
+            texts.push(n.head.text, ...n.templateSpans.map((s) => s.literal.text));
+            n.templateSpans.forEach((s) => take(s.expression));
+          } else ts.forEachChild(n, take);
+        };
+        take(p.initializer);
+      }
+      return texts.join(" ").split(/\s+/).filter(Boolean);
+    };
+    const groundOf = (tokens: string[]) => tokens.find((t) => /^bg-[a-z[]/.test(t) && !NOT_A_COLOUR.test(t));
+    const visit = (node: ts.Node, grounds: string[]) => {
+      let next = grounds;
+      if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+        const tokens = classesOf(ts.isJsxElement(node) ? node.openingElement : node);
+        const own = groundOf(tokens);
+        const ink = tokens.map((t) => /^text-white(?:\/(\d+))?$/.exec(t)).find(Boolean);
+        if (ink && (own ?? grounds[0]) === "bg-teal-band") {
+          const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
+          out.push({ key: `${file}:${line}`, file, alpha: ink[1] ? Number(ink[1]) / 100 : 1 });
+        }
+        if (own) next = [own, ...grounds];
+      }
+      ts.forEachChild(node, (child) => visit(child, next));
+    };
+    visit(sf, []);
+  }
+  return out;
+}
+
+const BAND_INKS = whiteInksOnTheBand();
+
+/*
+ * HELD, and the same entry scripts/check-theme-literals.mjs holds: the Home
+ * hero paragraph, white/80 on the band. Its /80 dims the paragraph so two
+ * words set in full-white semibold stand out, so full white is a design call
+ * on the landing page and waits for one. It is SKIPPED here, never asserted to
+ * fail, and the count is exact so the skip goes stale the day it is fixed.
+ */
+const BAND_HELD: Record<string, number> = { "client/src/pages/Home.tsx": 1 };
+
+/* The paragraphs this change made full white, one per file, plus the Housing hero. */
+const BAND_FIXED = [
+  "client/src/pages/Decisions.tsx",
+  "client/src/pages/Governance.tsx",
+  "client/src/pages/Housing.tsx",
+  "client/src/pages/Training.tsx",
+  "client/src/pages/Visit.tsx",
+  "client/src/pages/WorkWithUs.tsx",
+];
+
+describe("white on the band reads for every village, light only", () => {
+  it(`reads every white ink on the band in client/src (${BAND_INKS.length}), including each hero this change fixed`, () => {
+    for (const file of BAND_FIXED) {
+      expect(BAND_INKS.filter((b) => b.file === file && b.alpha === 1).length, `${file} white on the band`).toBeGreaterThanOrEqual(1);
+    }
+    for (const [file, n] of Object.entries(BAND_HELD)) {
+      expect(BAND_INKS.filter((b) => b.file === file && b.alpha < 1).length, `${file}: the hold is exact`).toBe(n);
+    }
+  });
+
+  for (const ink of BAND_INKS) {
+    const held = (BAND_HELD[ink.file] ?? 0) > 0 && ink.alpha < 1;
+    it.skipIf(held)(`${ink.key}: white${ink.alpha < 1 ? `/${Math.round(ink.alpha * 100)}` : ""} on the band reads at ${AA_BODY}:1 or better`, () => {
+      const below: string[] = [];
+      for (const village of VILLAGES) {
+        const band = utilityColour("bg", "teal-band", light(village))!;
+        const ratio = contrastRatio(ink.alpha === 1 ? WHITE : blend(WHITE, ink.alpha, band), band);
+        if (ratio < AA_BODY) below.push(`${village.name}: ${ratio.toFixed(2)}:1 on ${band}`);
+      }
+      expect(below).toEqual([]);
+    });
+  }
 });

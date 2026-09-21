@@ -91,7 +91,7 @@ export default function Visit() {
           <h1 className="font-display text-4xl md:text-5xl font-bold mb-4">
             Come and See for Yourself
           </h1>
-          <p className="text-white/80 text-lg max-w-3xl leading-relaxed">
+          <p className="text-white text-lg max-w-3xl leading-relaxed">
             {cfg?.hero_subtitle ?? `Experience the land, meet the people, and decide if ${villageName} is where you belong.`}
           </p>
         </div>

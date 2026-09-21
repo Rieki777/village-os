@@ -64,6 +64,21 @@
  * `hover:bg-teal-deep-dark`, --tone-brand-hover, a derived step from the brand
  * that white clears at 6.33:1 or better for every seed.
  *
+ * Two more pairings sit in the same scan. White on the MID tone at rest
+ * (`bg-teal-light`, 3.00:1 worst, under 4.5 for 30 of 55 villages) is refused
+ * the way the soft tone is. And a FIXED gold (`bg-gold`, #a06b1c, white at
+ * 4.55:1 for every village, Amora included) may not fade under a state either:
+ * at 90 it is 3.79:1 everywhere. The brand family's margin comes from the
+ * derivation and gold's from a literal, but the arithmetic is the same.
+ *
+ * A THIRD CHECK reads the JSX tree, because a paragraph and the band behind
+ * it are two elements: translucent white ink below /90 whose nearest painted
+ * ground is the band (`bg-teal-band`). The band is derived for FULL white (5.36:1
+ * worst); at /85 it falls under 4.5 for 2 of 55 villages and at /80 for 7,
+ * which is where the Housing, Governance, Visit and WorkWithUs hero
+ * paragraphs sat. /90 and above clear all 55. Described where BAND_INK_FLOOR
+ * is declared below.
+ *
  * Usage:
  *   node scripts/check-theme-literals.mjs                    # the gate
  *   node scripts/check-theme-literals.mjs --json              # machine readable
@@ -72,6 +87,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 import { stripComments } from "./brand-strip.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -200,10 +216,10 @@ function scanFile(file) {
  * `text-primary-foreground` (white in the light scheme, the only one there
  * is), an opacity suffix allowed.
  *
- * AT REST, a pairing is an UNPREFIXED `bg-teal` or `bg-ocean` (an opacity
- * suffix too) with white ink in one class list. `-deep`, `-light` and `-band`
- * are different tokens and are never matched here: `bg-teal-deep` is the
- * pairing white text is meant for.
+ * AT REST, a pairing is an UNPREFIXED `bg-teal` or `bg-ocean` (the soft
+ * tone) or `bg-teal-light` (the mid tone), an opacity suffix too, with white
+ * ink in one class list. `-deep` and `-band` are different tokens and are
+ * never matched here: `bg-teal-deep` is the pairing white text is meant for.
  *
  * UNDER A STATE, a token is read when its variant chain names hover, focus,
  * focus-visible, focus-within or active (a `group-` or `peer-` form too, and
@@ -213,18 +229,17 @@ function scanFile(file) {
  *  - `bg-teal` or `bg-ocean`, the soft tone, at any opacity;
  *  - `bg-teal-light`, the mid tone: white on it is 3.00 to 13.79:1, below 4.5
  *    for 30 of 55 villages;
- *  - `bg-teal-deep/NN` or `bg-primary/NN` below 100: a translucent brand;
+ *  - `bg-teal-deep/NN`, `bg-primary/NN` or `bg-gold/NN` below 100: a
+ *    translucent ground that lifts toward the page;
  *  - `opacity-NN` below 100 when the resting ground is `bg-teal-deep`,
- *    `bg-primary` or `bg-teal-light`: the whole button fades toward the page.
- *    (A white-on-teal-light button fails AT REST for 30 villages as well.
- *    This check does not refuse that resting pairing; it was reported with
- *    the change that added the state half.)
+ *    `bg-primary`, `bg-teal-light` or `bg-gold`: the whole button fades.
  * A chain that also names `disabled` is not read (WCAG exempts an inactive
  * control), nor is one that names `dark` (the theme is light only).
  *
  * WHAT IT DOES NOT READ, stated so nobody takes a green for more than it is:
- *  - Grounds that are not the brand family. A fixed colour's fade, such as
- *    `bg-gold hover:opacity-90`, is not refused here.
+ *  - Fixed grounds other than gold. Sage and coral fades still clear 4.5 at
+ *    90 (4.74 and 5.35:1 over white), so they are not refused, and nothing
+ *    here would notice if one of those literals were darkened or lightened.
  *  - Attribute states: `data-[state=open]:`, `aria-selected:` and the like.
  *    None paints the soft tone or a faded brand today.
  *  - Stylesheets. `.btn-amora:hover` lives in index.css, and
@@ -245,17 +260,31 @@ function scanFile(file) {
  *
  * HELD FOR A RULING. An entry here is a known defect whose fix is a design
  * call rather than a mechanical one, and it is printed on every run. It counts
- * refused class lists in the file, at rest and under a state together. The
- * count is EXACT: one more fails, and one fewer fails too, so a hold cannot
- * outlive the fix that makes it stale. An empty map is valid: nothing is held.
+ * every refusal in the file together: class lists at rest and under a state,
+ * and elements from the band check. The count is EXACT: one more fails, and
+ * one fewer fails too, so a hold cannot outlive the fix that makes it stale.
+ * An empty map is valid: nothing is held.
  */
 const PAIRING_HELD = {
-  // Empty since 2026-09-21. The Housing hero was held here, white type on the
-  // soft tone, until Rye ruled "band colour": it now sits on bg-teal-band with
-  // a full-white paragraph.
+  // The Housing hero was held here, white type on the soft tone, until Rye
+  // ruled "band colour" (2026-09-21): it now sits on bg-teal-band.
+  //
+  // The Opportunities hero: white type on the MID tone across a full-bleed
+  // section, 3.00:1 worst and under 4.5 for 30 of 55 villages (4.74 unseeded,
+  // so Amora passes). Its CTA moved to bg-teal-deep; the hero passes only by
+  // changing its ground, which restyles a hero, so the call is Rye's.
+  "client/src/pages/Opportunities.tsx": 1,
+  // The Home hero paragraph, white/80 on the band: under 4.5 for 7 of 54
+  // seeded themes (4.03 worst; 10.21 unseeded). Full white would fix it and is
+  // one token, but here the /80 is doing design work: it dims the paragraph so
+  // "belong" and "thrive", set in full-white semibold, stand out. Changing the
+  // emphasis is a taste call on the landing page, so it waits for a word.
+  "client/src/pages/Home.tsx": 1,
 };
 
 const SOFT_GROUND = /^bg-(?:teal|ocean)(?:\/\d+)?$/;
+/** The mid tone, --tone-brand-mid: derived for white at 3:1 (large text) only. */
+const MID_GROUND = /^bg-teal-light(?:\/\d+)?$/;
 const WHITE_INK = /^text-(?:white|primary-foreground)(?:\/\d+)?$/;
 const QUOTED = /"([^"\n]*)"|'([^'\n]*)'/g;
 
@@ -263,18 +292,27 @@ const QUOTED = /"([^"\n]*)"|'([^'\n]*)'/g;
 const TEXT_NOT_COLOUR = /^text-(?:xs|sm|base|lg|[2-9]?xl|left|center|right|justify|start|end|wrap|nowrap|balance|pretty|ellipsis|clip)$/;
 const STATE_VARIANT = /^(?:group-|peer-)?(?:hover|focus|focus-visible|focus-within|active)(?:\/[\w-]+)?$/;
 const UNREAD_VARIANT = /^(?:dark|disabled|aria-disabled|group-disabled|peer-disabled)$/;
-/** A resting ground in the brand family that a white-text button fades from. */
-const FADING_GROUND = /^bg-(?:teal-deep|teal-light|primary)$/;
+/** A resting ground that carries white with no margin to spare, so any fade drops it under 4.5. */
+const FADING_GROUND = /^bg-(?:teal-deep|teal-light|primary|gold)$/;
 const HOVER_PARTNER = "bg-teal-deep-dark";
 
 /** Why white text may not sit on this ground under a state, or null. */
-function refusedStateGround(utility, restingBrand) {
+function refusedStateGround(utility, resting) {
   if (SOFT_GROUND.test(utility)) return "white text onto the soft tone (bg-teal), 1.67 to 3.00:1";
-  if (/^bg-teal-light(?:\/\d+)?$/.test(utility)) return "white text onto the mid tone (bg-teal-light), under 4.5 for 30 of 55 villages";
-  const fade = /^bg-(?:teal-deep|primary)\/(\d+)$/.exec(utility);
-  if (fade && Number(fade[1]) < 100) return `white text onto a translucent brand (${utility}), under 4.5 for 28 of 55 villages at /90`;
+  if (MID_GROUND.test(utility)) return "white text onto the mid tone (bg-teal-light), under 4.5 for 30 of 55 villages";
+  const fade = /^bg-(teal-deep|primary|gold)\/(\d+)$/.exec(utility);
+  if (fade && Number(fade[2]) < 100) {
+    return fade[1] === "gold"
+      ? `white text onto a translucent gold (${utility}), 3.79:1 at /90 for every village`
+      : `white text onto a translucent brand (${utility}), under 4.5 for 28 of 55 villages at /90`;
+  }
   const dim = /^opacity-(\d+)$/.exec(utility);
-  if (dim && Number(dim[1]) < 100 && restingBrand) return `a white-on-brand button fading (${utility}), under 4.5 for 28 of 55 villages at opacity-90`;
+  const from = resting.find((u) => FADING_GROUND.test(u));
+  if (dim && Number(dim[1]) < 100 && from) {
+    return from === "bg-gold"
+      ? `a white-on-gold button fading (${utility}), 3.79:1 at opacity-90 for every village`
+      : `a white-on-brand button fading (${utility}), under 4.5 for 28 of 55 villages at opacity-90`;
+  }
   return null;
 }
 
@@ -405,14 +443,13 @@ function scanPairings(allFiles) {
       if (whiteUnderState && state.includes(HOVER_PARTNER)) hoverConventional.add(at);
 
       if (paired.has(at)) continue;
-      if (resting.some((u) => SOFT_GROUND.test(u)) && resting.some((u) => WHITE_INK.test(u))) {
-        hit(at, "rest", "white text on the soft tone (bg-teal), 1.67 to 3.00:1");
-        continue;
+      if (resting.some((u) => WHITE_INK.test(u))) {
+        if (resting.some((u) => SOFT_GROUND.test(u))) { hit(at, "rest", "white text on the soft tone (bg-teal), 1.67 to 3.00:1"); continue; }
+        if (resting.some((u) => MID_GROUND.test(u))) { hit(at, "rest", "white text on the mid tone (bg-teal-light), 3.00:1 worst, under 4.5 for 30 of 55 villages"); continue; }
       }
       if (!whiteUnderState) continue;
-      const restingBrand = resting.some((u) => FADING_GROUND.test(u));
       for (const u of state) {
-        const why = refusedStateGround(u, restingBrand);
+        const why = refusedStateGround(u, resting);
         if (why) { hit(at, "state", why); break; }
       }
     }
@@ -423,6 +460,88 @@ function scanPairings(allFiles) {
     result.hits[rel(file)]?.sort((a, b) => a.line - b.line);
   }
   return result;
+}
+
+/**
+ * THE BAND INK SCAN (the third check; see the header).
+ *
+ * WHAT IT READS. The JSX tree of every .tsx file under client/src, parsed
+ * with the TypeScript compiler. An element's classes are every string inside
+ * its className, branches of a ternary or a cn() call joined. Its ground is
+ * the first unprefixed colour `bg-*` on itself or on its nearest ancestor that
+ * has one. It refuses an element whose OWN unprefixed ink is `text-white/NN`
+ * with NN under BAND_INK_FLOOR and whose ground is exactly `bg-teal-band`.
+ *
+ * WHAT IT DOES NOT READ:
+ *  - Translucent white on any other ground. On `bg-teal-deep` every fade
+ *    fails (white/95 is under 4.5 for 25 of 55 villages) and five such inks
+ *    exist; they are not heroes and were reported, not refused.
+ *  - A band that arrives through a component boundary: a child component's
+ *    paragraph cannot see the section its parent draws around it.
+ *  - Inherited ink. An element with no text class of its own takes its
+ *    colour from an ancestor and is not read, so the refusal lands on the
+ *    element that wrote the translucent class.
+ *
+ * THE FLOOR. Every run prints how many elements it read, how many sit on the
+ * band and how many translucent white inks it saw. Twenty-one band surfaces
+ * exist, so a zero for either count means the walk is broken.
+ */
+const BAND_INK_FLOOR = 90;
+const BAND_GROUND = "bg-teal-band";
+const NOT_A_COLOUR_BG = /^bg-(?:gradient|linear|radial|conic|\[|clip|origin|cover|contain|auto|center|top|bottom|left|right|no-repeat|repeat|fixed|local|scroll|none|blend)/;
+
+function scanBandInk(allFiles, result) {
+  const band = { elements: 0, onBand: 0, translucentWhite: 0, hits: 0 };
+  for (const file of allFiles) {
+    if (file.endsWith(".test.tsx")) continue;
+    const src = fs.readFileSync(file, "utf8");
+    const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const classesOf = (opening) => {
+      const out = [];
+      for (const p of opening.attributes.properties) {
+        if (!ts.isJsxAttribute(p) || p.name.getText(sf) !== "className" || !p.initializer) continue;
+        const take = (n) => {
+          if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) out.push(n.text);
+          else if (ts.isTemplateExpression(n)) {
+            out.push(n.head.text, ...n.templateSpans.map((s) => s.literal.text));
+            n.templateSpans.forEach((s) => take(s.expression));
+          } else ts.forEachChild(n, take);
+        };
+        take(p.initializer);
+      }
+      return out.join(" ").split(/\s+/).filter(Boolean);
+    };
+    const groundOf = (tokens) => tokens.find((t) => /^bg-[a-z[]/.test(t) && !NOT_A_COLOUR_BG.test(t));
+    const visit = (node, grounds) => {
+      let next = grounds;
+      if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+        band.elements += 1;
+        const tokens = classesOf(ts.isJsxElement(node) ? node.openingElement : node);
+        const own = groundOf(tokens);
+        const ground = own ?? grounds[0] ?? null;
+        if (ground === BAND_GROUND) band.onBand += 1;
+        const ink = tokens.map((t) => /^text-white\/(\d+)$/.exec(t)).find(Boolean);
+        if (ink) {
+          band.translucentWhite += 1;
+          if (ground === BAND_GROUND && Number(ink[1]) < BAND_INK_FLOOR) {
+            band.hits += 1;
+            const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
+            (result.hits[rel(file)] ??= []).push({
+              line,
+              kind: "band",
+              why: `${ink[0]} on the band (bg-teal-band): /85 is under 4.5 for 2 of 55 villages and /80 for 7; full white clears 5.36:1`,
+              text: src.split("\n")[line - 1].trim().slice(0, 140),
+            });
+          }
+        }
+        if (own) next = [own, ...grounds];
+      }
+      ts.forEachChild(node, (child) => visit(child, next));
+    };
+    visit(sf, []);
+    result.hits[rel(file)]?.sort((a, b) => a.line - b.line);
+  }
+  return band;
 }
 
 const files = walk(SCAN_ROOT).sort();
@@ -457,14 +576,17 @@ if (process.argv.includes("--update-baseline")) {
 }
 
 const pairing = scanPairings(files);
+const band = scanBandInk(files, pairing);
 const pairingProblems = [];
 for (const [file, hits] of Object.entries(pairing.hits)) {
   const held = PAIRING_HELD[file] ?? 0;
   if (hits.length > held) {
-    const rest = hits.filter((h) => h.kind === "rest").length;
+    const n = (kind) => hits.filter((h) => h.kind === kind).length;
     pairingProblems.push({
       file,
-      reason: `${rest} white-on-soft pairing(s) at rest and ${hits.length - rest} under hover, focus or active, ${held} held for a ruling`,
+      reason:
+        `${n("rest")} white-on-soft or mid-tone pairing(s) at rest, ${n("state")} under hover, focus or active, ` +
+        `${n("band")} translucent white on the band; ${held} held for a ruling`,
       hits,
     });
   }
@@ -497,6 +619,15 @@ if (pairing.stateGrounds === 0 || pairing.hoverConvention === 0) {
     hits: [],
   });
 }
+if (band.onBand === 0 || band.translucentWhite === 0) {
+  pairingProblems.push({
+    file: "client/src",
+    reason:
+      `the band scan walked ${band.elements} element(s), found ${band.onBand} on ${BAND_GROUND} and ${band.translucentWhite} ` +
+      `translucent white ink(s). The tree walk cannot see a known positive, so its zero proves nothing`,
+    hits: [],
+  });
+}
 
 if (process.argv.includes("--json")) {
   console.log(JSON.stringify({
@@ -513,6 +644,10 @@ if (process.argv.includes("--json")) {
       hoverConventionSeen: pairing.hoverConvention,
       foundAtRest: pairing.restHits,
       foundUnderState: pairing.stateHits,
+      bandElementsWalked: band.elements,
+      bandElementsOnBand: band.onBand,
+      bandTranslucentWhiteInks: band.translucentWhite,
+      foundOnBand: band.hits,
       found: Object.fromEntries(Object.entries(pairing.hits).map(([f, h]) => [f, h.length])),
       held: PAIRING_HELD,
     },
@@ -557,7 +692,8 @@ if (pairingProblems.length) {
   console.error("Put white text on bg-teal-deep, the primary-button convention: --tone-brand is derived so white clears");
   console.error("4.5:1 on it for every seed, in both colour schemes.");
   console.error("Under hover, focus or active, move it to hover:bg-teal-deep-dark: --tone-brand-hover is a visible step from the");
-  console.error("brand that white clears at 6.33:1 or better for every seed. Not the soft or mid tone, and not a fade.\n");
+  console.error("brand that white clears at 6.33:1 or better for every seed. Not the soft or mid tone, and not a fade.");
+  console.error("On the band, paragraph ink is full text-white: the band is derived for full white and a fade below /90 fails.\n");
   for (const p of pairingProblems) {
     console.error(`  ${p.file}: ${p.reason}`);
     for (const h of p.hits.slice(0, 8)) console.error(`      ${p.file}:${h.line}: ${h.why}\n          ${h.text}`);
@@ -574,11 +710,16 @@ console.log(
 const heldList = Object.entries(PAIRING_HELD).map(([f, n]) => `${f}: ${n}`).join(", ") || "none";
 console.log(
   `Soft-ground pairing check passed. Read ${pairing.files} .tsx file(s) (${pairing.testsSkipped} test file(s) skipped) ` +
-  `and ${pairing.lists} class list(s). White on bg-teal/bg-ocean: 0 unheld, held for a ruling: ${heldList}. ` +
+  `and ${pairing.lists} class list(s). White on the soft or mid tone at rest: ${pairing.restHits} found. ` +
   `Known positive, bg-teal-deep with text-white: seen ${pairing.convention} time(s).`,
 );
 console.log(
   `State pairing check passed. Read ${pairing.stateGrounds} hover, focus or active ground(s), ` +
-  `${pairing.whiteStateLists} of them in class lists with white ink. White onto the soft or mid tone, a translucent brand, ` +
-  `or a fading brand button: 0 unheld. Known positive, white text hovering to ${HOVER_PARTNER}: seen ${pairing.hoverConvention} time(s).`,
+  `${pairing.whiteStateLists} of them in class lists with white ink. White onto the soft or mid tone, or a translucent or ` +
+  `fading brand or gold ground: ${pairing.stateHits} found. Known positive, white text hovering to ${HOVER_PARTNER}: seen ${pairing.hoverConvention} time(s).`,
 );
+console.log(
+  `Band ink check passed. Walked ${band.elements} JSX element(s), ${band.onBand} of them on ${BAND_GROUND}, and ` +
+  `${band.translucentWhite} translucent white ink(s). Below /${BAND_INK_FLOOR} on the band: ${band.hits} found.`,
+);
+console.log(`Every refusal found is held for a ruling, exactly: ${heldList}.`);
