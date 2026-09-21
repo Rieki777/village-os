@@ -235,8 +235,16 @@ export default function Training() {
                         <Icon className="w-6 h-6" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-3 mb-1.5">
-                          <h3 className={`font-display text-lg font-semibold ${isDone ? "text-stone-500" : "text-teal-deep"}`}>
+                        {/*
+                          The title and its badges share a row that may WRAP. At 390 they fit
+                          side by side; at 375, 360 and 320 the badges ("Required" plus the
+                          module type) held their width as `shrink-0` in a row that could not
+                          break, and pushed the page 9, 24 and 64 pixels wider than the phone.
+                          Now they drop under the title as one group instead, and the title
+                          itself may shrink and break rather than hold the row open.
+                        */}
+                        <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5 mb-1.5">
+                          <h3 className={`min-w-0 break-words font-display text-lg font-semibold ${isDone ? "text-stone-500" : "text-teal-deep"}`}>
                             {m.title}
                           </h3>
                           <div className="shrink-0 flex items-center gap-1.5">
