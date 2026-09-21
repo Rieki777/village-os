@@ -33,6 +33,7 @@ import FilterChips from "@/components/power/FilterChips";
 import HolderCard from "@/components/power/HolderCard";
 import CircleCard from "@/components/power/CircleCard";
 import { phoneDepthFor } from "@/components/power/phoneDepth";
+import { phoneKeysFor } from "@/components/power/phoneKeys";
 import ShapePicker from "@/components/power/ShapePicker";
 import CurrencyPicker from "@/components/power/CurrencyPicker";
 import DecideLens, { DecideKey } from "@/components/power/DecideLens";
@@ -247,6 +248,22 @@ export default function VillageMap() {
    */
   const phoneMaxDepth = useMemo(() => phoneDepthFor(layout?.circles ?? [], focusId), [layout, focusId]);
 
+  /*
+   * THE KEY UNDER THE PHONE MAP (2026-09-21). A phone circle is too small for
+   * its name, so the circles a reader is choosing between carry a number,
+   * counted clockwise from twelve o'clock (`phoneKeysFor`), and a list under
+   * the map names every number. The first tap on a numbered circle names it on
+   * the map; the second steps in. Stepping anywhere clears the name.
+   */
+  const [namedId, setNamedId] = useState<string | null>(null);
+  useEffect(() => setNamedId(null), [focusId]);
+  const phoneKeys = useMemo(() => {
+    if (!layout || !data) return [];
+    const parent = new Map(data.circles.map((c) => [c.id, (c.parentCircleId as string | null) ?? null]));
+    return phoneKeysFor(layout.circles, (id) => parent.get(id) ?? null, focusId, phoneMaxDepth);
+  }, [layout, data, focusId, phoneMaxDepth]);
+  const phoneKeyMap = useMemo(() => new Map(phoneKeys.map((k) => [k.id, k.key])), [phoneKeys]);
+
   const mayDeclareVillage = !!data?.viewer.mayDeclare?.includes("village");
 
   // Both canvases draw the same lens nodes through PowerMap's `lenses`
@@ -387,8 +404,42 @@ export default function VillageMap() {
                       // 358px the floor made every label legible and then
                       // piled fifteen of them on top of each other.
                       compact
+                      keys={phoneKeyMap}
+                      namedId={namedId}
+                      onName={setNamedId}
                     />
                   </div>
+                  {/* THE KEY. Every number on the map, named, in the order it
+                      is counted round the ring. A row steps into its circle;
+                      the one a tap has named on the map is marked here too. */}
+                  {phoneKeys.length > 0 && (
+                    <ol aria-label="The circles on the map, by number" className="grid grid-cols-2 gap-2 px-4 mt-3">
+                      {phoneKeys.map(({ id, key }) => {
+                        const circle = data.circles.find((o) => o.id === id);
+                        const named = namedId === id;
+                        return (
+                          <li key={id}>
+                            <button
+                              type="button"
+                              onClick={() => focusTo(id)}
+                              aria-current={named ? "true" : undefined}
+                              className={`w-full min-h-[44px] flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-sm text-foreground ${
+                                named ? "border-foreground/60 bg-muted" : "border-border bg-card"
+                              }`}
+                            >
+                              <span
+                                className="shrink-0 w-6 h-6 rounded-full border-2 grid place-items-center text-xs font-semibold"
+                                style={{ borderColor: cssColourForCircle({ id, color: circle?.color ?? null }) }}
+                              >
+                                {key}
+                              </span>
+                              <span className="min-w-0 text-[13px] leading-snug hyphens-auto break-words">{circle?.name ?? id}</span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  )}
                                 </div>
               )}
 

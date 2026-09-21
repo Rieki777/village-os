@@ -83,6 +83,9 @@ export default function PowerMap({
   svgRef,
   maxDepth,
   compact,
+  keys,
+  namedId,
+  onName,
   arrangeHint,
 }: {
   data: PowerData;
@@ -128,6 +131,21 @@ export default function PowerMap({
    * words, all of them readable, beats fifteen words in a heap.
    */
   compact?: boolean;
+  /**
+   * THE KEY A PHONE READS THE MAP BY (2026-09-21): circle id to the number it
+   * carries. Drawn only on a compact stage, where a circle is too small for its
+   * name. The numbers come from `phoneKeysFor`, and a list under the map names
+   * every one of them.
+   */
+  keys?: ReadonlyMap<string, number>;
+  /** The circle a tap has asked to see the name of, on a compact stage. */
+  namedId?: string | null;
+  /**
+   * The first tap on a numbered circle NAMES it instead of stepping inside,
+   * and a second tap on the same circle steps in. Omitted, a tap steps in at
+   * once, which is every stage except the phone.
+   */
+  onName?: (id: string | null) => void;
 }) {
   const byId = useMemo(() => new Map(data.circles.map((c) => [c.id, c])), [data.circles]);
   const posById = useMemo(() => new Map(layout.circles.map((p) => [p.id, p])), [layout]);
@@ -557,11 +575,18 @@ export default function PowerMap({
                 data-circle-id={pos.id}
                 role="button"
                 tabIndex={interactive ? 0 : -1}
-                aria-label={`${c?.name ?? pos.id}${forming ? ", still forming" : ""}${
+                aria-label={`${keys?.get(pos.id) ? `${keys.get(pos.id)}, ` : ""}${c?.name ?? pos.id}${forming ? ", still forming" : ""}${
                   isFocus ? ". You are inside it; press Enter or Escape to go out one level" : ". Press Enter to go inside"
                 }${arrangeHint && interactive ? `, or ${arrangeHint}` : ""}`}
                 onClick={(e: ReactMouseEvent) => {
                   e.stopPropagation();
+                  // ON A PHONE THE FIRST TAP NAMES A NUMBERED CIRCLE, and the
+                  // second tap on it steps in. Before this, the only way to learn
+                  // a small circle's name was to walk into it and back out.
+                  if (compact && onName && keys?.has(pos.id) && namedId !== pos.id && !isFocus) {
+                    onName(pos.id);
+                    return;
+                  }
                   // Tapping the FOCUSED ring goes out one level (spec 1).
                   onFocus(isFocus ? parentOf(pos.id) : pos.id);
                 }}
@@ -595,6 +620,28 @@ export default function PowerMap({
                 strokeWidth={3}
                 pointerEvents="none"
               />
+
+              {/* THE NUMBER THE KEY UNDER THE MAP NAMES. Sized in SCREEN
+                  pixels through pxPerWorld, like every label here, so it reads
+                  at 13px whatever the camera is doing, with the page's ground
+                  as a halo so it holds on any circle's tone. */}
+              {compact && keys?.has(pos.id) && (
+                <text
+                  x={pos.x}
+                  y={pos.y}
+                  dy="0.35em"
+                  textAnchor="middle"
+                  aria-hidden="true"
+                  className="fill-foreground font-semibold pointer-events-none"
+                  fontSize={pxPerWorld > 0 ? 13 / pxPerWorld : 12}
+                  paintOrder="stroke"
+                  stroke="var(--background)"
+                  strokeWidth={pxPerWorld > 0 ? 3 / pxPerWorld : 3}
+                  strokeLinejoin="round"
+                >
+                  {keys.get(pos.id)}
+                </text>
+              )}
 
               {/* On a compact stage a promoted label is dropped rather
                   than piled on its neighbours. See `compact` above. */}
@@ -892,6 +939,35 @@ export default function PowerMap({
           />
         )}
 
+        {/* THE NAME A TAP ASKED FOR. Drawn after every circle so no later
+            circle paints over it, and above the disc on the page's own
+            ground, because a phone circle is too small to hold it. */}
+        {compact && namedId && posById.get(namedId) && (() => {
+          const at = posById.get(namedId)!;
+          const name = byId.get(namedId)?.name ?? namedId;
+          // A circle big enough to carry its own name already shows it, and a
+          // second copy stacked above the first reads as a stutter, so the tap
+          // label stands down wherever the circle's own label is drawn.
+          const own = fitLabelToScreen(wrapLabel(name, at.r, at.depth), at.r, pxPerWorld);
+          if (showLabel(namedId) && !own.outside) return null;
+          const unit = pxPerWorld > 0 ? 1 / pxPerWorld : 1;
+          return (
+            <text
+              x={at.x}
+              y={at.y - at.r - 8 * unit}
+              textAnchor="middle"
+              data-named-circle={namedId}
+              className="fill-foreground font-semibold pointer-events-none"
+              fontSize={15 * unit}
+              paintOrder="stroke"
+              stroke="var(--background)"
+              strokeWidth={4 * unit}
+              strokeLinejoin="round"
+            >
+              {name}
+            </text>
+          );
+        })()}
         {lenses}
       </svg>
 
