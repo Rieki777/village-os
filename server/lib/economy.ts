@@ -3589,11 +3589,22 @@ export async function publicRules(pool: Pool): Promise<Array<{ trigger: string; 
  * figure derived from anything else is answering a different question from the
  * one the ledger enforces.
  *
- * AN EMPTY RESULT IS A REAL ANSWER AND NOT AN ERROR, and callers must tell it
- * from a zero. A database with no faucet row has not been migrated; it has not
- * issued nothing. Both callers below return an empty supply rather than
- * building `IN ()`, which is a MySQL syntax error and would take the public
- * feed down with a message about SQL.
+ * AN EMPTY RESULT IS A REAL ANSWER AND NOT AN ERROR. Both callers below turn
+ * it into an empty supply rather than building `IN ()`, which is a MySQL
+ * syntax error and would take the public feed down with a message about SQL.
+ * NEITHER CALLER TELLS IT FROM A VILLAGE THAT HAS ISSUED NOTHING, and both say
+ * so where they return. This header used to instruct callers to draw that
+ * distinction and no caller ever did, which is a promise the code was not
+ * keeping to whoever read it next.
+ *
+ * THE STATE IS ALSO NARROWER THAN "UNMIGRATED" SOUNDS, measured against
+ * `drizzle/`: `0009_ledger_accounts_and_transfers.sql` CREATES
+ * `ledger_accounts` and, in the same file, inserts `sys:gratitude-pool` and
+ * `sys:cycle-pool` with `faucet = 1`. A database that has not run 0009 has no
+ * table, so this read THROWS rather than returning empty. An empty list is
+ * therefore a database that DID migrate and then had the flag cleared off
+ * every account, which is the state `economyFaucetSet.test.ts` constructs by
+ * hand and not one a village boots into.
  */
 export async function faucetAccounts(pool: Pool): Promise<string[]> {
   const rows = await faucetAccountRows(pool);
@@ -3638,9 +3649,19 @@ export async function publicSupply(pool: Pool): Promise<{
   // supply feed reported four tokens and silently omitted the one members
   // actually spend. The flag cannot forget a faucet the way a list can.
   const faucets = await faucetAccounts(pool);
-  // No faucet row at all is an unmigrated database, not a village that has
-  // issued nothing, and the two must not render the same. Returning here also
-  // keeps `IN ()` off the wire, which MySQL refuses to parse.
+  // NO FAUCET ROW RENDERS EXACTLY LIKE A VILLAGE THAT HAS ISSUED NOTHING, and
+  // this feed does not tell a reader which one it is looking at. That is the
+  // same limitation `mintView` states over its own empty breakdown, said here
+  // rather than fixed with a field: nothing reads this endpoint that needs the
+  // difference, and `faucetAccounts` says why the empty case is a cleared flag
+  // on a migrated database rather than the unmigrated boot it sounds like. A
+  // public, unauthenticated feed whose whole stated character is publishing
+  // less than it knows is the wrong place to start publishing schema health.
+  // `economyFaucetSet.test.ts` pins both renderings side by side so the next
+  // reader meets the conflation as a tested fact instead of a surprise.
+  //
+  // Returning here also keeps `IN ()` off the wire, which MySQL refuses to
+  // parse.
   if (faucets.length === 0) return { cycleKey: key, tokens: [] };
   const [rows] = await pool.query<RowDataPacket[]>(
     "SELECT b.`token_type` AS slug, t.`name`, t.`decimals`, SUM(-b.`balance`) AS issued " +
