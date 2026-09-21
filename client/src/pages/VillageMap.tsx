@@ -38,7 +38,9 @@ import { phoneDepthFor } from "@/components/power/phoneDepth";
 import { phoneKeysFor } from "@/components/power/phoneKeys";
 import ShapePicker from "@/components/power/ShapePicker";
 import CurrencyPicker from "@/components/power/CurrencyPicker";
-import DecideLens, { DecideKey } from "@/components/power/DecideLens";
+import DecideLens from "@/components/power/DecideLens";
+import LensRow from "@/components/power/LensRow";
+import MapToolStrip from "@/components/power/MapToolStrip";
 // Lane L3: the resources lens rides PowerMap's `lenses` seam and the
 // layout's pad argument; these two imports and the wiring below are its
 // whole footprint in this file.
@@ -390,6 +392,19 @@ export default function VillageMap() {
                   nothing. */}
               {!listMode && (
                 <div className="sm:hidden -mx-4 mb-4">
+                  <MapToolStrip
+                    mode={mode}
+                    onMode={setMode}
+                    lensOn={lensOn}
+                    onLens={() => setLensOn((v) => !v)}
+                    resourcesModule={!!resourcesModule}
+                    resourcesOn={resourcesOn}
+                    onResources={() => setResourcesOn((v) => !v)}
+                    linesOn={linesOn}
+                    onLines={() => setLinesOn((v) => !v)}
+                  >
+                    {lensOn && <LensRow touch data={data} domain={lensDomain} onDomain={setLensDomain} />}
+                  </MapToolStrip>
                   <div className="relative aspect-square block" data-power-map-box>
                     <PowerMap
                       data={shown ?? data}
@@ -479,7 +494,8 @@ export default function VillageMap() {
                   }}
                 />
                 <div className="flex items-center gap-1.5 flex-wrap" data-power-actions>
-                  <div role="group" aria-label="Now or Vision" className="inline-flex rounded-full border border-border overflow-hidden">
+                  {/* The four chips that change the picture are `hidden sm:` here: a phone gets them in MapToolStrip, over the map. */}
+                  <div role="group" aria-label="Now or Vision" className="hidden sm:inline-flex rounded-full border border-border overflow-hidden">
                     <button
                       type="button"
                       aria-pressed={mode === "now"}
@@ -501,7 +517,7 @@ export default function VillageMap() {
                     type="button"
                     aria-pressed={lensOn}
                     onClick={() => setLensOn((v) => !v)}
-                    className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border ${
+                    className={`hidden sm:inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border ${
                       lensOn ? "bg-teal-deep text-white border-teal-deep" : "bg-card text-muted-foreground border-border"
                     }`}
                   >
@@ -531,7 +547,7 @@ export default function VillageMap() {
                       aria-pressed={resourcesOn}
                       onClick={() => setResourcesOn((v) => !v)}
                       data-resources-toggle
-                      className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border ${
+                      className={`hidden sm:inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border ${
                         resourcesOn ? "bg-teal-deep text-white border-teal-deep" : "bg-card text-muted-foreground border-border"
                       }`}
                     >
@@ -542,7 +558,7 @@ export default function VillageMap() {
                     type="button"
                     aria-pressed={linesOn}
                     onClick={() => setLinesOn((v) => !v)}
-                    className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border ${
+                    className={`hidden sm:inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border ${
                       linesOn ? "bg-teal-deep text-white border-teal-deep" : "bg-card text-muted-foreground border-border"
                     }`}
                   >
@@ -586,32 +602,8 @@ export default function VillageMap() {
                   signedIn={!!viewerUserId}
                   personName={personName}
                 />
-                {lensOn && (
-                  <div className="flex items-center gap-2 flex-wrap" data-power-lens-row>
-                    <div role="group" aria-label="Which domain" className="flex items-center gap-1">
-                      {[null, ...data.power.glossary.domains.map((d) => d.id)].map((d) => {
-                        const def = d ? data.power.glossary.domains.find((x) => x.id === d) : null;
-                        return (
-                          <button
-                            key={d ?? "overall"}
-                            type="button"
-                            aria-pressed={lensDomain === d}
-                            title={def?.gloss}
-                            onClick={() => setLensDomain(d)}
-                            className={`text-xs px-2 py-1 rounded-full border ${
-                              lensDomain === d
-                                ? "bg-teal-deep text-white border-teal-deep"
-                                : "bg-card text-muted-foreground border-border"
-                            }`}
-                          >
-                            {def?.label ?? "Overall"}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <DecideKey circles={data.circles} power={data.power} domain={lensDomain} />
-                  </div>
-                )}
+                {/* On a phone the lens's row rides in the tool strip over the map. */}
+                {lensOn && <LensRow className="hidden sm:flex" data={data} domain={lensDomain} onDomain={setLensDomain} />}
                 {resourcesOn && resources && <ResourcesKey resources={resources} />}
               </div>
 
