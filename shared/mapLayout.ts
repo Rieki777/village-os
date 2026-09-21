@@ -111,6 +111,27 @@ export function radiusForLabel(name: string): number {
   return innerR + ROLE_RING_INSET + ROLE_DOT_R;
 }
 
+/**
+ * WHERE SEAT j OF n SITS ON ITS CIRCLE'S RING.
+ *
+ * Every ring used to start at twelve o'clock, which is where a circle that
+ * holds others draws its NAME, just inside its rim: its first seat was drawn on
+ * its name. Measured on a village nested under one coordinating circle
+ * (2026-09-21): a seat sat in the middle of "General Coordinating Circle" and of
+ * "Development Circle", the first two names a reader meets, on a desktop and on
+ * a phone. Such a circle starts half a step round, which leaves the top to the
+ * name. Every other circle keeps its seats where they were.
+ *
+ * Tried and dropped: turning a small circle's four seats onto the diagonals,
+ * away from the ends of its centred name. Measured on the same village it moved
+ * which seats touched the name and cleared none, because a name fitted to a
+ * zoomed-out screen is wider than the seat ring it was sized for.
+ */
+export function seatAngle(j: number, n: number, holdsCircles: boolean): number {
+  const step = (2 * Math.PI) / Math.max(1, n);
+  return -Math.PI / 2 + step * j + (holdsCircles ? step / 2 : 0);
+}
+
 /** The radius a circle needs for its own contents: name, role ring, quests. */
 function ownRadius(c: NestedInput): number {
   const base = MIN_CIRCLE_R + CIRCLE_R_K * Math.log(1 + c.memberCount);
@@ -250,7 +271,7 @@ export function layoutNestedMap(
     const ringR = node.r - ROLE_RING_INSET;
     const roles = [...c.roles].sort((a, b) => Number(a.vacant) - Number(b.vacant) || a.id.localeCompare(b.id));
     const rolePositions = roles.map((role, j) => {
-      const ra = -Math.PI / 2 + (2 * Math.PI * j) / Math.max(1, roles.length);
+      const ra = seatAngle(j, roles.length, node.children.length > 0);
       return { id: role.id, vacant: role.vacant, x: x + ringR * Math.cos(ra), y: y + ringR * Math.sin(ra) };
     });
     const shownQuests = Math.min(c.questCount, QUEST_DISPLAY_CAP);
@@ -422,12 +443,20 @@ function sizedRoots(inputs: NestedInput[]): PackedNode[] {
 
 /** The per-circle furniture layoutNestedMap's `place` draws: seats on the
  *  inner ring, quest dots on the bottom arc. Same numbers, same sorting. */
-function furnish(node: PackedNode, x: number, y: number, depth: number, out: NestedCircle[]): void {
+function furnish(
+  node: PackedNode,
+  x: number,
+  y: number,
+  depth: number,
+  out: NestedCircle[],
+  /** Whether this circle holds others, for a shape that does not nest them inside it (the pyramid). */
+  holdsCircles: boolean = node.children.length > 0,
+): void {
   const c = node.input;
   const ringR = node.r - ROLE_RING_INSET;
   const roles = [...c.roles].sort((a, b) => Number(a.vacant) - Number(b.vacant) || a.id.localeCompare(b.id));
   const rolePositions = roles.map((role, j) => {
-    const ra = -Math.PI / 2 + (2 * Math.PI * j) / Math.max(1, roles.length);
+    const ra = seatAngle(j, roles.length, holdsCircles);
     return { id: role.id, vacant: role.vacant, x: x + ringR * Math.cos(ra), y: y + ringR * Math.sin(ra) };
   });
   const shownQuests = Math.min(c.questCount, QUEST_DISPLAY_CAP);
@@ -557,6 +586,9 @@ function layoutPyramid(
   // it. The renderer draws the connecting lines from `parentId`.
   const sorted = [...inputs].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
   const byId = new Map(sorted.map((c) => [c.id, c]));
+  // A parent here holds no circle INSIDE it, but the map still draws its name
+  // at its top the way it does for one that does, so its seats clear it too.
+  const parents = new Set(sorted.map((c) => c.parentId).filter((id): id is string => !!id && byId.has(id)));
   const rowOf = (c: NestedInput): number => {
     let depth = 0;
     let cur = c;
@@ -598,7 +630,7 @@ function layoutPyramid(
     let x = (width - rowWidth(nodes)) / 2 + PACK_GAP;
     for (const node of nodes) {
       const cxNode = x + PACK_GAP / 2 + node.r;
-      furnish(node, cxNode, y, rowKeys[rowIdx], out);
+      furnish(node, cxNode, y, rowKeys[rowIdx], out, parents.has(node.input.id));
       x += 2 * node.r + PACK_GAP;
     }
     y += maxR + ROW_GAP;
