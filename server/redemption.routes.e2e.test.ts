@@ -26,6 +26,7 @@ import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
+import { defaultDisplayCurrency } from "../shared/money";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -573,6 +574,103 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
     expect(String(mine.json?.money?.processText)).toContain("<b>bold</b>");
     expect(String(mine.json?.money?.processText)).toContain("\n");
     await setVar("redemption.process_text", "");
+  });
+
+  /*
+   * WHICH CURRENCY A REDEMPTION IS COUNTED IN, AND WHERE THAT IS READ.
+   *
+   * A village that never set a currency in Make This Yours has a BLANK
+   * `fiatCurrency` in its stored brand document. The platform default in
+   * shared/gameConfig.ts fills it on every read that goes through the merged
+   * config, and every price on the site is quoted in that merged value.
+   * Redemption read the stored document instead, found it blank and fell back
+   * to a CHF of its own, so one village quoted its prices in one currency and
+   * its payouts in another.
+   *
+   * THE SITE'S ANSWER IS READ THE WAY THE SITE READS IT, never typed here: the
+   * merged project from /api/game/config through `defaultDisplayCurrency`,
+   * which is what CurrencyPicker does. A literal "CRC" in this file would pass
+   * only for as long as the platform default happened to agree with it.
+   */
+  const siteCurrency = async (): Promise<string> => {
+    const cfg = await call("GET", "/api/game/config", undefined, null);
+    expect(cfg.status, cfg.text.slice(0, 200)).toBe(200);
+    return defaultDisplayCurrency(cfg.json?.project ?? {});
+  };
+  const storedCurrency = async (): Promise<string> => {
+    const b = await call("GET", "/api/admin/brand", undefined, founderToken);
+    expect(b.status, b.text.slice(0, 200)).toBe(200);
+    return String(b.json?.brand?.project?.fiatCurrency ?? "");
+  };
+  const setStoredCurrency = async (code: string) => {
+    const r = await call("PUT", "/api/admin/brand", { project: { fiatCurrency: code } }, founderToken);
+    expect(r.status, r.text.slice(0, 200)).toBe(200);
+  };
+
+  it("counts a redemption in the currency the site displays when the village never set one", async () => {
+    // The known positive, checked before anything is measured: nothing is
+    // stored, and the site shows a currency the old private fallback is not.
+    // Were the platform default ever CHF, this case could not tell the defect
+    // from the fix, so it says that rather than passing.
+    expect(await storedCurrency(), "this village must never have set a currency").toBe("");
+    const site = await siteCurrency();
+    expect(site, "the site must display some currency").toMatch(/^[A-Z]{3}$/);
+    expect(site, "the platform default must differ from CHF for this case to measure anything").not.toBe("CHF");
+
+    // What the member's form offers, and what each token is quoted in.
+    const mine = await call("GET", "/api/redemptions", undefined, wrenToken);
+    expect(mine.status, mine.text.slice(0, 300)).toBe(200);
+    expect(mine.json?.money?.currencies).toEqual([site]);
+    expect(mine.json?.money?.currency).toBe(site);
+    const credits = (mine.json?.tokens ?? []).find((t: any) => t.slug === CREDITS);
+    expect(credits?.currency).toBe(site);
+
+    // What the payout is computed in and snapshotted onto the row. The rate is
+    // set by hand so that the request carries figures to read a currency off.
+    await setVar("redemption.rate_source", "set");
+    await setVar("redemption.rate_per_token", "2");
+    await mintTo(wrenId, 20);
+    const asked = await call("POST", "/api/redemptions", { token: CREDITS, amount: 20, askedFor: "a pump" }, wrenToken);
+    expect(asked.status, asked.text.slice(0, 300)).toBe(201);
+    expect(asked.json?.redemption?.money, "a priced redemption carries its money").toBeTruthy();
+    expect(asked.json.redemption.money.currency).toBe(site);
+    expect((await call("POST", `/api/redemptions/${asked.json.redemption.id}/withdraw`, undefined, wrenToken)).status).toBe(200);
+
+    await setVar("redemption.rate_per_token", "0");
+    await setVar("redemption.rate_source", "exchange");
+  }, 300_000);
+
+  it("counts a redemption in the currency a founder set in Make This Yours", async () => {
+    // The positive control: a stored choice wins, and it is neither the
+    // platform default nor CHF, so reading either of those would show here.
+    await setStoredCurrency("EUR");
+    try {
+      expect(await siteCurrency()).toBe("EUR");
+      const mine = await call("GET", "/api/redemptions", undefined, wrenToken);
+      expect(mine.status, mine.text.slice(0, 300)).toBe(200);
+      expect(mine.json?.money?.currencies).toEqual(["EUR"]);
+      expect(mine.json?.money?.currency).toBe("EUR");
+    } finally {
+      await setStoredCurrency("");
+    }
+    expect(await storedCurrency(), "the village goes back to never having set one").toBe("");
+  });
+
+  it("offers the village's own list of currencies when it set one, whatever the project counts in", async () => {
+    await setVar("redemption.currencies", "USD,EUR");
+    try {
+      const mine = await call("GET", "/api/redemptions", undefined, wrenToken);
+      expect(mine.status, mine.text.slice(0, 300)).toBe(200);
+      expect(mine.json?.money?.currencies).toEqual(["USD", "EUR"]);
+      expect(mine.json?.money?.currency).toBe("USD");
+      // The member's pick is honoured when it is on the list, and not otherwise.
+      const eur = await call("GET", "/api/redemptions?currency=EUR", undefined, wrenToken);
+      expect(eur.json?.money?.currency).toBe("EUR");
+      const offList = await call("GET", "/api/redemptions?currency=JPY", undefined, wrenToken);
+      expect(offList.json?.money?.currency).toBe("USD");
+    } finally {
+      await setVar("redemption.currencies", "");
+    }
   });
 
   /*

@@ -115,7 +115,7 @@ import { numberVar, stringVar } from "../lib/variables";
 
 type Deps = Pick<
   AppDeps,
-  "authedUser" | "brandRepo" | "getPool" | "guardCapability" | "members" | "notify" | "overLimit"
+  "authedUser" | "getPool" | "guardCapability" | "members" | "notify" | "overLimit" | "projectCurrency"
 > & {
   /**
    * Put a redemption to the village, when nobody holds the key.
@@ -213,7 +213,7 @@ function forReading(row: {
 }
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, brandRepo, getPool, guardCapability, members, notify, openRedemptionBallot, overLimit, redemptionKeyHolders } = deps;
+  const { authedUser, getPool, guardCapability, members, notify, openRedemptionBallot, overLimit, projectCurrency, redemptionKeyHolders } = deps;
 
   /**
    * WHO DECIDES, derived at the moment of asking (Rye, 2026-09-15).
@@ -250,8 +250,11 @@ export function register(app: Express, deps: Deps): void {
    */
   async function moneyContext(slug: string, wanted?: unknown) {
     const pool = getPool();
-    const project = ((brandRepo.get() as any)?.project ?? {}) as { fiatCurrency?: string };
-    const currencies = redemptionCurrencies(String(project.fiatCurrency ?? ""));
+    // THE MERGED CURRENCY, never the stored brand document's. That document
+    // holds only what a founder typed in Make This Yours, so a village that
+    // never typed one read blank here and was quoted a private fallback while
+    // every price on the site was in the platform default.
+    const currencies = redemptionCurrencies(projectCurrency());
     const asked = String(wanted ?? "").trim().toUpperCase();
     const currency = currencies.includes(asked) ? asked : currencies[0];
     const source = redemptionRateSource();

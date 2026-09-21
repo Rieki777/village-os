@@ -457,4 +457,17 @@ export interface AppDeps {
 
   /** What this village calls itself, for an email subject line. */
   projectName(): string;
+
+  /**
+   * What this village counts its money in, MERGED: the founder's Make This
+   * Yours value over the platform default. It is `mergedConfig().project
+   * .fiatCurrency`, the same value `/api/game/config` serves every page.
+   *
+   * NOT `brandRepo.get().project.fiatCurrency`. The stored document holds only
+   * what a founder chose, so a village that never chose reads blank there
+   * while every price on the site is quoted in the platform default. It is
+   * blank here only when the platform default is blank too, and then
+   * `defaultDisplayCurrency` (shared/money.ts) gives the site's answer.
+   */
+  projectCurrency(): string;
 }

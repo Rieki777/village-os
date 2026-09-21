@@ -18926,7 +18926,7 @@ ${inner}
     const out = await openRedemptionBallot(getPool(), setup, redemptionId);
     return out.ok ? { ok: true } : { ok: false, error: out.error };
   };
-  registerRedemptionRoutes(app, { authedUser, brandRepo, getPool, guardCapability, members, notify, openRedemptionBallot: (id: string) => openRedemptionVote(id), overLimit, redemptionKeyHolders });
+  registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify, openRedemptionBallot: (id: string) => openRedemptionVote(id), overLimit, projectCurrency: () => mergedConfig().project.fiatCurrency, redemptionKeyHolders });
 
   // â”€â”€ Project Settings (village dues + other editable numbers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
