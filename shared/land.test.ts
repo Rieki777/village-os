@@ -26,6 +26,8 @@ import {
   validateSpan,
   zoomFor,
 } from "./land";
+import { boundsForAspect, MAP_WORLD_ASPECT } from "./land";
+import { parcelSlug, isParcelSlug, orderParcels, DEFAULT_PARCEL_SLUG } from "./land";
 
 /** Dominicalito, Costa Rica: roughly where the first village sits. */
 const CR = { lat: 9.2345, lon: -83.8412 };
@@ -366,5 +368,107 @@ describe("swapSuspicion on its own", () => {
 
   it("offers no alternative when swapping would not help either", () => {
     expect(swapSuspicion(200, 300).swapped).toBeNull();
+  });
+});
+describe("a parcel's name becomes its address", () => {
+  it("makes a slug a founder would recognise from the name they typed", () => {
+    expect(parcelSlug("North field")).toBe("north-field");
+    expect(parcelSlug("The Ridge")).toBe("the-ridge");
+  });
+
+  it("keeps accented letters as letters instead of dropping them to dashes", () => {
+    // "Rio Claro", not "r-o-claro": a Costa Rican parcel must not lose its name.
+    expect(parcelSlug("Rio Claro")).toBe("rio-claro");
+    expect(parcelSlug("Rio Claro".normalize("NFD"))).toBe("rio-claro");
+  });
+
+  it("collapses punctuation and never leaves a leading or trailing dash", () => {
+    expect(parcelSlug("  --The  Ridge!! (upper) -- ")).toBe("the-ridge-upper");
+  });
+
+  it("returns empty for a label with nothing usable in it, rather than inventing a name", () => {
+    // A generated fallback would put a name nobody chose into a URL forever.
+    expect(parcelSlug("!!!")).toBe("");
+    expect(parcelSlug("")).toBe("");
+  });
+
+  it("never emits a slug its own validator would refuse", () => {
+    for (const label of ["North field", "Rio Claro", "a", "The  --  Ridge", "x".repeat(200), "9 acres"]) {
+      const slug = parcelSlug(label);
+      if (slug) expect(isParcelSlug(slug)).toBe(true);
+    }
+  });
+
+  it("refuses what a founder or a different deriver might send by hand", () => {
+    for (const bad of ["North Field", "north field", "-north", "north-", "", "a".repeat(65), "nórth"]) {
+      expect(isParcelSlug(bad)).toBe(false);
+    }
+  });
+
+  it("accepts the slug every village that predates parcels already has", () => {
+    expect(isParcelSlug(DEFAULT_PARCEL_SLUG)).toBe(true);
+  });
+});
+
+describe("which parcel opens", () => {
+  const p = (slug: string, sortOrder: number, createdAt: string) => ({ slug, sortOrder, createdAt });
+
+  it("orders by sortOrder", () => {
+    expect(orderParcels([p("b", 2, "x"), p("a", 1, "x")]).map((r) => r.slug)).toEqual(["a", "b"]);
+  });
+
+  it("settles an equal sortOrder by age, so the answer is never row order", () => {
+    const rows = [p("later", 0, "2026-09-05"), p("earlier", 0, "2026-09-01")];
+    expect(orderParcels(rows).map((r) => r.slug)).toEqual(["earlier", "later"]);
+    // and the same answer when the input arrives the other way round
+    expect(orderParcels([...rows].reverse()).map((r) => r.slug)).toEqual(["earlier", "later"]);
+  });
+
+  it("does not mutate what it was handed", () => {
+    const rows = [p("b", 2, "x"), p("a", 1, "x")];
+    orderParcels(rows);
+    expect(rows.map((r) => r.slug)).toEqual(["b", "a"]);
+  });
+});
+describe("the ground a provider is asked for has the frame's own shape", () => {
+  const CENTRE = { lat: 9.2345, lon: -83.8412 };
+  /** Metres across a bounds, measured the way boundsFor builds one. */
+  const size = (b: { west: number; east: number; south: number; north: number }, lat: number) => {
+    const mPerDegLat = 111_320;
+    const w = (b.east - b.west) * mPerDegLat * Math.cos((lat * Math.PI) / 180);
+    const h = (b.north - b.south) * mPerDegLat;
+    return { w, h };
+  };
+
+  it("keeps spanM as the WIDTH, which is the number a founder typed", () => {
+    const { w } = size(boundsForAspect(CENTRE, 800, MAP_WORLD_ASPECT), CENTRE.lat);
+    expect(w).toBeCloseTo(800, 0);
+  });
+
+  it("makes the ground the same shape as the map's world rect", () => {
+    const { w, h } = size(boundsForAspect(CENTRE, 800, MAP_WORLD_ASPECT), CENTRE.lat);
+    expect(w / h).toBeCloseTo(MAP_WORLD_ASPECT, 5);
+  });
+
+  it("gives the same metres per pixel on both axes, which is what stops the stretch", () => {
+    // A 3:2 image over a 3:2 ground. If either half changed alone, a structure
+    // would sit off the ground it stands on and nothing would report it.
+    const pixelsW = 1024;
+    const pixelsH = Math.round(pixelsW / MAP_WORLD_ASPECT);
+    const { w, h } = size(boundsForAspect(CENTRE, 800, MAP_WORLD_ASPECT), CENTRE.lat);
+    expect(w / pixelsW).toBeCloseTo(h / pixelsH, 2);
+  });
+
+  it("still makes a square when the aspect is 1, matching boundsFor", () => {
+    const a = boundsForAspect(CENTRE, 800, 1);
+    const b = boundsFor(CENTRE, 800);
+    expect(a.north).toBeCloseTo(b.north, 9);
+    expect(a.west).toBeCloseTo(b.west, 9);
+  });
+
+  it("does not divide by zero on a nonsense aspect", () => {
+    expect(() => boundsForAspect(CENTRE, 800, 0)).not.toThrow();
+    const { w, h } = size(boundsForAspect(CENTRE, 800, 0), CENTRE.lat);
+    expect(Number.isFinite(w) && Number.isFinite(h)).toBe(true);
   });
 });

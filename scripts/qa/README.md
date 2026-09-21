@@ -1,6 +1,7 @@
 # QA sweeps against a deployed site
 
-Four scripts that drive a real browser against a real deployment. They exist because a whole
+Five scripts that drive a real browser. Four run against a real deployment;
+`ground-bridge.mjs` runs against the map artifact on disk and needs no URL. They exist because a whole
 class of defect is invisible to `pnpm test`: things that are only wrong at one viewport, in one
 auth state, after the CSS has actually painted.
 
@@ -14,6 +15,7 @@ QA_BASE_URL=https://your-deployment.example node scripts/qa/contrast.mjs
 QA_BASE_URL=... QA_TOKEN=<session token> node scripts/qa/sweep.mjs   # signed-in surfaces
 node scripts/qa/selftint.mjs                                          # static, no browser
 node scripts/qa/routes.mjs                                            # what will be swept
+node scripts/qa/ground-bridge.mjs                                     # artifact on disk, no URL
 ```
 
 `QA_BASE_URL` has **no default**. A sweep pointed at the wrong site still prints a clean
@@ -25,6 +27,7 @@ report, and you would believe it.
 | `contrast.mjs` | WCAG contrast from rendered pixels | yes |
 | `selftint.mjs` | an element that sets a tint and writes coloured text on itself | no |
 | `routes.mjs` | the route list, derived from `client/src/App.tsx` | no |
+| `ground-bridge.mjs` | the shell's ground push, and that a village never inherits the seed's coastline | yes |
 
 ---
 

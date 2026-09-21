@@ -42,6 +42,7 @@ import LookPanel from "@/components/LookPanel";
 import IdentityPackPanel from "@/components/IdentityPackPanel";
 import MapSkinPanel from "@/components/MapSkinPanel";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
+import LandTab from "@/components/admin/LandTab";
 import MapVocabularyPanel from "@/components/admin/MapVocabularyPanel";
 import ArchetypesPanel from "@/components/admin/ArchetypesPanel";
 import EventsAdminPanel from "@/components/EventsAdminPanel";
@@ -10153,6 +10154,7 @@ export default function Admin() {
           {activeTab === "drafts" && <DraftQueueTab password={password} />}
           {activeTab === "seasons-patterns" && <SeasonPatternsTab password={password} />}
           {activeTab === "circles-map" && <CirclesMapTab password={password} />}
+          {activeTab === "land" && <LandTab password={password} />}
           {activeTab === "tools-admin" && <ToolsAdminTab password={password} />}
           {activeTab === "crowdpool-admin" && <CrowdpoolAdminTab password={password} />}
           {activeTab === "stays-admin" && <StaysAdminTab password={password} onOpenTab={setActiveTab} />}

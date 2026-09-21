@@ -503,6 +503,40 @@ export function boundsFor(centre: LatLon, spanM: number): Bounds {
  * founder asking for a 50 metre span gets the deepest zoom that exists
  * instead of a request nothing answers.
  */
+/**
+ * The map's world rect, as a ratio: 2400 by 1600.
+ *
+ * The number lives here because it decides the SHAPE OF THE GROUND a provider
+ * is asked for, and a picture whose ground is a different shape from the frame
+ * it is drawn into has to be stretched to fit. Stretching a georeferenced
+ * photograph moves every structure off the ground it stands on, which is the
+ * one thing this map may not do, and it does it silently.
+ */
+export const MAP_WORLD_ASPECT = 2400 / 1600;
+
+/**
+ * The ground a provider is asked for, in the frame's own proportions.
+ *
+ * `boundsFor` makes a SQUARE, which is right for a provider being asked for a
+ * square image and wrong for the map, whose world is 3:2. `spanM` stays the
+ * WIDTH across, which is the number a founder typed and understands; the
+ * height follows from the aspect.
+ */
+export function boundsForAspect(centre: LatLon, spanM: number, aspect: number): Bounds {
+  const halfW = spanM / 2;
+  const halfH = spanM / (2 * (aspect > 0 ? aspect : 1));
+  const dLat = halfH / METRES_PER_DEG_LAT;
+  const cos = Math.max(Math.cos((centre.lat * Math.PI) / 180), 0.01);
+  const dLon = halfW / (METRES_PER_DEG_LAT * cos);
+  const wrap = (lon: number): number => ((((lon + 180) % 360) + 360) % 360) - 180;
+  return {
+    west: wrap(centre.lon - dLon),
+    south: Math.max(centre.lat - dLat, -90),
+    east: wrap(centre.lon + dLon),
+    north: Math.min(centre.lat + dLat, 90),
+  };
+}
+
 export function zoomFor(centre: LatLon, spanM: number, pixels: number): number {
   const cos = Math.max(Math.cos((centre.lat * Math.PI) / 180), 0.01);
   const worldMetres = 2 * Math.PI * 6378137 * cos;
@@ -553,4 +587,57 @@ export function publicPoint(point: LatLon | null, visibility: LandVisibility): L
   if (visibility === "hidden") return null;
   if (visibility === "approximate") return coarsen(point);
   return point;
+}
+/* ── PARCELS ───────────────────────────────────────────────────────────────
+ *
+ * A project is not always one piece of ground. Each parcel is its own map:
+ * two parcels forty kilometres apart share no honest coordinate space, and
+ * drawing them on one world rect would invent the ground between them.
+ *
+ * The slug is the parcel's name in an address (`/map#/parcel/north-field`)
+ * and the second half of its unique key. A founder never types one -- it is
+ * derived from the label they DID type -- which is why the derivation lives
+ * here, in shared, and runs identically in the browser and on the way in.
+ */
+
+/** Every village that already exists has exactly one parcel, and this is it. */
+export const DEFAULT_PARCEL_SLUG = "home";
+
+export const MAX_PARCEL_LABEL = 120;
+
+/**
+ * A label becomes a slug, or it does not become one at all.
+ *
+ * Returns "" for a label with no usable characters rather than inventing
+ * something, because the caller's next move differs: the screen asks the
+ * founder for a different name, and the route refuses. A generated fallback
+ * like "parcel-2" would be a name nobody chose appearing in a URL forever.
+ */
+export function parcelSlug(label: string): string {
+  return String(label ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")   // "Río Claro" -> "Rio Claro", not "R-o-Claro"
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64)
+    .replace(/-+$/g, "");               // a trailing dash left by the slice
+}
+
+export function isParcelSlug(value: unknown): value is string {
+  return typeof value === "string" && /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/.test(value);
+}
+
+/**
+ * Which parcel a reader opens, and the order of the jump control.
+ *
+ * Lowest `sortOrder`, and the oldest row settles a tie. There is deliberately
+ * no is-primary flag to consult: a flag has a second state nothing enforces,
+ * so every reader would need this tie-break anyway.
+ */
+export function orderParcels<T extends { sortOrder: number; createdAt?: string | null }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) =>
+    a.sortOrder !== b.sortOrder
+      ? a.sortOrder - b.sortOrder
+      : String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? "")));
 }
