@@ -8107,6 +8107,22 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
    */
   const PERSON_FIELDS = ["holders", "holderNote"];
 
+  /**
+   * The names of the sections this village has written, and nothing else.
+   *
+   * The route below answers 404 for an unwritten section and must keep doing
+   * so: the admin editor reads that 404 as "not written yet". But a browser
+   * logs every failed request in its console on its own, so eleven public
+   * pages asking blind for `legal`, `money` and `covenant` loaded red on every
+   * visit. The pages ask this first now (client/src/hooks/useVillageContent.ts)
+   * and request only what is here. Names only: a stranger learns nothing the
+   * route below would not answer for any name they guessed.
+   */
+  app.get("/api/content", (_req, res) => {
+    const content = contentRepo.get() ?? {};
+    res.json({ sections: Object.keys(content).filter((key) => content[key] !== undefined) });
+  });
+
   app.get("/api/content/:section", async (req, res) => {
     const content = contentRepo.get();
     const section = content[req.params.section];
