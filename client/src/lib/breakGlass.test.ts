@@ -22,6 +22,7 @@ const REFUSAL = {
   capability: "forum.moderate",
   villageHolds: true,
   requiresOverride: true,
+  overrideAvailable: true,
   holder: "Steward Circle",
   title: "The forum",
   consequence: "hide posts and act on reports for the whole community",
@@ -60,22 +61,45 @@ describe("reading the one refusal that has a way through", () => {
   });
 
   it("needs a capability, because the whole dialog is about one power", () => {
-    expect(readOverrideRefusal(409, { requiresOverride: true })).toBeNull();
-    expect(readOverrideRefusal(409, { requiresOverride: true, capability: "" })).toBeNull();
-    expect(readOverrideRefusal(409, { requiresOverride: true, capability: 7 })).toBeNull();
+    expect(readOverrideRefusal(409, { requiresOverride: true, overrideAvailable: true })).toBeNull();
+    expect(readOverrideRefusal(409, { requiresOverride: true, overrideAvailable: true, capability: "" })).toBeNull();
+    expect(readOverrideRefusal(409, { requiresOverride: true, overrideAvailable: true, capability: 7 })).toBeNull();
+  });
+
+  /*
+   * Rye, 2026-09-21: only a founder seated as a steward with the veto may
+   * reach past a village-held power. The server says so per requester, and
+   * a question it would refuse after it was answered is the one thing this
+   * reader must never produce.
+   */
+  it("offers nothing to somebody the server would refuse, and leaves their sentence alone", () => {
+    const plain = {
+      ...REFUSAL,
+      overrideAvailable: false,
+      error: "This village holds this one, and Steward Circle looks after it now. " +
+        "A founder can override it only while seated as a steward with the veto.",
+    };
+    expect(readOverrideRefusal(409, plain)).toBeNull();
+    // Absent is not yes. A body that does not say is a body that does not offer.
+    const { overrideAvailable: _unsaid, ...silent } = REFUSAL;
+    expect(readOverrideRefusal(409, silent)).toBeNull();
+    expect(readOverrideRefusal(409, { ...REFUSAL, overrideAvailable: "true" })).toBeNull();
+    // The control: the same body with the flag set IS a question.
+    expect(readOverrideRefusal(409, { ...plain, overrideAvailable: true })).not.toBeNull();
   });
 
   it("prints the key when the registry has no title for it", () => {
     // The honest fallback, and the same one `capabilityLabel` makes on the
     // server: a missing title is a missing row, and saying the key out loud
     // is how somebody finds out.
-    const ask = readOverrideRefusal(409, { requiresOverride: true, capability: "dial.set" });
+    const ask = readOverrideRefusal(409, { requiresOverride: true, overrideAvailable: true, capability: "dial.set" });
     expect(ask?.title).toBe("dial.set");
   });
 
   it("keeps a missing holder and a missing consequence missing", () => {
     const ask = readOverrideRefusal(409, {
       requiresOverride: true,
+      overrideAvailable: true,
       capability: "dial.set",
       holder: "",
       consequence: null,

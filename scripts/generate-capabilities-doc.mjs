@@ -385,18 +385,20 @@ const STEP_MEANINGS = {
   },
   "admin-override": {
     beats:
-      "The same operator on a key the village DOES hold, having said in the request that they mean to reach past the " +
-      "village. Everything below it is skipped.",
+      "A FOUNDER on a key the village DOES hold, seated in a live role that carries `BREAK_GLASS_SEAT`, having said in " +
+      "the request that they mean to reach past the village. Everything below it is skipped.",
     detail:
-      "The break-glass, for exactly one act. It never persists and it is never inferred. The gate reports " +
-      "`reachedPastVillage` so the caller cannot forget that it owes the village a record and a notification. It ships " +
-      "in the same commit as the ceiling above it, because a gate that can lock an operator out of a live village must " +
-      "never exist without its escape hatch.",
+      "The break-glass, for exactly one act. Rye ruled on 2026-09-21 that a founder keeps an override on a power the " +
+      "village holds only while holding the Steward role with the power to veto, so an administrator who is not a " +
+      "founder, a founder with no seat, a founder whose seat has lapsed and a steward who is not a founder all fall " +
+      "through to the steps below with the glass in their hand. A badge granting the seat's key does not count, " +
+      "because the ruling names the role. It never persists and it is never inferred. The gate reports " +
+      "`reachedPastVillage` so the caller cannot forget that it owes the village a record and a notification.",
   },
   "denied by warning badge": {
     beats:
       "An active warning badge naming this key. It sits ABOVE role, badge and stage, so an appointment does not " +
-      "override it. On a key the village holds it also reaches an admin who did not break the glass.",
+      "override it. On a key the village holds it also reaches every admin the break-glass step did not let through.",
     detail:
       "A warning a role trivially overrides is not a warning. The deny reaches only the keys `DENIABLE` marks as " +
       "deniable, and it can never reach a voice: a badge naming one of those is ignored here, refused at save time, and " +
@@ -507,6 +509,20 @@ export async function collectFacts(root = ROOT) {
   const transferable = requireExactMap(caps.TRANSFERABLE, keys, "TRANSFERABLE", capsWhere, "boolean");
   const stageUnlocks = requireSubsetMap(caps.STAGE_UNLOCKS, keys, "STAGE_UNLOCKS", capsWhere, "string");
 
+  /*
+   * THE SEAT THE BREAK-GLASS ASKS FOR (Rye, 2026-09-21). The gate's condition
+   * names it as `BREAK_GLASS_SEAT`, which reads as an identifier in the step
+   * table, so the value is read off the import and printed beside it. A seat
+   * naming a key the list does not hold is a step nobody could ever pass.
+   */
+  const breakGlassSeat = caps.BREAK_GLASS_SEAT;
+  if (typeof breakGlassSeat !== "string" || !keys.includes(breakGlassSeat)) {
+    fail(
+      `capabilities-doc: ${capsWhere} exports BREAK_GLASS_SEAT as ${JSON.stringify(breakGlassSeat)}, which is not a ` +
+        `key in ALL_CAPABILITIES. The break-glass step asks for a seat carrying that key. ${HELP}`,
+    );
+  }
+
   const sources = unionStrings(capsSource, "CapabilitySource", capsWhere);
   const steps = resolutionSteps(capsSource, capsWhere);
   const produced = [...new Set(steps.map((s) => s.source))];
@@ -590,6 +606,7 @@ export async function collectFacts(root = ROOT) {
     namespaces,
     steps,
     sources,
+    breakGlassSeat,
     ladder,
     modules: modules.map((m) => ({ id: m.id, name: m.name, capabilities: [...m.capabilities] })),
     counts: {
@@ -678,6 +695,21 @@ function workedDecisions(decide, facts) {
     });
     run("The same admin, having broken the glass in the request", held.key, {
       isAdmin: true,
+      villageHeld: [held.key],
+      badgeDenies: [held.key],
+      adminOverride: true,
+    });
+    run("A founder with no steward's seat, having broken the glass", held.key, {
+      isAdmin: true,
+      isFounder: true,
+      villageHeld: [held.key],
+      badgeDenies: [held.key],
+      adminOverride: true,
+    });
+    run("A founder seated in a live role carrying the break-glass seat, having broken the glass", held.key, {
+      isAdmin: true,
+      isFounder: true,
+      roleCapabilities: [facts.breakGlassSeat],
       villageHeld: [held.key],
       badgeDenies: [held.key],
       adminOverride: true,
@@ -792,6 +824,14 @@ export function render(f) {
     p(meaning.detail);
     p();
   }
+  const seat = f.rows.find((r) => r.key === f.breakGlassSeat);
+  p(
+    `\`BREAK_GLASS_SEAT\` is \`${f.breakGlassSeat}\`, "${seat.label}", read from the code. ` +
+      (seat.deniable
+        ? "A warning badge may deny it, and that deny does not reach the break-glass step, which reads the role alone."
+        : "No warning badge may deny it, so no badge can switch the break-glass step off."),
+  );
+  p();
   p(
     "The consequence worth holding onto: a deny beats an appointment. A village that hands somebody a role and then " +
       "has to ask them to stop for a while has a remedy short of unseating them, and a warning that the next role " +
@@ -833,8 +873,8 @@ export function render(f) {
     "- **A warning badge may deny it.** `DENIABLE` in `shared/capabilities.ts`. A `no` marks a VOICE: a member's own " +
       "say in a decision the village makes, which nothing may take away.\n" +
       "- **The village may hold it.** `TRANSFERABLE`. A `yes` means this key can leave the admin panel: once the " +
-      "village records a holder, an admin stops passing the gate by being an admin and has to reach past the village " +
-      "in the open.\n" +
+      "village records a holder, an admin stops passing the gate by being an admin, and only a founder seated as a " +
+      "steward with the veto may reach past the village, in the open.\n" +
       "- **Stage that unlocks it.** `STAGE_UNLOCKS`, against the ladder in `shared/gameConfig.ts`. A key with no rung " +
       "is an appointment, reached by a role or a badge and never by climbing.",
   );
@@ -934,6 +974,7 @@ export function render(f) {
     JSON.stringify(
       {
         counts: f.counts,
+        breakGlassSeat: f.breakGlassSeat,
         resolutionOrder: f.steps.map((s, i) => ({
           step: i + 1,
           source: s.source,

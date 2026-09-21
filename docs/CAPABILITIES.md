@@ -30,7 +30,7 @@ In one line: `admin` then `admin-override` then `denied by warning badge` then `
 | Step | Decides | Answer | The condition, as the code writes it |
 | --- | --- | --- | --- |
 | 1 | `admin` | allowed | `ctx.isAdmin && !villageHolds` |
-| 2 | `admin-override` | allowed | `ctx.isAdmin && villageHolds && ctx.adminOverride === true` |
+| 2 | `admin-override` | allowed | `ctx.isAdmin && villageHolds && ctx.adminOverride === true && ctx.isFounder === true && ctx.roleCapabilities.includes(BREAK_GLASS_SEAT)` |
 | 3 | `denied by warning badge` | refused | `isDeniable(cap) && (ctx.badgeDenies ?? []).includes(cap)` |
 | 4 | `role` | allowed | `ctx.roleCapabilities.includes(cap)` |
 | 5 | `carried by a greater key` | allowed | `carriedBy(ctx.roleCapabilities, cap)` |
@@ -42,11 +42,11 @@ In one line: `admin` then `admin-override` then `denied by warning badge` then `
 
 Admin is scaffolding, and R54 is the ruling that says so: these villages are meant to be taken over by their electorate. This step is the operator acting on the parts they are still responsible for.
 
-**2. `admin-override`.** The same operator on a key the village DOES hold, having said in the request that they mean to reach past the village. Everything below it is skipped.
+**2. `admin-override`.** A FOUNDER on a key the village DOES hold, seated in a live role that carries `BREAK_GLASS_SEAT`, having said in the request that they mean to reach past the village. Everything below it is skipped.
 
-The break-glass, for exactly one act. It never persists and it is never inferred. The gate reports `reachedPastVillage` so the caller cannot forget that it owes the village a record and a notification. It ships in the same commit as the ceiling above it, because a gate that can lock an operator out of a live village must never exist without its escape hatch.
+The break-glass, for exactly one act. Rye ruled on 2026-09-21 that a founder keeps an override on a power the village holds only while holding the Steward role with the power to veto, so an administrator who is not a founder, a founder with no seat, a founder whose seat has lapsed and a steward who is not a founder all fall through to the steps below with the glass in their hand. A badge granting the seat's key does not count, because the ruling names the role. It never persists and it is never inferred. The gate reports `reachedPastVillage` so the caller cannot forget that it owes the village a record and a notification.
 
-**3. `denied by warning badge`.** An active warning badge naming this key. It sits ABOVE role, badge and stage, so an appointment does not override it. On a key the village holds it also reaches an admin who did not break the glass.
+**3. `denied by warning badge`.** An active warning badge naming this key. It sits ABOVE role, badge and stage, so an appointment does not override it. On a key the village holds it also reaches every admin the break-glass step did not let through.
 
 A warning a role trivially overrides is not a warning. The deny reaches only the keys `DENIABLE` marks as deniable, and it can never reach a voice: a badge naming one of those is ignored here, refused at save time, and cleared out of storage by migration.
 
@@ -70,6 +70,8 @@ The member's computed stage is at or past the rung `STAGE_UNLOCKS` names. A vill
 
 This is the honest default. A key absent from `STAGE_UNLOCKS`, held by no role and carried by no badge, lands here for everybody who is not an admin.
 
+`BREAK_GLASS_SEAT` is `steward.veto`, "Stop a carried decision inside its window, and say why", read from the code. No warning badge may deny it, so no badge can switch the break-glass step off.
+
 The consequence worth holding onto: a deny beats an appointment. A village that hands somebody a role and then has to ask them to stop for a while has a remedy short of unseating them, and a warning that the next role grant would quietly cancel would be no warning at all.
 
 ## The gate, run
@@ -86,7 +88,9 @@ These rows are not a description of the order. They are answers: the generator c
 | A member holding the role, with a warning badge that denies a key no badge may deny | `mechanics.propose` | yes | `role` |
 | An admin, on a key the village does not hold | `quest.consent` | yes | `admin` |
 | An admin on a key the village HOLDS, with a warning badge denying it and no break-glass | `quest.consent` | no | `denied by warning badge` |
-| The same admin, having broken the glass in the request | `quest.consent` | yes | `admin-override` (owes the village a record) |
+| The same admin, having broken the glass in the request | `quest.consent` | no | `denied by warning badge` |
+| A founder with no steward's seat, having broken the glass | `quest.consent` | no | `denied by warning badge` |
+| A founder seated in a live role carrying the break-glass seat, having broken the glass | `quest.consent` | yes | `admin-override` (owes the village a record) |
 
 ## Every capability key
 
@@ -95,7 +99,7 @@ These rows are not a description of the order. They are answers: the generator c
 Three columns need a word before the tables:
 
 - **A warning badge may deny it.** `DENIABLE` in `shared/capabilities.ts`. A `no` marks a VOICE: a member's own say in a decision the village makes, which nothing may take away.
-- **The village may hold it.** `TRANSFERABLE`. A `yes` means this key can leave the admin panel: once the village records a holder, an admin stops passing the gate by being an admin and has to reach past the village in the open.
+- **The village may hold it.** `TRANSFERABLE`. A `yes` means this key can leave the admin panel: once the village records a holder, an admin stops passing the gate by being an admin, and only a founder seated as a steward with the veto may reach past the village, in the open.
 - **Stage that unlocks it.** `STAGE_UNLOCKS`, against the ladder in `shared/gameConfig.ts`. A key with no rung is an appointment, reached by a role or a badge and never by climbing.
 
 ### `quest`
@@ -279,6 +283,7 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
     "climbable": 13,
     "undeclared": 13
   },
+  "breakGlassSeat": "steward.veto",
   "resolutionOrder": [
     {
       "step": 1,
@@ -293,7 +298,7 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
       "source": "admin-override",
       "allowed": true,
       "conditions": [
-        "ctx.isAdmin && villageHolds && ctx.adminOverride === true"
+        "ctx.isAdmin && villageHolds && ctx.adminOverride === true && ctx.isFounder === true && ctx.roleCapabilities.includes(BREAK_GLASS_SEAT)"
       ]
     },
     {
@@ -753,6 +758,20 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
     },
     {
       "who": "The same admin, having broken the glass in the request",
+      "key": "quest.consent",
+      "allowed": false,
+      "source": "denied by warning badge",
+      "reachedPastVillage": false
+    },
+    {
+      "who": "A founder with no steward's seat, having broken the glass",
+      "key": "quest.consent",
+      "allowed": false,
+      "source": "denied by warning badge",
+      "reachedPastVillage": false
+    },
+    {
+      "who": "A founder seated in a live role carrying the break-glass seat, having broken the glass",
       "key": "quest.consent",
       "allowed": true,
       "source": "admin-override",

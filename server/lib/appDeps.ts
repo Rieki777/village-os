@@ -63,8 +63,10 @@ export interface CapabilityVerdict {
   source: string;
   /** What to say to the person, when `ok` is false. */
   message: string;
-  /** True for exactly one refusal: an admin, on a key the village holds, who did not break the glass. */
+  /** True for exactly one refusal: an admin, on a key the village holds, whom the gate refused. */
   needsOverride: boolean;
+  /** Would the gate let this requester through with the glass broken? Only a founder seated as a steward with the veto. */
+  overrideAvailable: boolean;
   /** Who holds it, as a bare name, when `needsOverride` is true. Null otherwise. */
   holderName: string | null;
 }
