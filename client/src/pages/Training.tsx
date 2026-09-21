@@ -1,5 +1,5 @@
 import Layout from "@/components/Layout";
-import { gameFetch } from "@/lib/gameApi";
+import { authToken, gameFetch } from "@/lib/gameApi";
 import { useState, useEffect, useCallback } from "react";
 import {
   BookOpen,
@@ -81,9 +81,11 @@ export default function Training() {
     // stays null on a failure, so an unreadable record never renders as an
     // empty one: "we could not ask" and "you have finished nothing" are
     // different sentences and only one of them is a reason to start.
+    // Signed out there is no record to read and the route answers 401, which
+    // the browser logged as a failure on every visit. Null is the same answer.
     try {
-      const res = await gameFetch("/api/game/training/completed");
-      const data = res.ok ? await res.json() : null;
+      const res = authToken() ? await gameFetch("/api/game/training/completed") : null;
+      const data = res?.ok ? await res.json() : null;
       if (Array.isArray(data?.completed)) setCompleted(data.completed.map(String));
     } catch {
       /* leaves null */

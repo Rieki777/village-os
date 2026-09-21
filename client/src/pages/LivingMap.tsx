@@ -48,7 +48,7 @@ import { rememberMapAvailable } from "@/lib/landing";
 import { MAP_SKIN_SAVED_EVENT, MAP_SKIN_SAVED_KEY } from "@shared/mapSkin";
 import { isPromiseKind } from "@shared/mapPromise";
 import { isSceneVerb } from "@shared/mapScene";
-import { gameFetch } from "@/lib/gameApi";
+import { authToken, gameFetch } from "@/lib/gameApi";
 
 /** Where the staged artifact is served from, and its presence probe. */
 const GROUNDS = "/grounds/index.html";
@@ -436,7 +436,10 @@ export default function LivingMap() {
     const win = frame.current?.contentWindow;
     if (!win) return;
     const [partyRes, orgRes] = await Promise.all([
-      gameFetch("/api/me/characters").catch(() => null),
+      // A party is a signed-in player's. With no session the route answers 401,
+      // which the browser logged on every signed-out visit, and the lens reads
+      // that as no party. Not asking reads the same.
+      authToken() ? gameFetch("/api/me/characters").catch(() => null) : null,
       gameFetch("/api/map").catch(() => null),
     ]);
     const partyBody = partyRes?.ok ? await partyRes.json().catch(() => null) : null;
