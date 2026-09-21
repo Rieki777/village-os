@@ -97,6 +97,8 @@ subtlety in this system; see section 7.
 | A member thanks another | `give()`, or `sendGratitude()` for a heart | Spends the member's cycle allowance |
 | An admin mints by hand | the admin mint route | Capped per cycle, refused when the admin is the recipient, cosigned over a threshold |
 | A member spends | a stay night, a seat fee, a library escrow, a member-to-member send | See section 12 |
+| A member asks to redeem | `requestRedemption`, `server/lib/redemptionStore.ts` | Holds the asked amount in `sys:redemption-hold` when `redemption.holds_on_propose` is on, and holds nothing when it is off. A refusal, a withdrawal or an expiry returns a held amount by reversing the hold |
+| A redemption is confirmed | `settleRedemption`, `server/lib/redemptionStore.ts` | Retires the tokens to `sys:redeemed`, which only ever receives, taking them from the hold if one was taken and from the member otherwise |
 | A member leaves | `sweepBalances` in `server/lib/exit.ts` | Moves the remaining balance to `sys:exit-settlement`; see section 14 |
 | A claim confirms on Base | `settleVoiceClaim` | Reconciles a one-way bridge; see section 6 |
 
