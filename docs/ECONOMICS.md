@@ -3076,6 +3076,10 @@ Five things this table is showing:
   ledger's occurrence key, so a second press finds the row posted, and a posting
   that already landed answers duplicate and moves nothing. The consent's own
   response never fails on any of it.
+  The owed tail on /review names each payee in full, the way the consent queue
+  beside it does, so two members who share a first name cannot be confused at the
+  moment a steward pays one of them. That is the read only: no posting, key,
+  amount or order above changes with it.
 - **A consent at 0 posts none of the three.** A zero is the witness saying the work
   earned no recognition, so row 1 posts nothing, and `owedForClaim` prices no rule
   for a grant of 0 either (economics and governance, 2026-09-14): a village can weight its ballots by

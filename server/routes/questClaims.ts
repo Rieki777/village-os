@@ -315,7 +315,13 @@ export function register(app: Express, deps: Deps): void {
           key: r.idempotencyKey,
           claimId: r.claimId,
           questTitle: c?.questTitle ?? null,
-          holder: c ? firstName(c.userName) : null,
+          // The payee in FULL, as the consent queue on this same page names
+          // them. First names only is the rule for public-facing lists; this is
+          // a steward-only read, rendered beside a queue that already shows the
+          // whole name to the same audience, so a first name here exposed
+          // nothing less and only made two members who share one
+          // indistinguishable at the one place a steward pays somebody.
+          holder: c ? c.userName : null,
           tokenSlug: r.tokenSlug,
           units: r.units,
           decimals: r.decimals,
