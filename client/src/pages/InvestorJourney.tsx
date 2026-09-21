@@ -336,7 +336,7 @@ export default function InvestorJourney() {
               >
                 <TrendingUp className="w-6 h-6 text-white" />
               </motion.div>
-              <span className="text-gold font-medium tracking-wide uppercase text-sm">Capital Contributor Journey</span>
+              <span className="text-muted-foreground font-medium tracking-wide uppercase text-sm">Capital Contributor Journey</span>
             </motion.div>
 
             <motion.h1
@@ -734,7 +734,7 @@ export default function InvestorJourney() {
                       </div>
                     </div>
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      phase.status === "Planning" ? "bg-gold/20 text-gold" : "bg-white/20 text-white"
+                      phase.status === "Planning" ? "bg-gold text-white" : "bg-white/20 text-white"
                     }`}>
                       {phase.status}
                     </span>

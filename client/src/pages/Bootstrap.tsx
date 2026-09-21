@@ -117,7 +117,7 @@ export default function Bootstrap() {
                 <KeyRound className="h-6 w-6 text-teal-deep" aria-hidden="true" />
               </span>
               <h1 className="text-2xl font-bold text-amber-ink">Claim this village</h1>
-              <p className="mt-2 text-sm text-amber-ink/70">
+              <p className="mt-2 text-sm text-amber-ink">
                 For the first founder of a new village, and for a founder who has lost their way
                 back in.
               </p>
@@ -133,7 +133,7 @@ export default function Bootstrap() {
                 </div>
 
                 {emailed && (
-                  <p className="text-sm text-amber-ink/80">
+                  <p className="text-sm text-amber-ink">
                     A link is on its way to <strong>{email}</strong>. It expires in an hour and
                     works once.
                   </p>
@@ -141,7 +141,7 @@ export default function Bootstrap() {
 
                 {note && (
                   <div className="rounded-lg bg-amber/10 p-4">
-                    <p className="text-sm text-amber-ink/90">{note}</p>
+                    <p className="text-sm text-amber-ink">{note}</p>
                   </div>
                 )}
 
@@ -156,7 +156,7 @@ export default function Bootstrap() {
                     >
                       {claimUrl}
                     </a>
-                    <p className="text-xs text-amber-ink/60">
+                    <p className="text-xs text-amber-ink">
                       It expires in an hour and works once. If it expires, come back to this page
                       and run it again.
                     </p>
@@ -188,7 +188,7 @@ export default function Bootstrap() {
                       placeholder="you@example.com"
                     />
                   </div>
-                  <p className="mt-1 text-xs text-amber-ink/60">
+                  <p className="mt-1 text-xs text-amber-ink">
                     The address that becomes this village&rsquo;s founder. If you already have an
                     account here, use that address. The existing account is promoted in place.
                   </p>
@@ -199,7 +199,7 @@ export default function Bootstrap() {
                     htmlFor="bootstrap-name"
                     className="mb-1.5 block text-sm font-medium text-amber-ink"
                   >
-                    Your name <span className="font-normal text-amber-ink/50">(optional)</span>
+                    Your name <span className="font-normal text-amber-ink">(optional)</span>
                   </label>
                   <input
                     id="bootstrap-name"
@@ -235,7 +235,7 @@ export default function Bootstrap() {
                       placeholder="From your hosting environment"
                     />
                   </div>
-                  <p className="mt-1 text-xs text-amber-ink/60">
+                  <p className="mt-1 text-xs text-amber-ink">
                     This is the <code className="font-mono">ADMIN_PASSWORD</code> variable where
                     this village is hosted, not your account password. It is never stored here and
                     never appears in a link.
@@ -261,7 +261,7 @@ export default function Bootstrap() {
             )}
           </div>
 
-          <p className="mt-6 text-center text-xs text-amber-ink/60">
+          <p className="mt-6 text-center text-xs text-muted-foreground">
             This page only ever creates the first founder, or recovers the account named in
             BREAK_GLASS_ADMIN_EMAIL. Once a village has a founder, the shared password stops
             authenticating anyone.

@@ -292,7 +292,7 @@ export default function StewardRights() {
       <section className="py-20 bg-background">
         <div className="container max-w-3xl">
           <div className="text-center mb-12">
-            <span className="text-sm font-medium uppercase tracking-wide text-amber-700">
+            <span className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
               Your Path Forward
             </span>
             <h2 className="font-display text-3xl font-semibold text-foreground mt-2">
