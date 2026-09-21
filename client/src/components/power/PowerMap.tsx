@@ -624,8 +624,10 @@ export default function PowerMap({
               {/* THE NUMBER THE KEY UNDER THE MAP NAMES. Sized in SCREEN
                   pixels through pxPerWorld, like every label here, so it reads
                   at 13px whatever the camera is doing, with the page's ground
-                  as a halo so it holds on any circle's tone. */}
-              {compact && keys?.has(pos.id) && (
+                  as a halo so it holds on any circle's tone. Not on a circle
+                  whose own name is drawn CENTRED in it: the number would sit
+                  across the name, and the name already says which one it is. */}
+              {compact && keys?.has(pos.id) && !(showLabel(pos.id) && !fit.outside && !hasChildren) && (
                 <text
                   x={pos.x}
                   y={pos.y}
