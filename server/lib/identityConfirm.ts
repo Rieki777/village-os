@@ -10,7 +10,7 @@
  * else, so that member could do neither. The screens drew a password box they
  * could never fill, and the server answered "Confirm with your password"
  * forever. Those two routes are the only self-service doors that re-check a
- * credential: login is the third `verifyPassword` call site, and no member
+ * credential: login is the other `verifyPassword` call site, and no member
  * route changes an email address or a password against the current one.
  *
  * ── WHY A PROMPT IS THERE AT ALL, AND WHAT REPLACES IT ──────────────────────
