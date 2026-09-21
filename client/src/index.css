@@ -876,6 +876,28 @@ button, a, [role="button"], input, textarea, select, summary {
 }
 
 /*
+ * The circle peek on the living map (`CirclePeek`, phones only) docks above
+ * the tab bar while a circle is open, and the shortcuts button's corner is that
+ * bar's right-hand end: left where it was, the button sat on the peek's
+ * "Details". So the button rides up clear while a peek shows, the way a
+ * floating button clears a snackbar, and settles back when it goes.
+ *
+ * One height, read by both: the peek is at least this tall, and the lift is
+ * this plus the half-rem the button keeps between itself and a bar.
+ */
+:root {
+  --circle-peek-h: 4.75rem;
+}
+:root:has([data-circle-peek]) [data-mobile-fab] {
+  translate: 0 calc(-1 * (var(--circle-peek-h) + 0.5rem));
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-mobile-fab] {
+    transition: translate 200ms ease-out;
+  }
+}
+
+/*
  * Scroll chaining. Without this, a scroll gesture that reaches the end of a
  * drawer, sheet or filter strip keeps going in the page behind it: the
  * overlay stays open while the village scrolls underneath, and on iOS the
