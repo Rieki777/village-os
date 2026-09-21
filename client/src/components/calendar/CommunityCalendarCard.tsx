@@ -12,6 +12,7 @@
  * refusal rather than pre-judging it (the RSVP page's own rule).
  */
 import { useCallback, useEffect, useState } from "react";
+import { useModuleOn } from "@/modules/ModuleProvider";
 import { authToken } from "@/lib/gameApi";
 import { CalendarPlus, HandHelping, Hourglass } from "lucide-react";
 import type { CalendarItem, EventSlot } from "@shared/gatherings";
@@ -80,7 +81,9 @@ export default function CommunityCalendarCard({ signedIn }: { signedIn: boolean 
       .catch(() => setItems([]));
   }, []);
 
-  useEffect(() => { if (open && signedIn) load(); }, [open, signedIn, load]);
+  // Events is optional; loading it when off is a 404. Only mounted inside the events page today, so this is quiet insurance for a future mount. See useModuleOn.
+  const eventsOn = useModuleOn("events");
+  useEffect(() => { if (open && signedIn && eventsOn) load(); }, [open, signedIn, eventsOn, load]);
 
   if (!signedIn) return null;
 
