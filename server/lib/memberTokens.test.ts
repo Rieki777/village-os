@@ -19,10 +19,12 @@ import {
   decodeToken,
   encodeToken,
   makeSetPasswordToken,
-  passwordFingerprint,
   readSetPasswordToken,
   sessionWindowMs,
+  SET_PASSWORD_LINK_REFUSAL,
   SET_PASSWORD_TTL_MS,
+  setPasswordLinkRefusal,
+  signTokenPayload,
   TOKEN_TTL_MS,
 } from "./memberTokens";
 
@@ -163,26 +165,57 @@ describe("the session window clamp", () => {
 });
 
 describe("set-password claim tokens", () => {
-  it("round-trips the account id and the password fingerprint", () => {
-    const claim = makeSetPasswordToken(SECRET, "u-1", "hash-v1");
-    expect(readSetPasswordToken(SECRET, claim)).toEqual({
-      userId: "u-1",
-      pw: passwordFingerprint(SECRET, "hash-v1"),
-    });
+  const claimsOf = (token: string) =>
+    JSON.parse(Buffer.from(token.slice(0, token.lastIndexOf(".")), "base64url").toString("utf-8"));
+
+  it("round-trips the account id and the tokenVersion it was minted at", () => {
+    const claim = makeSetPasswordToken(SECRET, "u-1", 3);
+    expect(readSetPasswordToken(SECRET, claim)).toEqual({ userId: "u-1", v: 3 });
+  });
+
+  it("carries exactly four claims, none of them derived from a password", () => {
+    // The link travels by email, so everything in it is readable by whoever
+    // holds it. Until 2026-09-21 a fifth claim, `pw`, carried an HMAC of the
+    // stored password hash (CodeQL alert 36). A new key here fails this test
+    // on purpose: whoever adds one says what it is derived from.
+    const claim = makeSetPasswordToken(SECRET, "u-1", 3);
+    expect(Object.keys(claimsOf(claim)).sort()).toEqual(["exp", "purpose", "userId", "v"]);
+    expect(claimsOf(claim)).toMatchObject({ userId: "u-1", purpose: "set-password", v: 3 });
+  });
+
+  it("refuses to mint when handed a stored hash where the tokenVersion goes", () => {
+    // The third argument used to BE the stored hash. `user` is `any` at the
+    // route, so the compiler cannot catch a caller left behind, and a string
+    // must throw here and never be coerced into the claim.
+    for (const stale of ["$2b$10$abcdefghijklmnopqrstuv", "", "0", null, undefined, -1, 1.5, Number.NaN]) {
+      expect(() => makeSetPasswordToken(SECRET, "u-1", stale as any), JSON.stringify(stale)).toThrow(TypeError);
+    }
   });
 
   it("cannot be forged by editing the account it names", () => {
-    const claim = makeSetPasswordToken(SECRET, "u-1", "hash-v1");
+    const claim = makeSetPasswordToken(SECRET, "u-1", 0);
     const forged = repayload(claim, (c) => {
       c.userId = "u-founder";
     });
     expect(readSetPasswordToken(SECRET, forged)).toBeNull();
   });
 
+  it("cannot be forged by editing its tokenVersion to catch up with the account", () => {
+    const claim = makeSetPasswordToken(SECRET, "u-1", 0);
+    const forged = repayload(claim, (c) => {
+      c.v = 4;
+    });
+    expect(readSetPasswordToken(SECRET, forged)).toBeNull();
+  });
+
+  it("refuses a claim signed with another secret", () => {
+    expect(readSetPasswordToken(SECRET, makeSetPasswordToken(OTHER_SECRET, "u-1", 0))).toBeNull();
+  });
+
   it("cannot be replayed as a session token, nor a session token as one of these", () => {
     // Different `purpose`, same HMAC. That is the only thing keeping the two
     // apart, so it is worth an assertion in both directions.
-    const claim = makeSetPasswordToken(SECRET, "u-1", "hash-v1");
+    const claim = makeSetPasswordToken(SECRET, "u-1", 0);
     expect(decodeToken(SECRET, claim, 30)).toBeNull();
 
     const session = encodeToken(SECRET, "u-1", "e@example.test", 0);
@@ -190,7 +223,7 @@ describe("set-password claim tokens", () => {
   });
 
   it("refuses a claim whose purpose was edited", () => {
-    const claim = makeSetPasswordToken(SECRET, "u-1", "hash-v1");
+    const claim = makeSetPasswordToken(SECRET, "u-1", 0);
     const forged = repayload(claim, (c) => {
       c.purpose = "session";
     });
@@ -200,7 +233,7 @@ describe("set-password claim tokens", () => {
   it("expires hard after an hour, whatever the session variable says", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
-    const claim = makeSetPasswordToken(SECRET, "u-1", "hash-v1");
+    const claim = makeSetPasswordToken(SECRET, "u-1", 0);
 
     vi.advanceTimersByTime(SET_PASSWORD_TTL_MS - 1000);
     expect(readSetPasswordToken(SECRET, claim)).not.toBeNull();
@@ -210,35 +243,79 @@ describe("set-password claim tokens", () => {
   });
 
   it("cannot have its expiry pushed out", () => {
-    const claim = makeSetPasswordToken(SECRET, "u-1", "hash-v1");
+    const claim = makeSetPasswordToken(SECRET, "u-1", 0);
     const forged = repayload(claim, (c) => {
       c.exp = Date.now() + 365 * DAY;
     });
     expect(readSetPasswordToken(SECRET, forged)).toBeNull();
   });
+});
 
-  it("fingerprints a changed password differently, which is what makes it single use", () => {
-    // The route compares the fingerprint in the token against a fresh read of
-    // the account. Setting a password changes the hash, so a replayed link no
-    // longer matches. No nonce table required.
-    expect(passwordFingerprint(SECRET, "hash-v1")).not.toBe(passwordFingerprint(SECRET, "hash-v2"));
-    expect(passwordFingerprint(SECRET, null)).toBe(passwordFingerprint(SECRET, undefined));
-    expect(passwordFingerprint(SECRET, "")).toBe(passwordFingerprint(SECRET, null));
-    expect(passwordFingerprint(SECRET, "hash-v1")).toHaveLength(16);
+describe("a set-password link works once, and never outlives a password change", () => {
+  /** Sign a payload this server's way, for claims in shapes the minter no longer writes. */
+  const signed = (claims: unknown) => {
+    const p = Buffer.from(JSON.stringify(claims)).toString("base64url");
+    return `${p}.${signTokenPayload(SECRET, p)}`;
+  };
+
+  it("redeems while the account is still at the tokenVersion the link was minted at", () => {
+    const claim = readSetPasswordToken(SECRET, makeSetPasswordToken(SECRET, "u-1", 2))!;
+    expect(setPasswordLinkRefusal(claim, 2)).toBeNull();
   });
 
-  it("cannot be reproduced without the server secret, which keeps a password out of the link", async () => {
-    // The input is the stored hash, and an account dormant since the bcrypt
-    // migration could still hold an unsalted SHA-256 of the password itself.
-    // Digesting that bare put sha256(sha256(password)) in an emailed link,
-    // which its holder can guess against offline. Keyed with the secret it
-    // cannot be reproduced from a guess. Both assertions fail against the
-    // old implementation, which returned exactly `bare`.
-    const crypto = await import("node:crypto");
-    const legacyStored = crypto.createHash("sha256").update("hunter2").digest("hex");
-    const bare = crypto.createHash("sha256").update(legacyStored).digest("hex").slice(0, 16);
+  it("redeems a claim-pending account's first link, minted at version 0", () => {
+    // The founder bootstrap and the first-password letter both mint at 0.
+    // A missing tokenVersion on the member reads as 0, as it does for sessions.
+    const claim = readSetPasswordToken(SECRET, makeSetPasswordToken(SECRET, "u-1", 0))!;
+    expect(setPasswordLinkRefusal(claim, 0)).toBeNull();
+    expect(setPasswordLinkRefusal(claim, undefined)).toBeNull();
+  });
 
-    expect(passwordFingerprint(SECRET, legacyStored)).not.toBe(bare);
-    expect(passwordFingerprint(SECRET, legacyStored)).not.toBe(passwordFingerprint("another-secret", legacyStored));
+  it("refuses the same link once it has set a password, because setting one bumps tokenVersion", () => {
+    const claim = readSetPasswordToken(SECRET, makeSetPasswordToken(SECRET, "u-1", 2))!;
+    expect(setPasswordLinkRefusal(claim, 3)).toBe(SET_PASSWORD_LINK_REFUSAL.spent);
+  });
+
+  it("refuses a second link minted before the password changed, never opened", () => {
+    // Two letters asked for, the first one used. The second was valid a
+    // moment ago and must die with the first, which is what the old hash
+    // fingerprint did and what tokenVersion now does.
+    const first = readSetPasswordToken(SECRET, makeSetPasswordToken(SECRET, "u-1", 5))!;
+    const second = readSetPasswordToken(SECRET, makeSetPasswordToken(SECRET, "u-1", 5))!;
+    expect(setPasswordLinkRefusal(first, 5)).toBeNull();
+    expect(setPasswordLinkRefusal(second, 6)).toBe(SET_PASSWORD_LINK_REFUSAL.spent);
+  });
+
+  it("refuses a link whose tokenVersion is AHEAD of the account's, which only a forger could hold", () => {
+    const claim = readSetPasswordToken(SECRET, makeSetPasswordToken(SECRET, "u-1", 9))!;
+    expect(setPasswordLinkRefusal(claim, 2)).toBe(SET_PASSWORD_LINK_REFUSAL.spent);
+  });
+
+  it("RETIRES a link in the shape this server signed before 2026-09-21, by name", () => {
+    // Signed by this very secret, unexpired, carrying the old `pw` fingerprint
+    // and no `v`. Deliberately refused, with a sentence of its own, however
+    // its fingerprint compares. At most an hour of links existed in this shape
+    // when it was retired, and Rye ruled that asking again is acceptable.
+    const old = readSetPasswordToken(
+      SECRET,
+      signed({ userId: "u-1", purpose: "set-password", pw: "0123456789abcdef", exp: Date.now() + 60_000 }),
+    );
+    expect(old).toEqual({ userId: "u-1", v: null });
+    expect(setPasswordLinkRefusal(old!, 0)).toBe(SET_PASSWORD_LINK_REFUSAL.retired);
+  });
+
+  it("retires an old-shape link even for an account that never signed out, which is where `?? 0` would let it through", () => {
+    // The trap this pins: reading a missing `v` as 0 matches the tokenVersion
+    // of every account that has never signed out or reset.
+    for (const shape of [
+      { userId: "u-1", purpose: "set-password", exp: Date.now() + 60_000 },
+      { userId: "u-1", purpose: "set-password", pw: null, exp: Date.now() + 60_000 },
+      { userId: "u-1", purpose: "set-password", v: "0", exp: Date.now() + 60_000 },
+      { userId: "u-1", purpose: "set-password", v: -1, exp: Date.now() + 60_000 },
+    ]) {
+      const claim = readSetPasswordToken(SECRET, signed(shape));
+      expect(claim?.v, JSON.stringify(shape)).toBeNull();
+      expect(setPasswordLinkRefusal(claim!, 0), JSON.stringify(shape)).toBe(SET_PASSWORD_LINK_REFUSAL.retired);
+    }
   });
 });
