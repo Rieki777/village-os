@@ -27095,6 +27095,27 @@ ${inner}
   app.get("/assets/{*splat}", (req, res) => {
     res.status(404).type("text/plain").send(`Not found: ${req.path}`);
   });
+  /*
+   * A PATH THAT LOOKS LIKE A FILE FAILS LIKE ONE.
+   *
+   * `/images` is the other folder of real files, and a missing image in it
+   * still got the shell and a 200: the second failure above, and every uptime
+   * check pointed at a missing file stayed green. Same for a root-level name
+   * with an extension (`/favicon.png`): no client route has a dot in its path
+   * (client/src/App.tsx, held by server/fileMisses.test.ts), so one segment
+   * with an extension can only ever be a file. Both sit after express.static
+   * and the generated files (robots, sitemap, manifest, /grounds, /org), so
+   * only a miss arrives here. A dotted `/profile/:handle` is two segments and
+   * still reaches its page. The body does not repeat the path: the caller
+   * already knows it, and echoing it is a reflection CodeQL reports.
+   */
+  app.get("/images/{*splat}", (_req, res) => {
+    res.status(404).type("text/plain").send("Not found");
+  });
+  app.get("/:file", (req, res, next) => {
+    if (!/\.[A-Za-z0-9]+$/.test(String(req.params.file))) return next();
+    res.status(404).type("text/plain").send("Not found");
+  });
 
   /*
    * QUEST PAGES UNFURL.
