@@ -219,7 +219,7 @@ export default function ReserveHome() {
             </p>
             <Link
               href="/housing"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal text-white font-medium"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-deep text-white font-medium"
             >
               Back to housing options
             </Link>
@@ -262,7 +262,7 @@ export default function ReserveHome() {
             </p>
             <Link
               href="/housing"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal text-white font-medium"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-deep text-white font-medium"
             >
               Back to housing
             </Link>
@@ -402,7 +402,7 @@ export default function ReserveHome() {
             <button
               type="submit"
               disabled={sending}
-              className="w-full px-6 py-4 rounded-xl bg-teal text-white font-medium disabled:opacity-60"
+              className="w-full px-6 py-4 rounded-xl bg-teal-deep text-white font-medium disabled:opacity-60"
             >
               {sending ? "Sending" : "Request this home"}
             </button>
