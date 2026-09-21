@@ -41,6 +41,8 @@
 import type { Express } from "express";
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { randomUUID } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import type { AppDeps } from "../lib/appDeps";
 import {
   DEFAULT_PARCEL_SLUG,
@@ -48,6 +50,7 @@ import {
   MAX_PARCEL_LABEL,
   isLandVisibility,
   isParcelSlug,
+  isSeedFrame,
   orderParcels,
   parseCoordinates,
   publicPoint,
@@ -163,6 +166,27 @@ function mapRow(row: RowDataPacket): LandRow {
   };
 }
 
+/**
+ * Take one kept picture off the uploads volume.
+ *
+ * The same discipline as server/lib/erasure.ts: a name that could climb out of
+ * the uploads directory is refused, because it is not a file this route wrote,
+ * and a file that is already gone counts as removed. It never throws. By the
+ * time it runs the database has stopped pointing at the file, so the picture
+ * is no longer shown whatever happens here, and a file it could not delete is
+ * an orphan that /health's orphan count already reports.
+ */
+function removeFromVolume(uploadsDir: string, fileName: string): boolean {
+  const name = String(fileName ?? "").trim();
+  if (!name || name.includes("/") || name.includes("\\") || name.includes("..")) return false;
+  try {
+    fs.unlinkSync(path.join(uploadsDir, name));
+    return true;
+  } catch (err: any) {
+    return err?.code === "ENOENT";
+  }
+}
+
 /** The address the browser loads the kept picture from, or null when there is none. */
 const imageryUrl = (row: LandRow): string | null =>
   row.imageryFilename ? `/api/uploads/${row.imageryFilename}` : null;
@@ -203,6 +227,17 @@ export function register(app: Express, deps: Deps): void {
       imageryUrl: imageryUrl(row),
       attribution: row.imageryAttribution ?? "",
       /*
+       * WHETHER THIS PICTURE SHOWS THE SEED'S OWN RECTANGLE, as one yes-or-no.
+       *
+       * The map needs this to know whether the seed's surround, place names
+       * and caption still describe the ground under them. It cannot work it
+       * out itself: that takes the centre, and at "hidden" the centre is the
+       * one thing this route withholds. So the comparison happens here, and
+       * only its answer crosses the wire. `spanM` crosses too, because the map
+       * needs the scale, and a width on its own names no place.
+       */
+      seedFrame: isSeedFrame(row.centre, row.spanM),
+      /*
        * Every parcel, each with its OWN ground. Each is its own map: they are
        * not offered as one picture, because two pieces of land in different
        * places share no coordinate space and joining them would draw ground
@@ -219,6 +254,7 @@ export function register(app: Express, deps: Deps): void {
         spanM: p.spanM,
         imageryUrl: imageryUrl(p),
         attribution: p.imageryAttribution ?? "",
+        seedFrame: isSeedFrame(p.centre, p.spanM),
       })),
     });
   });
@@ -238,6 +274,7 @@ export function register(app: Express, deps: Deps): void {
         spanM: p.spanM ?? DEFAULT_SPAN_M,
         visibility: p.visibility,
         sourceText: p.sourceText,
+        seedFrame: isSeedFrame(p.centre, p.spanM),
         imagery: {
           provider: p.imageryProvider,
           url: imageryUrl(p),
@@ -537,5 +574,44 @@ export function register(app: Express, deps: Deps): void {
       const code = err instanceof LicenceForbidsCaching ? 409 : 502;
       return res.status(code).json({ error: "imagery-failed", message });
     }
+  });
+  /**
+   * Take the picture down.
+   *
+   * THE UNDO, AND THE PRIVACY PROMISE. The visibility settings cover the
+   * coordinates only, and the screen tells a founder so, and tells them that
+   * they can remove the picture if they would rather it were not shown. For a
+   * while that sentence pointed at a button that did not exist. This is the
+   * route behind it, and it is also the only way back from a picture fetched
+   * with the wrong frame, which otherwise needed a hand edit in production.
+   *
+   * THE REFERENCE GOES FIRST, THEN THE FILE. Cleared in that order, a failure
+   * part way leaves an orphan file that nothing shows, which /health counts.
+   * The other order leaves the map pointing at a file that is gone, which is a
+   * broken picture on a village's front page.
+   *
+   * The file is DELETED, not just forgotten. A picture that stays reachable at
+   * its old address to anyone who saw it before is not private, and private is
+   * what the founder asked for.
+   */
+  app.delete("/api/admin/land/imagery", async (req, res) => {
+    if (!(await guardCapability(req, res, "map.publish"))) return;
+    const q = (req.query ?? {}) as Record<string, unknown>;
+    const slug = q.slug === undefined ? DEFAULT_PARCEL_SLUG : q.slug;
+    if (!isParcelSlug(slug)) {
+      return res.status(400).json({ error: "bad-parcel", message: "That parcel name is not one this village has." });
+    }
+    const pool = getPool();
+    const row = await readRow(pool, slug);
+    const filename = row.imageryFilename;
+    await pool.query(
+      `UPDATE village_land
+          SET imagery_provider = NULL, imagery_filename = NULL, imagery_attribution = NULL,
+              imagery_fetched_at = NULL, imagery_error = NULL
+        WHERE village_id = ? AND slug = ?`,
+      [VILLAGE, slug],
+    );
+    const fileRemoved = filename ? removeFromVolume(uploadsDir, filename) : false;
+    res.json({ success: true, removed: filename !== null, fileRemoved });
   });
 }

@@ -31,9 +31,28 @@ import {
   DEFAULT_SPAN_M,
   MAX_SPAN_M,
   MIN_SPAN_M,
+  distanceM,
+  isSeedFrame,
   parcelSlug,
   parseCoordinates,
+  seedFrame,
 } from "@shared/land";
+
+/*
+ * THE MAP'S OWN FRAME, and why this screen offers it.
+ *
+ * Every map ships with one picture baked in, cut to one rectangle of real
+ * ground, and every building on a map that has not placed itself sits on that
+ * rectangle. A picture fetched for any OTHER rectangle moves the ground under
+ * every one of them. The easy way to do that by accident is to paste the
+ * pin a mapping app gives you: for the village this map was first drawn for,
+ * the pin is 345 metres from the rectangle's centre, and the default width is
+ * a third of its span. So when somebody types a place near the map's own
+ * ground and it is not the map's frame, this screen says so and offers the
+ * frame, and a village anywhere else never sees the offer.
+ */
+const SEED = seedFrame();
+const NEAR_SEED_M = 25_000;
 
 type Parcel = {
   slug: string;
@@ -43,6 +62,8 @@ type Parcel = {
   spanM: number;
   visibility: "hidden" | "approximate" | "exact";
   sourceText: string | null;
+  /** Whether this parcel's frame is the map's own, worked out on the server. */
+  seedFrame?: boolean;
   imagery: {
     provider: string | null;
     url: string | null;
@@ -106,6 +127,15 @@ export default function LandTab({ password }: { password: string }) {
   const spanBad =
     span.trim() !== "" && (!Number.isFinite(spanNum) || spanNum < MIN_SPAN_M || spanNum > MAX_SPAN_M);
   const active = parcels.find((p) => p.slug === slug) ?? null;
+  const nearSeedMismatch =
+    parsed?.ok === true &&
+    !spanBad &&
+    distanceM({ lat: parsed.lat, lon: parsed.lon }, SEED.centre) < NEAR_SEED_M &&
+    !isSeedFrame({ lat: parsed.lat, lon: parsed.lon }, spanNum);
+  const useMapFrame = () => {
+    setText(`${SEED.centre.lat.toFixed(7)}, ${SEED.centre.lon.toFixed(7)}`);
+    setSpan(String(SEED.spanM));
+  };
 
   const save = async (confirmSwapped = false) => {
     setBusy("saving");
@@ -135,6 +165,25 @@ export default function LandTab({ password }: { password: string }) {
       return toast.error(refusal(d, "That location was refused"));
     }
     toast.success("Saved. The map draws this the next time it loads.");
+    await load();
+  };
+
+  /*
+   * THE UNDO. Deletes the kept file as well as the reference, because a picture
+   * still reachable at its old address is not private, and private is what the
+   * visibility note tells a founder this button gives them.
+   */
+  const removePicture = async () => {
+    if (!window.confirm("Remove this picture? The map goes back to its own ground, and the file is deleted.")) return;
+    setBusy("fetching");
+    const res = await fetch(`${API_BASE}/admin/land/imagery?slug=${encodeURIComponent(slug)}`, {
+      method: "DELETE",
+      headers: authHeaders(password),
+    });
+    const d = await res.json().catch(() => ({}));
+    setBusy("");
+    if (!res.ok) return toast.error(refusal(d, "The picture could not be removed"));
+    toast.success("Picture removed. The map draws its own ground again.");
     await load();
   };
 
@@ -288,6 +337,19 @@ export default function LandTab({ password }: { password: string }) {
             inputMode="numeric"
             className="mt-1 w-40 text-sm border border-gray-200 rounded-lg px-3 py-2"
           />
+          {nearSeedMismatch && (
+            <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              This map's buildings were placed on a frame centred at{" "}
+              <span className="font-mono">
+                {SEED.centre.lat.toFixed(5)}, {SEED.centre.lon.toFixed(5)}
+              </span>{" "}
+              and {SEED.spanM.toLocaleString()} m across. A picture framed anywhere else moves the ground
+              under every one of them.{" "}
+              <button onClick={useMapFrame} className="underline font-medium">
+                Use the map's frame
+              </button>
+            </div>
+          )}
           {spanBad && (
             <div className="mt-1.5 text-xs text-red-600">
               Pick a number of metres between {MIN_SPAN_M} and {MAX_SPAN_M}. Most projects sit near{" "}
@@ -320,8 +382,8 @@ export default function LandTab({ password }: { password: string }) {
           */}
           <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
             These three settings cover the <strong>coordinates only</strong>. Your aerial picture is
-            shown to visitors at every setting, including "Nobody" - remove it if you would rather it
-            were not.
+            shown to visitors at every setting, including "Nobody". Use "Remove the picture" below if you
+            would rather it were not.
           </div>
         </div>
 
@@ -340,6 +402,15 @@ export default function LandTab({ password }: { password: string }) {
           >
             {busy === "fetching" ? "Fetching..." : "Fetch the picture"}
           </button>
+          {active?.imagery?.url && (
+            <button
+              onClick={removePicture}
+              disabled={busy !== ""}
+              className="text-sm border border-red-200 text-red-700 rounded-lg px-4 py-2 font-medium disabled:opacity-40"
+            >
+              Remove the picture
+            </button>
+          )}
         </div>
 
         {!provider?.providerId && (
@@ -368,6 +439,11 @@ export default function LandTab({ password }: { password: string }) {
             className="w-full max-w-lg rounded-lg"
           />
           <p className="text-[11px] text-gray-500 mt-1.5">{active.imagery.attribution}</p>
+          <p className="text-xs text-gray-600 mt-2">
+            {active.seedFrame
+              ? "This picture matches the map's own frame, so the map keeps its coastline and place names."
+              : "This picture sets its own frame. The map measures and places everything against it, and shows none of another place's names."}
+          </p>
         </div>
       )}
 

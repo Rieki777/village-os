@@ -641,3 +641,102 @@ export function orderParcels<T extends { sortOrder: number; createdAt?: string |
       ? a.sortOrder - b.sortOrder
       : String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? "")));
 }
+/* ── THE SEED FRAME ────────────────────────────────────────────────────────
+ *
+ * Every deployment ships the map artifact with one plate baked into it, and
+ * that plate was cut to one real rectangle of ground. This is that rectangle's
+ * georeference, COPIED from `GEOREF` in docs/prototypes/grounds-v0.html, which
+ * is the source. `shared/land.test.ts` reads the artifact and fails if the two
+ * ever disagree, the same way scripts/check-map-routes.mjs holds the map's
+ * SITE_PAGES to the router: two copies of one fact are safe only when
+ * something checks them against each other.
+ *
+ * WHY THE SERVER HAS TO KNOW IT. Everything the seed draws besides its plate,
+ * its surround, its place names and its coordinate caption, belongs to THIS
+ * rectangle. Over a village standing anywhere else it is invented geography,
+ * which this map may never draw. So a village's picture is compared against
+ * the seed frame, and the comparison is made HERE rather than in the browser,
+ * because at "hidden" the browser is not allowed to learn the coordinates it
+ * would need to make it. What crosses the wire is one yes-or-no.
+ *
+ * It is not a village's identity and it names none. It is a fact about a file
+ * the platform ships.
+ */
+export const SEED_GEOREF = {
+  lat: 9.2320128,
+  lon: -83.8343203,
+  /** The world point the pin sits on. Deliberately NOT the centre. */
+  pinW: [1520, 800] as const,
+  mPerUnit: 2592 / 2400,
+  world: [2400, 1600] as const,
+};
+
+/**
+ * World units to WGS84 under a georeference, by the artifact's own formula.
+ *
+ * Web Mercator about the pin, exactly as grounds-v0.html's worldToLatLon does
+ * it, including the zoom it carries even though the zoom cancels: a second
+ * formula that agreed "to within a metre" would be a second thing to trust.
+ */
+export function worldToLatLonUnder(
+  g: { lat: number; lon: number; pinW: readonly [number, number]; mPerUnit: number },
+  x: number,
+  y: number,
+): LatLon {
+  const z = 17;
+  const n = Math.pow(2, z) * 256;
+  const mpp = (156543.03392 * Math.cos((g.lat * Math.PI) / 180)) / Math.pow(2, z);
+  const ppu = g.mPerUnit / mpp;
+  const lr = (g.lat * Math.PI) / 180;
+  const gx = ((g.lon + 180) / 360) * n + (x - g.pinW[0]) * ppu;
+  const gy = ((1 - Math.log(Math.tan(lr) + 1 / Math.cos(lr)) / Math.PI) / 2) * n + (y - g.pinW[1]) * ppu;
+  return {
+    lat: (Math.atan(Math.sinh(Math.PI * (1 - (2 * gy) / n))) * 180) / Math.PI,
+    lon: (gx / n) * 360 - 180,
+  };
+}
+
+/**
+ * The rectangle the seed plate covers, as a centre and a width.
+ *
+ * The centre is the WORLD centre, not the pin. They are 320 units apart, about
+ * 345 metres, and a picture centred on the pin would land that far from every
+ * building already placed on the map.
+ */
+export function seedFrame(): { centre: LatLon; spanM: number } {
+  const [w, h] = SEED_GEOREF.world;
+  return {
+    centre: worldToLatLonUnder(SEED_GEOREF, w / 2, h / 2),
+    spanM: w * SEED_GEOREF.mPerUnit,
+  };
+}
+
+/**
+ * Whether a parcel's picture shows the seed's own rectangle.
+ *
+ * TIGHT on purpose. The tolerance absorbs the column's six-decimal rounding
+ * (about eleven centimetres) and a founder's span arriving as a whole number,
+ * and nothing more. A frame five metres off is a different frame: the picture
+ * would sit that far from the buildings on it.
+ */
+export function isSeedFrame(centre: LatLon | null, spanM: number | null): boolean {
+  if (!centre || spanM === null || !Number.isFinite(spanM)) return false;
+  const seed = seedFrame();
+  const CENTRE_TOLERANCE_DEG = 0.00005; // about 5.5 m
+  const SPAN_TOLERANCE = 0.005; // half a percent, about 13 m of 2592
+  return (
+    Math.abs(centre.lat - seed.centre.lat) <= CENTRE_TOLERANCE_DEG &&
+    Math.abs(centre.lon - seed.centre.lon) <= CENTRE_TOLERANCE_DEG &&
+    Math.abs(spanM - seed.spanM) / seed.spanM <= SPAN_TOLERANCE
+  );
+}
+
+/** Great-circle distance in metres. Used to notice a founder standing near the seed. */
+export function distanceM(a: LatLon, b: LatLon): number {
+  const R = 6371008.8;
+  const toR = (d: number) => (d * Math.PI) / 180;
+  const dLat = toR(b.lat - a.lat);
+  const dLon = toR(b.lon - a.lon);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toR(a.lat)) * Math.cos(toR(b.lat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
