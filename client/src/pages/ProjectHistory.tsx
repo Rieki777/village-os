@@ -480,7 +480,7 @@ function PasswordGate({ onUnlock }: { onUnlock: (pw: string) => void }) {
           {!loading && !isAdmin && (
             <a
               href="/admin"
-              className="block w-full bg-teal-deep text-white py-3 rounded-xl font-semibold text-sm hover:bg-teal transition-colors text-center"
+              className="block w-full bg-teal-deep text-white py-3 rounded-xl font-semibold text-sm hover:bg-teal-deep-dark transition-colors text-center"
             >
               Sign in with an admin account
             </a>
@@ -1096,7 +1096,7 @@ export default function ProjectHistory() {
                   </button>
                   <button
                     onClick={saveResources}
-                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-teal-deep text-white hover:bg-teal transition-colors"
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-teal-deep text-white hover:bg-teal-deep-dark transition-colors"
                   >
                     <Save className="w-3 h-3" />
                     Save links
@@ -1504,7 +1504,7 @@ export default function ProjectHistory() {
                                         <div className="flex gap-2">
                                           <button
                                             onClick={() => saveNote(d.id)}
-                                            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-teal-deep text-white hover:bg-teal transition-colors"
+                                            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-teal-deep text-white hover:bg-teal-deep-dark transition-colors"
                                           >
                                             <Save className="w-3 h-3" />
                                             Save
@@ -1740,7 +1740,7 @@ export default function ProjectHistory() {
                                 className={`shrink-0 text-xs px-3 py-1.5 rounded-lg transition-colors ${
                                   isEditing
                                     ? "bg-stone-200 text-stone-600 hover:bg-stone-300"
-                                    : "bg-teal-deep text-white hover:bg-teal"
+                                    : "bg-teal-deep text-white hover:bg-teal-deep-dark"
                                 }`}
                               >
                                 {isEditing ? "Cancel" : isDecided ? "Edit" : "Resolve"}
@@ -1903,7 +1903,7 @@ export default function ProjectHistory() {
                       <button
                         onClick={addTopic}
                         disabled={!newTopic.trim()}
-                        className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal disabled:opacity-50 transition-colors"
+                        className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep-dark disabled:opacity-50 transition-colors"
                       >
                         Add Topic
                       </button>

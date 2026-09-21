@@ -53,6 +53,17 @@
  * rescue this pairing, which is why it is refused outright here instead of
  * counted down. The scan is described where PAIRING_HELD is declared below.
  *
+ * The same check reads the HOVER, FOCUS and ACTIVE states, because a button
+ * is read while a pointer rests on it too. White text may not move onto the
+ * soft tone there either, nor onto the mid tone (`bg-teal-light`, derived for
+ * white at 3:1 only), nor onto a translucent brand (`hover:bg-teal-deep/90`,
+ * `hover:bg-primary/90`), nor may a white-on-brand button fade
+ * (`hover:opacity-90`). --tone-brand is derived so white only just clears 4.5
+ * for a light seed, so any fade over a light page drops it under: at /90, 28
+ * of 55 villages, 3.79:1 worst. The hover that carries white is
+ * `hover:bg-teal-deep-dark`, --tone-brand-hover, a derived step from the brand
+ * that white clears at 6.33:1 or better for every seed.
+ *
  * Usage:
  *   node scripts/check-theme-literals.mjs                    # the gate
  *   node scripts/check-theme-literals.mjs --json              # machine readable
@@ -185,44 +196,104 @@ function scanFile(file) {
  * comments are blanked. A template contributes its static text, each quoted
  * literal inside a `${...}` on its own, and each of those joined to the
  * static text, because `bg-teal ${on ? "text-white" : ""}` renders the
- * pairing on one branch. A pairing is an UNPREFIXED `bg-teal` or `bg-ocean`
- * (an opacity suffix too) together with an unprefixed `text-white` (same) in
- * one class list. `-deep`, `-light` and `-band` are different tokens and are
- * never matched: `bg-teal-deep` is the pairing white text is meant for.
+ * pairing on one branch. White ink is an unprefixed `text-white` or
+ * `text-primary-foreground` (white in the light scheme, the only one there
+ * is), an opacity suffix allowed.
+ *
+ * AT REST, a pairing is an UNPREFIXED `bg-teal` or `bg-ocean` (an opacity
+ * suffix too) with white ink in one class list. `-deep`, `-light` and `-band`
+ * are different tokens and are never matched here: `bg-teal-deep` is the
+ * pairing white text is meant for.
+ *
+ * UNDER A STATE, a token is read when its variant chain names hover, focus,
+ * focus-visible, focus-within or active (a `group-` or `peer-` form too, and
+ * inside an arbitrary chain such as shadcn's `[a&]:hover:`). The ink under the
+ * state is a state `text-*` colour if the list has one, else the resting ink.
+ * With white ink it refuses a state ground of:
+ *  - `bg-teal` or `bg-ocean`, the soft tone, at any opacity;
+ *  - `bg-teal-light`, the mid tone: white on it is 3.00 to 13.79:1, below 4.5
+ *    for 30 of 55 villages;
+ *  - `bg-teal-deep/NN` or `bg-primary/NN` below 100: a translucent brand;
+ *  - `opacity-NN` below 100 when the resting ground is `bg-teal-deep`,
+ *    `bg-primary` or `bg-teal-light`: the whole button fades toward the page.
+ *    (A white-on-teal-light button fails AT REST for 30 villages as well.
+ *    This check does not refuse that resting pairing; it was reported with
+ *    the change that added the state half.)
+ * A chain that also names `disabled` is not read (WCAG exempts an inactive
+ * control), nor is one that names `dark` (the theme is light only).
  *
  * WHAT IT DOES NOT READ, stated so nobody takes a green for more than it is:
- *  - Variant-prefixed states. `hover:bg-teal` under white text fails the
- *    same way while a pointer rests on it, and 17 primary buttons did that
- *    when this check was written. That is a hover decision across the design
- *    system, not the resting pairing refused here, so it is left out and was
- *    reported with the change that added this check.
+ *  - Grounds that are not the brand family. A fixed colour's fade, such as
+ *    `bg-gold hover:opacity-90`, is not refused here.
+ *  - Attribute states: `data-[state=open]:`, `aria-selected:` and the like.
+ *    None paints the soft tone or a faded brand today.
+ *  - Stylesheets. `.btn-amora:hover` lives in index.css, and
+ *    client/src/lib/brandGroundContrast.test.ts resolves and measures it.
+ *  - A class list split across strings, such as `cn("text-white", "hover:bg-teal")`:
+ *    each string is its own list, so the two are never joined.
  *  - A colour that arrives through data. `color: "bg-teal"` in an object,
  *    rendered under a `text-white` icon somewhere else, is two literals in
  *    two places, and no text scan can join them.
  *  - Test files. A test may need to write the pairing down.
  *
  * THE FLOOR. A scan that silently finds nothing reads exactly like a clean
- * tree, so every run prints its denominator (files and class lists) and how
- * often it saw the CONVENTION, `bg-teal-deep` with `text-white`, which the
- * site's primary buttons use by the hundred. If that known positive reads
+ * tree, so every run prints its denominator (files, class lists, state grounds
+ * read) and how often it saw each CONVENTION: `bg-teal-deep` with
+ * `text-white` at rest, and white text hovering to `bg-teal-deep-dark`. The
+ * site's primary buttons use both by the dozen. If either known positive reads
  * zero, the extractor is broken, and the check fails instead of passing.
  *
  * HELD FOR A RULING. An entry here is a known defect whose fix is a design
- * call rather than a mechanical one, and it is printed on every run. The
+ * call rather than a mechanical one, and it is printed on every run. It counts
+ * refused class lists in the file, at rest and under a state together. The
  * count is EXACT: one more fails, and one fewer fails too, so a hold cannot
- * outlive the fix that makes it stale.
+ * outlive the fix that makes it stale. An empty map is valid: nothing is held.
  */
 const PAIRING_HELD = {
-  // The Housing hero: white type on the soft tone across a full-bleed
-  // section. Every passing fix restyles a hero (the deep or band tone, or
-  // dark type on the soft band), so the choice is Rye's. The measured options
-  // are in the pull request that added this check.
-  "client/src/pages/Housing.tsx": 1,
+  // Empty since 2026-09-21. The Housing hero was held here, white type on the
+  // soft tone, until Rye ruled "band colour": it now sits on bg-teal-band with
+  // a full-white paragraph.
 };
 
 const SOFT_GROUND = /^bg-(?:teal|ocean)(?:\/\d+)?$/;
-const WHITE_INK = /^text-white(?:\/\d+)?$/;
+const WHITE_INK = /^text-(?:white|primary-foreground)(?:\/\d+)?$/;
 const QUOTED = /"([^"\n]*)"|'([^'\n]*)'/g;
+
+/** A `text-*` utility that sets size, alignment or wrapping, not colour. */
+const TEXT_NOT_COLOUR = /^text-(?:xs|sm|base|lg|[2-9]?xl|left|center|right|justify|start|end|wrap|nowrap|balance|pretty|ellipsis|clip)$/;
+const STATE_VARIANT = /^(?:group-|peer-)?(?:hover|focus|focus-visible|focus-within|active)(?:\/[\w-]+)?$/;
+const UNREAD_VARIANT = /^(?:dark|disabled|aria-disabled|group-disabled|peer-disabled)$/;
+/** A resting ground in the brand family that a white-text button fades from. */
+const FADING_GROUND = /^bg-(?:teal-deep|teal-light|primary)$/;
+const HOVER_PARTNER = "bg-teal-deep-dark";
+
+/** Why white text may not sit on this ground under a state, or null. */
+function refusedStateGround(utility, restingBrand) {
+  if (SOFT_GROUND.test(utility)) return "white text onto the soft tone (bg-teal), 1.67 to 3.00:1";
+  if (/^bg-teal-light(?:\/\d+)?$/.test(utility)) return "white text onto the mid tone (bg-teal-light), under 4.5 for 30 of 55 villages";
+  const fade = /^bg-(?:teal-deep|primary)\/(\d+)$/.exec(utility);
+  if (fade && Number(fade[1]) < 100) return `white text onto a translucent brand (${utility}), under 4.5 for 28 of 55 villages at /90`;
+  const dim = /^opacity-(\d+)$/.exec(utility);
+  if (dim && Number(dim[1]) < 100 && restingBrand) return `a white-on-brand button fading (${utility}), under 4.5 for 28 of 55 villages at opacity-90`;
+  return null;
+}
+
+/** `[a&]:hover:bg-teal` into its variant chain and utility; a `:` inside brackets is not a separator. */
+function splitVariants(token) {
+  const parts = [];
+  let depth = 0;
+  let cur = "";
+  for (const c of token) {
+    if (c === "[") depth += 1;
+    if (c === "]") depth -= 1;
+    if (c === ":" && depth === 0) { parts.push(cur); cur = ""; } else cur += c;
+  }
+  parts.push(cur);
+  return { variants: parts.slice(0, -1), utility: parts[parts.length - 1].replace(/^!|!$/g, "") };
+}
+
+const isStateChain = (variants) =>
+  variants.some((v) => STATE_VARIANT.test(v)) && !variants.some((v) => UNREAD_VARIANT.test(v));
 
 /**
  * Replace every comment with spaces, keeping each newline where it was so an
@@ -297,7 +368,10 @@ function classLists(code) {
 }
 
 function scanPairings(allFiles) {
-  const result = { files: 0, testsSkipped: 0, lists: 0, convention: 0, hits: {} };
+  const result = {
+    files: 0, testsSkipped: 0, lists: 0, convention: 0,
+    stateGrounds: 0, whiteStateLists: 0, hoverConvention: 0, restHits: 0, stateHits: 0, hits: {},
+  };
   for (const file of allFiles) {
     if (file.endsWith(".test.tsx")) { result.testsSkipped += 1; continue; }
     result.files += 1;
@@ -305,18 +379,47 @@ function scanPairings(allFiles) {
     const code = blankComments(src);
     const paired = new Set();
     const conventional = new Set();
+    const stateGrounds = new Set();
+    const whiteState = new Set();
+    const hoverConventional = new Set();
+    const hit = (at, kind, why) => {
+      paired.add(at);
+      const line = code.slice(0, at).split("\n").length;
+      result[kind === "rest" ? "restHits" : "stateHits"] += 1;
+      (result.hits[rel(file)] ??= []).push({ line, kind, why, text: src.split("\n")[line - 1].trim().slice(0, 140) });
+    };
     for (const { text, at } of classLists(code)) {
       result.lists += 1;
-      const tokens = text.split(/\s+/);
+      const tokens = text.split(/\s+/).filter(Boolean);
       if (tokens.includes("bg-teal-deep") && tokens.includes("text-white")) conventional.add(at);
+
+      const parsed = tokens.map(splitVariants);
+      const resting = parsed.filter((p) => p.variants.length === 0).map((p) => p.utility);
+      const state = parsed.filter((p) => p.variants.length > 0 && isStateChain(p.variants)).map((p) => p.utility);
+      for (const u of state) if (/^(?:bg|opacity)-/.test(u)) stateGrounds.add(`${at}|${u}`);
+      const stateInk = state.filter((u) => u.startsWith("text-") && !TEXT_NOT_COLOUR.test(u));
+      const whiteUnderState =
+        stateInk.some((u) => WHITE_INK.test(u)) ||
+        (resting.some((u) => WHITE_INK.test(u)) && !stateInk.some((u) => !WHITE_INK.test(u)));
+      if (whiteUnderState && state.some((u) => /^(?:bg|opacity)-/.test(u))) whiteState.add(at);
+      if (whiteUnderState && state.includes(HOVER_PARTNER)) hoverConventional.add(at);
+
       if (paired.has(at)) continue;
-      if (tokens.some((t) => SOFT_GROUND.test(t)) && tokens.some((t) => WHITE_INK.test(t))) {
-        paired.add(at);
-        const line = code.slice(0, at).split("\n").length;
-        (result.hits[rel(file)] ??= []).push({ line, text: src.split("\n")[line - 1].trim().slice(0, 140) });
+      if (resting.some((u) => SOFT_GROUND.test(u)) && resting.some((u) => WHITE_INK.test(u))) {
+        hit(at, "rest", "white text on the soft tone (bg-teal), 1.67 to 3.00:1");
+        continue;
+      }
+      if (!whiteUnderState) continue;
+      const restingBrand = resting.some((u) => FADING_GROUND.test(u));
+      for (const u of state) {
+        const why = refusedStateGround(u, restingBrand);
+        if (why) { hit(at, "state", why); break; }
       }
     }
     result.convention += conventional.size;
+    result.stateGrounds += stateGrounds.size;
+    result.whiteStateLists += whiteState.size;
+    result.hoverConvention += hoverConventional.size;
     result.hits[rel(file)]?.sort((a, b) => a.line - b.line);
   }
   return result;
@@ -358,7 +461,12 @@ const pairingProblems = [];
 for (const [file, hits] of Object.entries(pairing.hits)) {
   const held = PAIRING_HELD[file] ?? 0;
   if (hits.length > held) {
-    pairingProblems.push({ file, reason: `${hits.length} white-on-soft pairing(s), ${held} held for a ruling`, hits });
+    const rest = hits.filter((h) => h.kind === "rest").length;
+    pairingProblems.push({
+      file,
+      reason: `${rest} white-on-soft pairing(s) at rest and ${hits.length - rest} under hover, focus or active, ${held} held for a ruling`,
+      hits,
+    });
   }
 }
 for (const [file, held] of Object.entries(PAIRING_HELD)) {
@@ -380,6 +488,15 @@ if (pairing.files === 0 || pairing.convention === 0) {
     hits: [],
   });
 }
+if (pairing.stateGrounds === 0 || pairing.hoverConvention === 0) {
+  pairingProblems.push({
+    file: "client/src",
+    reason:
+      `the state scan read ${pairing.stateGrounds} hover, focus or active ground(s) and saw white text hovering to ` +
+      `${HOVER_PARTNER} ${pairing.hoverConvention} time(s). The variant reader cannot see a known positive, so its zero proves nothing`,
+    hits: [],
+  });
+}
 
 if (process.argv.includes("--json")) {
   console.log(JSON.stringify({
@@ -391,6 +508,11 @@ if (process.argv.includes("--json")) {
       testFilesSkipped: pairing.testsSkipped,
       classLists: pairing.lists,
       conventionSeen: pairing.convention,
+      stateGroundsRead: pairing.stateGrounds,
+      whiteInkListsWithStateGround: pairing.whiteStateLists,
+      hoverConventionSeen: pairing.hoverConvention,
+      foundAtRest: pairing.restHits,
+      foundUnderState: pairing.stateHits,
       found: Object.fromEntries(Object.entries(pairing.hits).map(([f, h]) => [f, h.length])),
       held: PAIRING_HELD,
     },
@@ -433,10 +555,12 @@ if (pairingProblems.length) {
   console.error("\nSOFT-GROUND PAIRING REFUSED: white text on bg-teal measures 1.67 to 3.00:1 across every seed measured.\n");
   console.error("bg-teal is --tone-brand-soft, derived at a fixed light tone, so no village colour can carry white on it.");
   console.error("Put white text on bg-teal-deep, the primary-button convention: --tone-brand is derived so white clears");
-  console.error("4.5:1 on it for every seed, in both colour schemes.\n");
+  console.error("4.5:1 on it for every seed, in both colour schemes.");
+  console.error("Under hover, focus or active, move it to hover:bg-teal-deep-dark: --tone-brand-hover is a visible step from the");
+  console.error("brand that white clears at 6.33:1 or better for every seed. Not the soft or mid tone, and not a fade.\n");
   for (const p of pairingProblems) {
     console.error(`  ${p.file}: ${p.reason}`);
-    for (const h of p.hits.slice(0, 8)) console.error(`      ${p.file}:${h.line}: ${h.text}`);
+    for (const h of p.hits.slice(0, 8)) console.error(`      ${p.file}:${h.line}: ${h.why}\n          ${h.text}`);
   }
   console.error("");
 }
@@ -452,4 +576,9 @@ console.log(
   `Soft-ground pairing check passed. Read ${pairing.files} .tsx file(s) (${pairing.testsSkipped} test file(s) skipped) ` +
   `and ${pairing.lists} class list(s). White on bg-teal/bg-ocean: 0 unheld, held for a ruling: ${heldList}. ` +
   `Known positive, bg-teal-deep with text-white: seen ${pairing.convention} time(s).`,
+);
+console.log(
+  `State pairing check passed. Read ${pairing.stateGrounds} hover, focus or active ground(s), ` +
+  `${pairing.whiteStateLists} of them in class lists with white ink. White onto the soft or mid tone, a translucent brand, ` +
+  `or a fading brand button: 0 unheld. Known positive, white text hovering to ${HOVER_PARTNER}: seen ${pairing.hoverConvention} time(s).`,
 );

@@ -28,16 +28,26 @@
  * differs, and that is exactly the case that sinks dark text on the soft tone
  * (1.98:1), which is why the soft tone with dark type was not the fix.
  *
- * WHAT IT DOES NOT MEASURE: hover and focus states (variant-prefixed classes
- * are ignored), and anything painted by a gradient or an image, which no
- * ratio can score honestly. It resolves only what the resting state paints.
+ * UNDER THE POINTER, added 2026-09-21 on Rye's ruling that a primary button
+ * keeps a visible hover colour and that the hover passes AA. The second half
+ * of this file reads every class list in client/src whose ink is white under
+ * hover, focus or active and whose ground there is one a village's seed
+ * moves, resolves that ground the same way, and asserts 4.5:1 plus a visible
+ * step from rest. There is no dark mode (the theme is fixed to light by the
+ * same ruling), so those readings and the Housing hero's are LIGHT only: 55
+ * per surface.
+ *
+ * WHAT IT DOES NOT MEASURE: anything painted by a gradient or an image, which
+ * no ratio can score honestly, and a fade's backdrop beyond white. A
+ * translucent or faded hover is composited over white, the lightest ground a
+ * button sits on and so the worst case for white text.
  */
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { buildThemeCss } from "../../../server/lib/themeCss";
-import { CHARACTER_CARDS, contrastRatio, deriveTheme } from "@shared/brandTokens";
+import { CHARACTER_CARDS, contrastRatio, deriveTheme, HOVER_STEP } from "@shared/brandTokens";
 
 const ROOT = path.resolve(import.meta.dirname, "../../..");
 const AA_BODY = 4.5;
@@ -355,5 +365,311 @@ describe("the resolver reads the tokens a village actually gets", () => {
     const dark = utilityColour("text", "foreground", customProperties(VILLAGES[0], "dark"))!;
     expect(contrastRatio(light, "#000000")).toBeLessThan(2);
     expect(contrastRatio(dark, "#000000")).toBeGreaterThan(12);
+  });
+});
+
+// ── Light only, from here down ───────────────────────────────────────────────
+
+/* Rye, 2026-09-21: no dark mode; the theme is fixed to light. */
+const lightCache = new Map<string, Map<string, string>>();
+const light = (village: Village) => {
+  if (!lightCache.has(village.name)) lightCache.set(village.name, customProperties(village, "light"));
+  return lightCache.get(village.name)!;
+};
+const WHITE = "#ffffff";
+
+/** The innermost element whose source matches the anchor, ground or not. */
+function locateAny(file: string, anchor: RegExp): Located {
+  const src = fs.readFileSync(path.join(ROOT, file), "utf8");
+  const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const found: (Located & { node: ts.Node })[] = [];
+  const visit = (node: ts.Node, ancestors: string[][]) => {
+    let next = ancestors;
+    if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+      const classes = classNameOf(ts.isJsxElement(node) ? node.openingElement : node);
+      if (anchor.test(node.getText(sf))) found.push({ node, classes, ancestors });
+      next = [classes, ...ancestors];
+    }
+    ts.forEachChild(node, (child) => visit(child, next));
+  };
+  visit(sf, []);
+  const innermost = found.filter((f) => !found.some((g) => g !== f && g.node.pos >= f.node.pos && g.node.end <= f.node.end));
+  if (innermost.length !== 1) throw new Error(`${file}: ${anchor} names ${innermost.length} elements, expected exactly one`);
+  return innermost[0];
+}
+
+/** Text on the ground an ancestor paints: the nearest opaque ground, and the nearest ink. */
+function measureOnNearestGround(where: Located, village: Village) {
+  const vars = light(village);
+  const chain = [where.classes, ...where.ancestors];
+  let ground: string | null = null;
+  for (const classes of chain) {
+    const c = classes.map((t) => colourToken(t, "bg")).find((x) => x && utilityColour("bg", x.name, vars));
+    if (c) {
+      if (c.alpha !== 1) throw new Error(`a translucent ground (${c.name}) depends on what is behind it`);
+      ground = utilityColour("bg", c.name, vars);
+      break;
+    }
+  }
+  if (!ground) throw new Error("no ground painted by the element or any ancestor");
+  let ink: string | null = null;
+  for (const classes of chain) {
+    const c = classes.map((t) => colourToken(t, "text")).find((x) => x && utilityColour("text", x.name, vars));
+    if (c) {
+      const hex = utilityColour("text", c.name, vars)!;
+      ink = c.alpha === 1 ? hex : blend(hex, c.alpha, ground);
+      break;
+    }
+  }
+  ink ??= utilityColour("text", "foreground", vars)!;
+  return { ground, ink, ratio: contrastRatio(ink, ground) };
+}
+
+/*
+ * THE HOUSING HERO, on the band since Rye's ruling. Both the heading and the
+ * paragraph are held to 4.5:1. The heading is 36px bold and could claim the
+ * 3:1 large-text floor, but it does not need it: the band is derived no
+ * lighter than --tone-brand, which white clears at 4.5 by construction, so
+ * the stricter floor costs nothing and catches more. The paragraph is the
+ * one that needed full white: at /80 it read 4.03:1 on the handmade/#ff6b00
+ * band and fell under 4.5 on 7 of the 54 seeded themes.
+ */
+const HERO: { label: string; anchor: RegExp }[] = [
+  { label: "the Housing hero heading", anchor: /Housing at \{villageName\}/ },
+  { label: "the Housing hero paragraph", anchor: /Find your place here/ },
+];
+
+describe("the Housing hero reads on the band for every village, light only", () => {
+  for (const part of HERO) {
+    it(`${part.label} reads at ${AA_BODY}:1 or better over 55 villages`, () => {
+      const where = locateAny("client/src/pages/Housing.tsx", part.anchor);
+      const below: string[] = [];
+      let worst = Infinity;
+      for (const village of VILLAGES) {
+        const { ground, ink, ratio } = measureOnNearestGround(where, village);
+        worst = Math.min(worst, ratio);
+        if (ratio < AA_BODY) below.push(`${village.name}: ${ratio.toFixed(2)}:1, ${ink} on ${ground}`);
+      }
+      expect(below, `${part.label}: worst ${worst.toFixed(2)}:1`).toEqual([]);
+    });
+  }
+});
+
+// ── Under the pointer ────────────────────────────────────────────────────────
+
+const STATE_VARIANT = /^(?:group-|peer-)?(?:hover|focus|focus-visible|focus-within|active)(?:\/[\w-]+)?$/;
+const UNREAD_VARIANT = /^(?:dark|disabled|aria-disabled|group-disabled|peer-disabled)$/;
+
+/** `[a&]:hover:bg-x` into its variant chain and utility; a `:` inside brackets does not split. */
+function splitVariants(token: string): { variants: string[]; utility: string } {
+  const parts: string[] = [];
+  let depth = 0;
+  let cur = "";
+  for (const c of token) {
+    if (c === "[") depth += 1;
+    if (c === "]") depth -= 1;
+    if (c === ":" && depth === 0) { parts.push(cur); cur = ""; } else cur += c;
+  }
+  parts.push(cur);
+  return { variants: parts.slice(0, -1), utility: parts[parts.length - 1] };
+}
+
+interface ClassList { file: string; line: number; tokens: string[] }
+
+/**
+ * Every string a .tsx file writes, read with the TypeScript compiler rather
+ * than the gate's text scan, so a fault in one does not blind the other. A
+ * template also yields its static text joined to each string inside its
+ * `${...}`, because that branch renders with it.
+ */
+function classListsIn(file: string): ClassList[] {
+  const src = fs.readFileSync(path.join(ROOT, file), "utf8");
+  const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const lineOf = (n: ts.Node) => sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
+  const out: ClassList[] = [];
+  const push = (n: ts.Node, text: string) => out.push({ file, line: lineOf(n), tokens: text.split(/\s+/).filter(Boolean) });
+  const visit = (node: ts.Node) => {
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) push(node, node.text);
+    if (ts.isTemplateExpression(node)) {
+      const staticText = [node.head.text, ...node.templateSpans.map((s) => s.literal.text)].join(" ");
+      push(node, staticText);
+      const inner = (n: ts.Node): void => {
+        if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) push(n, `${staticText} ${n.text}`);
+        ts.forEachChild(n, inner);
+      };
+      node.templateSpans.forEach((s) => inner(s.expression));
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return out;
+}
+
+/** The first colour utility in the list that the stylesheet can resolve, with its alpha. */
+function firstPaint(utilities: string[], prefix: "bg" | "text", vars: Map<string, string>) {
+  for (const u of utilities) {
+    const c = colourToken(u, prefix);
+    const hex = c && utilityColour(prefix, c.name, vars);
+    if (c && hex) return { hex, alpha: c.alpha };
+  }
+  return null;
+}
+
+/**
+ * What the pointer paints: the state ground (composited over white when it is
+ * translucent), the ink under the state (a state text colour, else the
+ * resting one), and a state opacity fading both toward white. Null when the
+ * list has no state ground or no ink of its own.
+ */
+function hoverReading(tokens: string[], vars: Map<string, string>) {
+  const parsed = tokens.map(splitVariants);
+  const resting = parsed.filter((p) => p.variants.length === 0).map((p) => p.utility);
+  const state = parsed
+    .filter((p) => p.variants.some((v) => STATE_VARIANT.test(v)) && !p.variants.some((v) => UNREAD_VARIANT.test(v)))
+    .map((p) => p.utility);
+  const restBg = firstPaint(resting, "bg", vars);
+  const stateBg = firstPaint(state, "bg", vars);
+  const fade = state.map((u) => /^opacity-(\d+)$/.exec(u)).find(Boolean);
+  const ink = firstPaint(state, "text", vars) ?? firstPaint(resting, "text", vars);
+  if (!ink || (!stateBg && !fade)) return null;
+  const over = (c: { hex: string; alpha: number }) => (c.alpha === 1 ? c.hex : blend(c.hex, c.alpha, WHITE));
+  let ground = stateBg ? over(stateBg) : restBg ? over(restBg) : WHITE;
+  let inkHex = ink.alpha === 1 ? ink.hex : blend(ink.hex, ink.alpha, ground);
+  if (fade) {
+    const a = Number(fade[1]) / 100;
+    ground = blend(ground, a, WHITE);
+    inkHex = blend(inkHex, a, WHITE);
+  }
+  // The visible step is judged only from an OPAQUE rest: a translucent one is
+  // whatever sits behind it, and white is only the worst case for contrast.
+  return { ground, ink: inkHex, rest: restBg && restBg.alpha === 1 ? restBg.hex : null };
+}
+
+function walkTsx(dir: string, out: string[] = []): string[] {
+  for (const e of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
+    const rel = `${dir}/${e.name}`;
+    if (e.isDirectory()) walkTsx(rel, out);
+    else if (e.name.endsWith(".tsx") && !e.name.endsWith(".test.tsx")) out.push(rel);
+  }
+  return out;
+}
+
+/*
+ * WHICH LISTS. White ink under the state, and a state ground that a village's
+ * seed moves: the brand family. That leaves out white on bg-white/20 over a
+ * dark band, a fixed red or sage, and every other ground no seed can reach,
+ * which are not the pairing this ruling is about. It keeps the 25 buttons that
+ * already hovered to bg-teal-deep-dark, whose hover colour this change moved
+ * onto the derived tone, alongside the 60 it fixed.
+ */
+const UNSEEDED = VILLAGES[0];
+const POINTER_LISTS = (() => {
+  const seen = new Set<string>();
+  const picked: (ClassList & { key: string })[] = [];
+  for (const file of walkTsx("client/src").sort()) {
+    for (const list of classListsIn(file)) {
+      const first = hoverReading(list.tokens, light(UNSEEDED));
+      if (!first || first.ink !== WHITE) continue;
+      const grounds = new Set(VILLAGES.map((v) => hoverReading(list.tokens, light(v))?.ground));
+      if (grounds.size < 2) continue;
+      const key = `${file}:${list.line}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      picked.push({ ...list, key });
+    }
+  }
+  return picked;
+})();
+
+/*
+ * THE FLOOR. Per file, the number of hovers this change fixed there (60 in
+ * all: 17 onto the soft tone, 16 translucent brands, 25 faded buttons, the
+ * shadcn button and the badge). A reader that stopped seeing them would
+ * otherwise pass by measuring nothing.
+ */
+const FIXED: Record<string, number> = {
+  "client/src/components/GuideChat.tsx": 2,
+  "client/src/components/QuestActions.tsx": 2,
+  "client/src/components/admin/ContentEditorTab.tsx": 1,
+  "client/src/components/profile/InvitePanel.tsx": 1,
+  "client/src/components/ui/badge.tsx": 1,
+  "client/src/components/ui/button.tsx": 1,
+  "client/src/pages/Admin.tsx": 13,
+  "client/src/pages/Bootstrap.tsx": 1,
+  "client/src/pages/CoCreatorsGuide.tsx": 1,
+  "client/src/pages/FirstWalk.tsx": 2,
+  "client/src/pages/Forum.tsx": 1,
+  "client/src/pages/GameMechanics.tsx": 5,
+  "client/src/pages/GoodNeighbor.tsx": 1,
+  "client/src/pages/Home.tsx": 1,
+  "client/src/pages/Housing.tsx": 2,
+  "client/src/pages/HowWeCreate.tsx": 1,
+  "client/src/pages/LoveLetter.tsx": 2,
+  "client/src/pages/NotFound.tsx": 1,
+  "client/src/pages/Opportunities.tsx": 1,
+  "client/src/pages/ProjectHistory.tsx": 5,
+  "client/src/pages/ProposeQuest.tsx": 2,
+  "client/src/pages/QuestDetail.tsx": 1,
+  "client/src/pages/Quests.tsx": 2,
+  "client/src/pages/RequestMembership.tsx": 2,
+  "client/src/pages/ResidentJourney.tsx": 2,
+  "client/src/pages/ResidentRights.tsx": 1,
+  "client/src/pages/SetPassword.tsx": 1,
+  "client/src/pages/StewardRights.tsx": 1,
+  "client/src/pages/Visit.tsx": 2,
+  "client/src/pages/WorkWithUs.tsx": 1,
+};
+
+describe("under the pointer, a brand button stays readable and visibly moves, light only", () => {
+  it(`reads every white-on-brand hover in client/src (${POINTER_LISTS.length}), and every one this change fixed`, () => {
+    expect(Object.values(FIXED).reduce((n, v) => n + v, 0)).toBe(60);
+    for (const [file, n] of Object.entries(FIXED)) {
+      expect(POINTER_LISTS.filter((l) => l.file === file).length, `${file} hovers read`).toBeGreaterThanOrEqual(n);
+    }
+    expect(POINTER_LISTS.length).toBeGreaterThanOrEqual(60 + 25);
+  });
+
+  for (const list of POINTER_LISTS) {
+    it(`${list.key} reads at ${AA_BODY}:1 or better under the pointer, a visible step from rest`, () => {
+      const below: string[] = [];
+      const flat: string[] = [];
+      let worst = Infinity;
+      for (const village of VILLAGES) {
+        const r = hoverReading(list.tokens, light(village))!;
+        const ratio = contrastRatio(r.ink, r.ground);
+        worst = Math.min(worst, ratio);
+        if (ratio < AA_BODY) below.push(`${village.name}: ${ratio.toFixed(2)}:1, ${r.ink} on ${r.ground}`);
+        if (r.rest && contrastRatio(r.rest, r.ground) < HOVER_STEP) {
+          flat.push(`${village.name}: rest ${r.rest} to hover ${r.ground} is ${contrastRatio(r.rest, r.ground).toFixed(2)}`);
+        }
+      }
+      expect(below, `${list.key}: worst ${worst.toFixed(2)}:1 over ${list.tokens.join(" ")}`).toEqual([]);
+      expect(flat, `${list.key}: a hover nobody can see`).toEqual([]);
+    });
+  }
+
+  // The platform button's legacy class name, which index.css flags for a coordinated rename.
+  const LEGACY_BUTTON = "btn-amora"; // brand-ok: the stylesheet's legacy class name, read here to measure it
+  it(`.${LEGACY_BUTTON} keeps white readable under the pointer, and visibly moves`, () => {
+    const below: string[] = [];
+    const flat: string[] = [];
+    for (const village of VILLAGES) {
+      const vars = light(village);
+      const ink = literalToHex(resolveValue(componentRule(LEGACY_BUTTON, "color")!, vars));
+      const rest = literalToHex(resolveValue(componentRule(LEGACY_BUTTON, "background-color")!, vars));
+      const hover = literalToHex(resolveValue(componentRule(`${LEGACY_BUTTON}:hover`, "background-color")!, vars));
+      if (contrastRatio(ink, hover) < AA_BODY) below.push(`${village.name}: ${contrastRatio(ink, hover).toFixed(2)}:1 on ${hover}`);
+      if (contrastRatio(rest, hover) < HOVER_STEP) flat.push(`${village.name}: ${rest} to ${hover}`);
+    }
+    expect(below).toEqual([]);
+    expect(flat).toEqual([]);
+  });
+
+  it("the resolver reads the hover partner a village actually gets", () => {
+    for (const village of VILLAGES.filter((v) => v.seed)) {
+      const derived = deriveTheme(village.seed, village.card)!.vars["--tone-brand-hover"];
+      expect(utilityColour("bg", "teal-deep-dark", light(village)), village.name).toBe(derived);
+    }
+    expect(utilityColour("bg", "teal-deep-dark", light(UNSEEDED))).toBe("#262626");
   });
 });

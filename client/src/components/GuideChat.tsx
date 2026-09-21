@@ -145,7 +145,7 @@ export default function GuideChat({
               {assistantName} has captured everything. Review it, then send it to the {projectName} team.
             </p>
             <div className="flex flex-wrap gap-2">
-              <button onClick={submit} disabled={submitting} className="inline-flex items-center gap-2 bg-teal-deep text-white text-sm font-semibold px-4 py-2 rounded-xl hover:bg-teal disabled:opacity-50">
+              <button onClick={submit} disabled={submitting} className="inline-flex items-center gap-2 bg-teal-deep text-white text-sm font-semibold px-4 py-2 rounded-xl hover:bg-teal-deep-dark disabled:opacity-50">
                 {submitting ? "Sending…" : "Submit proposal"} <ArrowRight className="w-4 h-4" />
               </button>
               <button onClick={() => onRefineInForm(proposal)} className="text-sm font-medium text-teal-deep px-4 py-2 rounded-xl border border-stone-200 hover:bg-stone-50">
@@ -166,7 +166,7 @@ export default function GuideChat({
           rows={1}
           className="flex-1 resize-none px-3 py-2 text-sm border border-stone-200 rounded-xl outline-none focus:border-teal-deep max-h-32"
         />
-        <button onClick={send} aria-label="Send message" disabled={thinking || !input.trim()} className="shrink-0 w-10 h-10 rounded-xl bg-teal-deep text-white flex items-center justify-center hover:bg-teal disabled:opacity-50 pointer-coarse:min-h-11 pointer-coarse:min-w-11">
+        <button onClick={send} aria-label="Send message" disabled={thinking || !input.trim()} className="shrink-0 w-10 h-10 rounded-xl bg-teal-deep text-white flex items-center justify-center hover:bg-teal-deep-dark disabled:opacity-50 pointer-coarse:min-h-11 pointer-coarse:min-w-11">
           <Send className="w-4 h-4" />
         </button>
       </div>

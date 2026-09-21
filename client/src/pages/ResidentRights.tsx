@@ -404,7 +404,7 @@ export default function ResidentRights() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/resident">
-              <button className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-deep text-white font-medium hover:bg-teal-deep/90 transition-colors">
+              <button className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-deep text-white font-medium hover:bg-teal-deep-dark transition-colors">
                 Return to Resident Journey
                 <ArrowRight className="w-4 h-4" />
               </button>

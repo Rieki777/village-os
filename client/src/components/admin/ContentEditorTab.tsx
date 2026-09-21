@@ -295,7 +295,7 @@ export default function ContentEditorTab({ password, sectionKey, sectionLabel }:
           <button
             onClick={save}
             disabled={saving}
-            className="flex items-center gap-2 px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep/90 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep-dark disabled:opacity-50 transition-colors"
           >
             <Save className="w-4 h-4" />
             {saving ? "Saving..." : saved ? "Saved!" : "Save Changes"}

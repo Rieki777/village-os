@@ -126,7 +126,7 @@ export default function Visit() {
                       href={v.cta_url}
                       target={v.cta_url.startsWith("http") ? "_blank" : undefined}
                       rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center gap-2 bg-teal-deep text-white font-medium px-4 py-2.5 rounded-xl hover:bg-teal transition-colors"
+                      className="inline-flex items-center justify-center gap-2 bg-teal-deep text-white font-medium px-4 py-2.5 rounded-xl hover:bg-teal-deep-dark transition-colors"
                     >
                       {v.cta_label || "Learn More"} <ArrowRight className="w-4 h-4" />
                     </a>
@@ -244,7 +244,7 @@ export default function Visit() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full bg-teal-deep text-white font-semibold py-3 rounded-xl hover:bg-teal disabled:opacity-50 transition-colors"
+                className="w-full bg-teal-deep text-white font-semibold py-3 rounded-xl hover:bg-teal-deep-dark disabled:opacity-50 transition-colors"
               >
                 {submitting ? "Sending..." : "Send Request"}
               </button>

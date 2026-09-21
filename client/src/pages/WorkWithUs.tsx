@@ -376,7 +376,7 @@ function ProposalForm({
       />
 
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-      <button type="submit" disabled={submitting} className="w-full md:w-auto inline-flex items-center justify-center gap-2 bg-teal-deep text-white font-semibold px-8 py-3 rounded-xl hover:bg-teal disabled:opacity-50 transition-colors">
+      <button type="submit" disabled={submitting} className="w-full md:w-auto inline-flex items-center justify-center gap-2 bg-teal-deep text-white font-semibold px-8 py-3 rounded-xl hover:bg-teal-deep-dark disabled:opacity-50 transition-colors">
         {submitting ? "Sending…" : "Submit proposal"} <ArrowRight className="w-4 h-4" />
       </button>
       <p className="text-xs text-stone-400">Your answers save as you go, so you can come back and finish later.</p>
