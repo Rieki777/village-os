@@ -194,3 +194,32 @@ export async function stuckLandings(pool: Pool, claimedAtOrBefore: Date, limit =
     lastError: r.last_error == null ? null : String(r.last_error),
   }));
 }
+
+/**
+ * THE ONE ERROR A READER TELLS APART BY ITS WORDS.
+ *
+ * Two different failures leave the same row: the newest attempt, open and
+ * carrying an error, on a decision that will never land.
+ *
+ *  - A landing that kept failing until the decision was written off. Once the
+ *    decision is over, that is governance's own record.
+ *  - `closeUnlanded` (server/lib/applyDue.ts) failing to give back what a
+ *    stopped decision held, such as the tokens a redemption vote holds. That is
+ *    a member's value stranded, with nothing left that would ever release it.
+ *
+ * The failed-actions report lists the second and leaves the first, and the
+ * words at the front of the error are the only thing in the row that tells
+ * them apart. So the writer builds its note here and the reader tests it here,
+ * and neither can change those words without the other.
+ */
+const RELEASE_FAILED = "onUnlanded(";
+
+/** The error `closeUnlanded` records when giving back what a stopped decision held throws. */
+export function releaseFailureNote(reason: "vetoed" | "written_off", message: string): string {
+  return `${RELEASE_FAILED}${reason}) threw: ${message}`;
+}
+
+/** Whether an attempt's error is that note. */
+export function isReleaseFailure(lastError: string | null): boolean {
+  return lastError != null && lastError.startsWith(RELEASE_FAILED);
+}

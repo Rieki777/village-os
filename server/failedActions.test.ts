@@ -24,8 +24,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import mysql from "mysql2/promise";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { clearPending, closeUnlanded, type UnlandedDeps } from "./lib/applyDue";
 import type { ErasureDeps } from "./lib/erasure";
 import { keysFor } from "./lib/eventSeats";
 import {
@@ -551,6 +552,143 @@ describe.skipIf(!configured)("the failed-actions report, against a real database
       const [all] = await q("SELECT * FROM `failed_action_items`");
       expect((all as Array<{ resolved_at: unknown }>).every((r) => r.resolved_at != null)).toBe(true);
       for (const word of personal) expect(JSON.stringify(all), word).not.toContain(word);
+    });
+  });
+
+  /*
+   * A DECISION THAT WILL NEVER LAND, WHOSE GIVE-BACK FAILED.
+   *
+   * Each failure is written by the engine's real writer, `closeUnlanded`, with a
+   * closer whose give-back throws the way the redemption closer's does, naming
+   * the member it could not pay back. So these prove the words the writer puts
+   * on the row are the words the report looks for, and a change to either side
+   * turns them red. The ballots are seeded in the state the veto and the
+   * write-off leave them in, because the landing status is all the report reads.
+   */
+  describe("a stopped decision whose give-back failed", () => {
+    const MEMBER_ID = "user-1784000000000-9f8e7d6c";
+    const REFUSED = `redemption red-1 for member ${MEMBER_ID} could not be released: the ledger refused (${MEMBER_ID}@examples.invalid)`;
+    let quiet: { mockRestore(): void } | null = null;
+
+    beforeEach(() => {
+      // closeUnlanded logs every throw it records, by design.
+      quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    });
+    afterEach(() => quiet?.mockRestore());
+
+    const closer = (throws: boolean): UnlandedDeps => ({
+      pool,
+      closerFor: () => ({
+        settle: async () => ({ applied: [], held: null, proposerTold: null }),
+        onUnlanded: async () => {
+          if (throws) throw new Error(REFUSED);
+        },
+      }),
+    });
+
+    /** Seeded as `recordVetoOnBallot` leaves a passed row it stopped. */
+    const vetoed = async (id: string) => {
+      await ballot(id, "vetoed");
+      await q("UPDATE `ballots` SET `status` = 'failed', `vetoed_at` = CURRENT_TIMESTAMP, `vetoed_by` = 'steward' WHERE `id` = ?", [id]);
+    };
+
+    const run = () =>
+      runFailedActions({ pool, sources: defaultSources(pool), retries: [], notifyAdmins: async () => undefined, isFirstRun: async () => false });
+
+    /** Every governance row, open or cleared. Whether it is cleared is asked of SQL, so no TIMESTAMP is read into a Date. */
+    const governanceRows = async () => {
+      const [rows] = await q(
+        "SELECT `item_key`, `title`, `advice`, `last_error`, (`resolved_at` IS NOT NULL) AS cleared FROM `failed_action_items` WHERE `source` = 'governance'",
+      );
+      return (rows as Array<{ item_key: string; title: string; advice: string; last_error: string | null; cleared: unknown }>).map((r) => ({
+        ...r,
+        cleared: Number(r.cleared) === 1,
+      }));
+    };
+
+    it("lists a vetoed decision whose give-back failed, naming nobody and scrubbing the error", async () => {
+      await vetoed("bal-vetoed-give-back");
+      expect(await closeUnlanded(closer(true), "bal-vetoed-give-back", "vetoed")).toBe("failed");
+
+      await run();
+
+      const [item] = await governanceRows();
+      expect(item.item_key).toBe("give-back:bal-vetoed-give-back");
+      expect(item.title).toBe(
+        "A decision the village carried was stopped before it took effect, and giving back what it held failed (ballot bal-vetoed-give-back)",
+      );
+      expect(item.advice).toContain("nothing tries it again");
+      expect(item.cleared).toBe(false);
+      expect(item.last_error).toContain("onUnlanded(vetoed) threw");
+      expect(item.last_error).toContain("the ledger refused");
+      expect(JSON.stringify(await governanceRows()), "no member id or address anywhere in the row").not.toMatch(/user-\d|examples\.invalid/);
+      // The landing record keeps the whole message for whoever finishes it.
+      expect((await stuckLandings(pool, new Date()))[0]?.lastError).toContain(MEMBER_ID);
+    });
+
+    it("lists a written-off decision whose give-back failed, in the words for a write-off", async () => {
+      await ballot("bal-written-off-give-back", "expired");
+      expect(await closeUnlanded(closer(true), "bal-written-off-give-back", "written_off")).toBe("failed");
+
+      await run();
+
+      const rows = await governanceRows();
+      expect(rows.map((r) => r.item_key)).toEqual(["give-back:bal-written-off-give-back"]);
+      expect(rows[0].title).toBe(
+        "A decision the village carried was written off before it took effect, and giving back what it held failed (ballot bal-written-off-give-back)",
+      );
+      expect(rows[0].advice).toContain("was written off");
+      expect(rows[0].last_error).toContain("onUnlanded(written_off) threw");
+      expect(rows[0].last_error).not.toMatch(/user-\d|examples\.invalid/);
+    });
+
+    it("keeps a vetoed decision off the tab when no attempt carries an error", async () => {
+      // Given back without trouble: no attempt is written at all.
+      await vetoed("bal-vetoed-given-back");
+      expect(await closeUnlanded(closer(false), "bal-vetoed-given-back", "vetoed")).toBe("called");
+      // An attempt left open with nothing written on it, old enough that the
+      // report's first read finds it. A zero below is then the filter's answer.
+      await vetoed("bal-vetoed-silent");
+      await insertAttempt(pool, { ballotId: "bal-vetoed-silent", claimedAt: new Date(Date.now() - 60 * 60_000), attempts: 1 });
+      expect((await stuckLandings(pool, new Date(Date.now() - 10 * 60_000))).map((r) => r.ballotId)).toEqual(["bal-vetoed-silent"]);
+
+      await run();
+
+      expect(await governanceRows()).toEqual([]);
+    });
+
+    it("keeps a written-off decision off the tab when the error is its landing's, from before it was written off", async () => {
+      // The same row shape as a failed give-back: the newest attempt, open, with
+      // an error, on an expired decision. No give-back failed, so it stays
+      // governance's own record, as #247 ruled for every stopped decision.
+      await ballot("bal-written-off-landing", "expired");
+      await insertAttempt(pool, { ballotId: "bal-written-off-landing", claimedAt: new Date(Date.now() - 60 * 60_000), attempts: 3 });
+      await annotateNewestOpenAttempt(pool, "bal-written-off-landing", "the executor threw");
+      expect(await closeUnlanded(closer(false), "bal-written-off-landing", "written_off")).toBe("called");
+      expect((await stuckLandings(pool, new Date())).map((r) => r.ballotId)).toEqual(["bal-written-off-landing"]);
+
+      await run();
+
+      expect(await governanceRows()).toEqual([]);
+    });
+
+    it("drops a failed give-back once a person closes its attempt, and forgets the error", async () => {
+      await vetoed("bal-vetoed-finished");
+      await closeUnlanded(closer(true), "bal-vetoed-finished", "vetoed");
+      await run();
+      expect((await items.openItems(pool)).map((i) => `${i.source}/${i.key}`)).toEqual(["governance/give-back:bal-vetoed-finished"]);
+
+      // Finished by hand, then the attempt closed: the engine's own close, which
+      // clears the error on the landing record in the same statement.
+      await clearPending(pool, "bal-vetoed-finished");
+      await run();
+
+      expect(await items.openItems(pool)).toEqual([]);
+      const [item] = await governanceRows();
+      expect(item.item_key).toBe("give-back:bal-vetoed-finished");
+      expect(item.cleared).toBe(true);
+      expect(item.last_error, "cleared with the failure").toBeNull();
+      expect((await items.recentlyResolved(pool)).map((i) => i.key)).toContain("give-back:bal-vetoed-finished");
     });
   });
 

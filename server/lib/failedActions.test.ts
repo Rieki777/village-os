@@ -11,6 +11,7 @@
 import { describe, expect, it } from "vitest";
 import { scrubPersonal } from "../repos/failedActionItems";
 import type { SettleErrorGroup } from "../repos/failureSources";
+import { isReleaseFailure, releaseFailureNote } from "../repos/governanceExecutorPending";
 import {
   BLIND_SPOTS,
   calendarFindings,
@@ -22,6 +23,7 @@ import {
   erasureBackoffSeconds,
   erasureFindings,
   erasureStanding,
+  failedReleases,
   jobFindings,
   labelFor,
   landingFindings,
@@ -31,6 +33,7 @@ import {
   quarantineFindings,
   readableDuration,
   refusalFindings,
+  releaseFindings,
   seatFeeFindings,
   settleFindings,
   stillOwedLandings,
@@ -55,6 +58,15 @@ describe("what is scrubbed before anything is kept", () => {
       "SMTP RCPT TO:<(an email address)> refused for (a member)",
     );
     expect(scrubPersonal("503: Service Unavailable")).toBe("503: Service Unavailable");
+  });
+
+  it("takes out the id registration mints too, which is every ordinary member's, and leaves a user-agent alone", () => {
+    // Registration and Google sign-in mint `user-<epoch>-<rand>`; only bootstrap
+    // mints `usr-`. The redemption closer's error names the member this way.
+    expect(scrubPersonal("redemption red-1 for member user-1784000000000-9f8e7d6c could not be released")).toBe(
+      "redemption red-1 for member (a member) could not be released",
+    );
+    expect(scrubPersonal("the user-agent header was refused")).toBe("the user-agent header was refused");
   });
 });
 
@@ -232,6 +244,71 @@ describe("decisions taking effect", () => {
     expect(left.advice).toContain("nothing tries it again");
     expect(retrying.advice).not.toContain("nothing tries it again");
     expect(left.advice).not.toContain("every few minutes");
+  });
+
+  it("lists a stopped decision only when giving back what it held failed, never a landing that failed before it was stopped", () => {
+    const released = (reason: "vetoed" | "written_off") => releaseFailureNote(reason, "the ledger refused the release");
+    const rows = [
+      { ballotId: "b-vetoed-give-back", attempts: 1, lastError: released("vetoed") },
+      { ballotId: "b-expired-give-back", attempts: 4, lastError: released("written_off") },
+      // A scheduled landing that kept failing and was then written off: the same
+      // row shape, and no give-back failed. It stays governance's own record.
+      { ballotId: "b-expired-landing", attempts: 4, lastError: "the executor threw" },
+      // Open with nothing written: no failure recorded, so nothing to list.
+      { ballotId: "b-vetoed-silent", attempts: 1, lastError: null },
+      // The note on a decision that is still owed, or that landed, is not this list's.
+      { ballotId: "b-pending", attempts: 1, lastError: released("vetoed") },
+      { ballotId: "b-applied", attempts: 1, lastError: released("vetoed") },
+      { ballotId: "b-deleted", attempts: 1, lastError: released("vetoed") },
+    ];
+    const statuses = new Map([
+      ["b-vetoed-give-back", "vetoed"],
+      ["b-expired-give-back", "expired"],
+      ["b-expired-landing", "expired"],
+      ["b-vetoed-silent", "vetoed"],
+      ["b-pending", "pending"],
+      ["b-applied", "applied"],
+    ]);
+
+    expect(failedReleases(rows, statuses).map((r) => [r.ballotId, r.stoppedAs])).toEqual([
+      ["b-vetoed-give-back", "vetoed"],
+      ["b-expired-give-back", "expired"],
+    ]);
+    // #247's list is untouched, and the two never claim the same ballot.
+    expect(stillOwedLandings(rows, statuses).map((r) => r.ballotId)).toEqual(["b-pending"]);
+    expect(isReleaseFailure("the executor threw")).toBe(false);
+    expect(isReleaseFailure(null)).toBe(false);
+  });
+
+  it("says a failed give-back was stopped or written off, that nothing retries it, and names nobody", () => {
+    const lastError = releaseFailureNote("vetoed", "redemption red-1 for member user-1784000000000-9f8e7d6c could not be released");
+    const [vetoed, written] = releaseFindings([
+      { ballotId: "bal-1784000000000-abc123", attempts: 1, lastError, stoppedAs: "vetoed" },
+      { ballotId: "bal-1784000000001-def456", attempts: 4, lastError, stoppedAs: "expired" },
+    ]);
+
+    expect(vetoed.title).toBe(
+      "A decision the village carried was stopped before it took effect, and giving back what it held failed (ballot bal-1784000000000-abc123)",
+    );
+    expect(written.title).toBe(
+      "A decision the village carried was written off before it took effect, and giving back what it held failed (ballot bal-1784000000001-def456)",
+    );
+    expect(vetoed.advice).toContain("It was stopped inside its landing window");
+    expect(written.advice).toContain("sat unlanded through too many cycles and was written off");
+    for (const f of [vetoed, written]) {
+      expect(f.key).toMatch(/^give-back:bal-/);
+      expect(f.advice).toContain("nothing tries it again");
+      expect(f.advice).toContain("finishes it by hand");
+      expect(f.advice).toContain("close the open attempt on the decision's landing record");
+      // #247's landing sentences belong to decisions still owed a landing.
+      expect(f.advice).not.toContain("every few minutes");
+      // Whole, never clipped by the columns they are written to.
+      expect(f.title.length).toBeLessThanOrEqual(255);
+      expect(f.advice.length).toBeLessThanOrEqual(600);
+      // The member rides in the error alone, which is scrubbed on the way in.
+      expect(`${f.key} ${f.title} ${f.advice}`).not.toMatch(/usr-|user-\d|@/);
+      expect(f.lastError).toBe(lastError);
+    }
   });
 });
 
