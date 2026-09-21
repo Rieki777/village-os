@@ -149,9 +149,9 @@ describe.skipIf(!configured)("the redemption closer's error, as the failed-actio
     // Break every hold: the posting each release mirrors is removed.
     for (const c of cases) {
       const row = await redemptionById(pool, c.redemptionId);
-      await q("DELETE FROM `token_ledger` WHERE `idempotency_key` = ?", [row!.holdKey]);
+      await q("DELETE FROM `token_ledger` WHERE `idempotency_key` = ?", [row!.holdKey]); // module-review-ok: fixture breaking one posting on the S5 scratch schema, to drive the failure path
     }
-    await q("DELETE FROM `token_balances` WHERE `account_id` = ?", [REDEMPTION_HOLD]);
+    await q("DELETE FROM `token_balances` WHERE `account_id` = ?", [REDEMPTION_HOLD]); // module-review-ok: fixture on the S5 scratch schema, the balance cache of the posting removed above
 
     // A steward's refusal first, over the broken hold, for the terminal branch.
     for (const c of cases.filter((x) => x.standing === "refused")) {
