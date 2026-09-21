@@ -393,12 +393,24 @@ export default function LivingMap() {
    * no message at all, so the map draws the seed it was built with. That is
    * the ordinary state of a fresh fork and it is not a failure.
    *
-   * No surround travels with it yet, and that is deliberate rather than
-   * unfinished: the wide plate is a second, wider fetch this route does not
-   * do today. The artifact already knows what to do in the meantime -- a
-   * village core with no surround of its own suppresses the SEED surround,
-   * because that seed is Amora's coastline and drawing it around somebody
-   * else's land would invent a sea. When the wider fetch lands it attaches
+   * THE PICTURE TRAVELS WITH ITS FRAME. A URL on its own told the map nothing
+   * about where the picture was taken or how much ground it covers, so the map
+   * stretched it across a frame it was never cut for: three times too large
+   * and 345 m off on the one village this was built for. `frame` is what fixes
+   * that, and it carries only what the route was already willing to publish:
+   *
+   *   spanM   the width, which sets the scale and names no place
+   *   seed    one yes-or-no, worked out on the server: does this picture show
+   *           the seed's own rectangle? If so the seed's surround, place names
+   *           and caption still describe the ground and stay; if not they are
+   *           another place's geography and the map takes them down
+   *   centre  whatever /api/land gives, which is null at "hidden" and rounded
+   *           at "approximate". The map uses it for coordinates it shows and
+   *           shows none when it is null
+   *
+   * No surround travels with it yet. A wider fetch does not exist on this
+   * route, and a village standing anywhere but the seed's own rectangle gets
+   * no borrowed coastline in the meantime. When that fetch lands it attaches
    * here as `surround: { url, rect }`.
    */
   const pushGround = useCallback(async () => {
@@ -410,7 +422,23 @@ export default function LivingMap() {
       const body = await res.json();
       const url = typeof body?.imageryUrl === "string" ? body.imageryUrl : "";
       if (!url) return;
-      win.postMessage({ type: "ground", core: { url } }, window.location.origin);
+      const spanM = Number(body?.spanM);
+      const c = body?.centre;
+      win.postMessage(
+        {
+          type: "ground",
+          core: { url },
+          frame: {
+            spanM: Number.isFinite(spanM) && spanM > 0 ? spanM : null,
+            seed: body?.seedFrame === true,
+            centre:
+              c && Number.isFinite(Number(c.lat)) && Number.isFinite(Number(c.lon))
+                ? { lat: Number(c.lat), lon: Number(c.lon) }
+                : null,
+          },
+        },
+        window.location.origin,
+      );
     } catch {
       /* The map keeps the ground it is already standing on. */
     }

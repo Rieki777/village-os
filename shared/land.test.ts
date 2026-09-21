@@ -26,6 +26,9 @@ import {
   validateSpan,
   zoomFor,
 } from "./land";
+import { SEED_GEOREF, seedFrame, isSeedFrame, distanceM, worldToLatLonUnder } from "./land";
+import fs from "node:fs";
+import path from "node:path";
 import { boundsForAspect, MAP_WORLD_ASPECT } from "./land";
 import { parcelSlug, isParcelSlug, orderParcels, DEFAULT_PARCEL_SLUG } from "./land";
 
@@ -470,5 +473,73 @@ describe("the ground a provider is asked for has the frame's own shape", () => {
     expect(() => boundsForAspect(CENTRE, 800, 0)).not.toThrow();
     const { w, h } = size(boundsForAspect(CENTRE, 800, 0), CENTRE.lat);
     expect(Number.isFinite(w) && Number.isFinite(h)).toBe(true);
+  });
+});
+describe("the seed frame is one fact, held in two places and checked against itself", () => {
+  /*
+   * The artifact is the source. shared/land.ts carries a copy because the
+   * server has to compare frames without the browser's help, and a copy is
+   * only safe when something reads both. This is that something.
+   */
+  const html = fs.readFileSync(path.join(process.cwd(), "docs", "prototypes", "grounds-v0.html"), "utf8");
+
+  it("carries the artifact's own GEOREF, number for number", () => {
+    const m = html.match(/const GEOREF=\{lat:([-\d.]+),lon:([-\d.]+),z:(\d+),pinW:\[(\d+),(\d+)\],mPerUnit:(\d+)\/(\d+)\}/);
+    if (!m) throw new Error("the artifact's GEOREF line moved; this test must be taught its new shape");
+    expect(SEED_GEOREF.lat).toBe(Number(m[1]));
+    expect(SEED_GEOREF.lon).toBe(Number(m[2]));
+    expect([...SEED_GEOREF.pinW]).toEqual([Number(m[4]), Number(m[5])]);
+    expect(SEED_GEOREF.mPerUnit).toBe(Number(m[6]) / Number(m[7]));
+  });
+
+  it("agrees with the artifact's second copy of the scale too", () => {
+    // M_PER_UNIT drives every area and length. It is the twin that was missed once.
+    const m = html.match(/let M_PER_UNIT=(\d+)\/(\d+);/);
+    if (!m) throw new Error("the artifact's M_PER_UNIT line moved; this test must be taught its new shape");
+    expect(Number(m[1]) / Number(m[2])).toBe(SEED_GEOREF.mPerUnit);
+  });
+
+  it("puts the frame's centre at the WORLD centre, 345 m west of the pin", () => {
+    const f = seedFrame();
+    expect(f.spanM).toBe(2592);
+    const offset = distanceM(f.centre, { lat: SEED_GEOREF.lat, lon: SEED_GEOREF.lon });
+    expect(offset).toBeGreaterThan(340);
+    expect(offset).toBeLessThan(350);
+  });
+
+  it("round-trips the pin through the artifact's own projection", () => {
+    const pin = worldToLatLonUnder(SEED_GEOREF, SEED_GEOREF.pinW[0], SEED_GEOREF.pinW[1]);
+    expect(pin.lat).toBeCloseTo(SEED_GEOREF.lat, 9);
+    expect(pin.lon).toBeCloseTo(SEED_GEOREF.lon, 9);
+  });
+});
+
+describe("whether a picture shows the seed's own rectangle", () => {
+  const f = seedFrame();
+
+  it("says yes for the frame exactly, and for it after the column's six-decimal rounding", () => {
+    expect(isSeedFrame(f.centre, f.spanM)).toBe(true);
+    const rounded = { lat: Number(f.centre.lat.toFixed(6)), lon: Number(f.centre.lon.toFixed(6)) };
+    expect(isSeedFrame(rounded, 2592)).toBe(true);
+  });
+
+  it("says NO for the pin, which is where a founder would naturally paste", () => {
+    // 345 m off: this is the mistake the frame fix exists to stop.
+    expect(isSeedFrame({ lat: SEED_GEOREF.lat, lon: SEED_GEOREF.lon }, 2592)).toBe(false);
+  });
+
+  it("says NO for the right centre at the default width", () => {
+    expect(isSeedFrame(f.centre, 800)).toBe(false);
+  });
+
+  it("says NO for a place on another continent, and for nothing at all", () => {
+    expect(isSeedFrame({ lat: -1.2921, lon: 36.8219 }, 2592)).toBe(false);
+    expect(isSeedFrame(null, 2592)).toBe(false);
+    expect(isSeedFrame(f.centre, null)).toBe(false);
+  });
+
+  it("refuses a frame ten metres off, because the buildings would sit ten metres off", () => {
+    const tenMetresNorth = { lat: f.centre.lat + 10 / 111_320, lon: f.centre.lon };
+    expect(isSeedFrame(tenMetresNorth, 2592)).toBe(false);
   });
 });

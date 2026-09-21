@@ -25,7 +25,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { parseCoordinates } from "@shared/land";
+import { parseCoordinates, seedFrame } from "@shared/land";
 import LandTab from "./LandTab";
 
 vi.mock("sonner", () => ({
@@ -142,5 +142,69 @@ describe("the land screen a founder actually meets", () => {
     await user.type(add, "The Ridge");
     // The address is shown before they commit to it.
     await waitFor(() => expect(screen.getByText("/the-ridge")).toBeTruthy());
+  });
+});
+describe("the frame, the undo, and saying which outcome a founder got", () => {
+  const SEED = seedFrame();
+
+  it("offers the map's own frame when somebody pastes a place near it that is not it", async () => {
+    // The fixture is about a kilometre from the seed at 800 m wide: the exact mistake.
+    stubFetch(ONE_PARCEL);
+    render(<LandTab password="pw" />);
+    await waitFor(() => expect(screen.getByRole("button", { name: /use the map's frame/i })).toBeTruthy());
+  });
+
+  it("fills the frame exactly when asked, and the offer then goes away", async () => {
+    stubFetch(ONE_PARCEL);
+    const user = userEvent.setup();
+    render(<LandTab password="pw" />);
+    await user.click(await screen.findByRole("button", { name: /use the map's frame/i }));
+    await waitFor(() => expect(screen.getByDisplayValue(`${SEED.centre.lat.toFixed(7)}, ${SEED.centre.lon.toFixed(7)}`)).toBeTruthy());
+    expect(screen.getByDisplayValue(String(SEED.spanM))).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole("button", { name: /use the map's frame/i })).toBeNull());
+  });
+
+  it("never offers another place's frame to a village on another continent", async () => {
+    stubFetch({ ...ONE_PARCEL, parcels: [{ ...ONE_PARCEL.parcels[0], sourceText: "-1.2921, 36.8219" }] });
+    render(<LandTab password="pw" />);
+    await screen.findByDisplayValue("-1.2921, 36.8219");
+    expect(screen.queryByRole("button", { name: /use the map's frame/i })).toBeNull();
+  });
+
+  it("takes a picture down through the route, for the parcel on screen", async () => {
+    const calls = stubFetch(ONE_PARCEL);
+    vi.stubGlobal("confirm", () => true);
+    const user = userEvent.setup();
+    render(<LandTab password="pw" />);
+    await user.click(await screen.findByRole("button", { name: /remove the picture/i }));
+    await waitFor(() => expect(calls.some((c) => c.init?.method === "DELETE")).toBe(true));
+    const del = calls.find((c) => c.init?.method === "DELETE")!;
+    expect(del.url).toContain("/admin/land/imagery?slug=home");
+  });
+
+  it("does nothing when the founder cancels the removal", async () => {
+    const calls = stubFetch(ONE_PARCEL);
+    vi.stubGlobal("confirm", () => false);
+    const user = userEvent.setup();
+    render(<LandTab password="pw" />);
+    await user.click(await screen.findByRole("button", { name: /remove the picture/i }));
+    expect(calls.some((c) => c.init?.method === "DELETE")).toBe(false);
+  });
+
+  it("offers no remove button when there is no picture to remove", async () => {
+    stubFetch({ ...ONE_PARCEL, parcels: [{ ...ONE_PARCEL.parcels[0], imagery: { ...ONE_PARCEL.parcels[0].imagery, url: null } }] });
+    render(<LandTab password="pw" />);
+    await screen.findByDisplayValue("9.2345, -83.8412");
+    expect(screen.queryByRole("button", { name: /remove the picture/i })).toBeNull();
+  });
+
+  it("says, after a fetch, whether the map kept its own frame or took a new one", async () => {
+    stubFetch({ ...ONE_PARCEL, parcels: [{ ...ONE_PARCEL.parcels[0], seedFrame: true }] });
+    const { unmount } = render(<LandTab password="pw" />);
+    await waitFor(() => expect(screen.getByText(/keeps its coastline and place names/i)).toBeTruthy());
+    unmount();
+    stubFetch({ ...ONE_PARCEL, parcels: [{ ...ONE_PARCEL.parcels[0], seedFrame: false }] });
+    render(<LandTab password="pw" />);
+    await waitFor(() => expect(screen.getByText(/sets its own frame/i)).toBeTruthy());
   });
 });
