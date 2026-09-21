@@ -248,7 +248,7 @@ describe.skipIf(!DB_CONFIGURED)("a path that looks like a file fails like one", 
       ["/grounds/manifest.json", /json/],
     ];
     for (const [route, type] of real) {
-      const res = await fetch(BASE + route);
+      const res = await fetch(BASE + route); // module-review-ok: the test client dialling its own in-process server on localhost, as every e2e suite does
       expect(res.status, `${route} is a real file`).toBe(200);
       expect(res.headers.get("content-type") ?? "", `${route} content type`).toMatch(type);
     }
@@ -262,7 +262,7 @@ describe.skipIf(!DB_CONFIGURED)("a path that looks like a file fails like one", 
       "/apple-touch-icon.png",
       "/wp-login.php",
     ]) {
-      const res = await fetch(BASE + route);
+      const res = await fetch(BASE + route); // module-review-ok: the test client dialling its own in-process server on localhost, as every e2e suite does
       expect(res.status, `${route} is a missing file`).toBe(404);
       expect(res.headers.get("content-type") ?? "").toMatch(/text\/plain/);
       expect(await res.text(), `${route} must not be answered with the app`).not.toContain(SHELL);
@@ -271,7 +271,7 @@ describe.skipIf(!DB_CONFIGURED)("a path that looks like a file fails like one", 
 
   it("still gives every real page the shell, a dotted profile handle included", async () => {
     for (const route of ["/", "/investor", "/quests", "/profile/ada.lovelace", "/no-such-page"]) {
-      const res = await fetch(BASE + route);
+      const res = await fetch(BASE + route); // module-review-ok: the test client dialling its own in-process server on localhost, as every e2e suite does
       expect(res.status, `${route} is a page`).toBe(200);
       expect(res.headers.get("content-type") ?? "").toMatch(/text\/html/);
       expect(await res.text()).toContain(SHELL);
