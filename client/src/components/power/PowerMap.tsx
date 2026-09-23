@@ -37,9 +37,10 @@ import { wrapLabel, type NestedLayout } from "@shared/mapLayout";
 import { cssColourForCircle } from "@shared/circleView";
 import { viewBoxFor, type CameraTarget, type CameraView } from "./camera";
 import { NO_NUDGE, useCameraFlight, useMeasuredBox, useNudge } from "./mapStage";
-import SeatGlyph, { seatStateWords } from "./SeatGlyph";
+import SeatGlyph, { HitArea, seatStateWords } from "./SeatGlyph";
 import CircleLabel from "./CircleLabel";
 import { buildLabelPlan } from "./labelPlacement";
+import { seatHitRadii, type SeatPoint } from "./seatTargets";
 import { fitLabelToScreen } from "./labelFit";
 import { TermArc, SeasonRing } from "./TermMarkers";
 import RelationLines, { RelationArrowDef } from "./RelationLines";
@@ -401,6 +402,23 @@ export default function PowerMap({
     [layout, maxDepth, byId, data.circles, posById, pxPerWorld, focusId, readFocus],
   );
 
+  /*
+   * HOW BIG EACH SEAT'S TAP AREA IS. Measured live at 390x844: every seat on
+   * the village view draws at 7x7 with 19 pixels to its nearest neighbour, so
+   * the ring is too tight for the 44px every one of them wants. Each takes
+   * what the picture allows instead, and never a pixel that belongs to the
+   * seat beside it. See seatTargets.
+   */
+  const seatHits = useMemo(() => {
+    const points: SeatPoint[] = [];
+    for (const pos of layout.circles) {
+      if (maxDepth !== undefined && pos.depth > maxDepth) continue;
+      for (const rp of pos.roles) points.push({ id: rp.id, x: rp.x, y: rp.y, r: pos.depth === 0 ? 11 : 9, hostR: pos.r, hostSeats: pos.roles.length });
+    }
+    for (const rp of layout.village.roles) points.push({ id: rp.id, x: rp.x, y: rp.y, r: 12, hostR: layout.village.r, hostSeats: layout.village.roles.length });
+    return seatHitRadii(points, pxPerWorld);
+  }, [layout, maxDepth, pxPerWorld]);
+
   return (
     <>
       <svg
@@ -717,6 +735,10 @@ export default function PowerMap({
                       }
                     }}
                   >
+                    {/* The tap area, which is bigger than the dot and carries
+                        no ink. Drawn first, so it sits UNDER the glyph and
+                        cannot cover the face on a held seat. */}
+                    <HitArea r={seatHits.get(rp.id) ?? dotR} drawn={dotR} />
                     <SeatGlyph
                       x={0}
                       y={0}
@@ -842,6 +864,7 @@ export default function PowerMap({
                 }
               }}
             >
+              <HitArea r={seatHits.get(rp.id) ?? 12} drawn={12} />
               <SeatGlyph
                 x={0}
                 y={0}
