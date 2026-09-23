@@ -43,6 +43,34 @@
  * then the live one is the newest. The repo orders by `submitted_at`, so this
  * sorts anyway instead of trusting the caller's order.
  *
+ * ── AND THE DESK IS TOLD WHICH KIND OF ACCEPT IT WAS ───────────────────────
+ *
+ * `PUT /api/admin/submissions/:id/status` answers `admitted`, and this is the
+ * home for why, because `server/index.ts` is at a line ratchet and reasoning
+ * belongs in a module header anyway.
+ *
+ * A stranger's signing carries no account, so accepting it admits nobody. That
+ * is correct. The defect was that the admin panel said "Status updated" for
+ * that and for a real admission alike, so a steward pressing accept on a
+ * stranger's signing had every reason to believe they had let somebody in.
+ * `rewardRefused`, in the same handler, exists against exactly that shape: its
+ * own comment says "accepted" beside a silent unpaid mint is what the guard is
+ * there to stop. So `admitted` is true when the grant happened, false when the
+ * row named nobody to grant to, and null where the question does not arise,
+ * which is every other form type and every re-accept of a row already
+ * accepted.
+ *
+ * ── THE COMMENT THAT WAS FALSE FROM BIRTH ──────────────────────────────────
+ *
+ * Above `hasMembership` in `server/index.ts` stood: the Love Letter "sends no
+ * `Authorization` header and never has, in any commit." That sentence and the
+ * commit that added the header are THE SAME COMMIT, 29473e4. It was written
+ * about the world that commit was fixing, in the present tense, and it read as
+ * a live fact for a month. On 2026-09-23 a session believed it and reported
+ * the accept flow broken while it works, which is what this whole file exists
+ * because of. When a change needs a "this harmed nobody" argument, write the
+ * argument in the past tense and name the commit that ends it.
+ *
  * PURE, so a test holds every judgement here without a database.
  */
 

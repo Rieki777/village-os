@@ -3797,21 +3797,15 @@ function firstName(name: string): string {
  * to it, and the two are separate steps now because they were always two
  * different things.
  *
- * NOBODY WAS DEMOTED BY THIS. The only surface that has ever posted
- * `membership-508` is the Love Letter page, and up to this commit it sent no
- * `Authorization` header. `authedUser` reads that header alone with no cookie
- * fallback, so every signing stored before 29473e4 carries `user_id` NULL and
- * never once satisfied the rule this removes. Every row that could satisfy it
- * was a request somebody hand-built. Members who are actually here hold
- * `membershipGranted` (the 0058 freeze wrote it) or a `stageGranted` rung, and
- * this function and `computeStage` still answer for both.
- *
- * READ THAT PARAGRAPH AS HISTORY, because the same commit changed the page.
- * 29473e4 also made the Love Letter send the header when there is somebody
- * signed in, which is what gives an accepted signing a person to admit. A
- * signing made since 2026-08-29 DOES carry `user_id`. In the present tense the
- * sentence read as a live fact about the page, and on 2026-09-23 a session
- * believed it and reported the accept flow broken while it works.
+ * NOBODY WAS DEMOTED BY THIS, and read that in the past tense. Up to 29473e4
+ * the Love Letter sent no `Authorization` header, so every signing stored
+ * before 2026-08-29 carries `user_id` NULL and never once satisfied the rule
+ * this removes; members actually here hold `membershipGranted` (the 0058
+ * freeze wrote it) or a `stageGranted` rung. THE SAME COMMIT CHANGED THE PAGE,
+ * so a signing made since DOES carry `user_id`, which is what gives an
+ * accepted one a person to admit. This said "never has, in any commit" in the
+ * present tense until 2026-09-23, when a session believed it and reported the
+ * accept flow broken while it works.
  */
 function hasMembership(user: any): boolean {
   return !!user.membershipGranted;
@@ -7992,22 +7986,11 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
      * Matching a typed email to an account is exactly the hole that was closed
      * before this one, and it stays closed.
      *
-     * AND THE DESK IS TOLD WHICH IT WAS. `rewardRefused` below exists because
-     * "accepted" beside a silent unpaid mint is a lie to a steward, and this
-     * is that shape again: the panel said "Status updated" for a stranger's
-     * signing, which admits nobody, and for a real admission alike. `admitted`
-     * is `null` where the question does not arise, which is every other type
-     * and every re-accept of a row already accepted.
+     * `admitted` tells the desk which of the two it was; the why is in `shared/membershipSigning.ts`.
      */
-    let admitted: boolean | null = null;
-    if (status === "accepted" && !wasAccepted && submissions[idx].type === "membership-508") {
-      admitted = !!submissions[idx].userId;
-      if (admitted) {
-        await members.update(String(submissions[idx].userId), (m: any) => {
-          m.membershipGranted = true;
-        });
-      }
-    }
+    const signingAccepted = status === "accepted" && !wasAccepted && submissions[idx].type === "membership-508";
+    const admitted: boolean | null = signingAccepted ? !!submissions[idx].userId : null;
+    if (admitted) await members.update(String(submissions[idx].userId), (m: any) => { m.membershipGranted = true; });
     await submissionsRepo.replaceAll(submissions);
 
     /*
@@ -20472,9 +20455,7 @@ ${inner}
     const consentedQuests = await claimsRepo.consentedCount(user.id);
     const stageId = computeStage(user, consentedQuests, await completionsFor(getPool(), user.id), await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()));
     const ctx = await capabilityCtx(user);
-    // One read of the inbox for both answers below. `all()` hands back stamped
-    // copies, so calling it twice would copy every row twice for one filter.
-    const inbox: any[] = submissionsRepo.all();
+    const inbox: any[] = submissionsRepo.all(); // once, for both answers below: `all()` copies every row.
     res.json({
       stage: servedStage(stageId),
       stageIndex: stageIndex(stageId),
@@ -20494,12 +20475,7 @@ ${inner}
         .sort((a, b) => String(b.at).localeCompare(String(a.at)))
         .map((e) => ({ fromStage: e.fromStage, toStage: e.toStage, unlocked: e.unlocked, reason: e.reason, at: e.at })),
       firsts: await firstTimesFor(user.id),
-      // THE SIGNING THIS ACCOUNT CARRIES. Stored since 29473e4 and readable
-      // nowhere: the only routes over this table are the three under
-      // /api/admin, so the person a signing is about could not see it. Free
-      // here, because `inbox` is already in hand for the catalogue above.
-      // `shared/membershipSigning.ts` holds why the pipeline's own status
-      // words never cross into a member's page.
+      // The signing this account carries, free off `inbox`. See `shared/membershipSigning.ts`.
       signing: signingOf(inbox, user.id),
     });
   });
