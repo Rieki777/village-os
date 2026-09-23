@@ -2648,7 +2648,18 @@ function stagedFlags(dialKeys, governanceKeys, caps, dispatcher, routes, launchS
       !anyKey(/steward/i) &&
       !anyRoute(/veto|stewardship/i) &&
       !dispatcher.all.some((k) => /steward|approval/i.test(k)),
-    launchSeatsSteward: !/steward/i.test(launchBody),
+    /*
+     * THE CALL, NOT THE WORD. This read `/steward/i` over the closer's body,
+     * which counts a COMMENT mentioning the seat as the seat being filled, and
+     * this document's whole argument is that it reports from the code. The
+     * closer's seating is one call and naming it is what makes the flag a
+     * measurement. Both names are accepted: `seatFoundersAtLaunch` is the
+     * launch closer's half (server/lib/launchSeating.ts) and
+     * `seatCatalystsAsStewards` is the writes underneath it, so a later build
+     * that drops the wrapper and calls the writes directly still reads as
+     * built.
+     */
+    launchSeatsSteward: !/seatFoundersAtLaunch|seatCatalystsAsStewards/.test(launchBody),
     governanceWeek: !anyKey(/week/i) && !anyKey(/^governance\.window_/i),
     delegation: !anyKey(/delegat/i) && !anyRoute(/delegat/i),
     landing: !anyRoute(/landing/i) && !anyKey(/veto_hours/i),
