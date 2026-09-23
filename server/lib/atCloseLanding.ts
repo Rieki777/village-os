@@ -48,6 +48,19 @@
  *   after every write that can throw, and the audit event after it is not
  *   awaited, so a throw that reaches the landing path happened before either.
  *
+ *   SINCE 2026-09-23 THAT CLOSER ALSO SEATS THE FOUNDERS AS STEWARDS, and it
+ *   was re-read for this list rather than assumed. `seatFoundersAtLaunch`
+ *   (server/lib/launchSeating.ts) is idempotent in all four of the ways that
+ *   matter: the role is found or created, the capability is a set union, the
+ *   seat is `INSERT ... ON DUPLICATE KEY UPDATE` on `(role_id, user_id)`, and
+ *   the term history is a read-then-skip on the open term. The seat notice
+ *   goes only to the members THIS run seated and is keyed on a holding id
+ *   derived from the member, so a retry computes the same key and rings
+ *   nobody twice. It moves no value and grants nobody a power the ruling of
+ *   2026-09-23 did not already give them. A calendar that cannot give the
+ *   seat a term is reported and never thrown, so it can never be the reason a
+ *   launch is parked here.
+ *
  *   A token send at acceptance: NOT SAFE, so it stalls. No executor for one
  *   exists in this build. `token_send`, `quest_payout` and `founding_allocation`
  *   have no `SUBJECT_CLOSERS` entry, so a binding ballot on one is refused at

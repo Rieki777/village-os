@@ -68,10 +68,10 @@ export function register(app: Express, deps: RecoveryDeps): void {
     const user = await deps.members.byEmail(email);
     const verdict = maySendSetPasswordLink(user);
     if (verdict.send) {
-      // The token fingerprints the password state it was minted against, so it
-      // works once. An empty hash fingerprints as well as a real one, which is
-      // what makes the claim case single-use too.
-      const claim = makeSetPasswordToken(deps.authSecret, user.id, user.passwordHash);
+      // The token is bound to the member's tokenVersion, which setting a
+      // password bumps, so it works once, for the claim case as much as the
+      // reset. Nothing derived from the password rides in it.
+      const claim = makeSetPasswordToken(deps.authSecret, user.id, user.tokenVersion ?? 0);
       const claimUrl = `${deps.origin()}/set-password?token=${encodeURIComponent(claim)}`;
       const village = deps.escapeHtml(deps.projectName());
       const safeUrl = deps.escapeHtml(claimUrl);

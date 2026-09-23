@@ -92,6 +92,18 @@
      inline because the reference itself is what gets inlined into the
      generated utilities — same mechanism as the shadcn block above. */
   --color-teal-deep: var(--tone-brand, #404040);
+  /* The primary button's HOVER partner. White text sits on teal-deep, so the
+     hover has to carry white as well, and it has to look different from rest.
+     shared/brandTokens.ts derives --tone-brand-hover a fixed step
+     (HOVER_STEP, 1.4) from the brand, darker when there is room. White on it
+     measures 6.33 to 14.82:1 across the 54 seeded themes the token tests use.
+     The fallback is the neutral this name has always had: 15.13:1 under white,
+     1.46 from the #404040 rest. It used to be that literal for every village,
+     which carried no village's hue, and a #262626 seed's rest (#282424) sat
+     1.01:1 from it, a hover nobody could see. Never hover white text to teal
+     (the soft tone, 1.67 to 3.00:1) or to a translucent teal-deep:
+     scripts/check-theme-literals.mjs refuses both. */
+  --color-teal-deep-dark: var(--tone-brand-hover, #262626);
   --color-teal: var(--tone-brand-soft, #a3a3a3);
   --color-teal-light: var(--tone-brand-mid, #737373);
   --color-aqua: var(--tone-mist, #a3a3a3);
@@ -190,7 +202,6 @@
   --color-amber-light: #fdf1de;
   --color-green-light: #dcecd6;
   --color-cream-dark: #e4e4e4;     /* Deeper neutral - reads as a card against --background #f2f2f2 */
-  --color-teal-deep-dark: #262626; /* Hover partner for teal-deep - 13.6:1 vs white, so buttons stay AA while pressed */
 
   /* THE TWO ACCENTS THE NIGHT SHEET IS BUILT ON, given utilities so a
      component can reach them by name.
@@ -695,8 +706,10 @@
     transition: all 0.3s ease;
   }
 
+  /* Hover to the derived hover partner, never to --color-teal: that is the
+     soft tone, and white on it measured 1.67 to 3.00:1 for every seed. */
   .btn-amora:hover {
-    background-color: var(--color-teal);
+    background-color: var(--color-teal-deep-dark);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(38, 38, 38, 0.25);
   }

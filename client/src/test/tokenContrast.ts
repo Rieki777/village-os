@@ -47,6 +47,11 @@ type Rgba = { r: number; g: number; b: number; a: number };
 export interface TextContrast {
   /** The element's own text, trimmed. */
   text: string;
+  /**
+   * UNROUNDED, and every comparison is against this. It was rounded to two
+   * decimals here once, so 4.4999:1 read as 4.50 and passed a 4.5 floor: the
+   * borderline pair a contrast check exists to catch. Round only to print.
+   */
   ratio: number;
   /** 4.5 for body text, 3 for large text (24px, or 18.66px bold). */
   floor: number;
@@ -340,15 +345,22 @@ export function measureText(root: Element, scheme: Scheme, overlay: Record<strin
 
     const px = fontPx(el, scheme);
     const floor = px >= 24 || (px >= 18.66 && isBold(el, scheme)) ? 3 : 4.5;
-    const ratio = Math.round(contrastRatio(toHex(fg), toHex(ground)) * 100) / 100;
+    const ratio = contrastRatio(toHex(fg), toHex(ground));
     out.push({ text, ratio, floor, fg: toHex(fg), bg: toHex(ground) });
   });
   return out;
 }
 
+/**
+ * A ratio for a message: two decimals, rounded DOWN, so a line under its
+ * floor never prints as meeting it (4.4999 prints 4.49, never 4.50). The
+ * 1e-9 absorbs float error only: 9.29 * 100 is 928.9999999999999.
+ */
+export const shownRatio = (ratio: number) => (Math.floor(ratio * 100 + 1e-9) / 100).toFixed(2);
+
 /** One line per failure, for an assertion message a person can act on. */
 export function describeFailures(results: TextContrast[]): string[] {
   return results
     .filter((r) => r.ratio < r.floor)
-    .map((r) => `"${r.text.slice(0, 60)}" ${r.ratio}:1 < ${r.floor}:1 (${r.fg} on ${r.bg})`);
+    .map((r) => `"${r.text.slice(0, 60)}" ${shownRatio(r.ratio)}:1 < ${r.floor}:1 (${r.fg} on ${r.bg})`);
 }

@@ -32,6 +32,7 @@
  *
  * Skips loudly without TEST_DATABASE_URL, like every DB-backed suite here.
  */
+import crypto from "crypto";
 import fs from "fs";
 import http from "http";
 import os from "os";
@@ -39,6 +40,7 @@ import path from "path";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, type TestDb, E2E_BOOT_DEADLINE_MS, waitForPortFree } from "./db/testDb";
+import { makeSetPasswordToken, SET_PASSWORD_LINK_REFUSAL, signTokenPayload } from "./lib/memberTokens";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -56,6 +58,8 @@ const BARE_BASE = `http://localhost:${BARE_PORT}`;
 const ADMIN = "google-e2e-admin-password";
 const CLIENT_ID = "test-client-id.apps.googleusercontent.com";
 const CLIENT_SECRET = "test-client-secret";
+/** The server's signing key, and the key the set-password cases below mint their links with. */
+const TOKEN_SECRET = "google-e2e-token-secret"; // module-review-ok: a throwaway signing key for a server this file starts and kills
 
 let child: ChildProcess | undefined;
 let bareChild: ChildProcess | undefined;
@@ -139,7 +143,7 @@ beforeAll(async () => {
     ...process.env,
     NODE_ENV: "production",
     ADMIN_PASSWORD: ADMIN,
-    AUTH_TOKEN_SECRET: "google-e2e-token-secret", // a throwaway signing key for a server this file starts and kills
+    AUTH_TOKEN_SECRET: TOKEN_SECRET,
     RESEND_API_KEY: "",
     ANTHROPIC_API_KEY: "",
     // PINNED, because this suite spreads process.env and vitest loads .env into
@@ -668,6 +672,156 @@ describe.skipIf(!DB_CONFIGURED)("forgot-password no longer strands an account wi
     // A log line for an unknown address would be its own enumeration oracle
     // for anyone holding the logs.
     expect(logs.join("")).not.toContain("nobody-here@example.com");
+  });
+});
+
+/*
+ * THE SET-PASSWORD LINK, DRIVEN THROUGH THE ROUTE.
+ *
+ * server/lib/memberTokens.test.ts proves the claim and the decision. This
+ * proves the route asks it, bumps tokenVersion in the same update as the hash,
+ * and asks again under the row lock. The links are minted here with this
+ * suite's own signing secret, exactly as forgot-password mints them, because
+ * no route hands a reset link back to its caller. Nine set-password requests
+ * in all: the route allows ten per client address an hour.
+ */
+describe.skipIf(!DB_CONFIGURED)("a set-password link works once, and never outlives a password change", () => {
+  let rowan = { id: "", token: "" };
+  let sage = { id: "", token: "" };
+  let secondLetter = "";
+  let newSession = "";
+
+  async function signUp(who: string) {
+    const res = await fetch(`${BASE}/api/auth/register`, { // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: `A ${who}`, email: `${who}@example.com`, password: "first-password-1", paths: [] }),
+    });
+    const json = await res.json();
+    expect(res.status, JSON.stringify(json)).toBe(200);
+    return { id: String(json.user.id), token: String(json.token) };
+  }
+
+  async function setPassword(link: string, password: string) {
+    const res = await fetch(`${BASE}/api/auth/set-password`, { // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: link, password }),
+    });
+    return { status: res.status, json: await res.json().catch(() => null) };
+  }
+
+  async function logIn(who: string, password: string): Promise<number> {
+    const res = await fetch(`${BASE}/api/auth/login`, { // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: `${who}@example.com`, password }),
+    });
+    return res.status;
+  }
+
+  async function sessionStatus(token: string): Promise<number> {
+    return (await fetch(`${BASE}/api/profile`, { headers: { Authorization: `Bearer ${token}` } })).status; // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
+  }
+
+  /** The member's row as the database holds it, which is what the route decided on. */
+  async function stored(id: string): Promise<{ hash: string; version: number }> {
+    const [rows] = await testDb!.conn.query<any[]>("SELECT password_hash, token_version FROM users WHERE id = ?", [id]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    return { hash: String(rows[0].password_hash), version: Number(rows[0].token_version) };
+  }
+
+  /** A claim in any shape, signed with this server's own secret. */
+  const signed = (claims: unknown) => {
+    const p = Buffer.from(JSON.stringify(claims)).toString("base64url");
+    return `${p}.${signTokenPayload(TOKEN_SECRET, p)}`;
+  };
+
+  beforeAll(async () => {
+    if (!DB_CONFIGURED) return;
+    rowan = await signUp("rowan-resets");
+    sage = await signUp("sage-resets");
+    // A second letter, asked for before the first one was used.
+    secondLetter = makeSetPasswordToken(TOKEN_SECRET, rowan.id, (await stored(rowan.id)).version);
+  });
+
+  it("sets the password once, and the same link cannot set it again", async () => {
+    const link = makeSetPasswordToken(TOKEN_SECRET, rowan.id, (await stored(rowan.id)).version);
+    const first = await setPassword(link, "second-password-2");
+    expect(first.status, JSON.stringify(first.json)).toBe(200); // positive control
+    newSession = String(first.json?.token ?? "");
+    expect(await logIn("rowan-resets", "second-password-2")).toBe(200);
+
+    const replay = await setPassword(link, "third-password-3");
+    expect(replay.status).toBe(401);
+    expect(replay.json?.error).toBe(SET_PASSWORD_LINK_REFUSAL.spent);
+    expect(await logIn("rowan-resets", "third-password-3"), "the replay must not have set anything").toBe(401);
+  });
+
+  it("refuses a second letter that was minted before the password changed, never opened", async () => {
+    const late = await setPassword(secondLetter, "fourth-password-4");
+    expect(late.status).toBe(401);
+    expect(late.json?.error).toBe(SET_PASSWORD_LINK_REFUSAL.spent);
+  });
+
+  it("signs the member out of every other session, as setting a password already did", async () => {
+    expect(await sessionStatus(rowan.token), "the session from before the reset").toBe(401);
+    expect(await sessionStatus(newSession), "the session the reset handed back").toBe(200);
+  });
+
+  it("retires an unopened link when the member signs out anywhere", async () => {
+    const unopened = makeSetPasswordToken(TOKEN_SECRET, rowan.id, (await stored(rowan.id)).version);
+    const out = await fetch(`${BASE}/api/auth/logout`, { method: "POST", headers: { Authorization: `Bearer ${newSession}` } }); // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
+    expect(out.status).toBe(200);
+    const after = await setPassword(unopened, "fifth-password-5");
+    expect(after.status).toBe(401);
+    expect(after.json?.error).toBe(SET_PASSWORD_LINK_REFUSAL.spent);
+  });
+
+  it("refuses an expired link and a link edited to name another account", async () => {
+    const { version } = await stored(rowan.id);
+    const expired = signed({ userId: rowan.id, purpose: "set-password-2", v: version, exp: Date.now() - 1000 });
+    const lapsed = await setPassword(expired, "sixth-password-6");
+    expect(lapsed.status).toBe(401);
+    expect(lapsed.json?.error).toBe("This link is invalid or has expired");
+
+    const genuine = makeSetPasswordToken(TOKEN_SECRET, rowan.id, version);
+    const [payload, sig] = genuine.split(".");
+    const edited = Buffer.from(
+      JSON.stringify({ ...JSON.parse(Buffer.from(payload, "base64url").toString("utf-8")), userId: sage.id }),
+    ).toString("base64url");
+    const forged = await setPassword(`${edited}.${sig}`, "seventh-password-7");
+    expect(forged.status).toBe(401);
+    expect(forged.json?.error).toBe("This link is invalid or has expired");
+    expect(await logIn("sage-resets", "seventh-password-7")).toBe(401);
+  });
+
+  it("RETIRES a link in the old shape, by name, though the old route would have accepted it", async () => {
+    // Built exactly as the minter wrote it until 2026-09-21: `pw` is the HMAC
+    // of this member's CURRENT stored hash, so the old fingerprint compare
+    // would have matched and let it set a password. Sage has never signed
+    // out, so tokenVersion is 0, which is what a missing `v` read as `?? 0`
+    // would equal. Refused anyway, with a sentence of its own.
+    const before = await stored(sage.id);
+    expect(before.version).toBe(0);
+    const oldFingerprint = crypto.createHmac("sha256", TOKEN_SECRET).update(before.hash).digest("hex").slice(0, 16);
+    const oldLink = signed({ userId: sage.id, purpose: "set-password", pw: oldFingerprint, exp: Date.now() + 60 * 60 * 1000 });
+
+    const res = await setPassword(oldLink, "eighth-password-8");
+    expect(res.status).toBe(401);
+    expect(res.json?.error).toBe(SET_PASSWORD_LINK_REFUSAL.retired);
+    expect(await stored(sage.id)).toEqual(before);
+    expect(await logIn("sage-resets", "first-password-1"), "nothing changed on the account").toBe(200);
+  });
+
+  it("lets exactly one of two clicks racing on one link set the password", async () => {
+    // Both requests pass the first check on a plain read, before either has
+    // written. Only the second check, inside the locked row update, can stop
+    // the loser, and bcrypt holds the window open long enough to reach it.
+    const link = makeSetPasswordToken(TOKEN_SECRET, sage.id, (await stored(sage.id)).version);
+    const both = await Promise.all([setPassword(link, "race-password-a"), setPassword(link, "race-password-b")]);
+    expect(both.map((r) => r.status).sort(), JSON.stringify(both.map((r) => r.json))).toEqual([200, 401]);
+    expect(both.find((r) => r.status === 401)?.json?.error).toBe(SET_PASSWORD_LINK_REFUSAL.spent);
+    expect((await stored(sage.id)).version, "one landing, one bump").toBe(1);
   });
 });
 

@@ -114,7 +114,7 @@ export default function ProposeQuest() {
               </p>
               <div className="flex flex-wrap justify-center gap-3">
                 <Link href="/quests">
-                  <a className="px-5 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:opacity-90 transition-opacity">
+                  <a className="px-5 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-teal-deep-dark transition">
                     Back to Quests
                   </a>
                 </Link>
@@ -363,7 +363,7 @@ export default function ProposeQuest() {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+              className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-teal-deep-dark transition disabled:opacity-50"
             >
               <Sparkles className="w-5 h-5" />
               {submitting ? "Sending…" : "Submit Your Quest Proposal"}

@@ -75,9 +75,13 @@
  *                                      window is known rather than pretending
  *                                      one is open or closed.
  *   recordVeto / recordNoObjection     Write the act.
- *   seatCatalystsAsStewards(...)       Called by the launch closer once the
- *                                      Birthing carries. SEE THE CACHE
- *                                      WARNING ON IT.
+ *   seatCatalystsAsStewards(...)       The writes the launch seating makes.
+ *                                      Its caller is `seatFoundersAtLaunch`
+ *                                      in server/lib/launchSeating.ts, which
+ *                                      the `village_launch` closer runs once
+ *                                      the Birthing carries, and which owns
+ *                                      the term, the notices and the public
+ *                                      record. SEE THE CACHE WARNING ON IT.
  *
  * ── WHY THE PERMISSION PLANE ───────────────────────────────────────────────
  *
@@ -1458,9 +1462,35 @@ export interface SeatingReport {
 }
 
 /**
+ * THE ROW ID A LAUNCH SEATING WRITES, DERIVED FROM THE MEMBER AND NOTHING ELSE.
+ *
+ * Every other seating path mints a random id, and here that would be wrong
+ * twice over. `insertHoldingIfAbsent` is idempotent on the `(role_id,
+ * user_id)` key, so a retried close already writes one row; but the NOTICE
+ * that tells the founder they hold the seat is deduplicated on the row id the
+ * way `role_seat`'s is (`role:<holding id>`), and a random id would give the
+ * retry a second key and ring the same person twice about one seat.
+ *
+ * So it is a function rather than a literal in two files:
+ * `server/lib/launchSeating.ts` reads it to build that key, and this module
+ * writes it. The `slice` is the `role_holders.id` column width.
+ */
+export function stewardHoldingId(userId: string): string {
+  return `rh-steward-${userId}`.slice(0, 64);
+}
+
+/**
  * Seat every catalyst as a steward, once, with a term that really ends.
  *
- * Called by the launch closer after the Birthing carries. The founder's rule:
+ * THE WRITES ONLY. `seatFoundersAtLaunch` in server/lib/launchSeating.ts is
+ * the caller, and it is where the term is decided (`resolveSeatTerm`, so the
+ * launch and a voted seat cannot disagree), where the seated founders are
+ * told, and where the village's record of it is written. This function was
+ * written before that one existed and said in this header that the launch
+ * closer called it; for eight weeks nothing outside the tests did, which is
+ * why the caller is now named rather than described.
+ *
+ * The founder's rule:
  * the catalysts INHERIT the seat rather than standing for it, and then have to
  * be voted back in, which is what makes relinquishment automatic rather than
  * an act of virtue. Nobody has to decide they are ready to give up power; they
@@ -1605,7 +1635,7 @@ export async function seatCatalystsAsStewards(
      * here" rather than as an administrator's hand.
      */
     await insertHoldingIfAbsent(pool, {
-      id: `rh-steward-${userId}`.slice(0, 64),
+      id: stewardHoldingId(userId),
       roleId: STEWARD_ROLE_ID,
       userId,
       grantedBy: launchBallotId,

@@ -44,6 +44,36 @@ export interface SessionClaims {
   v?: number;
 }
 
+/**
+ * The one signer every member-facing token shares: the session token, the
+ * set-password claim, the Google sign-in state and handoff
+ * (server/lib/oauthGoogle.ts), the identity confirmation
+ * (server/lib/identityConfirm.ts) and the Google link record
+ * (server/lib/oauthAccounts.ts).
+ *
+ * CODEQL ALERT 36 (`js/insufficient-password-hash`) IS REPORTED ON THE LINE
+ * BELOW, and what it can and cannot see is recorded here so nobody has to
+ * trace it a fourth time. The rule reads this HMAC as a password hash, and it
+ * picks its sources BY NAME: CodeQL 2.27.0 treats any identifier matching
+ * `pass(wd|word|code|.?phrase)`, `oauth`, `api.?(key|tok)` and a few more as a
+ * password, unless the name also says `hash`, `sha`, `random`, `crypt` or
+ * similar. So it never followed a stored password hash (`passwordHash` is
+ * excluded by its own name). What it named was `passwordFingerprint(...)`, an
+ * HMAC of the stored hash that rode in the set-password claim as `pw`. That
+ * one was real: the claim travels by email and is readable by whoever holds
+ * the link. It is gone as of 2026-09-21, and the claim is bound to
+ * `tokenVersion` instead (makeSetPasswordToken, below).
+ *
+ * WHAT STILL MATCHES, AND WHY EACH IS BENIGN. The rule keeps firing here on
+ * names alone: `SET_PASSWORD_TTL_MS` (the integer 3600000, added to `exp`),
+ * `OAUTH_HANDOFF_TTL_MS` (the integer 120000, likewise), and calls to
+ * `makeSetPasswordToken` and `makeOAuthState`, whose results are these same
+ * signed tokens coming back to be verified. None of them carries anything
+ * derived from a password. Renaming them to slip past the pattern would hide
+ * the alert and change nothing, so they keep their names. If you add a field
+ * to any payload signed here, it must not come from a password or a stored
+ * hash, keyed or not; memberTokens.test.ts pins the set-password claim's keys.
+ */
 export function signTokenPayload(secret: string, payload: string): string {
   return crypto.createHmac("sha256", secret).update(payload).digest("base64url");
 }
@@ -106,48 +136,65 @@ export function decodeToken(
 }
 
 /**
- * A fingerprint of the account's password state at mint time. Including it
- * makes the token SINGLE-USE without a nonce table: setting a password changes
- * the hash, so the fingerprint no longer matches and a replayed link is
- * refused. Stateless, which is how the route is written; an empty hash (a
- * claim-pending account) fingerprints just as well as a real one.
- *
- * WHY THIS IS AN HMAC AND NOT A BARE HASH. The input is the STORED hash, so
- * over a bcrypt string a plain digest would tell an attacker nothing. It was
- * not bcrypt everywhere: an account dormant since the bcrypt migration could
- * still hold an unsalted SHA-256 of the password itself, and for that account
- * a bare digest puts sha256(sha256(password)) into a link that travels by
- * email, where whoever holds it can guess candidates offline until one
- * matches. Keying the digest with the server secret removes that: the
- * fingerprint still changes when the hash changes, and it can no longer be
- * reproduced from a password guess alone. CodeQL alert 36 named this.
- */
-export function passwordFingerprint(secret: string, passwordHash: string | null | undefined): string {
-  return crypto.createHmac("sha256", secret).update(String(passwordHash ?? "")).digest("hex").slice(0, 16);
-}
-
-/**
  * Set-password claim tokens (S1): the founder-bootstrap invite, and later the
  * platform's password-reset primitive. Same HMAC as session tokens, different
  * purpose field so one can never be replayed as the other, and a hard expiry.
+ *
+ * SINGLE USE, AND WHAT MAKES IT SO. The claim carries `v`, the member's
+ * tokenVersion when the link was minted, and redemption refuses it unless that
+ * is still the member's tokenVersion (setPasswordLinkRefusal). Every write
+ * that changes a stored password hash bumps tokenVersion in the same row
+ * update: redeeming one of these links (`POST /api/auth/set-password`) and the
+ * erasure tombstone (server/lib/erasure.ts). So once the password changes,
+ * every link minted before the change is dead, including a second letter the
+ * member asked for and never opened. A sign-out and an admin's session revoke
+ * bump the same counter, so they retire an unopened link too. That is
+ * stricter than "used", and it fails safe: the member asks for a new one.
+ *
+ * WHY NOT A FINGERPRINT OF THE HASH (it was one until 2026-09-21). The claim
+ * used to carry `pw`, an HMAC of the stored password hash, compared at
+ * redemption. This link travels by email and its claim is readable by whoever
+ * holds it, so nothing derived from a password belongs in it, keyed or not.
+ * tokenVersion moves on every password change as well, and is derived from
+ * nothing. CodeQL alert 36 named the fingerprint; see signTokenPayload.
+ *
+ * WHY THE PURPOSE IS "set-password-2" AND NOT "set-password". Rolling the
+ * image back is the one recovery lever a village has, so the previous release
+ * will meet these links. Its reader accepts any "set-password" claim and its
+ * route skips the single-use compare when `pw` is absent, so under the old
+ * name every link from the hour before a rollback would be replayable until it
+ * expired. Under this name the previous release refuses them outright, as
+ * invalid: a rollback fails closed.
+ *
+ * The third argument used to be the stored hash. A caller still passing one
+ * must fail here, loudly, and never mint: a string is refused, not coerced.
  */
-export function makeSetPasswordToken(
-  secret: string,
-  userId: string,
-  currentPasswordHash: string | null | undefined,
-): string {
+export function makeSetPasswordToken(secret: string, userId: string, tokenVersion: number): string {
+  if (!Number.isSafeInteger(tokenVersion) || tokenVersion < 0) {
+    throw new TypeError("makeSetPasswordToken takes the member's tokenVersion, a non-negative integer");
+  }
   const payload = Buffer.from(
     JSON.stringify({
       userId,
-      purpose: "set-password",
-      pw: passwordFingerprint(secret, currentPasswordHash),
+      purpose: "set-password-2",
+      v: tokenVersion,
       exp: Date.now() + SET_PASSWORD_TTL_MS,
     }),
   ).toString("base64url");
   return `${payload}.${signTokenPayload(secret, payload)}`;
 }
 
-export function readSetPasswordToken(secret: string, token: string): { userId: string; pw: string | null } | null {
+/**
+ * A verified set-password claim. `v` is null for a claim this server signed in
+ * the shape it used before 2026-09-21 (purpose "set-password", a `pw`
+ * fingerprint, no `v`). Those are retired, by name, in setPasswordLinkRefusal.
+ */
+export interface SetPasswordClaim {
+  userId: string;
+  v: number | null;
+}
+
+export function readSetPasswordToken(secret: string, token: string): SetPasswordClaim | null {
   try {
     const dot = token.lastIndexOf(".");
     if (dot < 1 || dot === token.length - 1) return null;
@@ -157,10 +204,35 @@ export function readSetPasswordToken(secret: string, token: string): { userId: s
     if (provided.length !== expected.length) return null;
     if (!crypto.timingSafeEqual(provided, expected)) return null;
     const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8"));
-    if (decoded.purpose !== "set-password" || !decoded.userId) return null;
+    const current = decoded.purpose === "set-password-2";
+    if ((!current && decoded.purpose !== "set-password") || !decoded.userId) return null;
     if (typeof decoded.exp !== "number" || Date.now() > decoded.exp) return null;
-    return { userId: decoded.userId, pw: typeof decoded.pw === "string" ? decoded.pw : null };
+    // The old shape is retired whatever else it carries. The PURPOSE decides,
+    // never the presence of `v`: reading a missing `v` as `?? 0` would match
+    // every account that never signed out, and let those links through.
+    if (!current) return { userId: decoded.userId, v: null };
+    if (!Number.isSafeInteger(decoded.v) || decoded.v < 0) return null;
+    return { userId: decoded.userId, v: decoded.v };
   } catch {
     return null;
   }
+}
+
+/** What the member reads when a signed, unexpired link still cannot be used. */
+export const SET_PASSWORD_LINK_REFUSAL = {
+  retired: "This link was sent before a security update and no longer works. Ask for a new one.",
+  spent: "This link has already been used, or this account was signed out everywhere after it was sent. Ask for a new one.",
+} as const;
+
+/**
+ * The redemption decision, whole: null means the link may set a password now.
+ *
+ * The route asks twice: once on a plain read, so a dead link costs no bcrypt,
+ * and again inside the locked row update, so two clicks racing on one link
+ * cannot both land. `currentTokenVersion` is the member's, read fresh.
+ */
+export function setPasswordLinkRefusal(claim: SetPasswordClaim, currentTokenVersion: unknown): string | null {
+  if (claim.v === null) return SET_PASSWORD_LINK_REFUSAL.retired;
+  if (claim.v !== Number(currentTokenVersion ?? 0)) return SET_PASSWORD_LINK_REFUSAL.spent;
+  return null;
 }

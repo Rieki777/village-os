@@ -32,7 +32,7 @@ export default function NotFound() {
 
         <button
           onClick={() => setLocation("/")}
-          className="inline-flex items-center gap-2 min-h-[44px] px-6 rounded-lg bg-teal-deep text-white font-semibold hover:bg-teal-deep/90"
+          className="inline-flex items-center gap-2 min-h-[44px] px-6 rounded-lg bg-teal-deep text-white font-semibold hover:bg-teal-deep-dark"
         >
           <Home className="w-4 h-4" aria-hidden="true" />
           Back to the village

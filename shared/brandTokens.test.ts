@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { atContrast, CHARACTER_CARDS, contrastRatio, deriveTheme, hexToHsl, hslToHex } from "./brandTokens";
+import { atContrast, CHARACTER_CARDS, contrastRatio, deriveTheme, hexToHsl, hslToHex, HOVER_STEP, luminance } from "./brandTokens";
 
 describe("the token layer", () => {
   it("emits NOTHING without a seed — the neutral fork", () => {
@@ -68,6 +68,38 @@ describe("the token layer", () => {
           expect(contrastRatio("#ffffff", band), `white on band, ${where}`).toBeGreaterThanOrEqual(4.5);
           expect(hexToHsl(accent)!.l, `accent washed out at ${where}`).toBeLessThanOrEqual(0.94);
           expect(hexToHsl(band)!.l, `band blacked out at ${where}`).toBeGreaterThanOrEqual(0.02);
+        }
+      }
+    });
+
+    it("the hover tone is a VISIBLE step from the brand and still carries white, any seed, any card", () => {
+      /*
+       * Primary buttons are white on --tone-brand, and they hover to
+       * --tone-brand-hover. Seventeen of them used to hover to the soft tone
+       * (white at 1.67 to 3.00:1) and dozens more to a translucent brand, which
+       * lifts toward the page from a tone derived to only just carry white.
+       *
+       * Legibility alone is easy to satisfy by hovering to the rest colour, so
+       * this also asserts the two grounds are a step apart. The seeds past the
+       * usual nine are the forks that break a FIXED hover: #262626 is the old
+       * neutral hover partner itself, and black and white are the two ends.
+       */
+      const seeds = ["#3f4a44", "#39ff14", "#ffe4ec", "#0a0a0a", "#fdfdfd", "#157f7d", "#1e3a8a", "#ff6b00", "#7b2d8b", "#262626", "#000000", "#ffffff"];
+      for (const card of CHARACTER_CARDS) {
+        for (const seed of seeds) {
+          const t = deriveTheme(seed, card.id)!;
+          const rest = t.vars["--tone-brand"];
+          const hover = t.vars["--tone-brand-hover"];
+          const where = `${card.id}/${seed}`;
+          expect(contrastRatio("#ffffff", hover), `white on hover, ${where}`).toBeGreaterThanOrEqual(4.5);
+          expect(contrastRatio(rest, hover), `rest ${rest} to hover ${hover}, ${where}`).toBeGreaterThanOrEqual(HOVER_STEP);
+          // Darker whenever a darker colour can sit a step away; lighter only for a brand too dark to have one.
+          if (luminance(hover) > luminance(rest)) {
+            expect(contrastRatio(rest, "#000000"), `hover went lighter at ${where} with room to darken`).toBeLessThan(HOVER_STEP);
+          }
+          const r = hexToHsl(rest)!, h = hexToHsl(hover)!;
+          if (r.s > 0.3) expect(Math.abs(r.h - h.h), `hue drifted at ${where}`).toBeLessThan(3);
+          expect(t.contrast.pairs.find((p) => p.name === "white on brand hover")?.verdict, where).toBe("pass");
         }
       }
     });
