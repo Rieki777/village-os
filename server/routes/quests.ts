@@ -57,6 +57,7 @@ import type { Express } from "express";
 import fs from "fs";
 import path from "path";
 import type { AppDeps } from "../lib/appDeps";
+import type { LimitState } from "../repos/rateHits";
 import { getStage, stageIndex } from "../../shared/gameConfig";
 import { sceneStopsFor } from "../../shared/questScenes";
 import { cleanCrewName } from "../lib/crews";
@@ -96,7 +97,17 @@ type Deps = Pick<
   | "questConsentRecipients"
   | "overLimit"
   | "clientIp"
->;
+> & {
+  /**
+   * The guard's THREE answers, for the one route that needs the third.
+   *
+   * `overLimit` above folds "could not check" into "not over limit",
+   * which is what every other guarded route here wants: a database
+   * problem must not take a public form down. The share-card raster is
+   * the exception and reads `unavailable` for itself.
+   */
+  limitState(bucket: string, max: number, windowMs: number): Promise<LimitState>;
+};
 
 export function register(app: Express, deps: Deps): void {
   const {
@@ -118,6 +129,7 @@ export function register(app: Express, deps: Deps): void {
     questConsentRecipients,
     overLimit,
     clientIp,
+    limitState,
   } = deps;
 
   // Quests: public list
@@ -263,11 +275,35 @@ export function register(app: Express, deps: Deps): void {
      * crawler that is over 120 misses an hour is not a social platform
      * fetching one card.
      */
-    if (await overLimit(`og-quest:${clientIp(req)}`, 120, 60 * 60 * 1000)) {
+    const guard = await limitState(`og-quest:${clientIp(req)}`, 120, 60 * 60 * 1000);
+    if (guard === "over") {
       return res
         .status(429)
         .set("Retry-After", "600")
         .json({ error: "Too many poster requests. Try again shortly." });
+    }
+    /*
+     * AND WHEN THE GUARD CANNOT CHECK, THIS ONE ROUTE REFUSES (Rye, 2026-09-23).
+     *
+     * Everywhere else in the platform an unreachable guard table reads as
+     * "not over limit", because a guard that takes a public form down
+     * during an outage costs the village real leads. Here the trade runs
+     * the other way: this is the only route that spends `sharp` on a
+     * caller with no account, so failing open means the one expensive
+     * anonymous path in the product loses its only bound at exactly the
+     * moment the database is already in trouble.
+     *
+     * The cost of refusing is a share card that does not render while the
+     * database is unwell, which is a poster, not a person's work. 503 and
+     * not 429: the caller did nothing wrong and the same request will work
+     * once the guard can answer again.
+     */
+    if (guard === "unavailable") {
+      console.error(`[og-quest] refusing to raster: the abuse guard could not check ${clientIp(req)}`);
+      return res
+        .status(503)
+        .set("Retry-After", "600")
+        .json({ error: "The poster could not be made just now. Try again shortly." });
     }
     const sharp = (await import("sharp")).default;
     // basename and nothing else: image_url is admin-typed and this reads disk.
