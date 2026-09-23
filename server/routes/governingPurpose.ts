@@ -92,6 +92,30 @@ export function register(app: Express, deps: Deps): void {
   });
 
   /**
+   * THE SAME ANSWER FOR THE SETUP WIZARD, WHICH HAS NO MEMBER TOKEN.
+   *
+   * The admin panel authenticates with the admin password and the route above
+   * asks `authedUser`, so a setup screen calling it would be refused. It also
+   * sits behind the `/api/governance` prefix, which `requireModule` can close,
+   * and a founder writes this statement before they have decided which
+   * modules the village runs.
+   *
+   * One shape, one reader, two doors. The payload is assembled by the same
+   * `purposePenState` call, so the wizard and the members' page cannot be
+   * told different things about who holds the pen.
+   */
+  app.get("/api/admin/purpose", async (req, res) => {
+    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
+    const state = await purposePenState(getPool());
+    res.json({
+      statement: state.doc.statement,
+      writtenAt: state.doc.writtenAt || null,
+      founderHoldsPen: state.founderHoldsPen,
+      handover: state.handover,
+    });
+  });
+
+  /**
    * THE FOUNDER WRITES IT, AND REWRITES IT, DIRECTLY.
    *
    * This is the door the setup wizard's step posts to, and it stays open for

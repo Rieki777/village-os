@@ -171,7 +171,24 @@ beforeAll(async () => {
   const claim = decodeURIComponent(String(boot.json?.claimUrl ?? "").match(/token=([^&]+)/)?.[1] ?? "");
   const setPw = await call("POST", "/api/auth/set-password", { token: claim, password: "PurposeTest123!" }, "");
   founderToken = String(setPw.json?.token ?? "");
+  const founderId = String(setPw.json?.user?.id ?? "");
   expect(founderToken, "founder must hold a session").toBeTruthy();
+
+  // The governance module ships OFF like every non-core module, and every
+  // route under /api/governance is mounted behind `requireModule`.
+  const mods = await call("GET", "/api/admin/modules");
+  for (const m of mods.json?.modules ?? []) {
+    if (m.core) continue;
+    await call("PUT", `/api/admin/modules/${m.id}/lifecycle`, { lifecycle: "public" });
+  }
+
+  /*
+   * The founder stands as a MEMBER for the ceremonies below. The change
+   * route asks `capabilityDecision` with `isAdmin: false` on purpose, so an
+   * account whose only path to `proposal.open` is the admin plane is refused,
+   * and `co-creator` is the rung that unlocks it.
+   */
+  await call("PUT", `/api/admin/players/${founderId}/stage`, { stageId: "co-creator" });
 }, 180_000);
 
 afterAll(async () => {
@@ -285,12 +302,13 @@ describe.skipIf(!DB_CONFIGURED)("the governing purpose statement", () => {
    */
   it("refuses a rule change with no judgement line, once the village has a statement", async () => {
     const made = await call("POST", "/api/game/mechanics/proposals", {
-      title: "Raise the quorum on rule changes",
-      rationale: "Three proposals in a row closed before the people they affected had read them, so the bar should ask for more of the village.",
-      changeSet: [{ key: "governance.quorum_pct", to: "40" }],
+      title: "Give a proposal longer to be read",
+      rationale: "Three proposals in a row closed before the people they affected had read them, so the sensing window should be longer.",
+      changes: [{ key: "governance.sensing_days", to: "10" }],
     });
     expect(made.status, made.text).toBe(200);
-    const proposalId = String(made.json?.proposal?.id ?? made.json?.id ?? "");
+    expect(made.json?.status, "the founder stands high enough to open one").toBe("open");
+    const proposalId = String(made.json?.id ?? "");
     expect(proposalId, made.text).toBeTruthy();
 
     const bare = await call("POST", `/api/governance/mechanics/${proposalId}/open-ballot`, {});

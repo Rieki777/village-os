@@ -32,7 +32,6 @@
  */
 import {
   Award,
-  Compass,
   Coins,
   FileText,
   Handshake,
@@ -43,9 +42,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ROLE_SEAT_TYPE } from "./roleSeatType";
-// 0217: the two validators the server runs, so the wizard refuses what the
-// route would refuse and says the same sentence while saying it earlier.
-import { purposeAlignmentProblem, purposeStatementProblem } from "@shared/governingPurpose";
+import { GPS_CHANGE_TYPE } from "./gpsChangeType";
 import { atLeast, changesPresent, pct, positive, required } from "./wizardValidators";
 
 /**
@@ -663,17 +660,10 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
             required: true,
             problem: atLeast(40, "The case for it"),
           },
-          /*
-           * HOW THIS SERVES THE GOVERNING PURPOSE (0217).
-           *
-           * Moving a power is one of the five subjects Rye scoped the
-           * judgement line to. The route refuses without it once the village
-           * has a statement, and refuses nothing before then, which is why
-           * this field is OPTIONAL here and the refusal is the server's: a
-           * required marker in this file would demand a line from a village
-           * with nothing to judge against, on the wizard's own step, where
-           * no server answer is in reach.
-           */
+          // 0217: moving a power is one of the five subjects Rye scoped the
+          // judgement line to. OPTIONAL here and required by the route once
+          // the village has a statement, because a wizard step cannot know
+          // whether there is anything to judge against yet.
           {
             key: "purposeAlignment",
             kind: "textarea",
@@ -763,17 +753,10 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
             required: true,
             problem: atLeast(40, "The case for it"),
           },
-          /*
-           * HOW THIS SERVES THE GOVERNING PURPOSE (0217).
-           *
-           * Moving a power is one of the five subjects Rye scoped the
-           * judgement line to. The route refuses without it once the village
-           * has a statement, and refuses nothing before then, which is why
-           * this field is OPTIONAL here and the refusal is the server's: a
-           * required marker in this file would demand a line from a village
-           * with nothing to judge against, on the wizard's own step, where
-           * no server answer is in reach.
-           */
+          // 0217: moving a power is one of the five subjects Rye scoped the
+          // judgement line to. OPTIONAL here and required by the route once
+          // the village has a statement, because a wizard step cannot know
+          // whether there is anything to judge against yet.
           {
             key: "purposeAlignment",
             kind: "textarea",
@@ -857,17 +840,10 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
             required: true,
             problem: atLeast(40, "The reason"),
           },
-          /*
-           * HOW THIS SERVES THE GOVERNING PURPOSE (0217).
-           *
-           * Moving a power is one of the five subjects Rye scoped the
-           * judgement line to. The route refuses without it once the village
-           * has a statement, and refuses nothing before then, which is why
-           * this field is OPTIONAL here and the refusal is the server's: a
-           * required marker in this file would demand a line from a village
-           * with nothing to judge against, on the wizard's own step, where
-           * no server answer is in reach.
-           */
+          // 0217: moving a power is one of the five subjects Rye scoped the
+          // judgement line to. OPTIONAL here and required by the route once
+          // the village has a statement, because a wizard step cannot know
+          // whether there is anything to judge against yet.
           {
             key: "purposeAlignment",
             kind: "textarea",
@@ -882,73 +858,7 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
       terms: { skip: true },
     },
   },
-  /*
-   * ── CHANGING WHAT THE VILLAGE IS FOR (0217) ──────────────────────────────
-   *
-   * Rye, 2026-09-23: "all upgrades going forward will be judged against it."
-   * This card is how a village that has finished its handover moves the
-   * sentence everything else answers to.
-   *
-   * IT IS DORMANT TODAY AND THE CARD STILL SHOWS. The route refuses while the
-   * founder holds the pen and says how many powers are still on the admin
-   * panel, which is a door that names its own condition. A card that appeared
-   * out of nowhere on the day a handover completed would be a feature nobody
-   * had ever seen arriving at the least convenient moment.
-   *
-   * THE WHOLE STATEMENT IS RETYPED, never edited in place. A wizard field
-   * pre-filled with the standing sentence would produce diffs nobody wrote
-   * and a village voting on a paragraph it had not read. The document the
-   * roll reads carries both, one under the other.
-   */
-  {
-    id: "gps_change",
-    group: "Rules",
-    icon: Compass,
-    title: "Change what this village is for",
-    description: "Ask the village to change the governing purpose statement every later change is judged against.",
-    consequence:
-      "Publishing opens the vote to the whole roll. If it carries, the statement reads the new way from that day and every proposal opened afterwards answers to it. Nothing already decided is reopened.",
-    opensVote: true,
-    publish: {
-      path: "/api/governance/purpose-changes",
-      body: (a) => ({
-        statement: a.statement,
-        purposeAlignment: a.purposeAlignment,
-      }),
-    },
-    steps: {
-      subject: { skip: true },
-      details: {
-        label: "The statement",
-        intro: "The whole sentence, as the village would read it afterwards.",
-        fields: [
-          {
-            key: "statement",
-            kind: "textarea",
-            rows: 10,
-            maxLength: 20000,
-            label: "The governing purpose statement",
-            required: true,
-            problem: (v) => purposeStatementProblem(v),
-            help: "Who this village serves, what they are up against, the move it is making, by what means, and what becomes true if it works.",
-            tip: "The village reads this beside the sentence that stands today, so write the whole thing and not the part you are changing.",
-          },
-          {
-            key: "purposeAlignment",
-            kind: "textarea",
-            rows: 3,
-            maxLength: 2000,
-            label: "How this serves the purpose",
-            required: true,
-            problem: (v) => purposeAlignmentProblem("gps_change", v),
-            help: "The whole roll reads this beside your proposal before voting, and it stays on the record.",
-            tip: "Moving the yardstick is measured against the yardstick that stands today.",
-          },
-        ],
-      },
-      terms: { skip: true },
-    },
-  },
+  GPS_CHANGE_TYPE,
 ];
 
 /** By id, for the walker and the renderer. */
