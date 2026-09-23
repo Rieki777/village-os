@@ -357,57 +357,6 @@ describe.skipIf(!DB_CONFIGURED)("a signed-in account names its own type", () => 
   });
 });
 
-/**
- * THE OTHER HALF OF AN ACCEPT, which nothing drove until now.
- *
- * A stranger signs the Love Letter with no account, that row carries no
- * `userId`, and accepting it admits nobody. That is correct and it is not the
- * defect. The defect was that the desk could not tell: the panel said "Status
- * updated" for this and for a real admission alike, so a steward pressing
- * accept on a stranger's signing had every reason to believe they had let
- * somebody in.
- */
-describe.skipIf(!DB_CONFIGURED)("a stranger's signing, which names nobody", () => {
-  let strangers = "";
-
-  it("is taken and kept, because signing is something a person may do without an account", async () => {
-    await forgetTheRateWindow();
-    const before = await onTheRoll();
-    const posted = await call("POST", "/api/forms/submit", {
-      token: null,
-      body: {
-        type: "membership-508",
-        data: { ...SIGNING, name: "A passing stranger", email: "stranger@example.test" },
-      },
-    });
-    expect(posted.status, JSON.stringify(posted.json)).toBe(200);
-    strangers = String(posted.json?.id ?? "");
-    expect(strangers, "the village keeps a stranger's signature").toBeTruthy();
-
-    const row = (await submissionsOfType("membership-508")).find((r: any) => String(r.id) === strangers);
-    expect(row, "the row is kept").toBeTruthy();
-    expect(row.user_id, "and it names nobody, because nobody was signed in").toBeNull();
-    expect(await onTheRoll(), "signing moved no roll").toBe(before);
-  });
-
-  it("is accepted, and the desk is told plainly that it admitted nobody", async () => {
-    const moved = await call("PUT", `/api/admin/submissions/${strangers}/status`, {
-      body: { status: "accepted" },
-    });
-    expect(moved.status, JSON.stringify(moved.json)).toBe(200);
-    expect(moved.json?.admitted, "there was nobody on the row to admit").toBe(false);
-    expect(moved.json?.notified, "and nobody to tell, which is the same absent account").toBe(false);
-
-    // The acceptance still stands and is still recorded: a stranger's signing
-    // is not thrown away for having no account behind it.
-    const row = (await submissionsOfType("membership-508")).find((r: any) => String(r.id) === strangers);
-    expect(String(row.status)).toBe("accepted");
-
-    // And nobody arrived, which is the harm the field exists to report.
-    expect(await onTheRoll(), "an accept with no account on it admits nobody").toBe(5);
-  });
-});
-
 describe.skipIf(!DB_CONFIGURED)("a submitted form cannot name its own type", () => {
   it("still takes every type the village actually collects", async () => {
     await forgetTheRateWindow();
@@ -510,6 +459,57 @@ describe.skipIf(!DB_CONFIGURED)("a submitted form cannot name its own type", () 
     const rows = await submissionsOfType("role-application");
     expect(rows.length, "the village's own route still writes it").toBe(1);
     expect(String(rows[0].user_id)).toBe(wrenId);
+  });
+});
+
+/**
+ * THE OTHER HALF OF AN ACCEPT, which nothing drove until now.
+ *
+ * A stranger signs the Love Letter with no account, that row carries no
+ * `userId`, and accepting it admits nobody. That is correct and it is not the
+ * defect. The defect was that the desk could not tell: the panel said "Status
+ * updated" for this and for a real admission alike, so a steward pressing
+ * accept on a stranger's signing had every reason to believe they had let
+ * somebody in.
+ */
+describe.skipIf(!DB_CONFIGURED)("a stranger's signing, which names nobody", () => {
+  let strangers = "";
+
+  it("is taken and kept, because signing is something a person may do without an account", async () => {
+    await forgetTheRateWindow();
+    const before = await onTheRoll();
+    const posted = await call("POST", "/api/forms/submit", {
+      token: null,
+      body: {
+        type: "membership-508",
+        data: { ...SIGNING, name: "A passing stranger", email: "stranger@example.test" },
+      },
+    });
+    expect(posted.status, JSON.stringify(posted.json)).toBe(200);
+    strangers = String(posted.json?.id ?? "");
+    expect(strangers, "the village keeps a stranger's signature").toBeTruthy();
+
+    const row = (await submissionsOfType("membership-508")).find((r: any) => String(r.id) === strangers);
+    expect(row, "the row is kept").toBeTruthy();
+    expect(row.user_id, "and it names nobody, because nobody was signed in").toBeNull();
+    expect(await onTheRoll(), "signing moved no roll").toBe(before);
+  });
+
+  it("is accepted, and the desk is told plainly that it admitted nobody", async () => {
+    const moved = await call("PUT", `/api/admin/submissions/${strangers}/status`, {
+      body: { status: "accepted" },
+    });
+    expect(moved.status, JSON.stringify(moved.json)).toBe(200);
+    expect(moved.json?.admitted, "there was nobody on the row to admit").toBe(false);
+    expect(moved.json?.notified, "and nobody to tell, which is the same absent account").toBe(false);
+
+    // The acceptance still stands and is still recorded: a stranger's signing
+    // is not thrown away for having no account behind it.
+    const row = (await submissionsOfType("membership-508")).find((r: any) => String(r.id) === strangers);
+    expect(String(row.status)).toBe("accepted");
+
+    // And nobody arrived, which is the harm the field exists to report.
+    expect(await onTheRoll(), "an accept with no account on it admits nobody").toBe(5);
   });
 });
 
