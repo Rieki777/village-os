@@ -1506,7 +1506,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
      * inert, and a migration to delete rows would risk a fork nobody can see
      * for no gain.
      */
-    const [epochRows] = await testDb.conn.query<any[]>(
+    const [epochRows] = await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT `config_key` FROM `app_config` WHERE `config_key` = 'economy-state'",
     );
     expect(epochRows).toEqual([]);
