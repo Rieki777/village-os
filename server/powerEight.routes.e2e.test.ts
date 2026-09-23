@@ -212,7 +212,24 @@ async function disarmRole(cap: string): Promise<void> {
 }
 
 const cross = (cap: string) => call("PUT", `/api/admin/capabilities/${cap}/holding`, { roleId: ROLE });
-const handBack = (cap: string) => call("DELETE", `/api/admin/capabilities/${cap}/holding`);
+/**
+ * THE GLASS IS PART OF THE HAND-BACK NOW (Rye, 2026-09-23).
+ *
+ * Handing a village-held power back to the panel is the village's own
+ * decision: the route refuses an administrator and names the `power_return`
+ * ballot, and carries on only for a founder seated as a steward with the veto
+ * who says they mean to reach past the village. This suite's founder is
+ * exactly that person — the seat is written in the fixture below for the
+ * 2026-09-21 ruling — so the header is what the hand-back costs here, and it
+ * is written into the helper rather than at fourteen call sites.
+ *
+ * WHAT THAT CHANGES FOR THIS FILE, and it is nothing: each of these is a
+ * teardown between scenarios, the village reads the reach as it reads every
+ * other one, and the assertions this suite actually makes are about the
+ * routes on the other side of the gate.
+ */
+const handBack = (cap: string) =>
+  call("DELETE", `/api/admin/capabilities/${cap}/holding`, undefined, founderToken, { "x-capability-override": "true" });
 
 /** The server's own output, kept across restarts so a failed boot can print it. */
 const serverLogs: string[] = [];

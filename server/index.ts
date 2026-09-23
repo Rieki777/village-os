@@ -40,6 +40,7 @@ import {
   assertCapabilityHoldingInvariants,
   capabilityHoldings,
   moveCapabilityToVillage,
+  RETURN_NEEDS_A_VOTE,
   returnCapabilityToScaffolding,
   villageHeldCapabilities,
 } from "./lib/capabilityHolding";
@@ -3181,8 +3182,10 @@ interface CapabilityVerdict {
   /**
    * Would the gate let THIS requester through if they broke the glass? Asked
    * of `capabilityDecision` itself and never re-spelled here (Rye, 2026-09-21:
-   * only a founder seated as a steward with the veto). False everywhere
-   * `needsOverride` is false.
+   * only a founder seated as a steward with the veto). Answered on a REFUSAL
+   * and on an allowed verdict over a village-held key, because a route may
+   * refuse an act the gate allowed and still owe the browser the door; false
+   * on every verdict where the village holds nothing to reach past.
    */
   overrideAvailable: boolean;
   /**
@@ -3356,7 +3359,19 @@ async function mayAct(req: express.Request, cap: Capability): Promise<Capability
   if (decision.allowed) {
     return {
       ok: true, reachedPast: false, villageHolds: decision.villageHolds,
-      source: decision.source, message: "", needsOverride: false, overrideAvailable: false, holderName: null,
+      source: decision.source, message: "", needsOverride: false,
+      /*
+       * ANSWERED ON AN ALLOWED VERDICT TOO, because a route may refuse an act
+       * the gate allowed. `DELETE /api/admin/capabilities/:capability/holding`
+       * carries on only for a reach PAST the village (Rye, 2026-09-23), so a
+       * founder seated as a steward who also holds the power by that seat
+       * arrives here with `ok: true` and still has to be told the door is
+       * there. Asked of `capabilityDecision` itself, never re-spelled.
+       */
+      overrideAvailable: decision.villageHolds
+        ? capabilityDecision(cap, { ...ctx, adminOverride: true }).reachedPastVillage
+        : false,
+      holderName: null,
     };
   }
   if (decision.villageHolds && ctx.isAdmin) {
@@ -13655,18 +13670,43 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
   });
 
   /**
-   * Hand a power back to the scaffolding.
+   * Hand a power back to the scaffolding — and since 2026-09-23 only as the
+   * village's own decision, or by a founder-steward breaking the glass.
    *
-   * This is not a hedge and it is not paternalism. The platform is custodian
-   * of deployments whose operator did not choose any of this and may not be
-   * able to pull a redeploy, so a transfer nothing can undo would leave a
-   * captured village with no way out. What makes the transfer real is the
-   * witness, never the one-way door: this leaves the same public line the
-   * crossing did.
+   * The reasoning and the refusal sentence live on `RETURN_NEEDS_A_VOTE` in
+   * server/lib/capabilityHolding.ts, beside the writer they both guard. The
+   * two facts this route has to carry: it asks the ONE gate for the key being
+   * returned and carries on only on `reachedPast`, which is `BREAK_GLASS_SEAT`
+   * and nothing else; and `mayAct` has already written the public line and
+   * told the holder by the time we get there, so the records below are the
+   * hand-back's own, exactly as they were.
    */
   app.delete("/api/admin/capabilities/:capability/holding", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const cap = String(req.params.capability);
+    // The holding is read BEFORE the gate and the delete: a 404 must stay a
+    // 404, and refusing somebody "this needs a vote" over a power the village
+    // is not holding would send them to open a ballot nothing can close.
+    const holding = (await capabilityHoldings(getPool())).find((h) => h.capability === cap);
+    if (!holding || !ALL_CAPABILITIES.includes(cap as Capability)) {
+      return res.status(404).json({ error: "The village was not holding that one." });
+    }
+    const verdict = await mayAct(req, cap as Capability);
+    if (!verdict.reachedPast) {
+      const who = holding.holderRoleName ?? holding.holderRoleId;
+      return res.status(409).json({
+        error:
+          `${who} looks after this one. ${RETURN_NEEDS_A_VOTE} ${BREAK_GLASS_WAY_THROUGH} ` +
+          "Send the x-capability-override header with this request to do it that way, and the village will see that you did.",
+        // The browser's half of the same answer (0103's shape): the panel
+        // sends people to the ballot, and offers the glass only to somebody
+        // the gate would actually let through.
+        requiresOverride: true,
+        overrideAvailable: verdict.overrideAvailable,
+        holderName: who,
+        ballotRoute: "/api/governance/power-returns",
+      });
+    }
     const existed = await returnCapabilityToScaffolding(getPool(), cap);
     if (!existed) return res.status(404).json({ error: "The village was not holding that one." });
     const what = CAPABILITY_CONSEQUENCE[cap as Capability] ?? cap;
@@ -24960,6 +25000,11 @@ ${inner}
    * behind `isAdmin`. So a village that took something on and found it was
    * not ready had to ask the scaffolding to take it back, which is the one
    * sentence the whole round exists to stop a village having to say.
+   *
+   * SINCE 2026-09-23 THIS ROUTE IS THE WAY AND NOT ONE OF TWO. Rye ruled that
+   * handing a village-held power back to the panel needs a village vote, so
+   * that admin route refuses everybody but a founder seated as a steward with
+   * the veto, and the sentence it sends back names this one.
    *
    * ── THE SUBJECT REF IS THE CAPABILITY ALONE ────────────────────────────
    *
