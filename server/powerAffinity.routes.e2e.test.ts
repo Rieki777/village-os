@@ -357,9 +357,10 @@ describe.skipIf(!DB_CONFIGURED)("a power the village takes off its ladder", () =
 });
 
 describe.skipIf(!DB_CONFIGURED)("a suggestion never permits", () => {
-  it("leaves the map to whoever holds story.tell, even for the member it suggests story.tell to", async () => {
+  it("leaves the map to whoever holds org.declare, even for the member it suggests story.tell to", async () => {
     // Fern holds nothing. Cass is the member the map now suggests story.tell
-    // to, and a suggestion is not the power.
+    // to, and a suggestion is not the power. Since 2026-09-23 the map is
+    // written by `org.declare`, so holding story.tell would not open it either.
     for (const token of [fernToken, cassToken]) {
       const tried = await call("PUT", "/api/admin/power-affinity/library.keep", { token, body: { classes: ["catalyzing"] } });
       expect([401, 403], JSON.stringify(tried.json)).toContain(tried.status);
