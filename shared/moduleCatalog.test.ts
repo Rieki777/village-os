@@ -112,20 +112,131 @@ describe("moduleCatalog", () => {
       .map((m) => m.id)
       .sort();
     /*
-     * Measured on main 2f91c93, redemption included. Every one of these owns
-     * dials whose defaults are a working village: the module does what its
-     * card says on the day it is switched on, and the dials are there for a
-     * village that wants something other than the default. That is what makes
-     * "nothing to set up" true for them and false for redemption, which is off
-     * this list because it is now `required`.
+     * Measured on main 2f91c93, redemption included, and re-measured on
+     * 2026-09-23 when EVENTS came off it. Every one of these owns dials whose
+     * defaults are a working village: the module does what its card says on
+     * the day it is switched on, and the dials are there for a village that
+     * wants something other than the default.
+     *
+     * Events was on this list under a claim that turned out to be false of it.
+     * `calendar.hemisphere` defaults to "north", which is not a working
+     * village south of the equator, it is an upside-down one, and no default
+     * can be right for both. That is a place-dependent default rather than a
+     * tuning knob, so events is `required` now and the test below is what
+     * stops another one arriving silently.
      *
      * Ownership is `modulesOwning`, never `variableKeys`: progression lists no
      * keys and owns twenty-six by namespace, so the shorter question would
      * have missed it.
      */
     expect(claiming).toEqual([
-      "events", "feed", "forum", "governance", "gratitude",
+      "feed", "forum", "governance", "gratitude",
       "introductions", "messaging", "progression", "quests",
+    ]);
+  });
+
+  /**
+   * THE PAIRING RULE, from Rye's ruling of 2026-09-21: a module owning a
+   * default that depends on WHERE the village is may not tell a fork there is
+   * nothing to set up. The flag is declared on the dial
+   * (`placeDependent`, shared/gameVariables.ts) and this is where it binds to
+   * the module that owns it, in both directions, so neither half can move
+   * alone.
+   */
+  it("no module owning a place-dependent dial says `setup: none`", () => {
+    const placeDials = VARIABLES.filter((v) => v.placeDependent);
+    // A known positive, so an empty list can never pass this test by accident:
+    // the day somebody drops the flag, this line fails before the loop does.
+    expect(placeDials.map((v) => v.key)).toContain("calendar.hemisphere");
+    for (const v of placeDials) {
+      const owners = modulesOwning(v.key);
+      expect(owners.length, `"${v.key}" depends on place and no module owns it`).toBeGreaterThan(0);
+      for (const id of owners) {
+        expect(
+          MODULES_BY_ID[id].setup,
+          `"${id}" owns "${v.key}", whose default depends on where the village is, and still says setup "none"`,
+        ).not.toBe("none");
+      }
+    }
+  });
+
+  /**
+   * THE SCREEN THAT FINDS THE NEXT ONE.
+   *
+   * The rule above only works on dials somebody remembered to flag. This is
+   * the enumeration that makes an unflagged candidate visible: every dial
+   * whose key, words or default smell of a place or a clock, pinned as a list.
+   * A new one joins the list and a person has to look at it and decide, which
+   * is the whole point; the judgement is not a test's to make.
+   *
+   * The pattern deliberately does not use `\b` around its words. `\b` treats
+   * an underscore as a word character, so `\busd\b` cannot match
+   * `payments.purchase_limit_per_order_usd` — measured while surveying the
+   * registry for this ruling, and it is how a currency dial hid from an
+   * earlier sweep of exactly this kind.
+   */
+  it("pins every dial that reads as place-dependent, flagged or judged", () => {
+    const SCREEN =
+      /hemispher|solstice|equinox|timezone|time zone|utc|locale|currency|usd|crc|country|latitud|longitud|coordinat|calendar|hectare|acre|celsius|fahrenheit/i;
+    const hits = VARIABLES.filter(
+      (v) => SCREEN.test(`${v.key} ${v.label} ${v.description} ${v.default}`) && !v.placeDependent,
+    ).map((v) => v.key).sort();
+    /*
+     * Judged on 2026-09-23, every one of them, and not one is a default that
+     * depends on where the village is:
+     *
+     *   calendar.year_anchor    a convention, not a fact. December is a real
+     *                           choice in the south, and the dial's own words
+     *                           say southern villages often pick June.
+     *   calendar.cross_quarters off, and off is right everywhere.
+     *   cycle.mode              a moon or a calendar month: the same two
+     *                           answers under either sky.
+     *   economy.claims_week_starts the solstices and equinoxes, which fall on
+     *                           the same four dates in both hemispheres.
+     *   events.*                window lengths, in days.
+     *   payments.*_usd          the payment spine charges in `usd`
+     *                           (server/lib/payments.ts), one platform choice
+     *                           rather than a local one.
+     *   redemption.*            counted in "the redemption's own currency",
+     *                           which the village answers once, elsewhere.
+     *   stay.autopay_post_hour  labelled UTC and read as UTC, so it is the
+     *                           same instant everywhere. Its LOCAL hour moves
+     *                           with longitude, which argues for reading it in
+     *                           village time rather than for asking a founder.
+     *   map.concierge_enabled   matched on "coordination".
+     *   governance.hub_url, governance.quorum_pct,
+     *   library.dispute_deadline_days, governance.window_role_seat
+     *                           matched on letters inside other words:
+     *                           "outcome", "computed", "the calendar allows
+     *                           it". The screen looks for substrings on
+     *                           purpose, because a word boundary is what hid
+     *                           the currency dials from an earlier sweep, and
+     *                           the price of that is noise a person reads
+     *                           once.
+     */
+    expect(hits).toEqual([
+      "calendar.cross_quarters",
+      "calendar.year_anchor",
+      "cycle.mode",
+      "economy.claims_week_starts",
+      "events.past_visible_days",
+      "events.rsvp_enabled",
+      "events.upcoming_days",
+      "governance.hub_url",
+      "governance.quorum_pct",
+      "governance.window_role_seat",
+      "library.dispute_deadline_days",
+      "map.concierge_enabled",
+      "payments.donation_max_usd",
+      "payments.purchase_limit_30d_usd",
+      "payments.purchase_limit_annual_usd",
+      "payments.purchase_limit_per_order_usd",
+      "redemption.currencies",
+      "redemption.fee_fixed",
+      "redemption.max_per_member_per_cycle",
+      "redemption.max_per_request",
+      "redemption.min_amount",
+      "stay.autopay_post_hour",
     ]);
   });
 

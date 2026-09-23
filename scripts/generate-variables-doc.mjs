@@ -274,6 +274,7 @@ const RENDERED_FIELDS = [
   "ring",
   "applyTiming",
   "criticality",
+  "placeDependent",
 ];
 
 /** What each type means, in a founder's words. Every member needs one. */
@@ -430,6 +431,7 @@ function readVariable(def, index, types, rings, timings, ringOf, applyTimingOf, 
     applyTimingExplicit: def.applyTiming !== undefined,
     criticality: criticalityOf(def),
     criticalityExplicit: def.criticality !== undefined,
+    placeDependent: def.placeDependent === true,
   };
 }
 
@@ -594,6 +596,21 @@ function variableSection(v) {
   // to move it has to clear, and whether a steward may stop that ballot at all.
   // A member reading what a dial does is owed what changing it costs.
   rows.push(["What it costs to change", CRITICALITY_GLOSS[v.criticality]]);
+  /*
+   * A DEFAULT THAT IS A GUESS ABOUT THIS VILLAGE says so here, because a
+   * reader deciding whether to touch a dial is owed the difference between a
+   * platform opinion they can leave alone and a question only they can
+   * answer. The module that owns one may not claim there is nothing to set up
+   * (shared/moduleCatalog.test.ts), and the answer is kept even when it
+   * matches the default, which is what makes "somebody here said so"
+   * knowable at all.
+   */
+  if (v.placeDependent) {
+    rows.push([
+      "Depends on where you are",
+      "Yes. The default is where the platform starts, not an answer: a village says which is true of it, and saying so is recorded even when the answer matches the default.",
+    ]);
+  }
   lines.push(table(["Fact", "Value"], rows));
   if (v.choices.length) {
     lines.push("");

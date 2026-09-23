@@ -31,7 +31,7 @@
  * sits in (scripts/check-tailwind-gray.mjs LIGHT_SURFACES), never a semantic
  * theme token.
  */
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 import { toast } from "sonner";
 import { stalemateWarningFor } from "@shared/ballotSubjects";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
@@ -61,6 +61,18 @@ interface Dial {
   ring: "open" | "founder";
   applyTiming: "instant" | "cycle-close";
   modules: string[];
+  /**
+   * THIS DIAL'S DEFAULT DEPENDS ON WHERE THE VILLAGE IS, so the platform's
+   * value is a starting guess. Declared in shared/gameVariables.ts and carried
+   * here on the same payload.
+   */
+  placeDependent?: boolean;
+  /**
+   * HAS ANYBODY HERE SAID SO? Not the negation of `isDefault`: a village in
+   * Costa Rica that confirms "north" is default AND answered, and until this
+   * field existed it was indistinguishable from one that never looked.
+   */
+  answered?: boolean;
 }
 
 /**
@@ -105,6 +117,8 @@ export default function ModuleSettingsSection({
   lifecycle,
   moduleNames,
   password,
+  focusKey,
+  onFocused,
 }: {
   moduleId: string;
   moduleName: string;
@@ -113,6 +127,16 @@ export default function ModuleSettingsSection({
   /** Module id to name, for saying who else a shared dial moves. */
   moduleNames: Record<string, string>;
   password: string;
+  /**
+   * THE ONE DIAL A DEEP LINK CAME HERE FOR (`?setting=<key>`, or the literal
+   * "config" for a module whose setup lives in its config editor). Focused
+   * once the dials are really on screen, which is why this is a prop and not
+   * something the URL is read for down here: the address is read once, at the
+   * tab, and consumed once.
+   */
+  focusKey?: string | null;
+  /** Called after the focus attempt, so the tab can take the key out of the URL. */
+  onFocused?: () => void;
 }) {
   const [dials, setDials] = useState<Dial[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -120,6 +144,9 @@ export default function ModuleSettingsSection({
   const [saving, setSaving] = useState<string | null>(null);
   /** The server's own words about a refusal, kept on the dial it refused. */
   const [refused, setRefused] = useState<Record<string, string>>({});
+  /** A deep link naming a dial this card does not hold. Said out loud. */
+  const [missed, setMissed] = useState<string | null>(null);
+  const headingRef = useRef<HTMLHeadingElement | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -139,6 +166,52 @@ export default function ModuleSettingsSection({
 
   useEffect(() => { void load(); }, [load]);
 
+  /**
+   * LANDING, once the control a link named is really on screen.
+   *
+   * The card renders before its dials arrive (two fetches: the catalog, then
+   * the variables), so nothing can be focused at navigation time and the
+   * browser's own `#hash` jump would have fired long before. This waits for
+   * the list and then moves focus to the control itself, so a keyboard user
+   * can change it with the next keystroke and a screen reader announces the
+   * dial, its value and why it is being asked, instead of leaving focus at
+   * the top of a page that scrolled under them.
+   *
+   * A key that is not on this card gets an honest miss rather than silence:
+   * `missed` prints a line and the heading takes focus, so a stale link says
+   * so instead of looking like a page that ignored a click.
+   */
+  useEffect(() => {
+    if (!focusKey || dials === null) return;
+    const el =
+      focusKey === "config"
+        ? document.getElementById(`module-config-${moduleId}`)
+        : // getElementById, never querySelector: a dial key has dots in it and
+          // `#module-setting-calendar.hemisphere` is a valid id but a selector
+          // reading "hemisphere" as a class.
+          document.getElementById(`module-setting-${focusKey}`);
+    if (el) {
+      // `center`, so the control does not land under the sticky header, and
+      // no smooth behaviour, so a reduced-motion reader is not swept along.
+      //
+      // Called optionally, like the card scroll in Admin.tsx: jsdom does not
+      // implement scrollIntoView, and an unguarded call threw inside this
+      // effect and took the focus below it with it. A page that scrolls but
+      // never focuses is precisely the half-kept promise this exists to fix,
+      // and only a test environment would have shown it.
+      el.scrollIntoView?.({ block: "center" });
+      const control = el.querySelector<HTMLElement>("input, select, textarea, button, a") ?? el;
+      control.focus({ preventScroll: true });
+    } else {
+      setMissed(focusKey);
+      headingRef.current?.focus({ preventScroll: true });
+    }
+    onFocused?.();
+    // focusKey is the whole trigger; re-running on every draft keystroke would
+    // yank focus back mid-edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusKey, dials === null, moduleId]);
+
   const save = async (dial: Dial, value: string) => {
     setSaving(dial.key);
     try {
@@ -157,6 +230,12 @@ export default function ModuleSettingsSection({
       setRefused((r) => { const n = { ...r }; delete n[dial.key]; return n; });
       setDrafts((p) => { const n = { ...p }; delete n[dial.key]; return n; });
       toast.success("Saved");
+      // The Go-live card and the module cards read readiness, and answering a
+      // place-dependent dial is exactly what flips one. They already listen
+      // for this; without it the hint a founder just satisfied would sit there
+      // until the next poll or reload, which reads as a button that did
+      // nothing.
+      window.dispatchEvent(new Event("module:saved"));
       await load();
     } catch {
       const sentence = "That did not reach the server, so nothing was saved.";
@@ -189,16 +268,39 @@ export default function ModuleSettingsSection({
     moduleId === "redemption" &&
     !off &&
     (dials ?? []).some((v) => v.key === "redemption.process_text" && v.value.trim() === "");
+  /**
+   * A DIAL WHOSE DEFAULT IS A GUESS ABOUT THIS VILLAGE, AND NOBODY HAS SAID.
+   *
+   * `calendar.hemisphere` is the case Rye ruled on: it ships "north", which is
+   * true in Costa Rica and upside down south of the equator. The value alone
+   * cannot tell a village that agreed from a village that never looked, so the
+   * server carries `answered` beside it, and this is where a founder is asked.
+   *
+   * It never blocks anything. The dial saves, the module goes live, and the
+   * amber stays until somebody answers, which is the standing house rule that
+   * warnings warn and do not refuse.
+   */
+  const needsAnswer = (v: Dial) => !!v.placeDependent && !v.answered;
+
   // The Hypha panel owns its own four account fields, so the generic list
   // leaves them alone. Every other module shows every dial it owns.
   const listed = (dials ?? []).filter((v) => moduleId !== "hypha" || !HYPHA_PANEL_KEYS.includes(v.key));
 
   return (
     <div className="mt-4 pt-4 border-t border-gray-100">
-      <h4 className="font-semibold text-gray-900 text-sm">Settings</h4>
+      {/* tabIndex -1 so a deep link that cannot find its dial has somewhere
+          honest to put focus, and the reader hears where they landed. */}
+      <h4 className="font-semibold text-gray-900 text-sm" tabIndex={-1} ref={headingRef}>Settings</h4>
       <p className="text-xs text-gray-600 mt-0.5 mb-3">
         Everything {moduleName} reads, editable here. Changes are live the moment they save.
       </p>
+
+      {missed && (
+        <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3" role="status">
+          That link asked for a setting this card does not hold any more. Everything {moduleName}{" "}
+          reads is below.
+        </p>
+      )}
 
       {off && (
         <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
@@ -236,8 +338,19 @@ export default function ModuleSettingsSection({
               const dirty = draft !== v.value;
               const others = (v.modules ?? []).filter((id) => id !== moduleId);
               const warning = stalemateWarningFor(v.key, draft);
+              const asking = needsAnswer(v);
+              // Tied to the control rather than left floating: a note a screen
+              // reader meets only if it happens to pass over it is not an
+              // answer to "why am I here", and a deep link lands ON the
+              // control. Not role="alert", which would re-announce on every
+              // keystroke and is unreachable once announced.
+              const answerNoteId = asking ? `module-setting-${v.key}-answer` : undefined;
               return (
-                <div key={v.key} id={`module-setting-${v.key}`} className="border border-gray-200 rounded-xl px-4 py-3">
+                <div
+                  key={v.key}
+                  id={`module-setting-${v.key}`}
+                  className={`border rounded-xl px-4 py-3 ${needsAnswer(v) ? "border-amber-300 bg-amber-50/40" : "border-gray-200"}`}
+                >
                   <div className="flex flex-wrap items-start gap-3">
                     <div className="flex-1 min-w-[220px]">
                       <div className="font-medium text-gray-900 text-sm">
@@ -255,6 +368,16 @@ export default function ModuleSettingsSection({
                         {v.min !== undefined && v.min !== null && v.max !== undefined && v.max !== null && ` · ${v.min}-${v.max}`}
                         {v.unit ? ` ${v.unit}` : ""}
                       </p>
+                      {asking && (
+                        <p
+                          id={answerNoteId}
+                          className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2"
+                        >
+                          Needs your answer. {v.value === v.default ? `It starts as "${v.default}", which is where the platform starts and not something anybody here said.` : ""} Choose
+                          it, or press This is right to keep what it shows. Nothing is blocked
+                          either way.
+                        </p>
+                      )}
                       {others.length > 0 && (
                         <p className="text-[11px] text-gray-600 mt-0.5">
                           Shared with {others.map((id) => moduleNames[id] ?? id).join(", ")}. Changing it here changes it there.
@@ -268,6 +391,7 @@ export default function ModuleSettingsSection({
                       <select
                         value={draft}
                         aria-label={v.label}
+                        aria-describedby={answerNoteId}
                         onChange={(e) => setDrafts((d) => ({ ...d, [v.key]: e.target.value }))}
                         className={`${inputCls} bg-white`}
                       >
@@ -278,6 +402,7 @@ export default function ModuleSettingsSection({
                       <select
                         value={draft}
                         aria-label={v.label}
+                        aria-describedby={answerNoteId}
                         onChange={(e) => setDrafts((d) => ({ ...d, [v.key]: e.target.value }))}
                         className={`${inputCls} bg-white max-w-[220px]`}
                       >
@@ -290,6 +415,7 @@ export default function ModuleSettingsSection({
                         value={draft}
                         rows={6}
                         aria-label={v.label}
+                        aria-describedby={answerNoteId}
                         onChange={(e) => setDrafts((d) => ({ ...d, [v.key]: e.target.value }))}
                         className={`${inputCls} w-full font-sans`}
                       />
@@ -299,6 +425,7 @@ export default function ModuleSettingsSection({
                         step={v.type === "decimal" || v.type === "percentage" ? "0.01" : "1"}
                         value={draft}
                         aria-label={v.label}
+                        aria-describedby={answerNoteId}
                         onChange={(e) => setDrafts((d) => ({ ...d, [v.key]: e.target.value }))}
                         className={`${inputCls} w-40`}
                       />
@@ -311,6 +438,26 @@ export default function ModuleSettingsSection({
                     >
                       {saving === v.key ? "Saving…" : "Save"}
                     </button>
+                    {asking && !dirty && (
+                      /*
+                       * THE ONLY WAY TO AGREE WITH A DEFAULT.
+                       *
+                       * Save is disabled while the draft equals the value, which
+                       * is right for every other dial and left this one
+                       * unanswerable: a village whose honest answer is the value
+                       * already showing had no control to press. This saves that
+                       * same value, and the server keeps the row for a
+                       * place-dependent dial, so agreeing leaves a trace at last.
+                       */
+                      <button
+                        type="button"
+                        onClick={() => save(v, draft)}
+                        disabled={saving === v.key}
+                        className={saveCls}
+                      >
+                        {saving === v.key ? "Saving…" : "This is right"}
+                      </button>
+                    )}
                     {!v.isDefault && (
                       <button
                         type="button"
@@ -338,13 +485,17 @@ export default function ModuleSettingsSection({
           </div>
 
           {moduleId === "hypha" && (
-            <div className="mt-4">
+            // The landing target for a `config` readiness address: hypha's
+            // second half is a contract confirmed in this panel, not a dial.
+            <div className="mt-4" id={`module-config-${moduleId}`}>
               <HyphaModulePanel password={password} vars={dials ?? []} onVariableSaved={load} />
             </div>
           )}
 
           {ConfigPanel && (
-            <div className="mt-4">
+            // Likewise for a module whose setup is its structural config, such
+            // as crowdpool's linked campaigns.
+            <div className="mt-4" id={`module-config-${moduleId}`}>
               <ConfigPanel password={password} />
             </div>
           )}

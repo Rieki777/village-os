@@ -20230,6 +20230,14 @@ ${inner}
       daysRemaining: cycleDaysRemaining(now),
       moonPhase: moonPhase(now),
       moonPhaseName: moonPhaseName(moonPhase(now)),
+      // WHICH WAY UP THE MOON IS, from the one clock route every surface can
+      // reach. The Gratitude Wall's cycle clock drew a northern sky for every
+      // village however `calendar.hemisphere` was set, because the only
+      // readers of that dial sit behind the events module: `/api/events` is
+      // gated by requireModule, and the public mechanics page hides an off
+      // module's dials. Gratitude is core, this route is already fetched by
+      // the clock, and the phase beside it is the same kind of fact.
+      hemisphere: stringVar("calendar.hemisphere") === "south" ? "south" : "north",
       budget: user ? await gratitudeBudget(user) : null,
     });
   });

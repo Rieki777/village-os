@@ -18,7 +18,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { storedText, writeStored } from "@/lib/safeStorage";
-import type { ModuleLifecycle } from "@shared/modules";
+import type { ModuleLifecycle, ModuleReadiness } from "@shared/modules";
+import SetupNeeded from "@/components/modules/SetupNeeded";
 import { useCatalyst } from "@/lib/gameApi";
 
 interface AdminModule {
@@ -28,7 +29,7 @@ interface AdminModule {
   lifecycle: string;
   dataClass: string;
   setup: "none" | "optional" | "required";
-  ready: { ready: boolean; hint: string } | null;
+  ready: ModuleReadiness | null;
   maxLifecycle: string;
   requires: string[];
   showingExamples: boolean;
@@ -225,7 +226,27 @@ export function AdminGoLive({
   const lookup = Object.fromEntries(
     (modules ?? []).map((x) => [x.id, { name: x.name, lifecycle: x.lifecycle }]),
   );
-  // Keyed by the module, so Not-yet state and the rest reset per tab while
-  // the fetcher above mounts exactly once.
-  return <GoLiveCard key={mod.id} module={mod} lookup={lookup} token={token} onChanged={load} />;
+  /*
+   * THE SLOT SAID NOTHING WHEN THERE WAS SOMETHING TO SAY.
+   *
+   * `GoLiveCard` renders null while setup is unfinished, which is correct for
+   * the card and left this spot blank: a founder standing on the module's own
+   * tab, waiting to go live, was shown an empty space where the reason
+   * belonged. The hint goes above it, carrying the link to the control, and
+   * the card still appears by itself the moment readiness flips.
+   */
+  return (
+    <>
+      <SetupNeeded
+        moduleId={mod.id}
+        setup={mod.setup}
+        ready={mod.ready}
+        lifecycle={mod.lifecycle}
+        className="mb-5"
+      />
+      {/* Keyed by the module, so Not-yet state and the rest reset per tab
+          while the fetcher above mounts exactly once. */}
+      <GoLiveCard key={mod.id} module={mod} lookup={lookup} token={token} onChanged={load} />
+    </>
+  );
 }
