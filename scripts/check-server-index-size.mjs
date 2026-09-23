@@ -27,9 +27,25 @@
  *
  * WHAT IS MEASURED, and both numbers only ever fall:
  *
- *   lines   Newline count of server/index.ts, the same number `wc -l` gives,
- *           so anyone checking this guard by hand gets the same answer. The
- *           blunt instrument, and the one that catches ordinary growth.
+ *   lines   Newline count of server/index.ts MINUS the lines `exemptLines`
+ *           forgives: route-module imports, and calls to the `register as
+ *           NAME` bindings those imports declare. The blunt instrument, and
+ *           the one that catches ordinary growth.
+ *
+ *           SO A HAND `wc -l` READS HIGHER THAN THIS GUARD, and the gap is
+ *           the exemption rather than a discrepancy. This block claimed the
+ *           opposite until 2026-09-23: it said the number was "the same
+ *           number `wc -l` gives, so anyone checking this guard by hand gets
+ *           the same answer", which stopped being true the day the exemption
+ *           was added and read as a 103-line mystery to anyone who checked.
+ *           A guard whose own header warns that hand-typed numbers go stale
+ *           had a stale claim in its header.
+ *
+ *           The gap is not quoted here on purpose. It is the count of
+ *           extracted route modules and moves with every extraction, so a
+ *           figure written into this comment would be wrong by the next one.
+ *           Run the script: it prints its own number, and `wc -l` prints the
+ *           other.
  *   routes  `app.get/post/put/patch/delete(` registrations, counted in code
  *           only. Lines alone are not enough: a commit can delete a long
  *           comment block and add a route in the same breath and still come
