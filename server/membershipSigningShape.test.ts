@@ -55,10 +55,13 @@ describe.skipIf(!configured)("a signing as the repo hands it over", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
-    await pool.query("SET time_zone = '+00:00'");
-    await pool.query("DELETE FROM submissions");
-    await pool.query("DELETE FROM collection_versions WHERE collection = 'submissions'");
+    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    // The one statement here, and the only reason it is not a repo call: a
+    // session setting is not a query on a table, and `kind: "time"` is exactly
+    // what this file is about, so a session on the host's offset would make the
+    // assertion below measure the wrong thing. `provisionTestDb` hands over a
+    // fresh scratch schema, so there is nothing to clear before writing.
+    await pool.query("SET time_zone = '+00:00'"); // module-review-ok: a session time zone, not a table read, and the conversion under test depends on it
   }, 300_000);
 
   afterAll(async () => {
