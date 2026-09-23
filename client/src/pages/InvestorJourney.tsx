@@ -734,7 +734,7 @@ export default function InvestorJourney() {
                       </div>
                     </div>
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      phase.status === "Planning" ? "bg-gold/20 text-gold" : "bg-white/20 text-white"
+                      phase.status === "Planning" ? "bg-gold text-white" : "bg-white/20 text-white"
                     }`}>
                       {phase.status}
                     </span>

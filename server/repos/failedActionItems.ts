@@ -70,7 +70,16 @@ const clip = (value: string | null | undefined, max: number): string | null =>
   value == null ? null : String(value).slice(0, max);
 
 const EMAIL_ADDRESS = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
-const MEMBER_ID = /\busr-[A-Za-z0-9-]{4,}/g;
+/**
+ * Both shapes a member id is minted in. Bootstrap mints `usr-<epoch>-<rand>`
+ * (server/index.ts), and registration, by password or by Google, mints
+ * `user-<epoch>-<rand>` (server/routes/register.ts, server/routes/authGoogle.ts),
+ * so an ordinary member's id is the second shape. This matched only the first
+ * until a failed give-back brought the redemption closer's error here, which
+ * names the member it could not pay back. The `user-` half insists on the epoch
+ * digits, so an error that says `user-agent` keeps its words.
+ */
+const MEMBER_ID = /\b(?:usr-[A-Za-z0-9-]{4,}|user-\d{6,}[A-Za-z0-9-]*)/g;
 
 /**
  * Email addresses and member ids, taken out of text copied from another system.
@@ -79,7 +88,8 @@ const MEMBER_ID = /\busr-[A-Za-z0-9-]{4,}/g;
  * not copied at all (startup-check events), and an admin-typed name never goes
  * in a title (calendar feeds). This is the net under that rule, for the vendor
  * error nobody has read yet, like an SMTP refusal that quotes the address it
- * refused. It runs on the write, so nothing reaches the table unscrubbed.
+ * refused, and for a closer's error that names the member it failed. It runs on
+ * the write, so nothing reaches the table unscrubbed.
  */
 export function scrubPersonal(text: string): string {
   return text.replace(EMAIL_ADDRESS, "(an email address)").replace(MEMBER_ID, "(a member)");

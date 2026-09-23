@@ -26,6 +26,11 @@ import {
   validateSpan,
   zoomFor,
 } from "./land";
+import { SEED_GEOREF, seedFrame, isSeedFrame, distanceM, worldToLatLonUnder } from "./land";
+import fs from "node:fs";
+import path from "node:path";
+import { boundsForAspect, MAP_WORLD_ASPECT } from "./land";
+import { parcelSlug, isParcelSlug, orderParcels, DEFAULT_PARCEL_SLUG } from "./land";
 
 /** Dominicalito, Costa Rica: roughly where the first village sits. */
 const CR = { lat: 9.2345, lon: -83.8412 };
@@ -366,5 +371,175 @@ describe("swapSuspicion on its own", () => {
 
   it("offers no alternative when swapping would not help either", () => {
     expect(swapSuspicion(200, 300).swapped).toBeNull();
+  });
+});
+describe("a parcel's name becomes its address", () => {
+  it("makes a slug a founder would recognise from the name they typed", () => {
+    expect(parcelSlug("North field")).toBe("north-field");
+    expect(parcelSlug("The Ridge")).toBe("the-ridge");
+  });
+
+  it("keeps accented letters as letters instead of dropping them to dashes", () => {
+    // "Rio Claro", not "r-o-claro": a Costa Rican parcel must not lose its name.
+    expect(parcelSlug("Rio Claro")).toBe("rio-claro");
+    expect(parcelSlug("Rio Claro".normalize("NFD"))).toBe("rio-claro");
+  });
+
+  it("collapses punctuation and never leaves a leading or trailing dash", () => {
+    expect(parcelSlug("  --The  Ridge!! (upper) -- ")).toBe("the-ridge-upper");
+  });
+
+  it("returns empty for a label with nothing usable in it, rather than inventing a name", () => {
+    // A generated fallback would put a name nobody chose into a URL forever.
+    expect(parcelSlug("!!!")).toBe("");
+    expect(parcelSlug("")).toBe("");
+  });
+
+  it("never emits a slug its own validator would refuse", () => {
+    for (const label of ["North field", "Rio Claro", "a", "The  --  Ridge", "x".repeat(200), "9 acres"]) {
+      const slug = parcelSlug(label);
+      if (slug) expect(isParcelSlug(slug)).toBe(true);
+    }
+  });
+
+  it("refuses what a founder or a different deriver might send by hand", () => {
+    for (const bad of ["North Field", "north field", "-north", "north-", "", "a".repeat(65), "nórth"]) {
+      expect(isParcelSlug(bad)).toBe(false);
+    }
+  });
+
+  it("accepts the slug every village that predates parcels already has", () => {
+    expect(isParcelSlug(DEFAULT_PARCEL_SLUG)).toBe(true);
+  });
+});
+
+describe("which parcel opens", () => {
+  const p = (slug: string, sortOrder: number, createdAt: string) => ({ slug, sortOrder, createdAt });
+
+  it("orders by sortOrder", () => {
+    expect(orderParcels([p("b", 2, "x"), p("a", 1, "x")]).map((r) => r.slug)).toEqual(["a", "b"]);
+  });
+
+  it("settles an equal sortOrder by age, so the answer is never row order", () => {
+    const rows = [p("later", 0, "2026-09-05"), p("earlier", 0, "2026-09-01")];
+    expect(orderParcels(rows).map((r) => r.slug)).toEqual(["earlier", "later"]);
+    // and the same answer when the input arrives the other way round
+    expect(orderParcels([...rows].reverse()).map((r) => r.slug)).toEqual(["earlier", "later"]);
+  });
+
+  it("does not mutate what it was handed", () => {
+    const rows = [p("b", 2, "x"), p("a", 1, "x")];
+    orderParcels(rows);
+    expect(rows.map((r) => r.slug)).toEqual(["b", "a"]);
+  });
+});
+describe("the ground a provider is asked for has the frame's own shape", () => {
+  const CENTRE = { lat: 9.2345, lon: -83.8412 };
+  /** Metres across a bounds, measured the way boundsFor builds one. */
+  const size = (b: { west: number; east: number; south: number; north: number }, lat: number) => {
+    const mPerDegLat = 111_320;
+    const w = (b.east - b.west) * mPerDegLat * Math.cos((lat * Math.PI) / 180);
+    const h = (b.north - b.south) * mPerDegLat;
+    return { w, h };
+  };
+
+  it("keeps spanM as the WIDTH, which is the number a founder typed", () => {
+    const { w } = size(boundsForAspect(CENTRE, 800, MAP_WORLD_ASPECT), CENTRE.lat);
+    expect(w).toBeCloseTo(800, 0);
+  });
+
+  it("makes the ground the same shape as the map's world rect", () => {
+    const { w, h } = size(boundsForAspect(CENTRE, 800, MAP_WORLD_ASPECT), CENTRE.lat);
+    expect(w / h).toBeCloseTo(MAP_WORLD_ASPECT, 5);
+  });
+
+  it("gives the same metres per pixel on both axes, which is what stops the stretch", () => {
+    // A 3:2 image over a 3:2 ground. If either half changed alone, a structure
+    // would sit off the ground it stands on and nothing would report it.
+    const pixelsW = 1024;
+    const pixelsH = Math.round(pixelsW / MAP_WORLD_ASPECT);
+    const { w, h } = size(boundsForAspect(CENTRE, 800, MAP_WORLD_ASPECT), CENTRE.lat);
+    expect(w / pixelsW).toBeCloseTo(h / pixelsH, 2);
+  });
+
+  it("still makes a square when the aspect is 1, matching boundsFor", () => {
+    const a = boundsForAspect(CENTRE, 800, 1);
+    const b = boundsFor(CENTRE, 800);
+    expect(a.north).toBeCloseTo(b.north, 9);
+    expect(a.west).toBeCloseTo(b.west, 9);
+  });
+
+  it("does not divide by zero on a nonsense aspect", () => {
+    expect(() => boundsForAspect(CENTRE, 800, 0)).not.toThrow();
+    const { w, h } = size(boundsForAspect(CENTRE, 800, 0), CENTRE.lat);
+    expect(Number.isFinite(w) && Number.isFinite(h)).toBe(true);
+  });
+});
+describe("the seed frame is one fact, held in two places and checked against itself", () => {
+  /*
+   * The artifact is the source. shared/land.ts carries a copy because the
+   * server has to compare frames without the browser's help, and a copy is
+   * only safe when something reads both. This is that something.
+   */
+  const html = fs.readFileSync(path.join(process.cwd(), "docs", "prototypes", "grounds-v0.html"), "utf8");
+
+  it("carries the artifact's own GEOREF, number for number", () => {
+    const m = html.match(/const GEOREF=\{lat:([-\d.]+),lon:([-\d.]+),z:(\d+),pinW:\[(\d+),(\d+)\],mPerUnit:(\d+)\/(\d+)\}/);
+    if (!m) throw new Error("the artifact's GEOREF line moved; this test must be taught its new shape");
+    expect(SEED_GEOREF.lat).toBe(Number(m[1]));
+    expect(SEED_GEOREF.lon).toBe(Number(m[2]));
+    expect([...SEED_GEOREF.pinW]).toEqual([Number(m[4]), Number(m[5])]);
+    expect(SEED_GEOREF.mPerUnit).toBe(Number(m[6]) / Number(m[7]));
+  });
+
+  it("agrees with the artifact's second copy of the scale too", () => {
+    // M_PER_UNIT drives every area and length. It is the twin that was missed once.
+    const m = html.match(/let M_PER_UNIT=(\d+)\/(\d+);/);
+    if (!m) throw new Error("the artifact's M_PER_UNIT line moved; this test must be taught its new shape");
+    expect(Number(m[1]) / Number(m[2])).toBe(SEED_GEOREF.mPerUnit);
+  });
+
+  it("puts the frame's centre at the WORLD centre, 345 m west of the pin", () => {
+    const f = seedFrame();
+    expect(f.spanM).toBe(2592);
+    const offset = distanceM(f.centre, { lat: SEED_GEOREF.lat, lon: SEED_GEOREF.lon });
+    expect(offset).toBeGreaterThan(340);
+    expect(offset).toBeLessThan(350);
+  });
+
+  it("round-trips the pin through the artifact's own projection", () => {
+    const pin = worldToLatLonUnder(SEED_GEOREF, SEED_GEOREF.pinW[0], SEED_GEOREF.pinW[1]);
+    expect(pin.lat).toBeCloseTo(SEED_GEOREF.lat, 9);
+    expect(pin.lon).toBeCloseTo(SEED_GEOREF.lon, 9);
+  });
+});
+
+describe("whether a picture shows the seed's own rectangle", () => {
+  const f = seedFrame();
+
+  it("says yes for the frame exactly, and for it after the column's six-decimal rounding", () => {
+    expect(isSeedFrame(f.centre, f.spanM)).toBe(true);
+    const rounded = { lat: Number(f.centre.lat.toFixed(6)), lon: Number(f.centre.lon.toFixed(6)) };
+    expect(isSeedFrame(rounded, 2592)).toBe(true);
+  });
+
+  it("says NO for the pin, which is where a founder would naturally paste", () => {
+    // 345 m off: this is the mistake the frame fix exists to stop.
+    expect(isSeedFrame({ lat: SEED_GEOREF.lat, lon: SEED_GEOREF.lon }, 2592)).toBe(false);
+  });
+
+  it("says NO for the right centre at the default width", () => {
+    expect(isSeedFrame(f.centre, 800)).toBe(false);
+  });
+
+  it("says NO for a place on another continent, and for nothing at all", () => {
+    expect(isSeedFrame({ lat: -1.2921, lon: 36.8219 }, 2592)).toBe(false);
+    expect(isSeedFrame(null, 2592)).toBe(false);
+    expect(isSeedFrame(f.centre, null)).toBe(false);
+  });
+
+  it("refuses a frame ten metres off, because the buildings would sit ten metres off", () => {
+    const tenMetresNorth = { lat: f.centre.lat + 10 / 111_320, lon: f.centre.lon };
+    expect(isSeedFrame(tenMetresNorth, 2592)).toBe(false);
   });
 });

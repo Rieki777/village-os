@@ -206,7 +206,7 @@ no metadata and the result is checked before storing, and
 
 | Variable | Meaning |
 |---|---|
-| `SATELLITE_PROVIDER` | One of `village-upload`, `sentinel2`, `mapbox`, `google`, `esri`. Unset means no imagery, which is an honest empty state and not an error |
+| `SATELLITE_PROVIDER` | One of `village-upload`, `esri-open`, `sentinel2`, `mapbox`, `google`, `esri`. Unset means no imagery, which is an honest empty state and not an error. `esri-open` needs no key and is what this project runs; see FORK_RUNBOOK for what naming it means |
 | `SENTINEL_WMS_URL` | The WMS base URL for Sentinel-2 |
 | `MAPBOX_TOKEN`, `GOOGLE_MAPS_STATIC_KEY`, `ESRI_API_KEY` | Per-provider keys |
 | `SATELLITE_CACHE_OVERRIDE` | The escape hatch. Set it to **the provider's id**, for a deployment that holds its own written agreement |

@@ -23,6 +23,7 @@ import { AppointToRole } from "@/components/admin/AppointToRole";
 import { RAISED_HAND_TERM_KEYS, RaisedHandTerm } from "@/components/admin/RaisedHandTerm";
 import { POWER_HAND_KEYS, PowerHandNote } from "@/components/admin/PowerHandNote";
 import { SeatClaimAsks, type SeatClaimAsk } from "@/components/admin/SeatClaimAsks";
+import { UndrawnSeatAsks } from "@/components/admin/UndrawnSeatAsks";
 import Celebration from "@/components/natural/Celebration";
 import { useMomentWindow } from "@/components/natural/moments";
 import { playMoment } from "@/lib/sound";
@@ -42,6 +43,7 @@ import LookPanel from "@/components/LookPanel";
 import IdentityPackPanel from "@/components/IdentityPackPanel";
 import MapSkinPanel from "@/components/MapSkinPanel";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
+import LandTab from "@/components/admin/LandTab";
 import MapVocabularyPanel from "@/components/admin/MapVocabularyPanel";
 import ArchetypesPanel from "@/components/admin/ArchetypesPanel";
 import EventsAdminPanel from "@/components/EventsAdminPanel";
@@ -848,7 +850,7 @@ function AdminGate({ onAuth }: { onAuth: (token: string) => void }) {
 
 // ── Submissions Tab ───────────────────────────────────────────────────────────
 
-function SubmissionsTab({ password }: { password: string }) {
+export function SubmissionsTab({ password }: { password: string }) {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [filter, setFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
@@ -916,19 +918,29 @@ function SubmissionsTab({ password }: { password: string }) {
           document rather than onto this row. */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h2 className="text-xl font-bold text-gray-900">Form Submissions</h2>
-        <div className="flex items-center gap-3">
+        {/* The row above wraps; this group used to not, and the filter sizes itself to its longest
+            option, so at 320px it pushed the button 19px off the edge. It now takes the wrapped line,
+            the filter shrinks into it, and the button never does. */}
+        <div className="flex items-center gap-3 w-full min-w-0 sm:w-auto">
           <select
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-deep/40"
+            aria-label="Form type"
+            className="min-w-0 flex-1 sm:flex-none text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-deep/40"
           >
             <option value="all">All types</option>
             {FORM_TYPES.map((t) => (
               <option key={t} value={t}>{prettyType(t)}</option>
             ))}
           </select>
-          <button onClick={load} className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
-            <RefreshCw className="w-4 h-4" />
+          <button
+            type="button"
+            onClick={load}
+            aria-label="Look again for new submissions"
+            title="Look again"
+            className="shrink-0 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -4692,7 +4704,7 @@ function DraftQueueTab({ password }: { password: string }) {
   );
 }
 
-function OrgChartTab({ password }: { password: string }) {
+export function OrgChartTab({ password }: { password: string }) {
   const [org, setOrg] = useState<any>(null);
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -4771,6 +4783,8 @@ function OrgChartTab({ password }: { password: string }) {
     const k = r.circleId ?? "";
     byCircle.set(k, [...(byCircle.get(k) ?? []), r]);
   }
+  // The seats drawn as cards below. UndrawnSeatAsks catches every ask for any other seat.
+  const drawnSeatIds = new Set(circles.flatMap((c) => (byCircle.get(c.id) ?? []).map((r) => String(r.id))));
 
   const STATE_LABEL: Record<string, string> = {
     filled: "Filled", partial: "Partially filled", open: "Open seat", forming: "Forming",
@@ -4827,6 +4841,15 @@ function OrgChartTab({ password }: { password: string }) {
           </ul>
         </div>
       )}
+
+      <UndrawnSeatAsks
+        asks={seatAsks}
+        drawnSeatIds={drawnSeatIds}
+        roles={roles}
+        circles={circles}
+        call={call}
+        onDone={(said) => { toast.success(said); void load(); }}
+      />
 
       <div className="space-y-6">
         {circles.map((c) => {
@@ -10153,6 +10176,7 @@ export default function Admin() {
           {activeTab === "drafts" && <DraftQueueTab password={password} />}
           {activeTab === "seasons-patterns" && <SeasonPatternsTab password={password} />}
           {activeTab === "circles-map" && <CirclesMapTab password={password} />}
+          {activeTab === "land" && <LandTab password={password} />}
           {activeTab === "tools-admin" && <ToolsAdminTab password={password} />}
           {activeTab === "crowdpool-admin" && <CrowdpoolAdminTab password={password} />}
           {activeTab === "stays-admin" && <StaysAdminTab password={password} onOpenTab={setActiveTab} />}

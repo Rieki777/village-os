@@ -57,9 +57,9 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 
 | Setup | What it means | Modules |
 | --- | --- | --- |
-| `none` | works the moment it is on. The Go-live card offers itself right after Turn on. | `quests`, `gratitude`, `progression`, `profiles`, `forum`, `feed`, `messaging`, `redemption`, `network`, `events`, `introductions`, `governance` |
+| `none` | works the moment it is on. The Go-live card offers itself right after Turn on. | `quests`, `gratitude`, `progression`, `profiles`, `forum`, `feed`, `messaging`, `network`, `events`, `introductions`, `governance` |
 | `optional` | better with content, honest without it. | `map`, `resources`, `automation`, `health`, `badges`, `crowdpool`, `tools` |
-| `required` | needs real content before going live (a room and a price, a stocked treasury), and the Go-live card waits for readiness. | `stays`, `library`, `exchange`, `commerce`, `hypha` |
+| `required` | needs real content before going live (a room and a price, a stocked treasury), and the Go-live card waits for readiness. | `stays`, `library`, `exchange`, `redemption`, `commerce`, `hypha` |
 
 ### The shelves
 
@@ -90,7 +90,7 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | Material Library | `library` | Host and earn | no | included | member-pii | required | [material-library.md](modules/material-library.md) |
 | Badges & Skills | `badges` | Recognise | no | included | member-pii | optional | [badges.md](modules/badges.md) |
 | Exchange | `exchange` | Host and earn | no | included | member-pii | required | [internal-exchange.md](modules/internal-exchange.md) |
-| Redemption | `redemption` | Host and earn | no | included | member-pii | none | [redemption.md](modules/redemption.md) |
+| Redemption | `redemption` | Host and earn | no | included | member-pii | required | [redemption.md](modules/redemption.md) |
 | Payments & Donations | `commerce` | Host and earn | no | included | member-pii | required | none yet |
 | Village Network | `network` | Connect | no | included | village-content | none | none yet |
 | Crowdpool | `crowdpool` | Connect | no | included | village-content | optional | [crowdpool.md](modules/crowdpool.md) |
@@ -350,7 +350,7 @@ A member asks for tokens they hold to become something real off the platform: ca
 | A village can switch it off | yes, and it ships off. An admin moves it to `preview`, `members`, `public` |
 | Tier | `included` |
 | Data it holds | `member-pii` |
-| Standing it up | `none`, works the moment it is on. The Go-live card offers itself right after Turn on. |
+| Standing it up | `required`, needs real content before going live (a room and a price, a stocked treasury), and the Go-live card waits for readiness. |
 | Requires | nothing |
 | Recommends | nothing |
 | Capabilities it adds | `redemption.confirm` |
@@ -1082,7 +1082,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
       "tier": "included",
       "dataClass": "member-pii",
       "group": "host-and-earn",
-      "setup": "none",
+      "setup": "required",
       "requires": [],
       "recommends": [],
       "capabilities": [

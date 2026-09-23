@@ -291,6 +291,25 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   three files. `origin/main` reaches `0206`. The number is confirmed again at landing, and
   renumbering this file is safe until it runs anywhere but a scratch schema, because its one
   statement is a `CREATE TABLE IF NOT EXISTS`.
+- **ground lane (per-village map ground + parcels), 2026-09-19: holds 0214** for
+  `drizzle/0214_village_land_parcels.sql` on `wt/ground-runtime`. It adds three columns to
+  `village_land` (`slug`, `label`, `sort_order`, all NOT NULL with defaults) and swaps that
+  table's UNIQUE key from `(village_id)` to `(village_id, slug)`, so a project can hold more
+  than one parcel. Measured four ways at 11:30 PDT after `git fetch origin`: `origin/main`
+  reaches **0210**; all origin refs and all local refs reach **0213** (`0211` and `0213` on
+  `wt/redemption-module`, `0212` on both `wt/redemption-module` and `wt/module-settings-in-card`);
+  the `drizzle/` directories across every worktree on disk reach **0210**.
+  **IT CARRIES A `compat-ok` WAIVER AND THAT IS THE PART TO READ.** A new UNIQUE index on an
+  existing table is on CLAUDE.md's never-in-the-same-release list, and
+  `check-migration-compat.mjs` reports it. The argument for the exception is written in the
+  file: the previous release's only write to this table never names `slug`, the column defaults
+  to `'home'`, so `UNIQUE(village_id, slug)` is exactly as permissive as the key it replaces for
+  every row that release can write, and its `ON DUPLICATE KEY UPDATE` still collides on the row
+  it always collided on. The old key cannot simply be kept, because keeping it is precisely what
+  forbids a second parcel, and it cannot simply be dropped, because the upsert needs A unique key
+  to collide on. **If a reviewer disagrees with that argument, the fallback is two releases**:
+  this file lands with the columns only, uniqueness moves into code for one release, and the
+  UNIQUE key lands in the next. Say so before this merges rather than after.
 - **econ renumber lane 2, 2026-09-14: holds 0200 to 0206** on `wt/econ-renumber-2`, for the seven
   economics migrations that `wt/econ` still carried at or below main's ceiling after the merge at
   `fb2d94b`, kept in the same relative order: `0181`->`0200`, `0183`->`0201`, `0184`->`0202`,
@@ -3225,6 +3244,7 @@ Both look like intentional work and neither is.
 | 2026-09-14 | membrane lane (invitations) | migration `0209`, `drizzle/0209_a_member_arrives_by_invitation.sql`; `POST /api/auth/register` moved out of `server/index.ts` into `server/routes/register.ts` (the size ratchet fell, the baseline was left alone); one fixture opinion in `server/db/testDb.ts`, `ProvisionOptions.inviteOnly`, so scratch villages provision with `membership.invite_only` off | `wt/invite-links`, PR #259 | HELD. Lands after `0200` to `0208` are on main. A suite that counts customized variables sees `membership.invite_only` stored by the harness; the loop suite names it rather than counting it. |
 
 | 2026-09-15 | Org Map lane (`amora-d2`) | `server/index.ts` (+9 lines: the circles collection gets `mergeRefusal`, wired to `loopedCirclesRefusal`; the ratchet passes against main's baseline), plus `docs/GOVERNANCE.md` and its lineage regenerated | `wt/circle-merge-loop`, off main at `ee38104` | Ready for its own PR. No migration, no baseline moved, and independent of #262. Also touches `server/repos/store-db.ts` (one optional spec field, `mergeRefusal`, and `MergeRefusedError`) and `server/lib/errors.ts` (a `merge_refused` branch in `terminalAnswerFor`), so a lane editing either rebases over this. It closes the twelfth defect from #262's review: a circle form save that rebases over somebody else's concurrent move could merge a loop into `circles`, which neither writer could have saved alone. |
+| 2026-09-21 | merge-conflict session (landing batch 4) | `server/index.ts` headroom after batch 4, MEASURED on the composed tree with `check-server-index-size.mjs`: **394 of 399 route registrations (5 left platform-wide)** and 27,226 of 27,507 lines. Routes are now the tighter limit. #313 adds +3 routes and +37 lines; #291's new routes live in `server/routes/land.ts`, which the ratchet exempts. A lane adding a route should put it in a route module, not `server/index.ts` | `wt/batch4-0921` | RECORDED (a measurement, not a claim), appended by the integrator so no lane collides with it |
 | 2026-09-23 | quests lane (ADMIN, abuse guard) | `server/index.ts` (28 lines FEWER: the three rate-limit guards become wrappers over the new `server/repos/rateHits.ts`, and the quests route gains a `limitState` dependency); the raw-SQL register and `BURNDOWN_CEILING`, lowered 725 to 719 as `server/index.ts` falls 32 to 26 | `wt/abuse-guard-raster-and-race` | OPEN. The guard counted its window on a clock the database does not share, so on any non-UTC session it counted 0 and bounded nobody; it also counted and inserted in two statements, so a parallel burst all passed. Both fixed, with a concurrency suite. The share-card raster now refuses when the guard cannot check (Rye, 2026-09-23: refuse on the raster only); every other caller still fails open. |
 
 ### 27d — Verification: CI runs the full suite, lanes run what they touched

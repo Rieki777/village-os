@@ -65,11 +65,15 @@ export async function playwright() {
 
 /** The viewports worth sweeping. 320 is the narrowest phone still in use and it finds things
  *  390 does not; desktop finds everything behind an `md:`/`lg:` breakpoint, which a
- *  mobile-only sweep structurally cannot see. */
+ *  mobile-only sweep structurally cannot see. 360 and 375 are two of the most common phone
+ *  widths and sit between 320 and 390, so a sweep stepping from one to the other lands on
+ *  neither: /training overflowed at both (+24px, +9px) while reading clean at 390 (#300). */
 export const PROFILES = [
   { name: "phone", width: 393, height: 851, dpr: 2.75, mobile: true, engine: "chromium" },
   { name: "phone-webkit", width: 390, height: 664, dpr: 3, mobile: true, engine: "webkit" },
   { name: "narrow", width: 320, height: 800, dpr: 2.75, mobile: true, engine: "chromium" },
+  { name: "android", width: 360, height: 800, dpr: 3, mobile: true, engine: "chromium" },
+  { name: "small-iphone", width: 375, height: 667, dpr: 2, mobile: true, engine: "webkit" },
   { name: "desktop", width: 1440, height: 900, dpr: 1, mobile: false, engine: "chromium" },
 ];
 

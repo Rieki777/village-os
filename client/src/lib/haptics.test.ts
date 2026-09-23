@@ -84,3 +84,37 @@ describe("firing", () => {
     expect(haptic("confirm")).toBe(true);
   });
 });
+
+// SWEEP FINDING F9 (2026-09-21): a celebration that fires on page load asked
+// for a vibrate before the member had touched the page, and the browser
+// logged a refusal on /profile. The util now asks the engine first.
+describe("before the member has touched the page", () => {
+  it("stays silent, so the browser has nothing to refuse", () => {
+    const vibrate = vi.fn(() => true);
+    withNavigator({ vibrate, userActivation: { hasBeenActive: false, isActive: false } });
+    expect(haptic("arrive")).toBe(false);
+    expect(vibrate).not.toHaveBeenCalled();
+  });
+
+  it("fires once the page has had a gesture", () => {
+    const vibrate = vi.fn(() => true);
+    const userActivation = { hasBeenActive: false, isActive: false };
+    withNavigator({ vibrate, userActivation });
+    expect(haptic("press")).toBe(false);
+    userActivation.hasBeenActive = true;
+    expect(haptic("press")).toBe(true);
+    expect(vibrate).toHaveBeenCalledTimes(1);
+    expect(vibrate).toHaveBeenCalledWith(10);
+  });
+
+  it("fires as it always did where the engine reports no activation at all", () => {
+    const vibrate = vi.fn(() => true);
+    withNavigator({ vibrate });
+    expect(haptic("tap")).toBe(true);
+  });
+
+  it("does not throw where there is no navigator", () => {
+    delete (globalThis as { navigator?: unknown }).navigator;
+    expect(haptic("tap")).toBe(false);
+  });
+});

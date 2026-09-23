@@ -44,15 +44,16 @@
  * the reversal, or the row could not be read. The message names the redemption,
  * the member and the repair, because the engine's own report is where it lands.
  *
- * AND THE REPORT HAS A GAP, said plainly rather than papered over: the
- * failed-actions tab keeps an attempt only while a landing is not_applicable,
- * pending, applying or stalled, and a vetoed or written-off row is neither, so a
- * stranded hold does NOT appear there. Two places do show it, and both are
- * reads a steward or an operator can run today: `unfinishedLandings`, and this
- * module's own `holdReconciliation`, which compares `sys:redemption-hold`
- * against the sum of open rows and reports the drift per token. The second is
- * the one that names the money, and it is the honest answer to "how would
- * anybody notice".
+ * The engine records the throw on the ballot's landing record, and the
+ * failed-actions tab lists it under "Decisions taking effect" although the
+ * decision is vetoed or written off by then (`failedReleases`,
+ * server/lib/failedActions.ts). That list used to drop such a row, so a
+ * stranded hold did not appear there until it was widened for exactly this
+ * case. The tab copies the message with member ids and addresses scrubbed, and
+ * the full text stays on the landing record. `unfinishedLandings` reads the
+ * same record, and this module's own `holdReconciliation`, which compares
+ * `sys:redemption-hold` against the sum of open rows and reports the drift per
+ * token, is still the one read that names the money.
  */
 import type { Pool } from "mysql2/promise";
 import type { BallotRow } from "./ballots";

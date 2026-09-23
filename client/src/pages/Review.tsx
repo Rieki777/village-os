@@ -305,6 +305,15 @@ export default function Review() {
    * answered are three different states, and none of them touches the claims.
    */
   const loadQueue = useCallback(async () => {
+    // Signed out, this is the refused state without the round trip: the route
+    // answers a stranger 401, and that request was logged as a failure on
+    // every signed-out visit. useConsentClaims makes the same call for the claims.
+    if (!authToken()) {
+      setForbidden(true);
+      setLoadError(null);
+      setQueue(null);
+      return;
+    }
     try {
       const r = await fetch("/api/review/queue", { headers: headers() });
       if (r.status === 401 || r.status === 403 || r.status === 409) {

@@ -199,9 +199,10 @@ describe.skipIf(!configured)("a redemption the village votes on", () => {
 
   /*
    * A REAL FAILURE THROWS, AND THE MESSAGE IS THE WHOLE POINT. The engine logs
-   * it and never retries, and the failed-actions tab does not keep rows in this
-   * landing state, so the sentence a person eventually reads has to name the
-   * redemption, the member and what to run.
+   * it and never retries, and records it on the ballot's landing record, which
+   * the failed-actions tab lists with member ids scrubbed. So the sentence a
+   * person eventually reads there, or on the record itself, has to name the
+   * redemption and what to run, and the record keeps the member too.
    */
   it("throws a message a person can act on when the ledger cannot give the tokens back", async () => {
     const id = await askFor("wren");

@@ -8075,6 +8075,22 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
    */
   const PERSON_FIELDS = ["holders", "holderNote"];
 
+  /**
+   * The names of the sections this village has written, and nothing else.
+   *
+   * The route below answers 404 for an unwritten section and must keep doing
+   * so: the admin editor reads that 404 as "not written yet". But a browser
+   * logs every failed request in its console on its own, so eleven public
+   * pages asking blind for `legal`, `money` and `covenant` loaded red on every
+   * visit. The pages ask this first now (client/src/hooks/useVillageContent.ts)
+   * and request only what is here. Names only: a stranger learns nothing the
+   * route below would not answer for any name they guessed.
+   */
+  app.get("/api/content", (_req, res) => {
+    const content = contentRepo.get() ?? {};
+    res.json({ sections: Object.keys(content).filter((key) => content[key] !== undefined) });
+  });
+
   app.get("/api/content/:section", async (req, res) => {
     const content = contentRepo.get();
     const section = content[req.params.section];
@@ -18894,7 +18910,7 @@ ${inner}
     const out = await openRedemptionBallot(getPool(), setup, redemptionId);
     return out.ok ? { ok: true } : { ok: false, error: out.error };
   };
-  registerRedemptionRoutes(app, { authedUser, brandRepo, getPool, guardCapability, members, notify, openRedemptionBallot: (id: string) => openRedemptionVote(id), overLimit, redemptionKeyHolders });
+  registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify, openRedemptionBallot: (id: string) => openRedemptionVote(id), overLimit, projectCurrency: () => mergedConfig().project.fiatCurrency, redemptionKeyHolders });
 
   // â”€â”€ Project Settings (village dues + other editable numbers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -27050,6 +27066,27 @@ ${inner}
   });
   app.get("/assets/{*splat}", (req, res) => {
     res.status(404).type("text/plain").send(`Not found: ${req.path}`);
+  });
+  /*
+   * A PATH THAT LOOKS LIKE A FILE FAILS LIKE ONE.
+   *
+   * `/images` is the other folder of real files, and a missing image in it
+   * still got the shell and a 200: the second failure above, and every uptime
+   * check pointed at a missing file stayed green. Same for a root-level name
+   * with an extension (`/favicon.png`): no client route has a dot in its path
+   * (client/src/App.tsx, held by server/fileMisses.test.ts), so one segment
+   * with an extension can only ever be a file. Both sit after express.static
+   * and the generated files (robots, sitemap, manifest, /grounds, /org), so
+   * only a miss arrives here. A dotted `/profile/:handle` is two segments and
+   * still reaches its page. The body does not repeat the path: the caller
+   * already knows it, and echoing it is a reflection CodeQL reports.
+   */
+  app.get("/images/{*splat}", (_req, res) => {
+    res.status(404).type("text/plain").send("Not found");
+  });
+  app.get("/:file", (req, res, next) => {
+    if (!/\.[A-Za-z0-9]+$/.test(String(req.params.file))) return next();
+    res.status(404).type("text/plain").send("Not found");
   });
 
   /*
