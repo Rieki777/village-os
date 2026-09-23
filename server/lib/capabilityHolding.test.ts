@@ -20,7 +20,7 @@ import {
   villageHandoverState,
   villageHeldCapabilities,
 } from "./capabilityHolding";
-import { HANDOVER_SET } from "../../shared/capabilities";
+import { ALL_CAPABILITIES, HANDOVER_SET } from "../../shared/capabilities";
 import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 
 const configured = testDbConfigured();
@@ -185,7 +185,21 @@ describe.skipIf(!configured)("capability holding", () => {
       expect(state.complete, "one short is not complete").toBe(false);
     });
 
-    it("is complete only when every transferable power is across", async () => {
+    /*
+     * THE DENOMINATOR, PINNED BY NAME.
+     *
+     * `total` counts the HANDOVER SET and never `ALL_CAPABILITIES`, and the
+     * difference is the kind of number nobody questions. `villageHeldCapabilities`
+     * already filters what it returns through `TRANSFERABLE`, so a denominator
+     * taken from the full list could never be reached: a village would hold 19
+     * of 34 with nothing left to hand over, `complete` would rest on a
+     * comparison that never balances, and every progress readout would say the
+     * handover was permanently unfinished.
+     *
+     * So all three fields come from one derived set, and this case is what
+     * says so out loud.
+     */
+    it("is complete only when every transferable power is across, counted against the handover set", async () => {
       for (const cap of HANDOVER_SET) {
         await pool.query( // module-review-ok: a fabricated handover state on the scratch schema this suite provisioned
           "INSERT INTO capability_holding (capability, holder_role_id) VALUES (?, 'keepers')",
@@ -195,7 +209,11 @@ describe.skipIf(!configured)("capability holding", () => {
       const state = await villageHandoverState(pool);
       expect(state.complete).toBe(true);
       expect(state.remaining).toEqual([]);
-      expect(state.held.length).toBe(HANDOVER_SET.length);
+      expect(state.held.length).toBe(state.total);
+      expect(state.total).toBe(HANDOVER_SET.length);
+      expect(state.total, "the whole capability list is the wrong denominator").toBeLessThan(
+        ALL_CAPABILITIES.length,
+      );
     });
 
     /*
