@@ -5,7 +5,7 @@
  * keeps someone from "improving" it with jitter or render-order dependence.
  */
 import { describe, expect, it } from "vitest";
-import { layoutMap, layoutNestedMap, layoutForShape, radiusForLabel, wrapLabel, CANVAS, QUEST_DISPLAY_CAP, type LayoutCircle, type NestedInput } from "./mapLayout";
+import { layoutMap, layoutNestedMap, layoutForShape, radiusForLabel, seatAngle, wrapLabel, CANVAS, QUEST_DISPLAY_CAP, type LayoutCircle, type NestedInput } from "./mapLayout";
 
 const circle = (id: string, order: number, extra: Partial<LayoutCircle> = {}): LayoutCircle => ({
   id,
@@ -231,6 +231,67 @@ describe("radiusForLabel", () => {
       expect(widest).toBeLessThanOrEqual((r - 20 - 11) * 1.8 + 1);
       // And nothing had to be cut to get there.
       expect(w.lines.join(" ")).not.toContain("…");
+    }
+  });
+});
+
+// WHERE A SEAT SITS, AGAINST WHERE A NAME IS DRAWN (2026-09-21). Every ring
+// started at twelve o'clock, which is where a circle that holds others draws its
+// name: measured on a village nested under one coordinating circle, a seat sat
+// in the middle of "General Coordinating Circle" and of "Development Circle".
+describe("seats keep clear of the name", () => {
+  const TOP = -Math.PI / 2;
+  const withSeats = (id: string, order: number, seats: number, parentId: string | null = null): NestedInput => ({
+    id, parentId, order, memberCount: 2, questCount: 0, name: id,
+    roles: Array.from({ length: seats }, (_, i) => ({ id: `${id}-s${i}`, vacant: i > 0 })),
+  });
+  /** Angle of a seat round its circle, 0 at twelve o'clock, growing clockwise. */
+  const clock = (c: { x: number; y: number }, s: { x: number; y: number }) => {
+    const a = Math.atan2(s.x - c.x, -(s.y - c.y));
+    return a < 0 ? a + 2 * Math.PI : a;
+  };
+
+  it("leaves twelve o'clock to the name of a circle that holds others", () => {
+    for (let n = 1; n <= 7; n++) {
+      const l = layoutNestedMap([withSeats("gcc", 1, n), withSeats("dev", 2, 2, "gcc")]);
+      const gcc = l.circles.find((c) => c.id === "gcc")!;
+      const nearest = Math.min(...gcc.roles.map((s) => {
+        const a = clock(gcc, s);
+        return Math.min(a, 2 * Math.PI - a);
+      }));
+      // Half a step either side of the top is clear: a whole step, centred on the name.
+      expect(nearest, `${n} seat(s)`).toBeCloseTo(Math.PI / n, 6);
+    }
+  });
+
+  it("puts one seat of a circle that holds others at the bottom, not on its name", () => {
+    const l = layoutNestedMap([withSeats("gcc", 1, 1), withSeats("dev", 2, 0, "gcc")]);
+    const gcc = l.circles.find((c) => c.id === "gcc")!;
+    expect(clock(gcc, gcc.roles[0])).toBeCloseTo(Math.PI, 6);
+  });
+
+  it("leaves every other circle's seats where they were, first at twelve o'clock", () => {
+    for (let n = 1; n <= 12; n++) {
+      expect(seatAngle(0, n, false), `${n} seats`).toBeCloseTo(TOP, 9);
+    }
+    // And the circle picture draws exactly what the rule says.
+    const l = layoutNestedMap([withSeats("land", 1, 2)]);
+    const land = l.circles[0];
+    expect(clock(land, land.roles[0])).toBeCloseTo(0, 6);
+  });
+
+  it("is the same rule in every shape that nests", () => {
+    const input = [withSeats("gcc", 1, 3), withSeats("dev", 2, 2, "gcc"), withSeats("lead", 3, 4, "gcc")];
+    for (const shape of ["circle", "pyramid", "council", "flat", "steward", "network"]) {
+      const l = layoutForShape(shape, input, []);
+      for (const c of l.circles) {
+        const holds = input.some((o) => o.parentId === c.id);
+        c.roles.forEach((s, j) => {
+          const want = seatAngle(j, c.roles.length, holds) - TOP;
+          const got = clock(c, s);
+          expect(Math.abs(Math.sin((got - want) / 2)), `${shape} ${c.id} seat ${j}`).toBeLessThan(1e-6);
+        });
+      }
     }
   });
 });

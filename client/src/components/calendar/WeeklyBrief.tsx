@@ -9,6 +9,7 @@
  * document and adds nothing to it.
  */
 import { useCallback, useEffect, useState } from "react";
+import { useModuleOn } from "@/modules/ModuleProvider";
 import { authToken } from "@/lib/gameApi";
 import { Mail, X } from "lucide-react";
 
@@ -49,7 +50,9 @@ export default function WeeklyBrief({ signedIn }: { signedIn: boolean }) {
       .catch((status) => setProblem(status === 401 ? "Sign in to read your brief" : "The brief could not be loaded"));
   }, [week]);
 
-  useEffect(() => { if (open) load(); }, [open, load]);
+  // Events is optional; loading it when off is a 404. Only mounted inside the events page today, so this is quiet insurance for a future mount. See useModuleOn.
+  const eventsOn = useModuleOn("events");
+  useEffect(() => { if (open && eventsOn) load(); }, [open, eventsOn, load]);
 
   const close = () => {
     setOpen(false);

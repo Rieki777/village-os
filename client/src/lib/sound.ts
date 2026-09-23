@@ -261,7 +261,13 @@ export function onMuteChange(listener: (on: boolean) => void): () => void {
 // ── Playing ─────────────────────────────────────────────────────────────────
 
 /** Why a call made no sound. Useful in a test, never shown to a member. */
-export type SoundOutcome = "played" | "muted" | "reduced-motion" | "no-asset" | "unavailable";
+/**
+ * `blocked` is the browser's autoplay policy saying "not yet": nothing on the
+ * page has had a gesture. It is NOT remembered, so the same moment plays once
+ * the member has tapped. `unavailable` is a file that genuinely cannot play,
+ * and that one is remembered for the visit.
+ */
+export type SoundOutcome = "played" | "muted" | "reduced-motion" | "no-asset" | "blocked" | "unavailable";
 
 function handleFor(moment: SoundMoment): SoundHandle | null {
   const cached = handles.get(moment);
@@ -286,8 +292,9 @@ function handleFor(moment: SoundMoment): SoundHandle | null {
  * Play one moment. Resolves when the attempt is over and never rejects, so a
  * caller can ignore the result entirely and nothing waits on audio.
  *
- * A moment that fails once is remembered and skipped, which is how a village
- * with three of the five files gets three sounds and a quiet console.
+ * A moment whose FILE fails once is remembered and skipped, which is how a
+ * village with three of the five files gets three sounds and a quiet console.
+ * A moment the browser merely refused to autoplay is not: see the catch below.
  */
 export async function playSound(moment: SoundMoment): Promise<SoundOutcome> {
   if (isMuted()) return "muted";
@@ -298,9 +305,24 @@ export async function playSound(moment: SoundMoment): Promise<SoundOutcome> {
   try {
     await handle.play();
     return "played";
-  } catch {
-    // A blocked autoplay and a 404 look identical here. Both mean this
-    // moment stays quiet, and neither is worth a member's attention.
+  } catch (e) {
+    // A BLOCKED AUTOPLAY IS NOT A MISSING FILE, though both land here. A browser
+    // refuses play() with a NotAllowedError until the page has had a gesture,
+    // and lifts that as soon as the member taps anything. Remembering it as
+    // broken silenced the moment for the rest of the visit, after the tap too:
+    // the gratitude bloom fires on load, before any tap, so every later
+    // gratitude sound that visit stayed quiet. So it is let go, and only a file
+    // that genuinely cannot play is remembered.
+    //
+    // By NAME, and never `instanceof DOMException`: a missing or undecodable
+    // file rejects with a DOMException too (NotSupportedError), and treating
+    // that as "not yet" would retry a file that is not there on every
+    // celebration. Nor by `navigator.userActivation.hasBeenActive` up front,
+    // which is right for vibration and wrong here: a browser can allow audible
+    // autoplay with no gesture on this page (a site the member engages with, an
+    // installed app), and asking first would silence sound it would have played.
+    // Trying and reading the refusal lets the browser's own policy decide.
+    if ((e as { name?: unknown } | null)?.name === "NotAllowedError") return "blocked";
     broken.add(moment);
     return "unavailable";
   }

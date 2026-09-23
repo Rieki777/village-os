@@ -32,9 +32,15 @@ import SearchBar, { type SearchHit } from "@/components/power/SearchBar";
 import FilterChips from "@/components/power/FilterChips";
 import HolderCard from "@/components/power/HolderCard";
 import CircleCard from "@/components/power/CircleCard";
+import CirclePeek from "@/components/power/CirclePeek";
+import SeatSheet from "@/components/power/SeatSheet";
+import { phoneDepthFor } from "@/components/power/phoneDepth";
+import { phoneKeysFor } from "@/components/power/phoneKeys";
 import ShapePicker from "@/components/power/ShapePicker";
 import CurrencyPicker from "@/components/power/CurrencyPicker";
-import DecideLens, { DecideKey } from "@/components/power/DecideLens";
+import DecideLens from "@/components/power/DecideLens";
+import LensRow from "@/components/power/LensRow";
+import MapToolStrip from "@/components/power/MapToolStrip";
 // Lane L3: the resources lens rides PowerMap's `lenses` seam and the
 // layout's pad argument; these two imports and the wiring below are its
 // whole footprint in this file.
@@ -233,15 +239,41 @@ export default function VillageMap() {
   /*
    * HOW DEEP THE PHONE DRAWS.
    *
-   * The village root is depth -1, so this is 0 there: only the top-level
-   * circles. Step into one and it becomes 1, which is that circle's
-   * children. Undefined on desktop, where there is room for the whole nest.
+   * One level at a time, because seventeen circles and their children in a
+   * 375px square is a picture nobody can use: a grandchild is a few pixels
+   * across and its seats are smaller than a fingertip. Undefined on desktop,
+   * where there is room for the whole nest.
    *
-   * Seventeen circles and their children in a 375px square is a picture
-   * nobody can use: a grandchild is a few pixels across and its seats are
-   * smaller than a fingertip.
+   * The rule is `phoneDepthFor`, and it is NOT simply one level down from the
+   * camera: a level holding a single circle is descended past. Nesting this
+   * village under the General Coordinating Circle made the top level one disc,
+   * and the phone drew exactly that, correctly and uselessly. The helper
+   * carries the measurement that found it.
    */
-  const phoneMaxDepth = ((focusId ? layout?.circles.find((c) => c.id === focusId)?.depth : undefined) ?? -1) + 1;
+  const phoneMaxDepth = useMemo(() => phoneDepthFor(layout?.circles ?? [], focusId), [layout, focusId]);
+
+  /*
+   * THE KEY UNDER THE PHONE MAP (2026-09-21). A phone circle is too small for
+   * its name, so the circles a reader is choosing between carry a number,
+   * counted clockwise from twelve o'clock (`phoneKeysFor`), and a list under
+   * the map names every number. The first tap on a numbered circle names it on
+   * the map; the second steps in. Stepping anywhere clears the name.
+   *
+   * Stepping in shows the circle as a peek under the map, and its full card
+   * only once asked for (`sheetOpen`), so every step starts from the peek.
+   */
+  const [namedId, setNamedId] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  useEffect(() => {
+    setNamedId(null);
+    setSheetOpen(false);
+  }, [focusId]);
+  const phoneKeys = useMemo(() => {
+    if (!layout || !data) return [];
+    const parent = new Map(data.circles.map((c) => [c.id, (c.parentCircleId as string | null) ?? null]));
+    return phoneKeysFor(layout.circles, (id) => parent.get(id) ?? null, focusId, phoneMaxDepth);
+  }, [layout, data, focusId, phoneMaxDepth]);
+  const phoneKeyMap = useMemo(() => new Map(phoneKeys.map((k) => [k.id, k.key])), [phoneKeys]);
 
   const mayDeclareVillage = !!data?.viewer.mayDeclare?.includes("village");
 
@@ -311,19 +343,23 @@ export default function VillageMap() {
         [data-power-map-box] { height: auto !important; }
       }`}</style>
 
-      <section className="py-10 bg-gradient-to-b from-teal-deep/5 to-background">
+      {/* WHAT A PHONE SPENDS BEFORE IT REACHES THE PICTURE.
+          Measured on the live site at 390x844: the site header took 135px,
+          this title and its subtitle 124, and the examples banner with the
+          walk invite another 210. The map began at 469 of 844 and its last
+          80px ran under the tab bar, so a reader met a third of a circle.
+
+          The title stays, because a page says what it is. The subtitle is a
+          second saying of the same thing and waits for the room to say it.
+          The two invitations moved BELOW the map, beside the search that
+          also acts on it. */}
+      <section className="py-6 sm:py-10 bg-gradient-to-b from-teal-deep/5 to-background">
         <div className="container text-center">
-          <h1 className="font-display text-4xl font-bold text-foreground mb-3">How Power Is Held</h1>
-          <p className="text-muted-foreground max-w-xl mx-auto">
+          <h1 className="font-display text-3xl sm:text-4xl font-bold text-foreground mb-2 sm:mb-3">How Power Is Held</h1>
+          <p className="hidden sm:block text-muted-foreground max-w-xl mx-auto">
             The village's shape, how each circle decides, who holds each seat, and the seats waiting
             for someone like you.
           </p>
-          {EXAMPLE_SETS.filter((s) => exampleModules.includes(s.id)).map((s) => (
-            <ExamplesBanner key={s.id} moduleId={s.id} noun={s.noun} />
-          ))}
-          <div className="max-w-2xl mx-auto text-left mt-4">
-            <FirstWalkInvite />
-          </div>
         </div>
       </section>
 
@@ -356,6 +392,19 @@ export default function VillageMap() {
                   nothing. */}
               {!listMode && (
                 <div className="sm:hidden -mx-4 mb-4">
+                  <MapToolStrip
+                    mode={mode}
+                    onMode={setMode}
+                    lensOn={lensOn}
+                    onLens={() => setLensOn((v) => !v)}
+                    resourcesModule={!!resourcesModule}
+                    resourcesOn={resourcesOn}
+                    onResources={() => setResourcesOn((v) => !v)}
+                    linesOn={linesOn}
+                    onLines={() => setLinesOn((v) => !v)}
+                  >
+                    {lensOn && <LensRow touch data={data} domain={lensDomain} onDomain={setLensDomain} />}
+                  </MapToolStrip>
                   <div className="relative aspect-square block" data-power-map-box>
                     <PowerMap
                       data={shown ?? data}
@@ -379,10 +428,56 @@ export default function VillageMap() {
                       // 358px the floor made every label legible and then
                       // piled fifteen of them on top of each other.
                       compact
+                      keys={phoneKeyMap}
+                      namedId={namedId}
+                      onName={setNamedId}
                     />
                   </div>
-                                </div>
+                  {/* THE KEY. Every number on the map, named, in the order it
+                      is counted round the ring. A row steps into its circle;
+                      the one a tap has named on the map is marked here too. */}
+                  {phoneKeys.length > 0 && (
+                    <ol aria-label="The circles on the map, by number" className="grid grid-cols-2 gap-2 px-4 mt-3">
+                      {phoneKeys.map(({ id, key }) => {
+                        const circle = data.circles.find((o) => o.id === id);
+                        const named = namedId === id;
+                        return (
+                          <li key={id}>
+                            <button
+                              type="button"
+                              onClick={() => focusTo(id)}
+                              aria-current={named ? "true" : undefined}
+                              className={`w-full min-h-[44px] flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-sm text-foreground ${
+                                named ? "border-foreground/60 bg-muted" : "border-border bg-card"
+                              }`}
+                            >
+                              <span
+                                className="shrink-0 w-6 h-6 rounded-full border-2 grid place-items-center text-xs font-semibold"
+                                style={{ borderColor: cssColourForCircle({ id, color: circle?.color ?? null }) }}
+                              >
+                                {key}
+                              </span>
+                              <span className="min-w-0 text-[13px] leading-snug hyphens-auto break-words">{circle?.name ?? id}</span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  )}
+                </div>
               )}
+
+              {/* THE TWO INVITATIONS, UNDER THE PICTURE THEY POINT AT.
+                  Above the map they cost a phone 210 of its 844 pixels
+                  before anything was drawn. The map block above is
+                  `sm:hidden`, so from `sm` up these sit exactly where they
+                  always did: above the standing canvas, under the title. */}
+              {EXAMPLE_SETS.filter((s) => exampleModules.includes(s.id)).map((s) => (
+                <ExamplesBanner key={s.id} moduleId={s.id} noun={s.noun} />
+              ))}
+              <div className="max-w-2xl mx-auto text-left mt-4 mb-2">
+                <FirstWalkInvite />
+              </div>
 
               <SearchBar data={data} onPick={pickFromSearch} />
 
@@ -399,7 +494,8 @@ export default function VillageMap() {
                   }}
                 />
                 <div className="flex items-center gap-1.5 flex-wrap" data-power-actions>
-                  <div role="group" aria-label="Now or Vision" className="inline-flex rounded-full border border-border overflow-hidden">
+                  {/* The four chips that change the picture are `hidden sm:` here: a phone gets them in MapToolStrip, over the map. */}
+                  <div role="group" aria-label="Now or Vision" className="hidden sm:inline-flex rounded-full border border-border overflow-hidden">
                     <button
                       type="button"
                       aria-pressed={mode === "now"}
@@ -421,7 +517,7 @@ export default function VillageMap() {
                     type="button"
                     aria-pressed={lensOn}
                     onClick={() => setLensOn((v) => !v)}
-                    className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border ${
+                    className={`hidden sm:inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border ${
                       lensOn ? "bg-teal-deep text-white border-teal-deep" : "bg-card text-muted-foreground border-border"
                     }`}
                   >
@@ -451,7 +547,7 @@ export default function VillageMap() {
                       aria-pressed={resourcesOn}
                       onClick={() => setResourcesOn((v) => !v)}
                       data-resources-toggle
-                      className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border ${
+                      className={`hidden sm:inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border ${
                         resourcesOn ? "bg-teal-deep text-white border-teal-deep" : "bg-card text-muted-foreground border-border"
                       }`}
                     >
@@ -462,7 +558,7 @@ export default function VillageMap() {
                     type="button"
                     aria-pressed={linesOn}
                     onClick={() => setLinesOn((v) => !v)}
-                    className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border ${
+                    className={`hidden sm:inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border ${
                       linesOn ? "bg-teal-deep text-white border-teal-deep" : "bg-card text-muted-foreground border-border"
                     }`}
                   >
@@ -506,32 +602,8 @@ export default function VillageMap() {
                   signedIn={!!viewerUserId}
                   personName={personName}
                 />
-                {lensOn && (
-                  <div className="flex items-center gap-2 flex-wrap" data-power-lens-row>
-                    <div role="group" aria-label="Which domain" className="flex items-center gap-1">
-                      {[null, ...data.power.glossary.domains.map((d) => d.id)].map((d) => {
-                        const def = d ? data.power.glossary.domains.find((x) => x.id === d) : null;
-                        return (
-                          <button
-                            key={d ?? "overall"}
-                            type="button"
-                            aria-pressed={lensDomain === d}
-                            title={def?.gloss}
-                            onClick={() => setLensDomain(d)}
-                            className={`text-xs px-2 py-1 rounded-full border ${
-                              lensDomain === d
-                                ? "bg-teal-deep text-white border-teal-deep"
-                                : "bg-card text-muted-foreground border-border"
-                            }`}
-                          >
-                            {def?.label ?? "Overall"}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <DecideKey circles={data.circles} power={data.power} domain={lensDomain} />
-                  </div>
-                )}
+                {/* On a phone the lens's row rides in the tool strip over the map. */}
+                {lensOn && <LensRow className="hidden sm:flex" data={data} domain={lensDomain} onDomain={setLensDomain} />}
                 {resourcesOn && resources && <ResourcesKey resources={resources} />}
               </div>
 
@@ -657,12 +729,18 @@ export default function VillageMap() {
               </div>
 
               {/* The card as a bottom sheet wherever the standing panel is
-                  not. A tapped SEAT wins; otherwise the circle you stepped
-                  into gets the sheet, so a phone reaches the inspector the
-                  same way a desktop reaches the panel. */}
-              {(selectedSeat || focusedCircle) && (
+                  not. A tapped SEAT opens straight into it. A circle you step
+                  into does NOT: it opened here on every step-in and covered
+                  the map the step was taken to see (measured live, 169px to
+                  the bottom of an 844px screen). The circle's card waits for
+                  the peek below to ask for it, and closing it goes back to
+                  the peek, not out of the circle. */}
+              {(selectedSeat || (focusedCircle && sheetOpen)) && (
                 <div className="md:hidden">
-                  <SeatSheet onClose={() => (selectedSeat ? setSelected(null) : focusTo(null))}>
+                  <SeatSheet
+                    label={selectedSeat ? selectedSeat.name : focusedCircle!.name}
+                    onClose={() => (selectedSeat ? setSelected(null) : setSheetOpen(false))}
+                  >
                     {selectedSeat ? (
                       <HolderCard seat={selectedSeat} circle={selectedCircle} data={data} onPickPerson={pickPerson} />
                     ) : (
@@ -678,6 +756,19 @@ export default function VillageMap() {
               )}
 
               {walkOpen && <SetupWalk data={data} onClose={() => setWalkOpen(false)} onChanged={refetchMap} />}
+
+              {/* Last in the section, because it is sticky: it rides the
+                  bottom of the screen while the map section is in view, then
+                  settles above the footer instead of covering it. */}
+              {focusedCircle && (
+                <CirclePeek
+                  circle={focusedCircle}
+                  data={data}
+                  outTo={data.circles.find((c) => c.id === focusedCircle.parentCircleId)?.name ?? "the village"}
+                  onOut={() => focusTo((focusedCircle.parentCircleId as string | null) ?? null)}
+                  onExpand={() => setSheetOpen(true)}
+                />
+              )}
             </>
           )}
         </div>
@@ -729,7 +820,7 @@ function VillageSummary({
           type="button"
           onClick={onOpenWalk}
           data-power-walk-launch
-          className="w-full text-sm bg-amber/90 text-teal-deep rounded-lg px-4 py-2 font-semibold"
+          className="w-full text-sm bg-amber/90 text-primary-foreground rounded-lg px-4 py-2 font-semibold"
         >
           Walk the setup: seats, methods, shape
         </button>
@@ -737,43 +828,6 @@ function VillageSummary({
       {mayDeclareVillage && (
         <ShapePicker power={data.power} preview={shapePreview} onPreview={onPreview} onSaved={onSaved} />
       )}
-    </div>
-  );
-}
-
-/** The bottom sheet, focus-managed exactly as the old card was. */
-function SeatSheet({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  const panelRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    panelRef.current?.focus();
-    return () => previous?.focus?.();
-  }, []);
-  return (
-    <div
-      className="fixed inset-0 z-[70] flex items-end justify-center bg-black/30"
-      onClick={onClose}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") onClose();
-      }}
-    >
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Role"
-        tabIndex={-1}
-        data-scroll-contain
-        className="bg-white w-full rounded-t-2xl p-6 pb-[calc(1.5rem+var(--tabbar-h))] max-h-[80vh] overflow-y-auto focus:outline-none"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex justify-end mb-2">
-          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-gray-600">
-            <X className="w-5 h-5" aria-hidden="true" />
-          </button>
-        </div>
-        {children}
-      </div>
     </div>
   );
 }
@@ -806,7 +860,10 @@ function CircleAccordion({
         const isOpen = open === c.id;
         const method = decideLabel(c.decidesBy) ?? decideLabel(data.power.decidesBy);
         return (
-          <div key={c.id} className={`bg-card border border-border rounded-xl ${c.status === "forming" ? "opacity-60" : ""}`}>
+          // A forming circle reads quieter by its dashed edge and its "(forming)"
+          // word. It was faded whole, text included, which put "(forming)" at
+          // 3.12:1 and its decision badge at 3.32:1 (measured 2026-09-21).
+          <div key={c.id} className={`bg-card border border-border rounded-xl ${c.status === "forming" ? "border-dashed" : ""}`}>
             <button type="button" className="w-full flex items-center justify-between px-4 py-3" onClick={() => {
               const next = isOpen ? "" : c.id;
               setOpen(next);

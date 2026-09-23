@@ -343,8 +343,17 @@ describe.skipIf(!configured)("what a consent owes, and paying it (MySQL, real le
       state: "refused",
       refusalReason: "rule",
       questTitle: "Quest owed-refused",
-      holder: "Ada",
+      holder: MEMBER.name,
     });
+
+    // THE PROMISE, not a literal: the owed tail names the payee exactly as the
+    // consent queue on the same page does, so a steward reading both sees one
+    // person. A first name alone made two members who share one
+    // indistinguishable at the one place a steward pays somebody.
+    const queue = await call("GET", "/api/admin/quest-claims");
+    const queued = queue.body.find((c: any) => c.id === claimId);
+    expect(queued, "the queue carries this claim").toBeTruthy();
+    expect(list.body.find((x: any) => x.claimId === claimId)?.holder).toBe(queued.userName);
   });
 
   it("before the Game starts, a consent at 0 leaves its stay credits owed, and after launch two presses pay them once", async () => {

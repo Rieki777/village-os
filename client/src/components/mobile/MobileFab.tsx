@@ -102,6 +102,35 @@ export default function MobileFab() {
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
+  /*
+   * IT STEPS ASIDE WHILE A MEMBER READS DOWN THE PAGE. The trigger is a 56px
+   * circle over whatever a page puts in its bottom-right corner: the living
+   * map's key, a paragraph on /roles (QA pass and sweep, 2026-09-21). Reading
+   * down is when that corner holds the thing being read, so it tucks away; a
+   * scroll back up, the top of the page, a new page, or a keyboard reaching
+   * it brings it back. Never while its menu is open.
+   */
+  const [tucked, setTucked] = useState(false);
+  useEffect(() => {
+    let last = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      if (y < 64) {
+        setTucked(false);
+        last = y;
+        return;
+      }
+      // Hysteresis, so a thumb resting on the glass does not flicker it.
+      if (Math.abs(y - last) < 12) return;
+      setTucked(y > last);
+      last = y;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  useEffect(() => setTucked(false), [location]);
+  const hidden = tucked && !open;
+
   // The screens that render no tab bar render no FAB either: the trigger is a
   // 56px circle in the bottom-right, and on /login it sat over the right end
   // of the full-width sign-in button. Same list, same reason (mobileNav.ts).
@@ -119,6 +148,8 @@ export default function MobileFab() {
       />
 
       <div
+        // Rides up clear of the living map's circle peek while one shows (index.css).
+        data-mobile-fab
         className="fixed right-4 z-[60] md:hidden flex flex-col items-end pointer-events-none"
         // Tab bar is h-16 (4rem) of content plus the safe-area pad. Offsetting
         // by that same pad + 3.5rem leaves the trigger's lower edge exactly
@@ -201,9 +232,11 @@ export default function MobileFab() {
         <button
           type="button"
           onClick={toggle}
-          className={`pointer-events-auto relative w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95 ${
-            open ? "scale-105" : ""
-          }`}
+          onFocus={() => setTucked(false)}
+          data-fab-trigger
+          className={`relative w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-all duration-300 motion-reduce:transition-none hover:scale-105 active:scale-95 ${
+            hidden ? "pointer-events-none scale-0 opacity-0" : "pointer-events-auto"
+          } ${open ? "scale-105" : ""}`}
           style={{
             background: "linear-gradient(to top, var(--tone-brand-band, #105e5d), var(--tone-brand, #157f7d))",
             boxShadow: open

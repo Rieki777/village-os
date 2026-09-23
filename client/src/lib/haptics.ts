@@ -64,7 +64,18 @@ export function hapticsSupported(): boolean {
 export function haptic(intensity: HapticIntensity = "tap"): boolean {
   if (!enabled) return false;
   const pattern = HAPTIC_MS[intensity] ?? HAPTIC_MS.tap;
+  // NOT BEFORE THE MEMBER HAS TOUCHED THE PAGE. The browser refuses a vibrate
+  // until the page has had a user gesture, and says so in the console:
+  // "Blocked call to navigator.vibrate because user hasn't tapped on the
+  // frame". A celebration can fire on page load (the gratitude bloom on
+  // /profile plays its moment as soon as its fetch lands), which put that
+  // error on a page members open every day (sweep finding F9, 2026-09-21).
+  // Where the engine reports activation, ask first; where it does not, this
+  // is the same call as before. Inside the try, because `navigator` itself
+  // can be absent.
   try {
+    const activation = (navigator as unknown as { userActivation?: { hasBeenActive?: boolean } }).userActivation;
+    if (activation && activation.hasBeenActive === false) return false;
     // Through unknown: the DOM lib types vibrate's pattern as an iterable in
     // this TypeScript version, and a plain number is the form every engine
     // actually takes. The shape here is the one the platform ships.

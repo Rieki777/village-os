@@ -862,7 +862,24 @@ export const MODULES: ModuleDef[] = [
     // who decided. That is a named person's financial request.
     dataClass: "member-pii",
     group: "host-and-earn",
-    setup: "none",
+    /*
+     * `none` UNTIL 2026-09-19, and it was true the day it was written: the
+     * module had no settings of its own. Ruling 23 gave it fourteen, and
+     * `redemption.process_text` ships EMPTY. That dial is the village's own
+     * words for how a member actually gets paid, so a village that took
+     * "nothing to set up" at its word switched redemption on and every member
+     * who asked to cash out met no instructions at all.
+     *
+     * `required` is what the other three funds-bearing modules say (stays,
+     * exchange, commerce), and it is what makes the Go-live card wait: see
+     * `attachModuleReadiness` in server/lib/modules.ts, which reads the
+     * process text and is the reason this value cannot be set here alone. A
+     * non-"none" setup with no readiness reader of its own would fall to the
+     * default one, and the default counts rows in a module's own tables;
+     * redemption has no examples engine entry, so it would have answered "not
+     * ready" forever and the Go-live card would never have appeared.
+     */
+    setup: "required",
     name: "Redemption",
     description:
       "A member asks for tokens they hold to become something real off the platform: cash, a service, a share. Asking holds the tokens, a steward confirms once the village has paid, and only then are the tokens destroyed; a refusal, a withdrawal or an expiry gives them back in full. Funds-bearing: read the legal card before enabling.",

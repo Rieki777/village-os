@@ -112,7 +112,7 @@ describe("navGroups", () => {
     ["Make it yours", ["team", "legal", "covenant", "money", "work-with-us", "faqs", "milestones", "visit-config", "investor-summary"]],
     ["Connections", ["integrations", "email-settings"]],
     ["What your village runs", [
-      "modules", "needs-admin", "variables", "season", "seasons-patterns", "circles-map", "housing",
+      "modules", "needs-admin", "variables", "season", "seasons-patterns", "circles-map", "land", "housing",
       "events-admin", "quests-admin", "tools-admin", "library-admin", "badges-admin",
       "stays-admin", "exchange-admin", "crowdpool-admin", "calls-admin", "intents-admin",
       "health-admin",
@@ -150,7 +150,7 @@ describe("navGroups", () => {
       "team", "legal", "covenant", "email-settings", "integrations", "brain", "drafts",
       "investor-vault", "uploaded-files", "training-modules", "modules", "quests-admin",
       "quest-claims", "players", "game-roles", "handover", "org-chart", "governance-weights",
-      "seasons-patterns", "circles-map", "housing", "events-admin", "tools-admin",
+      "seasons-patterns", "circles-map", "land", "housing", "events-admin", "tools-admin",
       "crowdpool-admin", "stays-admin", "exchange-admin", "badges-admin", "library-admin",
       "health-admin", "resources-admin", "exits-admin", "calls-admin", "intents-admin",
       "tokens", "ledger", "cycles", "variables", "season", "settings", "work-with-us",

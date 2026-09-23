@@ -12,13 +12,58 @@
  *
  * Accessibility contract:
  * - The trigger is a <button> with aria-expanded and a focus-visible ring.
- * - The plaque is aria-describedby-linked and stays in the DOM sr-only while
- *   closed, so a screen reader hears the mechanics on focus without needing
- *   the visual open state.
+ * - The plaque is aria-describedby-linked and stays in the DOM while closed,
+ *   so a screen reader hears the mechanics on focus without needing the
+ *   visual open state. It is `hidden` while closed, NOT `sr-only`: see below.
  * - Keyboard focus opens the plaque visually too, and blur closes it.
  * - The plaque positions FIXED from the trigger's measured rect, so an
  *   overflow-hidden card ancestor never clips it; scrolling closes it
  *   instead of letting it drift.
+ *
+ * WHY THE CLOSED PLAQUE IS `hidden` AND NOT `sr-only`. This wrapper is
+ * `relative inline-block`, so the plaque node sits in the HOST PARAGRAPH'S
+ * INLINE FLOW. An `sr-only` node is out of the VISUAL flow and fully inside
+ * the reading order, so every one of these read its definition MID-SENTENCE
+ * and then let the host sentence resume as a fragment after a full stop, and
+ * then read the same words AGAIN when the trigger took focus. On /campaigns
+ * that was: "...through the hub's crowdpool A crowdpool gathers pledges of
+ * money, goods, tools and hands for one build. Nothing moves through this
+ * page; every claim finishes on the hub's own page. . Each ring fills as the
+ * pool does". It renders perfectly for sighted visitors, which is why no
+ * screenshot, contrast pass or overflow sweep could ever have caught it.
+ *
+ * `hidden` (display:none) takes the node out of the accessibility tree
+ * altogether, and accname (Accessible Name and Description Computation 1.2,
+ * step 2A) carves out one exception: a node hidden but DIRECTLY referenced by
+ * aria-labelledby or aria-describedby is still traversed for the description.
+ * So both halves hold, which is the whole requirement: out of the sentence,
+ * still resolvable on focus. Measured in Chromium 153.0.8010.12 over the
+ * browser's own accessibility tree: the button's computed description is the
+ * tip text while the plaque is `hidden`, and the tip text is NOT among the
+ * tree's static-text nodes. Under `sr-only` the description resolved too and
+ * the text WAS a static-text node, which is the defect.
+ *
+ * The same defect had a second face, in HEADINGS. Fourteen of the call sites
+ * sit inside an h2, h3 or h4, and a heading's accessible name is computed
+ * from its content, which `sr-only` content is part of. Measured the same
+ * way: the governance "Your weight" h3 was named "Your weight What voting
+ * weight is Weight is how much a vote counts. It is read when a ballot opens
+ * and frozen there, so a later change never rewrites a vote in flight." in a
+ * screen reader's list of headings. Under `hidden` it is "Your weight What
+ * voting weight is".
+ *
+ * A portal was the other candidate, and the probe ruled it out: a portalled
+ * `sr-only` description was still a static-text node, merely relocated to the
+ * end of the document, so it is read out of nowhere instead of mid-sentence.
+ * A portal only helps if the node is ALSO hidden, and once it is hidden the
+ * portal adds nothing. Clipping needs no portal either, since the open plaque
+ * is already position:fixed. And the open plaque sets no font family or font
+ * variant of its own, so moving it would make its face depend on the body
+ * instead of on the host it opens from.
+ *
+ * The OPEN plaque stays where it is, beside its trigger: that is the expected
+ * DOM position for role="tooltip", and the open state is always
+ * user-initiated.
  *
  * The plaque wears the map's parchment look (the cp-plaque palette from the
  * crowdpool pieces), so the two tooltip families read as one voice.
@@ -143,6 +188,10 @@ export default function InfoTip({ tip, children, label, className = "" }: InfoTi
       <span
         id={id}
         role="tooltip"
+        // display:none while closed. The node stays in the DOM so the
+        // aria-describedby above still resolves; see the header for what was
+        // measured and why `sr-only` was the defect.
+        hidden={!(open && pos)}
         style={
           open && pos
             ? {
@@ -163,7 +212,7 @@ export default function InfoTip({ tip, children, label, className = "" }: InfoTi
         className={
           open && pos
             ? "block px-3 py-2 text-xs font-normal leading-relaxed text-left normal-case tracking-normal"
-            : "sr-only"
+            : undefined
         }
       >
         {tip}

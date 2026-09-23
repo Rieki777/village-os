@@ -92,25 +92,20 @@ const WRITE_METHODS = new Set(["post", "put", "delete", "patch"]);
  * Worth keeping the shape of that: the waiver was honest when it was written
  * and became a lie without anyone editing it. That is what this check is for.
  *
- * ── REFILLED THE SAME DAY, BY THE LAND LANE ────────────────────────────────
+ * ── REFILLED, AND THEN EMPTIED, BY THE LAND LANE ───────────────────────────
  *
- * The two entries below are waiting on a SCREEN, not on a decision. The land
- * routes (server/routes/land.ts, migration 0123) were built in a lane that was
- * explicitly forbidden to edit client/src/pages/Admin.tsx, because another wave
- * holds that file. The screen they need is specified field by field in
- * docs/VILLAGE_LAND.md, down to the request bodies and the error copy, so
- * wiring it is a small job for whoever owns Admin.tsx next.
+ * Two entries used to sit here waiting on a SCREEN. The land routes
+ * (server/routes/land.ts, migration 0123) were built in a lane forbidden to
+ * edit client/src/pages/Admin.tsx, so for a while a founder could not set the
+ * village's location from the product at all, and these lines recorded that.
  *
- * BOTH LINES COME OUT THE DAY THAT SCREEN LANDS. They keep a known, documented
- * gap visible. They are not a claim that a founder should never reach these
- * routes: a founder cannot set the village's location from the product at all
- * until the screen exists, and that is the thing being recorded.
+ * The screen landed: client/src/components/admin/LandTab.tsx, reached from
+ * "Where The Land Is". Both lines came out with it, which is what they said
+ * they would do. The shape is worth keeping in view: a waiver that names the
+ * thing it waits for is a waiver that can be retired by someone who was not
+ * there when it was written.
  */
 const ALLOWED = {
-  "PUT /api/admin/land":
-    "Waiting on the admin screen specified in docs/VILLAGE_LAND.md. The lane that built the route could not edit Admin.tsx, which another wave holds. Delete this line when the screen lands.",
-  "POST /api/admin/land/imagery":
-    "Waiting on the same screen as PUT /api/admin/land. Delete this line when the screen lands.",
   "POST /api/admin/site-pull":
     "The fetch half of 'paste your site address' shipped on its own, deliberately: it is the security surface and it was built and reviewed apart from the screen that calls it. The setup screen and the brand extractor are separate lanes. Delete this line when the screen lands.",
   "POST /api/admin/site-pull/assets":
