@@ -291,6 +291,19 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   three files. `origin/main` reaches `0206`. The number is confirmed again at landing, and
   renumbering this file is safe until it runs anywhere but a scratch schema, because its one
   statement is a `CREATE TABLE IF NOT EXISTS`.
+- **handback-vote lane (the return of a power becomes a vote; badges may not grant the veto),
+  2026-09-23: holds 0215** for `drizzle/0215_a_badge_may_not_carry_the_stewards_veto.sql` on
+  `wt/handback-vote`, stacked on #312 (`wt/override-needs-steward`). One `UPDATE` in the shape of
+  `0109` and `0114`, `JSON_REMOVE` over `badges.capabilities`, no `ALTER` and no new object. It is
+  REQUIRED rather than tidy-up for the reason `0114` states: `badgeProblem` now refuses
+  `steward.veto` in a badge's `capabilities`, and `assertBadgeInvariants` runs that validator over
+  every active badge at boot, so a village whose admin had once minted such a badge would fail to
+  start without this file. Measured two ways at 11:40 PDT after `git fetch origin`. Refs reach
+  **0214** (`drizzle/0214_village_land_parcels.sql`, the land lane, commit `cb4e3f2`), by the
+  `--diff-filter=AR` scan this section mandates; the `drizzle/` directories on disk across every
+  sibling worktree reach **0214**, the same file, in `LAND-0915` and `wt-ground`. `origin/main`
+  reaches **0213**. `check-migration-numbers --next` says `0214` and is wrong by one, exactly as
+  this section warns: it reads main and not the in-flight branch. Confirmed again at landing.
 - **econ renumber lane 2, 2026-09-14: holds 0200 to 0206** on `wt/econ-renumber-2`, for the seven
   economics migrations that `wt/econ` still carried at or below main's ceiling after the merge at
   `fb2d94b`, kept in the same relative order: `0181`->`0200`, `0183`->`0201`, `0184`->`0202`,

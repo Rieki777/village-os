@@ -74,6 +74,12 @@ export default function HandoverTab({ password }: { password: string }) {
   const [data, setData] = useState<any>(null);
   const [picking, setPicking] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState("");
+  /**
+   * The one power whose "bring it back" has been refused AND whose refusal
+   * said this account could reach past the village anyway. Set from the
+   * server's answer and never guessed: the second press sends the glass.
+   */
+  const [glassFor, setGlassFor] = useState("");
   /** The power and role waiting on "is the village ready". Null when nothing is being asked. */
   const [confirming, setConfirming] = useState<{ capability: string; roleId: string } | null>(null);
 
@@ -154,17 +160,39 @@ export default function HandoverTab({ password }: { password: string }) {
     setBusy("");
   };
 
-  const takeBack = async (capability: string) => {
-    if (!window.confirm("Bring this power back to the admin panel? The village sees this on its own feed.")) return;
+  /**
+   * ASK THE SERVER, AND LET IT SAY NO (Rye, 2026-09-23).
+   *
+   * Taking a power back is the village's own decision now: the server refuses
+   * this with a sentence naming the `power_return` ballot, and carries on only
+   * for a founder seated as a steward with the veto who breaks the glass. The
+   * panel does NOT decide which of those the person is — it asks, shows the
+   * refusal it gets back, and offers the glass only when the server says the
+   * door is there for THIS account (`overrideAvailable`). A button that
+   * predicted the answer would be a second gate in the browser.
+   */
+  const takeBack = async (capability: string, glass = false) => {
+    if (glass && !window.confirm(
+      "Reach past the village and take this power back? The village sees this on its own feed, with your name on it.",
+    )) return;
     setBusy(capability);
     try {
       const res = await fetch(`${API_BASE}/admin/capabilities/${encodeURIComponent(capability)}/holding`, {
         method: "DELETE",
-        headers: authHeaders(password),
+        headers: authHeaders(password, glass ? { "x-capability-override": "true" } : {}),
       });
       const d = await res.json();
-      if (!res.ok) throw new Error(refusal(d, "That did not go through"));
+      if (!res.ok) {
+        if (!glass && d?.overrideAvailable) {
+          setBusy("");
+          toast.error(d.error);
+          setGlassFor(capability);
+          return;
+        }
+        throw new Error(refusal(d, "That did not go through"));
+      }
       toast.success("Back with the admin panel");
+      setGlassFor("");
       load();
     } catch (e: any) { toast.error(e?.message || "That did not go through"); }
     setBusy("");
@@ -212,9 +240,9 @@ export default function HandoverTab({ password }: { password: string }) {
                 <button
                   className="text-sm underline text-muted-foreground"
                   disabled={busy === p.capability}
-                  onClick={() => takeBack(p.capability)}
+                  onClick={() => takeBack(p.capability, glassFor === p.capability)}
                 >
-                  Bring it back
+                  {glassFor === p.capability ? "Reach past the village and bring it back" : "Bring it back"}
                 </button>
               </div>
             ) : !p.movable ? (

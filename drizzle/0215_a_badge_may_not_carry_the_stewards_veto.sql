@@ -1,0 +1,49 @@
+-- 0215: clear `steward.veto` out of every badge's `capabilities`.
+--
+-- Rye's ruling of 2026-09-23, asked whether a badge could carry the steward's
+-- veto: seats only, "so that an admin cannot mint a badge and give themselves
+-- a veto". The veto comes from a seat the village votes somebody into, filled
+-- by a `role_seat` ballot and emptied by a `role_unseat` ballot, and from
+-- nothing else.
+--
+-- 0109 and 0114 did this for the DENY half of the badge plane and their
+-- reasoning holds here line for line, in the other direction.
+-- `shared/capabilities.ts` names the key in `BADGE_GRANTABLE`, the gate
+-- ignores a grant that names it, and `badgeProblem` refuses to save one. This
+-- file is the third lock: a row already stored answers to neither of the other
+-- two, and a badge minted months ago outlives the admin who wrote it.
+--
+-- ORDER MATTERS AT BOOT, and it is the same reason 0090, 0109 and 0114 gave.
+-- `applyPending` runs migrations before `assertBadgeInvariants` re-validates
+-- every active badge, and that assertion now refuses `steward.veto` in
+-- `capabilities`. Without this file a village whose admin had once minted such
+-- a badge would fail to start. With it, the row is cleaned a few seconds
+-- before the check reads it. That makes this migration REQUIRED rather than
+-- tidy-up: the map change alone would brick the boot of any village holding
+-- such a row.
+--
+-- WHY NO NEIGHBOURING KEY IS HERE. `steward.veto` is the only key with no
+-- admin route left to it once `BADGE_GRANTABLE` stands. `ballot.vote` and
+-- `member.vouch` are fenced off `power_grant` and off `POST
+-- /api/governance/role-seats`, and both are still reachable by the ordinary
+-- ladder an admin already steers; `member.superVouch` and `proposal.decide`
+-- can be written onto a role by an admin route today. Closing the badge door
+-- on any of those would be a new policy, and the founder ruled on the veto.
+--
+-- EXPAND, NEVER CONTRACT. No column is added, dropped or narrowed, and no
+-- constraint is created. The previous release reads and writes `capabilities`
+-- exactly as it did; what changes is the content of rows that named a key the
+-- gate has stopped honouring, so a roll-back over this file works.
+--
+-- JSON_SEARCH plus JSON_REMOVE rather than string surgery, as in 0090, 0109
+-- and 0114: both are available on MySQL 5.7+ and MariaDB 10.2+, the WHERE
+-- clause skips NULL columns on its own, and one occurrence per row is all the
+-- admin surface can produce, because a capability list is a set of checkboxes.
+--
+-- The badge itself is untouched. It may still exist and may still mean
+-- something true about the person holding it; this removes only the one power
+-- it was never the badge panel's to give.
+
+UPDATE `badges`
+SET `capabilities` = JSON_REMOVE(`capabilities`, JSON_UNQUOTE(JSON_SEARCH(`capabilities`, 'one', 'steward.veto')))
+WHERE JSON_SEARCH(`capabilities`, 'one', 'steward.veto') IS NOT NULL;

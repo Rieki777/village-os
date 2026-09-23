@@ -385,12 +385,31 @@ for (const row of REFUSED) {
 }
 
 describe.skipIf(!DB_CONFIGURED)("badges, as the gate's order says", () => {
-  it("a badge granting the veto does not seat a founder", async () => {
+  /*
+   * UPDATED, NEVER DELETED (Rye, 2026-09-23). This case used to MAKE the badge
+   * through `POST /api/admin/badges`, which took `capabilities:
+   * ["steward.veto"]` without a word. That route refuses it now, and the
+   * refusal is asserted here rather than the case being dropped: the door the
+   * ruling closed is the first half of what this test measures.
+   *
+   * The second half is the half that was always the point, and it needs a row
+   * the route will no longer write, so the badge goes in by hand the way a
+   * pre-ruling village's would already be sitting there. A badge granting the
+   * seat's key seats nobody: the break-glass reads `roleCapabilities` and the
+   * gate ignores the grant outright.
+   */
+  it("a badge granting the veto is refused, and one written by hand seats nobody", async () => {
     const made = await call("POST", "/api/admin/badges", {
       name: `Veto Badge ${PORT}`, kind: "granted", capabilities: ["steward.veto"],
     });
-    expect(made.status, made.text).toBe(200);
-    const award = await call("POST", `/api/admin/badges/${made.json.badge.id}/award`, { userId: people.bruno.id });
+    expect(made.status, made.text).toBe(400);
+    expect(String(made.json?.error)).toContain("role_seat");
+
+    await pool.query( // module-review-ok: fixture SQL standing in for a badge minted before the 2026-09-23 ruling, against the scratch schema
+      "INSERT INTO badges (id, name, kind, capabilities, denies, active) VALUES (?,?,?,?,?,1)",
+      ["veto-by-hand", `Veto By Hand ${PORT}`, "granted", JSON.stringify(["steward.veto"]), JSON.stringify([])],
+    );
+    const award = await call("POST", "/api/admin/badges/veto-by-hand/award", { userId: people.bruno.id });
     expect(award.status, award.text).toBe(200);
     const r = await setDial(OPEN_DIAL, "93", people.bruno.token, {}, GLASS);
     expect(r.status, r.text).toBe(409);
