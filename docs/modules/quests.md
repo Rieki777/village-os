@@ -192,7 +192,7 @@ that file alphabetically would make `field` a quest id that does not exist.
 | `GET /api/quests` | anyone | The whole board, examples included. |
 | `GET /api/quests/field` | anyone | Life signs: two aggregate queries, not three table loads. Example quests and example members are excluded on both sides. First names only. |
 | `GET /api/quests/:id` | anyone | One quest plus three related from the same circle, filtered to the same example-ness and to `status = open`. |
-| `GET /api/og/quest/:id` | anyone | The 1200x630 share card. No text is drawn into the raster because the renderer has no installed font. Cached on `id + imageUrl + circle`, 64 entries, oldest evicted first. The rate limit sits **after** the cache: 120 misses per IP per hour, then 429 with `Retry-After`. |
+| `GET /api/og/quest/:id` | anyone | The 1200x630 share card. No text is drawn into the raster because the renderer has no installed font. Cached on `id + imageUrl + circle`, 64 entries, oldest evicted first. The rate limit sits **after** the cache: 120 misses per IP per hour, then 429 with `Retry-After`. When the guard cannot reach its table at all, this route answers **503** and rasters nothing, alone in the platform (Rye, 2026-09-23). |
 | `GET /api/quests/:id/crews` | signed-in member | The read is gated too: who is walking a quest with whom is not for crawlers. `inviteCode` is returned only to members of that crew. |
 | `POST /api/quests/:id/crews` | signed-in member | Refuses an example quest. Crew size is clamped to 2..12, default 5. |
 | `POST /api/crews/join/:code` | signed-in member | Refuses a disbanded crew and a full one. |
@@ -741,10 +741,26 @@ board pays the `sharp` raster once per quest and is never counted against the 12
 What the bound catches is a caller cycling ids to make the village raster on demand. Adding a query
 parameter to the cache key hands that caller a free miss generator.
 
-The bound also costs a `rate_hits` row per miss and **fails open**: `overLimit` catches its own
-database error, logs "[abuse-guard] check failed (failing open)" and returns false. So a database
-problem removes the only protection on the one route in this module that rasters an image for an
-anonymous caller.
+The bound costs a `rate_hits` row per miss, and **this one route refuses when the guard cannot
+check**. Everywhere else in the platform an unreachable guard table reads as "not over limit",
+because a guard that takes a public form down during an outage costs the village real leads.
+Here the trade runs the other way and Rye chose it on 2026-09-23: this is the only route in the
+module that spends `sharp` on a caller with no account, so failing open would drop its only
+bound at the moment the database is already in trouble. The cost of refusing is a share card
+that does not render while the database is unwell, which is a poster and not a person's work.
+
+`server/repos/rateHits.ts` answers `under`, `over` or `unavailable`; `overLimit` in
+`server/index.ts` folds the third into "not over limit" for every other caller, in one visible
+place, and the raster reads it for itself. 503 rather than 429, because the caller did nothing
+wrong and the same request works as soon as the guard can answer.
+
+Two things about that guard were also wrong until 2026-09-23, and both meant it bounded nothing.
+It measured its window with a timestamp computed in Node while `at` is written with the
+database's `CURRENT_TIMESTAMP(3)`, which are different clocks on any database session that is
+not UTC, so the count came back 0 and every caller passed. And it counted in one statement and
+inserted in the next, so a burst arriving together all read a count below the bound and all
+passed. The window is now arithmetic the database does on its own clock, and the count and the
+insert happen under one named lock per bucket.
 
 **The submit sweep runs inside the response path, and is guarded twice.** In
 `POST /api/game/quests/:id/submit` the claim is flipped and committed first, then the loop over
