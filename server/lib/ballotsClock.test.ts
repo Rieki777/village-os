@@ -59,7 +59,7 @@ describe.skipIf(!configured)("the ballot window, on a database in any zone", () 
   beforeAll(async () => {
     db = await provisionTestDb();
     for (const [, offset] of ZONES) {
-      const p = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 2 }); // module-review-ok: the S5 scratch-schema harness pool, the ballots.test.ts shape
+      const p = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 2 }); // module-review-ok: the S5 scratch-schema harness pool, the ballots.test.ts shape. test-pool-ok: pinned to a deliberate non-UTC offset below, which is what the file measures
       p.on("connection", (c) => {
         c.query(`SET time_zone = '${offset}'`); // module-review-ok: the session pin is the thing under test, on the S5 scratch schema
       });

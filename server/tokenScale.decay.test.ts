@@ -21,7 +21,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "./db/testDb";
 import { loadTokenRegistry, memberAccount, registerToken } from "./lib/ledger";
 import { loadVariables, numberVar, stringVar } from "./lib/variables";
 import { recordGameStart } from "./lib/gameStart";
@@ -97,8 +97,7 @@ describe.skipIf(!configured)("waning reaches a small balance at two decimals", (
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-    await pool.query("SET time_zone = '+00:00'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    pool = testPool(db, { connectionLimit: 6 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await loadTokenRegistry(pool);
     await loadVariables(pool);
     await ensureVoiceToken(pool, "Village Voice");

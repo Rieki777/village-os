@@ -27,7 +27,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { circlesOnCycles, loopedCirclesRefusal } from "../../shared/circleView";
 import {
   dbCollection,
@@ -93,8 +93,7 @@ describe.skipIf(!configured)("replaceAll under two concurrent writers", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 8 });
-    await pool.query("SET time_zone = '+00:00'");
+    pool = testPool(db, { connectionLimit: 8 });
   }, 300_000);
 
   afterAll(async () => {
@@ -312,8 +311,7 @@ describe.skipIf(!configured)("replaceAll when the payload came back empty", () =
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 8 });
-    await pool.query("SET time_zone = '+00:00'");
+    pool = testPool(db, { connectionLimit: 8 });
   }, 300_000);
 
   afterAll(async () => {
@@ -467,8 +465,7 @@ describe.skipIf(!configured)("the snapshot stamp itself", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
-    await pool.query("SET time_zone = '+00:00'");
+    pool = testPool(db, { connectionLimit: 4 });
     await pool.query(
       "INSERT INTO tools (id, name, purpose, url, cta_label, category, icon_kind, visibility, sort_order, enabled) " +
         "VALUES ('s1','Stamped','seeded','https://example.org','Open','communication','slug','members',1,1)",
@@ -588,7 +585,7 @@ describe.skipIf(!configured)("a rebase that would merge a loop into the circles"
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 8 });
+    pool = testPool(db, { connectionLimit: 8 });
   }, 300_000);
 
   afterAll(async () => {
