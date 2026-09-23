@@ -126,6 +126,27 @@ describe("reading a vendor record", () => {
     }
   });
 
+  it("takes the role page's text, because a seat with no aim is a job title", () => {
+    const r = readVendorRecord("role", {
+      "Role Name": "Water Steward",
+      Body: "Holds the village's relationship with its water: the springs, the tanks, the lines.",
+      "Last Audit Date": "2026-06-01",
+    });
+    expect(r.fields.Body).toContain("springs");
+    expect(r.fields["Last Audit Date"]).toBe("2026-06-01");
+    expect(r.ignored).toEqual([]);
+  });
+
+  it("still drops that text when it carries an address, like any other field", () => {
+    // Body is the one allowed field most likely to carry one, being free prose.
+    const r = readVendorRecord("role", {
+      "Role Name": "Water Steward",
+      Body: "Holds the water. Questions to mika@amora.test.",
+    });
+    expect(r.fields).toEqual({ "Role Name": "Water Steward" });
+    expect(r.droppedForAnAddress).toEqual(["Body"]);
+  });
+
   it("can say what it will show, so a card never promises a field this drops", () => {
     expect(shownFields("role")).toContain("Role Name");
     expect(shownFields("role")).not.toContain("Active Holders");

@@ -56,7 +56,25 @@ const ALLOWED: Readonly<Record<string, readonly string[]>> = {
     "Role Type",
     "Assignment Method",
     "Next Audit Date",
+    "Last Audit Date",
     "Notes",
+    /**
+     * The role page's own text, which is where the vendor keeps what a role is
+     * FOR. Without it a proposal is a seat with a name and no aim, which is a
+     * steward being asked to approve a job title.
+     *
+     * It crosses although `Active Holders` does not, and the line between them
+     * is worth stating because it is not "one might mention a person".
+     * `Active Holders` is a STRUCTURED reference to a person record: taking it
+     * means this village systematically holds an outside service's mapping of
+     * people to seats, for everybody, which is `member-pii` and carries the
+     * three-part bar. `Body` is prose describing a seat. It may name somebody
+     * in passing, exactly as any proposal's free text may, and it meets the
+     * same three defences the rest of the intake already applies: an address
+     * makes the whole record refused, nothing here is ever auto-accepted, and
+     * a steward reads it before it becomes part of the chart.
+     */
+    "Body",
   ],
   /**
    * `Role Holder` is absent on purpose and so is `Active Holders` above. Who
