@@ -1211,9 +1211,18 @@ export const MODULES_BY_ID: Record<string, ModuleDef> = Object.fromEntries(
  *
  * A prefix that names no module is NOT an oversight and is the normal case:
  * `exit.*`, `economy.*`, `ledger.*`, `needs.*`, `org.*`, `village.*`,
- * `abuse.*`, `auth.*`, `retention.*`, `uploads.*`, `platform.*` and
- * `redemption.*` are platform dials that no module owns, and they stay in Game
- * Mechanics for exactly that reason.
+ * `abuse.*`, `auth.*`, `retention.*`, `uploads.*` and `platform.*` are
+ * platform dials that no module owns, and they stay in Game Mechanics for
+ * exactly that reason.
+ *
+ * `redemption.*` WAS on that list and was true when it was written: the dials
+ * predate the module. Ruling 22 gave redemption a registry entry and ruling 23
+ * gave it fourteen dials, which it owns through `variableKeys` rather than
+ * through this map, so `modulesOwning` has been putting them on the redemption
+ * card while this sentence still called them ownerless. A prefix entry here
+ * would say the same thing more plainly, and it is deliberately not added in
+ * the same breath as correcting the prose: that would move where every one of
+ * those dials is filed, which is a behaviour change wanting its own reason.
  */
 export const MODULE_KEY_PREFIXES: Record<string, string> = {
   quest: "quests",
