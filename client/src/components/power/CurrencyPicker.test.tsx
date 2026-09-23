@@ -59,11 +59,12 @@ describe("the display currency picker", () => {
   it("names the village's own currency once the config lands", async () => {
     const { onChange, villageOption } = await picker({ project: { name: "A village", fiatCurrency: "CRC" } });
     await waitFor(() => expect(villageOption()).toBe("CRC (this village's)"));
-    // The currency each call reported. A village in colones is never, even
-    // for one render, reported as Swiss francs.
-    const reported = onChange.mock.calls.map((c) => c[0]);
-    expect(reported).toContain("CRC");
-    expect(reported).not.toContain("CHF");
+    // The currency each call reported. The label and the report land in
+    // separate commits, so this waits for the report rather than assuming the
+    // effect has flushed. A village in colones is never, even for one render,
+    // reported as Swiss francs.
+    await waitFor(() => expect(onChange.mock.calls.map((c) => c[0])).toContain("CRC"));
+    expect(onChange.mock.calls.map((c) => c[0])).not.toContain("CHF");
   });
 
   it("keeps no guess when the config request fails", async () => {
@@ -79,6 +80,6 @@ describe("the display currency picker", () => {
   it("gives a village that declares no currency the platform's own CHF", async () => {
     const { onChange, villageOption } = await picker({ project: { name: "A village" } });
     await waitFor(() => expect(villageOption()).toBe("CHF (this village's)"));
-    expect(onChange.mock.calls.map((c) => c[0])).toContain("CHF");
+    await waitFor(() => expect(onChange.mock.calls.map((c) => c[0])).toContain("CHF"));
   });
 });
