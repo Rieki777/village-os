@@ -161,6 +161,7 @@ import {
   attemptCount,
   closeNewestOpenAttempt,
   insertAttempt,
+  releaseFailureNote,
   unclearedBallotIds,
 } from "../repos/governanceExecutorPending";
 import { voteReasonOf } from "../repos/voteReasons";
@@ -917,16 +918,20 @@ export type UnlandedDeps = Pick<LandingDeps, "pool" | "closerFor">;
  * route as a 500 over a decision that is stopped. A failure is logged and
  * written as an open attempt with its error, the shape `atCloseLanding.ts`
  * uses, and nothing selects it again. "no_hook" is the answer for every subject
- * that holds nothing, which today is all of them.
+ * that holds nothing, which today is every subject but a redemption
+ * (server/lib/redemptionBallot.ts holds the only hook).
  *
- * WHERE A FAILURE SURFACES, AND WHERE IT DOES NOT YET. The attempt row is read
- * by `unfinishedLandings` above, which is what a person has today. It does NOT
- * reach the failed-actions report (PR #247): that report keeps an attempt only
- * while the ballot's `landing_status` is `not_applicable`, `pending`,
- * `applying` or `stalled`, and by the time this runs the row is `vetoed` or
- * `expired`, which it drops as governance's own record. So a failed release is
- * recorded and is not on that tab. `applyDue.unlanded.test.ts` pins that gap
- * with the report's own query, so widening it later is a visible change there.
+ * WHERE A FAILURE SURFACES. The attempt row is read by `unfinishedLandings`
+ * above, and by the failed-actions report (server/lib/failedActions.ts), which
+ * lists it on the What's Failing tab under "Decisions taking effect". By the
+ * time this runs the row is `vetoed` or `expired`, and the report drops those as
+ * governance's own record EXCEPT when the newest attempt carries this note:
+ * `releaseFailureNote` builds it and the report's `isReleaseFailure` tests it,
+ * both in server/repos/governanceExecutorPending.ts, so the words cannot drift
+ * between the writer and the reader. A landing that failed before the decision
+ * was written off leaves an error on the same kind of row and stays off the
+ * tab. `applyDue.unlanded.test.ts` drives the report's own read over both
+ * shapes this function writes.
  */
 export async function closeUnlanded(
   deps: UnlandedDeps,
@@ -944,7 +949,7 @@ export async function closeUnlanded(
     console.error(`[applyDue] ${ballotId} was ${reason} and onUnlanded threw. It is not retried:`, e);
     try {
       await openPending(deps.pool, ballotId);
-      await clearPending(deps.pool, ballotId, `onUnlanded(${reason}) threw: ${message}`);
+      await clearPending(deps.pool, ballotId, releaseFailureNote(reason, message));
     } catch (recordError) {
       console.error(`[applyDue] the onUnlanded failure on ${ballotId} could not be recorded:`, recordError);
     }

@@ -161,7 +161,7 @@ describe("OAuth state is the login-CSRF token", () => {
 
   it("carries an invitation's id, and a caller cannot write one in", () => {
     const id = "inv-1726000000000-abc123";
-    expect(readOAuthState(SECRET, makeOAuthState(SECRET, "/profile", Date.now(), id))?.invite).toBe(id);
+    expect(readOAuthState(SECRET, makeOAuthState(SECRET, "/profile", Date.now(), { invite: id }))?.invite).toBe(id);
     expect(readOAuthState(SECRET, makeOAuthState(SECRET, "/profile"))?.invite).toBeNull();
 
     // Writing the id into a state this server signed without one breaks the signature.
@@ -175,7 +175,7 @@ describe("OAuth state is the login-CSRF token", () => {
 
   it("keeps only an id in the shape the village mints, so a token handed in is dropped", () => {
     const token = "A".repeat(43);
-    expect(readOAuthState(SECRET, makeOAuthState(SECRET, null, Date.now(), token))?.invite).toBeNull();
+    expect(readOAuthState(SECRET, makeOAuthState(SECRET, null, Date.now(), { invite: token }))?.invite).toBeNull();
   });
 
   it("puts the nonce on the authorization URL, where Google binds it into the id_token", () => {

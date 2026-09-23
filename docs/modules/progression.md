@@ -68,10 +68,35 @@ boot. Separately, this module's EXAMPLE roles and org seats seed in `seedExample
 lifecycle change, because a core module cannot hang off one.
 
 There is no "current stage" column anywhere. A member's stage is computed on every read by `computeStage`
-in `server/index.ts` from three live facts: their training journey, their membership grant, and a `COUNT`
-of consented quest claims. `stage_granted` is a FLOOR laid over that computation, never a stored answer.
-The consequence a fork operator needs: **a stage can go down, silently, with no row written anywhere.**
-See Sharp edges.
+in `server/index.ts` from FOUR live facts: their training journey, their membership grant, a `COUNT` of
+consented quest claims, and whether the village has ever paid them for something they brought it.
+`stage_granted` is a FLOOR laid over that computation, never a stored answer. The consequence a fork
+operator needs: **a stage can go down, silently, with no row written anywhere.** See Sharp edges.
+
+**Every caller passes all four facts, and the fourth one is the one that gets dropped.** It carries the
+Contributor rung alone, and `paidByVillage` had a default of `false` until 2026-09-15, so a caller handing
+over three arguments compiled, ran, and answered a rung too low for everybody the village had paid. Two
+did. `GET /api/admin/players` served `stageComputed: "member"` for a paid member, which is the number a
+steward reads when deciding whether somebody may vouch a neighbour in, and the `members_at_stage:<rung>`
+vision metric undercounted a trigger that prompts a human to publish a reorganisation. The default is gone,
+so the compiler asks the question, and `AppDeps.computeStage` declares the parameter required for the same
+reason. Every caller today, and where each gets the fact:
+
+| Caller | How it gets the fourth fact |
+|---|---|
+| `stageOf` (`server/index.ts`), which every single-member surface goes through | `hasBeenPaidByVillage`, one query for one member |
+| `GET /api/game/me` and `GET /api/game/progression` (`server/index.ts`) | `hasBeenPaidByVillage`, inline, beside the consented count they keep |
+| `eligibleSenderIds` (`server/index.ts`), the Sybil rule every breadth metric trusts | `paidByVillageMany`, one query for the whole roll |
+| `GET /api/admin/players` (`server/routes/players.ts`) | `paidByVillage` through `deps`, one query for the whole roster |
+| `members_at_stage:<rung>` (`measureVisionMetrics`, `server/lib/orgDrafts.ts`) | `paidByVillage` through `deps`, one query for the whole roll |
+
+A list caller batches it. `hasBeenPaidByVillage` is one query per member, so asking it inside a loop over
+the roster would turn one page into N queries; `paidByVillageMany` (`server/lib/ledger.ts`) answers the
+same question for a whole list in one, and returns the ids the village has paid. That is the same
+discipline `claimsRepo.consentedCounts()` and `completionsForMany` already follow, and the roster now pays
+three queries for any number of members instead of two. Which movements count is
+`server/lib/contributionPay.ts`, which is an allowlist, so a new ledger source promotes nobody until
+somebody decides it should.
 
 `roles` and `role_holders` are `dbCollection` tables. They load fully into memory at boot and are read
 synchronously from that cache on every gate question. **The lock covers only one of them.**

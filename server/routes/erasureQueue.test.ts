@@ -49,7 +49,7 @@ function deps(): ErasureDeps {
     members: { byId: (id: string) => real.byId(id), update: (id: string, fn: any) => real.update(id, fn) },
     submissionsRepo: { all: () => [], replaceAll: async () => undefined },
     roleHoldersRepo: {
-      replaceAll: async () => {
+      remove: async () => {
         if (breakRoleHolders) throw new Error("the role holder write was refused");
       },
     },

@@ -123,6 +123,44 @@ export function useModule(id: string): ClientModule | undefined {
   return useModules().modules.find((m) => m.id === id);
 }
 
+/**
+ * Whether a component that needs this module's API should go ahead and ask.
+ *
+ * FOR A COMPONENT THAT FETCHES FROM AN OPTIONAL MODULE, wherever it is mounted.
+ * An off module has no routes, so asking gets a 404 on every render. On a
+ * fresh fork every non-core module ships off, so the profile's moon asked
+ * `/api/events` on every load and was refused every time, while the one
+ * village anybody looked at had events on and never showed it.
+ *
+ * FOUR STATES, and the reason this is a function and not an `!!useModule(id)`:
+ *   - still loading: FALSE. `useModule` answers undefined before the catalog
+ *     arrives, exactly as it does for an off module, so a guard reading it
+ *     would treat every module as off until load and flash an empty state on a
+ *     village where it is on. Wait instead; the caller's effect lists this
+ *     value, so it asks once the answer lands.
+ *   - the catalog could not be read: TRUE. The provider keeps `failed`
+ *     separate from an empty catalog on purpose, because it is unknown and not
+ *     empty. Hiding a working feature because a DIFFERENT endpoint blipped
+ *     would be worse than one refusal the caller already handles.
+ *   - loaded, and the module is not there: FALSE. Off, or not open to this
+ *     viewer, which the server leaves out of the manifest.
+ *   - loaded, and it is there: TRUE, unless its lifecycle reads off.
+ *
+ * `preview` and `members` can still refuse some viewers with a 401 or 403.
+ * That is a real answer to a different question, so it is left to the caller.
+ */
+export function moduleIsOn(state: Pick<ModulesState, "modules" | "loaded" | "failed">, id: string): boolean {
+  if (!state.loaded) return false;
+  if (state.failed) return true;
+  const m = state.modules.find((x) => x.id === id);
+  return !!m && m.lifecycle !== "off";
+}
+
+/** `moduleIsOn` for the catalog this component is inside. */
+export function useModuleOn(id: string): boolean {
+  return moduleIsOn(useModules(), id);
+}
+
 export function useHypha(): HyphaState {
   return useModules().hypha;
 }

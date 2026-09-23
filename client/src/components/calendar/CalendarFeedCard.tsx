@@ -5,6 +5,7 @@
  * and revoked here; the server keeps only its hash.
  */
 import { useCallback, useEffect, useState } from "react";
+import { useModuleOn } from "@/modules/ModuleProvider";
 import { authToken } from "@/lib/gameApi";
 import { CalendarPlus, Copy, RefreshCw } from "lucide-react";
 import CommunityCalendarCard from "./CommunityCalendarCard";
@@ -35,7 +36,9 @@ export default function CalendarFeedCard({ signedIn }: { signedIn: boolean }) {
       .catch(() => setState({ publicUrl: `${window.location.origin}/api/events/calendar.ics`, hasToken: false, createdAt: null }));
   }, []);
 
-  useEffect(() => { if (open) load(); }, [open, load]);
+  // Events is optional; loading it when off is a 404. Only mounted inside the events page today, so this is quiet insurance for a future mount. See useModuleOn.
+  const eventsOn = useModuleOn("events");
+  useEffect(() => { if (open && eventsOn) load(); }, [open, eventsOn, load]);
 
   const copy = async (text: string) => {
     try { await navigator.clipboard.writeText(text); setNote("Copied"); }

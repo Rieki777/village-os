@@ -39,6 +39,8 @@ import {
   historyRows,
   insertRedemptionRow,
   markHoldRefused,
+  moneyAskedSinceRows,
+  openCountAllRows,
   openCountRows,
   openedSinceRows,
   openRedemptionRows,
@@ -46,7 +48,9 @@ import {
   queueRows,
   redemptionRowsById,
   unclaimConfirmation,
+  villageMoneyAskedSinceRowsForUpdate,
 } from "../repos/redemptions";
+import { formatMoney } from "../../shared/money";
 import { accountBalanceRows, lockedBalanceRows } from "../repos/tokenBalances";
 import { lockUserRowForUpdate } from "../repos/users";
 import { fromLedgerUnits, keys, reverse, villageId } from "./economy";
@@ -58,9 +62,11 @@ import {
   REDEMPTION_HOLD,
   VOTE_PATH_BUILT,
   canSettleRedemption,
+  redemptionMoneyRefusal,
   redemptionRefusal,
   redemptionReleases,
   type RedeemAsk,
+  type RedemptionQuote,
   type RedemptionState,
 } from "./redemption";
 
@@ -83,6 +89,16 @@ export interface RedemptionRow {
   decisionNote: string | null;
   expiresAt: string | null;
   createdAt: string;
+  /** 0213, ruling 23: what this was worth the day it was asked for. */
+  currency: string | null;
+  rateMinor: number | null;
+  rateSource: string | null;
+  feePct: number | null;
+  feeFixedMinor: number | null;
+  grossMinor: number | null;
+  feeMinor: number | null;
+  netMinor: number | null;
+  processText: string | null;
 }
 
 function rowToRedemption(r: RowDataPacket): RedemptionRow {
@@ -102,6 +118,18 @@ function rowToRedemption(r: RowDataPacket): RedemptionRow {
     decisionNote: r.decision_note ? String(r.decision_note) : null,
     expiresAt: r.expires_at ? new Date(r.expires_at).toISOString() : null,
     createdAt: new Date(r.created_at).toISOString(),
+    // NULL stays NULL. A row from before 0213 was never valued, and zero would
+    // say this village valued it at nothing.
+    currency: r.currency ? String(r.currency) : null,
+    rateMinor: r.rate_minor === null || r.rate_minor === undefined ? null : Number(r.rate_minor),
+    rateSource: r.rate_source ? String(r.rate_source) : null,
+    feePct: r.fee_pct === null || r.fee_pct === undefined ? null : Number(r.fee_pct),
+    feeFixedMinor:
+      r.fee_fixed_minor === null || r.fee_fixed_minor === undefined ? null : Number(r.fee_fixed_minor),
+    grossMinor: r.gross_minor === null || r.gross_minor === undefined ? null : Number(r.gross_minor),
+    feeMinor: r.fee_minor === null || r.fee_minor === undefined ? null : Number(r.fee_minor),
+    netMinor: r.net_minor === null || r.net_minor === undefined ? null : Number(r.net_minor),
+    processText: r.process_text ? String(r.process_text) : null,
   };
 }
 
@@ -149,6 +177,30 @@ export async function redemptionQueue(pool: Pool, limit = 100): Promise<Redempti
 
 // ── Asking ─────────────────────────────────────────────────────────────────
 
+/**
+ * What the village has decided about money, handed in by the route (ruling 23).
+ *
+ * The ROUTE resolves the rate, because that needs the exchange's posted price
+ * and the daily rate table, and this file reads no other module's tables. What
+ * happens HERE is the half that has to be inside the transaction: the two
+ * per-cycle totals, the refusal, and the snapshot written with the row.
+ */
+export interface RedeemMoney {
+  /** ISO 4217, already checked against the village's list. */
+  currency: string;
+  /** Null when this village could not put a number on the request. */
+  quote: RedemptionQuote | null;
+  /** The village's own words for what happens next, as they read today. */
+  processText: string;
+  /** Minor units of `currency`. Zero means no cap. */
+  minMinor: number;
+  maxPerRequestMinor: number;
+  memberCapMinor: number;
+  villageCapMinor: number;
+  feePct: number;
+  feeFixed: number;
+}
+
 export interface RedeemInput {
   userId: string;
   tokenSlug: string;
@@ -159,6 +211,36 @@ export interface RedeemInput {
   exitOpen: boolean;
   /** The start of the lunar cycle, for the per-cycle count. */
   cycleStart: Date;
+  /**
+   * WHO WILL DECIDE THIS ONE, derived by the caller and snapshotted here.
+   *
+   * `confirmModeFor` reads it off the village's own powers: "steward" when
+   * somebody holds `redemption.confirm`, "vote" when nobody does. It arrives as
+   * an input because counting holders needs the roles cache and the badge
+   * rows, and this file reads neither. Absent means steward, which is what a
+   * village with a key-holder has and what every caller before the ruling
+   * assumed.
+   */
+  confirmedBy?: "steward" | "vote";
+  /** Absent on a village that has set none of the ruling 23 dials. */
+  money?: RedeemMoney;
+}
+
+/**
+ * Money totals already spoken for this cycle, in the minor units of ONE
+ * currency. Rows in another currency are deliberately not converted: a cap is a
+ * promise in a currency, and adding a Swiss franc to a colon through a daily
+ * rate would make today's cap depend on today's exchange rate. A village that
+ * offers two currencies gets one cap per currency, which is the honest reading
+ * of "most the village will redeem per cycle".
+ */
+function totalInCurrency(rows: Array<{ currency?: unknown; total?: unknown; gross_minor?: unknown }>, currency: string): number {
+  let sum = 0;
+  for (const r of rows) {
+    if (String(r.currency ?? "") !== currency) continue;
+    sum += Number(r.total ?? r.gross_minor ?? 0);
+  }
+  return sum;
 }
 
 export type RedeemOutcome =
@@ -209,7 +291,9 @@ export async function requestRedemption(pool: Pool, input: RedeemInput): Promise
     openedThisCycle: await redemptionsOpenedSince(pool, input.userId, input.cycleStart),
     perCycle: numberVar("redemption.per_member_per_cycle"),
     askedFor,
-    confirmedBy: String(stringVar("redemption.confirmed_by") ?? "steward"),
+    // DERIVED BY THE CALLER, not read from a dial (Rye, 2026-09-15). See
+    // `confirmedBy` on RedeemInput for why the counting happens up there.
+    confirmedBy: input.confirmedBy ?? "steward",
     votePathBuilt: VOTE_PATH_BUILT,
     exitOpen: input.exitOpen,
   };
@@ -262,6 +346,52 @@ export async function requestRedemption(pool: Pool, input: RedeemInput): Promise
       return { ok: false, status: 409, error: `You hold ${free} ${def?.name ?? slug}, and that is what there is to redeem` };
     }
 
+    /*
+     * THE MONEY CAPS, INSIDE THE LOCK, AND THE VILLAGE-WIDE ONE LOCKED ITSELF.
+     *
+     * The per-member totals are safe on this connection because the `users` row
+     * above serialises this member's asks. The village total is not: two
+     * members asking in the same instant have no row in common, so
+     * `villageMoneyAskedSinceRowsForUpdate` takes a range lock over the cycle's
+     * rows and the second ask waits for the first to commit before it reads.
+     * Read it BEFORE the insert, so the lock is held across the write.
+     */
+    const money = input.money;
+    if (money) {
+      const memberRows = await moneyAskedSinceRows(conn, villageId(), input.userId, input.cycleStart);
+      const villageRows = money.villageCapMinor > 0
+        ? await villageMoneyAskedSinceRowsForUpdate(conn, villageId(), input.cycleStart)
+        : [];
+      const memberSoFar = totalInCurrency(memberRows as any[], money.currency);
+      const villageSoFar = totalInCurrency(villageRows as any[], money.currency);
+      const say = (minor: number) => formatMoney(minor, money.currency);
+      const capsSet =
+        money.minMinor > 0 ||
+        money.maxPerRequestMinor > 0 ||
+        money.memberCapMinor > 0 ||
+        money.villageCapMinor > 0;
+      const moneyRefusal = redemptionMoneyRefusal({
+        valued: !!money.quote,
+        capsSet,
+        grossMinor: money.quote?.grossMinor ?? 0,
+        minMinor: money.minMinor,
+        maxPerRequestMinor: money.maxPerRequestMinor,
+        memberSoFarMinor: memberSoFar,
+        memberCapMinor: money.memberCapMinor,
+        villageSoFarMinor: villageSoFar,
+        villageCapMinor: money.villageCapMinor,
+        grossText: say(money.quote?.grossMinor ?? 0),
+        minText: say(money.minMinor),
+        maxText: say(money.maxPerRequestMinor),
+        memberLeftText: say(Math.max(0, money.memberCapMinor - memberSoFar)),
+        villageLeftText: say(Math.max(0, money.villageCapMinor - villageSoFar)),
+      });
+      if (moneyRefusal) {
+        await conn.rollback();
+        return { ok: false, status: 409, error: moneyRefusal };
+      }
+    }
+
     const expires = expiresAfter();
     await insertRedemptionRow(conn, {
       id,
@@ -275,6 +405,16 @@ export async function requestRedemption(pool: Pool, input: RedeemInput): Promise
       holdKey: hold ? keys.redemptionHold(villageId(), id) : null,
       burnKey: keys.redemptionBurn(villageId(), id),
       expiresAt: expires,
+      // 0213: what this was worth today, written once and never updated.
+      currency: money?.quote ? money.quote.currency : null,
+      rateMinor: money?.quote ? money.quote.ratePerTokenMinor : null,
+      rateSource: money?.quote ? money.quote.rateSource : null,
+      feePct: money ? money.feePct : null,
+      feeFixedMinor: money?.quote ? money.quote.feeFixedMinor : null,
+      grossMinor: money?.quote ? money.quote.grossMinor : null,
+      feeMinor: money?.quote ? money.quote.feeMinor : null,
+      netMinor: money?.quote ? money.quote.netMinor : null,
+      processText: money && money.processText.trim() ? money.processText : null,
     });
     await conn.commit();
   } catch (err: any) {
@@ -590,6 +730,15 @@ export async function retryRelease(
  * through the same door a human would, so an expiry cannot become a second way
  * to move value. `expires_at` is NULL for a village that lets them wait
  * forever, and a NULL is never past.
+ *
+ * DELIBERATELY BLIND TO THE MODULE LIFECYCLE, and the `redemption-reap` job in
+ * server/index.ts calls it with no lifecycle test. `openStateCheck` refuses to
+ * switch the module off while anything is open, so in the ordinary case there
+ * is nothing here to expire once it is off. The module can still be SERVED off
+ * with rows open: `quarantineModule` takes a module off without touching its
+ * stored lifecycle, and a hand-edited `module_settings` row skips the check.
+ * An expiry that waited for the module to come back would hold those tokens
+ * for as long as it stayed off. The same reasoning as `seat-fee-settle`.
  */
 export async function expireRedemptions(pool: Pool, now: Date = new Date()): Promise<number> {
   const rows = await expiredIdRows(pool, villageId(), now);
@@ -685,4 +834,21 @@ export async function retiredSupply(pool: Pool): Promise<Record<string, number>>
 export async function openRedemptionCount(pool: Pool, userId: string): Promise<number> {
   const rows = await openCountRows(pool, villageId(), userId);
   return Number(rows[0]?.n ?? 0);
+}
+
+/**
+ * The redemption module's open state (economy invariant #13): every request
+ * still waiting on an answer, village-wide.
+ *
+ * Held or not. A request opened with the hold turned off holds nothing, and it
+ * is still a member waiting on a decision the village owes them, which a
+ * module switched off would 404.
+ */
+export async function redemptionOpenState(pool: Pool): Promise<{ count: number; description: string }> {
+  const rows = await openCountAllRows(pool, villageId());
+  const n = Number(rows[0]?.n ?? 0);
+  return {
+    count: n,
+    description: `${n} redemption(s) still waiting on an answer. Each is confirmed, refused or withdrawn, or runs out of time`,
+  };
 }

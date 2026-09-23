@@ -19,6 +19,9 @@
  * Engine-level, over a scratch schema, with no server booted: the defect was
  * in two SQL reads and a route test would have proved the route instead.
  */
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
 import { faucetAccounts, mintView, publicSupply } from "./lib/economy";
@@ -130,18 +133,105 @@ describe.skipIf(!configured)("the faucet set the supply surfaces read", () => {
   });
 
   /**
-   * AN UNMIGRATED DATABASE IS NOT A VILLAGE THAT ISSUED NOTHING.
+   * AN EMPTY FAUCET SET IS ANSWERED, NOT THROWN.
    *
    * With no faucet row at all the derived list is empty, and an empty list
    * spliced into an `IN (...)` clause is `IN ()`, which MySQL refuses to parse:
    * the public feed would have answered a SQL error to every reader. Both
-   * callers return an empty supply instead. This case runs LAST because it
-   * clears the flag on every account in this schema.
+   * callers return an empty supply instead. This case and the one after it run
+   * LAST, as a pair, because this one clears the flag on every account in this
+   * schema and that one puts the seeded five back.
    */
   it("answers an empty supply rather than a SQL error when no account is a faucet", async () => {
     await pool.query("UPDATE `ledger_accounts` SET `faucet` = 0"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(await faucetAccounts(pool)).toEqual([]);
     expect((await publicSupply(pool)).tokens).toEqual([]);
     expect((await mintView(pool)).supply).toEqual([]);
+  });
+
+  /**
+   * THE TWO STATES THE PUBLIC FEED CANNOT TELL APART, PINNED SIDE BY SIDE.
+   *
+   * `publicSupply` returns `{ cycleKey, tokens: [] }` when no account carries
+   * the faucet flag, and the `HAVING issued > 0` filter returns the SAME
+   * payload when every faucet is present and not one unit has left any of
+   * them. The source used to say the two "must not render the same" while
+   * rendering them the same; it now says plainly that it cannot tell them
+   * apart, and this case is the measurement behind that sentence.
+   *
+   * It is a pin and not a complaint. Nothing in the repository reads this
+   * endpoint (`GET /api/economy/supply` has zero client references against a
+   * positive control of eight for `api/modules`), so no field was added to
+   * separate them, and this case is what stops a later reader assuming a
+   * separation that was never built.
+   *
+   * SELF-CONTAINED ON PURPOSE. It builds both halves itself rather than
+   * leaning on the schema the case above left behind, so neither half can
+   * quietly become vacuous if the order of this file changes.
+   */
+  it("renders a village that has issued nothing exactly like a database with no faucet at all", async () => {
+    // HALF ONE: not one account carries the flag.
+    await pool.query("UPDATE `ledger_accounts` SET `faucet` = 0"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(await faucetAccounts(pool)).toEqual([]);
+    const noFaucetAtAll = await publicSupply(pool);
+
+    // HALF TWO: every seeded faucet back, and nothing issued out of any of
+    // them. Only the five are restored, so the probe faucet above (which DID
+    // issue 700) stays out and cannot mask the state under test.
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      `UPDATE \`ledger_accounts\` SET \`faucet\` = 1 WHERE \`id\` IN (${SEEDED_FAUCETS.map(() => "?").join(",")})`,
+      SEEDED_FAUCETS,
+    );
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      `UPDATE \`token_balances\` SET \`balance\` = 0 WHERE \`account_id\` IN (${SEEDED_FAUCETS.map(() => "?").join(",")})`,
+      SEEDED_FAUCETS,
+    );
+    expect(await faucetAccounts(pool)).toEqual(SEEDED_FAUCETS);
+    const nothingIssuedYet = await publicSupply(pool);
+
+    // THE INPUTS DIFFER AND THE PAYLOAD DOES NOT. That is the whole finding.
+    expect(nothingIssuedYet.tokens).toEqual([]);
+    expect(nothingIssuedYet).toEqual(noFaucetAtAll);
+  });
+});
+
+/**
+ * WHAT THE SOURCE PROMISES ABOUT AN EMPTY FAUCET SET.
+ *
+ * `publicSupply`'s own header used to open with "No faucet row at all is an
+ * unmigrated database, not a village that has issued nothing, and the two must
+ * not render the same", and then returned `{ cycleKey, tokens: [] }` for both.
+ * The admin breakdown twelve lines away already admitted it could not tell
+ * them apart. One surface stated the limitation and its twin promised the
+ * opposite, in the same file, about the same helper.
+ *
+ * Nothing here can compile a comment, so this case is the nearest thing: the
+ * false promise is named, and a reader who reintroduces it goes red. Written
+ * as an ABSENCE assertion, which is only worth anything with a control, so the
+ * case first proves the same scan finds two sentences that ARE there.
+ *
+ * NO DATABASE. Deliberately outside the suite above, which is
+ * `describe.skipIf(!configured)`: a worktree with no `TEST_DATABASE_URL` skips
+ * that whole block under a green summary, and this claim must not be one of
+ * the things that quietly stops being checked.
+ */
+describe("the supply surfaces' claims about an empty faucet set", () => {
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const ECONOMY = path.join(HERE, "lib", "economy.ts");
+
+  it("does not promise a distinction between the two empty cases that neither caller draws", () => {
+    const source = fs.readFileSync(ECONOMY, "utf8");
+
+    // THE CONTROL. An empty search proves nothing until a known positive comes
+    // back from the same scan, so these two go first: one sentence from
+    // `publicSupply`'s early return, one from `mintView`'s.
+    expect(source.length).toBeGreaterThan(1000);
+    expect(source).toMatch(/keeps `IN \(\)` off the wire/);
+    expect(source).toMatch(/which is why `faucetAccounts` says so/);
+
+    // THE CLAIM. Both empty cases render as `{ cycleKey, tokens: [] }` and the
+    // case above measures it, so no header in this file may tell the next
+    // reader that they are kept apart.
+    expect(source).not.toMatch(/must not render the same/i);
   });
 });

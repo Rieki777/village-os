@@ -505,6 +505,7 @@ const READINESS_HINTS: Record<string, string> = {
   commerce: "Create one product first",
   crowdpool: "Link one hub campaign first",
   hypha: "Set your DHO address, then confirm one token contract first",
+  redemption: "Write how redemption works here first",
 };
 
 let readinessAttached = false;
@@ -516,9 +517,13 @@ let readinessAttached = false;
  * openStateCheck attachments, so the shared registry stays import-clean for
  * the client bundle.
  *
- * Stays is the one custom reader: a room without a price reads as real
- * content to the default check (either table counts), and a stay nobody can
- * book is not ready. Both tables must hold a real row.
+ * FOUR modules read their own readiness, and each one is here because the
+ * default check cannot answer for it. Stays counts two tables rather than
+ * either (a room without a price reads as real content to the default, and a
+ * stay nobody can book is not ready). Crowdpool and redemption have no rows
+ * at all to count, so their content is config: a linked campaign, and the
+ * words a member is told to follow. Hypha needs an address and a confirmed
+ * binding, neither of which the examples engine knows how to see.
  */
 export function attachModuleReadiness(getPool: () => Pool): void {
   if (readinessAttached) return;
@@ -583,6 +588,28 @@ export function attachModuleReadiness(getPool: () => Pool): void {
           return { ready: false, hint };
         }
       };
+      continue;
+    }
+    if (def.id === "redemption") {
+      /*
+       * The fourth custom reader, and it exists because redemption's content
+       * is not rows. The default reader counts a module's own non-example
+       * tables through the examples engine, and redemption has no entry
+       * there at all, so the default would answer "not ready" for every
+       * village forever and the Go-live card would never appear.
+       *
+       * What ready MEANS here is one dial: `redemption.process_text`, the
+       * village's own words for who to speak to and how the money reaches a
+       * member. It ships empty and an empty one shows no card at all
+       * (shared/gameVariables.ts), so a village that switched redemption on
+       * without writing it handed every member who asked to cash out no
+       * instructions. The other thirteen dials all carry a working default,
+       * which is why exactly this one is the gate.
+       */
+      def.readiness = async () => ({
+        ready: stringVar("redemption.process_text").trim().length > 0,
+        hint,
+      });
       continue;
     }
     def.readiness = async () => {

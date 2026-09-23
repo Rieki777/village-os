@@ -69,7 +69,11 @@ function sourceField(key, field) {
 
 // ── A fixture registry, self-contained so a case can break one thing ─────────
 
-const TYPES = ["integer", "decimal", "percentage", "boolean", "choice", "text"];
+// `longtext` joined VariableType with the paragraph dials (the settings
+// lane). The generator carries a gloss for it, and `glossCoverage` refuses a
+// gloss describing a type the registry does not declare, so a fixture missing
+// it fails every case in this file rather than the one that added it.
+const TYPES = ["integer", "decimal", "percentage", "boolean", "choice", "text", "longtext"];
 
 const DIAL = {
   key: "sample.allowance",

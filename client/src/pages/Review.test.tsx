@@ -257,6 +257,23 @@ describe("the change limit on a batch card", () => {
       await screen.findByText(/This village accepts up to 500 changes from one outside batch\. This batch proposes 18\./),
     ).toBeTruthy();
     expect(screen.queryByText(/will be blocked/)).toBeNull();
+    // Nothing to raise under the limit, and "raise it" read as raising the batch.
+    expect(screen.queryByText(/An admin can raise/)).toBeNull();
+  });
+
+  it("counts a steward's edit in place of what the card proposed as it arrived", async () => {
+    // Accepting uses the edited payload, so a count as sent could say a batch
+    // fits when the accept will block part of it.
+    const q = queueWith({ limit: 2, proposed: 1, may: false });
+    answerWith(200, { ...q, batches: [{ ...q.batches[0], proposedChangesByItem: { p1: 1 } }] });
+    renderReview();
+    expect(await screen.findByText(/This batch proposes 1\./)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/What it proposes/), {
+      target: { value: '{"seats":[{"name":"A"},{"name":"B"},{"name":"C"}]}' },
+    });
+    expect(
+      await screen.findByText(/This batch proposes 3\. Every change past the first 2 will be blocked\. An admin can raise the limit\./),
+    ).toBeTruthy();
   });
 
   it("says the changes past the limit will be blocked when the batch proposes more", async () => {
@@ -270,13 +287,13 @@ describe("the change limit on a batch card", () => {
     renderReview();
     const link = await screen.findByRole("link", { name: "Change the limit" });
     expect(link.getAttribute("href")).toBe("/admin?tab=variables&variable=org.proposal_change_limit");
-    expect(screen.queryByText(/An admin can raise it/)).toBeNull();
+    expect(screen.queryByText(/An admin can raise/)).toBeNull();
   });
 
-  it("tells a steward who is not an admin who can raise it, and shows them no button that goes nowhere", async () => {
+  it("tells a steward who is not an admin who can raise the limit, and shows them no button that goes nowhere", async () => {
     answerWith(200, queueWith({ limit: 6, proposed: 18, may: false }));
     renderReview();
-    expect(await screen.findByText(/Every change past the first 6 will be blocked\. An admin can raise it\./)).toBeTruthy();
+    expect(await screen.findByText(/Every change past the first 6 will be blocked\. An admin can raise the limit\./)).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Change the limit" })).toBeNull();
     expect(screen.queryByText("Change the limit")).toBeNull();
   });
@@ -513,6 +530,100 @@ describe("what the review page says after an accept", () => {
     expect(screen.queryByText("Withdraw that draft")).toBeNull();
   });
 
+  it("keeps what the accept left out when the withdraw is refused for a power the village holds", async () => {
+    // The capability gate answers 409 to an admin who did not break the glass,
+    // and nothing about the draft changed. Read as "already gone", it cleared
+    // the fields-left-out card, which is the one card the queue reload cannot
+    // put back: the stuck card comes back from the server, so checking only
+    // that card passed with the defect in place.
+    let refused = false;
+    const d1 = { draftId: "d1", blocked: 1, blockedLines: [{ reads: 'Create the seat "Mill Warden"', blocked: REASON }] };
+    // The reload after the refusal names a different seat, so seeing it on screen
+    // IS the reload having rendered, with no pause standing in for it.
+    const reloaded = { draftId: "d1", blocked: 1, blockedLines: [{ reads: 'Create the seat "Kiln Keeper"', blocked: REASON }] };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: { method?: string }) => {
+        if (init?.method === "POST" && url === "/api/review/batches/b1/accept") {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              success: true, accepted: 1, draftId: "d1", seats: 1, blocked: 1, noted: 0,
+              blockedLines: d1.blockedLines,
+              ignored: [{ proposalId: "p1", keys: ["vendor_rank"] }],
+            }),
+          };
+        }
+        if (init?.method === "POST" && url === "/api/review/drafts/d1/withdraw") {
+          refused = true;
+          return {
+            ok: false,
+            status: 409,
+            json: async () => ({
+              error: "Steward Circle holds this power",
+              capability: "intake.moderate",
+              villageHolds: true,
+              requiresOverride: true,
+            }),
+          };
+        }
+        return { ok: true, status: 200, json: async () => ({ ...QUEUE, stuckDrafts: [refused ? reloaded : d1] }) };
+      }),
+    );
+    renderReview();
+    fireEvent.click(await screen.findByText(/Accept all 1, with my edits/i));
+    expect(await screen.findByText(/Not read from/)).toBeTruthy();
+    fireEvent.click(screen.getByText("Withdraw that draft"));
+    expect(await screen.findByText(/Kiln Keeper/)).toBeTruthy();
+    expect(screen.getByText(/Not read from/)).toBeTruthy();
+    expect(screen.getByText("Withdraw that draft")).toBeTruthy();
+  });
+
+  it("keeps what a published draft left out, and offers no withdraw that cannot work", async () => {
+    // Another steward published d1 first. Its fields-left-out card is still
+    // true of what went live, and clearing it lost the only record of them.
+    let published = false;
+    const d1 = { draftId: "d1", blocked: 1, blockedLines: [{ reads: 'Create the seat "Mill Warden"', blocked: REASON }] };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: { method?: string }) => {
+        if (init?.method === "POST" && url === "/api/review/batches/b1/accept") {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              success: true, accepted: 1, draftId: "d1", seats: 1, blocked: 1, noted: 0,
+              blockedLines: d1.blockedLines,
+              ignored: [{ proposalId: "p1", keys: ["vendor_rank"] }],
+            }),
+          };
+        }
+        if (init?.method === "POST" && url === "/api/review/drafts/d1/withdraw") {
+          published = true;
+          return {
+            ok: false,
+            status: 409,
+            json: async () => ({
+              error: "This draft is published, and only an open draft can be withdrawn",
+              draftStatus: "published",
+            }),
+          };
+        }
+        return { ok: true, status: 200, json: async () => ({ ...QUEUE, stuckDrafts: published ? [] : [d1] }) };
+      }),
+    );
+    renderReview();
+    fireEvent.click(await screen.findByText(/Accept all 1, with my edits/i));
+    expect(await screen.findByText(/Not read from/)).toBeTruthy();
+    fireEvent.click(screen.getAllByText("Withdraw that draft")[0]!);
+    await waitFor(() => expect(screen.queryByText("Withdraw that draft")).toBeNull());
+    expect(screen.getByText(/Not read from/)).toBeTruthy();
+    expect(screen.getByText(/That draft is live now/)).toBeTruthy();
+    // This reader is no admin, and the Org Chart is an admin screen, so it is told who can.
+    expect(screen.getByText(/ask an admin to write it onto that seat in the Org Chart/)).toBeTruthy();
+  });
+
   it("says a draft the server could not preview could not be checked, and counts no blocked seats", async () => {
     answerWith(200, {
       ...QUEUE,
@@ -533,6 +644,8 @@ describe("what the review page says after an accept", () => {
     renderReview();
     expect(await screen.findByText(/This draft could not be checked/)).toBeTruthy();
     expect(screen.queryByText(/of its seats are blocked/)).toBeNull();
+    // Nothing was counted, so "accept fewer at a time" was advice about a number nobody has.
+    expect(screen.queryByText(/accept fewer at a time/)).toBeNull();
     expect(screen.getByText("Withdraw that draft")).toBeTruthy();
   });
 

@@ -339,7 +339,7 @@ export default function MasterPlan() {
                   </div>
                   <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                     item.status === "In Progress" ? "bg-sage/10 text-sage" :
-                    item.status === "Planning" ? "bg-teal-light/10 text-teal-light" :
+                    item.status === "Planning" ? "bg-teal-deep/10 text-foreground" :
                     "bg-muted text-muted-foreground"
                   }`}>
                     {item.status}

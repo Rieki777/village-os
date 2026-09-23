@@ -159,6 +159,12 @@ export interface OAuthState {
    * secret half of the link never travels to Google and back.
    */
   invite: string | null;
+  /**
+   * Set when this round trip confirms a signed-in member for one destructive
+   * action (server/lib/identityConfirm.ts) and signs nobody in. Carried as a
+   * plain word; the route decides whether it names a real action.
+   */
+  confirm: string | null;
 }
 
 /** An invitation id in the shape `server/routes/invites.ts` mints, or null. */
@@ -186,7 +192,13 @@ export function makeOAuthState(
   secret: string,
   next: string | null,
   nowMs: number = Date.now(),
-  invite: string | null = null,
+  /**
+   * What this round trip is FOR beyond signing in, as ONE object rather than a
+   * growing tail of positional arguments. Two lanes took the fourth slot on the
+   * same day, the invitation and the confirmation, and a third field would have
+   * taken a fifth. Both are optional and absent means an ordinary sign-in.
+   */
+  opts: { invite?: string | null; confirm?: string | null } = {},
 ): string {
   const payload = Buffer.from(
     JSON.stringify({
@@ -194,7 +206,8 @@ export function makeOAuthState(
       next: normalizeNext(next) ?? "",
       nonce: crypto.randomBytes(16).toString("hex"),
       t: nowMs,
-      invite: readInviteId(invite) ?? "",
+      invite: readInviteId(opts.invite) ?? "",
+      ...(opts.confirm ? { confirm: opts.confirm } : {}),
     }),
   ).toString("base64url");
   return `${payload}.${signTokenPayload(secret, payload)}`;
@@ -216,7 +229,12 @@ export function readOAuthState(secret: string, state: string, nowMs: number = Da
     if (typeof decoded.t !== "number" || nowMs - decoded.t > OAUTH_STATE_TTL_MS) return null;
     // Re-normalised on the way out. A signature proves this server wrote the
     // value; it does not prove the value was safe when it was written.
-    return { next: normalizeNext(decoded.next), nonce: decoded.nonce, invite: readInviteId(decoded.invite) };
+    return {
+      next: normalizeNext(decoded.next),
+      nonce: decoded.nonce,
+      invite: readInviteId(decoded.invite),
+      confirm: typeof decoded.confirm === "string" && decoded.confirm ? decoded.confirm : null,
+    };
   } catch {
     return null;
   }

@@ -349,7 +349,7 @@ export default function ResidentRights() {
       <section className="py-20 bg-cream">
         <div className="container max-w-3xl">
           <div className="text-center mb-12">
-            <span className="text-sm font-medium uppercase tracking-wide text-amber-700">
+            <span className="text-sm font-medium uppercase tracking-wide text-amber-ink">
               Deepening Over Time
             </span>
             <h2 className="font-display text-3xl font-semibold text-foreground mt-2">

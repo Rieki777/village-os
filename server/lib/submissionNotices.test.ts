@@ -21,6 +21,7 @@ const SPEAKING = ["reviewing", "accepted", "declined"];
 const TYPES = [
   "role-application",
   "power-application",
+  "seat-claim",
   "work-with-us",
   "quest-proposal",
   "visit-inquiry",
@@ -54,6 +55,17 @@ describe("submissionSubject", () => {
     expect(submissionSubject("role-application", {})).toBe("your offer to hold a seat");
     expect(submissionSubject("role-application", { roleName: "   " })).toBe("your offer to hold a seat");
     expect(submissionSubject("role-application", null)).toBe("your offer to hold a seat");
+  });
+
+  it("names the seat on an ask to be confirmed, which is a different act from a raised hand", () => {
+    // A raised hand offers to take on a seat nobody holds. This one says a
+    // seat the village already wrote a name on is theirs, so the two must not
+    // read alike in a member's inbox.
+    expect(submissionSubject("seat-claim", { roleName: "Water Steward" })).toBe(
+      "your ask to be confirmed as Water Steward",
+    );
+    expect(submissionSubject("seat-claim", {})).toBe("your ask to be confirmed in a seat");
+    expect(submissionSubject("seat-claim", null)).toBe("your ask to be confirmed in a seat");
   });
 
   it("names the power on a hand raised for one, in the words of its label", () => {

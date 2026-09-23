@@ -315,7 +315,13 @@ export function register(app: Express, deps: Deps): void {
           key: r.idempotencyKey,
           claimId: r.claimId,
           questTitle: c?.questTitle ?? null,
-          holder: c ? firstName(c.userName) : null,
+          // The payee in FULL, as the consent queue on this same page names
+          // them. First names only is the rule for public-facing lists; this is
+          // a steward-only read, rendered beside a queue that already shows the
+          // whole name to the same audience, so a first name here exposed
+          // nothing less and only made two members who share one
+          // indistinguishable at the one place a steward pays somebody.
+          holder: c ? c.userName : null,
           tokenSlug: r.tokenSlug,
           units: r.units,
           decimals: r.decimals,
@@ -434,6 +440,29 @@ export function register(app: Express, deps: Deps): void {
       const outcome = await claimsRepo.declineOnce(claim.id, new Date().toISOString());
       if (!outcome.ok) {
         if (outcome.reason === "missing") return res.status(404).json({ error: "Not found" });
+        /*
+         * ALREADY DECLINED IS NOT A REFUSAL, AND SAYING SO WAS A DEFECT.
+         *
+         * `declineOnce` refuses anything that is no longer `claimed` or
+         * `submitted`, which is what stops a stale queue page declining work a
+         * colleague has consented and paid. A claim that is already DECLINED is
+         * the one status in that set where the request and the row agree: a
+         * second press, a retry after a lost answer, or two stewards clearing
+         * the same stale claim all want exactly what the row already says.
+         * Answering 409 told them something had gone wrong when nothing had,
+         * and `ConsentQueue` renders it as a failed action.
+         *
+         * So this branch answers the row as it stands, and nothing else: no
+         * second notification (the dedupe key would swallow it anyway), no
+         * second audit row, no write. Every other resolution is still 409,
+         * because declining consented work is the defect `declineOnce` exists
+         * to stop. Read under the row lock a moment ago, so it is re-read here
+         * rather than answered from the copy this request loaded before it.
+         */
+        if (outcome.status === "declined") {
+          const already = await claimsRepo.byId(claim.id);
+          if (already) return res.json(already);
+        }
         return res.status(409).json({
           error: `Cannot decline a claim with status "${outcome.status}". It has already been resolved, so there is nothing left to hand back.`,
           status: outcome.status,

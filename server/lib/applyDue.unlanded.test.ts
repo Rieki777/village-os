@@ -18,8 +18,9 @@
  *  - a decision that lands, fails at the vote, fails on a seated steward's no
  *    at the close, is withdrawn, or has no hook calls nothing;
  *  - a throwing hook leaves the veto or the write-off STANDING, records the
- *    error on an open `governance_executor_pending` attempt for a person, and
- *    is never tried again by a tick or by a second veto;
+ *    error on an open `governance_executor_pending` attempt for a person, is
+ *    never tried again by a tick or by a second veto, and is listed by the
+ *    failed-actions report although the decision is vetoed or written off;
  *  - a veto and a write-off racing each other call it once between them,
  *    because both are gated on their own statement's affected-rows count.
  *
@@ -47,7 +48,8 @@ import {
   type LandingDeps,
   type SubjectCloser,
 } from "./applyDue";
-import { sqlInstant } from "../repos/ballotLandings";
+import { stuckLandings } from "../repos/governanceExecutorPending";
+import { defaultSources } from "./failedActions";
 import { STEWARD_COUNCIL_KEY, STEWARD_SUBJECTS_KEY, STEWARD_VETO } from "./stewardship";
 import { loadVariables, setVariable } from "./variables";
 import { register as registerVetoRoutes } from "../routes/governanceVetoes";
@@ -102,7 +104,7 @@ const onUnlanded = async (b: BallotRow, reason: "vetoed" | "written_off"): Promi
 const holds: SubjectCloser = { settle, execute, onUnlanded };
 const HOOKED: Record<string, SubjectCloser> = { mechanics: holds, mint_rule: holds, token_send: holds };
 
-/** The shape every closer on this build has today: the three older hooks and no fourth. */
+/** The shape every closer but a redemption's has today: the three older hooks and no fourth. */
 const nothingHeld: SubjectCloser = { settle, execute };
 const HOOKLESS: Record<string, SubjectCloser> = {
   mechanics: nothingHeld,
@@ -233,37 +235,23 @@ const unseatEveryone = async () => {
 const callsFor = (ballotId: string) => unlanded.filter((c) => c.includes(`:${ballotId}:`));
 
 /**
- * THE FAILED-ACTIONS REPORT'S OWN READ, IN ITS TWO STEPS, COPIED.
+ * THE FAILED-ACTIONS REPORT'S OWN READ, CALLED THE WAY THE REPORT CALLS IT.
  *
- * From PR #247 (`origin/wt/failed-actions`, and frozen inside batch #270):
- * `stuckLandings` in server/repos/governanceExecutorPending.ts, then
- * `stillOwedLandings` in server/lib/failedActions.ts. Copied rather than
- * imported, the way server/lib/atCloseLanding.test.ts copies it, because that
- * branch is not on main and nothing here may depend on it.
- *
- * The split is the whole point below: step one FINDS a failed release, and step
- * two drops it.
+ * This used to be a copy of PR #247's two steps, because #247 was not on main
+ * yet. It is now, so this asks the report itself: its governance area from
+ * `defaultSources` (server/lib/failedActions.ts), which reads the newest open
+ * attempt per ballot (`stuckLandings`) and then decides what the tab lists. What
+ * comes back is exactly what the hourly job hands to the tab for this area.
  */
-const LANDING_STILL_OWED: ReadonlySet<string> = new Set(["not_applicable", "pending", "applying", "stalled"]);
-
-/** Step one: the newest attempt on this ballot is open and carries an error. */
-const newestAttemptIsStuck = async (ballotId: string): Promise<boolean> => {
-  const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, mirrors the report's own read
-    "SELECT p.ballot_id FROM governance_executor_pending p " +
-      "JOIN (SELECT ballot_id, MAX(id) AS newest FROM governance_executor_pending GROUP BY ballot_id) n " +
-      "ON n.ballot_id = p.ballot_id AND n.newest = p.id " +
-      "WHERE p.cleared_at IS NULL AND (p.last_error IS NOT NULL OR p.claimed_at <= ?) AND p.ballot_id = ?",
-    [sqlInstant(new Date(NOW.getTime() - 10 * 60 * 1000)), ballotId],
-  );
-  return rows.length === 1;
+const reportFindingsFor = async (ballotId: string) => {
+  const governance = defaultSources(pool).find((s) => s.key === "governance");
+  if (!governance) throw new Error("the failed-actions report has no governance area");
+  return (await governance.find()).filter((f) => f.title.includes(`(ballot ${ballotId})`));
 };
 
-/** Both steps: found, and then kept only while the decision is still owed a landing. */
-const onFailedActionsReport = async (ballotId: string): Promise<boolean> => {
-  if (!(await newestAttemptIsStuck(ballotId))) return false;
-  const row = await landingRow(pool, ballotId);
-  return !!row && LANDING_STILL_OWED.has(row.landingStatus);
-};
+/** Step one on its own: the newest attempt on this ballot is open, and the report's first read finds it. */
+const newestAttemptIsStuck = async (ballotId: string): Promise<boolean> =>
+  (await stuckLandings(pool, new Date())).some((r) => r.ballotId === ballotId);
 
 beforeAll(async () => {
   if (!configured) return;
@@ -370,7 +358,7 @@ describe.skipIf(!configured)("a carried decision that will never land tells its 
     expect(callsFor(b.id)).toEqual([]);
   });
 
-  it("changes nothing for a subject with no hook, which is every closer on this build", async () => {
+  it("changes nothing for a subject with no hook, which is every closer but a redemption's", async () => {
     const hookless = (over: Partial<LandingDeps> = {}) => deps({ closerFor: (t: string) => HOOKLESS[t], ...over });
 
     const vetoed = await stamped();
@@ -457,22 +445,22 @@ describe.skipIf(!configured)("a hook that throws", () => {
     }
   });
 
-  it("is written where the failed-actions report does not yet look, which is PINNED here and not blessed", async () => {
+  it("is written where the failed-actions report now sees it, on a vetoed and on a written-off decision", async () => {
     /*
-     * THE GAP, WRITTEN DOWN. A failed release is recorded as an open attempt
-     * carrying its error, and PR #247's report finds that attempt (step one)
-     * and then DROPS it (step two), because it keeps an attempt only while the
-     * ballot is still owed a landing and these rows are `vetoed` and `expired`
-     * by the time the hook runs. That is the exact case where a member's held
-     * tokens are stranded, so it is asserted rather than left to be discovered.
+     * THE GAP, CLOSED. A failed release is recorded as an open attempt carrying
+     * its error, and by the time the hook runs the ballot is `vetoed` or
+     * `expired`. PR #247's report found that attempt and then DROPPED it,
+     * because it kept an attempt only while the ballot was still owed a landing,
+     * and this test pinned that drop so the fix would turn it red on purpose.
+     * That is the exact case where a member's held tokens are stranded.
      *
-     * This test pins TODAY'S behaviour. It does not say the behaviour is right.
-     * Widening `LANDING_STILL_OWED` belongs to #247, after batch #270 lands,
-     * and this test is what will go red and say so when it happens.
+     * The report now keeps a stopped decision when its newest attempt carries
+     * the release's own note (`failedReleases` in server/lib/failedActions.ts),
+     * so both shapes this file writes are asserted ON the report, in the words
+     * for how each was stopped.
      *
-     * A zero proves nothing on its own, so the same rows are asserted PRESENT
-     * in `unfinishedLandings`, which is what a person reads on this base. The
-     * record exists; one report filters it out.
+     * The record is also still asserted in `unfinishedLandings`, the other read
+     * a person has, so the report is shown finding a row that is really there.
      */
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
@@ -498,13 +486,23 @@ describe.skipIf(!configured)("a hook that throws", () => {
       expect(await newestAttemptIsStuck(vetoed), "step one finds it").toBe(true);
       expect(await newestAttemptIsStuck(written), "step one finds it").toBe(true);
 
-      // Its second step drops both, on the landing status.
+      // Neither is owed a landing any more, which is what used to drop them.
       expect((await landingRow(pool, vetoed))?.landingStatus).toBe("vetoed");
       expect((await landingRow(pool, written))?.landingStatus).toBe("expired");
-      expect(await onFailedActionsReport(vetoed), "a vetoed row is not on that report today").toBe(false);
-      expect(await onFailedActionsReport(written), "a written-off row is not on that report today").toBe(false);
 
-      // And the known positive: what a person CAN see on this base.
+      // And the report lists each, once, as the give-back that failed.
+      const onVetoed = await reportFindingsFor(vetoed);
+      expect(onVetoed.map((f) => f.title), "the report now sees the vetoed one").toEqual([
+        `A decision the village carried was stopped before it took effect, and giving back what it held failed (ballot ${vetoed})`,
+      ]);
+      expect(onVetoed[0].lastError).toContain(RELEASE_REFUSED);
+      const onWritten = await reportFindingsFor(written);
+      expect(onWritten.map((f) => f.title), "the report now sees the written-off one").toEqual([
+        `A decision the village carried was written off before it took effect, and giving back what it held failed (ballot ${written})`,
+      ]);
+      expect(onWritten[0].lastError).toContain(RELEASE_REFUSED);
+
+      // And the same record, on the other read a person has.
       const unfinished = await unfinishedLandings(pool, 0);
       expect(unfinished, "the attempt is readable here").toContain(vetoed);
       expect(unfinished, "the attempt is readable here").toContain(written);

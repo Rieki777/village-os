@@ -184,7 +184,8 @@ describe.skipIf(!configured)("a stay credit redeemed, and a stay credit spent", 
     await pool.query("DELETE FROM `users`"); // module-review-ok: scratch-schema teardown between cases
     await pool.query("DELETE FROM `game_variables`"); // module-review-ok: scratch-schema teardown between cases
     await loadVariables(pool);
-    await setVariable(pool, "redemption.confirmed_by", "steward");
+    // No `redemption.confirmed_by`: who confirms is derived from who holds the
+    // redemption key (Rye, 2026-09-15), so the dial no longer exists.
     await setVariable(pool, "redemption.holds_on_propose", "true");
     await setVariable(pool, "redemption.per_member_per_cycle", "2");
     await setVariable(pool, "redemption.expires_after_days", "30");

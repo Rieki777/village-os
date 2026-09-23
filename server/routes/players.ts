@@ -22,6 +22,14 @@
  * and this module import each other. Passing them keeps the arrow pointing
  * one way. Same argument as the gates: see server/lib/appDeps.ts.
  *
+ * THE THREE BATCHED READS BESIDE THEM are `claimsRepo.consentedCounts`,
+ * `trainingCompletions` and `paidByVillage`, and they are the three facts the
+ * ladder wants for a whole roster. Each answers for every member in ONE query.
+ * That is not an optimisation to preserve politely: this route lists the whole
+ * village, so a per-member form of any of them turns one page into N queries,
+ * and `paidByVillage` was added here in 2026-09 because the rung it carries
+ * was simply missing from the answer.
+ *
  * REGISTERED WHERE IT WAS, because Express matches in registration order.
  */
 import type { Express } from "express";
@@ -37,13 +45,14 @@ type Deps = Pick<
   | "claimsRepo"
   | "computeStage"
   | "trainingCompletions"
+  | "paidByVillage"
   | "hasMembership"
   | "stageOf"
   | "recordStageEvent"
 >;
 
 export function register(app: Express, deps: Deps): void {
-  const { isAdmin, members, claimsRepo, computeStage, trainingCompletions, hasMembership, stageOf, recordStageEvent } = deps;
+  const { isAdmin, members, claimsRepo, computeStage, trainingCompletions, paidByVillage, hasMembership, stageOf, recordStageEvent } = deps;
 
   // Players admin: list + stage grants
   app.get("/api/admin/players", async (req, res) => {
@@ -62,6 +71,14 @@ export function register(app: Express, deps: Deps): void {
     const consented = await claimsRepo.consentedCounts();
     // Same reason as the line above: one query for the whole roster.
     const trained = await trainingCompletions(allMembers.map((u: any) => String(u.id)));
+    // THE FOURTH FACT THE LADDER WANTS, and the one this roster used to drop.
+    // Contributor is the rung the village pays you onto, and it opens
+    // `member.vouch`, so a steward deciding whether somebody may speak for a
+    // newcomer was reading a rung too low for everybody the village had paid.
+    // Third read of the same shape as the two above, and batched for the same
+    // reason: a per-member ledger question inside the map below would cost one
+    // query per member on a page that lists all of them.
+    const paid = await paidByVillage(allMembers.map((u: any) => String(u.id)));
     res.json(
       allMembers.map((u: any) => ({
         id: u.id,
@@ -73,7 +90,7 @@ export function register(app: Express, deps: Deps): void {
         joinedAt: u.joinedAt,
         balance: u.recognitionBalance ?? 0,
         stageGranted: u.stageGranted ?? null,
-        stageComputed: computeStage(u, consented.get(u.id) ?? 0, trained.get(String(u.id)) ?? []),
+        stageComputed: computeStage(u, consented.get(u.id) ?? 0, trained.get(String(u.id)) ?? [], paid.has(String(u.id))),
         membership: hasMembership(u),
       }))
     );

@@ -43,7 +43,7 @@
  * drafts.ts holds the arithmetic both callers share.
  */
 import { applyEscalationChoices, computeEscalations } from "./drafts";
-import { ALL_CAPABILITIES, type Capability } from "../../shared/capabilities";
+import { ALL_CAPABILITIES, carriedBy, isDeniable, type Capability } from "../../shared/capabilities";
 import { STEWARD_VETO, holdingHasLapsed, roleCapabilityList } from "./stewardship";
 
 /**
@@ -63,6 +63,84 @@ export function liveHolderCount(
   now: Date = new Date(),
 ): number {
   return holders.filter((h) => h.roleId === roleId && !holdingHasLapsed(h, now)).length;
+}
+
+/**
+ * WHO CAN ACTUALLY USE THIS POWER RIGHT NOW, counted the way the gate counts.
+ *
+ * Rye's rule for redemption (2026-09-15) is "a steward confirms, but if there
+ * isn't a steward the village can vote on these things", and org decide asks
+ * the same question, so this answers it once for both: how many PEOPLE hold a
+ * capability today.
+ *
+ * ── WHAT IT COUNTS, AND WHAT IT LEAVES OUT ────────────────────────────────
+ *
+ * `capabilityDecision` in shared/capabilities.ts is the order of authority and
+ * this walks the same planes in the same order, minus one:
+ *
+ *   counted    a role the person holds, whose capability list carries the key,
+ *              on a holding that has not lapsed (`holdingHasLapsed`)
+ *   counted    a capability a greater key carries, through `carriedBy`
+ *   counted    a badge grant
+ *   subtracted a warning badge that DENIES the key, which beats a role, exactly
+ *              as the gate has it, and only where the key may be denied at all
+ *   EXCLUDED   the admin short-circuit
+ *
+ * The exclusion is the whole point rather than a simplification. Every admin
+ * passes every gate, so counting them would make the answer "somebody holds it"
+ * in every village that has an administrator, which is every village. Rye's
+ * rule REPLACES the fall-through to admins: the question is whether the village
+ * has given this power to anybody, and an admin who was never given it is
+ * precisely the case that has to answer no.
+ *
+ * Stage-granted capabilities are not counted either, and `redemption.confirm`
+ * has no stage that grants it (STAGE_UNLOCKS). A caller asking about a key a
+ * stage unlocks would be asking a different question, and this header says so
+ * instead of quietly answering it.
+ *
+ * ── WHY THE BADGE PLANE ARRIVES AS AN ARGUMENT ────────────────────────────
+ *
+ * Roles and holdings are cached in memory and synchronous; badges are rows and
+ * are read per member. Taking them as data keeps this pure and testable, and
+ * lets the caller pay for the read only when it has one to make. Absent means
+ * "no badge grants and no denies", which is what a village with the badges
+ * module off actually has.
+ */
+export function liveHoldersOfCapability(
+  holders: ReadonlyArray<Parameters<typeof holdingHasLapsed>[0] & { roleId: string; userId: string }>,
+  roles: ReadonlyArray<{ id: string; capabilities?: unknown }>,
+  capability: string,
+  now: Date = new Date(),
+  badges: Readonly<Record<string, { grants?: readonly string[]; denies?: readonly string[] }>> = {},
+): string[] {
+  const grantingRoles = new Set(
+    roles.filter((r) => carriesCapability(roleCapabilityList(r.capabilities), capability)).map((r) => r.id),
+  );
+  const held = new Set<string>();
+  for (const h of holders) {
+    if (!grantingRoles.has(h.roleId)) continue;
+    if (holdingHasLapsed(h, now)) continue;
+    held.add(String(h.userId));
+  }
+  for (const [userId, plane] of Object.entries(badges)) {
+    if ((plane.grants ?? []).includes(capability)) held.add(userId);
+  }
+  // A DENY BEATS A ROLE, which is the gate's own order, and it only lands on a
+  // key that may be taken away (`isDeniable`). A warning badge naming a key
+  // that may not be denied is ignored here for the same reason it is ignored
+  // there: the row was written by hand and the gate refuses to trust it.
+  if (isDeniable(capability as Capability)) {
+    for (const [userId, plane] of Object.entries(badges)) {
+      if ((plane.denies ?? []).includes(capability)) held.delete(userId);
+    }
+  }
+  return Array.from(held).sort();
+}
+
+/** A role's list, or a greater key on it that carries the asked-for one. */
+function carriesCapability(list: readonly string[], capability: string): boolean {
+  if (list.includes(capability)) return true;
+  return carriedBy(list, capability as Capability);
 }
 
 /** A refusal a route can send straight back: a status and a body. */

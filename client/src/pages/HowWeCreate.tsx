@@ -414,7 +414,7 @@ export default function HowWeCreate() {
                 {
                   season: "Spring",
                   emoji: "🌱",
-                  color: "bg-green-100 text-green-700",
+                  color: "bg-green-light text-forest",
                   desc: "Breaking ground. Starting new buildings, projects, and initiatives. The season for bold beginnings and planting what we want to grow.",
                 },
                 {

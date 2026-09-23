@@ -784,7 +784,7 @@ export default function CoCreatorsGuide() {
                   an instruction for whoever runs this village, so it addresses
                   them and names nobody.
                 */}
-                <p className="text-xs text-cream/50 self-center italic">
+                <p className="text-xs text-cream/80 self-center italic">
                   Add this village's Hypha DHO link in Admin, Variables, to make this live.
                 </p>
               </div>
@@ -800,7 +800,7 @@ export default function CoCreatorsGuide() {
                   <h3 className="font-semibold text-cream text-lg mb-2">
                     Value In = Value Out
                   </h3>
-                  <p className="text-cream/70 text-sm leading-relaxed">
+                  <p className="text-cream/80 text-sm leading-relaxed">
                     Every proposal puts one question to the community: does this contribution serve
                     {villageName} at the level of {tokenName} being requested? Not hours logged, hours are
                     not a contribution. What matters is the actual value created, articulated
@@ -871,7 +871,7 @@ export default function CoCreatorsGuide() {
                   <div key={step.label} className="rounded-xl bg-white/10 border border-white/20 p-5">
                     <div className="text-2xl mb-2">{step.emoji}</div>
                     <div className="text-lg font-display font-bold text-cream mb-2">{step.label}</div>
-                    <p className="text-cream/70 text-sm leading-relaxed">{step.description}</p>
+                    <p className="text-cream/80 text-sm leading-relaxed">{step.description}</p>
                   </div>
                 ))}
               </div>
