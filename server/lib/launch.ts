@@ -37,6 +37,16 @@ import {
 } from "../../shared/issuanceCap";
 import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
 import { storedVariableValue } from "../repos/gameVariableRows";
+import { countWords, purposeStatementProblem } from "../../shared/governingPurpose";
+import { governingPurpose } from "./governingPurpose";
+
+/**
+ * The one `checkKey` this file resolves by name. It is a constant so the
+ * registry entry and the branch below cannot drift into two spellings, which
+ * is a failure that surfaces as "No check wired for" on a founder's checklist
+ * and nowhere else.
+ */
+const GPS_CHECK_KEY = "gps-written";
 
 export type CheckState = "ok" | "missing" | "partial";
 
@@ -201,6 +211,36 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
         detail: read.detail,
         declinedBy: declined?.by,
         declinedAt: declined?.at,
+      });
+      continue;
+    }
+
+    /*
+     * THE GOVERNING PURPOSE STATEMENT, CHECKED HERE AND NOT THROUGH
+     * `deps.checks`.
+     *
+     * Same reasoning as the `decide:` branch above. Every check wired through
+     * `deps.checks` closes over a boot-loaded cache in server/index.ts, and
+     * this one needs no cache at all: it reads one `app_config` row through
+     * the document's own reader and runs the same pure validator the setup
+     * wizard runs before it posts. Keeping it off that file also keeps it off
+     * that file's ratchet.
+     *
+     * The detail says WHICH of the two failures it is, because a founder who
+     * wrote four words and a founder who wrote nothing need different next
+     * steps and a single "missing" tells neither of them anything.
+     */
+    if (req.checkKey === GPS_CHECK_KEY) {
+      const doc = await governingPurpose(pool);
+      const problem = purposeStatementProblem(doc.statement);
+      items.push({
+        ...req,
+        state: problem ? "missing" : "ok",
+        detail: problem
+          ? doc.statement.trim() === ""
+            ? "Nothing is written yet. The village says what it is for before it starts"
+            : problem
+          : `Written, ${countWords(doc.statement)} words`,
       });
       continue;
     }

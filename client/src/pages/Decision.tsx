@@ -26,7 +26,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
-import { ArrowLeft, FileText, Scale } from "lucide-react";
+import { ArrowLeft, Compass, FileText, Scale } from "lucide-react";
 import type { BallotMethod, VoteChoice } from "@shared/governanceEngine";
 import Layout from "@/components/Layout";
 import ModuleGate from "@/components/modules/ModuleGate";
@@ -577,6 +577,34 @@ export default function Decision() {
             )}
 
             <VoterRoll votes={ballot.votes} silent={ballot.silent} live={open} />
+
+            {/* HOW THE PROPOSER SAYS THIS SERVES THE GOVERNING PURPOSE (0217).
+
+                Rye's ruling: the line shows beside the proposal when people
+                vote, and it stays on the record. So it sits ABOVE the
+                document and outside it, always open, and it is not one more
+                thing behind a "read the document" button. A member deciding
+                should meet it without pressing anything.
+
+                Absent on every subject that carries none, and the section
+                does not render at all rather than rendering an empty heading:
+                a village voting on a quest payout is not owed a blank box
+                where somebody else's judgement would be. */}
+            {ballot.purposeAlignment && (
+              <section className="rounded-xl border border-stone-200 bg-white p-4">
+                <h2 className="flex items-center gap-2 text-base font-bold text-stone-900">
+                  <Compass className="w-4 h-4 text-teal-deep" aria-hidden="true" />
+                  How this serves the village's purpose
+                  <InfoTip
+                    tip="The person who opened this vote wrote one line on how it serves the governing purpose statement. It was written before the vote opened and stays on the record afterwards."
+                    label="Why this is here"
+                  />
+                </h2>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-stone-800">
+                  {ballot.purposeAlignment}
+                </p>
+              </section>
+            )}
 
             {/* The document, exactly as it was when the ballot opened. */}
             <section className="rounded-xl border border-stone-200 bg-white p-4">

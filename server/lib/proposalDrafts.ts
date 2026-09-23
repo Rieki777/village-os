@@ -55,6 +55,11 @@ export const WIZARD_TYPES = [
   // Seating somebody by the village's vote (POST /api/governance/role-seats).
   // The id is the ballot's own subject type, the same way the power types are.
   "role_seat",
+  // Changing the governing purpose statement (POST /api/governance/purpose-changes).
+  // DORMANT until the handover completes: while the founder holds the pen the
+  // route refuses and says how many powers are still to come, so the wizard
+  // offers a door that names its own condition instead of one that 409s.
+  "gps_change",
 ] as const;
 export type WizardType = (typeof WIZARD_TYPES)[number];
 
@@ -76,6 +81,8 @@ export const CONDUCTABLE_TYPES: readonly WizardType[] = [
   "power_return",
   // The route opens the seat vote itself and freezes the seat's term (0199).
   "role_seat",
+  // The route opens the change and the closer writes the statement (0217).
+  "gps_change",
 ];
 
 /**

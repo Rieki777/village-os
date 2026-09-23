@@ -81,6 +81,9 @@ import { numberVar, stringVar } from "./variables";
 import { defaultTimingFor, kindOfSubject, noCloserRefusal, timingOf, type ProposalTiming } from "../../shared/governanceKinds";
 // Windows lane: the open path is gated, and only the open path (19E).
 import { openingRefusal } from "./governanceWindows";
+// 0217: the judgement line the proposer writes, and which subjects carry one.
+import { normaliseAlignment } from "../../shared/governingPurpose";
+import { purposeAlignmentRefusal } from "./governingPurpose";
 import type { WeightMode } from "./governanceWeights";
 // The objections table's one enumerable home. Every statement against
 // `ballot_objections` lives there; the POLICY around them (which rulings
@@ -114,6 +117,14 @@ export interface BallotRow {
   status: "open" | "passed" | "failed" | "no_quorum" | "withdrawn";
   /** Dispatcher lane, 0172: the timing FROZEN at open, like the dials. */
   timing: ProposalTiming;
+  /**
+   * WHAT THE PROPOSER SAID THIS SERVES (0217).
+   *
+   * Null on every subject that carries no judgement line, and null on every
+   * ballot opened before the column existed. Those are the same value and
+   * different facts, which the migration's own header spells out.
+   */
+  purposeAlignment: string | null;
   outcomeNote: string | null;
   closedBy: string | null;
   closedAt: string | null;
@@ -173,6 +184,7 @@ export function rowToBallot(r: RowDataPacket): BallotRow {
     closesAt: iso(r.closes_at),
     status: outcomeStatusOf(r),
     timing: timingOf(r.timing),
+    purposeAlignment: r.purpose_alignment ?? null,
     outcomeNote: r.outcome_note ?? null,
     closedBy: r.closed_by ?? null,
     closedAt: r.closed_at === null || r.closed_at === undefined ? null : iso(r.closed_at),
@@ -254,6 +266,14 @@ export interface OpenBallotInput {
   /** Dispatcher lane, 0172: at_acceptance or next_moon. Defaults to next_moon. */
   timing?: ProposalTiming;
   /**
+   * THE PROPOSER'S ONE LINE ON HOW THIS SERVES THE GOVERNING PURPOSE (0217).
+   *
+   * Required for the five subjects that change how the village works and
+   * refused everywhere else, both decided by `shared/governingPurpose.ts`.
+   * Read the gate below for why it is checked HERE.
+   */
+  purposeAlignment?: string | null;
+  /**
    * WINDOWS LANE (19E): what this opening carries, for the window gate below.
    *
    * Optional because a ceremony carries nothing beyond its subject type, which
@@ -299,6 +319,26 @@ export async function openBallot(pool: Pool, input: OpenBallotInput): Promise<Op
    */
   const refusal = closerCheck ? noCloserRefusal(input.subjectType, closerCheck(input.subjectType)) : null;
   if (refusal) return { ok: false, error: refusal };
+  /*
+   * THE JUDGEMENT LINE IS CHECKED AT THE ONE DOOR EVERY BALLOT COMES THROUGH.
+   *
+   * Same placement and the same reason as the governance window below: every
+   * route into a village-wide vote passes through here, so a route a later
+   * lane adds on one of the five subjects cannot forget to ask. A check in
+   * each route is a check the next route does not have.
+   *
+   * It refuses a MISSING line on a subject that needs one, and it refuses a
+   * line that is not an answer. What it does not do is refuse a line on a
+   * subject that needs none: a proposer who wrote one anyway has said
+   * something true about their own proposal, and throwing it away would be
+   * the platform correcting somebody for volunteering.
+   *
+   * And it asks nothing at all of a village that has not written its
+   * statement, because there would be nothing to judge against. The whole of
+   * that reasoning is at `purposeAlignmentRefusal`.
+   */
+  const alignmentProblem = await purposeAlignmentRefusal(pool, input.subjectType, input.purposeAlignment);
+  if (alignmentProblem) return { ok: false, error: alignmentProblem };
   const electorate = input.electorate.filter((e) => e.userId);
   if (electorate.length === 0) {
     return { ok: false, error: "Nobody is eligible to vote on this, so the ballot refuses to open. Check who holds ballot.vote and, in custom mode, who holds weight" };
@@ -366,8 +406,8 @@ export async function openBallot(pool: Pool, input: OpenBallotInput): Promise<Op
     await conn.query( // module-review-ok: the ballot tables' one enumerable home (the intents.ts pattern; no cache sits above them)
       "INSERT INTO ballots (id, subject_type, subject_ref, open_key, title, doc_markdown, method, " +
         "weight_mode, weight_token, unity_pct, quorum_pct, total_weight, electorate_count, opened_by, " +
-        "opens_at, closes_at, timing, status) " +
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, ?, ?, ?, 'open')",
+        "opens_at, closes_at, timing, purpose_alignment, status) " +
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, ?, ?, ?, ?, 'open')",
       [
         id,
         input.subjectType,
@@ -386,6 +426,12 @@ export async function openBallot(pool: Pool, input: OpenBallotInput): Promise<Op
         opensAt,
         closesAt,
         input.timing ?? defaultTimingFor(kindOfSubject(input.subjectType)),
+        /*
+         * An empty line is stored as NULL, so "nobody was asked" and "asked
+         * and wrote nothing" cannot both arrive as the empty string. They are
+         * different facts and the column has to keep them apart.
+         */
+        normaliseAlignment(input.purposeAlignment) || null,
       ],
     );
     for (const e of electorate) {

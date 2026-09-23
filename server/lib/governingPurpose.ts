@@ -31,6 +31,9 @@ import type { Pool } from "mysql2/promise";
 import {
   GPS_DOC_KEY,
   EMPTY_PURPOSE,
+  hasGoverningPurpose,
+  purposeAlignmentProblem,
+  purposeAlignmentRequired,
   purposeDocFrom,
   purposeStatementProblem,
   type GoverningPurposeDoc,
@@ -131,6 +134,47 @@ export async function founderPenRefusal(pool: Pool): Promise<string | null> {
     `This village looks after all ${handover.total} of its powers now, so the governing purpose statement ` +
     `is the village's to change. Open a change of the governing purpose and put it to the whole roll.`
   );
+}
+
+/**
+ * WHY THIS BALLOT MAY NOT OPEN WITHOUT A JUDGEMENT LINE, or null.
+ *
+ * ── A LINE ANSWERS TO A STATEMENT, AND WITH NO STATEMENT THERE IS NOTHING
+ *    TO ANSWER TO ─────────────────────────────────────────────────────────
+ *
+ * This is the whole of the extra condition, and it is a rule rather than a
+ * convenience. "Judged against it" is a comparison, and a village that has
+ * not written its sentence has nothing on the other side of the comparison.
+ * Asking a proposer to say how their change serves a document that does not
+ * exist would produce the ritual answer Rye scoped the field against, on the
+ * villages least able to tell the difference.
+ *
+ * It also makes the two halves of this lane agree. The statement is a
+ * BLOCKING launch requirement, so a launched village always has one and the
+ * line is always required there. A village still setting itself up has
+ * neither, which is the same posture the whole platform takes towards a
+ * half-configured deployment.
+ *
+ * ── WHAT THIS DOES NOT EXCUSE ──────────────────────────────────────────────
+ *
+ * It is not a grace period and it does not decay. The moment the founder
+ * writes the statement, every later mechanics, power and purpose ballot needs
+ * its line, including one opened on a proposal written before the statement
+ * was. Somebody taking such a proposal to the vote is asked for the line at
+ * that route, which is where a proposer stands.
+ *
+ * One primary-key read of one row per ballot opened, which is a handful a
+ * month on a busy village.
+ */
+export async function purposeAlignmentRefusal(
+  pool: Pool,
+  subjectType: string,
+  raw: unknown,
+): Promise<string | null> {
+  if (!purposeAlignmentRequired(subjectType)) return null;
+  const doc = await governingPurpose(pool);
+  if (!hasGoverningPurpose(doc)) return null;
+  return purposeAlignmentProblem(subjectType, raw);
 }
 
 /** The pen and the handover in one read, for a surface that shows both. */

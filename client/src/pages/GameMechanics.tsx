@@ -527,6 +527,10 @@ export default function GameMechanics() {
    */
   const [answerable, setAnswerable] = useState<AnswerableObjection[]>([]);
   const [answersFor, setAnswersFor] = useState<Record<string, string>>({});
+  /** This village's governing purpose statement, empty when it has none (0217). */
+  const [purposeStatement, setPurposeStatement] = useState("");
+  /** The line the proposer writes on how a change serves that purpose, per proposal. */
+  const [alignmentFor, setAlignmentFor] = useState<Record<string, string>>({});
 
   // A notification about a proposal lands ON the proposal. The dependency is
   // the list length because the target arrives with the fetch, not with the
@@ -562,6 +566,24 @@ export default function GameMechanics() {
       .catch(() => {});
   }, []);
 
+  /**
+   * WHETHER THIS VILLAGE HAS A GOVERNING PURPOSE STATEMENT (0217).
+   *
+   * Asked because the judgement line is asked only of a village that has one.
+   * The route refuses without it and the refusal says so, and a field that
+   * appears on a village with nothing to judge against would be the ritual
+   * Rye scoped this against. A failed read leaves the field hidden, which is
+   * today's behaviour for every village and costs a proposer nothing worse
+   * than a refusal they can act on.
+   */
+  const loadPurpose = useCallback(() => {
+    if (!authToken()) return;
+    fetch("/api/governance/purpose", { headers: authHeaders() })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setPurposeStatement(String(d?.statement ?? "")))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     fetch("/api/game/mechanics")
       .then((r) => {
@@ -576,7 +598,8 @@ export default function GameMechanics() {
   useEffect(() => {
     loadStanding();
     loadAnswerable();
-  }, [user, loadStanding, loadAnswerable]);
+    loadPurpose();
+  }, [user, loadStanding, loadAnswerable, loadPurpose]);
 
   const openHistory = () => {
     setHistoryOpen((v) => !v);
@@ -717,10 +740,20 @@ export default function GameMechanics() {
      * this picker existed.
      */
     const answers = answersFor[p.id];
-    const d = await act(
-      `/api/governance/mechanics/${p.id}/open-ballot`,
-      answers ? { answersObjectionId: answers } : undefined,
-    );
+    /*
+     * THE JUDGEMENT LINE (0217). Sent only when the proposer wrote one, so a
+     * vote opened on a village with no governing purpose statement carries
+     * the same body it carried before this field existed.
+     */
+    const alignment = (alignmentFor[p.id] ?? "").trim();
+    const body =
+      answers || alignment
+        ? {
+            ...(answers ? { answersObjectionId: answers } : {}),
+            ...(alignment ? { purposeAlignment: alignment } : {}),
+          }
+        : undefined;
+    const d = await act(`/api/governance/mechanics/${p.id}/open-ballot`, body);
     /*
      * ASK THE RECORD AGAIN EITHER WAY. Self-audit after this was green: the
      * refresh sat inside the success branch, so the one case that most needs
@@ -1149,6 +1182,35 @@ export default function GameMechanics() {
                             >
                               Open the village vote
                             </button>
+                          )}
+                          {/* HOW THIS SERVES THE GOVERNING PURPOSE (0217).
+
+                              Rye's ruling: on a proposal that changes how the
+                              village works, the proposer writes one line on
+                              how it serves the purpose, it shows beside the
+                              proposal when people vote, and it stays on the
+                              record. A rule change is one of the five subjects
+                              that carry one.
+
+                              Shown only to a village that HAS a statement,
+                              because a line answers to a statement and there
+                              is nothing to answer to without one. The route
+                              refuses on the same condition, so this field and
+                              that refusal cannot disagree. */}
+                          {mayOpenBallotOn(p) && purposeStatement.trim() !== "" && (
+                            <label className="flex flex-col gap-1 basis-full text-xs text-stone-600">
+                              <span>How does this serve the village's governing purpose? The whole roll reads this beside your proposal.</span>
+                              <textarea
+                                rows={3}
+                                maxLength={2000}
+                                value={alignmentFor[p.id] ?? ""}
+                                onChange={(e) =>
+                                  setAlignmentFor((s) => ({ ...s, [p.id]: e.target.value }))
+                                }
+                                className="max-w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm text-stone-800"
+                                placeholder="This raises the quorum on rule changes, which serves the part of the purpose about agreements the members write and can change themselves."
+                              />
+                            </label>
                           )}
                           {/* THE PROPOSER NAMES WHAT THIS ANSWERS (0102).
                               An objection that changed a proposal should say

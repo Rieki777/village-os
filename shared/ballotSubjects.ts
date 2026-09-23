@@ -67,6 +67,7 @@ import {
   type WeighedSeat,
 } from "./governanceEngine";
 import { CYCLE_SETTLEMENT } from "./moonSettlement";
+import { GPS_CHANGE } from "./governingPurpose";
 
 export interface SubjectThresholds {
   /**
@@ -378,6 +379,47 @@ export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
     minElectorate: 0,
     criticality: "routine",
     why: "Settling a moon asks whatever this village asks of any decision. It happens every moon, so it is not priced above the village's own bar.",
+  },
+  /*
+   * ── CHANGING THE SENTENCE EVERYTHING ELSE IS JUDGED AGAINST ─────────────
+   *
+   * Rye, 2026-09-23: "all upgrades going forward will be judged against it."
+   * So this subject moves the yardstick, and a village doing that should have
+   * turned up for it.
+   *
+   * HE HAS NOT PRICED THIS ONE, and that is said here rather than dressed up
+   * as a derivation. What follows is the MINT_RULE shape and the MINT_RULE
+   * argument, applied to a different subject:
+   *
+   *  - The quorum rises and the unity does not. R68's stated reason for
+   *    tiering anything is awareness, and quorum is the dial that measures
+   *    awareness. How much of the room has to agree stays the village's own
+   *    setting.
+   *  - No method is fixed. `evaluateBallot` reads `quorumPct` first under
+   *    every method and reads `unityPct` for `custom` alone, so a quorum
+   *    floor is a true statement whatever the village conducts, and a unity
+   *    floor would be a number deciding nothing on three of the four. A
+   *    village that decides by consent still decides this by consent.
+   *  - 50 is not invented for this. It is the engine's own constant, the hard
+   *    50 `majority` compares against, and the same floor `mint_rule` already
+   *    carries. Said plainly it is "more than half the village's voting weight
+   *    was in the room", which is the smallest claim that answers the
+   *    awareness test.
+   *
+   * NO ELECTORATE FLOOR, for the reason CYCLE_SETTLEMENT gives: a floor here
+   * would only ever bite a village that has SHRUNK, and taking the pen off a
+   * small village would hand it back to the scaffolding, which fails R54's
+   * test outright.
+   *
+   * A HIGHER BAR IS A LIVE QUESTION and it belongs with Rye. It has been put
+   * to him beside the one that decides what "all steward powers" means, since
+   * both are about how hard this village's own sentence should be to move.
+   */
+  [GPS_CHANGE]: {
+    minUnityPct: 0,
+    minQuorumPct: 50,
+    minElectorate: 0,
+    why: "This one changes the statement every later change is judged against, so it asks for more than half the village's voting weight to take part. How much of that has to agree is the village's own setting.",
   },
 };
 
