@@ -32,7 +32,7 @@ import { createHmac } from "crypto";
 import { spawn, type ChildProcess } from "child_process";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
 import { HAND_MINT_SOURCES, MINT_CAP_KEY, mintCycleStart, readCycleIssuance } from "./lib/mintCap";
 import { CIRCLE_BONUS_SOURCE, payCircleBonus } from "./lib/circleBonus";
@@ -181,7 +181,7 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
     }
     dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-mint-cap-"));
     testDb = await provisionTestDb();
-    libPool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the S5 scratch-schema harness pool, the shape server/lib/circleBonus.test.ts uses
+    libPool = testPool(testDb, { connectionLimit: 4 });
     await waitForPortFree(PORT);
     child = spawn(process.execPath, [DIST], {
       env: {

@@ -16,7 +16,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { countInWindow, limitState, recordHit } from "./rateHits";
 
 const configured = testDbConfigured();
@@ -45,7 +45,7 @@ describe.skipIf(!configured)("the abuse guard under a parallel burst (MySQL)", (
     // Enough connections that twenty callers really do overlap. With a smaller
     // pool they would queue on connections instead of on the row lock, and the
     // case would pass without proving anything.
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 24 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 24 });
   }, 300_000);
 
   afterAll(async () => {
@@ -108,7 +108,7 @@ describe.skipIf(!configured)("the abuse guard under a parallel burst (MySQL)", (
     // The third answer exists so a caller can tell "within budget" from "could
     // not check". `overLimit` in server/index.ts folds this back to not-over
     // for the callers written to fail open; the share-card raster reads it.
-    const dead = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 1 }); // module-review-ok: the suite's own pool, closed on purpose to make the guard's read fail
+    const dead = testPool(db, { connectionLimit: 1 }); // closed on purpose, to make the guard's read fail
     await dead.end();
 
     await expect(limitState(dead, "unreachable", 5, HOUR)).resolves.toBe("unavailable");
