@@ -74,18 +74,27 @@ export interface BreakGlassAsk {
 }
 
 /**
- * Is this response the one refusal with a way through?
+ * Is this response the one refusal with a way through, FOR THIS PERSON?
  *
  * Pure, so it is testable without a browser, which is what every client test
  * in this repo is. Returns null for every other 409 in the product, and there
  * are several: an already-open ask, an escalation that needs confirming, a
  * ballot that closed while somebody was typing.
+ *
+ * `requiresOverride` says the village holds the power and only an override
+ * would pass it. `overrideAvailable` says whether the server would accept one
+ * from whoever is holding this screen (Rye, 2026-09-21: only a founder seated
+ * as a steward with the veto). Both have to be true. A refusal with the first
+ * and not the second passes through untouched, so the caller prints the
+ * server's own sentence, which names the way through, and nobody is offered
+ * a door that refuses them after they walk through it.
  */
 export function readOverrideRefusal(status: number, body: unknown): BreakGlassAsk | null {
   if (status !== 409) return null;
   if (!body || typeof body !== "object" || Array.isArray(body)) return null;
   const b = body as Record<string, unknown>;
   if (b.requiresOverride !== true) return null;
+  if (b.overrideAvailable !== true) return null;
   const capability = typeof b.capability === "string" ? b.capability : "";
   if (!capability) return null;
   const title = typeof b.title === "string" && b.title ? b.title : capability;

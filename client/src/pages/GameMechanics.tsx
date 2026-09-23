@@ -1117,7 +1117,7 @@ export default function GameMechanics() {
                             <button
                               type="button"
                               onClick={() => act(`/api/game/mechanics/proposals/${p.id}/support`)}
-                              className="text-sm bg-teal-deep text-white rounded-lg px-3 py-1.5 font-medium hover:bg-teal"
+                              className="text-sm bg-teal-deep text-white rounded-lg px-3 py-1.5 font-medium hover:bg-teal-deep-dark"
                             >
                               Support
                             </button>
@@ -1129,7 +1129,7 @@ export default function GameMechanics() {
                             <button
                               type="button"
                               onClick={() => act(`/api/game/mechanics/proposals/${p.id}/sponsor`)}
-                              className="text-sm bg-teal-deep text-white rounded-lg px-3 py-1.5 font-medium hover:bg-teal"
+                              className="text-sm bg-teal-deep text-white rounded-lg px-3 py-1.5 font-medium hover:bg-teal-deep-dark"
                             >
                               Sponsor this draft
                             </button>
@@ -1145,7 +1145,7 @@ export default function GameMechanics() {
                             <button
                               type="button"
                               onClick={() => openBallot(p)}
-                              className="text-sm bg-teal-deep text-white rounded-lg px-3 py-1.5 font-medium hover:bg-teal"
+                              className="text-sm bg-teal-deep text-white rounded-lg px-3 py-1.5 font-medium hover:bg-teal-deep-dark"
                             >
                               Open the village vote
                             </button>
@@ -1339,7 +1339,7 @@ export default function GameMechanics() {
                   type="button"
                   onClick={openHistory}
                   aria-expanded={historyOpen}
-                  className="inline-flex items-center gap-2 bg-teal-deep text-white font-semibold px-5 py-2.5 rounded-xl hover:bg-teal transition-colors"
+                  className="inline-flex items-center gap-2 bg-teal-deep text-white font-semibold px-5 py-2.5 rounded-xl hover:bg-teal-deep-dark transition-colors"
                 >
                   <ScrollText className="w-4 h-4" />
                   {historyOpen ? "Hide the history" : "Explore the history"}
@@ -1423,7 +1423,7 @@ export default function GameMechanics() {
                   <button
                     type="button"
                     onClick={() => setComposerOpen(true)}
-                    className="text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium hover:bg-teal"
+                    className="text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium hover:bg-teal-deep-dark"
                   >
                     Write the proposal
                   </button>

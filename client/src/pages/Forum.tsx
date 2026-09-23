@@ -499,7 +499,7 @@ function ThreadView({ id }: { id: string }) {
                     href={eventMeta.ctaUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 mt-1 text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium hover:opacity-90"
+                    className="inline-flex items-center gap-1.5 mt-1 text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium hover:bg-teal-deep-dark"
                   >
                     {eventMeta.ctaLabel || "Respond"}
                     <ExternalLink className="w-3.5 h-3.5" />

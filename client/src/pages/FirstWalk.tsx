@@ -114,7 +114,7 @@ export default function FirstWalk() {
                         <p className="text-xs text-teal-deep mt-1.5">{s.teaches}</p>
                         <Link
                           href={s.href}
-                          className="inline-block mt-3 text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium hover:opacity-90"
+                          className="inline-block mt-3 text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium hover:bg-teal-deep-dark"
                         >
                           {s.cta}
                         </Link>
@@ -140,7 +140,7 @@ export default function FirstWalk() {
                   </p>
                   <Link
                     href="/admin"
-                    className="inline-block mt-3 text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium hover:opacity-90"
+                    className="inline-block mt-3 text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium hover:bg-teal-deep-dark"
                   >
                     Open the admin
                   </Link>
