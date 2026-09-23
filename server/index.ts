@@ -102,6 +102,7 @@ import { resolveSeatTerm, type SeatCalendar } from "../shared/seatTerms";
 import { decideRoleCapabilities, liveHolderCount, liveHoldersOfCapability, stewardSeatRefusal } from "./lib/roleGrants";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
 import { type ConsentActor, register as registerQuestClaimRoutes } from "./routes/questClaims";
+import { countInWindow, limitState, recordHit as recordRateHit } from "./repos/rateHits";
 import { register as registerHousingRoutes } from "./routes/housing";
 import { register as registerJourneyRoutes } from "./routes/journey";
 import { register as registerProfileRoutes } from "./routes/profile";
@@ -4914,58 +4915,25 @@ function recipientsForType(type: string): string[] {
  * login down with it; the guard protects against abuse, not outages.
  */
 async function overLimit(bucket: string, max: number, windowMs: number): Promise<boolean> {
-  try {
-    const pool = getPool();
-    const since = new Date(Date.now() - windowMs);
-    const [[row]] = await pool.query<any[]>(
-      "SELECT COUNT(*) AS n FROM rate_hits WHERE bucket = ? AND at > ?",
-      [bucket, since],
-    );
-    if (Number(row?.n ?? 0) >= max) return true;
-    await pool.query("INSERT INTO rate_hits (bucket, at) VALUES (?, CURRENT_TIMESTAMP(3))", [bucket]);
-    // Opportunistic sweep (~1% of calls): the table stays a day deep, forever.
-    if (Math.random() < 0.01) {
-      void pool.query("DELETE FROM rate_hits WHERE at < (NOW() - INTERVAL 1 DAY) LIMIT 5000").catch(() => {});
-    }
-    return false;
-  } catch (e) {
-    console.error("[abuse-guard] check failed (failing open)", e);
-    return false;
-  }
+  // `unavailable` reads as not-over-limit HERE, in one visible place, which is
+  // what fail-open means for the twenty-odd callers written against it.
+  return (await limitState(getPool(), bucket, max, windowMs)) === "over";
 }
 
 /**
  * Check-only half of overLimit: counts, never inserts. For guards where the
  * hit is recorded separately (login records only on credential FAILURE, so a
- * correct sign-in never spends anyone's budget). Fail-open like overLimit.
+ * correct sign-in never spends anyone's budget). Fail-open like overLimit:
+ * a count that could not be taken is not a caller over their budget.
  */
 async function atLimit(bucket: string, max: number, windowMs: number): Promise<boolean> {
-  try {
-    const pool = getPool();
-    const since = new Date(Date.now() - windowMs);
-    const [[row]] = await pool.query<any[]>(
-      "SELECT COUNT(*) AS n FROM rate_hits WHERE bucket = ? AND at > ?",
-      [bucket, since],
-    );
-    return Number(row?.n ?? 0) >= max;
-  } catch (e) {
-    console.error("[abuse-guard] check failed (failing open)", e);
-    return false;
-  }
+  const n = await countInWindow(getPool(), bucket, windowMs);
+  return n !== null && n >= max;
 }
 
 /** Record-only half: call when the guarded event actually happened. */
 async function recordHit(bucket: string): Promise<void> {
-  try {
-    const pool = getPool();
-    await pool.query("INSERT INTO rate_hits (bucket, at) VALUES (?, CURRENT_TIMESTAMP(3))", [bucket]);
-    // Opportunistic sweep (~1% of calls): the table stays a day deep, forever.
-    if (Math.random() < 0.01) {
-      void pool.query("DELETE FROM rate_hits WHERE at < (NOW() - INTERVAL 1 DAY) LIMIT 5000").catch(() => {});
-    }
-  } catch (e) {
-    console.error("[abuse-guard] record failed", e);
-  }
+  await recordRateHit(getPool(), bucket);
 }
 
 /**
@@ -19663,6 +19631,10 @@ ${inner}
     isAdmin, authedUser, adminActor, getPool, uploadsDir: UPLOADS_DIR, members,
     questsRepo, claimsRepo, crewsRepo, firstName, notify, stageOf, loadRoles,
     roleIdsFor, currentPatternId, questConsentRecipients, overLimit, clientIp,
+    // The share-card raster reads the guard's third answer for itself: it is
+    // the one route here that rasters for an anonymous caller, so it refuses
+    // when the guard cannot check rather than serving unguarded (Rye, 2026-09-23).
+    limitState: (bucket: string, max: number, windowMs: number) => limitState(getPool(), bucket, max, windowMs),
   });
 
   // Quests: team consent (value release is always human-gated)
