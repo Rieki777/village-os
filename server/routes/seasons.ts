@@ -96,7 +96,11 @@ export function register(app: Express, deps: Deps): void {
     // list, or the derived list the Season tab was shown, stores [] so the village
     // keeps deriving (D2-9). Both rules live in server/lib/seasonCalendar.ts. The
     // seats below still move, onto whatever the stored document now derives.
-    const saving = seasonDocumentToStore(req.body);
+    // The document as it stands, so a save can tell a CHANGED zone from the
+    // normalised one this tab was handed, and so an ordinary save carries an
+    // existing answer forward instead of quietly dropping it.
+    const standing = getSeasonConfig();
+    const saving = seasonDocumentToStore(req.body, new Date(), standing, adminActor(req)?.id ?? null);
     if (!saving.ok) return res.status(400).json({ error: saving.error });
     const before = seasonState().current?.id ?? null;
     await seasonRepo.put(saving.doc);
