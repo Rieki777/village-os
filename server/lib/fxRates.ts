@@ -19,13 +19,16 @@
 import type { Pool } from "mysql2/promise";
 import { guardedFetchJson } from "./toolcheck";
 
-export const FX_BASE = "EUR";
-
-/** The quotes fetched daily. All present on the ECB list (verified). */
-export const FX_QUOTES = [
-  "USD", "CHF", "GBP", "JPY", "CAD", "AUD", "NZD",
-  "SEK", "NOK", "DKK", "MXN", "BRL", "PLN", "CZK",
-] as const;
+/*
+ * THE LIST MOVED TO `shared/money.ts`, and is re-exported here so every
+ * existing importer and test keeps its address. What it contains is a fact the
+ * client needs too: Make This Yours, the member's currency picker and the
+ * redemption currencies dial all ask whether a code converts by itself, and a
+ * second copy in `shared/` would have gone stale the day a quote was added.
+ * How the list is FETCHED is still entirely this file's business.
+ */
+export { FX_BASE, FX_QUOTES } from "../../shared/money";
+import { FX_BASE, FX_QUOTES } from "../../shared/money";
 
 export function ecbDailyUrl(quotes: readonly string[] = FX_QUOTES): string {
   return (

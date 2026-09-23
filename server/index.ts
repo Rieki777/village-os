@@ -737,7 +737,7 @@ import {
   type ResourcesViewer,
 } from "./lib/resources";
 import { CAPITALS } from "../shared/capitals";
-import { defaultDisplayCurrency } from "../shared/money";
+import { defaultDisplayCurrency, projectCurrencyToStore } from "../shared/money";
 import {
   addMember as addPatternMember,
   applyRoll,
@@ -2759,7 +2759,12 @@ function mergedConfig() {
       // 0083 (P8): where the project lives and what it counts in. Display
       // only, like every overlay field; blank inherits the platform default.
       country: pick((brand.project as any).country, p.country),
-      fiatCurrency: pick((brand.project as any).fiatCurrency, p.fiatCurrency),
+      // TRIMMED HERE TOO, so a value stored before the write above learned to
+      // normalise inherits exactly as a blank one does, instead of reading as
+      // an answer the village never gave. `pick` treats only "" as absent, and
+      // every reader downstream trims, so without this one line a stored "   "
+      // is invisible on every surface and still counts as having been said.
+      fiatCurrency: pick(String((brand.project as any).fiatCurrency ?? "").trim(), p.fiatCurrency),
       adminPath: p.adminPath,
       // Blank INHERITS the platform default, like every overlay field. A fork
       // that wants NO outside links clears the gameConfig default too — the
