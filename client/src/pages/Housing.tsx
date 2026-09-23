@@ -137,8 +137,13 @@ export default function Housing() {
 
   return (
     <Layout>
-      {/* Hero */}
-      <section className="py-24 bg-teal text-white">
+      {/* Hero, on the band: the ground the Governance, Visit and WorkWithUs
+          heroes use (Rye's ruling, 2026-09-21). It sat on the soft tone,
+          where white measured 1.67 to 3.00:1 for every seed. The paragraph is
+          full white on purpose: at /80 it drops under 4.5 on 7 of the 54
+          seeded themes (4.03 worst), and full white clears 5.36 on all of
+          them. client/src/lib/brandGroundContrast.test.ts measures both. */}
+      <section className="py-24 bg-teal-band text-white">
         <div className="container">
           <div className="max-w-3xl">
             <motion.div
@@ -157,7 +162,7 @@ export default function Housing() {
                   holds for any village running this platform, because the
                   Land Share structure it names is the one this page already
                   explains further down for everybody. */}
-              <p className="text-xl text-white/80 leading-relaxed">
+              <p className="text-xl text-white leading-relaxed">
                 Find your place here. Homes sit on land the community holds together,
                 and a Land Share Agreement is how you take one.
               </p>
@@ -317,7 +322,7 @@ export default function Housing() {
             </div>
             <Link
               href="/resident"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-teal-deep text-white rounded-lg font-semibold hover:opacity-90 transition-opacity"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-teal-deep text-white rounded-lg font-semibold hover:bg-teal-deep-dark transition"
             >
               Learn About Residency
               <ArrowRight className="w-5 h-5" />
@@ -343,7 +348,7 @@ export default function Housing() {
                   href={eventsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-8 py-4 bg-teal-deep text-white rounded-lg font-semibold hover:opacity-90 transition-opacity flex items-center gap-2"
+                  className="px-8 py-4 bg-teal-deep text-white rounded-lg font-semibold hover:bg-teal-deep-dark transition flex items-center gap-2"
                 >
                   <Calendar className="w-5 h-5" />
                   Join Community Call

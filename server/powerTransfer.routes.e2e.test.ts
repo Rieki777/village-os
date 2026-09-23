@@ -40,6 +40,7 @@ import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
+import { BREAK_GLASS_WAY_THROUGH } from "../shared/capabilities";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -603,7 +604,8 @@ describe.skipIf(!DB_CONFIGURED)("what the village actually got", () => {
      * the right answer to.
      */
     expect(stopped.status).toBe(409);
-    // THE EXPLANATION ARRIVES: who holds it, and exactly what to send.
+    // THE EXPLANATION ARRIVES: who holds it, and who may reach past it (a
+    // founder seated as a steward, which this founder is not).
     expect(stopped.json?.villageHolds).toBe(true);
     expect(stopped.json?.requiresOverride).toBe(true);
     expect(stopped.json?.capability).toBe("event.manage");
@@ -611,17 +613,32 @@ describe.skipIf(!DB_CONFIGURED)("what the village actually got", () => {
     expect(String(stopped.json?.error)).toContain("override");
   });
 
-  it("...and reaching past the village in the open works, and the village is told", async () => {
-    const through = await call("POST", "/api/admin/events", {
+  /*
+   * UPDATED, NEVER DELETED (Rye, 2026-09-21). This case used to drive the
+   * founder through the glass. The ruling keeps the glass for a founder
+   * seated as a steward with the veto, and this founder holds no seat, so the
+   * same request is now refused and the village is told nothing because
+   * nothing happened. The seated founder's way through is driven in
+   * server/founderOverride.routes.e2e.test.ts.
+   */
+  it("...and reaching past the village is refused to a founder with no steward's seat, and nothing is written", async () => {
+    // Counted over the whole table: `publicPulse` reads fifty rows, and a capped read can hide a new line.
+    const reaches = async () => Number(((await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT COUNT(*) AS n FROM health_events WHERE audience = 'public' AND text LIKE '%acted on a power this village holds%'",
+    ))[0] as any[])[0]?.n ?? 0);
+    const before = await reaches();
+    const refused = await call("POST", "/api/admin/events", {
       body: {
         title: "An admin's gathering, in the open",
         startsAt: new Date(Date.now() + 9 * 864e5).toISOString(),
         override: true,
       },
     });
-    expect(through.status).toBe(200);
-    const pulse = await publicPulse();
-    expect(pulse.some((t) => t.includes("acted on a power this village holds"))).toBe(true);
+    expect(refused.status, JSON.stringify(refused.json)).toBe(409);
+    expect(refused.json?.overrideAvailable).toBe(false);
+    expect(String(refused.json?.error)).toContain(BREAK_GLASS_WAY_THROUGH);
+    const after = await reaches();
+    expect(after, "the village reads nothing about an act that did not happen").toBe(before);
   });
 
   it("the powers list says who holds it, in sentences, with no number on it", async () => {

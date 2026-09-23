@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `7f564c89baa8ffc6`, which regenerating reproduces.
+It describes the sources at fingerprint `30c7bcefe5cdc8fb`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -531,7 +531,6 @@ The hub address is `governance.hub_url`, a `founder`-ring dial that ships blank,
 <!-- written by a person: brokenIntro -->
 What is broken today, by name. A document that only described the parts that work would be the same kind of check this repository has spent weeks removing: green about the wrong thing.
 
-- **Nothing seats a catalyst as a steward.** The seat, the power, the record, the settings, the window and the landing loop that reads them are all built. The closer that runs when the Birthing carries writes the launch facts and nothing else: no role, no seat, no grant. So a fresh village has a veto window that nobody can use until a steward is seated, which today is an act somebody performs by hand.
 - **A close and its executor are not one transaction.** The ballot is closed by one guarded update and the executor runs after it. An executor that throws leaves a ballot closed and passed with nothing applied, and only the mechanics subject has a second door to apply by hand.
 - **4 reads under the governance prefix answer a stranger**, and at the module's `public` lifecycle that means the whole voter roll with names, choices and weights is served to the internet.
 - **A weight in token mode is displayed in ledger units.** A holding a member reads as 0.1 weighs 100 in the tally, and the hand-mint form takes raw units with no hint, so typing 1 for a 3-decimal token mints a thousandth.
@@ -546,7 +545,6 @@ What is broken today, by name. A document that only described the parts that wor
 <!-- written by a person: stagedIntro -->
 What is staged: ruled by the founder, described here, and absent from the code. Nothing in this list exists. Each one carries a guard in the generator, so the day somebody builds it the guard goes red and this section has to be updated before the build passes.
 
-- **Catalysts inherit the steward seat at the Birthing, and the seat is re-voted every season** (ruling 2)
 - **Giving up the steward power is reversible, and only the village can fill the seat again** (ruling 3)
 - **One to three catalysts start a village, and Voice is the only token they may issue before the Game starts** (ruling 10)
 - **The Game Mechanics section is public, always, and after the Birthing every control becomes a proposal** (ruling 12)
@@ -576,7 +574,7 @@ The seat exists, and the approval gate this ruling describes is WITHDRAWN by the
 
 ### 2. Catalysts inherit the steward seat at the Birthing, and the seat is re-voted every season
 
-**Staged.** Not built. Status computed from the code. Said 2026-08-31.
+**Built.** Status computed from the code. Said 2026-08-31.
 
 <!-- the founder's own words -->
 > I want to override the optionally vote in that role to where the founders automatically inherit it, but just like every role resets every season - this role too needs to be voted back in to be maintained.
@@ -1036,7 +1034,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "7f564c89baa8ffc6",
+  "commit": "30c7bcefe5cdc8fb",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -2385,7 +2383,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "dates": [
         "2026-08-31"
       ],
-      "status": "Staged. Not built.",
+      "status": "Built.",
       "statusBasis": "computed"
     },
     {

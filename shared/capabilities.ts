@@ -329,7 +329,8 @@ export const STAGE_UNLOCKS: Partial<Record<Capability, string>> = {
  *
  * A `true` here means: once this village records a holder for this key, an
  * admin stops passing the gate on it by being an admin, and has to reach past
- * the village in the open to act on it.
+ * the village in the open to act on it. Since 2026-09-21 only a founder
+ * seated as a steward with the veto may reach past it (BREAK_GLASS_SEAT).
  *
  * A `false` means one of two things, and they are worth telling apart:
  *
@@ -701,12 +702,28 @@ export type CapabilitySource =
 export interface CapabilityCtx {
   stageIndex: number;
   stageIndexOf: (stageId: string) => number;
+  /**
+   * What the member's roles grant, counting only holdings that have NOT
+   * lapsed. A seat whose term has ended is nobody (0171, `holdingHasLapsed` in
+   * server/lib/stewardship.ts), and the server builds this list that way in
+   * `roleCapabilitiesFor`. The break-glass step reads it too, so a founder
+   * whose steward's seat ran out loses the override the same instant they
+   * lose the veto.
+   */
   roleCapabilities: readonly string[];
   /** Capabilities granted by the member's active badges. Default []. */
   badgeCapabilities?: readonly string[];
   /** Capabilities DENIED by active warning badges. Default []. */
   badgeDenies?: readonly string[];
   isAdmin?: boolean;
+  /**
+   * The actor's ACCOUNT role is `founder`, read off the user record. What a
+   * village calls that role on its own screens is the client's business and
+   * never this file's: the gate knows the stored value and no label. Only the
+   * break-glass step reads this (Rye, 2026-09-21), and it is never enough on
+   * its own: see BREAK_GLASS_SEAT.
+   */
+  isFounder?: boolean;
   /**
    * Per-village overrides of STAGE_UNLOCKS, sourced from the variables
    * registry (progression.unlock.*) — the Game Mechanics initiative made
@@ -726,11 +743,16 @@ export interface CapabilityCtx {
   /**
    * THE BREAK-GLASS, for exactly one act.
    *
-   * Set by a caller that has been told, in the request, that the admin means
+   * Set by a caller that has been told, in the request, that the actor means
    * to reach past a power the village holds. It never persists, it is never
    * inferred, and the caller that sets it owes the village a record and a
    * notification. `capabilityDecision` reports `reachedPastVillage` so the
    * caller cannot forget.
+   *
+   * ASKING IS NOT THE SAME AS BEING LET THROUGH. The name is older than the
+   * ruling that narrowed it: since 2026-09-21 the gate honours it only for a
+   * founder seated as a steward with the veto, and from anybody else it is a
+   * request the gate refuses.
    */
   adminOverride?: boolean;
 }
@@ -756,11 +778,13 @@ export interface CapabilityDecision {
  *   1. isAdmin, on a key the village does NOT hold -> true. Unchanged: the
  *      operator can always act on the scaffolding they are responsible for.
  *   1b. isAdmin, on a key the village DOES hold:
- *        - with an explicit break-glass -> true, and the caller owes the
- *          village a record it can read.
- *        - without one -> the admin short-circuit does not apply, and the
- *          same admin is judged on steps 2-5 like anybody else. An admin
- *          who holds the role still passes, and passes AS the holder.
+ *        - a FOUNDER seated as a steward with the veto, with an explicit
+ *          break-glass -> true, and the caller owes the village a record it
+ *          can read (Rye, 2026-09-21; see BREAK_GLASS_SEAT).
+ *        - anybody else, glass or no glass -> the admin short-circuit does
+ *          not apply, and the same admin is judged on steps 2-5 like anybody
+ *          else. An admin who holds the role still passes, and passes AS the
+ *          holder.
  *   2. badgeDenies, ON A DENIABLE KEY -> false. A warning badge's deny beats
  *      ROLE and stage grants too, not just badge grants: a warning that a
  *      role trivially overrides is not a warning. It reaches only the keys
@@ -776,6 +800,12 @@ export interface CapabilityDecision {
  * point. It is also why the break-glass ships in the same commit and not one
  * commit later: a gate that can lock an operator out of a live village must
  * never exist without its escape hatch.
+ *
+ * SINCE 2026-09-21 THE GLASS IS A FOUNDER-STEWARD'S, and an operator who is
+ * not one has one door left: handing the power back to the admin panel
+ * (`DELETE /api/admin/capabilities/:capability/holding`), which leaves the
+ * same public line the crossing did. That route is outside this gate and the
+ * ruling did not reach it, so it is named here instead of changed.
  */
 /**
  * KEYS THAT CARRY OTHER KEYS, because holding the greater already means holding
@@ -829,12 +859,59 @@ export function carriedBy(held: readonly string[], cap: Capability): boolean {
   return held.some((k) => (CARRIES[k as Capability] ?? []).includes(cap));
 }
 
+/**
+ * THE SEAT A FOUNDER HAS TO BE SITTING IN TO BREAK THE GLASS.
+ *
+ * Rye's ruling of 2026-09-21, asked whether a founder keeps an override once
+ * a village holds a power such as `dial.set`: "Only if the founder is holding
+ * the Steward role and has the power to veto." So the break-glass step asks
+ * three things at once, and all three are facts the gate already holds:
+ *
+ *   - the account role is `founder` (`isFounder`). An administrator who is
+ *     not a founder never gets through, and neither does a steward who is not
+ *     a founder: the ruling is about founders.
+ *   - a ROLE the founder holds carries this key. A badge granting it does not
+ *     count, and that is deliberate: the ruling names the Steward role, and a
+ *     badge is something an administrator can mint and award to themselves.
+ *   - that holding has not lapsed. `roleCapabilities` already counts only
+ *     live seats, so this costs nothing extra and cannot disagree with the
+ *     veto itself: a founder whose term ran out loses both in the same
+ *     instant. A seat carrying this key is filled by a `role_seat` ballot and
+ *     by no admin route (`stewardSeatRefusal`), so the village decides who
+ *     can reach past it.
+ *
+ * A warning badge cannot take the seat's key away (`DENIABLE` marks
+ * `steward.veto` false), so no badge can switch this step off either.
+ *
+ * WHAT IT DOES NOT TOUCH. The admin short-circuit on a key the village does
+ * NOT hold is unchanged, and so is operator recovery through
+ * `BREAK_GLASS_ADMIN_EMAIL`, which re-elevates an account at bootstrap and
+ * never reaches this function. Rye ruled on the founder's override, and the
+ * operator's recovery path is a separate question.
+ */
+export const BREAK_GLASS_SEAT: Capability = "steward.veto";
+
+/**
+ * The way through, in the words everybody the gate refuses it to reads.
+ *
+ * One sentence in one place, so the refusal the server writes and the tests
+ * that read it cannot drift apart.
+ */
+export const BREAK_GLASS_WAY_THROUGH =
+  "A founder can override it only while seated as a steward with the veto.";
+
 export function capabilityDecision(cap: Capability, ctx: CapabilityCtx): CapabilityDecision {
   const villageHolds = isVillageHeld(cap, ctx.villageHeld);
   if (ctx.isAdmin && !villageHolds) {
     return { allowed: true, source: "admin", villageHolds: false, reachedPastVillage: false };
   }
-  if (ctx.isAdmin && villageHolds && ctx.adminOverride === true) {
+  if (
+    ctx.isAdmin &&
+    villageHolds &&
+    ctx.adminOverride === true &&
+    ctx.isFounder === true &&
+    ctx.roleCapabilities.includes(BREAK_GLASS_SEAT)
+  ) {
     return { allowed: true, source: "admin-override", villageHolds: true, reachedPastVillage: true };
   }
   const decided = (allowed: boolean, source: CapabilitySource): CapabilityDecision =>

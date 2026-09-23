@@ -317,29 +317,40 @@ diffs iterate; keep the union and the array in lockstep.
 count is not written down here. `capabilityDecision` is the one implementation
 and it is pure and isomorphic; `hasCapability` is its yes-or-no projection and
 never a second copy of the order. That order IS the policy (Gate E, shipped
-S36, amended by 0098):
+S36, amended by 0098 and by Rye's ruling of 2026-09-21). `docs/CAPABILITIES.md`
+is generated from the function and is the authority; this list is a summary
+of it, checked against the code on 2026-09-21:
 
 1. `isAdmin`, on a key the village does NOT hold → true. The operator can
    always act on the scaffolding they are responsible for, through a real role
    on the user record and never a parallel path.
-2. `isAdmin`, on a key the village DOES hold: with an explicit break-glass
-   → true, and the caller owes the village a record it can read
-   (`reachedPastVillage` says so); without one, the admin short-circuit does
-   not apply and the same admin is judged on steps 3 to 6 like anybody else.
+2. `isAdmin`, on a key the village DOES hold, with an explicit break-glass,
+   from a FOUNDER seated in a live role carrying `steward.veto`
+   (`BREAK_GLASS_SEAT`) → true, and the caller owes the village a record it
+   can read (`reachedPastVillage` says so). Any other admin, glass or no
+   glass, gets no short-circuit and is judged on the steps below like
+   anybody else. A badge granting `steward.veto` does not count: the ruling
+   names the role.
 3. `badgeDenies`, ON A DENIABLE KEY → false. A warning badge's deny beats
    role AND stage grants: "a warning that a role trivially overrides is not a
    warning". `DENIABLE` (0109, R65/R66) says which keys a deny may reach;
-   `ballot.vote` and `member.vouch` are a member's own say in a decision,
-   nothing takes one away, and the gate ignores a deny that names one.
+   the voices are a member's own say in a decision, nothing takes one away,
+   and the gate ignores a deny that names one.
 4. `roleCapabilities` → true (appointments);
-5. `badgeCapabilities` → true (earned/granted badges);
-6. stage unlock (`STAGE_UNLOCKS`, deliberately only a handful of real
+5. a key a role already carries through `CARRIES` → true (a super vouch
+   carries a vouch);
+6. `badgeCapabilities` → true (earned/granted badges);
+7. stage unlock (`STAGE_UNLOCKS`, deliberately only a handful of real
    gates) → true;
-7. otherwise false.
+8. otherwise false.
 
 On a village-held key a warning badge's deny therefore reaches an ADMIN too,
 which is why the break-glass shipped in the same commit: a gate that can lock
 an operator out of a live village must never exist without its escape hatch.
+Since the 2026-09-21 ruling an operator who is not a founder-steward has one
+door left, handing the power back to the panel
+(`DELETE /api/admin/capabilities/:capability/holding`), which leaves the same
+public line the crossing did.
 
 Server side, `capabilityCtx(user)` in `server/index.ts` builds the context
 once per request; badge grants and denies are only queried while the badges
@@ -1475,8 +1486,9 @@ submission aged out.
      `guardCapability(req, res, cap)`, or `mayAct(req, cap)` when the route
      has a second door beside the capability (an author editing their own
      thing, a proposer closing their own ballot). Both read `override` and
-     `x-capability-override`, both answer 409 with the holder's name, and
-     `mayAct` writes the public record.
+     `x-capability-override`, both answer 409 with the holder's name and
+     `overrideAvailable` (true only for a founder seated as a steward with
+     the veto), and `mayAct` writes the public record.
    - A route that only REPORTS the key, in a payload flag or a decision
      about how much to build, is a LOOK. Use
      `hasCapability(cap, await capabilityCtx(user))`, which reads no

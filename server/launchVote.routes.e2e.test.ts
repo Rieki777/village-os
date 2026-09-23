@@ -129,6 +129,28 @@ const gameStartRow = async (): Promise<any | null> => {
   return typeof rows[0].value === "string" ? JSON.parse(rows[0].value) : rows[0].value;
 };
 
+/**
+ * Every steward seat this village holds, read raw.
+ *
+ * THIS IS THE ASSERTION THAT THE CLOSER ACTUALLY CALLS THE SEATING, and it is
+ * here rather than beside the unit tests for a reason worth writing down.
+ * `seatCatalystsAsStewards` said in its own header for eight weeks that the
+ * launch closer called it, was covered by a whole passing suite, and was
+ * called by nothing outside that suite. A green function nobody calls is a
+ * green about code that never runs, so the wiring gets driven over HTTP,
+ * through a real vote, against the built server.
+ */
+const stewardSeats = async (): Promise<Array<{ userId: string; endsAt: number | null; grantedBy: string | null }>> => {
+  const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    "SELECT user_id, UNIX_TIMESTAMP(term_ends_at) AS ends, granted_by FROM role_holders WHERE role_id = 'steward' ORDER BY user_id",
+  );
+  return rows.map((r) => ({
+    userId: String(r.user_id),
+    endsAt: r.ends === null ? null : Number(r.ends) * 1000,
+    grantedBy: r.granted_by === null ? null : String(r.granted_by),
+  }));
+};
+
 /** One claim's status, read from the table and never off a payload. */
 const claimStatus = async (id: string): Promise<string | null> => {
   const [rows] = await pool.query<any[]>("SELECT status FROM quest_claims WHERE id = ?", [id]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
@@ -465,6 +487,59 @@ describe.skipIf(!DB_CONFIGURED)("everybody answers and everybody agrees", () => 
     const now = await tryToIssue("The village started its Game, so this can land");
     expect(now.status, JSON.stringify(now.json)).toBe(200);
     expect(now.json?.toBalance).toBe(5);
+  });
+
+  it("seats the founder as a steward, with a term, and leaves the members where they were", async () => {
+    /*
+     * Rye, 2026-09-23: "Seat them at launch." The close is the only thing that
+     * has run since the previous case, so a seat here was written by the
+     * closer and by nothing else. Larksfield's roll is a founder and two
+     * members, so this also drives the filter: the seating asks for the stored
+     * role `founder` and never for the roll.
+     */
+    const rows = await launchBallots();
+    const carried = rows[rows.length - 1];
+    expect(carried.status).toBe("passed");
+
+    const seats = await stewardSeats();
+    expect(seats.map((s) => s.userId), "the founder, and only the founder").toEqual([founderId]);
+    expect(seats[0].endsAt, "no seat may enter with an indefinite time").not.toBeNull();
+    expect(seats[0].endsAt!).toBeGreaterThan(Date.now());
+    expect(seats[0].grantedBy, "the village put them here, not an administrator").toBe(carried.id);
+
+    // The seat is worth something: the role carries the veto, and the veto has
+    // crossed to the village, which is what makes an admin meet a break-glass.
+    const [roles] = await pool.query<any[]>("SELECT capabilities FROM roles WHERE id = 'steward'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const caps = typeof roles[0]?.capabilities === "string" ? JSON.parse(roles[0].capabilities) : roles[0]?.capabilities;
+    expect(caps).toContain("steward.veto");
+    const [holding] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT holder_role_id, moved_by_ballot_id FROM capability_holding WHERE capability = 'steward.veto'",
+    );
+    expect(String(holding[0]?.holder_role_id)).toBe("steward");
+    expect(String(holding[0]?.moved_by_ballot_id)).toBe(carried.id);
+
+    // And the founder was told, on the same spine every other seating uses.
+    const [rung] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT title FROM notifications WHERE user_id = ? AND type = 'role_appointed'",
+      [founderId],
+    );
+    expect(rung, "a seat nobody was told about is not a seating").toHaveLength(1);
+    expect(String(rung[0].title)).toContain("Steward");
+
+    /*
+     * AND THE RUNNING PROCESS KNOWS, which is a separate fact from the rows
+     * above. `roles` and `role_holders` are served from an in-process cache
+     * built at boot, the capability gate reads it, and the seating writes
+     * underneath it. Without the reload this payload would still be serving
+     * the pre-launch answer while the database says otherwise, and the founder
+     * would hold a seat nothing could see until somebody restarted the server.
+     */
+    const me = await call("GET", "/api/game/me");
+    expect(me.status, JSON.stringify(me.json)).toBe(200);
+    expect(
+      ((me.json?.roles ?? []) as Array<{ id: string }>).map((r) => r.id),
+      "the cache the gate reads, not the table",
+    ).toContain("steward");
   });
 
   it("pays the work that was waiting, because the claim was never stranded", async () => {

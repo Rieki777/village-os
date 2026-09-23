@@ -156,7 +156,7 @@ export default function Training() {
           <h1 className="font-display text-4xl md:text-5xl font-bold mb-3">
             Learn Together, Grow Together
           </h1>
-          <p className="text-white/80 text-lg max-w-2xl">
+          <p className="text-white text-lg max-w-2xl">
             Practical training in nonviolent communication, authentic relating, and
             consent-based decision making. The practices that make community life
             actually work.

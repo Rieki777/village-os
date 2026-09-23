@@ -155,7 +155,7 @@ export default function Decisions() {
             <div>
               <span className="text-amber-on-band text-sm font-medium uppercase tracking-widest">The village decides</span>
               <h1 className="mt-1 font-display text-3xl font-bold sm:text-4xl">Decisions</h1>
-              <p className="mt-2 max-w-2xl text-white/85 leading-relaxed">
+              <p className="mt-2 max-w-2xl text-white leading-relaxed">
                 Every vote this village is holding, and every one it has held. Votes stay changeable until they close,
                 and nothing closes on a timer.
               </p>
