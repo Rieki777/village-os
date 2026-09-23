@@ -26384,11 +26384,15 @@ ${inner}
    * miss and not a page. Without this, /.well-known/anything falls through to
    * the SPA and answers HTML with a 200, which is how a peer probing for a
    * capability document concludes this village has one.
+   *
+   * Neither miss repeats the path back. The caller already knows what it
+   * asked for, and a body built from the request is the reflection CodeQL
+   * reports, which is why the file misses further down answer a constant too.
    */
-  app.get("/.well-known/{*splat}", (req, res) => notPublished(res, `Not found: ${req.path}`));
+  app.get("/.well-known/{*splat}", (_req, res) => notPublished(res, "Not found"));
 
   app.get("/org", (_req, res) => res.redirect(308, "/org/index.md"));
-  app.get("/org/{*splat}", (req, res) => notPublished(res, `Not found: ${req.path}`));
+  app.get("/org/{*splat}", (_req, res) => notPublished(res, "Not found"));
 
   // Links, structural drafts, seat history and the admin edits to the org
   // chart, all nineteen registered at exactly the point they used to sit.
@@ -27151,12 +27155,15 @@ ${inner}
    * A 404 lets each of those be seen: fetch clients get an honest status,
    * broken assets show as broken, and a browser asking for a bundle that no
    * longer exists gets an error a reload can fix rather than a blank page.
+   *
+   * The asset miss answers a constant: repeating the requested path is the
+   * reflection CodeQL reports, and the status is what a caller needs anyway.
    */
   app.all("/api/{*splat}", (req, res) => {
     res.status(404).json({ error: `No such endpoint: ${req.method} ${req.path}` });
   });
-  app.get("/assets/{*splat}", (req, res) => {
-    res.status(404).type("text/plain").send(`Not found: ${req.path}`);
+  app.get("/assets/{*splat}", (_req, res) => {
+    res.status(404).type("text/plain").send("Not found");
   });
   /*
    * A PATH THAT LOOKS LIKE A FILE FAILS LIKE ONE.
