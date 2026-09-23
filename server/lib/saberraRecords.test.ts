@@ -11,7 +11,7 @@
  * connector on 2026-09-23, rather than names invented for a test.
  */
 import { describe, expect, it } from "vitest";
-import { readVendorRecord, shownFields } from "./saberraRecords";
+import { readVendorRecord, shownFields, type SaberraRecordKind } from "./saberraRecords";
 
 describe("reading a vendor record", () => {
   it("takes a circle's structure and leaves its people behind", () => {
@@ -99,7 +99,7 @@ describe("reading a vendor record", () => {
     // Notes is allowed, and a note can still hold somebody's address.
     const r = readVendorRecord("circle", {
       "Circle Name": "Governance & Coordination",
-      Notes: "Ask jess@amora.test before changing the rhythm.",
+      Notes: "Ask jess@example.test before changing the rhythm.",
       Status: "Active",
     });
     expect(r.fields).toEqual({ "Circle Name": "Governance & Coordination", Status: "Active" });
@@ -141,7 +141,7 @@ describe("reading a vendor record", () => {
     // Body is the one allowed field most likely to carry one, being free prose.
     const r = readVendorRecord("role", {
       "Role Name": "Water Steward",
-      Body: "Holds the water. Questions to mika@amora.test.",
+      Body: "Holds the water. Questions to mika@example.test.",
     });
     expect(r.fields).toEqual({ "Role Name": "Water Steward" });
     expect(r.droppedForAnAddress).toEqual(["Body"]);
@@ -151,5 +151,73 @@ describe("reading a vendor record", () => {
     expect(shownFields("role")).toContain("Role Name");
     expect(shownFields("role")).not.toContain("Active Holders");
     expect(shownFields("tension")).not.toContain("Sensed By");
+  });
+});
+
+/**
+ * THE FIELDS THE VENDOR TOLD US ABOUT ON 2026-09-23.
+ *
+ * Their founder checked his live schema against the structural-field list we
+ * had been working from and reported it correct but INCOMPLETE: seven further
+ * fields carry a person and were not on it. One of them, `Role Holders`, is an
+ * automatic back-reference nobody wrote — it simply exists because a relation
+ * points at it.
+ *
+ * That is the allow list's whole argument, arriving as an event rather than as
+ * a hypothetical: seven name-carrying fields we did not know about, one of
+ * which nobody created on purpose. Under a deny list every one of them would
+ * have been admitted by default. These cases exist so the next such email is
+ * answered by a test run rather than by reading the file and reasoning.
+ */
+describe("the fields the vendor named on 2026-09-23", () => {
+  it("drops the two that look most like structure to a reader", () => {
+    // A lead and a steward sound like seats. They hold people.
+    const r = readVendorRecord("circle", {
+      "Circle Name": "Land & Ecology",
+      "Circle Lead": "Michael",
+      "Rep Steward": "Jess",
+    });
+    expect(r.fields).toEqual({ "Circle Name": "Land & Ecology" });
+    expect(r.ignored).toEqual(["Circle Lead", "Rep Steward"]);
+  });
+
+  it("drops the back-reference nobody wrote onto the role", () => {
+    const r = readVendorRecord("role", { "Role Name": "Water Steward", "Role Holders": ["Mika"] });
+    expect(r.fields).toEqual({ "Role Name": "Water Steward" });
+    expect(r.ignored).toEqual(["Role Holders"]);
+  });
+
+  it("HAS NO DOOR AT ALL for the three record kinds where the Profile fields live", () => {
+    // Decisions, Projects and Commitments carry Decision Maker Profile,
+    // Reviewer Profile, Lead Profile, Team Profiles and Parties. The safety is
+    // not that those names are denied — it is that these kinds have no allow
+    // list, so an unknown kind resolves to an empty one and everything is
+    // dropped. Fails CLOSED. The cast is the point: these are not readable
+    // kinds, and this proves what happens if one is asked for anyway.
+    for (const kind of ["decision", "project", "commitment"]) {
+      const r = readVendorRecord(kind as SaberraRecordKind, {
+        Name: "Buy the north parcel",
+        "Decision Maker Profile": "Rick",
+        "Reviewer Profile": "Jess",
+        "Lead Profile": "Michael",
+        "Team Profiles": ["Ky", "Mika"],
+        Parties: ["North Parcel Group", "Kyleen"],
+      });
+      expect(r.fields).toEqual({});
+      expect(r.ignored).toContain("Decision Maker Profile");
+      expect(r.ignored).toContain("Team Profiles");
+      expect(r.ignored).toContain("Parties");
+    }
+  });
+
+  it("names every kind that has a door, so adding one is a deliberate act", () => {
+    // If this list grows, somebody widened the boundary. That should be a
+    // conversation and a failing test, not a quiet commit.
+    for (const kind of ["circle", "role", "roleAssignment", "tension", "risk"] as const) {
+      expect(shownFields(kind).length).toBeGreaterThan(0);
+    }
+    for (const kind of ["decision", "project", "commitment", "meeting", "profile", "task"]) {
+      expect(shownFields(kind as SaberraRecordKind)).toEqual([]);
+    }
   });
 });

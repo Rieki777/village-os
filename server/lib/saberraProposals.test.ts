@@ -90,7 +90,7 @@ describe("suggesting a structure", () => {
 
   it("keeps the rest of a seat when one field carried an address, and names the record", () => {
     const r = proposeStructure(
-      [role("r-1", { "Role Name": "Water Steward", Body: "Ask mika@amora.test." })],
+      [role("r-1", { "Role Name": "Water Steward", Body: "Ask mika@example.test." })],
       { sourceName: SOURCE },
     );
     expect(r.payload.seats[0]).toEqual({ name: "Water Steward", id: "r-1" });
