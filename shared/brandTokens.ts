@@ -162,6 +162,15 @@ const AA_BODY = 4.5;
 const AA_LARGE = 3.0;
 
 /**
+ * How far a hover moves from the brand, as the WCAG ratio between the two
+ * grounds. The platform's own neutral pair, #404040 at rest and #262626 under
+ * the pointer, is 1.46; Tailwind's blue-600 to blue-700 is 1.30. This sits
+ * between them, so every village's hover reads as a change at least as clearly
+ * as those do.
+ */
+export const HOVER_STEP = 1.4;
+
+/**
  * Derive everything from (seed, card). Returns null when seed is absent or
  * invalid — the neutral case, which MUST emit nothing.
  */
@@ -187,6 +196,31 @@ export function deriveTheme(seedHex: string | undefined | null, cardId: string |
   const brand = atContrast(brandTarget, "#ffffff", AA_BODY, true);
   const brandHex = hslToHex(brand);
   measured("white on brand", "#ffffff", brandHex, AA_BODY, Math.abs(brand.l - seed.l) > 0.02);
+
+  /*
+   * THE BRAND UNDER THE POINTER. A primary button is white text on `brand`,
+   * and it needs a hover colour a member can SEE that still carries the white.
+   * No tone here did both. The soft tone is where 17 buttons used to hover, and
+   * white on it is 1.67 to 3.00:1. A translucent brand (`/90`, `opacity-90`)
+   * lifts toward the page, and `brand` above is derived so white only just
+   * clears 4.5, so the fade dropped 28 of 55 villages below it (3.79 worst).
+   * The band is darker or equal, and it is EQUAL whenever the accent already
+   * clears on the brand: 8 of 54 themes, where a hover to it changes nothing.
+   *
+   * So the hover is the brand moved by a fixed step, HOVER_STEP, measured as
+   * the WCAG ratio between the two grounds. It goes DARKER when there is room,
+   * which can only raise white's contrast. A brand so dark that no darker
+   * colour sits a step away (a near-black seed) goes lighter by the same step
+   * instead, and the step is small enough that white still clears AA body on
+   * it with room to spare. Both directions keep the seed's hue and saturation.
+   */
+  const darkerHover = atContrast(brand, brandHex, HOVER_STEP, true);
+  const brandHover =
+    darkerHover.l < brand.l && contrastRatio(hslToHex(darkerHover), brandHex) >= HOVER_STEP
+      ? darkerHover
+      : atContrast(brand, brandHex, HOVER_STEP, false);
+  const brandHoverHex = hslToHex(brandHover);
+  measured("white on brand hover", "#ffffff", brandHoverHex, AA_BODY, false);
 
   // ink: near-black of the seed's hue, forced past AAA-ish on the background.
   const surfaces = {
@@ -283,6 +317,9 @@ export function deriveTheme(seedHex: string | undefined | null, cardId: string |
   const vars: Record<string, string> = {
     // The tone layer — index.css aliases the historical colour names to these.
     "--tone-brand": brandHex,
+    // The primary button's hover partner: a visible step from --tone-brand,
+    // carrying white at AA body for every seed. Derived above.
+    "--tone-brand-hover": brandHoverHex,
     "--tone-brand-mid": brandMid,
     "--tone-brand-soft": brandSoft,
     "--tone-mist": mist,

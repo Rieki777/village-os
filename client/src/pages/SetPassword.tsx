@@ -129,7 +129,7 @@ export default function SetPassword() {
                   <button
                     type="submit"
                     disabled={busy || !token}
-                    className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity"
+                    className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-semibold hover:bg-teal-deep-dark disabled:opacity-50 transition"
                   >
                     {busy ? "Saving…" : "Set password"}
                   </button>

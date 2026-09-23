@@ -512,7 +512,7 @@ export default function ProsperityJourney() {
                             {!step.link ? null : step.link.startsWith("#") ? (
                               <a
                                 href={step.link}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-gold text-white rounded-full text-sm font-medium hover:opacity-90 transition-opacity"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-gold text-white rounded-full text-sm font-medium hover:bg-amber-800 transition"
                               >
                                 {step.linkText}
                                 <ArrowRight className="w-4 h-4" />
@@ -522,7 +522,7 @@ export default function ProsperityJourney() {
                                 href={step.link}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-gold text-white rounded-full text-sm font-medium hover:opacity-90 transition-opacity"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-gold text-white rounded-full text-sm font-medium hover:bg-amber-800 transition"
                               >
                                 {step.linkText}
                                 <ExternalLink className="w-4 h-4" />
@@ -530,7 +530,7 @@ export default function ProsperityJourney() {
                             ) : (
                               <Link
                                 href={step.link}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-gold text-white rounded-full text-sm font-medium hover:opacity-90 transition-opacity"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-gold text-white rounded-full text-sm font-medium hover:bg-amber-800 transition"
                               >
                                 {step.linkText}
                                 <ArrowRight className="w-4 h-4" />

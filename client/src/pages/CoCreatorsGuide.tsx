@@ -1096,7 +1096,7 @@ export default function CoCreatorsGuide() {
                 respect.
               </p>
               <Link href="/good-neighbor">
-                <a className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:opacity-90 transition-opacity">
+                <a className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-teal-deep-dark transition">
                   Read the Full Good Neighbor Document
                   <ArrowRight className="w-4 h-4" />
                 </a>

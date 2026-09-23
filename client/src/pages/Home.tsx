@@ -622,7 +622,7 @@ export default function Home() {
                   href={eventsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-8 py-4 bg-primary text-primary-foreground rounded-lg font-semibold text-lg hover:opacity-90 transition-all duration-200 flex items-center gap-2"
+                  className="px-8 py-4 bg-primary text-primary-foreground rounded-lg font-semibold text-lg hover:bg-teal-deep-dark transition-all duration-200 flex items-center gap-2"
                 >
                   <Calendar className="w-5 h-5" />
                   Join Community Call
