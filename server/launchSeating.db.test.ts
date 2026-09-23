@@ -27,7 +27,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
 import type { Pool } from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "./db/testDb";
 import { loadVariables } from "./lib/variables";
 import { seatFoundersAtLaunch, type LaunchSeatingDeps } from "./lib/launchSeating";
 import { holdingHasLapsed, stewardHoldingId, STEWARD_ROLE_ID, STEWARD_VETO } from "./lib/stewardship";
@@ -114,7 +114,7 @@ function recorder(pool: Pool) {
  * So this suite runs the app's own discipline and then reads the true instant.
  */
 function connect(url: string): Pool {
-  const p = mysql.createPool({ uri: url, timezone: "Z", connectionLimit: 6 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+  const p = testPool(url, { connectionLimit: 6 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
   p.on("connection", (c) => {
     c.query("SET time_zone = '+00:00'"); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
   });

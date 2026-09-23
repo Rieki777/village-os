@@ -136,7 +136,14 @@ if (UPDATE) {
 }
 
 if (total > baseline.total) {
-  console.error(`\n${total - baseline.total} new unpinned test pool(s):`);
+  console.error(
+    `\nThe count rose by ${total - baseline.total}, from ${baseline.total} to ${total}.\n` +
+      `WHAT FOLLOWS IS EVERY UNPINNED POOL, not the new ones. This guard holds a TOTAL and\n` +
+      `cannot tell which line is yours; diff against the base ref to find it. The first draft\n` +
+      `of this message said "N new" above a list of forty unrelated files, which sent the\n` +
+      `reader looking in the wrong place.` +
+      (total > 40 ? `\nShowing the first 40 of ${total}.` : ""),
+  );
   for (const u of unpinned.slice(0, 40)) console.error(`  ${u.file}:${u.line}`);
   console.error(
     `\nA pool built with mysql.createPool({ timezone: "Z" }) reads NOW() and UNIX_TIMESTAMP in the\n` +
