@@ -92,7 +92,8 @@ import { landingRow } from "./lib/applyDue";
 import { closeActivityLine, decisionLink, notifyRollRows, tellRollTheOutcome, type RollNotice } from "./lib/ballotNotices";
 import { isPresentMember, presenceTest } from "./lib/memberPresence";
 import { runSeasonReminders } from "./lib/seasonReminders";
-import { forgetStewardActs, holdingHasLapsed, recordTermStarted, runTermWatch, setVetoWindowCheck, STEWARD_VETO, stewardMailRefusal, termWatchLookaheadDays } from "./lib/stewardship";
+import { forgetStewardActs, holdingHasLapsed, recordTermStarted, runTermWatch, setVetoWindowCheck, STEWARD_ROLE_ID, STEWARD_VETO, stewardMailRefusal, termWatchLookaheadDays } from "./lib/stewardship";
+import { seatFoundersAtLaunch } from "./lib/launchSeating";
 import { freezeSeatTerm } from "./repos/ballotSeatTerms";
 import { roleVoteDays, seatVoteLandsAt, termForCarriedSeat } from "./lib/seatTermLanding";
 import { raisedHandTerm } from "./lib/raisedHandTerm";
@@ -23045,6 +23046,17 @@ ${inner}
         actorUserId: actorId,
         entityType: "ballot",
         entityRef: b.id,
+      });
+      // AND THE FOUNDERS TAKE THE STEWARD'S SEAT (Rye, 2026-09-23: "Seat them
+      // at launch"). server/lib/launchSeating.ts owns the term, the notices,
+      // the pulse line, the cache reload, and what a village whose calendar
+      // cannot give a term gets instead. It never refuses the launch.
+      await seatFoundersAtLaunch({
+        pool: getPool(), calendar: seatCalendar(), ballotId: b.id, actorId, withRoleHolderLock, notify,
+        reloadRoleCaches: async () => { await Promise.all([rolesRepo.load(), roleHoldersRepo.load()]); },
+        addActivity: (text, entityRef) => addActivity("governance", text, { actorUserId: actorId, entityType: "role", entityRef }),
+        audit: (text) => { void recordEvent(getPool(), { kind: "audit", text, actorUserId: actorId, entityType: "role", entityRef: STEWARD_ROLE_ID, audience: "admin" }); },
+        notifyAdmins: (title, dedupeKey) => notifyAdmins("governance", title, dedupeKey),
       });
       void recordEvent(getPool(), {
         kind: "audit",
