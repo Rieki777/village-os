@@ -35,6 +35,7 @@
 import { useEffect, useState } from "react";
 
 import { moonCountLabel } from "@shared/villageMoon";
+import { useModuleOn } from "@/modules/ModuleProvider";
 
 interface Total {
   name: string;
@@ -68,14 +69,24 @@ export default function MoonsPast({ currency }: { currency: string }) {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (alive && Array.isArray(d)) setCycles(d as ClosedCycle[]); })
       .catch(() => { /* the section stays away */ });
-    // The village's own moon count, so a moon is named the way the rest of the
-    // build names it rather than by its raw lunation number.
+    return () => { alive = false; };
+  }, []);
+
+  // The village's own moon count, so a moon is named the way the rest of the
+  // build names it rather than by its raw lunation number. Its OWN effect,
+  // because events is an optional module and the moons above are gratitude,
+  // which is core: guarding one shared effect would have hidden this whole
+  // section on every village with events off, to save a 404.
+  const eventsOn = useModuleOn("events");
+  useEffect(() => {
+    if (!eventsOn) return;
+    let alive = true;
     fetch("/api/events")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (alive && d && typeof d.moonOneCycle === "number") setMoonOne(d.moonOneCycle); })
       .catch(() => { /* an unanchored village gets the plain label */ });
     return () => { alive = false; };
-  }, []);
+  }, [eventsOn]);
 
   // Null means the read has not landed or failed. An empty ARRAY means the
   // village has never closed a moon, which is true of every new village and is

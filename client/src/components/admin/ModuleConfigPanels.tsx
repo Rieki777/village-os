@@ -84,12 +84,20 @@ function useModuleConfig(moduleId: string, password: string) {
   return { config, lifecycle, loading, save, reload: load };
 }
 
-/** The shared "this module is off" board, so an empty editor is never a mystery. */
+/**
+ * The shared "this module is off" board, so an empty editor is never a mystery.
+ *
+ * It used to send a founder away to turn the module on first. Setting a module
+ * up happens BEFORE it is switched on (Rye, 2026-09-15), and this editor has
+ * always written to the stored config whatever the lifecycle says, so the
+ * board now states what is true: the work is kept and it starts counting when
+ * the module does.
+ */
 function ModuleOff({ name }: { name: string }) {
   return (
-    <p className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-lg p-4">
-      The {name} module is off. Turn it on in the Module Library first, and this
-      editor writes to the config it reads.
+    <p className="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-4">
+      The {name} module is off. What you set here is saved now and takes effect
+      the moment you turn it on.
     </p>
   );
 }
@@ -126,21 +134,20 @@ const toRefs = (rows: CampaignRow[]) =>
       return ref;
     });
 
-export function CrowdpoolAdminTab({ password }: { password: string }) {
+/**
+ * The linked campaigns, as a panel the module card can mount.
+ *
+ * SPLIT OUT OF `CrowdpoolAdminTab` rather than copied, so the Crowdpool card in
+ * the Module Library and the Crowdpool tab are the same editor writing through
+ * the same route. `onSaved` is how the tab's hub-status card below it learns
+ * that the links moved.
+ */
+export function CrowdpoolCampaignsEditor({ password, onSaved }: { password: string; onSaved?: () => void }) {
   const { config, lifecycle, loading, save } = useModuleConfig("crowdpool", password);
   const [rows, setRows] = useState<CampaignRow[]>([]);
-  const [status, setStatus] = useState<any>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => { setRows(toRows(config?.villageCampaigns)); }, [config]);
-
-  const loadStatus = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_BASE}/admin/crowdpool/status`, { headers: authHeaders(password) });
-      setStatus(res.ok ? await res.json() : null);
-    } catch { setStatus(null); }
-  }, [password]);
-  useEffect(() => { void loadStatus(); }, [loadStatus]);
 
   if (loading) return <p className="text-sm text-gray-500">Loading…</p>;
 
@@ -148,18 +155,7 @@ export function CrowdpoolAdminTab({ password }: { password: string }) {
     setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-          <Coins className="w-5 h-5 text-teal-deep" /> Crowdpool
-        </h2>
-        <p className="text-sm text-gray-500 mt-1 max-w-2xl">
-          Which raisings on the hub belong to this village. Each one linked here
-          gets a ring on /campaigns and a page at /campaign/its-slug. The numbers
-          come from the hub every ten minutes; nothing is pledged or held here.
-        </p>
-      </div>
-
+    <div className="space-y-4">
       {lifecycle === "off" && <ModuleOff name="Crowdpool" />}
 
       <div className="bg-white border border-gray-100 rounded-xl p-5">
@@ -210,10 +206,39 @@ export function CrowdpoolAdminTab({ password }: { password: string }) {
               setSaving(true);
               const ok = await save({ villageCampaigns: toRefs(rows) });
               setSaving(false);
-              if (ok) { toast.success("Linked campaigns saved"); void loadStatus(); }
+              if (ok) { toast.success("Linked campaigns saved"); onSaved?.(); }
             }}>{saving ? "Saving…" : "Save links"}</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+export function CrowdpoolAdminTab({ password }: { password: string }) {
+  const [status, setStatus] = useState<any>(null);
+
+  const loadStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/crowdpool/status`, { headers: authHeaders(password) });
+      setStatus(res.ok ? await res.json() : null);
+    } catch { setStatus(null); }
+  }, [password]);
+  useEffect(() => { void loadStatus(); }, [loadStatus]);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+          <Coins className="w-5 h-5 text-teal-deep" /> Crowdpool
+        </h2>
+        <p className="text-sm text-gray-500 mt-1 max-w-2xl">
+          Which raisings on the hub belong to this village. Each one linked here
+          gets a ring on /campaigns and a page at /campaign/its-slug. The numbers
+          come from the hub every ten minutes; nothing is pledged or held here.
+        </p>
+      </div>
+
+      <CrowdpoolCampaignsEditor password={password} onSaved={loadStatus} />
 
       {/*
         What the hub actually answered. A linked slug the hub has never served
@@ -448,6 +473,78 @@ export function ResourcesRoutingEditor({ password }: { password: string }) {
           setSaving(false);
           if (ok) toast.success("Saved. /resources reads it on the next request");
         }}>{saving ? "Saving…" : "Save routing"}</button>
+    </div>
+  );
+}
+
+/**
+ * Call Automation's structural config, which had NO editor anywhere.
+ *
+ * Three keys are read on every recording sync and every synthesis
+ * (`server/index.ts`): the channel recordings are pulled from, how many ready
+ * syntheses may queue before the job stops adding to the pile, and the forum
+ * category a published synthesis lands in. A founder could enable the module
+ * and had no way to name their own channel, so the sync read an empty string
+ * and found nothing, with nothing on any screen saying why.
+ *
+ * `maxReadyQueue` is bounded 1 to 100 by the module's own validator, and that
+ * validator is the authority: the number input carries the same bounds so the
+ * browser can say so early, and the server's refusal is what decides.
+ */
+export function AutomationConfigEditor({ password }: { password: string }) {
+  const { config, lifecycle, loading, save } = useModuleConfig("automation", password);
+  const [channel, setChannel] = useState("");
+  const [queue, setQueue] = useState("15");
+  const [category, setCategory] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setChannel(String(config?.youtubeChannelId ?? ""));
+    setQueue(String(config?.maxReadyQueue ?? 15));
+    setCategory(String(config?.forumCategory ?? ""));
+  }, [config]);
+
+  if (loading) return <p className="text-sm text-gray-500">Loading…</p>;
+
+  return (
+    <div className="bg-white border border-gray-100 rounded-xl p-5">
+      <h3 className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+        <Wrench className="w-4 h-4 text-teal-deep" /> Where recordings come from, and where syntheses go
+      </h3>
+      <p className="text-xs text-gray-500 mb-3">
+        Read on every sync and every publish. Without a channel id nothing is ever pulled in.
+      </p>
+      {lifecycle === "off" && <div className="mb-3"><ModuleOff name="Call Automation" /></div>}
+
+      <div className="grid sm:grid-cols-3 gap-3">
+        <label className="text-xs text-gray-600">
+          Channel id the recordings are pulled from
+          <input value={channel} onChange={(e) => setChannel(e.target.value)}
+            placeholder="UC..." className={`${inputCls} w-full mt-1`} />
+        </label>
+        <label className="text-xs text-gray-600">
+          Ready syntheses allowed to wait for a human
+          <input type="number" min={1} max={100} value={queue} onChange={(e) => setQueue(e.target.value)}
+            className={`${inputCls} w-full mt-1`} />
+        </label>
+        <label className="text-xs text-gray-600">
+          Forum category a published synthesis is filed under
+          <input value={category} onChange={(e) => setCategory(e.target.value)}
+            placeholder="village-life" className={`${inputCls} w-full mt-1`} />
+        </label>
+      </div>
+
+      <button type="button" className={`${saveCls} mt-3`} disabled={saving}
+        onClick={async () => {
+          setSaving(true);
+          const ok = await save({
+            youtubeChannelId: channel.trim(),
+            maxReadyQueue: Number(queue),
+            forumCategory: category.trim(),
+          });
+          setSaving(false);
+          if (ok) toast.success("Saved. The next sync reads it");
+        }}>{saving ? "Saving…" : "Save"}</button>
     </div>
   );
 }

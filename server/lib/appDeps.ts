@@ -152,6 +152,21 @@ export interface AppDeps {
   milestonesRepo: DbCollection<Row>;
 
   /**
+   * The stewards' inbox: raised hands, applications, proposals, and anything
+   * else a member sends in that a human works through a pipeline.
+   *
+   * THERE IS ONE OF THESE AND IT IS THIS ONE. `submissions` is served from a
+   * boot-loaded cache, so a second `dbCollection` over the same table would
+   * write rows the admin inbox could not see until a restart. A module that
+   * files a row takes this and calls `insert`; a module that moves one reads
+   * `all()`, changes the row, and hands the WHOLE list back to `replaceAll`,
+   * which rebases a stale snapshot instead of overwriting a concurrent insert.
+   * Never call `replaceAll` with an empty array: an empty payload carries no
+   * version stamp, so the check that makes the rebase possible cannot run.
+   */
+  submissionsRepo: DbCollection<Row>;
+
+  /**
    * The village's circles, as the admin circle routes write them.
    *
    * `all()` answers from the cache, and the cache is current for every write
@@ -253,11 +268,32 @@ export interface AppDeps {
    * nothing. `trainingDone` is the SERVER's record of completed modules and
    * never a field the member can write; batch it with `trainingCompletions`
    * rather than reading per member inside a loop.
+   *
+   * FOUR FACTS, AND THE FOURTH WAS EASY TO DROP. `paidByVillage` carries the
+   * Contributor rung on its own, and until 2026-09-15 the implementation
+   * defaulted it to false, so a caller that handed over three arguments
+   * compiled and answered a rung too low for everybody the village had paid.
+   * Two did. The default is gone and this declaration is REQUIRED, which is
+   * two ways of saying the same thing on purpose: a dep passed as a value
+   * loses the implementation's signature, so the omission can only become a
+   * compiler error here. Batch it with `paidByVillage` below.
    */
-  computeStage(user: MemberRecord, consentedQuests: number, trainingDone: readonly string[]): string;
+  computeStage(user: MemberRecord, consentedQuests: number, trainingDone: readonly string[], paidByVillage: boolean): string;
 
   /** Completed training modules for many members, in one query. */
   trainingCompletions(userIds: readonly string[]): Promise<Map<string, string[]>>;
+
+  /**
+   * Which of these members the village has ever paid for something they
+   * brought it, in ONE query. The ids it answers with are the paid ones.
+   *
+   * The fourth fact `computeStage` wants, for a whole list. Every surface that
+   * computes a stage for more than one person reads it this way: the roster
+   * lists every member, so a per-member `hasBeenPaidByVillage` inside the loop
+   * would turn one page into N queries. Same discipline as `consentedCounts`
+   * and `trainingCompletions`, and for the same reason.
+   */
+  paidByVillage(userIds: readonly string[]): Promise<Set<string>>;
 
   /** `computeStage` with the quest count looked up for you. One read. */
   stageOf(user: MemberRecord): Promise<string>;
@@ -421,4 +457,17 @@ export interface AppDeps {
 
   /** What this village calls itself, for an email subject line. */
   projectName(): string;
+
+  /**
+   * What this village counts its money in, MERGED: the founder's Make This
+   * Yours value over the platform default. It is `mergedConfig().project
+   * .fiatCurrency`, the same value `/api/game/config` serves every page.
+   *
+   * NOT `brandRepo.get().project.fiatCurrency`. The stored document holds only
+   * what a founder chose, so a village that never chose reads blank there
+   * while every price on the site is quoted in the platform default. It is
+   * blank here only when the platform default is blank too, and then
+   * `defaultDisplayCurrency` (shared/money.ts) gives the site's answer.
+   */
+  projectCurrency(): string;
 }

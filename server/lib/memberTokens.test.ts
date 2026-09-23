@@ -167,7 +167,7 @@ describe("set-password claim tokens", () => {
     const claim = makeSetPasswordToken(SECRET, "u-1", "hash-v1");
     expect(readSetPasswordToken(SECRET, claim)).toEqual({
       userId: "u-1",
-      pw: passwordFingerprint("hash-v1"),
+      pw: passwordFingerprint(SECRET, "hash-v1"),
     });
   });
 
@@ -221,9 +221,24 @@ describe("set-password claim tokens", () => {
     // The route compares the fingerprint in the token against a fresh read of
     // the account. Setting a password changes the hash, so a replayed link no
     // longer matches. No nonce table required.
-    expect(passwordFingerprint("hash-v1")).not.toBe(passwordFingerprint("hash-v2"));
-    expect(passwordFingerprint(null)).toBe(passwordFingerprint(undefined));
-    expect(passwordFingerprint("")).toBe(passwordFingerprint(null));
-    expect(passwordFingerprint("hash-v1")).toHaveLength(16);
+    expect(passwordFingerprint(SECRET, "hash-v1")).not.toBe(passwordFingerprint(SECRET, "hash-v2"));
+    expect(passwordFingerprint(SECRET, null)).toBe(passwordFingerprint(SECRET, undefined));
+    expect(passwordFingerprint(SECRET, "")).toBe(passwordFingerprint(SECRET, null));
+    expect(passwordFingerprint(SECRET, "hash-v1")).toHaveLength(16);
+  });
+
+  it("cannot be reproduced without the server secret, which keeps a password out of the link", async () => {
+    // The input is the stored hash, and an account dormant since the bcrypt
+    // migration could still hold an unsalted SHA-256 of the password itself.
+    // Digesting that bare put sha256(sha256(password)) in an emailed link,
+    // which its holder can guess against offline. Keyed with the secret it
+    // cannot be reproduced from a guess. Both assertions fail against the
+    // old implementation, which returned exactly `bare`.
+    const crypto = await import("node:crypto");
+    const legacyStored = crypto.createHash("sha256").update("hunter2").digest("hex");
+    const bare = crypto.createHash("sha256").update(legacyStored).digest("hex").slice(0, 16);
+
+    expect(passwordFingerprint(SECRET, legacyStored)).not.toBe(bare);
+    expect(passwordFingerprint(SECRET, legacyStored)).not.toBe(passwordFingerprint("another-secret", legacyStored));
   });
 });

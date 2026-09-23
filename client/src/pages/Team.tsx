@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { gameFetch, useGameConfig, useVillageLinks } from "@/lib/gameApi";
 import { PeopleLockNote, type PeopleTier } from "@/components/PeopleLock";
 import { useVillageName } from "@/hooks/useVillageName";
+import { readVillageSection } from "@/hooks/useVillageContent";
 
 interface TeamMember {
   name: string;
@@ -53,7 +54,9 @@ export default function Team() {
     // and it had never granted anybody anything here.
     Promise.all([
       gameFetch("/api/org").then((r) => (r.ok ? r.json() : { circles: [], roles: [] })).catch(() => ({ circles: [], roles: [] })),
-      fetch("/api/content/team").then((r) => (r.ok ? r.json() : [])).catch(() => []),
+      // Through the section listing, so a fork that has written no team cards
+      // never requests them (see client/src/hooks/useVillageContent.ts).
+      readVillageSection("team").then((cards) => (Array.isArray(cards) ? cards : [])),
     ])
       .then(([org, cards]) => {
         setPeople(org.people ?? null);

@@ -124,7 +124,9 @@ const buildJourneySteps = (villageName: string, tokenName: string) => [
 const ariTiers = (tokenName: string) => [
   {
     tier: "Seed",
-    color: "bg-amber/10 text-amber border-amber/20",
+    // No tint: bg-gold/10 outranks the card's bg-card by stylesheet order and would
+    // freeze this card light under text that themes. Gold heading, 24px: 4.55:1 light, 3.78:1 dark.
+    color: "text-gold border-gold/20",
     description: "Early stage, establishing presence",
     focus: "Primary village impact",
     metrics: ["Families served", `${tokenName} generated per week`, "Community meals contributed"]

@@ -91,12 +91,14 @@ subtlety in this system; see section 7.
 
 | Trigger | Path | Notes |
 |---|---|---|
-| A steward confirms a quest | consent route (`server/index.ts`), then `mintForConfirmedClaim` | Gratitude is posted by the route; the rule engine deliberately SKIPS the gratitude slug so one piece of work cannot pay twice |
+| A steward confirms a quest | consent route (`server/routes/questClaims.ts`), then `owedForClaim`, `recordOwed`, `settleOwedForClaim` | Gratitude is posted by the route inside the claim's own commit; the rule engine deliberately SKIPS the gratitude slug so one piece of work cannot pay twice. What else the consent owes is priced and recorded in that same commit and posted after it, so a crash between the two cannot lose the obligation. A steward can ask again at `POST /api/admin/quest-claims/:id/owed/pay` |
 | A moon closes | `runSettlement` | Pays seat holders per `mint_rules` on `role.cycle` |
 | A cycle is closed by an admin | the cycle-close route | Splits `gratitude.pool_per_cycle` of the pool token by recognition received. A human act, never a job |
 | A member thanks another | `give()`, or `sendGratitude()` for a heart | Spends the member's cycle allowance |
 | An admin mints by hand | the admin mint route | Capped per cycle, refused when the admin is the recipient, cosigned over a threshold |
 | A member spends | a stay night, a seat fee, a library escrow, a member-to-member send | See section 12 |
+| A member asks to redeem | `requestRedemption`, `server/lib/redemptionStore.ts` | Holds the asked amount in `sys:redemption-hold` when `redemption.holds_on_propose` is on, and holds nothing when it is off. A refusal, a withdrawal or an expiry returns a held amount by reversing the hold |
+| A redemption is confirmed | `settleRedemption`, `server/lib/redemptionStore.ts` | Retires the tokens to `sys:redeemed`, which only ever receives, taking them from the hold if one was taken and from the member otherwise |
 | A member leaves | `sweepBalances` in `server/lib/exit.ts` | Moves the remaining balance to `sys:exit-settlement`; see section 14 |
 | A claim confirms on Base | `settleVoiceClaim` | Reconciles a one-way bridge; see section 6 |
 
@@ -243,6 +245,25 @@ losing its own payout by about twenty milliseconds. Fixed: `startEconomyEpoch` i
 now called at boot. Amora's epoch carries a boot timestamp and its ledger is
 empty, which proves it was stamped by the boot and not by a lost quest. **Amora
 never lost a payout, because Amora has never confirmed a quest.**
+
+**The epoch now decides nothing, and this is the open question rather than a
+finished state.** Audited 2026-09-19 against `116d3bb`. The stamp is written at
+boot and read by exactly one function, `mintForConfirmedClaim`, and PRs #264 and
+#269 left that function with no production caller when the consent route moved
+onto `owedForClaim` and `postOwed`. Every live path that pays a quest claim now
+reaches the ledger without consulting the epoch. The header in
+`server/lib/economy.ts` used to claim that every source query filters on the
+epoch and that an admin backfill honours pre-epoch work on purpose: neither is
+true and neither has ever had a line of code, since `runSettlement` sweeps
+`role.cycle` seats and the voice waning and never reads a claim, and nothing
+writes `app_config.economy-state` except `startEconomyEpoch` itself. The guard
+also never refused anything in production before the split, because the old
+consent route measured the claim against the epoch using a `resolvedAt` that the
+same transaction had just stamped at `now`. What keeps a flag flip from paying
+years of backlog is structural rather than guarded: an obligation exists only
+because a consent created it, and a consent is always now. Whether this village
+wants a real epoch guard, and where it could live without stamping inside a
+transaction that may roll back, is an open decision for the economics lane.
 
 ---
 
@@ -1847,11 +1868,14 @@ surfaces on the day it is seeded. The five constants stay where they were, used
 by `faucetFor`, which answers a different question (which faucet issues a given
 token) and is hand-written on purpose.
 
-**An empty result is a real answer here, and it is not a zero.** A database
-with no faucet row has not been migrated; it has not issued nothing. Both
-callers return an empty supply for it, which also keeps `IN ()` off the wire:
-MySQL refuses to parse that, so the public feed would have answered a SQL error
-to every reader the moment the derived list came back empty.
+**An empty result is a real answer here, and the two surfaces cannot tell it
+from a zero.** Both callers return an empty supply for it, which keeps `IN ()`
+off the wire: MySQL refuses to parse that, so the public feed would have
+answered a SQL error to every reader the moment the derived list came back
+empty. `GET /api/economy/supply` therefore answers `{"cycleKey": "...",
+"tokens": []}` both when no account carries the flag and when every faucet is
+present with nothing issued out of it, and **no field separates the two.**
+That is stated rather than fixed, for the reasons in the closing note below.
 
 **Measured.** `server/economyFaucetSet.test.ts`, over a scratch schema with no
 server booted, seeds a sixth faucet (`sys:probe-mint`), posts 700 of a probe
@@ -1862,6 +1886,30 @@ to be truthy"; against the fix, three cases pass. The tripwire that found this
 (`server/mintCap.e2e.test.ts`, "agrees with the hand-kept faucet list the
 supply surfaces use") is untouched and still true: the constants it compares
 still exist and still name the five seeded accounts.
+
+**Closing note, added later: the header promised a distinction the payload
+never made.** `publicSupply` opened its early return with "No faucet row at all
+is an unmigrated database, not a village that has issued nothing, and the two
+must not render the same", and then returned `{ cycleKey, tokens: [] }` for
+both, because `HAVING issued > 0` empties the result set for a village that has
+issued nothing. The admin breakdown twelve lines away said the opposite and
+said it honestly ("Nothing here can tell it from a village that has issued
+nothing"). **Three things decided it in favour of correcting the prose rather
+than adding a field.** Nothing reads the endpoint: `economy/supply` returns
+zero client references against a positive control of eight for `api/modules`
+from the same search, so no member and no fork is being shown a wrong figure
+today. The state is narrower than "unmigrated" sounds:
+`drizzle/0009_ledger_accounts_and_transfers.sql` creates `ledger_accounts` AND
+seeds `sys:gratitude-pool` and `sys:cycle-pool` with `faucet = 1` in the same
+file, so a database that has not run 0009 has no table and the read throws
+instead of returning empty, which makes an empty list a migrated database whose
+flag was cleared. And a public, unauthenticated feed whose entire stated
+character is publishing less than it knows is the wrong surface on which to
+start publishing schema health, especially while the authenticated admin
+breakdown publishes none. **Measured.** `server/economyFaucetSet.test.ts` now
+builds both states in one case and asserts the payloads are equal, and a second
+case outside the database-gated block reads `server/lib/economy.ts` and fails
+if the "must not render the same" promise is ever written back.
 
 ### 10.34 One quest consent could answer 200 twice. Fixed on `wt/econ-small`, measured.
 
@@ -2233,6 +2281,31 @@ choices, with the vote path refusing at the door while it is unbuilt
 (`VOTE_PATH_BUILT`, the same shape as `BRIDGE_DISPATCH_BUILT`), so a village on
 that setting is told instead of being left with a stranded hold. Section 16
 carries both as questions.
+
+**2026-09-15, ruling 23: a redemption carries a number, and the village says what
+it will pay.** Eleven dials (a currency list, a rate that follows the exchange's
+posted price or is set by hand, a percentage and a fixed fee, four caps, and the
+village's own process text) are resolved once at the ask and snapshotted onto the
+row by `drizzle/0213_a_redemption_remembers_what_it_was_worth.sql`, so a dial moved later never changes what an open request is
+worth. The fee comes out of the payment the village makes off the platform and
+never off the burn: the tokens destroyed are the tokens asked for, in full, and no
+posting is derived from any of these figures. A token with no rate is a real state,
+and while any money cap is set a request that cannot be valued is refused instead
+of passing unmeasured.
+
+**2026-09-15: who confirms is derived, and a village with no steward votes.**
+`redemption.confirmed_by` is retired. The ask counts who holds `redemption.confirm`
+through the village's own powers, excluding the admin short-circuit, and routes to
+a steward or to a ballot on that. The ballot subject and its closer are built and
+registered, including the `onUnlanded` hook that gives the tokens back when a
+passed decision is vetoed or written off; the path stays refused at the door while
+`VOTE_PATH_BUILT` is false.
+
+**2026-09-15, ruling 22: redemption is a module that ships off.** Its routes now
+mount behind `requireModule("redemption")`, its open requests block switching it
+off, and `drizzle/0211_redemption_stays_on_where_it_was_used.sql` keeps it on for
+any village that already holds a redemption row, while expiry and the member's
+own withdraw keep running whatever the lifecycle, so a hold is never stranded.
 
 ### 10.39 A generated table said where value sits and named four of the eleven places. Fixed on `wt/econ`, measured.
 
@@ -2633,7 +2706,6 @@ display name as the member sees it.
 - `<name> buys one thing from the village, and that thing is what it is worth`
 - `<name> is not one of the tokens this village redeems. A steward can change that in the village's dials`
 - `This village is not taking redemptions just now. A steward can open them in the village's dials`
-- `This village has chosen that redemptions go to a village vote, and that path is still being finished. A steward can move it back to a steward confirming in the village's dials`
 - `You have a departure open, and what happens to your balance is being settled there`
 - `You have opened <openedThisCycle> redemptions this moon, which is what this village allows. The count starts again at the new moon`
 - `Ask for <name> in positive amounts with at most <decimals> decimal places`
@@ -2671,6 +2743,7 @@ them": it made a repaired build read as a broken one. Every row re-measured
 | Asks to leave while holding an unsettled library loan | `Open state must settle through its own domain first`, with the blocking domains named | Correct. See section 14 |
 | Opens their wallet holding 10 Village Voice | **10** | Correct. `formatTokenAmount` divides by the scale the payload carries. It printed 10000 until 10.3 closed |
 | Presses Consent in a busy moment, and InnoDB gives up on the row lock all three times the code retries | `Several people were saving at the same moment, and this one did not get through. Try it again.` as a 503 | Correct. The consent's transaction rolled back, so the claim is untouched and the member is still owed, and pressing again is the whole remedy. It read `Internal server error` until `terminalAnswerFor` learned the two lock codes |
+| Presses Decline twice on the same claim | The claim comes back declined, and the queue settles | Correct. The first press wrote the row and rang the member; the second answers the row it already wrote, writes nothing and rings nobody. Every other resolution, consented above all, is still refused with 409 |
 
 **The four that no longer happen, kept here because deleting them would lose what
 a member used to meet and what closed it.**
@@ -3051,6 +3124,10 @@ Five things this table is showing:
   ledger's occurrence key, so a second press finds the row posted, and a posting
   that already landed answers duplicate and moves nothing. The consent's own
   response never fails on any of it.
+  The owed tail on /review names each payee in full, the way the consent queue
+  beside it does, so two members who share a first name cannot be confused at the
+  moment a steward pays one of them. That is the read only: no posting, key,
+  amount or order above changes with it.
 - **A consent at 0 posts none of the three.** A zero is the witness saying the work
   earned no recognition, so row 1 posts nothing, and `owedForClaim` prices no rule
   for a grant of 0 either (economics and governance, 2026-09-14): a village can weight its ballots by

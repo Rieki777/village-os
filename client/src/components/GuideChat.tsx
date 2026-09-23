@@ -114,7 +114,7 @@ export default function GuideChat({
         </div>
         <div>
           <p className="font-semibold text-teal-deep leading-tight">{assistantName}</p>
-          <p className="text-xs text-stone-500">Your {projectName} guide</p>
+          <p className="text-xs text-stone-600">Your {projectName} guide</p>
         </div>
       </div>
 
@@ -130,7 +130,7 @@ export default function GuideChat({
         ))}
         {thinking && (
           <div className="flex justify-start">
-            <div className="bg-stone-100 text-stone-500 rounded-2xl px-4 py-2.5 text-sm flex items-center gap-2">
+            <div className="bg-stone-100 text-stone-600 rounded-2xl px-4 py-2.5 text-sm flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin" /> {assistantName} is thinking…
             </div>
           </div>

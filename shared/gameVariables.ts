@@ -25,7 +25,51 @@ import { TIER_FLOORS, type Criticality } from "./governanceEngine";
 import { MINT_RULE, SUBJECT_THRESHOLDS, VILLAGE_LAUNCH } from "./ballotSubjects";
 import { isAnchorDateAcceptable } from "./villageMoon";
 
-export type VariableType = "integer" | "decimal" | "percentage" | "boolean" | "choice" | "text";
+export type VariableType = "integer" | "decimal" | "percentage" | "boolean" | "choice" | "text" | "longtext";
+
+/**
+ * How long a `longtext` value may be, in characters.
+ *
+ * `text` stops at 255 because that is what `game_variables`.`value` held.
+ * Migration 0212 widened that column to TEXT, which is 65,535 BYTES, and a
+ * character is up to four of them under utf8mb4. 4,000 characters therefore
+ * cannot overflow the column even when every character is an emoji, which is
+ * the property worth having: MySQL in strict mode REFUSES an oversized write
+ * rather than truncating it, so a cap that could be wrong would show up as a
+ * village losing a paragraph it had already typed.
+ */
+export const LONGTEXT_MAX = 4000;
+
+/**
+ * What a `longtext` value becomes before it is validated, stored, or compared.
+ *
+ * Three things happen here and each one is a decision:
+ *
+ *   1. CRLF and a lone CR become one newline. The founders editing these
+ *      paragraphs are on Windows browsers, a textarea submits CRLF, and a
+ *      value that round-trips through the database with a carriage return in
+ *      it compares unequal to the same words typed on a Mac. `setVariable`
+ *      stores deltas only and DELETES the row when the value equals the
+ *      platform default, so an invisible CR is the difference between a
+ *      village inheriting future defaults and being frozen on today's.
+ *   2. Control characters go, and newlines and tabs stay. A NUL or an escape
+ *      sequence in a value that is rendered to members is never something a
+ *      person typed on purpose; \n and \t are, and they are the whole reason
+ *      this type exists.
+ *   3. The bidi overrides and isolates go (U+202A-U+202E, U+2066-U+2069).
+ *      They are not control characters in the Cc sense and are worth naming
+ *      separately: they reorder the characters AROUND them when rendered, so
+ *      a value carrying one can display words in an order nobody wrote. They
+ *      are stripped here rather than escaped at render time because there are
+ *      several render sites and one write path.
+ */
+export function normaliseLongText(raw: string): string {
+  return String(raw ?? "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\x00---]/g, "")
+    .replace(/[‪-‮⁦-⁩]/g, "")
+    .trim();
+}
 
 /**
  * THE THREE RINGS (Game Mechanics initiative, decided 2026-07-31).
@@ -297,27 +341,19 @@ export const VARIABLES: VariableDef[] = [
   // bicycle. The village settles that off the platform. When a steward
   // confirms that the member has been paid, the tokens are destroyed here.
   // The five dials below are everything a village decides about that.
-  {
-    key: "redemption.confirmed_by",
-    category: "Ledger",
-    label: "Who confirms a redemption",
-    description:
-      "Who has to agree before a member's redemption is carried out and their tokens are destroyed. A steward means one person who holds this village's redemption key signs it off, and it stays between them, the member, and the other stewards. A village vote means it opens as a ballot, and a ballot is public: what the member asked for, and what they asked for it in return, become readable by anyone with the link, permanently, including after a refusal. Whichever is set when a member asks is written onto their request, so moving this dial never changes how something already open is decided.",
-    type: "choice",
-    default: "steward",
-    choices: [
-      {
-        value: "steward",
-        label: "A steward confirms",
-        hint: "One holder of the redemption key signs it off. Grant that key to a role in the village's powers, and a village that has granted it to nobody falls back to its admins.",
-      },
-      {
-        value: "vote",
-        label: "The village votes",
-        hint: "It opens as a ballot. Ballots are public. This path is still being finished, and while it is, asking to redeem is refused with a sentence saying so.",
-      },
-    ],
-  },
+  // `redemption.confirmed_by` STOOD HERE UNTIL 2026-09-15, and it is retired
+  // rather than renamed. Rye's ruling is that a steward confirms, and that a
+  // village with no steward votes, so who decides is DERIVED from whether
+  // anybody actually holds `redemption.confirm` (`confirmModeFor` in
+  // server/lib/redemption.ts). A dial beside that derivation could only
+  // disagree with it: a village that set "steward" while holding the key to
+  // nobody was promised a fall-back to its admins, which is the behaviour the
+  // ruling overturns.
+  //
+  // A village that stored a value keeps the ROW in `game_variables`, harmlessly:
+  // `allVariables` walks the registry and never the table, `variable()` is only
+  // reached through a key some code asks for, and nothing asks for this one any
+  // more. `redemptionOrphanDial.test.ts` boots with such a row present.
   {
     key: "redemption.holds_on_propose",
     category: "Ledger",
@@ -360,6 +396,141 @@ export const VARIABLES: VariableDef[] = [
     min: 0,
     max: 3650,
     unit: "days",
+  },
+  // ── What a redemption is worth, and what the village will pay (ruling 23) ──
+  //
+  // Everything below turns an amount of tokens into an amount of money the
+  // village settles off the platform. Nothing here moves value: the tokens are
+  // destroyed in full at confirmation whatever these say, and the fee is taken
+  // out of the payment the village makes, which happens somewhere this software
+  // cannot see. What these dials buy is that the member and the steward read the
+  // same number before either of them agrees to anything.
+  //
+  // Every one of them is SNAPSHOTTED onto the request when a member asks, the
+  // same law `held_account` already follows, so moving a dial never changes what
+  // an open request is worth.
+  {
+    key: "redemption.currencies",
+    category: "Ledger",
+    label: "Currencies a member may redeem into",
+    description:
+      "Leave this empty and redemptions are counted in the currency this project counts in, which you set in Make This Yours. Type a comma-separated list of three-letter codes to offer more than one, and a member chooses which one when they ask. A currency this village cannot convert into still works: what it cannot do is follow the exchange's posted price, and the request then carries what the member asked for and no arithmetic.",
+    type: "text",
+    default: "",
+    ring: "founder",
+  },
+  {
+    key: "redemption.rate_source",
+    category: "Ledger",
+    label: "Where the rate comes from",
+    description:
+      "Following the exchange means a token is worth what this village currently sells it for, so the two prices can never drift apart while nobody is looking. Setting a rate here is for a village that pays back at a different number from the one it sells at, and it is shown with a warning whenever it pays more than the exchange sells for, because a member could then buy on the exchange and redeem at a profit until the treasury is empty. The warning never blocks anything.",
+    type: "choice",
+    default: "exchange",
+    ring: "founder",
+    choices: [
+      {
+        value: "exchange",
+        label: "Follow the exchange's posted price",
+        hint: "The token is worth what this village sells it for right now. A token with no posted price has no rate, and a request for one carries words instead of a number.",
+      },
+      {
+        value: "set",
+        label: "Set a rate here",
+        hint: "The village pays back at its own number, whatever it sells at. Set it below.",
+      },
+    ],
+  },
+  {
+    key: "redemption.rate_per_token",
+    category: "Ledger",
+    label: "Rate set here, per whole token",
+    description:
+      "What one whole token is worth in the first of this village's redemption currencies, read only while the rate above is set here instead of followed. A rate of 0 means there is no rate, so a request carries what the member asked for and no arithmetic, which is the honest state for a village that redeems into services or a share and prices neither. Works with: 'Where the rate comes from' and 'Currencies a member may redeem into'.",
+    type: "decimal",
+    default: "0",
+    min: 0,
+    max: 1000000000,
+    ring: "founder",
+    unit: "per whole token",
+  },
+  {
+    key: "redemption.fee_pct",
+    category: "Ledger",
+    label: "Fee taken from the payment",
+    description:
+      "A share of what a redemption is worth, kept by the village and taken out of the payment it makes off the platform. The tokens are still destroyed in full: a fee is never a smaller burn, and nothing about it is posted to the ledger, because the money it comes out of never entered this software. The member is shown what they asked for, the fee, and what is left, before they ask.",
+    type: "percentage",
+    default: "0",
+    min: 0,
+    max: 100,
+    ring: "founder",
+  },
+  {
+    key: "redemption.fee_fixed",
+    category: "Ledger",
+    label: "Fixed fee taken from the payment",
+    description:
+      "A flat amount in the redemption's own currency, kept by the village on top of the share above, for the cost of making a payment at all: a transfer fee, a trip to the bank. Taken out of the payment the same way, and the tokens are still destroyed in full. Works with: 'Fee taken from the payment'.",
+    type: "decimal",
+    default: "0",
+    min: 0,
+    max: 1000000000,
+    ring: "founder",
+  },
+  {
+    key: "redemption.min_amount",
+    category: "Ledger",
+    label: "Smallest redemption, in money",
+    description:
+      "The least a member may ask to redeem at once, counted in the redemption's own currency, so a village is not settling payments worth less than the transfer costs. 0 means there is no floor. A token with no rate cannot be measured against this, so while this is above 0 a request for an unpriced token is refused instead of passing unmeasured.",
+    type: "decimal",
+    default: "0",
+    min: 0,
+    max: 1000000000,
+  },
+  {
+    key: "redemption.max_per_request",
+    category: "Ledger",
+    label: "Most in one redemption, in money",
+    description:
+      "The most a member may ask for at once, counted in the redemption's own currency. 0 means there is no ceiling. Same rule as the floor: while this is above 0, a token with no rate is refused instead of passing unmeasured.",
+    type: "decimal",
+    default: "0",
+    min: 0,
+    max: 1000000000,
+  },
+  {
+    key: "redemption.max_per_member_per_cycle",
+    category: "Ledger",
+    label: "Most one member may redeem per cycle, in money",
+    description:
+      "Counted across every request one member opens in a lunar cycle, the ones still waiting included, in the redemption's own currency. This is the money twin of 'Redemptions one member may open per cycle', which counts requests and not value: a village that cares how much it pays wants this one, and a village that cares how often it is asked wants that one. 0 means there is no ceiling.",
+    type: "decimal",
+    default: "0",
+    min: 0,
+    max: 1000000000,
+  },
+  {
+    key: "redemption.process_text",
+    category: "Ledger",
+    label: "How redemption works here",
+    description:
+      "The village's own words for what happens after a member asks: who to speak to, what they will be asked for, how the money actually reaches them. A member reads this before they ask and on every request they have open, and whoever confirms reads it beside the request, so both sides are working from the same instructions. It is shown as plain text with the line breaks you type, and web addresses become links. It is never read as HTML, so nothing typed here can style or script a member's page. Leave it empty and no such card is shown.",
+    type: "longtext",
+    default: "",
+    ring: "founder",
+  },
+  {
+    key: "redemption.max_village_per_cycle",
+    category: "Ledger",
+    label: "Most the village will redeem per cycle, in money",
+    description:
+      "Counted across every member's requests in a lunar cycle, the ones still waiting included. This is the village's own ability to pay, said as a number, and it is the one cap that two members asking at the same moment could otherwise walk through together. 0 means there is no ceiling.",
+    type: "decimal",
+    default: "0",
+    min: 0,
+    max: 1000000000,
   },
   // ── R73, 2026-08-29: one allowance, one per-recipient rule ────────────────
   //
@@ -2980,6 +3151,27 @@ export function validateVariable(def: VariableDef, raw: string): string | null {
     const allowed = (def.choices ?? []).map((c) => c.value);
     return allowed.includes(raw) ? null : `Must be one of: ${allowed.join(", ")}.`;
   }
+  /*
+   * A paragraph, judged on what will actually be STORED.
+   *
+   * The length is measured after normalising rather than before, because the
+   * write path normalises too: judging the raw string would refuse a value
+   * that is under the cap the moment its carriage returns come off, and a
+   * refusal a person cannot see the cause of is the worst kind.
+   *
+   * No per-key grammar below it, on purpose. The rules under `text` exist for
+   * values that are addresses, URLs and windows; a paragraph is prose, and the
+   * only thing the platform has to promise about prose is that it is stored as
+   * typed and rendered as text rather than as markup. That promise is kept at
+   * the render sites (client/src/components/LongText.tsx).
+   */
+  if (def.type === "longtext") {
+    const stored = normaliseLongText(raw);
+    if (stored.length > LONGTEXT_MAX) {
+      return `Too long (${LONGTEXT_MAX} characters maximum, this is ${stored.length}).`;
+    }
+    return null;
+  }
   if (def.type === "text") {
     if (raw.length > 255) return "Too long (255 characters maximum).";
     /*
@@ -3000,6 +3192,24 @@ export function validateVariable(def: VariableDef, raw: string): string | null {
     // here, at the only door that writes it.
     if (def.key === "village.first_moon_at" && !isAnchorDateAcceptable(raw)) {
       return "Must be a date such as 2026-03-19, or blank to count from the moon this village launched under.";
+    }
+    /*
+     * A CURRENCY LIST IS CODES OR IT IS NOTHING (ruling 23).
+     *
+     * This dial decides what a redemption is counted in, and every rate, fee
+     * and cap is read through it. A typo here would not fail loudly: an
+     * unknown code formats as a plain number with the code beside it
+     * (`shared/money.ts`), so "CFC" would quietly become a currency this
+     * village appears to pay in and no rate could ever be found for it. Blank
+     * is the real default and means the project's own currency.
+     */
+    if (def.key === "redemption.currencies" && raw.trim() !== "") {
+      const codes = raw.split(",").map((c) => c.trim());
+      if (codes.some((c) => !/^[A-Za-z]{3}$/.test(c))) {
+        return "Must be three-letter currency codes separated by commas, such as CRC or USD, CHF. Leave it blank to use this project's own currency.";
+      }
+      const seen = new Set(codes.map((c) => c.toUpperCase()));
+      if (seen.size !== codes.length) return "Each currency can only be listed once.";
     }
     // Contract addresses must look like addresses, or a typo silently reads a
     // balance from nowhere and the member sees zero holdings.

@@ -48,7 +48,7 @@ import { rememberMapAvailable } from "@/lib/landing";
 import { MAP_SKIN_SAVED_EVENT, MAP_SKIN_SAVED_KEY } from "@shared/mapSkin";
 import { isPromiseKind } from "@shared/mapPromise";
 import { isSceneVerb } from "@shared/mapScene";
-import { gameFetch } from "@/lib/gameApi";
+import { authToken, gameFetch } from "@/lib/gameApi";
 
 /** Where the staged artifact is served from, and its presence probe. */
 const GROUNDS = "/grounds/index.html";
@@ -378,6 +378,72 @@ export default function LivingMap() {
     }
   }, []);
 
+  /**
+   * The ground the map draws its village on.
+   *
+   * The artifact ships Amora's satellite plate baked in, and for a long time
+   * that was the ONLY ground a deployment could have: a new village's map
+   * needed a developer, three Python scripts and a redeploy of a 5.7 MB file.
+   * This push is what makes the ground data instead of code -- the village's
+   * own picture, fetched once into the uploads volume by
+   * `POST /api/admin/land/imagery` and served from there.
+   *
+   * ABSENT MEANS KEEP YOUR OWN, the same rule the walk and the scene follow.
+   * A village that has not placed itself answers `imageryUrl: null` and gets
+   * no message at all, so the map draws the seed it was built with. That is
+   * the ordinary state of a fresh fork and it is not a failure.
+   *
+   * THE PICTURE TRAVELS WITH ITS FRAME. A URL on its own told the map nothing
+   * about where the picture was taken or how much ground it covers, so the map
+   * stretched it across a frame it was never cut for: three times too large
+   * and 345 m off on the one village this was built for. `frame` is what fixes
+   * that, and it carries only what the route was already willing to publish:
+   *
+   *   spanM   the width, which sets the scale and names no place
+   *   seed    one yes-or-no, worked out on the server: does this picture show
+   *           the seed's own rectangle? If so the seed's surround, place names
+   *           and caption still describe the ground and stay; if not they are
+   *           another place's geography and the map takes them down
+   *   centre  whatever /api/land gives, which is null at "hidden" and rounded
+   *           at "approximate". The map uses it for coordinates it shows and
+   *           shows none when it is null
+   *
+   * No surround travels with it yet. A wider fetch does not exist on this
+   * route, and a village standing anywhere but the seed's own rectangle gets
+   * no borrowed coastline in the meantime. When that fetch lands it attaches
+   * here as `surround: { url, rect }`.
+   */
+  const pushGround = useCallback(async () => {
+    const win = frame.current?.contentWindow;
+    if (!win) return;
+    try {
+      const res = await fetch("/api/land");
+      if (!res.ok) return;
+      const body = await res.json();
+      const url = typeof body?.imageryUrl === "string" ? body.imageryUrl : "";
+      if (!url) return;
+      const spanM = Number(body?.spanM);
+      const c = body?.centre;
+      win.postMessage(
+        {
+          type: "ground",
+          core: { url },
+          frame: {
+            spanM: Number.isFinite(spanM) && spanM > 0 ? spanM : null,
+            seed: body?.seedFrame === true,
+            centre:
+              c && Number.isFinite(Number(c.lat)) && Number.isFinite(Number(c.lon))
+                ? { lat: Number(c.lat), lon: Number(c.lon) }
+                : null,
+          },
+        },
+        window.location.origin,
+      );
+    } catch {
+      /* The map keeps the ground it is already standing on. */
+    }
+  }, []);
+
   const pushHand = useCallback(async () => {
     const win = frame.current?.contentWindow;
     if (!win) return;
@@ -436,7 +502,10 @@ export default function LivingMap() {
     const win = frame.current?.contentWindow;
     if (!win) return;
     const [partyRes, orgRes] = await Promise.all([
-      gameFetch("/api/me/characters").catch(() => null),
+      // A party is a signed-in player's. With no session the route answers 401,
+      // which the browser logged on every signed-out visit, and the lens reads
+      // that as no party. Not asking reads the same.
+      authToken() ? gameFetch("/api/me/characters").catch(() => null) : null,
       gameFetch("/api/map").catch(() => null),
     ]);
     const partyBody = partyRes?.ok ? await partyRes.json().catch(() => null) : null;
@@ -617,11 +686,13 @@ export default function LivingMap() {
       if (!data || typeof data !== "object") return;
 
       if (data.type === "grounds-ready") {
-        // Two pushes, deliberately. The config is the same for everyone and
-        // needs no session; the hand depends on who is asking. Sending them
-        // separately means a signed-out visitor still gets the published land
-        // even though their hand request tells them they may do nothing.
+        // The config and the ground are the same for everyone and need no
+        // session; the hand depends on who is asking. Sending them separately
+        // means a signed-out visitor still gets the published land and the
+        // village's own photograph under it, even though their hand request
+        // tells them they may do nothing.
         pushConfig();
+        pushGround();
         pushHand();
         pushPhotos();
         // Third and last, because it is the only one nothing waits on: the org
@@ -649,7 +720,7 @@ export default function LivingMap() {
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [navigate, pushConfig, pushHand, pushPhotos, pushLens, exitApp, relayPromise, relayScene]);
+  }, [navigate, pushConfig, pushGround, pushHand, pushPhotos, pushLens, exitApp, relayPromise, relayScene]);
 
   /**
    * A save in the wizard retints an open map.

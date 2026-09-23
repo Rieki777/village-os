@@ -24,7 +24,9 @@
  */
 import { useEffect, useState } from "react";
 import { authToken } from "@/lib/gameApi";
+import LongText from "@/components/LongText";
 import { formatHumanAmount } from "@/lib/tokenAmount";
+import { formatMoney } from "@shared/money";
 import { HandCoins } from "lucide-react";
 
 const headers = (): Record<string, string> => {
@@ -44,6 +46,21 @@ interface Redemption {
   decisionNote: string | null;
   openedAt: string;
   expiresAt: string | null;
+  /** Ruling 23: what it was worth the day it was asked for. Null when this
+   *  village put no number on it, which is a real state and not a gap. */
+  money: Money | null;
+  /** The village's instructions as they read that day, snapshotted with it. */
+  processText: string | null;
+}
+
+interface Money {
+  currency: string;
+  grossMinor: number;
+  feeMinor: number;
+  netMinor: number;
+  grossText: string;
+  feeText: string;
+  netText: string;
 }
 
 interface Payload {
@@ -55,7 +72,28 @@ interface Payload {
   votePathBuilt: boolean;
   perCycle: number;
   openedThisCycle: number;
-  tokens: Array<{ slug: string; name: string; decimals: number }>;
+  tokens: Array<{
+    slug: string;
+    name: string;
+    decimals: number;
+    /** Minor units of `currency` for one whole token. Null when unpriced. */
+    rateMinor: number | null;
+    rateSource: string | null;
+    currency: string;
+  }>;
+  money: {
+    currencies: string[];
+    currency: string;
+    rateSource: string;
+    rateMinor: number | null;
+    feePct: number;
+    feeFixedMinor: number;
+    minMinor: number;
+    maxPerRequestMinor: number;
+    memberCapMinor: number;
+    villageCapMinor: number;
+    processText: string;
+  };
 }
 
 const day = (iso: string) =>
@@ -86,6 +124,7 @@ export default function RedemptionPanel() {
   const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
   const [data, setData] = useState<Payload | null>(null);
   const [token, setToken] = useState("");
+  const [currency, setCurrency] = useState("");
   const [amount, setAmount] = useState("");
   const [askedFor, setAskedFor] = useState("");
   const [error, setError] = useState("");
@@ -102,6 +141,7 @@ export default function RedemptionPanel() {
       .then((d: Payload) => {
         setData(d);
         if (!token && d.tokens.length) setToken(d.tokens[0].slug);
+        if (!currency && d.money?.currency) setCurrency(d.money.currency);
         setStatus("ready");
       })
       .catch(() => setStatus("failed"));
@@ -122,7 +162,7 @@ export default function RedemptionPanel() {
       const res = await fetch("/api/redemptions", {
         method: "POST",
         headers: headers(),
-        body: JSON.stringify({ token, amount: Number(amount), askedFor }),
+        body: JSON.stringify({ token, amount: Number(amount), askedFor, currency }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -185,8 +225,34 @@ export default function RedemptionPanel() {
   }
   if (!data) return null;
 
+  /*
+   * THE MATHS THE MEMBER READS BEFORE THEY ASK.
+   *
+   * A MIRROR OF `redemptionQuote` in server/lib/redemption.ts, and the server
+   * is the authority: it resolves the rate again at the ask, refuses what the
+   * caps refuse, and writes the figures it computed onto the row. This exists
+   * so nobody presses a button on a number they have not seen, and it is kept
+   * to the same three lines so the two cannot drift far without a test noticing.
+   */
+  const tokenRow = data.tokens.find((t) => t.slug === token);
+  const quote = (() => {
+    const rate = tokenRow?.rateMinor ?? null;
+    const asked = Number(amount);
+    if (!rate || !(asked > 0)) return null;
+    const grossMinor = Math.round(asked * rate);
+    const feeMinor = Math.min(
+      grossMinor,
+      Math.round((grossMinor * (data.money?.feePct ?? 0)) / 100) + (data.money?.feeFixedMinor ?? 0),
+    );
+    return {
+      currency: tokenRow?.currency ?? data.money?.currency ?? "",
+      grossMinor,
+      feeMinor,
+      netMinor: grossMinor - feeMinor,
+    };
+  })();
+
   const closed = data.perCycle <= 0;
-  const votePending = data.confirmedBy === "vote" && !data.votePathBuilt;
   const atCap = data.openedThisCycle >= data.perCycle;
   const decimalsFor = (slug: string) => data.tokens.find((t) => t.slug === slug)?.decimals ?? 0;
 
@@ -204,6 +270,18 @@ export default function RedemptionPanel() {
         make anyone pay you. What happens here is the other half of it. When a steward
         confirms that you have been paid, your tokens are destroyed, and they do not come back.
       </p>
+
+      {data.money?.processText?.trim() && (
+        <div className="border border-border rounded-lg px-4 py-3">
+          <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+            How redemption works here
+          </p>
+          {/* The village's own words, as TEXT. LongText escapes by
+              construction and linkifies http(s) only, so nothing typed in
+              Admin can style or script this page. */}
+          <LongText text={data.money.processText} className="text-sm text-foreground" />
+        </div>
+      )}
 
       {Object.keys(data.held).length > 0 && (
         <div className="border border-border rounded-lg px-4 py-3">
@@ -242,6 +320,17 @@ export default function RedemptionPanel() {
                 for {r.askedFor}, opened {day(r.openedAt)}, waiting on a steward.
                 {r.expiresAt ? ` It runs out on ${day(r.expiresAt)}.` : ""}
               </p>
+              {/* OFF THE ROW, never off today's dials: what this member agreed
+                  to is what they were told when they asked. */}
+              {r.money && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Agreed at {r.money.grossText}
+                  {r.money.feeMinor > 0 ? `, less a fee of ${r.money.feeText}, so you receive ${r.money.netText}` : ", with no fee"}.
+                </p>
+              )}
+              {r.processText?.trim() && (
+                <LongText text={r.processText} className="block text-xs text-muted-foreground mt-1" />
+              )}
               <button
                 type="button"
                 disabled={busy}
@@ -258,12 +347,6 @@ export default function RedemptionPanel() {
       {closed ? (
         <p className="text-sm text-muted-foreground">
           This village is not taking redemptions just now. A steward can open them in the
-          village's dials.
-        </p>
-      ) : votePending ? (
-        <p className="text-sm text-muted-foreground">
-          This village has chosen that redemptions go to a village vote, and that path is
-          still being finished. A steward can move it back to a steward confirming in the
           village's dials.
         </p>
       ) : data.tokens.length === 0 ? (
@@ -303,6 +386,24 @@ export default function RedemptionPanel() {
                 className="border border-border rounded-lg px-3 py-2 bg-background text-foreground w-32"
               />
             </label>
+            {/* Only when the village offers a choice. One currency is the
+                common case and a select with one option is furniture. */}
+            {(data.money?.currencies.length ?? 0) > 1 && (
+              <label className="text-sm text-foreground">
+                <span className="block text-xs text-muted-foreground mb-1">Paid in</span>
+                <select
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="border border-border rounded-lg px-3 py-2 bg-background text-foreground"
+                >
+                  {data.money.currencies.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
           <label className="block text-sm text-foreground">
             <span className="block text-xs text-muted-foreground mb-1">
@@ -317,6 +418,64 @@ export default function RedemptionPanel() {
               className="border border-border rounded-lg px-3 py-2 bg-background text-foreground w-full"
             />
           </label>
+          {/* Said at the field where somebody would type one. A member asked
+              to arrange a bank transfer will reach for their account number
+              unless the form tells them not to, and this text is stored, shown
+              to whoever holds the redemption key, and kept after the request
+              ends. */}
+          <p className="text-xs text-muted-foreground">
+            Do not type bank account numbers, card numbers or passwords here. Say what you would
+            like, and arrange how you are paid with a steward, the way this village's process says.
+          </p>
+
+          {/*
+            A PUBLIC BALLOT IS A DIFFERENT THING FROM A STEWARD READING YOUR
+            REQUEST, and the member has to know which one they are starting
+            BEFORE they press the button, not after.
+
+            A ballot is served to anyone with the link and it is kept: what you
+            asked for, and what you asked for it in return, stay readable after
+            a refusal and after the moon turns. `confirmedBy` is derived from
+            whether anybody holds the redemption key, so this appears exactly
+            when the village has nobody to confirm it privately.
+          */}
+          {data.confirmedBy === "vote" && data.votePathBuilt && (
+            <p role="note" className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5">
+              <span className="font-semibold">Nobody in this village holds the key that confirms a redemption,
+              so this one goes to a village vote.</span>{" "}
+              A vote is public and it stays public: what you are asking for, and what you are asking for it in
+              return, become readable by anyone with the link, permanently, including if the village says no.
+              If you would rather it stayed between you and a steward, ask the village to give the redemption
+              key to a role first.
+            </p>
+          )}
+
+          {/* THE MATHS, BEFORE THE BUTTON. */}
+          {quote ? (
+            <p className="text-sm text-muted-foreground">
+              <span className="font-semibold text-foreground">
+                {amount} {tokenRow?.name ?? token} pays {formatMoney(quote.grossMinor, quote.currency)}
+              </span>
+              {quote.feeMinor > 0 ? (
+                <>
+                  , minus a fee of {formatMoney(quote.feeMinor, quote.currency)}, so you receive{" "}
+                  <span className="font-semibold text-foreground">
+                    {formatMoney(quote.netMinor, quote.currency)}
+                  </span>
+                </>
+              ) : (
+                <>, and this village takes no fee</>
+              )}
+              . Your village pays that off the platform, and this page never sees it.
+            </p>
+          ) : (
+            Number(amount) > 0 && (
+              <p className="text-sm text-muted-foreground">
+                This village has not put a price on {tokenRow?.name ?? token}, so your request
+                carries your own words and no figure. A steward agrees to what you asked for.
+              </p>
+            )
+          )}
           {data.holds && Number(amount) > 0 && (
             <p className="text-sm text-muted-foreground">
               <span className="font-semibold text-foreground">

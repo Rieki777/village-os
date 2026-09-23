@@ -22,27 +22,27 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 171 open and 35 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 174 open and 41 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 180 of them as soon as it is saved, and 26 of them at the next cycle close.
+Each dial also says WHEN a change lands. 189 of them as soon as it is saved, and 26 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-206 dials in 32 categories. 120 carry a minimum and a maximum. By type: 90 integer, 14 decimal, 17 percentage, 24 boolean, 29 choice, 32 text.
+215 dials in 32 categories. 127 carry a minimum and a maximum. By type: 90 integer, 20 decimal, 18 percentage, 24 boolean, 29 choice, 33 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
 | Membership | 3 | 3 | 0 |
 | Gratitude | 11 | 11 | 0 |
-| Ledger | 8 | 6 | 2 |
+| Ledger | 17 | 9 | 8 |
 | The Mint | 6 | 5 | 1 |
 | Progression | 28 | 28 | 0 |
 | Quests | 5 | 5 | 0 |
@@ -96,11 +96,20 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Issuance cap per lunar cycle | `ledger.admin_mint_cycle_cap` | Ledger | integer | `10000` | the whole village |
 | Second steward needed above | `ledger.admin_mint_cosign_over` | Ledger | integer | `100` | the whole village |
 | Bonus for a circle that finished under its cap | `resources.circle_cap_bonus_pct` | Ledger | percentage | `10` | the whole village |
-| Who confirms a redemption | `redemption.confirmed_by` | Ledger | choice | `steward` | the whole village |
 | Hold the tokens while a redemption is open | `redemption.holds_on_propose` | Ledger | boolean | `true` | the founder or an admin |
 | Which tokens may be redeemed | `redemption.tokens` | Ledger | text | blank | the founder or an admin |
 | Redemptions one member may open per cycle | `redemption.per_member_per_cycle` | Ledger | integer | `2` | the whole village |
 | A redemption expires after | `redemption.expires_after_days` | Ledger | integer | `30` | the whole village |
+| Currencies a member may redeem into | `redemption.currencies` | Ledger | text | blank | the founder or an admin |
+| Where the rate comes from | `redemption.rate_source` | Ledger | choice | `exchange` | the founder or an admin |
+| Rate set here, per whole token | `redemption.rate_per_token` | Ledger | decimal | `0` | the founder or an admin |
+| Fee taken from the payment | `redemption.fee_pct` | Ledger | percentage | `0` | the founder or an admin |
+| Fixed fee taken from the payment | `redemption.fee_fixed` | Ledger | decimal | `0` | the founder or an admin |
+| Smallest redemption, in money | `redemption.min_amount` | Ledger | decimal | `0` | the whole village |
+| Most in one redemption, in money | `redemption.max_per_request` | Ledger | decimal | `0` | the whole village |
+| Most one member may redeem per cycle, in money | `redemption.max_per_member_per_cycle` | Ledger | decimal | `0` | the whole village |
+| How redemption works here | `redemption.process_text` | Ledger | longtext | blank | the founder or an admin |
+| Most the village will redeem per cycle, in money | `redemption.max_village_per_cycle` | Ledger | decimal | `0` | the whole village |
 | Voice needed before a member can claim | `economy.voice_claim_threshold` | The Mint | integer | `100` | the whole village |
 | How many days Claims Week stays open | `economy.claims_week_days` | The Mint | integer | `7` | the whole village |
 | When each Claims Week begins | `economy.claims_week_starts` | The Mint | text | `03-21,06-21,09-23,12-21` | the whole village |
@@ -326,7 +335,7 @@ The role whose holders are told the moment somebody joins. Greeting belongs to a
 | Fact | Value |
 | --- | --- |
 | Key | `arrival.greeter_role` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -374,7 +383,7 @@ The token the cycle pool pays out, for example your village's credits. The list 
 | Fact | Value |
 | --- | --- |
 | Key | `gratitude.pool_token` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `credits` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -509,7 +518,7 @@ How much recognition is minted for a member whose Work With Us proposal is accep
 
 ## Ledger
 
-8 dials. 6 for the whole village, 2 for the founder or an admin.
+17 dials. 9 for the whole village, 8 for the founder or an admin.
 
 ### Issuance cap per lunar cycle
 
@@ -556,25 +565,6 @@ The share of a circle's UNMINTED capacity that comes back to the circle as a bon
 | A change takes effect | at the next cycle close |
 | What it costs to change | a routine vote |
 
-### Who confirms a redemption
-
-Who has to agree before a member's redemption is carried out and their tokens are destroyed. A steward means one person who holds this village's redemption key signs it off, and it stays between them, the member, and the other stewards. A village vote means it opens as a ballot, and a ballot is public: what the member asked for, and what they asked for it in return, become readable by anyone with the link, permanently, including after a refusal. Whichever is set when a member asks is written onto their request, so moving this dial never changes how something already open is decided.
-
-| Fact | Value |
-| --- | --- |
-| Key | `redemption.confirmed_by` |
-| Type | choice, one of a fixed list |
-| Default | `steward` |
-| Range | one of the choices below |
-| Who may change it | the whole village |
-| A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
-
-What it may be set to:
-
-- `steward` A steward confirms. One holder of the redemption key signs it off. Grant that key to a role in the village's powers, and a village that has granted it to nobody falls back to its admins.
-- `vote` The village votes. It opens as a ballot. Ballots are public. This path is still being finished, and while it is, asking to redeem is refused with a sentence saying so.
-
 ### Hold the tokens while a redemption is open
 
 When this is on, asking to redeem moves the tokens into a holding account straight away. They stay the member's, they stop being spendable, and they come back in full if the redemption is refused, withdrawn, or left to expire. Turning it off leaves them spendable until the moment a steward confirms, which means a member can be paid off the platform on Tuesday, spend the same tokens on Wednesday, and leave the confirmation with nothing to destroy on Thursday. The village has then paid for tokens it never received, and no part of this software notices. Founder held for that reason.
@@ -596,7 +586,7 @@ Leave this empty and every token this village issues as a spendable credit may b
 | Fact | Value |
 | --- | --- |
 | Key | `redemption.tokens` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -628,6 +618,152 @@ How long a redemption waits for an answer before it expires on its own and the h
 | Default | `30` |
 | Range | 0 to 3650 |
 | Counted in | days |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Currencies a member may redeem into
+
+Leave this empty and redemptions are counted in the currency this project counts in, which you set in Make This Yours. Type a comma-separated list of three-letter codes to offer more than one, and a member chooses which one when they ask. A currency this village cannot convert into still works: what it cannot do is follow the exchange's posted price, and the request then carries what the member asked for and no arithmetic.
+
+| Fact | Value |
+| --- | --- |
+| Key | `redemption.currencies` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the founder or an admin |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Where the rate comes from
+
+Following the exchange means a token is worth what this village currently sells it for, so the two prices can never drift apart while nobody is looking. Setting a rate here is for a village that pays back at a different number from the one it sells at, and it is shown with a warning whenever it pays more than the exchange sells for, because a member could then buy on the exchange and redeem at a profit until the treasury is empty. The warning never blocks anything.
+
+| Fact | Value |
+| --- | --- |
+| Key | `redemption.rate_source` |
+| Type | choice, one of a fixed list |
+| Default | `exchange` |
+| Range | one of the choices below |
+| Who may change it | the founder or an admin |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+What it may be set to:
+
+- `exchange` Follow the exchange's posted price. The token is worth what this village sells it for right now. A token with no posted price has no rate, and a request for one carries words instead of a number.
+- `set` Set a rate here. The village pays back at its own number, whatever it sells at. Set it below.
+
+### Rate set here, per whole token
+
+What one whole token is worth in the first of this village's redemption currencies, read only while the rate above is set here instead of followed. A rate of 0 means there is no rate, so a request carries what the member asked for and no arithmetic, which is the honest state for a village that redeems into services or a share and prices neither. Works with: 'Where the rate comes from' and 'Currencies a member may redeem into'.
+
+| Fact | Value |
+| --- | --- |
+| Key | `redemption.rate_per_token` |
+| Type | decimal, a number, fractions allowed |
+| Default | `0` |
+| Range | 0 to 1000000000 |
+| Counted in | per whole token |
+| Who may change it | the founder or an admin |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Fee taken from the payment
+
+A share of what a redemption is worth, kept by the village and taken out of the payment it makes off the platform. The tokens are still destroyed in full: a fee is never a smaller burn, and nothing about it is posted to the ledger, because the money it comes out of never entered this software. The member is shown what they asked for, the fee, and what is left, before they ask.
+
+| Fact | Value |
+| --- | --- |
+| Key | `redemption.fee_pct` |
+| Type | percentage, a percentage |
+| Default | `0` |
+| Range | 0 to 100 |
+| Who may change it | the founder or an admin |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Fixed fee taken from the payment
+
+A flat amount in the redemption's own currency, kept by the village on top of the share above, for the cost of making a payment at all: a transfer fee, a trip to the bank. Taken out of the payment the same way, and the tokens are still destroyed in full. Works with: 'Fee taken from the payment'.
+
+| Fact | Value |
+| --- | --- |
+| Key | `redemption.fee_fixed` |
+| Type | decimal, a number, fractions allowed |
+| Default | `0` |
+| Range | 0 to 1000000000 |
+| Who may change it | the founder or an admin |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Smallest redemption, in money
+
+The least a member may ask to redeem at once, counted in the redemption's own currency, so a village is not settling payments worth less than the transfer costs. 0 means there is no floor. A token with no rate cannot be measured against this, so while this is above 0 a request for an unpriced token is refused instead of passing unmeasured.
+
+| Fact | Value |
+| --- | --- |
+| Key | `redemption.min_amount` |
+| Type | decimal, a number, fractions allowed |
+| Default | `0` |
+| Range | 0 to 1000000000 |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Most in one redemption, in money
+
+The most a member may ask for at once, counted in the redemption's own currency. 0 means there is no ceiling. Same rule as the floor: while this is above 0, a token with no rate is refused instead of passing unmeasured.
+
+| Fact | Value |
+| --- | --- |
+| Key | `redemption.max_per_request` |
+| Type | decimal, a number, fractions allowed |
+| Default | `0` |
+| Range | 0 to 1000000000 |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Most one member may redeem per cycle, in money
+
+Counted across every request one member opens in a lunar cycle, the ones still waiting included, in the redemption's own currency. This is the money twin of 'Redemptions one member may open per cycle', which counts requests and not value: a village that cares how much it pays wants this one, and a village that cares how often it is asked wants that one. 0 means there is no ceiling.
+
+| Fact | Value |
+| --- | --- |
+| Key | `redemption.max_per_member_per_cycle` |
+| Type | decimal, a number, fractions allowed |
+| Default | `0` |
+| Range | 0 to 1000000000 |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### How redemption works here
+
+The village's own words for what happens after a member asks: who to speak to, what they will be asked for, how the money actually reaches them. A member reads this before they ask and on every request they have open, and whoever confirms reads it beside the request, so both sides are working from the same instructions. It is shown as plain text with the line breaks you type, and web addresses become links. It is never read as HTML, so nothing typed here can style or script a member's page. Leave it empty and no such card is shown.
+
+| Fact | Value |
+| --- | --- |
+| Key | `redemption.process_text` |
+| Type | longtext, free text, several lines, shown to members as plain words |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the founder or an admin |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Most the village will redeem per cycle, in money
+
+Counted across every member's requests in a lunar cycle, the ones still waiting included. This is the village's own ability to pay, said as a number, and it is the one cap that two members asking at the same moment could otherwise walk through together. 0 means there is no ceiling.
+
+| Fact | Value |
+| --- | --- |
+| Key | `redemption.max_village_per_cycle` |
+| Type | decimal, a number, fractions allowed |
+| Default | `0` |
+| Range | 0 to 1000000000 |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
@@ -673,7 +809,7 @@ Four dates a year, one per season, as MM-DD separated by commas. The default fol
 | Fact | Value |
 | --- | --- |
 | Key | `economy.claims_week_starts` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `03-21,06-21,09-23,12-21` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -687,7 +823,7 @@ The DHO slug that voice claims are raised into, from app.hypha.earth. Until this
 | Fact | Value |
 | --- | --- |
 | Key | `economy.hypha_space` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -1524,7 +1660,7 @@ Base URL of the hub that listens to the chain for this village. When a proposal'
 | Fact | Value |
 | --- | --- |
 | Key | `governance.hub_url` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -1552,7 +1688,7 @@ A steward can stop a decision the village has already carried, inside the window
 | Fact | Value |
 | --- | --- |
 | Key | `governance.steward_subjects` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `all` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -1566,7 +1702,7 @@ Every decision carries a size: routine, structural, or constitutional. This name
 | Fact | Value |
 | --- | --- |
 | Key | `governance.steward_veto_tiers` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `constitutional` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -1668,7 +1804,7 @@ always_open lets anyone take a change set to the vote on any day. last_days_of_c
 | Fact | Value |
 | --- | --- |
 | Key | `governance.window_changeset` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `always_open` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -1682,7 +1818,7 @@ The window a minting change opens in, in the same words as the change set window
 | Fact | Value |
 | --- | --- |
 | Key | `governance.window_mint_rule` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `always_open` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -1696,7 +1832,7 @@ The window a vote-mode switch opens in, in the same words as the change set wind
 | Fact | Value |
 | --- | --- |
 | Key | `governance.window_governance_mode` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `always_open` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -1710,7 +1846,7 @@ The window a proposal that declares a new role opens in, in the same words as th
 | Fact | Value |
 | --- | --- |
 | Key | `governance.window_role_declare` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `always_open` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -1724,7 +1860,7 @@ The window a proposal that asks somebody to sit in a role opens in, in the same 
 | Fact | Value |
 | --- | --- |
 | Key | `governance.window_role_seat` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `always_open` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -1738,7 +1874,7 @@ The window a proposal that takes a seat back opens in, in the same words as the 
 | Fact | Value |
 | --- | --- |
 | Key | `governance.window_role_unseat` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `always_open` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -1752,7 +1888,7 @@ The window a proposal that moves a power from the admin panel to a role opens in
 | Fact | Value |
 | --- | --- |
 | Key | `governance.window_power_transfer` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `always_open` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -1766,7 +1902,7 @@ The window a proposal that grants a power to a role opens in, in the same words 
 | Fact | Value |
 | --- | --- |
 | Key | `governance.window_power_grant` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `always_open` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -1780,7 +1916,7 @@ The window a proposal that hands a power back to the admin panel opens in, in th
 | Fact | Value |
 | --- | --- |
 | Key | `governance.window_power_return` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `always_open` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -1829,7 +1965,7 @@ Which token weighs votes when the weight mode is token. Only tokens this platfor
 | Fact | Value |
 | --- | --- |
 | Key | `governance.weight_token` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `gratitude` |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2098,7 +2234,7 @@ The ERC-20 address for the project's equity token. The platform only ever READS 
 | Fact | Value |
 | --- | --- |
 | Key | `tokens.equity_address` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2112,7 +2248,7 @@ The ERC-20 address for the governance-weight token. Read-only here, exactly like
 | Fact | Value |
 | --- | --- |
 | Key | `tokens.voice_address` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2140,7 +2276,7 @@ Where balances are read from. A public endpoint is fine to start; a dedicated on
 | Fact | Value |
 | --- | --- |
 | Key | `tokens.base_rpc_url` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `https://mainnet.base.org` |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2158,7 +2294,7 @@ The one place this platform sends people for governance, proposals, treasury and
 | Fact | Value |
 | --- | --- |
 | Key | `hypha.org_url` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2172,7 +2308,7 @@ The numeric id of your DAO's space on Hypha's Base contracts. Every on-chain pro
 | Fact | Value |
 | --- | --- |
 | Key | `hypha.space_id` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2186,7 +2322,7 @@ The 0x address holding your DAO's treasury on Base. The Hypha Bridge module read
 | Fact | Value |
 | --- | --- |
 | Key | `hypha.treasury_address` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2200,7 +2336,7 @@ The 0x address that created your DAO and issued its first tokens on Base. The Hy
 | Fact | Value |
 | --- | --- |
 | Key | `hypha.founder_base_address` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2214,7 +2350,7 @@ Only if your DHO's governance page is not at the org root. Blank derives from th
 | Fact | Value |
 | --- | --- |
 | Key | `hypha.link_governance` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2228,7 +2364,7 @@ Only if your DHO's proposals page is not at /agreements. Blank derives from the 
 | Fact | Value |
 | --- | --- |
 | Key | `hypha.link_proposals` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2242,7 +2378,7 @@ Only if your DHO's treasury page is not at /treasury. Blank derives from the DHO
 | Fact | Value |
 | --- | --- |
 | Key | `hypha.link_treasury` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2256,7 +2392,7 @@ Only if your DHO's members page is not at /members. Blank derives from the DHO a
 | Fact | Value |
 | --- | --- |
 | Key | `hypha.link_members` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
@@ -2786,7 +2922,7 @@ The feed is a LENS over one forum category plus the village's system events. It 
 | Fact | Value |
 | --- | --- |
 | Key | `feed.category_slug` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `village-life` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -2950,7 +3086,7 @@ Quests carrying this tag appear on the Stay page as ways to EARN credits. The re
 | Fact | Value |
 | --- | --- |
 | Key | `stay.work_exchange_tag` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | `work-exchange` |
 | Range | no bounds are set |
 | Who may change it | the whole village |
@@ -3280,7 +3416,7 @@ Leave blank and Moon 1 is the moon your village launched under, which is what al
 | Fact | Value |
 | --- | --- |
 | Key | `village.first_moon_at` |
-| Type | text, free text |
+| Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |

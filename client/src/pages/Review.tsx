@@ -63,6 +63,7 @@ import { toast } from "sonner";
 import { Inbox } from "lucide-react";
 import { Link } from "wouter";
 import QuestProposalCard, { type QuestCard, type QuestTyped } from "@/components/review/QuestProposalCard";
+import { CHANGE_LIMIT_HREF, countWithEdits, limitSentence, readWithdrawRefusal } from "@/lib/reviewBatchLimit";
 
 interface ProposalCard {
   id: string;
@@ -89,6 +90,8 @@ interface Batch {
   receivedAt: string | null;
   /** Changes accepting the batch whole would propose. Null with no org proposals; absent from an older server. */
   proposedChanges?: number | null;
+  /** Each org card's share of that count, by proposal id, so an edit is counted in its place. Absent from an older server. */
+  proposedChangesByItem?: Record<string, number>;
   items: ProposalCard[];
 }
 
@@ -115,26 +118,6 @@ interface Queue {
   proposalChangeLimit?: number;
   /** Whether this reader can open the admin page where that limit is changed. */
   mayChangeProposalLimit?: boolean;
-}
-
-/** Where an admin changes the limit: the Game Mechanics tab, opened at that one dial. */
-const CHANGE_LIMIT_HREF = "/admin?tab=variables&variable=org.proposal_change_limit";
-
-function changes(n: number): string {
-  return n === 1 ? "1 change" : `${n} changes`;
-}
-
-/**
- * The limit a batch meets, said before anybody accepts it. Rye, 2026-09-14:
- * "Definitely should show the batch limit with a button to go to that
- * setting to change adjust it higher." A steward who cannot open that setting
- * is told who can, and is offered no button that would go nowhere.
- */
-function limitSentence(limit: number, proposed: number, mayChange: boolean): string {
-  const parts = [`This village accepts up to ${changes(limit)} from one outside batch. This batch proposes ${proposed}.`];
-  if (proposed > limit) parts.push(`Every change past the first ${limit} will be blocked.`);
-  if (!mayChange) parts.push("An admin can raise it.");
-  return parts.join(" ");
 }
 
 /** A draft that cannot publish: how many seats are blocked, and why each one is. */
@@ -322,6 +305,15 @@ export default function Review() {
    * answered are three different states, and none of them touches the claims.
    */
   const loadQueue = useCallback(async () => {
+    // Signed out, this is the refused state without the round trip: the route
+    // answers a stranger 401, and that request was logged as a failure on
+    // every signed-out visit. useConsentClaims makes the same call for the claims.
+    if (!authToken()) {
+      setForbidden(true);
+      setLoadError(null);
+      setQueue(null);
+      return;
+    }
     try {
       const r = await fetch("/api/review/queue", { headers: headers() });
       if (r.status === 401 || r.status === 403 || r.status === 409) {
@@ -469,20 +461,30 @@ export default function Review() {
       const d = res ? await res.json().catch(() => ({})) : {};
       // Both cards described that draft, which is no longer open. Every other
       // stuck draft keeps its own card.
-      const forget = () => {
+      const dropStuck = () =>
         setStuck((s) => {
           const rest = { ...s };
           delete rest[draftId];
           return rest;
         });
+      const forget = () => {
+        dropStuck();
         setNotRead((r) => (r.draftId === draftId ? NOTHING_LEFT_OUT : r));
       };
       if (!res || !res.ok) {
         toast.error((d as { error?: string })?.error ?? "That draft could not be withdrawn");
-        // The server answered, so read the queue again. A 409 means another steward
-        // withdrew or published this draft already. The queue's list clears the stuck
-        // card, and only this clears the fields-left-out card, whose button 409'd forever.
-        if (res?.status === 409) forget();
+        // The server answered, so read the queue again. A 409 is three answers
+        // (readWithdrawRefusal). The break-glass refusal changed nothing, so every
+        // card stays. A published draft loses its withdraw and keeps the fields it
+        // left out, which are true of what went live. A draft another steward
+        // withdrew loses both cards, or its button moves onto the fields-left-out
+        // card and 409s forever.
+        const refusal = res ? readWithdrawRefusal(res.status, d) : "other";
+        if (refusal === "closed") forget();
+        if (refusal === "published") {
+          dropStuck();
+          setNotRead((r) => (r.draftId === draftId ? { ...r, published: true } : r));
+        }
         if (res) await load();
         return;
       }
@@ -759,8 +761,9 @@ export default function Review() {
           <div key={draftId} className={card}>
             <h2 className="text-sm font-semibold text-foreground">A draft from this queue cannot publish</h2>
             <p className="text-sm text-muted-foreground mt-2">
-              {s.unpreviewable ? "This draft could not be checked." : `${s.blocked} of its seats are blocked.`} Withdrawing
-              puts its proposals back in the queue, so you can accept fewer at a time or deal with the reasons below first.
+              {s.unpreviewable
+                ? "This draft could not be checked. Withdrawing puts its proposals back in the queue, so you can accept them again."
+                : `${s.blocked} of its seats are blocked. Withdrawing puts its proposals back in the queue, so you can accept fewer at a time or deal with the reasons below first.`}
             </p>
             {s.lines.length > 0 && (
               <ul className="text-sm text-muted-foreground mt-2 space-y-1">
@@ -785,9 +788,12 @@ export default function Review() {
               The last accept left some fields out of the draft
             </h2>
             <p className="text-sm text-muted-foreground mt-2">
-              The draft publishes without them. If one belongs on a seat, withdraw the draft, which puts its
-              proposals back in the queue, then write that value as text under a field the seat has and
-              accept again. If none of them belongs on a seat, there is nothing to do.
+              {notRead.published
+                ? `That draft is live now, so these fields cannot ride in on a withdraw. If one belongs on a seat, ${
+                    // The Org Chart is an admin screen, and a steward is often no admin: same signal as the limit's button.
+                    queue?.mayChangeProposalLimit === true ? "write it" : "ask an admin to write it"
+                  } onto that seat in the Org Chart. If none of them belongs on a seat, there is nothing to do.`
+                : "The draft publishes without them. If one belongs on a seat, withdraw the draft, which puts its proposals back in the queue, then write that value as text under a field the seat has and accept again. If none of them belongs on a seat, there is nothing to do."}
             </p>
             <ul className="text-sm text-muted-foreground mt-2 space-y-1">
               {notRead.lines.map((n, i) => (
@@ -796,7 +802,7 @@ export default function Review() {
                 </li>
               ))}
             </ul>
-            {notRead.draftId && !stuck[notRead.draftId] && (
+            {notRead.draftId && !notRead.published && !stuck[notRead.draftId] && (
               <button
                 disabled={busy === notRead.draftId}
                 onClick={() => void withdraw(String(notRead.draftId))}
@@ -831,7 +837,11 @@ export default function Review() {
             {typeof batch.proposedChanges === "number" && typeof queue?.proposalChangeLimit === "number" && (
               <div className="mt-3">
                 <p className="text-sm text-muted-foreground">
-                  {limitSentence(queue.proposalChangeLimit, batch.proposedChanges, queue.mayChangeProposalLimit === true)}
+                  {limitSentence(
+                    queue.proposalChangeLimit,
+                    countWithEdits(batch.proposedChanges, batch.proposedChangesByItem, edits),
+                    queue.mayChangeProposalLimit === true,
+                  )}
                 </p>
                 {queue.mayChangeProposalLimit === true && (
                   <Link

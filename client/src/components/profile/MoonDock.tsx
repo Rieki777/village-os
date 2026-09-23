@@ -64,6 +64,7 @@ import { CalendarDays, X } from "lucide-react";
 import MoonGlyph from "@/components/calendar/MoonGlyph";
 import { useReducedMotion } from "@/components/natural/useReducedMotion";
 import { gameFetch } from "@/lib/gameApi";
+import { useModuleOn } from "@/modules/ModuleProvider";
 import type { CalendarItem, LunarSummary } from "@shared/gatherings";
 import { formatMoonWindow, moonCountLabel } from "@shared/villageMoon";
 
@@ -94,8 +95,14 @@ export default function MoonDock() {
   const button = useRef<HTMLButtonElement | null>(null);
   const panel = useRef<HTMLDivElement | null>(null);
   const reduced = useReducedMotion();
+  // The dock sits on the profile and the gratitude wall, which render whatever
+  // a village has switched on. Events is an optional module, and asking it when
+  // it is off got a 404 on every profile load of a fresh fork. See useModuleOn
+  // for why this waits while the catalog loads and still asks if it failed.
+  const eventsOn = useModuleOn("events");
 
   useEffect(() => {
+    if (!eventsOn) return;
     let alive = true;
     (async () => {
       try {
@@ -110,7 +117,7 @@ export default function MoonDock() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [eventsOn]);
 
   const close = useCallback(() => {
     setOpen(false);

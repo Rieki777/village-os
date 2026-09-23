@@ -113,8 +113,9 @@ handlers used to occupy, because Express matches in registration order.
 | `GET /api/profile/prefs` | the signed-in member | `{ notify }`, `sheetSeen` and `displayCurrency` |
 | `PUT /api/profile/prefs` | the signed-in member | accepts and echoes `notify` PLUS `displayCurrency` |
 | `GET /api/profile/export` | the signed-in member | roughly thirty domains of their own data, as a download |
-| `POST /api/profile/request-exit` | the signed-in member, password confirmed | opens a departure |
-| `POST /api/profile/delete-account` | the signed-in member, password confirmed | anonymises the account |
+| `POST /api/profile/request-exit` | the signed-in member, confirmed with their password, or with a fresh Google sign-in when they have none | opens a departure |
+| `POST /api/profile/delete-account` | the signed-in member, confirmed the same way | anonymises the account |
+| `GET /api/auth/confirm-methods` | the signed-in member | `{ confirmWith }`: `password`, `google` or `none`, which control the exit and delete screens draw |
 
 The prefs pair used to be asymmetric, and it is worth recording what the asymmetry was.
 `GET` answered `{ notify, sheetSeen }` while `displayCurrency` was validated, written and echoed by
@@ -230,10 +231,15 @@ That 401 body is exact for the eight `/api/profile*` handlers. The `/api/me/*` h
 answers `{"error":"auth_required","message":"Sign in first"}`: the `error` word is stable, as the
 auth helper promises, and the body shape is not.
 
-`403` on exit and delete, in two different sentences. `POST /api/profile/request-exit` answers
-`{"error":"Confirm with your password"}` and `POST /api/profile/delete-account` answers
+`403` on exit and delete. For a member with a password the two sentences are unchanged:
+`POST /api/profile/request-exit` answers `{"error":"Confirm with your password"}` and
+`POST /api/profile/delete-account` answers
 `{"error":"Confirm with your password to delete your account"}`. Neither is a machine word, and a
-caller matching on the string gets one of the two.
+caller matching on the string gets one of the two. For a member with no password the body also
+carries `confirmWith` (`google` or `none`), and the sentence says what to do: confirm with Google,
+or, on a village with Google off, set a password first. A Google confirmation that is expired,
+already used, edited, another member's, or given for the other action is each refused with its own
+sentence (`CONFIRM_REFUSAL` in `server/lib/identityConfirm.ts`).
 `400` with a sentence for a malformed handle or an unknown path id. `409 {"error":"That handle is
 taken"}`. `409` with a `blocking` array naming each domain when a departure would strand open
 economic state. `404 {"error":"Not found"}` for an unknown handle, and the same for an example

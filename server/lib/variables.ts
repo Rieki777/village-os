@@ -16,6 +16,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 import {
   VARIABLES,
   VARIABLES_BY_KEY,
+  normaliseLongText,
   parseVariable,
   validateVariable,
   type VariableDef,
@@ -197,7 +198,13 @@ export async function setVariable(
   const def = VARIABLES_BY_KEY[key];
   if (!def) return { ok: false, key, error: `Unknown variable: ${key}` };
 
-  const value = String(raw).trim();
+  // A paragraph is normalised rather than merely trimmed: line endings folded,
+  // control characters and bidi overrides removed, newlines and tabs kept. One
+  // write path, so every writer (this route, the governance apply loop, a
+  // change set) stores the same bytes for the same typing. See
+  // `normaliseLongText` in shared/gameVariables.ts for why each of the three
+  // steps is there.
+  const value = def.type === "longtext" ? normaliseLongText(raw) : String(raw).trim();
   const error = validateVariable(def, value);
   if (error) return { ok: false, key, error };
 

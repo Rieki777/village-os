@@ -198,7 +198,7 @@ export default function WorkWithUs() {
         </div>
       </section>
 
-      <p className="text-center text-xs text-stone-400 max-w-2xl mx-auto px-4 pb-12">
+      <p className="text-center text-xs text-muted-foreground max-w-2xl mx-auto px-4 pb-12">
         This form is an invitation to propose and does not constitute an offer, agreement, or commitment.
         Any partnership is subject to mutual agreement and formal terms.
       </p>
@@ -379,7 +379,7 @@ function ProposalForm({
       <button type="submit" disabled={submitting} className="w-full md:w-auto inline-flex items-center justify-center gap-2 bg-teal-deep text-white font-semibold px-8 py-3 rounded-xl hover:bg-teal disabled:opacity-50 transition-colors">
         {submitting ? "Sending…" : "Submit proposal"} <ArrowRight className="w-4 h-4" />
       </button>
-      <p className="text-xs text-stone-400">Your answers save as you go, so you can come back and finish later.</p>
+      <p className="text-xs text-stone-500">Your answers save as you go, so you can come back and finish later.</p>
     </form>
   );
 }

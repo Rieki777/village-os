@@ -168,10 +168,12 @@ export function register(app: Express, deps: Deps): void {
     if (!(await isAdmin(req))) {
       return res.status(401).json({ error: "auth_required" });
     }
-    const mods: any[] = trainingRepo.all();
-    const filtered = mods.filter((m) => m.id !== req.params.id);
-    if (filtered.length === mods.length) return res.status(404).json({ error: "Not found" });
-    await trainingRepo.replaceAll(filtered);
+    // By id. A filtered snapshot that comes back EMPTY carries no version
+    // stamp, which the store reads as boot seeding, so deleting the last
+    // module used to delete the table as it stood (store-db.ts, 0123).
+    if (!(await trainingRepo.remove([String(req.params.id)]))) {
+      return res.status(404).json({ error: "Not found" });
+    }
     res.json({ success: true });
   });
 }

@@ -416,13 +416,33 @@ export function seatState(
   return "filled";
 }
 
-/** `doc:` keeps a documented holder from ever colliding with a real user id. */
-export function documentedKey(displayName: string): string {
-  const slug = String(displayName)
+/**
+ * A slug with its dashes trimmed, in ONE PASS.
+ *
+ * `.replace(/[^a-z0-9]+/g, "-")` followed by `.replace(/^-+|-+$/g, "")` is the
+ * obvious spelling and it is a polynomial ReDoS (CodeQL js/polynomial-redos,
+ * alerts #14, #15 and #16): the trim alternates two greedy runs of the same
+ * character, so a name holding many dashes costs time in the square of its
+ * length. Every caller below slugs a string A PERSON TYPED, which is the half
+ * that makes it worth fixing rather than waiving.
+ *
+ * Splitting on the dash and dropping the empty pieces does the same job
+ * linearly, and it is the same fix `server/routes/circles.ts` took for the
+ * circle slug. The collapse itself is linear already: one character class with
+ * one quantifier has nothing to backtrack into.
+ */
+function dashSlug(s: string): string {
+  return s
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return `doc:${slug || "unnamed"}`;
+    .split("-")
+    .filter(Boolean)
+    .join("-");
+}
+
+/** `doc:` keeps a documented holder from ever colliding with a real user id. */
+export function documentedKey(displayName: string): string {
+  return `doc:${dashSlug(String(displayName)) || "unnamed"}`;
 }
 
 /**
@@ -434,12 +454,8 @@ export function documentedKey(displayName: string): string {
  * with that person's own card on the same seat.
  */
 export function agentKeySlug(name: string): string {
-  return String(name)
-    .trim()
-    .toLowerCase()
-    .replace(/^agent:/, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+  // Lowercased BEFORE the prefix is stripped, so "AGENT:Willow" loses it too.
+  return dashSlug(String(name).trim().toLowerCase().replace(/^agent:/, ""));
 }
 
 /**
@@ -767,11 +783,8 @@ const WRITABLE: Record<string, string> = {
 
 export async function createOrgRole(pool: Pool, body: any): Promise<string> {
   const id =
-    String(body?.id ?? body?.name ?? "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 64) || `seat-${Date.now().toString(36)}`;
+    dashSlug(String(body?.id ?? body?.name ?? "")).slice(0, 64) ||
+    `seat-${Date.now().toString(36)}`;
   // The four every seat gets whether or not the caller sent them, so a bare
   // `{name}` still produces a usable row.
   const cols = ["id", "name", "circle_id", "aim", "domain", "accountabilities", "seats", "sort_order"];

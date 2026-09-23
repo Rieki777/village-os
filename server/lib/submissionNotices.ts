@@ -29,6 +29,10 @@ import { asOffer } from "../../shared/powerHands";
  */
 const WHAT_THEY_SENT: Record<string, string> = {
   "role-application": "your offer to hold a seat",
+  // A seat the village had already written your name on, before you had an
+  // account here. Different from a raised hand, which offers to take on a
+  // seat nobody is holding.
+  "seat-claim": "your ask to be confirmed in a seat",
   "power-application": "your offer to take on a power",
   "work-with-us": "your proposal to work together",
   "quest-proposal": "the quest you proposed",
@@ -51,16 +55,18 @@ const FALLBACK = "what you sent us";
 /**
  * A raised hand names its seat, because a member may have raised several and
  * "your offer to hold a seat" would leave them guessing which one moved. A hand
- * for a power names its power for the same reason, in the power's own label.
- * Only these two carry a name worth saying: the rest are free text a stranger
- * typed, and quoting it back into an email subject is a different decision.
+ * for a power names its power for the same reason, in the power's own label, and
+ * an ask to be confirmed in a seat names the seat because a backfilled chart can
+ * carry one person's name on several seatings. Only these three carry a name
+ * worth saying, because each one is something the village itself wrote down. The
+ * rest are free text a stranger typed, and quoting that back into an email
+ * subject is a different decision.
  */
 export function submissionSubject(type: string, data?: Record<string, unknown> | null): string {
   const base = WHAT_THEY_SENT[type] ?? FALLBACK;
-  if (type === "role-application") {
-    const seat = String((data as any)?.roleName ?? "").trim();
-    if (seat) return `your offer to hold ${seat}`;
-  }
+  const seat = String((data as any)?.roleName ?? "").trim();
+  if (type === "role-application" && seat) return `your offer to hold ${seat}`;
+  if (type === "seat-claim" && seat) return `your ask to be confirmed as ${seat}`;
   if (type === "power-application") {
     const power = String((data as any)?.powerLabel ?? "").trim();
     if (power) return `your offer to ${asOffer(power)}`;
