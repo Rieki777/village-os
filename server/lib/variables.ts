@@ -8,6 +8,13 @@
  * opposite of regen-civics, which seeds every row via migration and therefore
  * needs a migration to change a default.
  *
+ * ONE FAMILY OF DIALS IS DELIBERATELY NOT A DELTA: a `placeDependent` one
+ * (shared/gameVariables.ts) keeps its row even when the value equals the
+ * default, because for those dials the row is the only evidence that anybody
+ * here ever answered. `calendar.hemisphere` ships "north"; a northern village
+ * agreeing and a village that never looked are the same bytes otherwise, and
+ * the calendar needs to tell them apart. `isAnswered` below is that reading.
+ *
  * Readers stay SYNCHRONOUS (the cache is the read path): variables sit on hot
  * paths — budget math, cycle close, consent caps — and they change through
  * exactly one admin endpoint, which is where the single async write lives.
@@ -66,6 +73,22 @@ export function storedOverride(key: string): string | undefined {
 }
 
 /**
+ * HAS ANYBODY IN THIS VILLAGE ANSWERED THIS DIAL? A row, and nothing else.
+ *
+ * Only honest for a `placeDependent` dial, which is the one family whose row
+ * survives a write of the default value. For every other dial a stored row
+ * means "changed from the default", which is a different fact and one
+ * `isDefault` already reports.
+ *
+ * Reads the boot cache, so it costs nothing and is safe on a render path: the
+ * events module's readiness reader calls it per admin modules request and
+ * touches no pool at all.
+ */
+export function isAnswered(key: string): boolean {
+  return overrides[key] !== undefined;
+}
+
+/**
  * The RAW effective value (override ?? default), as stored. This is the
  * string a mechanics proposal captures as its baseline and compares its
  * target against — same representation the write path validates, so a
@@ -83,7 +106,7 @@ export function rawValue(key: string): string {
  * `isDefault` lets the UI show what has been customised at a glance.
  */
 export function allVariables(): Array<
-  VariableDef & { value: string; parsed: number | boolean | string; isDefault: boolean }
+  VariableDef & { value: string; parsed: number | boolean | string; isDefault: boolean; answered: boolean }
 > {
   return VARIABLES.map((def) => {
     const raw = overrides[def.key];
@@ -92,6 +115,13 @@ export function allVariables(): Array<
       value: raw ?? def.default,
       parsed: parseVariable(def, raw),
       isDefault: raw === undefined || raw === def.default,
+      // A SECOND FACT, and not the negation of the first. `isDefault` asks
+      // what the value IS; this asks whether anybody here ever said so. They
+      // differ exactly where it matters: a `placeDependent` dial holding its
+      // default is `isDefault: true` and `answered: true` once a village has
+      // confirmed it. Travels on the admin payload (it spreads this row), so
+      // the module card can ask for an answer without a second request.
+      answered: raw !== undefined,
     };
   });
 }
@@ -217,9 +247,20 @@ export async function setVariable(
 
   const previous = overrides[key] ?? def.default;
 
-  // Setting a variable back to its default REMOVES the override, so the village
-  // keeps inheriting future platform defaults for anything it has not opinionated.
-  if (value === def.default) {
+  /*
+   * Setting a variable back to its default REMOVES the override, so the village
+   * keeps inheriting future platform defaults for anything it has not
+   * opinionated.
+   *
+   * A `placeDependent` dial is the exception and keeps its row. Deleting it
+   * would delete the only evidence that a human answered the question, and for
+   * those dials "the value equals the default" is exactly the answer we most
+   * need to be able to see: a village in Costa Rica saying "north" is an
+   * answer, not a silence. Writing the row on that path is also what makes the
+   * card's "This is right" button do anything at all, since it saves the value
+   * already showing.
+   */
+  if (value === def.default && !def.placeDependent) {
     await pool.query("DELETE FROM game_variables WHERE config_key = ?", [key]);
     delete overrides[key];
   } else {

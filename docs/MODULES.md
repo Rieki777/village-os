@@ -57,9 +57,9 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 
 | Setup | What it means | Modules |
 | --- | --- | --- |
-| `none` | works the moment it is on. The Go-live card offers itself right after Turn on. | `quests`, `gratitude`, `progression`, `profiles`, `forum`, `feed`, `messaging`, `network`, `events`, `introductions`, `governance` |
+| `none` | works the moment it is on. The Go-live card offers itself right after Turn on. | `quests`, `gratitude`, `progression`, `profiles`, `forum`, `feed`, `messaging`, `network`, `introductions`, `governance` |
 | `optional` | better with content, honest without it. | `map`, `resources`, `automation`, `health`, `badges`, `crowdpool`, `tools` |
-| `required` | needs real content before going live (a room and a price, a stocked treasury), and the Go-live card waits for readiness. | `stays`, `library`, `exchange`, `redemption`, `commerce`, `hypha` |
+| `required` | needs real content before going live (a room and a price, a stocked treasury), and the Go-live card waits for readiness. | `stays`, `library`, `exchange`, `redemption`, `commerce`, `events`, `hypha` |
 
 ### The shelves
 
@@ -95,7 +95,7 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | Village Network | `network` | Connect | no | included | village-content | none | none yet |
 | Crowdpool | `crowdpool` | Connect | no | included | village-content | optional | [crowdpool.md](modules/crowdpool.md) |
 | Tools Hub | `tools` | Coordinate | no | included | member-pii | optional | [tools-hub.md](modules/tools-hub.md) |
-| Village Calendar | `events` | Coordinate | no | included | member-pii | none | [events.md](modules/events.md) |
+| Village Calendar | `events` | Coordinate | no | included | member-pii | required | [events.md](modules/events.md) |
 | Introductions | `introductions` | Connect | no | included | member-pii | none | none yet |
 | Governance | `governance` | Know and decide | no | included | member-pii | none | none yet |
 | Hypha Bridge | `hypha` | Know and decide | no | included | village-content | required | [hypha.md](modules/hypha.md) |
@@ -240,7 +240,7 @@ The village's calendar: gatherings with a time, a place, a capacity and an RSVP.
 | A village can switch it off | yes, and it ships off. An admin moves it to `preview`, `members`, `public` |
 | Tier | `included` |
 | Data it holds | `member-pii` |
-| Standing it up | `none`, works the moment it is on. The Go-live card offers itself right after Turn on. |
+| Standing it up | `required`, needs real content before going live (a room and a price, a stocked treasury), and the Go-live card waits for readiness. |
 | Requires | nothing |
 | Recommends | `map` |
 | Capabilities it adds | `event.rsvp`, `event.manage` |
@@ -1197,7 +1197,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
       "tier": "included",
       "dataClass": "member-pii",
       "group": "coordinate",
-      "setup": "none",
+      "setup": "required",
       "requires": [],
       "recommends": [
         "map"

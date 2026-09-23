@@ -3517,6 +3517,7 @@ Which way the seasons turn. Sets which solstice is the longest day and which the
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
+| Depends on where you are | Yes. The default is where the platform starts, not an answer: a village says which is true of it, and saying so is recorded even when the answer matches the default. |
 
 What it may be set to:
 

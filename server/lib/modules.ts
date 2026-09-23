@@ -26,12 +26,14 @@ import {
   supportRoute,
   type ModuleDef,
   type ModuleLifecycle,
+  type SetupTarget,
 } from "../../shared/modules";
+import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
 import { recordEvent } from "./events";
 import { hasRealContent } from "./examples";
 import { markModuleUse, usageMarkPending } from "./moduleUsage";
 import { secretValue } from "./secrets";
-import { stringVar } from "./variables";
+import { isAnswered, stringVar } from "./variables";
 
 interface ModuleRow {
   lifecycle: ModuleLifecycle;
@@ -506,7 +508,51 @@ const READINESS_HINTS: Record<string, string> = {
   crowdpool: "Link one hub campaign first",
   hypha: "Set your DHO address, then confirm one token contract first",
   redemption: "Write how redemption works here first",
+  events: "Say which hemisphere this village is in first",
 };
+
+/**
+ * WHERE EACH HINT SENDS SOMEBODY, which is the half a sentence cannot carry
+ * (Rye, 2026-09-21: "have a link to direct people to exactly what they need").
+ *
+ * A hint names a step; this names the control. The pairing lives beside the
+ * hints so a module cannot gain one without the other, and every module whose
+ * setup is not "none" must appear in both — `moduleReadiness.test.ts` walks
+ * the registry rather than a copied list, so a new module with a hint and no
+ * address fails the build instead of shipping a link to nowhere.
+ *
+ * A `tab` target is content the village makes on the module's own screen. That
+ * screen is unreachable while the module is off (the rail hides it and its
+ * routes are behind requireModule), which the link builder knows; a `setting`
+ * or `config` target is on the module card and works at every lifecycle.
+ */
+const READINESS_TARGETS: Record<string, SetupTarget> = {
+  map: { kind: "tab", tab: "circles-map", label: "the living map" },
+  tools: { kind: "tab", tab: "tools-admin", label: "Tools Hub" },
+  badges: { kind: "tab", tab: "badges-admin", label: "Badges & Skills" },
+  health: { kind: "tab", tab: "health-admin", label: "Village Health" },
+  automation: { kind: "tab", tab: "calls-admin", label: "Call Automation" },
+  stays: { kind: "tab", tab: "stays-admin", label: "Stays" },
+  library: { kind: "tab", tab: "library-admin", label: "Material Library" },
+  exchange: { kind: "tab", tab: "exchange-admin", label: "Exchange" },
+  commerce: { kind: "tab", tab: "products", label: "Payments & Donations" },
+  resources: { kind: "tab", tab: "resources-admin", label: "How Resources Flow" },
+  crowdpool: { kind: "config", module: "crowdpool", label: "Crowdpool" },
+  redemption: settingTarget("redemption.process_text"),
+  events: settingTarget("calendar.hemisphere"),
+  // Hypha's address moves as its two halves are answered, so its reader picks
+  // between these rather than reading one fixed entry.
+  hypha: settingTarget("hypha.org_url"),
+};
+
+/**
+ * A dial's address, with the label a founder is shown read from the registry
+ * rather than typed here. Two copies of "Hemisphere" would be one rename away
+ * from a link that promises one control and lands on another.
+ */
+function settingTarget(key: string): SetupTarget {
+  return { kind: "setting", key, label: VARIABLES_BY_KEY[key]?.label ?? key };
+}
 
 let readinessAttached = false;
 
@@ -517,13 +563,17 @@ let readinessAttached = false;
  * openStateCheck attachments, so the shared registry stays import-clean for
  * the client bundle.
  *
- * FOUR modules read their own readiness, and each one is here because the
+ * FIVE modules read their own readiness, and each one is here because the
  * default check cannot answer for it. Stays counts two tables rather than
  * either (a room without a price reads as real content to the default, and a
  * stay nobody can book is not ready). Crowdpool and redemption have no rows
  * at all to count, so their content is config: a linked campaign, and the
  * words a member is told to follow. Hypha needs an address and a confirmed
- * binding, neither of which the examples engine knows how to see.
+ * binding, neither of which the examples engine knows how to see. Events is
+ * not waiting on content at all, but on an ANSWER — see its reader below.
+ *
+ * Every answer carries its `target` as well as its hint, so the surfaces that
+ * show one can link to the control instead of describing it.
  */
 export function attachModuleReadiness(getPool: () => Pool): void {
   if (readinessAttached) return;
@@ -531,6 +581,35 @@ export function attachModuleReadiness(getPool: () => Pool): void {
   for (const def of MODULES) {
     if (!def.setup || def.setup === "none") continue;
     const hint = READINESS_HINTS[def.id] ?? "Add the first real item before going live";
+    const target = READINESS_TARGETS[def.id];
+    if (def.id === "events") {
+      /*
+       * THE FIFTH READER, and the only one that asks whether a question was
+       * ANSWERED rather than whether content exists.
+       *
+       * `calendar.hemisphere` ships "north". A village south of the equator
+       * that never opened this dial gets solstices the wrong way round and a
+       * moon lit on the wrong side, and nothing anywhere said so, because the
+       * module told every fork there was nothing to set up.
+       *
+       * Ready cannot mean "the value is south", because "north" is a true
+       * answer for most of this platform's villages, and it cannot mean "the
+       * value differs from the default", because that is the same sentence.
+       * It means a row exists: `placeDependent` keeps one for this dial even
+       * when the value equals the default (server/lib/variables.ts), so the
+       * row is the fossil of somebody having looked.
+       *
+       * No pool, deliberately. The answer is in the boot cache, so this costs
+       * nothing on the admin payload and answers identically in a village
+       * with no tables of its own.
+       */
+      def.readiness = async () => ({
+        ready: isAnswered("calendar.hemisphere"),
+        hint,
+        target,
+      });
+      continue;
+    }
     if (def.id === "stays") {
       def.readiness = async () => {
         try {
@@ -541,9 +620,9 @@ export function attachModuleReadiness(getPool: () => Pool): void {
           const [[prices]] = await p.query<RowDataPacket[]>(
             "SELECT COUNT(*) n FROM accommodation_prices WHERE is_example = 0",
           );
-          return { ready: Number(rooms.n) > 0 && Number(prices.n) > 0, hint };
+          return { ready: Number(rooms.n) > 0 && Number(prices.n) > 0, hint, target };
         } catch {
-          return { ready: false, hint };
+          return { ready: false, hint, target };
         }
       };
       continue;
@@ -556,9 +635,9 @@ export function attachModuleReadiness(getPool: () => Pool): void {
       def.readiness = async () => {
         try {
           const cfg = moduleConfig<{ villageCampaigns?: unknown[] }>("crowdpool");
-          return { ready: (cfg?.villageCampaigns?.length ?? 0) > 0, hint };
+          return { ready: (cfg?.villageCampaigns?.length ?? 0) > 0, hint, target };
         } catch {
-          return { ready: false, hint };
+          return { ready: false, hint, target };
         }
       };
       continue;
@@ -577,15 +656,24 @@ export function attachModuleReadiness(getPool: () => Pool): void {
        * and no treasury figure to show, and a page of empty cards is exactly
        * the broken-looking module this reader exists to prevent.
        */
+      /*
+       * ITS ADDRESS MOVES WITH ITS ANSWER, which is why this reader builds one
+       * rather than reading a fixed entry. Sending a founder who has already
+       * set the DHO address back to the DHO address field is a link that looks
+       * like help and is not; once that half is answered, what is left is the
+       * contract to confirm, which is the Hypha panel further down the same
+       * card.
+       */
+      const bindings: SetupTarget = { kind: "config", module: "hypha", label: "the Hypha Bridge" };
       def.readiness = async () => {
         try {
-          if (!stringVar("hypha.org_url").trim()) return { ready: false, hint };
+          if (!stringVar("hypha.org_url").trim()) return { ready: false, hint, target };
           const [[bound]] = await getPool().query<RowDataPacket[]>(
             "SELECT COUNT(*) n FROM hypha_token_bindings",
           );
-          return { ready: Number(bound.n) > 0, hint };
+          return { ready: Number(bound.n) > 0, hint, target: bindings };
         } catch {
-          return { ready: false, hint };
+          return { ready: false, hint, target };
         }
       };
       continue;
@@ -609,14 +697,15 @@ export function attachModuleReadiness(getPool: () => Pool): void {
       def.readiness = async () => ({
         ready: stringVar("redemption.process_text").trim().length > 0,
         hint,
+        target,
       });
       continue;
     }
     def.readiness = async () => {
       try {
-        return { ready: await hasRealContent(getPool(), def.id), hint };
+        return { ready: await hasRealContent(getPool(), def.id), hint, target };
       } catch {
-        return { ready: false, hint };
+        return { ready: false, hint, target };
       }
     };
   }

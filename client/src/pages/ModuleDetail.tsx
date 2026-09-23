@@ -23,7 +23,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { authToken, useCatalyst } from "@/lib/gameApi";
 import { prepareImageForUpload } from "@/lib/imagePrep";
 import { POOL_REASON_COPY } from "@shared/moduleCatalog";
-import type { ModuleDataClass } from "@shared/modules";
+import type { ModuleDataClass, ModuleReadiness } from "@shared/modules";
+import SetupNeeded from "@/components/modules/SetupNeeded";
 import { ArrowLeft } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useRoute } from "wouter";
@@ -61,7 +62,7 @@ interface AdminModule {
   legalReview: boolean;
   dataClass: ModuleDataClass;
   setup: "none" | "optional" | "required";
-  ready: { ready: boolean; hint: string } | null;
+  ready: ModuleReadiness | null;
   maxLifecycle: string;
   requires: string[];
   showingExamples: boolean;
@@ -182,6 +183,18 @@ function AdminPanel({ id }: { id: string }) {
             Off right now. Turning it on opens a preview only {catalyst.plural} can see; you go live from
             there when it is ready.
           </p>
+          {/* An off module is exactly where setup begins, and this page used to
+              say nothing about it until the module reached preview. A dial or
+              a config editor is reachable right now; content is not, and the
+              link says so rather than sending somebody to a screen that
+              opens with the module. */}
+          <SetupNeeded
+            moduleId={m.id}
+            setup={m.setup}
+            ready={m.ready}
+            lifecycle={m.served ?? m.lifecycle}
+            className="mt-3"
+          />
           {m.examplesAvailable && (
             <label className="flex items-center gap-2 mt-3 text-sm text-foreground">
               <input
@@ -204,8 +217,18 @@ function AdminPanel({ id }: { id: string }) {
       ) : (
         <>
           <p className="text-sm text-muted-foreground">{lifecycleLine(catalyst.plural)[m.lifecycle] ?? m.lifecycle}</p>
+          {/* At every lifecycle now, not only in preview: a village whose
+              calendar has been live for a year is exactly the one that was
+              never told its seasons turn the wrong way round. */}
+          <SetupNeeded
+            moduleId={m.id}
+            setup={m.setup}
+            ready={m.ready}
+            lifecycle={m.served ?? m.lifecycle}
+            className="mt-2"
+          />
           {m.lifecycle === "preview" && m.setup !== "none" && m.ready && !m.ready.ready && (
-            <p className="text-sm text-amber-700 mt-2">{m.ready.hint}. Then the go-live choice appears here.</p>
+            <p className="text-sm text-muted-foreground mt-2">Then the go-live choice appears here.</p>
           )}
           <div className="mt-4">
             <GoLiveCard module={m as any} lookup={lookup} token={token} onChanged={load} />
