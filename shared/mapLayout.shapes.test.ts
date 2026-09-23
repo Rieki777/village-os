@@ -95,7 +95,7 @@ describe("layoutForShape", () => {
       {
         "circles": [
           "land d0 r49@107,263 [land-lead@107,234 water@107,292 open] q2+0",
-          "welcome d0 r98@271,271 [host@271,193] q0+0",
+          "welcome d0 r98@271,271 [host@271,349] q0+0",
           "kitchen d1 r57@271,271 [cook@271,234] q1+0",
           "wisdom d0 r53@435,279 [] q0+0",
         ],
@@ -114,7 +114,7 @@ describe("layoutForShape", () => {
       {
         "circles": [
           "land d0 r49@84,121 [land-lead@84,91 water@84,150 open] q2+0",
-          "welcome d0 r57@204,121 [host@204,84] q0+0",
+          "welcome d0 r57@204,121 [host@204,157] q0+0",
           "wisdom d0 r53@328,121 [] q0+0",
           "kitchen d1 r57@208,260 [cook@208,223] q1+0",
         ],
@@ -133,7 +133,7 @@ describe("layoutForShape", () => {
       {
         "circles": [
           "land d0 r49@422,199 [land-lead@422,169 water@422,228 open] q2+0",
-          "welcome d0 r98@317,466 [host@317,388] q0+0",
+          "welcome d0 r98@317,466 [host@317,544] q0+0",
           "kitchen d1 r57@317,466 [cook@317,429] q1+0",
           "wisdom d0 r53@190,205 [] q0+0",
         ],
@@ -152,7 +152,7 @@ describe("layoutForShape", () => {
       {
         "circles": [
           "land d0 r98@271,151 [land-lead@271,73 water@271,229 open] q2+0",
-          "welcome d0 r98@374,330 [host@374,253] q0+0",
+          "welcome d0 r98@374,330 [host@374,408] q0+0",
           "kitchen d1 r57@374,330 [cook@374,294] q1+0",
           "wisdom d0 r98@167,330 [] q0+0",
         ],
@@ -171,7 +171,7 @@ describe("layoutForShape", () => {
       {
         "circles": [
           "land d0 r49@448,204 [land-lead@448,174 water@448,233 open] q2+0",
-          "welcome d0 r98@333,497 [host@333,419] q0+0",
+          "welcome d0 r98@333,497 [host@333,574] q0+0",
           "kitchen d1 r57@333,497 [cook@333,460] q1+0",
           "wisdom d0 r53@194,210 [] q0+0",
         ],
@@ -190,7 +190,7 @@ describe("layoutForShape", () => {
       {
         "circles": [
           "land d0 r49@429,200 [land-lead@429,171 water@429,230 open] q2+0",
-          "welcome d0 r98@321,475 [host@321,397] q0+0",
+          "welcome d0 r98@321,475 [host@321,552] q0+0",
           "kitchen d1 r57@321,475 [cook@321,438] q1+0",
           "wisdom d0 r53@191,206 [] q0+0",
         ],

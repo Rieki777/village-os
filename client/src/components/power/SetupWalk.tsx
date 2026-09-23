@@ -310,7 +310,7 @@ function SeatStep({
           <button type="button" disabled={busy} onClick={() => setPicking(true)} className="text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium disabled:opacity-40">
             Assign somebody
           </button>
-          <button type="button" disabled={busy} onClick={() => onOpenCall(seat.id)} className="text-sm bg-amber/90 text-teal-deep rounded-lg px-4 py-2 font-semibold disabled:opacity-40">
+          <button type="button" disabled={busy} onClick={() => onOpenCall(seat.id)} className="text-sm bg-amber/90 text-primary-foreground rounded-lg px-4 py-2 font-semibold disabled:opacity-40">
             Leave it as an open call
           </button>
           <button type="button" onClick={onSkip} className="text-sm text-muted-foreground px-2 inline-flex items-center gap-1">

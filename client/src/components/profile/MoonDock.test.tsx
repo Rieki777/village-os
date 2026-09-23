@@ -17,6 +17,24 @@ vi.mock("@/components/natural/useReducedMotion", () => ({
   prefersReducedMotion: () => true,
 }));
 
+/**
+ * What the module catalog says. Events is ON by default, because every case
+ * in the first block is about the dock and not the gate. The provider's own
+ * network fetch is replaced, as ModuleGate.test.tsx does and for its reason,
+ * but `useModuleOn` runs the REAL `moduleIsOn` over this catalog, so the rule
+ * the dock reads is the one that ships.
+ */
+const catalog = vi.hoisted(() => ({ modules: [] as any[], loaded: true, failed: false }));
+vi.mock("@/modules/ModuleProvider", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/modules/ModuleProvider")>();
+  return {
+    ...real,
+    useModules: () => ({ ...catalog }),
+    useModuleOn: (id: string) => real.moduleIsOn(catalog, id),
+  };
+});
+const EVENTS_ON = { id: "events", name: "Events", description: "", core: false, lifecycle: "public", hyphaLinks: [] };
+
 import MoonDock from "./MoonDock";
 
 /** A lunation running the first fortnight of March, half done. */
@@ -66,6 +84,9 @@ const answers = (body: unknown, ok = true, status = 200) =>
   vi.stubGlobal("fetch", vi.fn(async () => ({ ok, status, json: async () => body })));
 
 beforeEach(() => {
+  catalog.modules = [EVENTS_ON];
+  catalog.loaded = true;
+  catalog.failed = false;
   vi.stubGlobal("localStorage", {
     getItem: () => null,
     setItem: () => {},
@@ -144,5 +165,67 @@ describe("MoonDock", () => {
     render(<MoonDock />);
     fireEvent.click(await screen.findByRole("button", { name: /Moon 41/i }));
     expect(await screen.findByText(/Nothing is on the calendar this moon yet/i)).toBeTruthy();
+  });
+});
+
+/**
+ * THE DOCK ASKS THE EVENTS API ONLY WHEN THE MODULE CAN ANSWER.
+ *
+ * It sits on the profile and the gratitude wall, which render whatever
+ * modules a village has switched on. On a fresh fork every non-core module is
+ * off, so events has no routes and the dock's request was refused with a 404
+ * on every profile load. Nothing broke on the page, which is exactly why it
+ * went unseen: the one village anybody looks at has events on.
+ *
+ * Counted as requests, never as the absence of an error: a dock that asked and
+ * swallowed the 404 would pass an "it shows nothing" check just as well.
+ */
+describe("MoonDock asks the events API only when the module can answer", () => {
+  const eventsRequests = () =>
+    (fetch as any).mock.calls.filter((c: any[]) => String(c[0]).startsWith("/api/events")).length;
+  /** Long enough for a mount effect to have fired, so a zero is a zero. */
+  const settle = () => new Promise((r) => setTimeout(r, 50));
+
+  it("asks when events is on, which is what makes the zeros below mean something", async () => {
+    answers({ events: [], lunar, moonOneCycle: null });
+    render(<MoonDock />);
+    await waitFor(() => expect(eventsRequests()).toBe(1));
+  });
+
+  it("makes no request at all when the events module is off", async () => {
+    catalog.modules = [];
+    answers({}, false, 404);
+    render(<MoonDock />);
+    await settle();
+    expect(eventsRequests()).toBe(0);
+  });
+
+  it("makes no request while the module catalog is still loading", async () => {
+    catalog.loaded = false;
+    answers({ events: [], lunar, moonOneCycle: null });
+    render(<MoonDock />);
+    await settle();
+    expect(eventsRequests()).toBe(0);
+  });
+
+  it("asks once the catalog arrives, so waiting never becomes never", async () => {
+    // Without this, the loading guard would hide the moon for good on a village
+    // with events on, and every test run against a loaded provider would pass.
+    catalog.loaded = false;
+    answers({ events: [], lunar, moonOneCycle: null });
+    const { rerender } = render(<MoonDock />);
+    await settle();
+    expect(eventsRequests()).toBe(0);
+    catalog.loaded = true;
+    rerender(<MoonDock />);
+    await waitFor(() => expect(eventsRequests()).toBe(1));
+  });
+
+  it("still asks when the catalog could not be read, because unknown is not off", async () => {
+    catalog.modules = [];
+    catalog.failed = true;
+    answers({ events: [], lunar, moonOneCycle: null });
+    render(<MoonDock />);
+    await waitFor(() => expect(eventsRequests()).toBe(1));
   });
 });

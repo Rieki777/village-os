@@ -74,7 +74,7 @@
  * whoever actually holds the contract.
  */
 import { sanitiseForVolume, sniffKind, stampedName, writeToVolume } from "./uploads";
-import { boundsFor, zoomFor, type LatLon } from "../../shared/land";
+import { MAP_WORLD_ASPECT, boundsFor, boundsForAspect, zoomFor, type LatLon } from "../../shared/land";
 
 /** What a provider is asked for. */
 export interface ImageryRequest {
@@ -257,8 +257,61 @@ const ESRI: SatelliteProvider = {
   },
 };
 
+/**
+ * Esri World Imagery, fetched without a key and kept.
+ *
+ * SEPARATE FROM `ESRI` ABOVE, AND THE SEPARATION IS THE POINT. That entry
+ * records a licence reading made on 2026-08-31 and stays exactly as it was:
+ * keyed, and refused for caching. This one is a DEPLOYMENT OWNER'S DECISION,
+ * made by Rye on 2026-09-19 for this project, that its own fetches and its own
+ * stored copies are acceptable to it. Two entries, because a policy choice and
+ * a licence reading are different things and collapsing them into one edit
+ * would have quietly rewritten the research.
+ *
+ * It is not the default. `SATELLITE_PROVIDER` still has to name it, so a fork
+ * that has not made this decision is unaffected and still gets the honest
+ * empty state it gets today. The three commercial entries above stay
+ * forbidden, and the test that pins them still passes.
+ *
+ * The same public `export` endpoint the map's own plate was cut from
+ * (docs/prototypes/fetch_sat.py), which is why it needs no key: the token is
+ * only ever added when one exists.
+ */
+const ESRI_OPEN: SatelliteProvider = {
+  id: "esri-open",
+  label: "Esri World Imagery (no key, kept on our own volume)",
+  attribution: "Imagery (c) Esri and its imagery contributors",
+  caching: "permitted",
+  licenceNote:
+    "Kept by a deployment owner's decision. This project is open source and treats its own use of the public World Imagery export endpoint as acceptable for itself. That is a policy choice made here on 2026-09-19, and it is not a licence grant. The keyed `esri` entry above records the stricter reading and is unchanged. A fork that has not made the same decision should leave this provider unnamed.",
+  keyEnv: null,
+  groundResolutionM: 0.5,
+  buildUrl: (req) => {
+    const b = boundsForAspect(req.centre, req.spanM, MAP_WORLD_ASPECT);
+    /*
+     * The image is asked for in the WORLD'S aspect, not as a square. The map's
+     * world rect is 2400x1600, and a square picture stretched into it would
+     * move every structure off the ground it stands on, which is the one thing
+     * a georeferenced map may not do.
+     */
+    const params = new URLSearchParams({
+      bbox: `${b.west},${b.south},${b.east},${b.north}`,
+      bboxSR: "4326",
+      imageSR: "4326",
+      size: `${req.pixels},${Math.round(req.pixels / MAP_WORLD_ASPECT)}`,
+      format: "jpg",
+      f: "image",
+    });
+    return (
+      "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export" +
+      `?${params.toString()}`
+    );
+  },
+};
+
 export const PROVIDERS: readonly SatelliteProvider[] = [
   VILLAGE_UPLOAD,
+  ESRI_OPEN,
   SENTINEL2,
   MAPBOX,
   GOOGLE,

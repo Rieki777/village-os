@@ -170,6 +170,25 @@ export default function ModuleSettingsSection({
   const ConfigPanel = CONFIG_PANELS[moduleId];
   const elsewhere = ELSEWHERE[moduleId];
   const off = lifecycle === "off";
+  /*
+   * A LIVE MODULE WITH NOTHING TO TELL A MEMBER, said out loud on the card
+   * where the dial that fixes it already is.
+   *
+   * `redemption.process_text` is the village's own words for who to speak to
+   * and how the money reaches somebody. It ships empty, and empty shows no
+   * card at all, so a member who asks to cash out from a live redemption
+   * module reads no instructions anywhere. Ruling 11: warn loudly, never
+   * refuse. Nothing here blocks the module, the dial, or going live; a
+   * village that means to run redemption by word of mouth may ignore it.
+   *
+   * The condition reads the SERVED value and not the draft, because a founder
+   * halfway through typing has not fixed anything yet, and the warning going
+   * quiet on the first keystroke would be a lie the length of a save.
+   */
+  const emptyProcess =
+    moduleId === "redemption" &&
+    !off &&
+    (dials ?? []).some((v) => v.key === "redemption.process_text" && v.value.trim() === "");
   // The Hypha panel owns its own four account fields, so the generic list
   // leaves them alone. Every other module shows every dial it owns.
   const listed = (dials ?? []).filter((v) => moduleId !== "hypha" || !HYPHA_PANEL_KEYS.includes(v.key));
@@ -185,6 +204,16 @@ export default function ModuleSettingsSection({
         <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
           {moduleName} is off. You can set it up now: what you save here is kept, and it takes
           effect the moment you turn the module on.
+        </p>
+      )}
+
+      {emptyProcess && (
+        <p
+          className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3"
+          role="status"
+        >
+          Redemption is on and "How redemption works here" is empty, so a member who asks to cash
+          out is shown no instructions at all. Write it below. Nothing is blocked either way.
         </p>
       )}
 

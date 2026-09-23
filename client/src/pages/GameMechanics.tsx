@@ -199,7 +199,7 @@ interface Standing {
 export const STATUS_COPY: Record<ProposalStatus, { label: string; cls: string }> = {
   draft: { label: "draft, needs a sponsor", cls: "bg-amber-50 text-amber-700" },
   open: { label: "open for support", cls: "bg-emerald-50 text-emerald-700" },
-  withdrawn: { label: "withdrawn", cls: "bg-stone-100 text-stone-500" },
+  withdrawn: { label: "withdrawn", cls: "bg-stone-100 text-stone-600" },
   to_hypha: { label: "at Hypha for the vote", cls: "bg-sky-50 text-sky-700" },
   onsite_vote: { label: "at the village vote", cls: "bg-sky-50 text-sky-700" },
   passed_claimed: { label: "passed, awaiting verification", cls: "bg-violet-50 text-violet-700" },
@@ -211,7 +211,7 @@ export const STATUS_COPY: Record<ProposalStatus, { label: string; cls: string }>
   // instant, the brake and the cycle timing, so the chip states the fact that
   // never varies and WaitingNote below says which of the three is holding it.
   passed_onsite: { label: "carried at the village vote", cls: "bg-violet-50 text-violet-700" },
-  failed: { label: "did not pass", cls: "bg-stone-100 text-stone-500" },
+  failed: { label: "did not pass", cls: "bg-stone-100 text-stone-600" },
   vetoed: { label: "stopped by a steward, back with the proposer", cls: "bg-amber-50 text-amber-700" }, // 0172
   applied: { label: "applied", cls: "bg-teal-deep/10 text-teal-deep" },
 };
@@ -245,7 +245,7 @@ export const APPLYABLE: ReadonlySet<ProposalStatus> = new Set<ProposalStatus>([
  * status nobody has taught this page yet now reads as itself instead.
  */
 function statusChip(status: ProposalStatus): { label: string; cls: string } {
-  return STATUS_COPY[status] ?? { label: String(status).replace(/_/g, " "), cls: "bg-stone-100 text-stone-500" };
+  return STATUS_COPY[status] ?? { label: String(status).replace(/_/g, " "), cls: "bg-stone-100 text-stone-600" };
 }
 
 /**
@@ -861,7 +861,7 @@ export default function GameMechanics() {
                     >
                       <h3 className="font-semibold text-stone-900 mb-1.5">{law.title}</h3>
                       <p className="text-sm text-stone-600 leading-relaxed">{law.plain}</p>
-                      <p className="text-[11px] text-stone-400 mt-2 font-mono">{law.enforcedBy}</p>
+                      <p className="text-[11px] text-stone-500 mt-2 font-mono">{law.enforcedBy}</p>
                     </motion.div>
                   ))}
                 </div>
@@ -957,7 +957,7 @@ export default function GameMechanics() {
                         >
                           <span className="font-semibold text-stone-900">
                             {cat}
-                            <span className="ml-2 text-xs font-normal text-stone-400">
+                            <span className="ml-2 text-xs font-normal text-stone-500">
                               {vars.length} {dialSearch ? "matching " : ""}dial{vars.length === 1 ? "" : "s"}
                               {tuned > 0 ? ` · ${tuned} village-tuned` : ""}
                               {stagedHere > 0 ? ` · ${stagedHere} staged` : ""}
@@ -983,7 +983,7 @@ export default function GameMechanics() {
                                         <span className="ml-2 text-amber-700 font-semibold">→ {displayValue(v, stagedValue)}</span>
                                       )}
                                       {!v.isDefault && stagedValue === undefined && (
-                                        <span className="ml-2 text-[11px] font-normal text-teal-deep/70 align-middle">
+                                        <span className="ml-2 text-[11px] font-normal text-teal-deep align-middle">
                                           village-tuned · default {displayValue(v, v.default)}
                                         </span>
                                       )}
@@ -1005,7 +1005,7 @@ export default function GameMechanics() {
                                       )}
                                     </div>
                                   )}
-                                  <p className="text-[11px] text-stone-400 mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                                  <p className="text-[11px] text-stone-500 mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
                                     {v.ring === "open" ? (
                                       <span className="inline-flex items-center gap-1 text-emerald-700">
                                         <Users className="w-3 h-3" /> community dial
@@ -1089,7 +1089,7 @@ export default function GameMechanics() {
                             <BallotReturnChip proposal={p} />
                           </span>
                         </div>
-                        <p className="text-xs text-stone-400 mb-2">
+                        <p className="text-xs text-stone-500 mb-2">
                           by {p.proposer} · {new Date(p.createdAt).toLocaleDateString()} · {p.supports} supporter
                           {p.supports === 1 ? "" : "s"}
                           {p.sponsors > 0 ? ` · sponsored` : ""}
@@ -1101,10 +1101,10 @@ export default function GameMechanics() {
                           {p.changes.map((c) => (
                             <li key={c.key}>
                               <span className="text-stone-700">{c.label}:</span>{" "}
-                              <span className="line-through text-stone-400">{c.fromDisplay}</span> →{" "}
+                              <span className="line-through text-stone-500">{c.fromDisplay}</span> →{" "}
                               <span className="font-semibold text-teal-deep">{c.toDisplay}</span>
                               {c.applyTiming === "cycle-close" && (
-                                <span className="text-[11px] text-stone-400"> (at next cycle close)</span>
+                                <span className="text-[11px] text-stone-500"> (at next cycle close)</span>
                               )}
                               {c.currentValue !== null && c.currentValue !== c.from && (
                                 <span className="text-[11px] text-amber-700"> · baseline has since moved to {c.currentValue}</span>
@@ -1286,7 +1286,7 @@ export default function GameMechanics() {
                             <button
                               type="button"
                               onClick={() => act(`/api/game/mechanics/proposals/${p.id}/withdraw`)}
-                              className="text-sm text-stone-400 hover:text-red-600 hover:underline"
+                              className="text-sm text-stone-500 hover:text-red-600 hover:underline"
                               title={`Proposer or ${catalyst.name} only`}
                             >
                               Withdraw
@@ -1358,12 +1358,12 @@ export default function GameMechanics() {
                           <li key={h.id} className="px-4 py-3">
                             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                               <span className="font-medium text-stone-900">{h.label}</span>
-                              <span className="text-xs text-stone-400">
+                              <span className="text-xs text-stone-500">
                                 {new Date(h.at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
                               </span>
                             </div>
                             <p className="text-sm text-stone-600 mt-0.5">
-                              <span className="line-through text-stone-400">
+                              <span className="line-through text-stone-500">
                                 {amendmentValue(h.key, h.from)}
                                 {h.fromWasDefault ? " (default)" : ""}
                               </span>{" "}
@@ -1374,7 +1374,7 @@ export default function GameMechanics() {
                               {h.source === "platform" ? " · platform migration" : ""}
                             </p>
                             {h.proposalRef && (
-                              <p className="text-[11px] text-stone-400 mt-0.5">
+                              <p className="text-[11px] text-stone-500 mt-0.5">
                                 <span className="font-mono">proposal: {h.proposalRef}</span>
                                 {ballotIdIn(h.proposalRef) && (
                                   <>
@@ -1389,7 +1389,7 @@ export default function GameMechanics() {
                                 )}
                               </p>
                             )}
-                            {h.note && <p className="text-[11px] text-stone-400 mt-0.5">{h.note}</p>}
+                            {h.note && <p className="text-[11px] text-stone-500 mt-0.5">{h.note}</p>}
                           </li>
                         ))}
                       </ul>
@@ -1470,7 +1470,7 @@ export default function GameMechanics() {
                   >
                     {submitting ? "Proposing…" : standing?.qualified ? "Open the proposal" : "Save as draft"}
                   </button>
-                  <span className="text-[11px] text-stone-400">
+                  <span className="text-[11px] text-stone-500">
                     {standing?.qualified
                       ? "Opens for village support immediately."
                       : "A qualified member's sponsorship opens it."}

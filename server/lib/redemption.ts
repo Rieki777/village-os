@@ -91,7 +91,7 @@
  * live in `server/lib/redemptionStore.ts`.
  */
 import { tokenDef, type TokenDef } from "./ledger";
-import { exponentOf } from "../../shared/money";
+import { defaultDisplayCurrency, exponentOf } from "../../shared/money";
 import { fromLedgerUnits } from "./economy";
 import { MODULE_VOUCHERS, isPriceableToken } from "./spending";
 import { stringVar } from "./variables";
@@ -506,14 +506,19 @@ export function confirmModeFor(liveHolders: number): "steward" | "vote" {
 /**
  * The currencies this village will settle a redemption in.
  *
- * Blank means the one currency the project already counts in, which a founder
- * set in Make This Yours and which `shared/money.ts` falls back to CHF for. A
- * list means the member picks one when they ask, and the first is the one a
- * rate set by hand is expressed in.
+ * Blank means the one currency the project already counts in. The caller
+ * passes the MERGED value (`projectCurrency` in server/lib/appDeps.ts), and
+ * the fallback for a project with none is `defaultDisplayCurrency`'s, the
+ * function every price on the site starts from. This used to spell its own
+ * "CHF" and be handed the stored brand document, which is blank for any
+ * village that never set a currency, so such a village displayed every price
+ * in the platform default and quoted its redemptions in CHF. A list means the
+ * member picks one when they ask, and the first is the one a rate set by hand
+ * is expressed in.
  */
 export function redemptionCurrencies(projectCurrency: string): string[] {
   const raw = String(stringVar("redemption.currencies") ?? "").trim();
-  const fallback = String(projectCurrency ?? "").trim().toUpperCase() || "CHF";
+  const fallback = defaultDisplayCurrency({ fiatCurrency: projectCurrency });
   if (!raw) return [fallback];
   const out: string[] = [];
   for (const code of raw.split(",")) {

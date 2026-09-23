@@ -286,3 +286,46 @@ describe("URL building", () => {
     expect(providerById("village-upload")?.buildUrl).toBeNull();
   });
 });
+describe("the keyless Esri entry is a decision, kept apart from the licence reading", () => {
+  it("is permitted and needs no key, while the keyed entry is untouched", () => {
+    const open = providerById("esri-open");
+    expect(open?.caching).toBe("permitted");
+    expect(open?.keyEnv).toBeNull();
+    // The reading made on 2026-08-31 still says what it said.
+    expect(providerById("esri")?.caching).toBe("forbidden");
+    expect(providerById("esri")?.keyEnv).toBe("ESRI_API_KEY");
+  });
+
+  it("is ready with no key once a deployment names it", () => {
+    const status = configuredProvider({ SATELLITE_PROVIDER: "esri-open" });
+    expect(status.provider?.id).toBe("esri-open");
+    expect(status.ready).toBe(true);
+    expect(status.missingEnv).toBeNull();
+  });
+
+  it("is NOT the default, so a fork that never decided is unaffected", () => {
+    const status = configuredProvider({});
+    expect(status.provider).toBeNull();
+    expect(status.missingEnv).toBe("SATELLITE_PROVIDER");
+  });
+
+  it("asks for a picture whose ground is the same shape as the image", () => {
+    const open = providerById("esri-open");
+    if (!open) throw new Error("esri-open missing");
+    const url = new URL(open.buildUrl!({ centre: { lat: 9.2345, lon: -83.8412 }, spanM: 800, pixels: 1024 }, null));
+    const [w, h] = String(url.searchParams.get("size")).split(",").map(Number);
+    const [west, south, east, north] = String(url.searchParams.get("bbox")).split(",").map(Number);
+    const mLat = 111_320;
+    const groundW = (east - west) * mLat * Math.cos((9.2345 * Math.PI) / 180);
+    const groundH = (north - south) * mLat;
+    // Same metres per pixel on both axes: the picture is not stretched.
+    expect(groundW / w).toBeCloseTo(groundH / h, 2);
+  });
+
+  it("carries no token when there is no key to carry", () => {
+    const open = providerById("esri-open");
+    if (!open) throw new Error("esri-open missing");
+    const url = new URL(open.buildUrl!({ centre: { lat: 9.2, lon: -83.8 }, spanM: 800, pixels: 512 }, null));
+    expect(url.searchParams.get("token")).toBeNull();
+  });
+});

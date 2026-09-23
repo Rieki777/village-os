@@ -17,7 +17,7 @@
  * around them did.
  */
 import type { LucideIcon } from "lucide-react";
-import { Activity, AlertTriangle, BarChart3, Calendar, Circle, Coins, FileText, GraduationCap, Handshake, HardDrive, Heart, HelpCircle, Home, Inbox, KeyRound, LogOut, Mail, MessageSquare, Moon, Scale, Sparkles, ToggleLeft, TrendingUp, Users, Users2 } from "lucide-react";
+import { Activity, AlertTriangle, BarChart3, Calendar, Circle, Coins, FileText, GraduationCap, Handshake, HardDrive, Heart, HelpCircle, Home, Inbox, KeyRound, LogOut, Mail, MapPin, MessageSquare, Moon, Scale, Sparkles, ToggleLeft, TrendingUp, Users, Users2 } from "lucide-react";
 import type { TabBadge } from "@/lib/adminNav";
 import { CONTENT_SECTIONS } from "./contentSections";
 
@@ -116,6 +116,9 @@ export function navGroups(setupComplete: boolean): NavGroup[] {
         { key: "season", label: "Season", icon: Circle },
         { key: "seasons-patterns", label: "Season Shapes", icon: Calendar },
         { key: "circles-map", label: "Circles & Map", icon: Circle },
+        // Beside the map because it is the ground the map is drawn on: this
+        // row is where a founder puts the project on the real Earth.
+        { key: "land", label: "Where The Land Is", icon: MapPin },
         // Beside the map on purpose: a hamlet's homes are keyed by the same
         // structure key the map mints, and a gathering's structure keys are
         // what light the map's buildings.

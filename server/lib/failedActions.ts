@@ -124,7 +124,7 @@ import {
   type SettleErrorGroup,
   type TroubledPeerRow,
 } from "../repos/failureSources";
-import { stuckLandings, type StuckLanding } from "../repos/governanceExecutorPending";
+import { isReleaseFailure, stuckLandings, type StuckLanding } from "../repos/governanceExecutorPending";
 import { claimResume, countUnfinishedErasures, unfinishedErasuresWithAge } from "../repos/memberErasure";
 import { withNamedLock } from "../repos/namedLock";
 
@@ -147,7 +147,9 @@ const LANDING_GRACE_MS = 10 * 60 * 1000;
  * The landing statuses under which an unfinished attempt is still owed.
  * `not_applicable` is a decision that took effect when its vote closed, which
  * nothing tries again. A decision that landed, was vetoed or was written off is
- * governance's own record, and no longer this report's.
+ * governance's own record, and no longer this report's, with one exception:
+ * giving back what a vetoed or written-off decision held failed. That is
+ * `failedReleases`, and it is listed.
  */
 const LANDING_STILL_OWED: ReadonlySet<string> = new Set(["not_applicable", "pending", "applying", "stalled"]);
 
@@ -446,6 +448,74 @@ export function landingFindings(rows: readonly StuckLanding[], scheduled: Readon
   }));
 }
 
+/** A decision that will never land, whose give-back failed, and how it was stopped. */
+export interface FailedRelease extends StuckLanding {
+  stoppedAs: "vetoed" | "expired";
+}
+
+/**
+ * Decisions that will never land, where giving back what they held failed.
+ *
+ * WHY THIS IS THE ONE EXCEPTION TO `LANDING_STILL_OWED`. A decision can hold
+ * something while its vote runs: a redemption vote holds the member's tokens.
+ * When a passed decision is vetoed inside its window or written off, the
+ * engine's `closeUnlanded` (server/lib/applyDue.ts) runs once to give that back,
+ * and when the give-back throws it records the error on an open attempt and
+ * nothing ever tries again, because a person must act. By then the decision is
+ * `vetoed` or `expired`, which this report otherwise drops, so without this the
+ * one failure that strands a member's value was recorded where no tab showed it.
+ *
+ * ONLY THE GIVE-BACK'S OWN ERROR. A scheduled landing that kept failing until it
+ * was written off leaves the same row, an open newest attempt carrying an error
+ * on an `expired` decision, and it is no give-back that failed. The note's own
+ * words tell the two apart (`isReleaseFailure`), so that one stays governance's
+ * record as it was. An open attempt with no error on a stopped decision records
+ * no failure at all, so it stays off too.
+ */
+export function failedReleases(rows: readonly StuckLanding[], statuses: ReadonlyMap<string, string>): FailedRelease[] {
+  const out: FailedRelease[] = [];
+  for (const r of rows) {
+    const status = statuses.get(r.ballotId);
+    if ((status === "vetoed" || status === "expired") && isReleaseFailure(r.lastError)) out.push({ ...r, stoppedAs: status });
+  }
+  return out;
+}
+
+/** Said of every stopped decision whose give-back failed, however it was stopped. */
+const RELEASE_LEFT =
+  "That give-back failed, and nothing tries it again: no job retries it and no button in the admin panel reruns it. Whoever maintains the village's code or database finishes it by hand, checking first what already went back, since a give-back can fail part way. The error below says what failed. This clears once they close the open attempt on the decision's landing record.";
+
+/**
+ * One finding per failed give-back, worded by how the decision was stopped.
+ *
+ * KEYED APART FROM A LANDING. A decision whose landing kept failing is listed
+ * under its ballot id while it is owed; if it is then written off and its
+ * give-back fails too, that is a new failure with a new remedy, so it opens as a
+ * new item and earns its own notice instead of inheriting the old one's.
+ *
+ * The ballot id is the only identifier in the key or the title. The error is
+ * the closer's own words and may name the member it failed to pay back, which
+ * is why it rides in `lastError` alone: scrubbed on the way in, and cleared the
+ * run the attempt is closed (server/repos/failedActionItems.ts).
+ */
+export function releaseFindings(rows: readonly FailedRelease[]): ReportFinding[] {
+  return rows.map((r) =>
+    r.stoppedAs === "vetoed"
+      ? {
+          key: `give-back:${r.ballotId}`,
+          title: `A decision the village carried was stopped before it took effect, and giving back what it held failed (ballot ${r.ballotId})`,
+          advice: `It was stopped inside its landing window, so it will never take effect, and whatever it held while the vote ran, such as a member's tokens, should have gone back then. ${RELEASE_LEFT}`,
+          lastError: r.lastError,
+        }
+      : {
+          key: `give-back:${r.ballotId}`,
+          title: `A decision the village carried was written off before it took effect, and giving back what it held failed (ballot ${r.ballotId})`,
+          advice: `It sat unlanded through too many cycles and was written off, so it will never take effect, and whatever it held while the vote ran, such as a member's tokens, should have gone back then. ${RELEASE_LEFT}`,
+          lastError: r.lastError,
+        },
+  );
+}
+
 // ── Payments ────────────────────────────────────────────────────────────────
 
 /**
@@ -668,8 +738,12 @@ export function defaultSources(pool: Pool, now: () => number = Date.now): Failur
       key: "governance",
       find: async () => {
         const stuck = await stuckLandings(pool, new Date(now() - LANDING_GRACE_MS));
-        const owed = stillOwedLandings(stuck, await landingStatusesFor(pool, stuck.map((r) => r.ballotId)));
-        return landingFindings(owed, await scheduledLandings(pool, owed.map((r) => r.ballotId)));
+        const statuses = await landingStatusesFor(pool, stuck.map((r) => r.ballotId));
+        const owed = stillOwedLandings(stuck, statuses);
+        return [
+          ...landingFindings(owed, await scheduledLandings(pool, owed.map((r) => r.ballotId))),
+          ...releaseFindings(failedReleases(stuck, statuses)),
+        ];
       },
     },
     {
