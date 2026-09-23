@@ -30,7 +30,7 @@ import fs from "node:fs";
 import path from "node:path";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "./db/testDb";
 import { splitStatements } from "./db/migrate";
 import { CURRENCY_DECIMALS, VOICE_DECIMALS, decayUnits, decayFloorMinorUnits } from "../shared/tokenScale";
 import { loadExampleSeed, loadExampleState, seedExamples } from "./lib/examples";
@@ -108,8 +108,7 @@ describe.skipIf(!configured)("0202, the scale ruling, run against a real schema"
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, connectionLimit: 4, timezone: "Z" }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-    await pool.query("SET time_zone = '+00:00'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await seedRuntimeTokens();
   }, 180_000);
 
