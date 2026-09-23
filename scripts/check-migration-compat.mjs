@@ -26,9 +26,11 @@
  * produces, so a violation cannot be attributed back to one file). It does NOT
  * waive immutability, and it does NOT waive the migration actually running: a
  * file that fails on a populated table fails here whatever comment it carries,
- * because that is not a policy judgement, it is the boot failure.
+ * because that is not a policy judgement, it is the boot failure. For the same
+ * reason it does not waive phase 5: a moment with no unique key is a boot
+ * failure waiting for a deploy to be rolling, not a judgement about rollback.
  *
- * WHAT IT DOES, in four phases. Each one is reported separately, with its own
+ * WHAT IT DOES, in five phases. Each one is reported separately, with its own
  * count, so no phase can go missing behind another phase's success.
  *
  *  1. IMMUTABILITY, from git alone. A migration file that exists at the base
@@ -61,6 +63,30 @@
  *     NULL, a type that narrowed, an enum value that vanished, a new UNIQUE
  *     index or FOREIGN KEY on a table that already existed, a new NOT NULL
  *     column with no default.
+ *
+ *  5. NO MOMENT WITHOUT A UNIQUE KEY, checked BETWEEN statements while phase 3
+ *     applies them. Phases 3 and 4 both look at a file from the outside: does
+ *     it apply, and what is the schema once it has. Neither can see a state
+ *     that exists only part way through, and one of those states is a boot
+ *     failure this fleet cannot afford.
+ *
+ *     Every upsert in this codebase is `INSERT ... ON DUPLICATE KEY UPDATE`.
+ *     Swap a table's UNIQUE key in two statements, `DROP INDEX` and then
+ *     `ADD UNIQUE KEY`, and between them the table has no unique key at all.
+ *     Railway deploys by ROLLING: the old container serves while the new one
+ *     boots and runs this file, so a write landing in that gap has nothing to
+ *     collide on and INSERTs a duplicate. The `ADD` then fails, the container
+ *     does not start, rolling the image back does not remove the row, and the
+ *     next deploy fails the same way. Recovery is a hand DELETE in production.
+ *
+ *     So after every statement, any table that HAD a non-primary unique key
+ *     before the change must still have one. Only those tables are watched: a
+ *     table that never had one cannot lose it, and a table the change creates
+ *     has no previous release reading it. The fix is one ALTER carrying both
+ *     clauses, which MySQL applies together, leaving no moment between them.
+ *
+ *     Found on drizzle/0214 in September 2026, by a reviewer reading the file
+ *     rather than by this script, which passed it. That is why it is here.
  *
  * BOTH SNAPSHOTS COME FROM ONE SERVER, which is what makes the comparison
  * trustworthy across engines. This machine runs MariaDB and CI runs MySQL 8,
@@ -156,9 +182,10 @@ const report = {
   destructive: [],
   seeded: { tables: 0, rows: 0, refused: [] },
   applyError: null,
+  gaps: [],
   violations: [],
   secondRun: null,
-  ran: { immutability: false, destructive: false, database: false },
+  ran: { immutability: false, destructive: false, database: false, gaps: false },
 };
 let failed = false;
 
@@ -627,7 +654,7 @@ async function seedRows(conn, snap, tables, log) {
  * resumable: this is a scratch schema and a partial apply is a failure to
  * report, not a state to recover.
  */
-async function applyFiles(conn, dir, files) {
+async function applyFiles(conn, dir, files, afterStatement = null) {
   await conn.query(
     "CREATE TABLE IF NOT EXISTS `_migrations_applied` (" +
       "`filename` varchar(255) NOT NULL, " +
@@ -644,6 +671,7 @@ async function applyFiles(conn, dir, files) {
     for (let i = 0; i < parts.length; i += 1) {
       try {
         await conn.query(parts[i]);
+        if (afterStatement) await afterStatement(file, i + 1, parts.length);
       } catch (err) {
         return { applied, failure: { file, statement: i + 1, of: parts.length, message: err.message, sql: parts[i].replace(/\s+/g, " ").slice(0, 200) } };
       }
@@ -652,6 +680,32 @@ async function applyFiles(conn, dir, files) {
     applied.push(file);
   }
   return { applied, failure: null };
+}
+
+/**
+ * Which tables carry a unique key that is not the primary key, right now.
+ *
+ * One cheap read of information_schema, called after every statement, rather
+ * than a whole `snapshot()`: this asks one question and a full capture of
+ * every column and foreign key would be paid for once per statement to answer
+ * it.
+ */
+async function tablesWithUniqueKey(conn, schema) {
+  const [rows] = await conn.query(
+    "SELECT DISTINCT TABLE_NAME n FROM information_schema.STATISTICS " +
+      "WHERE TABLE_SCHEMA = ? AND NON_UNIQUE = 0 AND INDEX_NAME <> 'PRIMARY'",
+    [schema],
+  );
+  return new Set(rows.map((r) => String(r.n)));
+}
+
+/** The tables phase 5 watches: those that had a non-primary unique key before the change. */
+function uniqueKeyTablesIn(snap) {
+  const out = new Set();
+  for (const e of snap.idx.values()) {
+    if (e.unique && e.name !== "PRIMARY") out.add(String(e.table));
+  }
+  return out;
 }
 
 /* ==================================================================== *
@@ -860,8 +914,34 @@ if (report.newMigrations.length === 0) {
       );
     }
 
-    const newPass = await applyFiles(conn, DIR, report.newMigrations);
+    /*
+     * Phase 5 rides along with phase 3's apply. The watched set is fixed from
+     * the BEFORE snapshot, so a table the change creates is not watched (no
+     * previous release reads it) and a table that never had a unique key
+     * cannot lose one.
+     */
+    const watched = uniqueKeyTablesIn(before);
+    const seenGap = new Set();
+    const watchGap = async (file, statement, of) => {
+      if (watched.size === 0) return;
+      const nowUnique = await tablesWithUniqueKey(conn, schema);
+      for (const table of watched) {
+        if (nowUnique.has(table)) continue;
+        const [[{ n }]] = await conn.query(
+          "SELECT COUNT(*) n FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?",
+          [schema, table],
+        );
+        // A table the change DROPS is not a gap; phase 2 and phase 4 own that.
+        if (Number(n) === 0) continue;
+        const key = `${file}:${table}`;
+        if (seenGap.has(key)) continue;
+        seenGap.add(key);
+        report.gaps.push({ file, statement, of, table });
+      }
+    };
+    const newPass = await applyFiles(conn, DIR, report.newMigrations, watchGap);
     report.ran.database = true;
+    report.ran.gaps = watched.size > 0;
     if (newPass.failure) {
       failed = true;
       report.applyError = newPass.failure;
@@ -895,6 +975,34 @@ if (report.newMigrations.length === 0) {
         console.error(`  Every instance boots this file list on every start. A second run must do nothing at all.`);
       } else {
         say(`  second run applied 0 migrations and changed no schema (the ledger holds)`);
+      }
+
+      /*
+       * Phase 5's verdict. NOT waivable by compat-ok, and the header says why:
+       * this is the boot failure, not a judgement about what a rollback can
+       * survive. A file carrying a waiver for the contract would otherwise
+       * waive this too, which is exactly the file most likely to have a gap.
+       */
+      if (report.gaps.length) {
+        failed = true;
+        console.error("");
+        console.error(
+          `::error::${report.gaps.length} moment(s) with no unique key, part way through a migration. ` +
+            `On a rolling deploy the previous release writes into that gap and the statement after it fails at boot.`,
+        );
+        for (const g of report.gaps) {
+          console.error(`    drizzle/${g.file}: after statement ${g.statement} of ${g.of}, \`${g.table}\` has no unique key`);
+        }
+        console.error("");
+        console.error(`  Every upsert here is INSERT ... ON DUPLICATE KEY UPDATE, which with no unique key to`);
+        console.error(`  collide on INSERTs instead. The duplicate then fails the statement that adds the key`);
+        console.error(`  back, on a database already part way through the file. Recovery is a hand DELETE in`);
+        console.error(`  production, because rolling the image back does not remove the row.`);
+        console.error(`  THE FIX IS ONE STATEMENT: put the DROP INDEX and the ADD UNIQUE KEY in a single`);
+        console.error(`  ALTER TABLE, which MySQL applies together, so no moment between them exists.`);
+        console.error(`  A compat-ok comment does NOT waive this, for the reason the header gives.`);
+      } else if (report.ran.gaps) {
+        say(`  no moment without a unique key, after every statement of ${report.newMigrations.length} file(s) (${watched.size} table(s) watched)`);
       }
 
       if (report.violations.length) {
