@@ -438,7 +438,7 @@ it.
 
 **Do not read the gate's order from this document.** `docs/CAPABILITIES.md` is generated from
 `capabilityDecision` by `scripts/generate-capabilities-doc.mjs` and checked against it by
-`scripts/check-capabilities-doc.mjs`. It is the authority on all 31 keys and all 7 steps. Two things are
+`scripts/check-capabilities-doc.mjs`. It is the authority on every key and every step, and it prints the counts itself. Two things are
 worth knowing before you open it, because they are the ones people guess wrong:
 
 - **An administrator is not automatically top of the order.** Step 1 is `isAdmin && !villageHolds`. On a
@@ -449,15 +449,19 @@ worth knowing before you open it, because they are the ones people guess wrong:
   `PUT /api/admin/users/:id/role` sets `users.role` to member, admin or founder. It refuses a non-founder
   while `founderPowerStands`, refuses making anybody a founder after launch, refuses an example identity
   409, and carries a last-admin guard counting `accountsWithAdminReach()`.
-- **The break-glass is the way through.** An admin who means it sends `override: true` in the body or
-  `x-capability-override: true` as a header. `mayAct` then writes the admin trail entry immediately, and
-  seals a public event plus a notification to the holder when the response goes out.
+- **The break-glass is the way through, for a founder seated as a steward with the veto and nobody
+  else** (Rye, 2026-09-21; `BREAK_GLASS_SEAT` in `shared/capabilities.ts`). That founder sends
+  `override: true` in the body or `x-capability-override: true` as a header. `mayAct` then writes the
+  admin trail entry immediately, and seals a public event plus a notification to the holder when the
+  response goes out. From any other admin the same request is refused.
 
 A refusal has three shapes. `401 { error: "auth_required" }` for no session. Whatever sentence the route
 already wrote, at its own status, for an ordinary refusal, because replacing eleven written refusals with a
 bare 401 would have left every person who met one told less than before. And `409` carrying
-`{ error, capability, villageHolds: true, requiresOverride: true, holder, title, consequence }` for the one
-case that had no sentence at all: an admin, on a village-held key, who did not break the glass.
+`{ error, capability, villageHolds: true, requiresOverride: true, overrideAvailable, holder, title, consequence }`
+for an admin the gate refused on a village-held key. `overrideAvailable` is the gate's own answer to whether
+it would let THIS requester through with the glass broken, and `client/src/lib/breakGlass.ts` asks its
+question only when it is true; everybody else reads a sentence naming the way through.
 
 Restating the order in prose is exactly what went stale for two weeks in `CLAUDE.md`. It is stale right now
 in the docblock at the top of `PowersMap.tsx`, which describes a five-step gate and predates the two
@@ -643,7 +647,7 @@ paths change:
 
 ## Where to read next
 
-- `docs/CAPABILITIES.md` for the gate, all 31 keys and all 7 steps. Generated and checked.
+- `docs/CAPABILITIES.md` for the gate, every key and every step. Generated and checked.
 - `docs/VARIABLES.md` for the Progression category, all 29 rows with their founder-facing descriptions.
 - `docs/MODULES.md` for this module's registry facts as the code declares them.
 - `docs/modules/module-framework.md` for what a module id, tier, lifecycle and data class mean.

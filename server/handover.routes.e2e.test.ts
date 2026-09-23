@@ -12,8 +12,9 @@
  *
  *  1. A village moves a named power onto a role, and the holder ACTS with a
  *     member token and no admin anywhere in the request.
- *  2. An admin reaching past a village-held power leaves a record on the
- *     PUBLIC pulse, which is the surface the village itself reads. An admin
+ *  2. A founder seated as a steward reaching past a village-held power (the
+ *     only person Rye's ruling of 2026-09-21 lets through) leaves a record on
+ *     the PUBLIC pulse, which is the surface the village itself reads. An admin
  *     trail nobody but admins can read is a receipt and not a witness.
  *  3. Editing a badge definition that holders answer to refuses to land
  *     silently and tells the holders.
@@ -118,19 +119,10 @@ async function notificationsFor(userId: string): Promise<Array<{ type: string; t
   return rows.map((r) => ({ type: String(r.type), title: String(r.title), body: String(r.body ?? "") }));
 }
 
-beforeAll(async () => {
-  if (!DB_CONFIGURED) return;
-  if (!fs.existsSync(DIST)) {
-    throw new Error(`${DIST} is missing. Run \`pnpm build\` before the handover route test.`);
-  }
-  dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-handover-"));
-  testDb = await provisionTestDb();
-  pool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+/** The server's own output, kept across restarts so a failed boot can print it. */
+const serverLogs: string[] = [];
 
-  // Refuse a port a stranger is already holding, and wait out the previous
-  // suite's server if it has not let go yet. The boot poll below breaks on ANY
-  // 200 on this port, so without this an orphan answers it and the whole
-  // scenario runs against the wrong server. See waitForPortFree in ./db/testDb.
+async function bootServer(): Promise<void> {
   await waitForPortFree(PORT);
   child = spawn(process.execPath, [DIST], {
     env: {
@@ -146,7 +138,7 @@ beforeAll(async () => {
       // is its subject.
       SCHEDULER_ENABLED: "0",
       DATA_DIR: dataDir,
-      DATABASE_URL: testDb.url,
+      DATABASE_URL: testDb!.url,
       ADMIN_PASSWORD: ADMIN,
       AUTH_TOKEN_SECRET: "handover-token-secret", // module-review-ok: a fixture signing secret for a throwaway server on a scratch schema, same as every e2e suite
       RESEND_API_KEY: "",
@@ -154,13 +146,51 @@ beforeAll(async () => {
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
-  const logs: string[] = [];
-  child.stdout?.on("data", (d) => logs.push(String(d)));
-  child.stderr?.on("data", (d) => logs.push(String(d)));
+  child!.stdout?.on("data", (d) => serverLogs.push(String(d)));
+  child!.stderr?.on("data", (d) => serverLogs.push(String(d)));
 
   // Reports the last /health answer and when the server logged that it was
   // listening, and stops at once if the child died. See ./db/e2eBoot.ts.
-  await waitForHealth({ base: BASE, logs, child });
+  await waitForHealth({ base: BASE, logs: serverLogs, child });
+}
+
+/**
+ * RYE, 2026-09-21: only a founder seated as a steward with the veto may break
+ * the glass (`BREAK_GLASS_SEAT` in shared/capabilities.ts). This suite drives
+ * the glass on purpose, so its founder sits in that seat. A seat carrying the
+ * veto is filled by a role_seat ballot and by no admin route, so it is written
+ * underneath the role cache and the server comes back up to read it.
+ * `server/founderOverride.routes.e2e.test.ts` drives everybody the glass
+ * refuses.
+ */
+async function seatFounderAsSteward(founderId: string): Promise<void> {
+  child?.kill();
+  await new Promise((r) => setTimeout(r, 500));
+  await pool.query( // module-review-ok: fixture SQL standing in for a carried role_seat ballot, against the scratch schema
+    "INSERT INTO roles (id, name, description, capabilities, sort_order) VALUES (?,?,?,?,?)",
+    ["steward", "Steward", "Can stop a carried decision inside its window.", JSON.stringify(["steward.veto"]), 0],
+  );
+  await pool.query( // module-review-ok: fixture SQL standing in for a carried role_seat ballot, against the scratch schema
+    "INSERT INTO role_holders (id, role_id, user_id, granted_by, term_ends_at) VALUES (?,?,?,?,?)",
+    [`rh-steward-${founderId}`.slice(0, 64), "steward", founderId, "bal-role-seat", new Date(Date.now() + 365 * 864e5)],
+  );
+  await bootServer();
+}
+
+beforeAll(async () => {
+  if (!DB_CONFIGURED) return;
+  if (!fs.existsSync(DIST)) {
+    throw new Error(`${DIST} is missing. Run \`pnpm build\` before the handover route test.`);
+  }
+  dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-handover-"));
+  testDb = await provisionTestDb();
+  pool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+
+  // Refuse a port a stranger is already holding, and wait out the previous
+  // suite's server if it has not let go yet. The boot poll below breaks on ANY
+  // 200 on this port, so without this an orphan answers it and the whole
+  // scenario runs against the wrong server. See waitForPortFree in ./db/testDb.
+  await bootServer();
 
   const boot = await call("POST", "/api/admin/bootstrap", {
     password: ADMIN, email: `founder-${PORT}@example.test`, name: "Handover Founder",
@@ -168,6 +198,7 @@ beforeAll(async () => {
   const claim = decodeURIComponent(String(boot.json?.claimUrl ?? "").match(/token=([^&]+)/)?.[1] ?? "");
   const setPw = await call("POST", "/api/auth/set-password", { token: claim, password: "HandoverTest123!" }, "");
   founderToken = String(setPw.json?.token ?? "");
+  const founderId = String(setPw.json?.user?.id ?? "");
   expect(founderToken, "founder must hold a session").toBeTruthy();
 
   const mods = await call("GET", "/api/admin/modules");
@@ -183,6 +214,10 @@ beforeAll(async () => {
   for (const id of [kiraId, ottoId]) {
     await call("PUT", `/api/admin/players/${id}/stage`, { stageId: "member" });
   }
+
+  // The founder breaks the glass below, so the founder sits where the
+  // ruling says the glass is kept. See seatFounderAsSteward.
+  await seatFounderAsSteward(founderId);
 }, 180_000);
 
 afterAll(async () => {
@@ -281,7 +316,7 @@ describe.skipIf(!DB_CONFIGURED)("harm metric 1: a power moves, and the holder ac
   });
 });
 
-describe.skipIf(!DB_CONFIGURED)("harm metric 2: an admin reaching past it leaves a record the village can read", () => {
+describe.skipIf(!DB_CONFIGURED)("harm metric 2: a founder seated as a steward reaching past it leaves a record the village can read", () => {
   it("refuses the admin first, and the refusal says how to go through anyway", async () => {
     // THE ESCAPE HATCH IS DISCOVERABLE. An operator who meets a bare 401 on
     // their own panel starts looking for a database to edit.

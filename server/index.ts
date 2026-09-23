@@ -27,6 +27,7 @@ import { crewsRepo as crewsRepoFactory } from "./lib/crews";
 import { capabilityCatalogue, heldCapabilities, namedRoles, servedLadder, servedStage } from "./lib/progressionPayload";
 import {
   ALL_CAPABILITIES,
+  BREAK_GLASS_WAY_THROUGH,
   capabilityDecision,
   hasCapability,
   isDeniable,
@@ -3120,6 +3121,8 @@ async function capabilityCtx(user: any) {
     // Admins pass every capability gate (shared/capabilities.ts honors this):
     // real role on the user record, never a parallel permission path.
     isAdmin: user.role === "admin" || user.role === "founder",
+    // Read by the break-glass step alone (Rye, 2026-09-21; BREAK_GLASS_SEAT).
+    isFounder: user.role === "founder",
     // 0098: what the VILLAGE holds. Read live, never cached, in the same
     // shape as badgeGrantsFor above, and for the same reason turned up to
     // eleven: a cached permission that a hand-written UPDATE can desync
@@ -3141,12 +3144,12 @@ async function capabilityCtx(user: any) {
  *
  *  - `ok`, `reachedPast: false` — ordinary. The actor holds it, by being an
  *    admin on a key the village has not taken, or by role, badge or stage.
- *  - `ok`, `reachedPast: true` — an admin broke the glass on a power the
- *    village holds. This function has already written the public record and
- *    told the village; the caller does nothing extra.
- *  - `!ok`, `villageHolds: true` — an admin who did not say they meant it.
- *    The caller answers 409 with `body.message`, which names the holder and
- *    says exactly what to send to go through.
+ *  - `ok`, `reachedPast: true` — a founder seated as a steward broke the
+ *    glass on a power the village holds. This function has already written
+ *    the public record and told the village; the caller does nothing extra.
+ *  - `!ok`, `villageHolds: true` — an admin the gate refused. The caller
+ *    answers 409 with `body.message`, which names the holder and says what
+ *    to send when `overrideAvailable`, or who may reach past it when not.
  *  - `!ok`, `villageHolds: false` — the ordinary 401. Unchanged.
  *
  * THE ESCAPE HATCH SHIPS WITH THE GATE, in this same commit, because a gate
@@ -3164,9 +3167,9 @@ interface CapabilityVerdict {
   /** What to say to the person, when `ok` is false. */
   message: string;
   /**
-   * TRUE for exactly one refusal: an admin, on a key the village holds, who
-   * did not break the glass. That is the only case with a 409 and a way
-   * through, and every other refusal is an ordinary one.
+   * TRUE for exactly one refusal: an admin, on a key the village holds, whom
+   * the gate refused. That is the only case with a 409, whether or not it
+   * has a way through, and every other refusal is an ordinary one.
    *
    * It is a named field since 0103 because the callers were reading it off
    * `message !== "auth_required"`, and a string comparison deciding which
@@ -3175,6 +3178,13 @@ interface CapabilityVerdict {
    * stopped being worth leaving as a coincidence of wording.
    */
   needsOverride: boolean;
+  /**
+   * Would the gate let THIS requester through if they broke the glass? Asked
+   * of `capabilityDecision` itself and never re-spelled here (Rye, 2026-09-21:
+   * only a founder seated as a steward with the veto). False everywhere
+   * `needsOverride` is false.
+   */
+  overrideAvailable: boolean;
   /**
    * WHO HOLDS IT, as a bare name, when `needsOverride` is true.
    *
@@ -3296,7 +3306,7 @@ async function mayAct(req: express.Request, cap: Capability): Promise<Capability
   if (!user) {
     return {
       ok: false, reachedPast: false, villageHolds: false,
-      source: "not granted", message: "auth_required", needsOverride: false, holderName: null,
+      source: "not granted", message: "auth_required", needsOverride: false, overrideAvailable: false, holderName: null,
     };
   }
   // `adminActor(req)` reads this, and it is how a hundred routes attribute
@@ -3340,34 +3350,39 @@ async function mayAct(req: express.Request, cap: Capability): Promise<Capability
     }
     return {
       ok: true, reachedPast: true, villageHolds: true,
-      source: decision.source, message: "", needsOverride: false, holderName: null,
+      source: decision.source, message: "", needsOverride: false, overrideAvailable: false, holderName: null,
     };
   }
   if (decision.allowed) {
     return {
       ok: true, reachedPast: false, villageHolds: decision.villageHolds,
-      source: decision.source, message: "", needsOverride: false, holderName: null,
+      source: decision.source, message: "", needsOverride: false, overrideAvailable: false, holderName: null,
     };
   }
   if (decision.villageHolds && ctx.isAdmin) {
     const holder = (await capabilityHoldings(getPool())).find((h) => h.capability === cap);
     const who = holder?.holderRoleName ?? holder?.holderRoleId ?? "the village";
+    // The gate answers, asked as if the glass were broken: a way through is
+    // offered only to somebody it would let through.
+    const overrideAvailable = capabilityDecision(cap, { ...ctx, adminOverride: true }).reachedPastVillage;
     return {
       ok: false,
       reachedPast: false,
       villageHolds: true,
       needsOverride: true,
+      overrideAvailable,
       holderName: who,
       source: decision.source,
-      message:
-        `This village holds this one. ${who} looks after it now, and you are not seated there. ` +
-        `You can still act on it: send override with this request, or the x-capability-override header ` +
-        `when it carries no body, and the village will see that you did.`,
+      message: overrideAvailable
+        ? `This village holds this one. ${who} looks after it now, and you are not seated there. ` +
+          `You can still act on it: send override with this request, or the x-capability-override header ` +
+          `when it carries no body, and the village will see that you did.`
+        : `This village holds this one, and ${who} looks after it now. ${BREAK_GLASS_WAY_THROUGH}`,
     };
   }
   return {
     ok: false, reachedPast: false, villageHolds: decision.villageHolds,
-    source: decision.source, message: "auth_required", needsOverride: false, holderName: null,
+    source: decision.source, message: "auth_required", needsOverride: false, overrideAvailable: false, holderName: null,
   };
 }
 
@@ -3397,8 +3412,8 @@ async function guardCapability(
    *
    * So the 409 hatch is added ON TOP of what the route already said, and
    * nothing else about the refusal changes. The 409 is reached only when the
-   * village holds the key AND the actor is an admin who did not break the
-   * glass, which is precisely the case that had no sentence at all.
+   * village holds the key AND the actor is an admin the gate refused, which
+   * is precisely the case that had no sentence at all.
    */
   refusal?: { status: number; body: Record<string, unknown> },
 ): Promise<boolean> {
@@ -3429,7 +3444,7 @@ async function guardCapability(
  *
  * Null means the refusal has nothing to do with the village holding the key:
  * either it does not, or the actor is a member who simply does not hold it.
- * Only an admin who did not break the glass gets a body here.
+ * Only an admin the gate refused on a village-held key gets a body here.
  */
 function overrideRefusal(
   cap: Capability,
@@ -3457,7 +3472,10 @@ function overrideRefusal(
     error: verdict.message,
     capability: cap,
     villageHolds: true,
+    // Only an override would pass this; `overrideAvailable` says whether THIS
+    // requester may send one, and a browser asks its question only when true.
     requiresOverride: true,
+    overrideAvailable: verdict.overrideAvailable,
     holder: verdict.holderName,
     title: entry?.title,
     consequence: CAPABILITY_CONSEQUENCE[cap],
@@ -20934,6 +20952,9 @@ ${inner}
     res.json({ success: true, message: "Answered. The delivery stays on the record with your note beside it." });
   });
 
+  const FOUNDER_RING_HELD =
+    "This dial is not one the village governs, and the village holds the power to turn dials, " +
+    "so nobody can change this one here while it does. An override does not reach it.";
   app.put("/api/admin/variables/:key", async (req, res) => {
     /*
      * 0098: `dial.set`, and THE RING BECOMES A FLOOR AS WELL AS A CEILING.
@@ -20951,21 +20972,27 @@ ${inner}
      * proposal path refuses it. An admin acting AS an admin keeps the
      * founder ring, because a fork's operator has to be able to set an RPC
      * url and a session length. Once the village holds `dial.set`, an admin
-     * falls through and is judged as anybody else, so an admin who wants a
-     * founder-ring key back breaks the glass in the open.
+     * falls through and is judged as anybody else, and a founder-ring key is
+     * refused to every path here, the break-glass included (measured
+     * 2026-09-21); handing `dial.set` back to the panel is what reopens it.
      */
     const verdict = await mayAct(req, "dial.set");
+    const def = VARIABLES_BY_KEY[req.params.key];
     if (!verdict.ok) {
       // 0103: through `overrideRefusal`, so this route and the eleven the
       // same commit converted write ONE 409 body between them. It used to
       // build its own off `message !== "auth_required"`, which is a copy edit
       // away from being a different permission answer.
       const hatch = overrideRefusal("dial.set", verdict);
+      // The ring check below refuses a founder-ring dial to an override too,
+      // so no question is offered that would refuse after it was answered.
+      if (hatch && def && ringOf(def) !== "open") {
+        return res.status(409).json({ ...hatch, overrideAvailable: false, error: FOUNDER_RING_HELD });
+      }
       if (hatch) return res.status(409).json(hatch);
       return res.status(401).json({ error: "auth_required" });
     }
     if (verdict.source !== "admin") {
-      const def = VARIABLES_BY_KEY[req.params.key];
       if (def && ringOf(def) !== "open") {
         return res.status(403).json({
           error:

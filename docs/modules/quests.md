@@ -550,9 +550,11 @@ A refusal has three shapes, and they differ on purpose:
 
 - No signed-in user: `401 {"error":"Unauthorized"}`.
 - A member who does not hold it: `403 {"error":"Consenting to finished work is for stewards"}`.
-- An admin, on a key the **village** holds, who did not break the glass: `409` with the body
-  `overrideRefusal` builds, carrying `capability`, `villageHolds`, `requiresOverride`, `holder`,
-  `title` and `consequence` alongside the sentence. That body exists so a browser control can
+- An admin, on a key the **village** holds, whom the gate refused: `409` with the body
+  `overrideRefusal` builds, carrying `capability`, `villageHolds`, `requiresOverride`,
+  `overrideAvailable`, `holder`, `title` and `consequence` alongside the sentence.
+  `overrideAvailable` is true only for a founder seated as a steward with the veto (Rye,
+  2026-09-21), and only that founder's glass is accepted. That body exists so a browser control can
   write its own sentence; the `error` string is the answer for curl. This route carried a
   hand-built twin of that body once, and the twin drifted the day the shared one grew the three
   facts a browser needs.
