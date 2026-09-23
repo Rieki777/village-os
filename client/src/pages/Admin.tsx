@@ -52,6 +52,9 @@ import { CrowdpoolAdminTab, ForumCategoriesEditor, ToolsCategoriesEditor } from 
 import ModuleSettingsSection from "@/components/admin/ModuleSettingsSection";
 import { useModuleDeepLink } from "@/components/admin/moduleDeepLink";
 import SetupNeeded from "@/components/modules/SetupNeeded";
+import VillageAnswers from "@/components/admin/VillageAnswers";
+import SeasonTimezoneField from "@/components/admin/SeasonTimezoneField";
+import { useSettingFocus } from "@/components/admin/settingFocus";
 import { CONTENT_SECTIONS, emptyContentFor } from "@/components/admin/contentSections";
 import { displayCurrencyProblem } from "@shared/money";
 import { formatTokenAmount } from "@/lib/tokenAmount";
@@ -8895,7 +8898,7 @@ const CADENCES = [
   { value: "custom", label: "Custom / set by hand" },
 ];
 
-function SeasonTab({ password }: { password: string }) {
+export function SeasonTab({ password }: { password: string }) {
   const [cfg, setCfg] = useState<any>(null);
   const [saving, setSaving] = useState(false);
 
@@ -8907,14 +8910,17 @@ function SeasonTab({ password }: { password: string }) {
   }, [password]);
 
   useEffect(() => { load(); }, [load]);
+  // The launch checklist and the admin banner send a founder to this control
+  // by name; this is where they land.
+  useSettingFocus("season.timezone", "season-timezone", !!cfg);
 
-  const save = async () => {
+  const save = async (extra: Record<string, unknown> = {}) => {
     setSaving(true);
     try {
       const res = await fetch(`${API_BASE}/admin/seasons`, {
         method: "PUT",
         headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ seasons: cfg.seasons, cadence: cfg.cadence, timezone: cfg.timezone }),
+        body: JSON.stringify({ seasons: cfg.seasons, cadence: cfg.cadence, timezone: cfg.timezone, ...extra }),
       });
       if (!res.ok) throw new Error();
       toast.success("Seasons saved");
@@ -8948,7 +8954,10 @@ function SeasonTab({ password }: { password: string }) {
             whichever season covers today. Queue the next one and it hands over by itself.
           </p>
         </div>
-        <button onClick={save} disabled={saving} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50 shrink-0">
+        {/* Called through an arrow, not passed directly: `save` takes the
+            extra body fields now, and handing it straight to onClick would
+            spread a React click event into the request. */}
+        <button onClick={() => save()} disabled={saving} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50 shrink-0">
           {saving ? "Saving..." : "Save"}
         </button>
       </div>
@@ -8972,17 +8981,13 @@ function SeasonTab({ password }: { password: string }) {
           </select>
           <p className="text-[11px] text-gray-400 mt-1">Used to suggest dates for the next season.</p>
         </div>
-        <div>
-          <label className="text-sm font-medium text-gray-700 block mb-1">Timezone</label>
-          <input
-            type="text"
-            value={cfg.timezone ?? ""}
-            onChange={(e) => setCfg({ ...cfg, timezone: e.target.value })}
-            placeholder="America/Costa_Rica"
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg"
-          />
-          <p className="text-[11px] text-gray-400 mt-1">A season turns at midnight where the village is.</p>
-        </div>
+        <SeasonTimezoneField
+          value={cfg.timezone ?? ""}
+          answered={!!cfg.timezoneAnswer}
+          saving={saving}
+          onChange={(timezone) => setCfg({ ...cfg, timezone })}
+          onConfirm={() => save({ confirmTimezone: true })}
+        />
       </div>
 
       <div className="space-y-4">
@@ -9186,6 +9191,10 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
   const [defaults, setDefaults] = useState<any>(null);
   const [savingSection, setSavingSection] = useState<string | null>(null);
   const needsSetup = useNeedsSetupObservation(password);
+  // Where the launch checklist and the admin banner land somebody sent to say
+  // which currency this village counts in. Above the early return, like every
+  // other hook on this screen.
+  useSettingFocus("project.fiatCurrency", "project-fiat-currency", !!brand);
   /**
    * Which currency codes the daily rate table actually carries.
    *
@@ -9352,6 +9361,19 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
           <p id="project-fiat-currency-note" className="text-[11px] text-gray-400 mt-0.5">
             Platform default: {defaults.project?.fiatCurrency ?? ""}. This sets what every price on the
             site is quoted in, and what a member sees before choosing their own display currency.
+          </p>
+        )}
+        {/* NEEDS YOUR ANSWER, and deliberately naming no code: the platform's
+            own is shown beside the box already, and a code written into this
+            sentence would be a second copy to go stale. Blank means inherit,
+            which is a real state and not an error, so this asks and blocks
+            nothing. Typing a code IS the answer here; there is no confirm
+            button, because the box is empty until somebody types one. */}
+        {!code && (
+          <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
+            Needs your answer. Until somebody here types a code, prices follow the platform's own
+            currency, which is where it starts and not something this village chose. Type yours,
+            even if it is already the one shown.
           </p>
         )}
       </div>
@@ -10158,6 +10180,11 @@ export default function Admin() {
               filter, so the rail and the card ride one fetch. */}
           <AdminGoLive token={password} moduleId={TAB_MODULE[activeTab] ?? null}
             onLifecycles={(m) => setModuleLifecycles(m as Record<string, ModuleLifecycle>)} />
+          {/* The two facts only this village can state, on every admin screen
+              until they are stated. The launch checklist carries them too and
+              goes quiet the moment a village launches, which is the village
+              that has been running on somebody else's clock the longest. */}
+          <VillageAnswers password={password} />
           {activeTab === "setup" && <SetupWizard password={password} onOpenTab={setActiveTab} />}
           {activeTab === "events-admin" && <EventsAdminPanel password={password} />}
           {activeTab === "submissions" && <SubmissionsTab password={password} />}

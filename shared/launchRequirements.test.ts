@@ -10,7 +10,12 @@
  */
 import { describe, expect, it } from "vitest";
 import { GAME_CONFIG } from "./gameConfig";
-import { LAUNCH_REQUIREMENTS, recognitionNameCheck } from "./launchRequirements";
+import {
+  LAUNCH_REQUIREMENTS,
+  projectCurrencyCheck,
+  recognitionNameCheck,
+  timezoneAnswerCheck,
+} from "./launchRequirements";
 
 const DEFAULT_WORD = GAME_CONFIG.currency.name;
 
@@ -55,5 +60,63 @@ describe("the recognition-token requirement", () => {
     // The Setup Wizard's two currency boxes were the old destination and could
     // never win against the registry. They are gone; this must not point back.
     expect(item.fixAt).not.toContain("tab=setup");
+  });
+});
+
+/**
+ * THE TWO FACTS ONLY A VILLAGE CAN STATE, and the difference between them.
+ *
+ * The platform ships a timezone and a currency, and a fork inherits both in
+ * silence: nothing renders as broken, so nothing ever asks. These two items
+ * ask, once each.
+ *
+ * They read what is STORED, never what is rendered, and the two questions are
+ * not the same shape. A stored currency IS an answer, because that box holds
+ * the village's own value and blank means inherit. A stored timezone is not,
+ * because the Season tab is handed the normalised document and writes the
+ * platform's zone back on any save, so the season document carries a separate
+ * answer and `timezoneAnswerCheck` reads that.
+ */
+describe("the village's own facts", () => {
+  it("asks about the timezone, and says which one it is running on", () => {
+    const missing = timezoneAnswerCheck(false, "America/Costa_Rica");
+    expect(missing.state).toBe("missing");
+    expect(missing.detail).toContain("America/Costa_Rica");
+    // The sentence names no village and blames nobody: an inherited default is
+    // not a mistake, it is a question that was never put.
+    expect(missing.detail).toContain("not an answer anybody here gave");
+    const answered = timezoneAnswerCheck(true, "Pacific/Auckland");
+    expect(answered.state).toBe("ok");
+    expect(answered.detail).toContain("Pacific/Auckland");
+  });
+
+  it("counts a stored currency as the answer, whatever it is", () => {
+    // Deliberately NOT compared against the platform's own code, unlike the
+    // recognition name above: a village may count in the same currency the
+    // platform ships, and typing it is the answer.
+    expect(projectCurrencyCheck("CHF").state).toBe("ok");
+    expect(projectCurrencyCheck("CRC").state).toBe("ok");
+    expect(projectCurrencyCheck("crc").detail).toContain("CRC");
+  });
+
+  it("counts blank, and whitespace, as unanswered", () => {
+    // Blank means inherit, which is a real state and not an error. Whitespace
+    // used to be storable and read as non-empty, which is how a village could
+    // look answered on one surface and unanswered on another.
+    for (const v of ["", "   ", null, undefined]) {
+      expect(projectCurrencyCheck(v as any).state).toBe("missing");
+    }
+  });
+
+  it("carries both as recommended, never blocking, and links to the control", () => {
+    const ids = ["village-timezone", "village-currency"];
+    for (const id of ids) {
+      const req = LAUNCH_REQUIREMENTS.find((r) => r.id === id);
+      expect(req, `no launch requirement "${id}"`).toBeTruthy();
+      // A warning warns. A village that means to launch on the defaults may.
+      expect(req!.severity).toBe("recommended");
+      // The address names the control, not just the screen it sits on.
+      expect(req!.fixAt).toContain("setting=");
+    }
   });
 });

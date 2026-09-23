@@ -14,7 +14,7 @@ import crypto from "crypto";
 import multer from "multer";
 import bcrypt from "bcrypt";
 import { claimPaths, GAME_CONFIG, getStage, stageIndex, withCommitmentName } from "../shared/gameConfig";
-import { recognitionNameCheck } from "../shared/launchRequirements";
+import { projectCurrencyCheck, recognitionNameCheck, timezoneAnswerCheck } from "../shared/launchRequirements";
 import { signingOf } from "../shared/membershipSigning";
 // `daysRemainingInCycle` is gone with the clock seam: every consumer reads
 // the active clock now, and it had no caller left here. `sceneStopsFor` and
@@ -12524,6 +12524,17 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
           ? { state: "ok" as const, detail: `This village introduces itself as “${mergedConfig().project.name}”` }
           : { state: "missing" as const, detail: "The project name, tagline and location still come from the template" };
       },
+      /*
+       * WHERE THE VILLAGE IS, asked once each. Both read what the village
+       * STORED, never what it renders: the rendered value is the platform's
+       * own default in both cases, which is the whole reason a fork can live
+       * on somebody else's clock and currency without noticing.
+       */
+      "village-timezone": () => {
+        const cfg = getSeasonConfig();
+        return timezoneAnswerCheck(!!(cfg as any).timezoneAnswer, cfg.timezone);
+      },
+      "village-currency": () => projectCurrencyCheck((getBrand().project as any)?.fiatCurrency),
       // THE REGISTRY, never `brand.currency.name`: mergedConfig() prefers `tokens`.`name` over the brand overlay, so the old read here was red after a correct rename and green after the wizard's dead box. Rule, reasons and test: shared/launchRequirements.ts.
       "brand-token-names": () => recognitionNameCheck(tokenDef(HEARTS)?.name, GAME_CONFIG.currency.name),
       "resend-key": () => {
