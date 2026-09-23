@@ -30,12 +30,15 @@ import os from "os";
 import path from "path";
 import { createHmac } from "crypto";
 import { spawn, type ChildProcess } from "child_process";
+import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
-import { HAND_MINT_SOURCES } from "./lib/mintCap";
-import { CYCLE_POOL_FAUCET, MINT_FAUCET, RECOGNITION_FAUCET } from "./lib/ledger";
-import { LIBRARY_MINT, VOICE_MINT } from "./lib/economy";
+import { HAND_MINT_SOURCES, MINT_CAP_KEY, mintCycleStart, readCycleIssuance } from "./lib/mintCap";
+import { CIRCLE_BONUS_SOURCE, payCircleBonus } from "./lib/circleBonus";
+import { CYCLE_POOL_FAUCET, MINT_FAUCET, RECOGNITION_FAUCET, loadTokenRegistry } from "./lib/ledger";
+import { LIBRARY_MINT, VOICE_MINT, toLedgerUnits } from "./lib/economy";
+import { setVariable } from "./lib/variables";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -61,6 +64,20 @@ const PROBE = 9_000_000;
 
 let child: ChildProcess | null = null;
 let testDb: TestDb | undefined;
+/**
+ * THE ONE DOOR THIS FILE CANNOT DIAL, AND WHY IT GETS A POOL OF ITS OWN.
+ *
+ * `POST /api/admin/resources/budgets/:id/bonus` wires `commitmentFor` to
+ * `noCommitmentOnRecord` (server/routes/circleBonusGate.ts), which returns
+ * null every time because no table in this build records what a circle took
+ * on for a period. So every reading through that route refuses on the missing
+ * commitment and the bonus door is UNREACHABLE over HTTP today. Driving it
+ * needs `payCircleBonus` itself, which needs a pool.
+ *
+ * It is the SAME SCRATCH SCHEMA the child server runs on, so the row the
+ * bonus writes is the row the guarded-source query below reads back.
+ */
+let libPool: mysql.Pool | undefined;
 let dataDir = "";
 const logs: string[] = [];
 
@@ -164,6 +181,7 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
     }
     dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-mint-cap-"));
     testDb = await provisionTestDb();
+    libPool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the S5 scratch-schema harness pool, the shape server/lib/circleBonus.test.ts uses
     await waitForPortFree(PORT);
     child = spawn(process.execPath, [DIST], {
       env: {
@@ -240,6 +258,7 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
 
   afterAll(async () => {
     child?.kill();
+    await libPool?.end();
     await testDb?.drop();
     if (dataDir) fs.rmSync(dataDir, { recursive: true, force: true });
   });
@@ -469,7 +488,7 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
   }, 60_000);
 
   /**
-   * THE FOUR DOORS THAT DO MEET THE GUARD WRITE ONLY HAND SOURCES.
+   * EVERY DOOR THAT MEETS THE GUARD, AND THE SOURCE EACH ONE WRITES.
    *
    * `HAND_MINT_SOURCES` is what the refusal subtracts before it tells a
    * founder how much of the lunation came from somewhere other than an
@@ -481,8 +500,18 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
    * assertion went red when it landed, which is the tripwire working. Minting
    * a circle its treasury is a steward deciding to issue, so it belongs beside
    * the hand-mint instead of beside the stays doors nobody clicks.
+   *
+   * DOOR 5 IS THE CIRCLE BONUS, AND IT LANDED WITHOUT TURNING THIS RED.
+   * `payCircleBonus` hands `mintCapGuard` to `postTransfer` exactly as the
+   * other four do and writes a source none of them write, which is precisely
+   * what this case exists to catch. It slipped through because the case drove
+   * four doors and called that every door: a tripwire only covers what it is
+   * dragged across. The expectation is therefore the GUARDED set and no longer
+   * `HAND_MINT_SOURCES` alone, and the difference between the two — the bonus
+   * is guarded and is deliberately not a hand mint — is asserted rather than
+   * left implied.
    */
-  it("holds the hand-mint source list against the four doors that meet the guard", async () => {
+  it("holds the guarded source list against the five doors that meet the guard", async () => {
     await setVar("ledger.admin_mint_cycle_cap", "100000");
     const slug = "cap-probe";
     expect((await call("POST", "/api/admin/tokens", {
@@ -531,14 +560,89 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
     }, founderToken);
     expect(funded.status, `fund: ${funded.text.slice(0, 300)}`).toBe(200);
 
+    /*
+     * DOOR 5 (0200's BONUS): the same circle, paid for room it did not use.
+     *
+     * Driven in this process because it cannot be dialled: the bonus route
+     * reads commitments through `noCommitmentOnRecord`, which finds none, so
+     * every reading refuses before it reaches a payment. The pool points at
+     * the child server's own scratch schema, so what lands here is what the
+     * query below reads back.
+     *
+     * THE AWARD IS HAND-BUILT AND THAT IS THE POINT OF THE SEAM. `bonusFor`
+     * decides the amount and server/lib/circleBonus.test.ts proves that
+     * arithmetic against a real burn meter; what is under test HERE is the
+     * door: that it passes the guard and what source its row carries. Only
+     * `unit` and `amountMinor` are read by `payCircleBonus`.
+     */
+    await loadTokenRegistry(libPool!);
+    // One whole token of this slug, off the registry rather than assumed.
+    const oneToken = toLedgerUnits(slug, 1);
+    const award = {
+      circleId, periodId: "rooting", unit: `token:${slug}`, scope: "season" as const,
+      capMinor: 100, spentMinor: 0, unmintedMinor: 100, pct: 100, amountMinor: oneToken,
+    };
+    const payBonus = (recordId: string, note: string) => payCircleBonus(libPool!, {
+      circleId, circleName: "Cap Probe Circle", circleStatus: "active", tokenSlug: slug,
+      award, recordId, actorId: null, note, permit: () => null,
+    });
+
+    /*
+     * FIRST, PROVE THE DOOR MEETS THE GUARD, because a source assertion alone
+     * cannot tell a guarded door from an unguarded one: the row carries the
+     * same `circle_cap_bonus` either way. The cap is closed to the whole-token
+     * ceiling of what this token has already issued, which leaves under one
+     * whole token of room against a bonus of exactly one, and the refusal has
+     * to be the cap's own sentence. Take `mintCapGuard` off `payCircleBonus`
+     * and this payment succeeds.
+     *
+     * THE DIAL IS SET THROUGH `setVariable` AND NOT THROUGH `setVar`, because
+     * the guard that decides here runs in THIS process and reads this
+     * process's variable store; the route would only move the child's. It is
+     * put back to the 100000 this case opened with, so the row in the database
+     * ends where the child's cached copy already is.
+     */
+    const issued = await readCycleIssuance(libPool!, slug, mintCycleStart());
+    const tight = Math.ceil(issued.net / oneToken);
+    expect(await setVariable(libPool!, MINT_CAP_KEY, String(tight))).toMatchObject({ ok: true });
+    const refusedBonus = await payBonus("mintcap-door-5", "door 5, with no room");
+    expect(refusedBonus.ok, "a bonus mints, so the cap binds it").toBe(false);
+    expect(String(refusedBonus.error)).toContain("mint cap");
+    const [none] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT COUNT(*) AS n FROM token_ledger WHERE token_type = ? AND source = ?",
+      [slug, CIRCLE_BONUS_SOURCE],
+    );
+    expect(Number(none[0]?.n ?? -1), "a refused bonus writes nothing").toBe(0);
+
+    // Then put the room back, so the refusal above was the cap and not
+    // something else that happened to fail, and the door actually writes.
+    expect(await setVariable(libPool!, MINT_CAP_KEY, "100000")).toMatchObject({ ok: true });
+    const paidBonus = await payBonus("mintcap-door-5", "door 5");
+    expect(paidBonus.ok, `bonus: ${paidBonus.error}`).toBe(true);
+
+    const [bonusRows] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT from_account, source, amount FROM token_ledger WHERE token_type = ? AND source = ?",
+      [slug, CIRCLE_BONUS_SOURCE],
+    );
+    expect(bonusRows.length, "the bonus door must have written exactly one row").toBe(1);
+    expect(String(bonusRows[0].from_account), "and it leaves the mint faucet").toBe("sys:mint");
+    expect(Number(bonusRows[0].amount)).toBe(oneToken);
+
     const [rows] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT DISTINCT source FROM token_ledger WHERE from_account = 'sys:mint' AND token_type = ?",
       [slug],
     );
     const written = rows.map((r: any) => String(r.source)).sort();
-    expect(written, "four guarded doors, and only the sources the refusal knows about").toEqual(
-      [...HAND_MINT_SOURCES].sort(),
-    );
+    const guarded = [...HAND_MINT_SOURCES, CIRCLE_BONUS_SOURCE].sort();
+    expect(written, "five guarded doors, and only the sources the refusal knows about").toEqual(guarded);
+    /*
+     * AND THE GAP IS ASSERTED, not assumed. The bonus meets the guard and is
+     * still not a hand mint, which is what lets `capRefusal` tell a founder
+     * their lunation went on bonuses. Move it onto `HAND_MINT_SOURCES` and
+     * this goes red beside the sentence that would have started lying.
+     */
+    expect(HAND_MINT_SOURCES).not.toContain(CIRCLE_BONUS_SOURCE);
+    expect(written).not.toEqual([...HAND_MINT_SOURCES].sort());
   }, 180_000);
 
   /**

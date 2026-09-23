@@ -16889,8 +16889,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
    * The cap's own arithmetic lives in `server/lib/mintCap.ts`, with the
    * ruling it enforces written beside it: the cap bounds ALL ISSUANCE of a
    * token in a cycle, by every door, NET of what came back to the faucet
-   * inside the same cycle. Nine doors write `sys:mint` and three of them meet
-   * `mintCapGuard`; the counter has always seen all nine, and what it grew
+   * inside the same cycle. Twelve doors write `sys:mint` and five of them meet
+   * `mintCapGuard`; the counter has always seen all twelve, and what it grew
    * was a subtraction, because `spendSinkFor("stay-credit")` is that same
    * faucet and a spent credit was being counted as a second issue.
    *
