@@ -425,8 +425,8 @@ mode, meaning acknowledged with no recognition. With the dial off, a quest that 
 (`0`, `0-50`) can still be consented at 0. That second door is new: under the default dials a quest
 paying in stay credits alone could not be consented at any amount, since 0 was refused as "at least
 1" and 1 as outside 0 to 0. Every amount above 0 still sits inside the range. A zero consent still
-releases any stay credits, and mints no `quest.completed` rule token: the route skips
-`mintForConfirmedClaim` at a grant of 0. Economics and governance agreed that on 2026-09-14. A zero
+releases any stay credits, and mints no `quest.completed` rule token: `owedForClaim`
+prices no rule at a grant of 0. Economics and governance agreed that on 2026-09-14. A zero
 is the witness saying the work earned no recognition, and any rule token, voice or credits, can be
 weight on a ballot through `governance.weight_token`. Stay credits still release because a person
 set that payment on the quest, so in a village that weights votes by stay credits a zero-consent
@@ -445,9 +445,10 @@ post's returned balance rather than incremented. At `granted === 0` there is not
 the cache write is skipped entirely; an earlier version assigned the failed post's `toBalance` of
 0 and wiped the member.
 
-**On top of the ledger post**, in order: `mintForConfirmedClaim` for any `quest.completed` rule on a
-token that is not recognition (skipped entirely on a consent at 0), and
-`mintStayCredits` for `stay_credit_reward` under its own key `queststay:<claimId>`. The last two
+**On top of the ledger post**, in order: `owedForClaim` prices any `quest.completed` rule on a
+token that is not recognition (nothing at all on a consent at 0) and the quest's own
+`stay_credit_reward` under its key `queststay:<claimId>`; `recordOwed` writes both into the
+consent's commit and `settleOwedForClaim` posts them after it. The last two
 are best-effort. A rule mint that throws is logged and the response is unaffected; a stay-credit
 failure is logged and the recognition still stands. `drizzle/0021_stays_and_payments.sql` describes
 the stay credit as released "in the same consent transaction", which is the intent and not the

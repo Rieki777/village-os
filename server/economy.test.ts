@@ -27,13 +27,11 @@ import {
   CREDITS,
   cycleWindow,
   decayVoice,
-  economyEpoch,
   faucetFor,
   publicSupply,
   ruleCannotPay,
   economyReady,
   ensureVoiceToken,
-  forgetEpoch,
   fromLedgerUnits,
   give,
   HEARTS,
@@ -41,7 +39,6 @@ import {
   keys,
   MAX_KEY,
   mint,
-  mintForConfirmedClaim,
   mintView,
   owedForClaim,
   postOwed,
@@ -1015,19 +1012,6 @@ describe.skipIf(!configured)("the village economy engine", () => {
     expect(await balanceOf(pool, memberAccount(u), VILLAGE_VOICE)).toBe(1);
   });
 
-  // ── The epoch and the flag ───────────────────────────────────────────────
-
-  it("stamps an epoch on first read and keeps it", async () => {
-    forgetEpoch();
-    const first = await economyEpoch(pool);
-    forgetEpoch();
-    const second = await economyEpoch(pool);
-    // Without a stored epoch, every quest ever consented becomes an unpaid
-    // mint the moment the engine reads the table, and the first settlement
-    // pays out years of backlog nobody chose.
-    expect(second.getTime()).toBe(first.getTime());
-  });
-
   // ── What a confirmed claim mints ─────────────────────────────────────────
 
   describe("a confirmed claim", () => {
@@ -1096,19 +1080,6 @@ describe.skipIf(!configured)("the village economy engine", () => {
       expect(fromLedgerUnits(VILLAGE_VOICE, voiceUnits)).toBeCloseTo(0.1);
     });
 
-    it("treats a confirmation older than the epoch as history", async () => {
-      const u = await makeMember("econ-src-4");
-      const out = await mintForConfirmedClaim(pool, {
-        id: "claim-src-4", questId: "q-src", userId: u,
-        confirmedAt: new Date("2020-01-01T00:00:00Z"),
-      });
-      // The day the flag flips, every quest ever consented would otherwise
-      // become a payable backlog and the first settlement would pay out years
-      // of it at once. Nobody decided that; it is just what the query returns.
-      expect(out.skipped).toMatch(/epoch/);
-      expect(out.minted).toHaveLength(0);
-      expect(await balanceOf(pool, memberAccount(u), VILLAGE_VOICE)).toBe(0);
-    });
   });
 
   // ── A rule that cannot pay says so ───────────────────────────────────────
@@ -2661,7 +2632,6 @@ describe.skipIf(!configured)("the village economy engine", () => {
       await loadVariables(dpool);
       await ensureVoiceToken(dpool, "Village Voice");
       await loadTokenRegistry(dpool);
-      await economyEpoch(dpool);
     });
 
     afterAll(async () => {

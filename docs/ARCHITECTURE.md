@@ -127,9 +127,10 @@ top to bottom in that function; the stages below are the landmarks:
    the `tokens` table into memory. `ensureStayToken` and `ensureLibraryToken`
    create module tokens even while their modules are off, so rewards never
    race an enable click. `seedEconomy` upserts the archetypes and inserts the
-   starting rules only when absent, then the registry reloads and
-   `startEconomyEpoch` starts the clock before the first confirmed quest is
-   measured against it.
+   starting rules only when absent, then the registry reloads. There is no
+   economy epoch any more: the stamp boot used to take was read by one
+   function with no production caller, and Rye ruled on 2026-09-21 that work
+   done before an economy launched should be payable.
 4. **Ledger invariants refuse boot.** `checkLedgerInvariants` in
    `server/lib/ledger.ts`; any problem throws and the process does not serve.
    "A server that boots over a broken ledger normalizes the break."

@@ -345,7 +345,7 @@ import {
   spendSurfacesFor,
 } from "./lib/spending";
 import { seatChargeFor, seatEscrowDrift, seatPriceFor, settleFinishedSeats } from "./lib/eventSeats";
-import { allowanceFor, applyMintRuleChanges, canConfirm, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, runSettlement, startEconomyEpoch, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
+import { allowanceFor, applyMintRuleChanges, canConfirm, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, runSettlement, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
 import { addCharacter, avatarFor, listArchetypes, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
 import { loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
@@ -5165,9 +5165,6 @@ async function startServer() {
   // village's own amounts are never restored to a default by a redeploy.
   await seedEconomy(getPool(), villageId());
   await loadTokenRegistry(getPool());
-  // At boot, so the first confirmed quest is never the thing that starts the
-  // clock it is then measured against. See `startEconomyEpoch`.
-  await startEconomyEpoch(getPool());
   // Suggested class tags on work that already exists, so a fresh village does
   // not meet five classes that appear to open nothing. Only rows where
   // `archetypes IS NULL` are touched, so a tag a human confirmed or cleared is
