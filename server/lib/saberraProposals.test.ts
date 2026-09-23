@@ -35,9 +35,15 @@ describe("suggesting a structure", () => {
     expect(r.skipped).toEqual([]);
   });
 
-  it("never lets a holder reach a seat, even though the caller handed raw fields", () => {
-    // The boundary is applied INSIDE this function. A caller that forgot to
-    // filter must not be able to create the leak.
+  it("stops a holder at BOTH doors, so neither one alone is load-bearing", () => {
+    // Two allow-lists stand between a vendor record and a seat, and this pins
+    // the second one. The boundary drops `Active Holders` because it is not an
+    // allowed field; `SEAT_FROM` would drop it again because it maps to no seat
+    // key. Worth a test of its own precisely BECAUSE the first door makes it
+    // look redundant: a neuter that removes the boundary entirely leaves this
+    // green, and the tests that go red are the address ones below. So this is
+    // not evidence the boundary works — it is evidence a holder cannot become a
+    // seat field even if the boundary is one day bypassed.
     const r = proposeStructure(
       [role("r-1", { "Role Name": "Finance Steward", "Active Holders": ["Kyleen"] })],
       { sourceName: SOURCE },
