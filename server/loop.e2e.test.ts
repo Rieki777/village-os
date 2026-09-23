@@ -4281,6 +4281,68 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const backups = launch.json.items.find((i: any) => i.id === "backups-drilled");
     expect(backups.state).toBe("missing");
 
+    /*
+     * THE TWO FACTS ONLY A VILLAGE CAN STATE, wired end to end.
+     *
+     * A registry entry whose `checkKey` names no resolver does not disappear:
+     * `launchStatus` reports it as missing with "No check wired for ...",
+     * which reads like a question on the page and is a wiring bug. Nothing
+     * else in the build would catch a typo in these two keys, so this asks the
+     * live route.
+     *
+     * A fresh village has answered neither, and the detail is the sentence a
+     * founder acts on rather than a scolding.
+     */
+    for (const id of ["village-timezone", "village-currency"]) {
+      const item = launch.json.items.find((i: any) => i.id === id);
+      expect(item, `no launch item "${id}"`).toBeTruthy();
+      expect(item.detail).not.toContain("No check wired");
+      expect(item.state).toBe("missing");
+      // A warning warns. Neither of these may stop a village launching.
+      expect(item.severity).toBe("recommended");
+      // The address names the control, not the screen it lives on.
+      expect(item.fixAt).toContain("setting=");
+    }
+    // The timezone item names the zone the village is actually running on, so
+    // a founder reads what they are inheriting rather than an abstraction.
+    expect(launch.json.items.find((i: any) => i.id === "village-timezone").detail).toMatch(/[A-Za-z]+\/[A-Za-z_]+/);
+
+    // ANSWERING THE CURRENCY IS STORING ONE, and a village may answer with the
+    // platform's own code: the point is that somebody said it.
+    const saidCurrency = await api("PUT", "/api/admin/brand", { project: { fiatCurrency: "chf" } }, founderToken);
+    expect(saidCurrency.status).toBe(200);
+    const afterCurrency = (await api("GET", "/api/admin/launch", undefined, founderToken)).json;
+    expect(afterCurrency.items.find((i: any) => i.id === "village-currency").state).toBe("ok");
+    // Uppercased on the way in, so "chf" and "CHF" cannot become two villages'
+    // worth of stored value.
+    expect((await api("GET", "/api/admin/brand", undefined, founderToken)).json.brand.project.fiatCurrency).toBe("CHF");
+
+    // Whitespace is not an answer: it normalises to blank, which means
+    // inherit, and the question comes back rather than the save being refused.
+    const spaces = await api("PUT", "/api/admin/brand", { project: { fiatCurrency: "   " } }, founderToken);
+    expect(spaces.status).toBe(200);
+    expect((await api("GET", "/api/admin/brand", undefined, founderToken)).json.brand.project.fiatCurrency).toBe("");
+    const afterSpaces = (await api("GET", "/api/admin/launch", undefined, founderToken)).json;
+    expect(afterSpaces.items.find((i: any) => i.id === "village-currency").state).toBe("missing");
+
+    // A code that is not a code is refused whole, and stores nothing.
+    const bad = await api("PUT", "/api/admin/brand", { project: { name: "Kept", fiatCurrency: "EURO" } }, founderToken);
+    expect(bad.status).toBe(400);
+    expect((await api("GET", "/api/admin/brand", undefined, founderToken)).json.brand.project.name).not.toBe("Kept");
+
+    // CONFIRMING THE TIMEZONE IS THE ONLY WAY TO AGREE with an inherited one,
+    // and it must move no seat: every seat has a term by ruling.
+    const seasons = (await api("GET", "/api/admin/seasons", undefined, founderToken)).json;
+    const confirmZone = await api(
+      "PUT", "/api/admin/seasons",
+      { seasons: seasons.seasons, cadence: seasons.cadence, timezone: seasons.timezone, confirmTimezone: true },
+      founderToken,
+    );
+    expect(confirmZone.status).toBe(200);
+    expect(confirmZone.json.seatsMoved).toEqual({ permission: 0, org: 0 });
+    const afterZone = (await api("GET", "/api/admin/launch", undefined, founderToken)).json;
+    expect(afterZone.items.find((i: any) => i.id === "village-timezone").state).toBe("ok");
+
     // Confirm a manual item — attributed — and see it flip.
     const confirmed = await api("POST", "/api/admin/launch/confirm", { id: "backups-drilled", done: true }, founderToken);
     expect(confirmed.json.status.items.find((i: any) => i.id === "backups-drilled").state).toBe("ok");
