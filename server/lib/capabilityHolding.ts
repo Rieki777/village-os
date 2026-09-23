@@ -28,7 +28,7 @@
  * scan of a table that cannot grow past that.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
-import { ALL_CAPABILITIES, TRANSFERABLE, type Capability } from "../../shared/capabilities";
+import { ALL_CAPABILITIES, HANDOVER_SET, TRANSFERABLE, type Capability } from "../../shared/capabilities";
 import { WIRED_BUT_HELD_BACK } from "./capabilityRegistry";
 
 export interface CapabilityHoldingRow {
@@ -69,6 +69,61 @@ export async function villageHeldCapabilities(pool: Pool): Promise<string[]> {
     console.error("[capabilityHolding] read failed, treating the village as holding nothing", e);
     return [];
   }
+}
+
+/** Where this village has got to in taking the scaffolding's powers on. */
+export interface VillageHandoverState {
+  /** Every power in `HANDOVER_SET` is in the village's hands. */
+  complete: boolean;
+  /** The ones it holds, in the platform's own order. */
+  held: string[];
+  /** The ones still on the admin panel, in the platform's own order. */
+  remaining: string[];
+  /** How many there are to take. `held.length + remaining.length`. */
+  total: number;
+}
+
+/**
+ * HOW FAR THE HANDOVER HAS GOT, from the same map and the same table the
+ * capability gate reads.
+ *
+ * It calls `villageHeldCapabilities` rather than querying again, so the gate
+ * and this answer can never disagree about whether the village has taken
+ * over. Two reads of one table through two statements is how two answers
+ * about one fact start drifting, and here the drift would be a founder told
+ * the pen had moved while the gate still answered for them.
+ *
+ * `complete` is `HANDOVER_SET` fully held, which is 19 keys today. What that
+ * set MEANS is a reading of Rye's words and the reasoning is at the constant,
+ * in shared/capabilities.ts, where narrowing it is one edit.
+ *
+ * ── `remaining` IS NOT DECORATION ──────────────────────────────────────────
+ *
+ * The handover confirm screen warns a founder on the LAST power only, which
+ * is `remaining.length === 1`. A warning on every handover is a warning
+ * people learn to click past, and the one crossing that changes what the
+ * founder may do afterwards is the one that has to land differently.
+ *
+ * NO LIVE VILLAGE HAS EVER BEEN IN THAT STATE. Amora holds zero of the
+ * nineteen: `capability_holding` is created empty and nothing seeds it. So
+ * every branch below except "held is empty" is reached today only from a
+ * seeded fixture, and a green test about `complete` is a statement about the
+ * fixture rather than about production.
+ *
+ * Fails the same way `villageHeldCapabilities` does, which is OPEN: a read
+ * that throws answers "the village holds nothing", so a database hiccup
+ * leaves the scaffolding reachable instead of suspending it.
+ */
+export async function villageHandoverState(pool: Pool): Promise<VillageHandoverState> {
+  const heldKeys = new Set(await villageHeldCapabilities(pool));
+  const held = HANDOVER_SET.filter((c) => heldKeys.has(c));
+  const remaining = HANDOVER_SET.filter((c) => !heldKeys.has(c));
+  return {
+    complete: remaining.length === 0,
+    held: [...held],
+    remaining: [...remaining],
+    total: HANDOVER_SET.length,
+  };
 }
 
 /** Every holding, with the holding role's name, newest crossing first. */

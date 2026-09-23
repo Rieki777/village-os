@@ -485,6 +485,38 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
 };
 
 /**
+ * WHICH POWERS MUST BE IN THE VILLAGE'S HANDS BEFORE THE HANDOVER COUNTS AS
+ * DONE.
+ *
+ * Rye, 2026-09-23, on who holds the pen over the governing purpose statement:
+ * "Founder keeps the pen until they give over all steward powers to the
+ * village."
+ *
+ * ── THIS IS A READING OF THOSE WORDS, AND THE ALTERNATIVE IS LIVE ──────────
+ *
+ * "All steward powers" is read here as ALL TRANSFERABLE POWERS, which is 19
+ * keys today. That reading is a judgement and it has a product consequence
+ * worth stating: on Amora it puts the pen with the founder for as long as the
+ * whole handover takes, and the handover stands at zero of nineteen. A
+ * NARROWER NAMED SUBSET is the live alternative, and it would put the pen and
+ * the Saberra warnings in the village's hands far sooner. That call is Rye's
+ * and it has been put to him.
+ *
+ * So this is ONE constant that one function reads, and narrowing it is an
+ * edit to this one expression. Every caller and every test follows it, and
+ * nothing else in the codebase has to be found. Whoever changes it is
+ * answering a question that was left open, never breaking an invariant.
+ *
+ * DERIVED, NEVER HAND-LISTED. `TRANSFERABLE` is a `Record` on purpose, so a
+ * capability added to the union with no line there is a type error and a
+ * decision somebody makes. A hand-kept list beside it would be a promise
+ * nobody checks, and it would go stale in exactly the direction that matters:
+ * a new transferable power missing from the set would make the handover read
+ * complete while the village held nothing of it.
+ */
+export const HANDOVER_SET: readonly Capability[] = ALL_CAPABILITIES.filter((c) => TRANSFERABLE[c]);
+
+/**
  * WHICH KEYS A WARNING BADGE MAY EVER TAKE AWAY (0109).
  *
  * R65 and R66, the founder's ruling: "denying a voice is not a power anyone
