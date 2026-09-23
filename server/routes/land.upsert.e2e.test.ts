@@ -26,6 +26,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { splitStatements } from "../db/migrate";
+import { upsertParcel } from "../repos/villageLand";
 
 const DB_CONFIGURED = testDbConfigured();
 const VILLAGE = "land-upsert-probe";
@@ -37,36 +38,30 @@ beforeAll(async () => {
   if (!DB_CONFIGURED) return;
   testDb = await provisionTestDb();
   conn = testDb.conn;
-  await conn.query("DELETE FROM village_land WHERE village_id = ?", [VILLAGE]);
+  await conn.query("DELETE FROM village_land WHERE village_id = ?", [VILLAGE]); // module-review-ok: resetting the scratch schema this suite provisioned before it seeds its own rows
 });
 
 afterAll(async () => {
   if (!DB_CONFIGURED || !testDb) return;
-  await conn.query("DELETE FROM village_land WHERE village_id = ?", [VILLAGE]).catch(() => {});
+  await conn.query("DELETE FROM village_land WHERE village_id = ?", [VILLAGE]).catch(() => {}); // module-review-ok: cleaning the scratch schema this suite provisioned after it
   await testDb.drop();
 });
 
-/** The upsert exactly as server/routes/land.ts issues it. */
-const UPSERT = `INSERT INTO village_land
-   (id, village_id, slug, label, sort_order, centre_lat, centre_lon, span_m, visibility, source_text, source_format, updated_by)
- VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
- ON DUPLICATE KEY UPDATE
-   label = IF(VALUES(label) = '', label, VALUES(label)),
-   sort_order = VALUES(sort_order),
-   centre_lat = VALUES(centre_lat),
-   centre_lon = VALUES(centre_lon),
-   span_m = VALUES(span_m),
-   visibility = VALUES(visibility),
-   source_text = VALUES(source_text),
-   source_format = VALUES(source_format),
-   updated_by = VALUES(updated_by)`;
-
+/*
+ * THE REAL STATEMENT, not a copy of it. This file used to hold its own string
+ * of the upsert "exactly as land.ts issues it", which is a promise only a
+ * reader could check: change the route's SQL and this suite would go on
+ * proving the old text. It now calls the repo function the route calls.
+ */
 const save = (id: string, slug: string, label: string, order: number, lat: number) =>
-  conn.query(UPSERT, [id, VILLAGE, slug, label, order, lat, -83.84, 800, "exact", "t", "decimal", "f1"]);
+  upsertParcel(conn, {
+    id, villageId: VILLAGE, slug, label, sortOrder: order, centreLat: lat, centreLon: -83.84,
+    spanM: 800, visibility: "exact", sourceText: "t", sourceFormat: "decimal", updatedBy: "f1",
+  });
 
 /** The write the release BEFORE 0214 makes: it names no slug and no label. */
 const previousReleaseSave = (id: string, lat: number) =>
-  conn.query(
+  conn.query( // module-review-ok: the PREVIOUS release's own raw write, issued verbatim; routing it through the repo would test the new code instead of the old
     `INSERT INTO village_land (id, village_id, centre_lat, centre_lon, span_m, visibility)
      VALUES (?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE centre_lat = VALUES(centre_lat), span_m = VALUES(span_m)`,
@@ -74,7 +69,7 @@ const previousReleaseSave = (id: string, lat: number) =>
   );
 
 const rows = async (): Promise<any[]> => {
-  const [r] = await conn.query(
+  const [r] = await conn.query( // module-review-ok: reading rows back to prove what the repo wrote, which is what this suite exists to check
     "SELECT slug, label, sort_order, centre_lat FROM village_land WHERE village_id = ? ORDER BY sort_order, created_at",
     [VILLAGE],
   );
@@ -157,14 +152,14 @@ describe.skipIf(!DB_CONFIGURED)("0214 leaves no moment without a unique key", ()
   beforeAll(async () => {
     if (!DB_CONFIGURED) return;
     sideName = `land_window_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-    await conn.query(`CREATE DATABASE \`${sideName}\``);
-    side = await mysql.createConnection(testDb.url.replace(/\/[^/?]+(\?|$)/, `/${sideName}$1`));
+    await conn.query(`CREATE DATABASE \`${sideName}\``); // module-review-ok: a throwaway sibling database holding the pre-0214 table on the same test server; dropped in afterAll
+    side = await mysql.createConnection(testDb.url.replace(/\/[^/?]+(\?|$)/, `/${sideName}$1`)); // module-review-ok: connecting to that throwaway sibling database on the test server
   });
 
   afterAll(async () => {
     if (!DB_CONFIGURED || !sideName) return;
     await side?.end().catch(() => {});
-    await conn.query(`DROP DATABASE IF EXISTS \`${sideName}\``).catch(() => {});
+    await conn.query(`DROP DATABASE IF EXISTS \`${sideName}\``).catch(() => {}); // module-review-ok: dropping the throwaway sibling database this suite created
   });
 
   const read = (f: string) => fs.readFileSync(path.join(process.cwd(), "drizzle", f), "utf8");
