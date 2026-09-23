@@ -596,7 +596,7 @@ export default function ResidentJourney() {
                                 href={step.link}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-2 px-3 py-1.5 bg-teal-deep text-white rounded-full text-xs font-medium hover:opacity-90 transition-opacity"
+                                className="inline-flex items-center gap-2 px-3 py-1.5 bg-teal-deep text-white rounded-full text-xs font-medium hover:bg-teal-deep-dark transition"
                               >
                                 {step.linkText}
                                 <ExternalLink className="w-3 h-3" />
@@ -604,7 +604,7 @@ export default function ResidentJourney() {
                             ) : (
                               <Link
                                 href={step.link}
-                                className="inline-flex items-center gap-2 px-3 py-1.5 bg-teal-deep text-white rounded-full text-xs font-medium hover:opacity-90 transition-opacity"
+                                className="inline-flex items-center gap-2 px-3 py-1.5 bg-teal-deep text-white rounded-full text-xs font-medium hover:bg-teal-deep-dark transition"
                               >
                                 {step.linkText}
                                 <ArrowRight className="w-3 h-3" />

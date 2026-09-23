@@ -274,7 +274,7 @@ export default function Opportunities() {
                   href={eventsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-8 py-4 bg-teal-light text-white rounded-lg font-semibold hover:opacity-90 transition-opacity flex items-center gap-2"
+                  className="px-8 py-4 bg-teal-deep text-white rounded-lg font-semibold hover:bg-teal-deep-dark transition flex items-center gap-2"
                 >
                   <Calendar className="w-5 h-5" />
                   Join Community Call

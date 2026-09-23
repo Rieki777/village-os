@@ -81,6 +81,11 @@ export interface PublicGameConfig {
      *  "email us" control. See useVillageLinks below for why blank hides. */
     contactEmail?: string;
     footerBlurb?: string;
+    /** The money this village trades in, as a three-letter code ("CRC").
+     *  Blank = none declared; `defaultDisplayCurrency` then falls back to the
+     *  platform's own. Read by the display-currency picker. */
+    fiatCurrency?: string | null;
+    country?: string | null;
   };
   currency: {
     name: string;

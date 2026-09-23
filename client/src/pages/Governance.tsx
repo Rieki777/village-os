@@ -61,7 +61,7 @@ export default function Governance() {
           <h1 className="font-display text-4xl md:text-5xl font-bold mb-4">
             Power Belongs to the Circle, Not the Person
           </h1>
-          <p className="text-white/80 text-lg max-w-3xl leading-relaxed">
+          <p className="text-white text-lg max-w-3xl leading-relaxed">
             {villageName} uses sociocracy, a consent-based governance system where every voice can influence decisions. While the systems are still finding their feet, members elect stewards who can veto a decision, and those same members can vote a steward out.
           </p>
         </div>

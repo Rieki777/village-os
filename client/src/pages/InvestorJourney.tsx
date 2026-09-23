@@ -323,11 +323,20 @@ export default function InvestorJourney() {
         </div>
 
         <div className="container relative z-10">
-          <div className="max-w-2xl">
+          <div className="relative max-w-2xl">
+            {/* THE COPY SITS ON AN OPAQUE BAND, as on Home and Master Plan. A
+                photograph under text cannot promise a ratio: the paragraph read
+                3.59:1 over this one at 393px, and the eyebrow cleared only
+                because of what today's picture happens to hold. With no picture
+                the band is the colour it sits on. heroCopy.contrast.test.tsx */}
+            <div
+              aria-hidden="true"
+              className="absolute -inset-x-5 -inset-y-6 sm:-inset-x-8 sm:-inset-y-10 rounded-3xl bg-background"
+            />
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              className="flex items-center gap-3 mb-6"
+              className="relative flex items-center gap-3 mb-6"
             >
               <motion.div 
                 className="w-12 h-12 rounded-xl bg-gold flex items-center justify-center"
@@ -336,14 +345,18 @@ export default function InvestorJourney() {
               >
                 <TrendingUp className="w-6 h-6 text-white" />
               </motion.div>
-              <span className="text-gold font-medium tracking-wide uppercase text-sm">Capital Contributor Journey</span>
+              {/* amber-ink, index.css's amber for text on light grounds: gold is 4.07:1 on the band. */}
+              <span className="text-amber-ink font-medium tracking-wide uppercase text-sm">Capital Contributor Journey</span>
             </motion.div>
 
+            {/* 36px under 360px wide: at 48px "Regeneration" is one unbreakable word
+                that inked to x=336 at 320px, past the 304px column and the section's
+                overflow-hidden edge, so its end was cut off. From 360px up, unchanged. */}
             <motion.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="font-display text-5xl md:text-6xl font-semibold text-foreground mb-6"
+              className="relative font-display text-4xl min-[360px]:text-5xl md:text-6xl font-semibold text-foreground mb-6"
             >
               Invest in{" "}
               <span className="text-teal-deep italic">Regeneration</span>
@@ -353,7 +366,7 @@ export default function InvestorJourney() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="text-xl text-muted-foreground leading-relaxed mb-8"
+              className="relative text-xl text-muted-foreground leading-relaxed mb-8"
             >
               Capital Contributors offer financial resources, credit lines, investments,
               or other capital resources. We prioritize investors who share the vision -
@@ -365,7 +378,7 @@ export default function InvestorJourney() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
-              className="flex flex-wrap gap-4"
+              className="relative flex flex-wrap gap-4"
             >
               {/* This asked for the investor pack by mail. The page already
                   serves that exact request with its own form, posting to this

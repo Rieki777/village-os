@@ -387,7 +387,7 @@ export default function Quests() {
               </p>
             </div>
             <Link href="/propose-quest">
-              <a className="shrink-0 inline-flex items-center gap-2 px-5 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:opacity-90 transition-opacity">
+              <a className="shrink-0 inline-flex items-center gap-2 px-5 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-teal-deep-dark transition">
                 Propose a Quest
                 <ArrowRight className="w-4 h-4" />
               </a>
@@ -524,7 +524,7 @@ export default function Quests() {
                   href={eventsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:opacity-90 transition-opacity flex items-center gap-2"
+                  className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-teal-deep-dark transition flex items-center gap-2"
                 >
                   <Calendar className="w-5 h-5" />
                   Join a Community Call
