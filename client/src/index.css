@@ -264,15 +264,31 @@
    was written against. A component that hardcoded a colour would not follow,
    which is the honest reason `check-theme-literals` is a gate.
 
-   Every pairing below is MEASURED against the ground or card it sits on:
+   THE LENS HAS FOUR SURFACES, AND THIS LIST NAMED THREE. Every pairing below
+   is measured against the ground, the card or the muted panel it sits on:
 
      parchment on ground   13.01      dim on ground    6.77
      parchment on card     12.09      dim on card      6.29
      sage on ground         7.63      dim on muted     5.59
      gold on card           7.33
 
-   The worst is 5.59:1, so the whole lens clears AA, and the light theme it
-   replaces is untouched everywhere else on the site. */
+   The worst of those is 5.59:1. What that sentence used to say next was "so
+   the whole lens clears AA", and it was wrong for two years of surface: the
+   FOURTH surface is the map's own DISCS, the translucent circle tones a
+   village picks, and a name is drawn on them. Measured live (2026-09-23),
+   composited through the stack of discs each name sits on: 22 of 24 desktop
+   names under 4.5:1, 10 of 16 phone numbers, a forming circle's caption at
+   1.6. Nothing about the three pairings above was wrong; the subject list was
+   short.
+
+   So names on a disc do not rely on a pairing at all. Every one carries a
+   halo of this ground under its glyphs (`CircleLabel.tsx`), which is the
+   surface they are then measured against. Whatever gets added to the picture
+   next, measure it on the DISCS as well as on these three:
+   scratchpad/map-label-scan.mjs in the org map session composites the disc
+   stack, the opacity chain and the halo, and reads rendered pixels.
+
+   The light theme this replaces is untouched everywhere else on the site. */
 .circle-lens {
   --background: var(--circle-ground, #131a11);
   --foreground: var(--circle-ink, #e8dcbc);
