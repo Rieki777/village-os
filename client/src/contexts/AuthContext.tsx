@@ -205,3 +205,30 @@ export function useAuth() {
   }
   return context;
 }
+
+/**
+ * Whether the signed-in person may reach an admin route, client-side.
+ *
+ * The MIRROR of `isAdmin` in server/index.ts, which is the authority: a valid
+ * member token whose account role is 'admin' or 'founder'. The shared password
+ * authenticates nothing there, so this is the whole test on both sides.
+ *
+ * It exists because the same expression was being hand-written wherever an
+ * admin surface needed it, and a hand-kept copy of a rule is a promise nobody
+ * checks. Adding a third role server-side should change one line here, not
+ * however many call sites happen to spell it out.
+ *
+ * WHAT IT IS FOR, and this is the part worth reading: it gates the REQUEST, not
+ * only the render. A panel mounted on a member-facing page that fetches an
+ * admin route on mount hands every member a 401 in their console on a page they
+ * open daily, and a call that cannot succeed should never be made. Gate `load`
+ * on this as well as the JSX.
+ *
+ * `loading` is false while the session resolves, so a panel reading it goes
+ * from "not admin" to "admin" on one re-render. Depend on it in the callback
+ * that fetches and the fetch follows.
+ */
+export function useIsAdmin(): boolean {
+  const { user } = useAuth();
+  return !!user && (user.role === "admin" || user.role === "founder");
+}
