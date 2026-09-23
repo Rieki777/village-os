@@ -227,8 +227,30 @@ export function useAuth() {
  * `loading` is false while the session resolves, so a panel reading it goes
  * from "not admin" to "admin" on one re-render. Depend on it in the callback
  * that fetches and the fetch follows.
+ *
+ * ── IT READS THE CONTEXT DIRECTLY, AND FAILS CLOSED WITH NO PROVIDER ────────
+ *
+ * `useAuth` THROWS outside an AuthProvider, on purpose: a page that forgot the
+ * provider is a wiring mistake and should say so loudly. This hook cannot
+ * borrow that behaviour, and the reason is what it is for. These panels are
+ * being mounted in trees they did not used to live in, so "no provider above
+ * me" has to be an answer instead of an exception that takes the whole surface
+ * down with it.
+ *
+ * Measured, not theorised: routing this through `useAuth` turned ten tests red
+ * across three Admin files in CI. They render `SetupWizard` bare, the wizard
+ * mounts the map panels at step 6, and one throw from a panel unmounted every
+ * unrelated field on the page. A gate that can blank the screen it is guarding
+ * is worse than the thing it guards against.
+ *
+ * FALSE IS THE SAFE ANSWER, not a convenient one. With no provider there is no
+ * session to read, so the honest reply to "may this person administer" is no.
+ * That is the same answer a signed-out visitor gets, and it renders nothing and
+ * requests nothing. There is no path here where a missing provider grants
+ * anything.
  */
 export function useIsAdmin(): boolean {
-  const { user } = useAuth();
+  const context = useContext(AuthContext);
+  const user = context?.user;
   return !!user && (user.role === "admin" || user.role === "founder");
 }
