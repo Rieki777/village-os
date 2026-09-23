@@ -65,6 +65,13 @@ import {
   configuredProvider,
   fetchAndCache,
 } from "../lib/satellite";
+import {
+  clearParcelImagery,
+  recordParcelImagery,
+  recordParcelImageryError,
+  upsertParcel,
+  villageLandRows,
+} from "../repos/villageLand";
 
 type Deps = Pick<
   AppDeps,
@@ -137,11 +144,7 @@ async function readRow(pool: Pool, slug?: string): Promise<LandRow> {
  * drifts.
  */
 async function readParcels(pool: Pool): Promise<LandRow[]> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT * FROM village_land WHERE village_id = ?",
-    [VILLAGE],
-  );
-  return orderParcels(rows.map(mapRow));
+  return orderParcels((await villageLandRows(pool, VILLAGE)).map(mapRow));
 }
 
 function mapRow(row: RowDataPacket): LandRow {
@@ -462,35 +465,20 @@ export function register(app: Express, deps: Deps): void {
      * one: renaming is a thing a founder does on purpose, and a save of the
      * coordinates alone must not blank the name they gave the land.
      */
-    await pool.query(
-      `INSERT INTO village_land
-         (id, village_id, slug, label, sort_order, centre_lat, centre_lon, span_m, visibility, source_text, source_format, updated_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE
-         label = IF(VALUES(label) = '', label, VALUES(label)),
-         sort_order = VALUES(sort_order),
-         centre_lat = VALUES(centre_lat),
-         centre_lon = VALUES(centre_lon),
-         span_m = VALUES(span_m),
-         visibility = VALUES(visibility),
-         source_text = VALUES(source_text),
-         source_format = VALUES(source_format),
-         updated_by = VALUES(updated_by)`,
-      [
-        randomUUID(),
-        VILLAGE,
-        slug,
-        label,
-        sortOrder,
-        centre.lat,
-        centre.lon,
-        span.span,
-        visibility,
-        sourceText,
-        format,
-        actor,
-      ],
-    );
+    await upsertParcel(pool, {
+      id: randomUUID(),
+      villageId: VILLAGE,
+      slug,
+      label,
+      sortOrder,
+      centreLat: centre.lat,
+      centreLon: centre.lon,
+      spanM: span.span,
+      visibility,
+      sourceText,
+      sourceFormat: format,
+      updatedBy: actor,
+    });
 
     res.json({ success: true, slug, label: label || known?.label || "", centre, spanM: span.span, visibility });
   });
@@ -543,13 +531,11 @@ export function register(app: Express, deps: Deps): void {
     const request = { centre: row.centre, spanM: row.spanM ?? DEFAULT_SPAN_M, pixels: IMAGE_PIXELS };
     try {
       const cached = await fetchAndCache(status, request, uploadsDir);
-      await pool.query(
-        `UPDATE village_land
-            SET imagery_provider = ?, imagery_filename = ?, imagery_attribution = ?,
-                imagery_fetched_at = CURRENT_TIMESTAMP, imagery_error = NULL
-          WHERE village_id = ? AND slug = ?`,
-        [status.provider.id, cached.filename, cached.attribution, VILLAGE, slug],
-      );
+      await recordParcelImagery(pool, VILLAGE, slug, {
+        provider: status.provider.id,
+        filename: cached.filename,
+        attribution: cached.attribution,
+      });
       return res.json({
         success: true,
         url: `/api/uploads/${cached.filename}`,
@@ -566,11 +552,7 @@ export function register(app: Express, deps: Deps): void {
         err instanceof LicenceForbidsCaching || err instanceof NotAnImage
           ? err.message
           : "The imagery provider could not be reached. Try again in a few minutes.";
-      await pool.query("UPDATE village_land SET imagery_error = ? WHERE village_id = ? AND slug = ?", [
-        message.slice(0, 255),
-        VILLAGE,
-        slug,
-      ]);
+      await recordParcelImageryError(pool, VILLAGE, slug, message);
       const code = err instanceof LicenceForbidsCaching ? 409 : 502;
       return res.status(code).json({ error: "imagery-failed", message });
     }
@@ -604,13 +586,7 @@ export function register(app: Express, deps: Deps): void {
     const pool = getPool();
     const row = await readRow(pool, slug);
     const filename = row.imageryFilename;
-    await pool.query(
-      `UPDATE village_land
-          SET imagery_provider = NULL, imagery_filename = NULL, imagery_attribution = NULL,
-              imagery_fetched_at = NULL, imagery_error = NULL
-        WHERE village_id = ? AND slug = ?`,
-      [VILLAGE, slug],
-    );
+    await clearParcelImagery(pool, VILLAGE, slug);
     const fileRemoved = filename ? removeFromVolume(uploadsDir, filename) : false;
     res.json({ success: true, removed: filename !== null, fileRemoved });
   });
