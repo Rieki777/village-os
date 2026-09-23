@@ -11,12 +11,20 @@
  *
  * ── THE GATES ──────────────────────────────────────────────────────────────
  *
- * The same pair `server/routes/archetypes.ts` uses, on purpose: the read takes
- * `isAdmin` and the write takes `story.tell`. Which powers suit a class is part
- * of what the class IS to this village, and `/api/archetypes/:key/paths` serves
- * it to anybody at the front door beside the class's own words. The editor sits
- * in the same panel as those words, so whoever can reword The Architect can say
- * what The Architect is suited to.
+ * `org.declare` writes it, and an admin OR that same key reads it.
+ *
+ * It used to be the pair `server/routes/archetypes.ts` uses, `isAdmin` to read
+ * and `story.tell` to write, on the reasoning that the editor sits in the same
+ * panel as the words describing a class, so whoever can reword The Architect
+ * can say what The Architect is suited to. Rye ruled that too wide on
+ * 2026-09-23: rewording a class is copy, and saying which powers suit which
+ * character steers who gets entrusted with what. `org.declare`'s own gloss is
+ * the category, "Declare how the village and its circles hold power", and it is
+ * deliberately absent from stage climbing, so it is appointed and never earned.
+ *
+ * THE READ MOVED WITH IT. `org.declare` is transferable, so a village that
+ * transferred it would otherwise have a holder who may write this map and
+ * cannot see it. An admin still reads it holding no key at all.
  *
  * A suggestion permits nothing. The capability gate never reads the map, so
  * this gate being wrong would put the wrong hint in front of a member and could
@@ -51,12 +59,21 @@ export function register(app: Express, deps: Deps): void {
   const { isAdmin, guardCapability, getPool } = deps;
 
   app.get("/api/admin/power-affinity", async (req, res) => {
-    if (!(await isAdmin(req))) {
-      return res.status(401).json({
+    // An admin, or whoever holds the key that writes it. `org.declare` is
+    // transferable, so a village that transferred it would otherwise have a
+    // holder who may edit this map and cannot see what they are editing.
+    // The refusal is handed to the gate rather than left to it: a bare
+    // auth_required would tell somebody who met this door less than the route
+    // told them before, which is the loss `guardCapability`'s own header warns
+    // about. It now names both ways in.
+    const refusal = {
+      status: 401,
+      body: {
         error: "auth_required",
-        message: "Sign in as an admin to see which classes suit which powers.",
-      });
-    }
+        message: "Sign in as an admin, or hold the key that declares how this village holds power, to see which classes suit which powers.",
+      },
+    };
+    if (!(await isAdmin(req)) && !(await guardCapability(req, res, "org.declare", refusal))) return;
     res.json(await affinityForAdmin(getPool(), villageId()));
   });
 
@@ -67,7 +84,12 @@ export function register(app: Express, deps: Deps): void {
    * decision that the power suits nobody.
    */
   app.put("/api/admin/power-affinity/:key", async (req, res) => {
-    if (!(await guardCapability(req, res, "story.tell"))) return;
+    // THE PLAIN, VILLAGE-WIDE QUESTION, never the circle-scoped one. A live
+    // holder of a seat flagged `represents_circle` may declare FOR THAT CIRCLE,
+    // and this map is village-wide, so asking that way would hand every circle
+    // delegate a village-wide power. This module's `Deps` cannot reach the
+    // scoped check, which is the structural half of the same guard.
+    if (!(await guardCapability(req, res, "org.declare"))) return;
     const key = String(req.params.key ?? "").trim();
     const body = (req.body ?? {}) as Record<string, unknown>;
     const classes = Object.prototype.hasOwnProperty.call(body, "classes") ? body.classes : undefined;
