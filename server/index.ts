@@ -15,6 +15,7 @@ import multer from "multer";
 import bcrypt from "bcrypt";
 import { claimPaths, GAME_CONFIG, getStage, stageIndex, withCommitmentName } from "../shared/gameConfig";
 import { recognitionNameCheck } from "../shared/launchRequirements";
+import { signingOf } from "../shared/membershipSigning";
 // `daysRemainingInCycle` is gone with the clock seam: every consumer reads
 // the active clock now, and it had no caller left here. `sceneStopsFor` and
 // `cleanCrewName` go with main's dead-import pass for the same reason,
@@ -3777,14 +3778,21 @@ function firstName(name: string): string {
  * to it, and the two are separate steps now because they were always two
  * different things.
  *
- * NOBODY IS DEMOTED BY THIS. The only surface that has ever posted
- * `membership-508` is the Love Letter page, which sends no `Authorization`
- * header and never has, in any commit. `authedUser` reads that header alone
- * with no cookie fallback, so a real signing has always stored `user_id` NULL
- * and has never once satisfied the rule this removes. Every row that could
- * satisfy it was a request somebody hand-built. Members who are actually here
- * hold `membershipGranted` (the 0058 freeze wrote it) or a `stageGranted`
- * rung, and this function and `computeStage` still answer for both.
+ * NOBODY WAS DEMOTED BY THIS. The only surface that has ever posted
+ * `membership-508` is the Love Letter page, and up to this commit it sent no
+ * `Authorization` header. `authedUser` reads that header alone with no cookie
+ * fallback, so every signing stored before 29473e4 carries `user_id` NULL and
+ * never once satisfied the rule this removes. Every row that could satisfy it
+ * was a request somebody hand-built. Members who are actually here hold
+ * `membershipGranted` (the 0058 freeze wrote it) or a `stageGranted` rung, and
+ * this function and `computeStage` still answer for both.
+ *
+ * READ THAT PARAGRAPH AS HISTORY, because the same commit changed the page.
+ * 29473e4 also made the Love Letter send the header when there is somebody
+ * signed in, which is what gives an accepted signing a person to admit. A
+ * signing made since 2026-08-29 DOES carry `user_id`. In the present tense the
+ * sentence read as a live fact about the page, and on 2026-09-23 a session
+ * believed it and reported the accept flow broken while it works.
  */
 function hasMembership(user: any): boolean {
   return !!user.membershipGranted;
@@ -7964,16 +7972,22 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
      * to admit; the acceptance is still recorded and still means what it says.
      * Matching a typed email to an account is exactly the hole that was closed
      * before this one, and it stays closed.
+     *
+     * AND THE DESK IS TOLD WHICH IT WAS. `rewardRefused` below exists because
+     * "accepted" beside a silent unpaid mint is a lie to a steward, and this
+     * is that shape again: the panel said "Status updated" for a stranger's
+     * signing, which admits nobody, and for a real admission alike. `admitted`
+     * is `null` where the question does not arise, which is every other type
+     * and every re-accept of a row already accepted.
      */
-    if (
-      status === "accepted" &&
-      !wasAccepted &&
-      submissions[idx].type === "membership-508" &&
-      submissions[idx].userId
-    ) {
-      await members.update(String(submissions[idx].userId), (m: any) => {
-        m.membershipGranted = true;
-      });
+    let admitted: boolean | null = null;
+    if (status === "accepted" && !wasAccepted && submissions[idx].type === "membership-508") {
+      admitted = !!submissions[idx].userId;
+      if (admitted) {
+        await members.update(String(submissions[idx].userId), (m: any) => {
+          m.membershipGranted = true;
+        });
+      }
     }
     await submissionsRepo.replaceAll(submissions);
 
@@ -8018,7 +8032,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // sentence, the status moved and the recognition did not, and the desk has
     // to be told which: "accepted" with a silent unpaid mint is the shape this
     // guard exists to stop.
-    res.json({ success: true, rewarded, rewardRefused, notified });
+    res.json({ success: true, rewarded, rewardRefused, notified, admitted });
   });
 
   // Admin: Export Submissions as CSV
@@ -20440,6 +20454,9 @@ ${inner}
     const consentedQuests = await claimsRepo.consentedCount(user.id);
     const stageId = computeStage(user, consentedQuests, await completionsFor(getPool(), user.id), await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()));
     const ctx = await capabilityCtx(user);
+    // One read of the inbox for both answers below. `all()` hands back stamped
+    // copies, so calling it twice would copy every row twice for one filter.
+    const inbox: any[] = submissionsRepo.all();
     res.json({
       stage: servedStage(stageId),
       stageIndex: stageIndex(stageId),
@@ -20452,13 +20469,20 @@ ${inner}
       // The same keys with the closed ones included, and the rung that opens
       // each. `capabilities` above is exactly the rows here whose `held` is
       // true, by construction rather than by agreement.
-      capabilityCatalogue: await withPowerAffinity(capabilityCatalogue(ctx), { pool: getPool(), villageId: villageId(), userId: user.id, stageId, inbox: submissionsRepo.all() }),
+      capabilityCatalogue: await withPowerAffinity(capabilityCatalogue(ctx), { pool: getPool(), villageId: villageId(), userId: user.id, stageId, inbox }),
       roles: rolesFor(user.id),
       history: events
         .filter((e) => e.userId === user.id)
         .sort((a, b) => String(b.at).localeCompare(String(a.at)))
         .map((e) => ({ fromStage: e.fromStage, toStage: e.toStage, unlocked: e.unlocked, reason: e.reason, at: e.at })),
       firsts: await firstTimesFor(user.id),
+      // THE SIGNING THIS ACCOUNT CARRIES. Stored since 29473e4 and readable
+      // nowhere: the only routes over this table are the three under
+      // /api/admin, so the person a signing is about could not see it. Free
+      // here, because `inbox` is already in hand for the catalogue above.
+      // `shared/membershipSigning.ts` holds why the pipeline's own status
+      // words never cross into a member's page.
+      signing: signingOf(inbox, user.id),
     });
   });
 

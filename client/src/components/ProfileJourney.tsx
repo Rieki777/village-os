@@ -8,6 +8,7 @@ import BreathingLoader from "@/components/natural/BreathingLoader";
 import { useMomentWindow } from "@/components/natural/moments";
 import { capabilityLabel } from "@shared/capabilities";
 import { villageMoonLabel } from "@shared/villageMoon";
+import type { MembershipSigning, SigningAnswer } from "@shared/membershipSigning";
 import { claimMoment } from "@/lib/celebrated";
 import { playMoment } from "@/lib/sound";
 import { onProfileRefresh } from "@/lib/profileRefresh";
@@ -141,6 +142,49 @@ function dayOf(at: unknown): string {
   } catch {
     return "";
   }
+}
+
+/**
+ * The village's answer, in the member's own words.
+ *
+ * The pipeline underneath has five statuses and none of them is a sentence for
+ * a person, which is the ruling `server/lib/submissionNotices.ts` made for the
+ * notification spine. `shared/membershipSigning.ts` maps those five onto the
+ * three below and says why each one lands where it does.
+ */
+const SIGNING_WORDS: Record<SigningAnswer, string> = {
+  waiting: "Your membership request is with the village.",
+  welcomed: "The village said yes, and you hold membership.",
+  left: "The village left your membership request where it is for now.",
+};
+
+/**
+ * THE SIGNING THIS ACCOUNT CARRIES.
+ *
+ * A signing made while signed in has named its signer since 2026-08-29, and
+ * the only surfaces that could read it were the three routes under
+ * /api/admin. This is the one place the person it is about can see it, which
+ * is what "stored in that account as a record of them signing it" asked for.
+ *
+ * Null for a member who never signed, and null for every stranger's signing,
+ * which carries no account to show it on.
+ */
+function TheSigning({ signing }: { signing?: MembershipSigning | null }) {
+  if (!signing) return null;
+  const day = dayOf(signing.at);
+  return (
+    <div className="mb-5 border-b border-border pb-4">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Your signing</p>
+      <div className="flex items-start gap-3 text-sm">
+        <ScrollText className="mt-0.5 w-4 h-4 text-notice shrink-0" aria-hidden="true" />
+        <span>
+          <span className="text-card-foreground">You signed the Love Letter</span>
+          <span className="block text-muted-foreground mt-0.5">{SIGNING_WORDS[signing.answer]}</span>
+          {day && <span className="block text-xs text-muted-foreground mt-0.5">{day}</span>}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 function FirstTimes({ firsts }: { firsts?: { vote?: string | null; objection?: string | null; seat?: string | null } | null }) {
@@ -341,6 +385,8 @@ export default function ProfileJourney() {
               ))}
             </div>
           )}
+
+          <TheSigning signing={prog.signing} />
 
           <FirstTimes firsts={prog.firsts} />
 

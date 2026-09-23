@@ -901,6 +901,9 @@ export function SubmissionsTab({ password }: { password: string }) {
       const data = await res.json();
       if (!res.ok) throw new Error();
       if (data.rewarded) toast.success("Accepted. The member was welcomed into the game.");
+      else if (data.admitted) toast.success("Accepted. They hold membership now.");
+      // A stranger signed with no account, so the accept stands and admits nobody.
+      else if (data.admitted === false) toast.success("Accepted. This signing carries no account, so nobody was admitted. Invite them to join.");
       // Whether the person who sent this heard about the move. Members hear;
       // a public form filled in by a stranger has no account to reach, and a
       // founder who knows which is which can pick up the phone.

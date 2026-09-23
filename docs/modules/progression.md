@@ -130,7 +130,11 @@ member-facing reads. Everything else that moves this module's data sits outside 
   Serves `stage` (as played, not as configured), `stageIndex`, `consentedQuests`, `capabilities` (held),
   `capabilityCatalogue` (all of them, with the rung that opens each, on every power the village entrusts
   the classes it `suits` and whether it is `recommended` to this member, and the member's own `hand` on a power
-  while one is up), `roles` (id and name), `history` (this member's stage events, newest first) and `firsts`.
+  while one is up), `roles` (id and name), `history` (this member's stage events, newest first), `firsts`,
+  and `signing`: this member's own Love Letter signing as `at` plus one of `waiting`, `welcomed` or `left`,
+  or null for somebody who never signed. It costs no query, because the inbox is already in hand for the
+  catalogue above. `shared/membershipSigning.ts` maps the pipeline's five statuses onto those three and
+  says why the pipeline's own words (`new`, `reviewing`, `in-conversation`) never reach a member's page.
 - `GET /api/roles` (`server/index.ts`). No auth required, no module gate. Serves the village's SHAPE to
   anyone: role id, name, description, `capabilities`, `minStage`, `circleId`, `seats`, `holderCount`,
   `isExample`. It answers with a **bare array**, not an object; reading `.roles` off it yields `undefined`,

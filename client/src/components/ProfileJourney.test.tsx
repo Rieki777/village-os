@@ -183,3 +183,82 @@ describe("ProfileJourney", () => {
     expect(await screen.findByText("9")).toBeTruthy();
   });
 });
+
+/**
+ * THE SIGNING A MEMBER CAN SEE.
+ *
+ * The signing has been stored against the account since 2026-08-29 and the
+ * only routes over that table are the three under /api/admin, so nobody could
+ * read their own. The cases below are the three answers plus the two shapes
+ * that must draw nothing: a member who never signed, and a payload from a
+ * server that predates the key.
+ */
+describe("the signing on a member's own journey", () => {
+  const withSigning = (signing: unknown) =>
+    routing(async (p) =>
+      p.includes("progression")
+        ? ok({ ...progression, signing })
+        : p.includes("flows")
+          ? ok(flows)
+          : p.includes("ledger")
+            ? ok(ledger)
+            : ok({ received: [] }),
+    );
+
+  it("says they signed, and that the village has it", async () => {
+    withSigning({ at: "2026-08-30T10:00:00.000Z", answer: "waiting" });
+    render(<ProfileJourney />);
+    expect(await screen.findByText("You signed the Love Letter")).toBeTruthy();
+    expect(screen.getByText("Your membership request is with the village.")).toBeTruthy();
+  });
+
+  it("says the village answered yes, which is the act that grants membership", async () => {
+    withSigning({ at: "2026-08-30T10:00:00.000Z", answer: "welcomed" });
+    render(<ProfileJourney />);
+    expect(await screen.findByText("The village said yes, and you hold membership.")).toBeTruthy();
+  });
+
+  it("says the no plainly, because a record that reads waiting forever is false", async () => {
+    withSigning({ at: "2026-08-30T10:00:00.000Z", answer: "left" });
+    render(<ProfileJourney />);
+    expect(
+      await screen.findByText("The village left your membership request where it is for now."),
+    ).toBeTruthy();
+  });
+
+  it("never shows the pipeline's own words", async () => {
+    // `new`, `reviewing`, `in-conversation`, `accepted` and `declined` are the
+    // admin panel's vocabulary. A member should not have to learn it to read
+    // their own page.
+    withSigning({ at: "2026-08-30T10:00:00.000Z", answer: "waiting" });
+    render(<ProfileJourney />);
+    await screen.findByText("You signed the Love Letter");
+    for (const word of ["in-conversation", "reviewing", "declined", "accepted"]) {
+      expect(screen.queryByText(new RegExp(word, "i")), word).toBeNull();
+    }
+  });
+
+  it("draws nothing for a member who never signed, and the rest of the panel still draws", async () => {
+    withSigning(null);
+    render(<ProfileJourney />);
+    expect(await screen.findByText("Your Progression")).toBeTruthy();
+    expect(screen.queryByText("Your signing")).toBeNull();
+  });
+
+  it("draws nothing when the key is absent, so an older server blanks no page", async () => {
+    // `progression` carries no `signing` key at all, which is exactly what a
+    // server one deploy behind sends.
+    routing(async (p) =>
+      p.includes("progression")
+        ? ok(progression)
+        : p.includes("flows")
+          ? ok(flows)
+          : p.includes("ledger")
+            ? ok(ledger)
+            : ok({ received: [] }),
+    );
+    render(<ProfileJourney />);
+    expect(await screen.findByText("Your Progression")).toBeTruthy();
+    expect(screen.queryByText("Your signing")).toBeNull();
+  });
+});
