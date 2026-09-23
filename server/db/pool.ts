@@ -54,7 +54,8 @@ export function getPool(): mysql.Pool {
 /**
  * SAY IT OUT LOUD IF THE PIN DID NOT TAKE.
  *
- * The `SET time_zone` above is fire-and-forget, and a sweep of `server/**`
+ * The `SET time_zone` that `pinSessionZone` runs is fire-and-forget, and a
+ * sweep of `server/**`
  * counted about ten comparisons whose correctness rests entirely on it: the
  * abuse guard's window and the scheduler's dueness check named in the comment
  * above, the ballot close time (`ballots.closes_at`, written by
