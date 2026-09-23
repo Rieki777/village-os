@@ -595,6 +595,12 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
      * whole token of room against a bonus of exactly one, and the refusal has
      * to be the cap's own sentence. Take `mintCapGuard` off `payCircleBonus`
      * and this payment succeeds.
+     *
+     * THE DIAL IS SET THROUGH `setVariable` AND NOT THROUGH `setVar`, because
+     * the guard that decides here runs in THIS process and reads this
+     * process's variable store; the route would only move the child's. It is
+     * put back to the 100000 this case opened with, so the row in the database
+     * ends where the child's cached copy already is.
      */
     const issued = await readCycleIssuance(libPool!, slug, mintCycleStart());
     const tight = Math.ceil(issued.net / oneToken);
