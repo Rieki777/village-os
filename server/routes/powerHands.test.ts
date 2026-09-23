@@ -64,7 +64,7 @@ let server: http.Server;
 let base = "";
 
 async function call(path: string, init?: { method?: string; body?: unknown }) {
-  const r = await fetch(`${base}${path}`, {
+  const r = await fetch(`${base}${path}`, { // module-review-ok: the test client dialling its own in-process server on localhost, as every e2e suite does
     method: init?.method ?? "GET",
     headers: { "Content-Type": "application/json" },
     body: init?.body === undefined ? undefined : JSON.stringify(init.body),
