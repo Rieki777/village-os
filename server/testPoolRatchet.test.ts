@@ -54,7 +54,7 @@ function run(dir: string, baselinePath: string, extra: string[] = []) {
   return { status: r.status ?? -1, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
 }
 
-const UNPINNED = `const p = mysql.createPool({ uri: db.url, timezone: "Z" });\n`; // test-pool-ok: a fixture string, never a pool
+const UNPINNED = `const p = mysql.createPool({ uri: db.url, timezone: "Z" });\n`; // test-pool-ok: a fixture string, never a pool. module-review-ok: a string this guard scans, not a query it runs
 const PINNED = `const p = testPool(db, { connectionLimit: 2 });\n`;
 
 describe("the test-pool timezone ratchet", () => {
@@ -79,7 +79,7 @@ describe("the test-pool timezone ratchet", () => {
   });
 
   it("honours a waiver ON THE LINE, and ignores one on the line above", () => {
-    const onTheLine = `const p = mysql.createPool({ uri: db.url }); // test-pool-ok: the pin is what this measures\n`;
+    const onTheLine = `const p = mysql.createPool({ uri: db.url }); // test-pool-ok: the pin is what this measures\n`; // module-review-ok: a fixture string this guard scans, not a query it runs
     const lineAbove = `// test-pool-ok: this does nothing here\nconst p = mysql.createPool({ uri: db.url });\n`;
     const good = fixture({ "a.test.ts": onTheLine }, 0);
     expect(run(good.dir, good.baselinePath).status).toBe(0);
