@@ -1591,9 +1591,44 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const t = adminView.json.modules.find((m: any) => m.id === "tools");
     expect(t.group).toBe("coordinate");
     expect(t.setup).toBe("optional");
-    expect(t.ready).toEqual({ ready: false, hint: "Add one tool card first" });
+    // The hint AND the address it sends a founder to. Tools' setup is content
+    // made on its own screen, so the target is that tab rather than a dial.
+    expect(t.ready).toEqual({
+      ready: false,
+      hint: "Add one tool card first",
+      target: { kind: "tab", tab: "tools-admin", label: "Tools Hub" },
+    });
     expect(t.maxLifecycle).toBe("public");
-    expect(adminView.json.modules.find((m: any) => m.id === "events").ready).toBeNull();
+    /*
+     * THIS LINE USED TO NAME EVENTS, and it was defending the defect.
+     *
+     * A module whose setup is "none" gets no reader, so `ready` is null, and
+     * events was the example. But events owns `calendar.hemisphere`, whose
+     * default is "north": right in Costa Rica and upside down south of the
+     * equator, with the module telling every fork there was nothing to set up.
+     * Events says `required` now, so a green here meant the bug was still in
+     * place. `network` carries the example instead: it owns no dials at all
+     * and works the moment it is on.
+     */
+    expect(adminView.json.modules.find((m: any) => m.id === "network").ready).toBeNull();
+    const ev = adminView.json.modules.find((m: any) => m.id === "events");
+    expect(ev.setup).toBe("required");
+    // A fresh village has answered nothing, so the calendar is not ready and
+    // says which dial it is waiting on.
+    expect(ev.ready).toEqual({
+      ready: false,
+      hint: "Say which hemisphere this village is in first",
+      target: { kind: "setting", key: "calendar.hemisphere", label: "Hemisphere" },
+    });
+    // ANSWERING IS ENOUGH, and answering with the platform's own value counts:
+    // that is the whole point of keeping the row. This writes "north", which
+    // every other dial would have stored as a deletion.
+    const answered = await api(
+      "PUT", "/api/admin/variables/calendar.hemisphere", { value: "north" }, founderToken,
+    );
+    expect(answered.status).toBe(200);
+    const afterAnswer = await api("GET", "/api/admin/modules", undefined, founderToken);
+    expect(afterAnswer.json.modules.find((m: any) => m.id === "events").ready.ready).toBe(true);
     expect(adminView.json.modules.find((m: any) => m.id === "feed").maxLifecycle).toBe("off");
 
     // preview -> public writes the module_events lifecycle row (the Go-live
