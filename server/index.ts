@@ -130,8 +130,8 @@ import {
   decodeToken,
   encodeToken,
   makeSetPasswordToken,
-  passwordFingerprint,
   readSetPasswordToken,
+  setPasswordLinkRefusal,
 } from "./lib/memberTokens";
 import { buildThemeCss, sanitizeFontName } from "./lib/themeCss";
 import { applyTimingOf, ringOf, VARIABLES_BY_KEY } from "../shared/gameVariables";
@@ -8288,7 +8288,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       // password cannot log in and cannot ask for a reset. Re-running bootstrap
       // (break-glass path) re-sends a fresh claim link for exactly that case.
       if (!user.passwordHash) {
-        const claim = makeSetPasswordToken(AUTH_TOKEN_SECRET, user.id, user.passwordHash);
+        const claim = makeSetPasswordToken(AUTH_TOKEN_SECRET, user.id, user.tokenVersion ?? 0);
         claimUrl = `${(process.env.FRONTEND_URL || "").replace(/\/$/, "")}/set-password?token=${encodeURIComponent(claim)}`;
         try {
           const mail = await sendResendEmail({
@@ -8321,7 +8321,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
         joinedAt: new Date().toISOString(),
       };
       await members.add(user);
-      const claim = makeSetPasswordToken(AUTH_TOKEN_SECRET, userId, "");
+      const claim = makeSetPasswordToken(AUTH_TOKEN_SECRET, userId, user.tokenVersion ?? 0);
       claimUrl = `${(process.env.FRONTEND_URL || "").replace(/\/$/, "")}/set-password?token=${encodeURIComponent(claim)}`;
       try {
         const mail = await sendResendEmail({
@@ -8440,21 +8440,20 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     if (!claim) return res.status(401).json({ error: "This link is invalid or has expired" });
     const user = await members.byId(claim.userId);
     if (!user) return res.status(404).json({ error: "Account not found" });
-    // SINGLE USE. The token carries a fingerprint of the password state it
-    // was minted against; writing a new password invalidates it, so a link
-    // that leaks (mail archive, forwarded thread, shared browser) cannot be
-    // replayed inside its hour to take the account back.
-    if (claim.pw !== null && claim.pw !== passwordFingerprint(AUTH_TOKEN_SECRET, user.passwordHash)) {
-      return res.status(401).json({ error: "This link has already been used. Ask for a new one." });
-    }
+    // SINGLE USE: the link is bound to the tokenVersion it was minted at (setPasswordLinkRefusal).
+    const refusal = setPasswordLinkRefusal(claim, user.tokenVersion);
+    if (refusal) return res.status(401).json({ error: refusal });
     const hash = await hashPassword(String(password));
     // Bump tokenVersion in the SAME update: setting a password ends every
-    // session that existed before it. That is the semantics account recovery
-    // needs — a stolen password must not survive the reset that answers it.
+    // session and every set-password link that existed before it. Recovery
+    // needs that: a stolen password must not survive the reset that answers it.
+    const lost = { refusal: null as string | null }; // asked again under the row lock: two clicks, one landing
     const fresh = await members.update(user.id, (u: any) => {
+      if ((lost.refusal = setPasswordLinkRefusal(claim, u.tokenVersion))) return;
       u.passwordHash = hash;
       u.tokenVersion = (u.tokenVersion ?? 0) + 1;
     });
+    if (lost.refusal) return res.status(401).json({ error: lost.refusal });
     if (!fresh) return res.status(404).json({ error: "Account not found" });
     const authTokenStr = encodeToken(AUTH_TOKEN_SECRET, fresh.id, fresh.email, fresh.tokenVersion ?? 0);
     res.json({ success: true, token: authTokenStr, user: publicUser(fresh) });
@@ -8487,7 +8486,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       return res.status(403).json({ error: "Only a founder can send a founder a password link" });
     }
     if (!target.email) return res.status(409).json({ error: "That account has no address to send to" });
-    const claim = makeSetPasswordToken(AUTH_TOKEN_SECRET, target.id, target.passwordHash);
+    const claim = makeSetPasswordToken(AUTH_TOKEN_SECRET, target.id, target.tokenVersion ?? 0);
     const claimUrl = `${notifyDeps.origin()}/set-password?token=${encodeURIComponent(claim)}`;
     let emailed = true;
     try {
