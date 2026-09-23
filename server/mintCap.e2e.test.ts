@@ -181,8 +181,7 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
     }
     dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-mint-cap-"));
     testDb = await provisionTestDb();
-    // module-review-ok: the S5 scratch-schema harness pool, the shape server/lib/circleBonus.test.ts uses
-    libPool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 });
+    libPool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the S5 scratch-schema harness pool, the shape server/lib/circleBonus.test.ts uses
     await waitForPortFree(PORT);
     child = spawn(process.execPath, [DIST], {
       env: {
