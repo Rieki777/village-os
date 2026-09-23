@@ -85,8 +85,11 @@ describe("reading a vendor record", () => {
     // allowed by default, and a name would ride in behind it.
     const r = readVendorRecord("circle", {
       "Circle Name": "Land & Ecology",
-      "Primary Contact": "ana@example.test",
+      // Out of alphabetical order on purpose: the assertion below pins the
+      // fact that what was left behind comes back sorted, so a steward reading
+      // it is not handed the vendor's arrival order as though it meant something.
       "Steward Phone": "+506 8888 8888",
+      "Primary Contact": "ana@example.test",
     });
     expect(r.fields).toEqual({ "Circle Name": "Land & Ecology" });
     expect(r.ignored).toEqual(["Primary Contact", "Steward Phone"]);
