@@ -717,9 +717,11 @@ export interface CapabilityCtx {
   badgeDenies?: readonly string[];
   isAdmin?: boolean;
   /**
-   * The actor's ACCOUNT role is `founder`, the stored value a player reads as
-   * Catalyst. Only the break-glass step reads it (Rye, 2026-09-21), and it is
-   * never enough on its own: see BREAK_GLASS_SEAT.
+   * The actor's ACCOUNT role is `founder`, read off the user record. What a
+   * village calls that role on its own screens is the client's business and
+   * never this file's: the gate knows the stored value and no label. Only the
+   * break-glass step reads this (Rye, 2026-09-21), and it is never enough on
+   * its own: see BREAK_GLASS_SEAT.
    */
   isFounder?: boolean;
   /**
