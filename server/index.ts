@@ -92,12 +92,12 @@ import { landingRow } from "./lib/applyDue";
 import { closeActivityLine, decisionLink, notifyRollRows, tellRollTheOutcome, type RollNotice } from "./lib/ballotNotices";
 import { isPresentMember, presenceTest } from "./lib/memberPresence";
 import { runSeasonReminders } from "./lib/seasonReminders";
-import { forgetStewardActs, holdingHasLapsed, recordTermStarted, runTermWatch, setVetoWindowCheck, STEWARD_VETO, stewardMailRefusal, termWatchLookaheadDays } from "./lib/stewardship";
+import { forgetStewardActs, holdingHasLapsed, recordTermStarted, roleCapabilityList, runTermWatch, setVetoWindowCheck, STEWARD_VETO, stewardMailRefusal, termWatchLookaheadDays } from "./lib/stewardship";
 import { freezeSeatTerm } from "./repos/ballotSeatTerms";
 import { roleVoteDays, seatVoteLandsAt, termForCarriedSeat } from "./lib/seatTermLanding";
 import { raisedHandTerm } from "./lib/raisedHandTerm";
 import { resolveSeatTerm, type SeatCalendar } from "../shared/seatTerms";
-import { decideRoleCapabilities, liveHolderCount, liveHoldersOfCapability, stewardSeatRefusal } from "./lib/roleGrants";
+import { carriesCapability, decideRoleCapabilities, liveHolderCount, liveHoldersOfCapability, stewardSeatRefusal } from "./lib/roleGrants";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
 import { type ConsentActor, register as registerQuestClaimRoutes } from "./routes/questClaims";
 import { register as registerHousingRoutes } from "./routes/housing";
@@ -3064,8 +3064,9 @@ function lapseContext(): LapseContext {
  * down with the move that emptied that neighbourhood.)
  */
 /**
- * WHO HOLDS THE REDEMPTION KEY, for the door that has to know whether this
- * village has a steward at all (Rye, 2026-09-15).
+ * WHO HOLDS A POWER RIGHT NOW, for the doors that have to know whether this
+ * village has anybody in the chair (Rye, 2026-09-15 for redemption, and again
+ * 2026-09-23 for a raised hand).
  *
  * The counting rule is `liveHoldersOfCapability`, which walks the gate's own
  * planes and deliberately leaves out the admin short-circuit. This function is
@@ -3076,8 +3077,13 @@ function lapseContext(): LapseContext {
  * dormant badge grants nothing while its season is not running, and a deny is
  * never dormant (0050), so a sleeping badge cannot make somebody a steward and
  * a warning badge still takes it away.
+ *
+ * IT TAKES THE CAPABILITY because a second caller arrived and the alternative
+ * was a second copy of the badge-plane read. It answered `redemption.confirm`
+ * alone until 2026-09-23; `redemptionKeyHolders` below is that same call under
+ * its old name, so the redemption routes are handed exactly what they were.
  */
-async function redemptionKeyHolders(): Promise<string[]> {
+async function liveHoldersOf(capability: string): Promise<string[]> {
   const badges: Record<string, { grants: string[]; denies: string[] }> = {};
   if (effectiveLifecycle("badges") !== "off") {
     const asleep = new Set(await dormantBadgeIds());
@@ -3092,7 +3098,24 @@ async function redemptionKeyHolders(): Promise<string[]> {
       plane.denies.push(...parse((r as any).denies));
     }
   }
-  return liveHoldersOfCapability(loadRoleHolders(), loadRoles(), "redemption.confirm", new Date(), badges);
+  return liveHoldersOfCapability(loadRoleHolders(), loadRoles(), capability, new Date(), badges);
+}
+
+/** The redemption door's own question, unchanged: who can confirm one today. */
+const redemptionKeyHolders = (): Promise<string[]> => liveHoldersOf("redemption.confirm");
+
+/**
+ * Which of this village's roles carry a power, so a seat vote knows where to
+ * seat somebody. `carriesCapability` is `liveHoldersOfCapability`'s own test,
+ * exported rather than re-spelled: a role this says carries the key is exactly
+ * a role whose holders that function counts.
+ *
+ * Example roles are left out. A vote cannot seat anybody in one.
+ */
+function rolesCarrying(capability: string): Array<{ id: string; name: string }> {
+  return loadRoles()
+    .filter((r: any) => !r.isExample && carriesCapability(roleCapabilityList(r.capabilities), capability))
+    .map((r: any) => ({ id: String(r.id), name: String(r.name ?? r.id) }));
 }
 
 async function capabilityCtx(user: any) {
@@ -20017,7 +20040,7 @@ ${inner}
   registerCharacterPortraitRoutes(app, { authedUser, getPool, uploadsDir: UPLOADS_DIR });
   registerArchetypeAdminRoutes(app, { isAdmin, guardCapability, getPool });
   registerPowerAffinityRoutes(app, { isAdmin, guardCapability, getPool });
-  registerPowerHandRoutes(app, { authedUser, capabilityCtx, stageOf, firstName, notifyAdmins, getPool, overLimit, submissionsRepo });
+  registerPowerHandRoutes(app, { authedUser, capabilityCtx, stageOf, firstName, isPresent: (m: any) => isPresentMember(m, AUTH_TOKEN_SECRET), members, notifyAdmins, getPool, overLimit, submissionsRepo, liveHoldersOf, rolesCarrying, openSeatVote: (ask) => openSeatVote(ask) });
 
   /** The five classes, as this village names them. Public: it is the front door. */
   app.get("/api/archetypes", async (_req, res) => {
@@ -25318,36 +25341,67 @@ ${inner}
    * destination, and the way there is `progression.unlock.ballot.vote`, a
    * mechanic the whole roll changes in one vote about a rule.
    */
-  app.post("/api/governance/role-seats", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required" });
-    const ctx = await capabilityCtx(user);
-    if (await refuseUnlessMemberMayOpen(req, res, ctx, "Seating somebody in a role")) return;
+  /**
+   * ── OPENING A SEAT VOTE, ONCE, FOR EVERY DOOR THAT OPENS ONE ──────────────
+   *
+   * Lifted whole out of `POST /api/governance/role-seats` on 2026-09-23, when
+   * a second door onto the same act arrived: a member putting a standing hand
+   * for a power to the village (server/routes/powerHands.ts). Nothing about the
+   * checks, the term, the document or the notice changed in the move.
+   *
+   * ONE FUNCTION RATHER THAN TWO COPIES, for the reason `carriedBy` is exported
+   * from shared/capabilities.ts: every check below is a rule about what a
+   * village may vote on, and a rule with two spellings grows a lenient one, and
+   * the lenient one is the one somebody finds. The refusal about `ballot.vote`
+   * and `member.vouch` is the sharpest example. A second seat-vote path that
+   * forgot it would let a few members choose who else gets a say.
+   *
+   * WHAT THE TWO DOORS DO DIFFER ON IS WHO MAY KNOCK, and that stays at each
+   * route. This one asks for `proposal.open` held as a member
+   * (`refuseUnlessMemberMayOpen`). The hand route asks Rye's ruling of
+   * 2026-09-23 instead (`whoMayPutHandToVillage`, shared/powerHands.ts).
+   *
+   * The caller owns the reply, so a refusal comes back as a status and a body
+   * rather than being sent from here.
+   */
+  interface SeatVoteAsk {
+    userId: string;
+    roleId: string;
+    /** Why this person for this role. The whole roll reads it before voting. */
+    reason: string;
+    termEndsOn?: unknown;
+    /** Who is opening it: named on the document, and not rung by the notice. */
+    openedBy: { id: string; name: string };
+  }
+  type SeatVoteResult =
+    | { ok: true; ballot: any }
+    | { ok: false; status: number; body: Record<string, unknown> };
 
-    const userId = String(req.body?.userId ?? "").trim();
-    const roleId = String(req.body?.roleId ?? "").trim();
-    const reason = String(req.body?.reason ?? "").trim().slice(0, 20000);
+  async function openSeatVote(ask: SeatVoteAsk): Promise<SeatVoteResult> {
+    const { userId, roleId, reason } = ask;
+    const user = ask.openedBy;
+    const no = (status: number, body: Record<string, unknown>): SeatVoteResult => ({ ok: false, status, body });
 
     const role = rolesRepo.all().find((r: any) => r.id === roleId) as any;
-    if (!role) return res.status(404).json({ error: "There is no role by that name." });
+    if (!role) return no(404, { error: "There is no role by that name." });
     if (role.isExample) {
-      return res.status(409).json({ error: "That is one of the platform's example roles, not one of this village's. Declare a role of your own first." });
+      return no(409, { error: "That is one of the platform's example roles, not one of this village's. Declare a role of your own first." });
     }
     const carried = ((role.capabilities ?? []) as string[]).filter((c) =>
       ["ballot.vote", "member.vouch"].includes(c), // superVouch absent: SUPER_VOUCH_PLACEMENT
     );
     if (carried.length) {
-      return res.status(409).json({
+      return no(409, {
         error:
           `${role.name ?? roleId} carries ${carried.join(" and ")}, so seating somebody in it would be a few members choosing who else gets a say. ` +
           "Who votes here is a rule of the game, and the village changes it the way it changes any rule: open a rule change on the rung that decides who is on the roll, and the whole roll decides it.",
       });
     }
     const member = await members.byId(userId);
-    if (!member) return res.status(404).json({ error: "There is no member by that id." });
-    if (isExampleUser(member)) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
+    if (!member) return no(404, { error: "There is no member by that id." });
+    if (isExampleUser(member)) return no(409, EXAMPLE_REFUSAL_BODY);
     if (loadRoleHolders().some((h) => h.roleId === roleId && h.userId === userId)) {
-      return res.status(409).json({
+      return no(409, {
         error: `${firstName(member.name)} already sits in ${role.name ?? roleId}. There is nothing for the village to decide here.`,
       });
     }
@@ -25357,30 +25411,30 @@ ${inner}
     if (role.minStage) {
       const needed = stageIndex(role.minStage);
       if (needed >= 0 && stageIndex(await stageOf(member)) < needed) {
-        return res.status(409).json({
+        return no(409, {
           error: `${firstName(member.name)} has not reached the ${getStage(role.minStage)?.name ?? role.minStage} stage this role asks for.`,
           minStage: role.minStage,
         });
       }
     }
     if (userId.includes("@") || roleId.includes("@")) {
-      return res.status(400).json({ error: "A member and a role are both named without an @ in them." });
+      return no(400, { error: "A member and a role are both named without an @ in them." });
     }
     const subjectRef = `${userId}@${roleId}`;
     if (subjectRef.length > 64) {
-      return res.status(409).json({ error: "That role's name is too long for the record to hold beside the member. Shorten the role id first." });
+      return no(409, { error: "That role's name is too long for the record to hold beside the member. Shorten the role id first." });
     }
     if (reason.length < 40) {
-      return res.status(400).json({
+      return no(400, {
         error: "Say why this person for this role. The whole roll reads this before voting.",
       });
     }
 
     const setup = await roleBallotSetup();
-    if (setup.tokenProblem) return res.status(409).json({ error: setup.tokenProblem });
+    if (setup.tokenProblem) return no(409, { error: setup.tokenProblem });
 
-    const term = resolveSeatTerm({ requestedEndsOn: req.body?.termEndsOn, calendar: seatCalendar(), capAtSeasonEnd: ((role.capabilities ?? []) as string[]).includes(STEWARD_VETO), now: new Date(), startsNoEarlierThan: seatVoteLandsAt(landingDeps(), setup.durationDays) });
-    if (!term.ok) return res.status(409).json({ error: term.error, code: term.code });
+    const term = resolveSeatTerm({ requestedEndsOn: ask.termEndsOn, calendar: seatCalendar(), capAtSeasonEnd: ((role.capabilities ?? []) as string[]).includes(STEWARD_VETO), now: new Date(), startsNoEarlierThan: seatVoteLandsAt(landingDeps(), setup.durationDays) });
+    if (!term.ok) return no(409, { error: term.error, code: term.code });
     const can = roleConsequences(role);
     const who = role.name ?? roleId;
     const title = `${who}: the village asks ${firstName(member.name)} to sit in it`;
@@ -25428,7 +25482,7 @@ ${inner}
       openedBy: user.id,
       electorate: setup.electorate,
     });
-    if (!result.ok) return res.status(409).json({ error: result.error, ballotId: result.alreadyOpen?.id ?? null });
+    if (!result.ok) return no(409, { error: result.error, ballotId: result.alreadyOpen?.id ?? null });
 
     await addActivity("governance", `The village is deciding whether ${firstName(member.name)} sits in ${who}.`, {
       actorUserId: user.id,
@@ -25443,7 +25497,23 @@ ${inner}
       except: [user.id],
       roll: setup.electorate.map((e) => e.userId),
     });
-    res.json({ success: true, ballot: await serveBallot(result.ballot, user.id) });
+    return { ok: true, ballot: result.ballot };
+  }
+
+  app.post("/api/governance/role-seats", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    const ctx = await capabilityCtx(user);
+    if (await refuseUnlessMemberMayOpen(req, res, ctx, "Seating somebody in a role")) return;
+    const opened = await openSeatVote({
+      userId: String(req.body?.userId ?? "").trim(),
+      roleId: String(req.body?.roleId ?? "").trim(),
+      reason: String(req.body?.reason ?? "").trim().slice(0, 20000),
+      termEndsOn: req.body?.termEndsOn,
+      openedBy: user,
+    });
+    if (!opened.ok) return res.status(opened.status).json(opened.body);
+    res.json({ success: true, ballot: await serveBallot(opened.ballot, user.id) });
   });
 
   /**
