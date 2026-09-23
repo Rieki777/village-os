@@ -144,19 +144,10 @@ async function hold(cap: string): Promise<void> {
   expect(moved.status, `${cap}: ${moved.text}`).toBe(200);
 }
 
-beforeAll(async () => {
-  if (!DB_CONFIGURED) return;
-  if (!fs.existsSync(DIST)) {
-    throw new Error(`${DIST} is missing. Run \`pnpm build\` before the glass handle test.`);
-  }
-  dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-glass-handle-"));
-  testDb = await provisionTestDb();
-  pool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+/** The server's own output, kept across restarts so a failed boot can print it. */
+const serverLogs: string[] = [];
 
-  // Refuse a port a stranger is already holding, and wait out the previous
-  // suite's server if it has not let go yet. The boot poll below breaks on ANY
-  // 200 on this port, so without this an orphan answers it and the whole
-  // scenario runs against the wrong server. See waitForPortFree in ./db/testDb.
+async function bootServer(): Promise<void> {
   await waitForPortFree(PORT);
   child = spawn(process.execPath, [DIST], {
     env: {
@@ -172,7 +163,7 @@ beforeAll(async () => {
       // is its subject.
       SCHEDULER_ENABLED: "0",
       DATA_DIR: dataDir,
-      DATABASE_URL: testDb.url,
+      DATABASE_URL: testDb!.url,
       ADMIN_PASSWORD: ADMIN,
       AUTH_TOKEN_SECRET: "glass-handle-token-secret", // module-review-ok: a fixture signing secret for a throwaway server on a scratch schema, same as every e2e suite
       RESEND_API_KEY: "",
@@ -180,13 +171,51 @@ beforeAll(async () => {
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
-  const logs: string[] = [];
-  child.stdout?.on("data", (d) => logs.push(String(d)));
-  child.stderr?.on("data", (d) => logs.push(String(d)));
+  child!.stdout?.on("data", (d) => serverLogs.push(String(d)));
+  child!.stderr?.on("data", (d) => serverLogs.push(String(d)));
 
   // Reports the last /health answer and when the server logged that it was
   // listening, and stops at once if the child died. See ./db/e2eBoot.ts.
-  await waitForHealth({ base: BASE, logs, child });
+  await waitForHealth({ base: BASE, logs: serverLogs, child });
+}
+
+/**
+ * RYE, 2026-09-21: only a founder seated as a steward with the veto may break
+ * the glass (`BREAK_GLASS_SEAT` in shared/capabilities.ts). This suite drives
+ * the glass on purpose, so its founder sits in that seat. A seat carrying the
+ * veto is filled by a role_seat ballot and by no admin route, so it is written
+ * underneath the role cache and the server comes back up to read it.
+ * `server/founderOverride.routes.e2e.test.ts` drives everybody the glass
+ * refuses.
+ */
+async function seatFounderAsSteward(founderId: string): Promise<void> {
+  child?.kill();
+  await new Promise((r) => setTimeout(r, 500));
+  await pool.query( // module-review-ok: fixture SQL standing in for a carried role_seat ballot, against the scratch schema
+    "INSERT INTO roles (id, name, description, capabilities, sort_order) VALUES (?,?,?,?,?)",
+    ["steward", "Steward", "Can stop a carried decision inside its window.", JSON.stringify(["steward.veto"]), 0],
+  );
+  await pool.query( // module-review-ok: fixture SQL standing in for a carried role_seat ballot, against the scratch schema
+    "INSERT INTO role_holders (id, role_id, user_id, granted_by, term_ends_at) VALUES (?,?,?,?,?)",
+    [`rh-steward-${founderId}`.slice(0, 64), "steward", founderId, "bal-role-seat", new Date(Date.now() + 365 * 864e5)],
+  );
+  await bootServer();
+}
+
+beforeAll(async () => {
+  if (!DB_CONFIGURED) return;
+  if (!fs.existsSync(DIST)) {
+    throw new Error(`${DIST} is missing. Run \`pnpm build\` before the glass handle test.`);
+  }
+  dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-glass-handle-"));
+  testDb = await provisionTestDb();
+  pool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+
+  // Refuse a port a stranger is already holding, and wait out the previous
+  // suite's server if it has not let go yet. The boot poll below breaks on ANY
+  // 200 on this port, so without this an orphan answers it and the whole
+  // scenario runs against the wrong server. See waitForPortFree in ./db/testDb.
+  await bootServer();
 
   const boot = await call("POST", "/api/admin/bootstrap", {
     password: ADMIN, email: `founder-${PORT}@example.test`, name: "Glass Founder",
@@ -194,6 +223,7 @@ beforeAll(async () => {
   const claim = decodeURIComponent(String(boot.json?.claimUrl ?? "").match(/token=([^&]+)/)?.[1] ?? "");
   const setPw = await call("POST", "/api/auth/set-password", { token: claim, password: PASSWORD }, "");
   founderToken = String(setPw.json?.token ?? "");
+  const founderId = String(setPw.json?.user?.id ?? "");
   expect(founderToken, "the founder must hold a session").toBeTruthy();
 
   const mods = await call("GET", "/api/admin/modules");
@@ -232,6 +262,10 @@ beforeAll(async () => {
   expect(gathering.status, gathering.text).toBe(200);
   eventId = String(gathering.json?.id ?? gathering.json?.event?.id ?? "");
   expect(eventId, "the calendar write must hand back an id").toBeTruthy();
+
+  // The founder breaks the glass below, so the founder sits where the
+  // ruling says the glass is kept. See seatFounderAsSteward.
+  await seatFounderAsSteward(founderId);
 }, 300_000);
 
 afterAll(async () => {

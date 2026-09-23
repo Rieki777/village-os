@@ -770,7 +770,7 @@ function AdminGate({ onAuth }: { onAuth: (token: string) => void }) {
           </p>
           <button
             onClick={() => logout()}
-            className="w-full py-3 bg-teal-deep text-white rounded-lg font-medium hover:bg-teal-deep/90 transition-colors"
+            className="w-full py-3 bg-teal-deep text-white rounded-lg font-medium hover:bg-teal-deep-dark transition-colors"
           >
             Sign out and switch accounts
           </button>
@@ -838,7 +838,7 @@ function AdminGate({ onAuth }: { onAuth: (token: string) => void }) {
           <button
             type="submit"
             disabled={checking}
-            className="w-full py-3 bg-teal-deep text-white rounded-lg font-medium hover:bg-teal-deep/90 disabled:opacity-60 transition-colors"
+            className="w-full py-3 bg-teal-deep text-white rounded-lg font-medium hover:bg-teal-deep-dark disabled:opacity-60 transition-colors"
           >
             {checking ? "Signing in..." : "Sign in"}
           </button>
@@ -1139,7 +1139,7 @@ function EmailSettingsTab({ password, openIntegrations }: { password: string; op
         <button
           onClick={save}
           disabled={saving || loading}
-          className="flex items-center gap-2 px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep/90 disabled:opacity-50 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep-dark disabled:opacity-50 transition-colors"
         >
           <Save className="w-4 h-4" /> {saving ? "Saving..." : "Save"}
         </button>
@@ -1532,7 +1532,7 @@ function InvestorInboxCard({ password }: { password: string }) {
         <button
           onClick={save}
           disabled={saving || loading || loadFailed}
-          className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-teal-deep text-white rounded-lg text-xs font-medium hover:bg-teal-deep/90 disabled:opacity-50 transition-colors"
+          className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-teal-deep text-white rounded-lg text-xs font-medium hover:bg-teal-deep-dark disabled:opacity-50 transition-colors"
         >
           <Save className="w-3.5 h-3.5" /> {saving ? "Saving..." : "Save"}
         </button>
@@ -1744,7 +1744,7 @@ function InvestorVaultTab({ password }: { password: string }) {
         <button
           type="submit"
           disabled={uploading || !file}
-          className="flex items-center gap-2 px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep/90 disabled:opacity-50 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep-dark disabled:opacity-50 transition-colors"
         >
           <Upload className="w-4 h-4" /> {uploading ? "Uploading..." : "Upload"}
         </button>
@@ -2013,7 +2013,7 @@ function UploadedFilesTab({ password }: { password: string }) {
                   <button
                     onClick={() => setArmed(true)}
                     disabled={busy || !report.complete}
-                    className="flex items-center gap-2 px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep/90 disabled:opacity-50 transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep-dark disabled:opacity-50 transition-colors"
                   >
                     <Trash2 className="w-4 h-4" /> Remove these {orphans.length} file(s)
                   </button>
@@ -2214,7 +2214,7 @@ function TrainingModulesTab({ password }: { password: string }) {
       <div className="flex gap-2">
         <button
           onClick={save}
-          className="flex items-center gap-2 px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep/90 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep-dark transition-colors"
         >
           <Save className="w-4 h-4" /> Save
         </button>
@@ -2240,7 +2240,7 @@ function TrainingModulesTab({ password }: { password: string }) {
         {editingId === null && (
           <button
             onClick={startNew}
-            className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep/90 transition-colors"
+            className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep-dark transition-colors"
           >
             Add Module
           </button>
@@ -2430,7 +2430,7 @@ function FaqAdminTab({ password }: { password: string }) {
         />
         <button
           onClick={add}
-          className="flex items-center gap-2 px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep/90 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep-dark transition-colors"
         >
           <Plus className="w-4 h-4" /> Add Question
         </button>
@@ -2610,7 +2610,7 @@ function MilestonesAdminTab({ password }: { password: string }) {
           <p className="text-sm text-gray-500 mt-1">Edit the Build Progress tracker shown on the homepage.</p>
         </div>
         {!adding && (
-          <button onClick={() => setAdding(true)} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep/90">
+          <button onClick={() => setAdding(true)} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep-dark">
             Add Milestone
           </button>
         )}
@@ -2822,7 +2822,7 @@ function VisitAdminTab({ password }: { password: string }) {
           <h2 className="text-xl font-bold text-gray-900">Visit Program</h2>
           <p className="text-sm text-gray-500 mt-1">Controls the /visit page.</p>
         </div>
-        <button onClick={save} disabled={saving || loading} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep/90 disabled:opacity-50">
+        <button onClick={save} disabled={saving || loading} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep-dark disabled:opacity-50">
           {saving ? "Saving..." : "Save"}
         </button>
       </div>
@@ -2941,7 +2941,7 @@ function InvestorSummaryAdminTab({ password }: { password: string }) {
           <h2 className="text-xl font-bold text-gray-900">Investor Financial Summary</h2>
           <p className="text-sm text-gray-500 mt-1">Plain-language summary shown on /investor.</p>
         </div>
-        <button onClick={save} disabled={saving || loading} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep/90 disabled:opacity-50">
+        <button onClick={save} disabled={saving || loading} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep-dark disabled:opacity-50">
           {saving ? "Saving..." : "Save"}
         </button>
       </div>
@@ -9117,7 +9117,7 @@ function BrandImageField({
         )}
       </div>
 
-      <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-deep text-white text-xs font-medium cursor-pointer hover:opacity-90">
+      <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-deep text-white text-xs font-medium cursor-pointer hover:bg-teal-deep-dark">
         <Upload className="w-3.5 h-3.5" />
         {value ? "Replace image" : "Upload image"}
         <input

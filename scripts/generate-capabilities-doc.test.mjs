@@ -74,6 +74,8 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   "council.vote": false,
 };
 
+export const BREAK_GLASS_SEAT: Capability = "garden.plan";
+
 export function isDeniable(cap: string): boolean {
   return DENIABLE[cap as Capability] === true;
 }
@@ -289,6 +291,14 @@ await check("a rung naming a stage the ladder does not have refuses", async () =
     { "capabilities.ts": CAPABILITIES.replace(`"garden.tend": "member",`, `"garden.tend": "elder",`) },
     /STAGE_UNLOCKS/,
     /elder/,
+  );
+});
+
+await check("a break-glass seat naming a key the list does not hold refuses", async () => {
+  await refuses(
+    { "capabilities.ts": CAPABILITIES.replace(`BREAK_GLASS_SEAT: Capability = "garden.plan"`, `BREAK_GLASS_SEAT: Capability = "garden.keys"`) },
+    /BREAK_GLASS_SEAT/,
+    /garden\.keys/,
   );
 });
 

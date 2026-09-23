@@ -126,7 +126,7 @@ export default function WorkWithUs() {
           <div className="container max-w-2xl mx-auto px-4 text-center">
             <CheckCircle2 className="w-14 h-14 text-amber-on-band mx-auto mb-6" />
             <h1 className="font-display text-4xl font-bold mb-4">Your proposal is with us</h1>
-            <p className="text-white/80 text-lg">
+            <p className="text-white text-lg">
               Thank you for offering your gifts to {projectName}. We review every proposal with care.
               Please allow up to a month for a thoughtful response, and room for conversation and revision.
             </p>
@@ -147,7 +147,7 @@ export default function WorkWithUs() {
           <h1 className="font-display text-4xl md:text-5xl font-bold mb-4">
             Build and grow alongside {projectName}
           </h1>
-          <p className="text-white/80 text-lg max-w-2xl leading-relaxed">
+          <p className="text-white text-lg max-w-2xl leading-relaxed">
             {wwu?.intro ??
               `${projectNameSentenceStart} grows through the people who bring their gifts to it. We welcome ideas, offerings, and ventures: a garden, a piece of infrastructure, a service, a craft, a program, or something we haven't yet imagined. Propose it here.`}
           </p>
@@ -376,7 +376,7 @@ function ProposalForm({
       />
 
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-      <button type="submit" disabled={submitting} className="w-full md:w-auto inline-flex items-center justify-center gap-2 bg-teal-deep text-white font-semibold px-8 py-3 rounded-xl hover:bg-teal disabled:opacity-50 transition-colors">
+      <button type="submit" disabled={submitting} className="w-full md:w-auto inline-flex items-center justify-center gap-2 bg-teal-deep text-white font-semibold px-8 py-3 rounded-xl hover:bg-teal-deep-dark disabled:opacity-50 transition-colors">
         {submitting ? "Sending…" : "Submit proposal"} <ArrowRight className="w-4 h-4" />
       </button>
       <p className="text-xs text-stone-500">Your answers save as you go, so you can come back and finish later.</p>

@@ -528,7 +528,7 @@ export default function GoodNeighbor() {
 
               <div className="flex flex-wrap justify-center gap-4">
                 <Link href="/love-letter">
-                  <a className="px-8 py-4 bg-primary text-primary-foreground rounded-lg font-semibold text-lg hover:opacity-90 transition-all duration-200 flex items-center gap-2">
+                  <a className="px-8 py-4 bg-primary text-primary-foreground rounded-lg font-semibold text-lg hover:bg-teal-deep-dark transition-all duration-200 flex items-center gap-2">
                     Sign the Membership Covenant
                     <ArrowRight className="w-5 h-5" />
                   </a>

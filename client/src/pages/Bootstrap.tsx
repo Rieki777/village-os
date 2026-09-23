@@ -252,7 +252,7 @@ export default function Bootstrap() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-teal-deep py-3 font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-deep disabled:opacity-60"
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-teal-deep py-3 font-medium text-white transition hover:bg-teal-deep-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-deep disabled:opacity-60"
                 >
                   {loading ? "Checking..." : "Claim this village"}
                   {!loading && <ArrowRight className="h-4 w-4" aria-hidden="true" />}

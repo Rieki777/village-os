@@ -11,6 +11,8 @@
 import { describe, expect, it } from "vitest";
 import {
   ALL_CAPABILITIES,
+  BREAK_GLASS_SEAT,
+  BREAK_GLASS_WAY_THROUGH,
   CAPABILITY_LABELS,
   capabilityDecision,
   capabilityLabel,
@@ -143,11 +145,27 @@ describe("hasCapability truth table", () => {
       expect(d.source).toBe("denied by warning badge");
     });
 
-    it("the break-glass passes and says it owes a record", () => {
-      const d = capabilityDecision(MOVED, ctx({ isAdmin: true, adminOverride: true, ...held }));
+    /*
+     * UPDATED, NEVER DELETED (Rye, 2026-09-21). This case used to hand the
+     * glass to ANY admin. The ruling narrowed it to a founder seated as a
+     * steward with the veto, so the same call now passes only with those two
+     * facts beside it, and without them it is refused. Both halves stay here.
+     */
+    it("the break-glass passes for a founder seated as a steward, and says it owes a record", () => {
+      const d = capabilityDecision(
+        MOVED,
+        ctx({ isAdmin: true, isFounder: true, roleCapabilities: [BREAK_GLASS_SEAT], adminOverride: true, ...held }),
+      );
       expect(d.allowed).toBe(true);
       expect(d.source).toBe("admin-override");
       expect(d.reachedPastVillage).toBe(true);
+    });
+
+    it("the same glass from an admin who is neither is refused, and owes nothing", () => {
+      const d = capabilityDecision(MOVED, ctx({ isAdmin: true, adminOverride: true, ...held }));
+      expect(d.allowed).toBe(false);
+      expect(d.source).toBe("not granted");
+      expect(d.reachedPastVillage).toBe(false);
     });
 
     it("the break-glass is an ADMIN's affordance and grants a member nothing", () => {
@@ -158,6 +176,90 @@ describe("hasCapability truth table", () => {
 
     it("a member holding it by role is untouched by the transfer", () => {
       expect(hasCapability(MOVED, ctx({ roleCapabilities: [MOVED], ...held }))).toBe(true);
+    });
+
+    /*
+     * RYE, 2026-09-21: "Only if the founder is holding the Steward role and
+     * has the power to veto." Every row below is one person the ruling names
+     * or excludes, asked of the one gate with the glass broken. The server
+     * builds `roleCapabilities` from UNLAPSED holdings only, so a lapsed seat
+     * reaches this function as a founder with no seat; the lapse itself is
+     * driven against a real server in server/founderOverride.routes.e2e.test.ts.
+     */
+    describe("who may break the glass", () => {
+      const SEAT = BREAK_GLASS_SEAT;
+      const glass = (over: Partial<Parameters<typeof hasCapability>[1]>) =>
+        capabilityDecision(MOVED, ctx({ adminOverride: true, ...held, ...over }));
+
+      it("names the steward's veto as the seat, a key no badge may deny and a village may hold", () => {
+        expect(SEAT).toBe("steward.veto");
+        expect(DENIABLE[SEAT]).toBe(false);
+        expect(TRANSFERABLE[SEAT]).toBe(true);
+      });
+
+      it("lets through a founder whose live role carries the veto", () => {
+        const d = glass({ isAdmin: true, isFounder: true, roleCapabilities: [SEAT] });
+        expect([d.allowed, d.source, d.reachedPastVillage]).toEqual([true, "admin-override", true]);
+      });
+
+      it("refuses a founder with no steward's seat", () => {
+        const d = glass({ isAdmin: true, isFounder: true });
+        expect([d.allowed, d.reachedPastVillage]).toEqual([false, false]);
+      });
+
+      it("refuses a founder whose seat lapsed, which reaches the gate as no seat at all", () => {
+        // The term ran out, so `roleCapabilitiesFor` stopped counting the role.
+        // Whatever else the founder still holds by other roles stays theirs.
+        const d = glass({ isAdmin: true, isFounder: true, roleCapabilities: ["forum.post"] });
+        expect(d.allowed).toBe(false);
+      });
+
+      it("refuses a steward holding the veto who is not a founder, admin or not", () => {
+        expect(glass({ roleCapabilities: [SEAT] }).allowed).toBe(false);
+        expect(glass({ isAdmin: true, roleCapabilities: [SEAT] }).allowed).toBe(false);
+      });
+
+      it("refuses an admin who is not a founder", () => {
+        expect(glass({ isAdmin: true }).allowed).toBe(false);
+      });
+
+      it("refuses a founder whose veto comes from a BADGE, because an admin can mint and award one", () => {
+        const d = glass({ isAdmin: true, isFounder: true, badgeCapabilities: [SEAT] });
+        expect(d.allowed).toBe(false);
+        expect(d.reachedPastVillage).toBe(false);
+      });
+
+      it("refuses a founder the caller stripped of the admin short-circuit", () => {
+        // Two callers ask "would they hold it without being an admin" by
+        // passing isAdmin: false. The glass must not survive that question.
+        expect(glass({ isAdmin: false, isFounder: true, roleCapabilities: [SEAT] }).allowed).toBe(false);
+      });
+
+      it("ignores a warning badge naming the seat, because the veto is not deniable", () => {
+        const d = glass({ isAdmin: true, isFounder: true, roleCapabilities: [SEAT], badgeDenies: [SEAT] });
+        expect(d.source).toBe("admin-override");
+      });
+
+      it("sits ABOVE a deny on the power itself, exactly where the order puts the step", () => {
+        const d = glass({ isAdmin: true, isFounder: true, roleCapabilities: [SEAT], badgeDenies: [MOVED] });
+        expect([d.allowed, d.source]).toEqual([true, "admin-override"]);
+        // And the same founder without the glass meets the deny like anybody.
+        const plain = capabilityDecision(
+          MOVED,
+          ctx({ isAdmin: true, isFounder: true, roleCapabilities: [SEAT, MOVED], badgeDenies: [MOVED], ...held }),
+        );
+        expect(plain.source).toBe("denied by warning badge");
+      });
+
+      it("changes nothing on a key the village does not hold", () => {
+        expect(capabilityDecision(MOVED, ctx({ isAdmin: true, adminOverride: true })).source).toBe("admin");
+      });
+
+      it("keeps the way-through sentence plain", () => {
+        expect(BREAK_GLASS_WAY_THROUGH).toContain("founder");
+        expect(BREAK_GLASS_WAY_THROUGH).toContain("steward with the veto");
+        expect(BREAK_GLASS_WAY_THROUGH).not.toMatch(/[–—]|rather than|\bnot\b.*\bbut\b/);
+      });
     });
 
     it("a holding row naming a NON-transferable key cannot close a door", () => {

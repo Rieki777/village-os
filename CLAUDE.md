@@ -236,12 +236,13 @@ constant comes back.
   (`server/lib/modules.ts`); missing dependencies demote a module to off at boot;
   `openStateCheck` refuses `off` while value is outstanding (settle first).
 - ONE capability gate (`shared/capabilities.ts`). Never gate anywhere else. The order of
-  authority IS the policy, it has SEVEN steps, and an admin is NOT automatically top of it:
-  on a key the village holds, the admin short-circuit does not apply, so a warning badge's
-  deny beats an admin unless they use the explicit break-glass (`adminOverride`). Do not
-  restate the order from memory: this bullet described the gate correctly when it was
-  written, then `0f8d041` (2026-08-22) added the break-glass step and the bullet was not
-  touched, so it spent two weeks reading as authoritative and being wrong.
+  authority IS the policy, and an admin is NOT automatically top of it: on a key the village
+  holds, the admin short-circuit does not apply, so a warning badge's deny beats an admin.
+  The break-glass (`adminOverride`) passes only a FOUNDER seated in a live role carrying
+  `steward.veto` (Rye, 2026-09-21; `BREAK_GLASS_SEAT`), and from anybody else it is refused.
+  Do not restate the order from memory, and do not count its steps here: this bullet said
+  SEVEN while the gate had eight, and before that `0f8d041` (2026-08-22) added the
+  break-glass step and the bullet spent two weeks reading as authoritative and being wrong.
   `docs/CAPABILITIES.md` is generated from the gate itself and held to it by
   `scripts/check-capabilities-doc.mjs`; read that.
 
