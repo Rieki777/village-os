@@ -63,6 +63,7 @@ import {
   delegatedRowsCountOn,
   evaluationRulesFor,
   quorumMissReading,
+  VILLAGE_LAUNCH,
   type QuorumMissReading,
 } from "../../shared/ballotSubjects";
 // THRESHOLDS LANE (19G): whose weight the quorum counts, and the seat facts
@@ -465,7 +466,24 @@ export async function talliesFor(pool: Pool, ballot: string | BallotRow): Promis
  */
 export { standingObjectionCount };
 
-export type VoteResult = { ok: true; choice: VoteChoice } | { ok: false; error: string };
+export type VoteResult =
+  | {
+      ok: true;
+      choice: VoteChoice;
+      /**
+       * WHAT WAS ACTUALLY RECORDED about standing for the steward's seat, which
+       * is not always what was asked for.
+       *
+       * The signal is stored on a `village_launch` ballot and nowhere else, so
+       * a caller that asked for it on any other vote gets `false` back. Said in
+       * the result rather than refused, because the vote itself is valid either
+       * way and refusing the launch vote over a checkbox would be the wrong
+       * price by a long way. A surface that reads this back can say what it
+       * recorded instead of guessing.
+       */
+      standsForSteward: boolean;
+    }
+  | { ok: false; error: string };
 
 /**
  * WHY SOMEBODY IS OFF A ROLL, worked out by the caller and handed in.
@@ -540,6 +558,31 @@ export function offRollSentence(standing?: VoterStanding): string {
  * and their weight is read at tally time from the frozen row — never here.
  * In consent mode a `no` requires a reason and auto-files an objection (one
  * open objection per voter from this path; re-voting `no` updates it).
+ *
+ * ── AND, ON THE LAUNCH VOTE ALONE, WHETHER THEY STAND FOR THE SEAT ─────────
+ *
+ * Rye, 2026-09-24: a founding member says they want the inaugural steward's
+ * seat by "self signaling at founding", and asked when, he placed it AT THE
+ * LAUNCH VOTE, so the roll and the stewards are decided in one moment. The
+ * signal therefore travels with the vote, on the vote's own row (0218), and
+ * `seatCatalystsAsStewards` reads it back at the close.
+ *
+ * `village_launch` AND NOTHING ELSE. The column is on every vote because that
+ * is where the row lives, and the value means something on one subject. A
+ * caller asking for it elsewhere is told `false` in the result rather than
+ * refused: the vote is valid, and the signal simply has no meaning there.
+ *
+ * IT IS REWRITTEN ON EVERY CAST, INCLUDING BACK TO FALSE. A founder who
+ * stands and then thinks better of it recasts their vote and stands down, the
+ * same way they change their choice. `ON DUPLICATE KEY UPDATE` therefore
+ * names the column rather than leaving it, which is the difference between a
+ * signal somebody can withdraw and one they are stuck with.
+ *
+ * WHETHER THEY ARE A FOUNDER IS NOT ASKED HERE, and that is deliberate rather
+ * than an omission. `users.role` can change between the vote and the close,
+ * and the ruling is about who is a founding member when the seats are filled.
+ * So the seating intersects the signallers with the catalysts at the close,
+ * which is the one moment the answer has to be right.
  */
 export async function castVote(
   pool: Pool,
@@ -549,6 +592,8 @@ export async function castVote(
   reason?: string,
   /** The gate's answer about this member, read by the route. See below. */
   standing?: VoterStanding,
+  /** "I want the inaugural steward's seat", honoured on `village_launch` only. */
+  standsForSteward?: boolean,
 ): Promise<VoteResult> {
   const choice = String(choiceRaw) as VoteChoice;
   if (!VOTE_CHOICES.includes(choice)) {
@@ -579,10 +624,14 @@ export async function castVote(
   // following somebody takes their own row back the moment they vote. Every
   // delegation-derived row is guarded on that column being set, so an own vote
   // is never overwritten afterwards.
+  // 0218: the signal is meaningful on the Birthing and on nothing else, so the
+  // subject decides it here rather than every caller being trusted to.
+  const stands = standsForSteward === true && ballot.subjectType === VILLAGE_LAUNCH;
   await pool.query( // module-review-ok: the ballot tables' one enumerable home (the intents.ts pattern; no cache sits above them)
-    "INSERT INTO ballot_votes (ballot_id, user_id, choice, reason, followed_user_id) VALUES (?,?,?,?,NULL) " +
-      "ON DUPLICATE KEY UPDATE choice = VALUES(choice), reason = VALUES(reason), followed_user_id = NULL",
-    [ballotId, userId, choice, cleanReason || null],
+    "INSERT INTO ballot_votes (ballot_id, user_id, choice, reason, followed_user_id, stands_for_steward) VALUES (?,?,?,?,NULL,?) " +
+      "ON DUPLICATE KEY UPDATE choice = VALUES(choice), reason = VALUES(reason), followed_user_id = NULL, " +
+      "stands_for_steward = VALUES(stands_for_steward)",
+    [ballotId, userId, choice, cleanReason || null, stands ? 1 : 0],
   );
   if (ballot.method === "consent" && choice === "no") {
     // ONE OPEN OBJECTION PER VOTER FROM THIS PATH. Re-voting `no` rewrites the
@@ -603,7 +652,7 @@ export async function castVote(
   // member. See server/lib/delegation.ts for why one routine derives the whole
   // ballot rather than patching the members who look affected.
   await applyDelegatedVotes(pool, ballotId);
-  return { ok: true, choice };
+  return { ok: true, choice, standsForSteward: stands };
 }
 
 export async function fileObjection(

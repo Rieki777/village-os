@@ -26,6 +26,8 @@
 import type { Pool } from "mysql2/promise";
 import {
   LAUNCH_REQUIREMENTS,
+  projectCurrencyCheck,
+  timezoneAnswerCheck,
   type LaunchRequirement,
 } from "../../shared/launchRequirements";
 import {
@@ -37,6 +39,8 @@ import {
 } from "../../shared/issuanceCap";
 import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
 import { storedVariableValue } from "../repos/gameVariableRows";
+import { readConfigDocument } from "../repos/appConfigDocs";
+import { normalizeSeasonConfig } from "./seasonCalendar";
 
 export type CheckState = "ok" | "missing" | "partial";
 
@@ -205,6 +209,23 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
       continue;
     }
 
+    /*
+     * WHERE THE VILLAGE IS, resolved HERE for the reason the `decide:` branch
+     * above gives: `server/index.ts` sits at exactly its line baseline, and
+     * the gate's own message is that the one big file may only ever get
+     * smaller. A check wired from there could not be added at all.
+     *
+     * Neither of these needs that file's caches. Both are stored documents,
+     * read by key through a repo (`server/repos/appConfigDocs.ts`), which is
+     * also where the statement has to live: raw SQL outside `server/repos` is
+     * counted by a register that is at its ceiling too.
+     */
+    if (req.checkKey.startsWith("village:")) {
+      const read = await villageFactFor(pool, req.checkKey.slice("village:".length));
+      items.push({ ...req, state: read.state, detail: read.detail });
+      continue;
+    }
+
     if (req.checkKey.startsWith("manual:")) {
       const confirm = state.manualConfirms[req.id];
       items.push({
@@ -359,6 +380,51 @@ export async function issuanceCapDecisionFor(pool: Pool): Promise<IssuanceCapDec
  * bug in the same words an unwired check does. A checklist that silently
  * dropped a row would read as shorter than the truth.
  */
+/**
+ * THE TWO FACTS ONLY A VILLAGE CAN STATE, read from what it STORED.
+ *
+ * Both are inherited in silence and neither renders as broken, which is the
+ * whole reason a fork can live on somebody else's clock and currency without
+ * noticing. So both read the stored document and never the effective value:
+ * the effective value is the platform's own default in both cases and would
+ * answer "yes" for every village on earth.
+ *
+ * The two questions are not the same shape, and that asymmetry is the point:
+ *
+ *   currency  a stored value IS the answer. The box holds the village's own
+ *             value and blank means inherit.
+ *   timezone  a stored zone proves nothing. The Season tab is handed the
+ *             normalised document, so any save writes the platform's zone
+ *             back whether or not a human looked; only `timezoneAnswer`,
+ *             written on a real change or an explicit confirmation, says
+ *             somebody answered.
+ *
+ * An unreadable or missing document reads as unanswered, which is true: a
+ * village that has stored nothing has said nothing.
+ *
+ * Exported for its own tests. The checklist path reaches it through
+ * `launchStatus`, which needs a village's whole world to answer; this reads
+ * two documents and can be asked directly with a stub pool.
+ */
+export async function villageFactFor(
+  pool: Pool,
+  fact: string,
+): Promise<{ state: CheckState; detail: string }> {
+  if (fact === "timezone") {
+    const doc = await readConfigDocument<{ timezone?: string; timezoneAnswer?: unknown }>(pool, "season");
+    const cfg = normalizeSeasonConfig(doc ?? {});
+    return timezoneAnswerCheck(!!cfg.timezoneAnswer, cfg.timezone);
+  }
+  if (fact === "currency") {
+    const doc = await readConfigDocument<{ project?: { fiatCurrency?: string } }>(pool, "brand");
+    return projectCurrencyCheck(doc?.project?.fiatCurrency ?? null);
+  }
+  return {
+    state: "missing",
+    detail: `No village fact resolver for "${fact}". This is a platform bug, report it`,
+  };
+}
+
 async function decisionFor(
   pool: Pool,
   name: string,

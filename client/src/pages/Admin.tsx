@@ -50,6 +50,9 @@ import { CrowdpoolAdminTab, ForumCategoriesEditor, ToolsCategoriesEditor } from 
 import ModuleSettingsSection from "@/components/admin/ModuleSettingsSection";
 import { useModuleDeepLink } from "@/components/admin/moduleDeepLink";
 import SetupNeeded from "@/components/modules/SetupNeeded";
+import VillageAnswers from "@/components/admin/VillageAnswers";
+import CurrencyAnswerNote from "@/components/admin/CurrencyAnswerNote";
+import SeasonTimezoneField from "@/components/admin/SeasonTimezoneField";
 import { CONTENT_SECTIONS, emptyContentFor } from "@/components/admin/contentSections";
 import { displayCurrencyProblem } from "@shared/money";
 import { formatTokenAmount } from "@/lib/tokenAmount";
@@ -8892,7 +8895,7 @@ const CADENCES = [
   { value: "custom", label: "Custom / set by hand" },
 ];
 
-function SeasonTab({ password }: { password: string }) {
+export function SeasonTab({ password }: { password: string }) {
   const [cfg, setCfg] = useState<any>(null);
   const [saving, setSaving] = useState(false);
 
@@ -8905,13 +8908,13 @@ function SeasonTab({ password }: { password: string }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const save = async () => {
+  const save = async (extra: Record<string, unknown> = {}) => {
     setSaving(true);
     try {
       const res = await fetch(`${API_BASE}/admin/seasons`, {
         method: "PUT",
         headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ seasons: cfg.seasons, cadence: cfg.cadence, timezone: cfg.timezone }),
+        body: JSON.stringify({ seasons: cfg.seasons, cadence: cfg.cadence, timezone: cfg.timezone, ...extra }),
       });
       if (!res.ok) throw new Error();
       toast.success("Seasons saved");
@@ -8945,7 +8948,8 @@ function SeasonTab({ password }: { password: string }) {
             whichever season covers today. Queue the next one and it hands over by itself.
           </p>
         </div>
-        <button onClick={save} disabled={saving} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50 shrink-0">
+        {/* Arrow, not `save` itself: it takes body fields now, and onClick would pass the event as one. */}
+        <button onClick={() => save()} disabled={saving} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50 shrink-0">
           {saving ? "Saving..." : "Save"}
         </button>
       </div>
@@ -8969,17 +8973,13 @@ function SeasonTab({ password }: { password: string }) {
           </select>
           <p className="text-[11px] text-gray-400 mt-1">Used to suggest dates for the next season.</p>
         </div>
-        <div>
-          <label className="text-sm font-medium text-gray-700 block mb-1">Timezone</label>
-          <input
-            type="text"
-            value={cfg.timezone ?? ""}
-            onChange={(e) => setCfg({ ...cfg, timezone: e.target.value })}
-            placeholder="America/Costa_Rica"
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg"
-          />
-          <p className="text-[11px] text-gray-400 mt-1">A season turns at midnight where the village is.</p>
-        </div>
+        <SeasonTimezoneField
+          value={cfg.timezone ?? ""}
+          answered={!!cfg.timezoneAnswer}
+          saving={saving}
+          onChange={(timezone) => setCfg({ ...cfg, timezone })}
+          onConfirm={() => save({ confirmTimezone: true })}
+        />
       </div>
 
       <div className="space-y-4">
@@ -9351,6 +9351,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
             site is quoted in, and what a member sees before choosing their own display currency.
           </p>
         )}
+        <CurrencyAnswerNote answered={!!code} />
       </div>
     );
   };
@@ -10173,6 +10174,8 @@ export default function Admin() {
               filter, so the rail and the card ride one fetch. */}
           <AdminGoLive token={password} moduleId={TAB_MODULE[activeTab] ?? null}
             onLifecycles={(m) => setModuleLifecycles(m as Record<string, ModuleLifecycle>)} />
+          {/* The two facts only this village can state. VillageAnswers.tsx says why it outlives the checklist. */}
+          <VillageAnswers password={password} />
           {activeTab === "setup" && <SetupWizard password={password} onOpenTab={setActiveTab} />}
           {activeTab === "events-admin" && <EventsAdminPanel password={password} />}
           {activeTab === "submissions" && <SubmissionsTab password={password} />}

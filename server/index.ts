@@ -2754,7 +2754,7 @@ function mergedConfig() {
       // 0083 (P8): where the project lives and what it counts in. Display
       // only, like every overlay field; blank inherits the platform default.
       country: pick((brand.project as any).country, p.country),
-      fiatCurrency: pick((brand.project as any).fiatCurrency, p.fiatCurrency),
+      fiatCurrency: pick(String((brand.project as any).fiatCurrency ?? "").trim(), p.fiatCurrency), // trimmed: shared/money.ts
       adminPath: p.adminPath,
       // Blank INHERITS the platform default, like every overlay field. A fork
       // that wants NO outside links clears the gameConfig default too — the
@@ -10249,7 +10249,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       },
       viewer: {
         viewPeople,
-        canContact: false,
+        canContact: false, mayStyleMap: admin, mayEditWalk: admin, mayNameMapThings: admin, // the three map editors: admin today because their endpoints are, see power/types.ts
         mayArrange: admin, // the drag publishes an org draft: admin until the decide gate lands
         // Where this viewer may declare (P10): "village" and/or circle ids.
         // The pencil shows where this says; the server re-checks on write.
@@ -23964,16 +23964,15 @@ ${inner}
     if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to vote" });
     const voteGate = capabilityDecision("ballot.vote", await capabilityCtx(user));
     const result = await castVote(
-      getPool(),
-      req.params.id,
-      user.id,
+      getPool(), req.params.id, user.id,
       String(req.body?.choice ?? ""),
       req.body?.reason === undefined ? undefined : String(req.body.reason),
       { mayVoteNow: voteGate.allowed, deniedByWarning: voteGate.source === "denied by warning badge" },
+      req.body?.standsForSteward === true, // 0218: castVote honours it on the Birthing alone, and reports what it stored
     );
     if (!result.ok) return res.status(409).json({ error: result.error });
     const b = await ballotById(getPool(), req.params.id);
-    res.json({ success: true, choice: result.choice, ballot: b ? await serveBallot(b, user.id) : null });
+    res.json({ success: true, choice: result.choice, standsForSteward: result.standsForSteward, ballot: b ? await serveBallot(b, user.id) : null });
   });
 
   /** File an objection on a consent ballot without voting no. */

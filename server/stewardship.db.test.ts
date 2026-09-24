@@ -37,6 +37,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
 import type { Pool } from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { HANDOVER_SET } from "../shared/capabilities";
 import { loadVariables, setVariable } from "./lib/variables";
 import { carriedUnseatingsOf } from "./repos/stewardshipBallots";
 import { beingVotedOut } from "./lib/stewardship";
@@ -98,6 +99,23 @@ async function ballot(id: string, subjectType: string, status: string, openedBy:
   );
 }
 
+/**
+ * A member's vote on the launch ballot, and whether they stood for the seat.
+ *
+ * Rye, 2026-09-24: a founding member says at the launch vote that they want the
+ * inaugural steward's seat, and `seatCatalystsAsStewards` seats whoever did.
+ * These suites drove the seating with no launch ballot and no votes at all,
+ * which is exactly a village where nobody stood, so every one of them is a
+ * fixture that has to say out loud who asked.
+ */
+async function stoodAtLaunch(userId: string, stands = true): Promise<void> {
+  await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema
+    "INSERT INTO ballot_votes (ballot_id, user_id, choice, stands_for_steward) VALUES (?,?,?,?) " +
+      "ON DUPLICATE KEY UPDATE stands_for_steward = VALUES(stands_for_steward)",
+    [LAUNCH_BALLOT, userId, "yes", stands ? 1 : 0],
+  );
+}
+
 /** The permission gate's own predicate, run over the rows the gate reads. */
 async function capabilitiesOf(userId: string): Promise<string[]> {
   const [holders]: any = await pool.query(
@@ -126,6 +144,12 @@ describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
     await member("cat-1", "Wren Alder", "founder");
     await member("cat-2", "Iris Fenn", "founder");
     await member("mem-1", "Rook Salt", "member");
+    // Both founders stood for the seat at the launch vote, which is what makes
+    // the seating below seat them (Rye, 2026-09-24). The ordinary member voted
+    // and did not stand, so the roll is bigger than the signal.
+    await stoodAtLaunch("cat-1");
+    await stoodAtLaunch("cat-2");
+    await stoodAtLaunch("mem-1", false);
   });
 
   afterAll(async () => {
@@ -173,28 +197,50 @@ describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
     expect(Number(count[0].n)).toBe(0);
   });
 
-  it("seats every catalyst, creates the role, and grants the one power", async () => {
+  it("seats the catalysts who stood, creates the role, and grants ALL NINETEEN powers", async () => {
     const r = await seatCatalystsAsStewards(pool, LAUNCH_BALLOT, SEASON);
     expect(r.ok).toBe(true);
     expect(r.roleCreated).toBe(true);
     expect(r.capabilityGranted).toBe(true);
-    // And the holding crosses in the same breath. Without this row an
-    // administrator passes the veto gate as an ordinary admin, with nothing
+    // Rye, 2026-09-24: "hold all powers at launch", and asked whether that
+    // named a subset, all nineteen entrustable powers. NOT `toContain`: a
+    // seat carrying eighteen would pass that and would be the defect.
+    expect([...r.capabilitiesGranted].sort()).toEqual([...HANDOVER_SET].sort());
+    // And every one of them crosses in the same breath. Without these rows an
+    // administrator passes each gate as an ordinary admin, with nothing
     // anywhere saying they reached past the village.
     expect(r.holdingMoved).toBe(true);
+    expect([...r.capabilitiesMoved].sort()).toEqual([...HANDOVER_SET].sort());
+    expect(r.holdingHeld).toBeNull();
     expect(r.seated.sort()).toEqual(["cat-1", "cat-2"]);
     expect(r.alreadySeated).toEqual([]);
+    expect(r.stoodForSeat).toEqual(["cat-1", "cat-2"]);
 
     const [roles]: any = await pool.query("SELECT capabilities FROM roles WHERE id = ?", [STEWARD_ROLE_ID]);
     const caps = typeof roles[0].capabilities === "string" ? JSON.parse(roles[0].capabilities) : roles[0].capabilities;
-    expect(caps).toContain(STEWARD_VETO);
+    expect([...caps].sort(), "the role really carries them, read off the row").toEqual([...HANDOVER_SET].sort());
 
-    const [holding]: any = await pool.query(
-      "SELECT holder_role_id, moved_by_ballot_id FROM capability_holding WHERE capability = ?",
-      [STEWARD_VETO],
+    const [holdings]: any = await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT capability, holder_role_id, moved_by_ballot_id FROM capability_holding",
     );
-    expect(holding[0]?.holder_role_id).toBe(STEWARD_ROLE_ID);
-    expect(holding[0]?.moved_by_ballot_id, "the Birthing moved it, not an administrator").toBe(LAUNCH_BALLOT);
+    expect(
+      holdings.map((h: any) => String(h.capability)).sort(),
+      "all nineteen entrusted, read off the table the gate reads",
+    ).toEqual([...HANDOVER_SET].sort());
+    for (const h of holdings) {
+      expect(String(h.holder_role_id)).toBe(STEWARD_ROLE_ID);
+      expect(String(h.moved_by_ballot_id), "the Birthing moved it, not an administrator").toBe(LAUNCH_BALLOT);
+    }
+  });
+
+  it("does not seat an ordinary member who voted and did not stand", async () => {
+    // `mem-1` has a vote row on the launch ballot with the signal off, so this
+    // is the filter working and not an empty query answering nothing.
+    const [rows]: any = await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT COUNT(*) AS n FROM role_holders WHERE role_id = ? AND user_id = 'mem-1'",
+      [STEWARD_ROLE_ID],
+    );
+    expect(Number(rows[0].n)).toBe(0);
   });
 
   it("writes a term computed from the CLOCK, not from the season list", async () => {
@@ -224,17 +270,26 @@ describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
     expect(history[0].seasonId).toBe("rooting-2026");
   });
 
-  it("gives a catalyst the veto, and gives an ordinary member none", async () => {
-    expect(await capabilitiesOf("cat-1")).toContain(STEWARD_VETO);
+  it("gives a catalyst who stood all nineteen, and gives an ordinary member none", async () => {
+    expect([...(await capabilitiesOf("cat-1"))].sort()).toEqual([...HANDOVER_SET].sort());
     expect(await capabilitiesOf("mem-1")).toEqual([]);
   });
 
-  it("seats nobody twice: a retried close is one row per catalyst, and one term each", async () => {
+  it("seats nobody twice and moves nothing twice: a retried close is one row per catalyst", async () => {
+    const [before]: any = await pool.query("SELECT COUNT(*) AS n, MAX(moved_at) AS last FROM capability_holding"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     const again = await seatCatalystsAsStewards(pool, LAUNCH_BALLOT, SEASON);
     expect(again.seated, "nothing to do, and that is different from a failure").toEqual([]);
     expect(again.alreadySeated.sort()).toEqual(["cat-1", "cat-2"]);
     expect(again.roleCreated).toBe(false);
     expect(again.capabilityGranted).toBe(false);
+    expect(again.capabilitiesGranted, "the role already carried all nineteen").toEqual([]);
+    // The crossing RUNS again and is a no-op on every key, which is what
+    // `ON DUPLICATE KEY UPDATE` buys. The table is the measurement, not the
+    // report: nineteen rows before and nineteen after.
+    expect(again.holdingMoved, "and the powers are still the village's").toBe(true);
+    const [after]: any = await pool.query("SELECT COUNT(*) AS n FROM capability_holding"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(Number(after[0].n), "one row per power, not two").toBe(Number(before[0].n));
+    expect(Number(after[0].n)).toBe(HANDOVER_SET.length);
 
     const [count]: any = await pool.query(
       "SELECT COUNT(*) AS n FROM role_holders WHERE role_id = ?",
@@ -291,6 +346,11 @@ describe.skipIf(!configured)("the veto on a carried decision", () => {
     await member("st-1", "Wren Alder", "founder");
     await member("st-2", "Iris Fenn", "founder");
     await member("pr-1", "Rook Salt", "member");
+    // Both founders stood for the seat at the launch vote, which is what the
+    // seating now asks for (Rye, 2026-09-24). Without these rows the whole
+    // suite below would be about a village that seated nobody.
+    await stoodAtLaunch("st-1");
+    await stoodAtLaunch("st-2");
     await seatCatalystsAsStewards(pool, LAUNCH_BALLOT, SEASON);
     await ballot("bal-stop", "mechanics", "passed", "pr-1");
     await ballot("bal-quiet", "mechanics", "passed", "pr-1");
@@ -595,6 +655,8 @@ describe.skipIf(!configured)("a term that runs out, and the vacancy it leaves", 
     await loadVariables(pool);
     await member("lapse-1", "Wren Alder", "founder");
     await member("roll-1", "Rook Salt", "member");
+    // The founder stood for the seat at the launch vote (Rye, 2026-09-24).
+    await stoodAtLaunch("lapse-1");
     await seatCatalystsAsStewards(pool, LAUNCH_BALLOT, SEASON);
     await ballot("bal-held", "mechanics", "passed", "roll-1");
   });
