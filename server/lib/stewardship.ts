@@ -175,7 +175,7 @@ import {
   type CarriedUnseating,
 } from "../repos/stewardshipBallots";
 import { catalystUserIds } from "../repos/users";
-import { moveCapabilityToVillage } from "./capabilityHolding";
+import { moveCapabilityToVillage, STEWARD_ROLE_ID } from "./capabilityHolding";
 import { boolVar, stringVar } from "./variables";
 
 /**
@@ -186,7 +186,16 @@ import { boolVar, stringVar } from "./variables";
  * would orphan every one of them. The name a member reads is a column, and a
  * village that wants to call this seat something else changes the column.
  */
-export const STEWARD_ROLE_ID = "steward";
+/*
+ * The literal moved to `./capabilityHolding` and is re-exported here under the
+ * name it has always had, so every reader is unchanged and there is one
+ * literal. It went the other way because that module needs it to tell a power
+ * still in the founding seat from one the village has moved on, and it already
+ * sits BELOW this one: `stewardship.ts` imports `moveCapabilityToVillage` from
+ * it, so importing back would be a cycle. The low-level module owns the
+ * constant and the high-level one passes it along.
+ */
+export { STEWARD_ROLE_ID } from "./capabilityHolding";
 
 /** What a fresh village calls the seat before it renames it. */
 export const STEWARD_ROLE_NAME = "Steward";

@@ -17,6 +17,7 @@ import {
   capabilityHoldings,
   moveCapabilityToVillage,
   returnCapabilityToScaffolding,
+  STEWARD_ROLE_ID,
   villageHandoverState,
   villageHeldCapabilities,
 } from "./capabilityHolding";
@@ -34,8 +35,11 @@ describe.skipIf(!configured)("capability holding", () => {
     pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
     await pool.query( // module-review-ok: a fixture on the scratch schema this suite provisioned
       "INSERT INTO roles (id, name, capabilities) VALUES " +
-        "('keepers','The Library Keepers',?), ('greeters','The Greeters',?)",
-      [JSON.stringify(["library.keep"]), JSON.stringify([])],
+        "('keepers','The Library Keepers',?), ('greeters','The Greeters',?), ('steward','Steward',?)",
+      // The founding seat has to exist and has to CARRY the power, because
+      // `moveCapabilityToVillage` refuses a role that could not act on it.
+      // That refusal is tested above; here the seat is the fixture.
+      [JSON.stringify(["library.keep"]), JSON.stringify([]), JSON.stringify(["library.keep"])],
     );
   });
 
@@ -183,6 +187,51 @@ describe.skipIf(!configured)("capability holding", () => {
       expect(state.remaining).toEqual([HANDOVER_SET[HANDOVER_SET.length - 1]]);
       expect(state.remaining.length).toBe(1);
       expect(state.complete, "one short is not complete").toBe(false);
+    });
+
+    /*
+     * THE THREE STATES, AND THE ONE THE EARLIER DRAFT GOT WRONG.
+     *
+     * Every case above holds powers as `keepers`, so all of them passed both
+     * before and after the rule changed and none of them said anything about
+     * the change. These are the ones that fail against the earlier predicate,
+     * which asked "is it entrusted to anybody" rather than "has it left the
+     * founding seat".
+     *
+     * The second is the important one: it is the shape of a launched village
+     * under Rye's ruling of 2026-09-24, and the earlier predicate called it
+     * COMPLETE, which would have moved the purpose statement's pen to the
+     * village at the moment the ruling says the founder keeps it.
+     */
+    it("does not count a power the FOUNDING SEAT still holds", async () => {
+      await moveCapabilityToVillage(pool, { capability: "library.keep", holderRoleId: STEWARD_ROLE_ID });
+      const state = await villageHandoverState(pool);
+      expect(state.held, "the stewards holding it is where the arc STARTS").toEqual([]);
+      expect(state.remaining).toContain("library.keep");
+      expect(state.complete).toBe(false);
+    });
+
+    it("CONTROL: a launched village, all 19 with the stewards, is 0 of 19 and NOT complete", async () => {
+      for (const cap of HANDOVER_SET) {
+        await pool.query( // module-review-ok: a fabricated handover state on the scratch schema this suite provisioned
+          "INSERT INTO capability_holding (capability, holder_role_id) VALUES (?, ?)",
+          [cap, STEWARD_ROLE_ID],
+        );
+      }
+      const state = await villageHandoverState(pool);
+      expect(state.complete, "a village that has just launched has handed over nothing").toBe(false);
+      expect(state.held).toEqual([]);
+      expect(state.remaining.length).toBe(HANDOVER_SET.length);
+    });
+
+    it("counts a power the moment it leaves the founding seat for another role", async () => {
+      await moveCapabilityToVillage(pool, { capability: "library.keep", holderRoleId: STEWARD_ROLE_ID });
+      expect((await villageHandoverState(pool)).held).toEqual([]);
+      // The same door, pointed somewhere else. This is the transition itself.
+      await moveCapabilityToVillage(pool, { capability: "library.keep", holderRoleId: "keepers" });
+      const after = await villageHandoverState(pool);
+      expect(after.held).toEqual(["library.keep"]);
+      expect(after.remaining).not.toContain("library.keep");
     });
 
     /*
