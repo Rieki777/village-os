@@ -16,10 +16,17 @@
  * `media` would erase every medium the village had named. This panel edits four
  * of the five keys and carries `media` through untouched, and it says so where
  * a founder can read it.
+ *
+ * Takes no password prop, and gates its FETCHES on `useIsAdmin` as well as its
+ * JSX, so it can be mounted on the map page without handing a member a console
+ * refusal on load. The reasoning in full is in MapSkinPanel.tsx, which moved
+ * for the same reason on the same day.
  */
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { API_BASE, authHeaders } from "./adminApi";
+import { useIsAdmin } from "@/contexts/AuthContext";
+import { gameFetch } from "@/lib/gameApi";
+import { API_BASE } from "./adminApi";
 
 const inputCls =
   "border border-gray-200 rounded-lg px-2 py-1.5 text-sm min-h-[44px] w-full focus:outline-none focus:ring-2 focus:ring-teal-deep";
@@ -32,7 +39,8 @@ const linesOf = (list: unknown): string =>
 const wordsOf = (text: string): string[] =>
   text.split("\n").map((s) => s.trim()).filter(Boolean);
 
-export default function MapVocabularyPanel({ password }: { password: string }) {
+export default function MapVocabularyPanel() {
+  const mayAdminister = useIsAdmin();
   const [vocab, setVocab] = useState<any>(null);
   const [road, setRoad] = useState("");
   const [water, setWater] = useState("");
@@ -41,8 +49,9 @@ export default function MapVocabularyPanel({ password }: { password: string }) {
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
+    if (!mayAdminister) return;
     try {
-      const res = await fetch(`${API_BASE}/map/vocabulary`, { headers: authHeaders(password) });
+      const res = await gameFetch(`${API_BASE}/map/vocabulary`);
       const d = res.ok ? await res.json() : null;
       const v = d?.vocabulary ?? {};
       setVocab(v);
@@ -51,9 +60,11 @@ export default function MapVocabularyPanel({ password }: { password: string }) {
       setZone(linesOf(v.zone));
       setPhases(Object.entries(v.phases ?? {}).map(([k, val]) => [String(k), String(val)]));
     } catch { setVocab(null); }
-  }, [password]);
+  }, [mayAdminister]);
   useEffect(() => { void load(); }, [load]);
 
+  // Nothing for a member, matching the fetch gate: every control here writes.
+  if (!mayAdminister) return null;
   if (!vocab) return null;
 
   const save = async () => {
@@ -68,9 +79,8 @@ export default function MapVocabularyPanel({ password }: { password: string }) {
       // village named, because the server replaces the whole document.
       media: Array.isArray(vocab.media) ? vocab.media : [],
     };
-    const res = await fetch(`${API_BASE}/admin/map/vocabulary`, {
+    const res = await gameFetch(`${API_BASE}/admin/map/vocabulary`, {
       method: "PUT",
-      headers: authHeaders(password, { "Content-Type": "application/json" }),
       body: JSON.stringify({ vocabulary: next }),
     });
     const d = await res.json().catch(() => ({}));

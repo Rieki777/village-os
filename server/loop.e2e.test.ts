@@ -1473,8 +1473,13 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // epoch", which described the mechanism exactly and read as a policy. That
     // is what makes this shape expensive: the number was not wrong about the
     // engine, it was right about an engine that was wrong, so nothing in this
-    // file ever looked like it needed checking. Boot now starts the clock. See
-    // `startEconomyEpoch` and `server/lib/economyEpoch.test.ts`.
+    // file ever looked like it needed checking.
+    //
+    // The epoch is GONE now, so three is simply what three confirmed quests
+    // pay, with nothing to lose the first one to. Rye ruled on 2026-09-21 that
+    // acknowledging work done before an economy launched is encouraged, and
+    // the audit on `116d3bb` had already found the guard unreachable. See
+    // `server/lib/economyEpoch.test.ts`, which keeps the account of the defect.
     expect(credits.quest_consent).toBe(75 * credit);
     // And nothing else issued a credit: the total over the faucet equals the
     // two sources named, so a third channel appearing fails here.
@@ -1482,6 +1487,29 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       Object.values(credits).reduce((n, v) => n + v, 0),
     );
     expect(poolRow?.issuedToDate).toBe(1075 * credit);
+
+    /*
+     * AND A REAL BOOT WRITES NO ECONOMY EPOCH.
+     *
+     * This is the one assertion about the removal that a source guard cannot
+     * make, because it is about what the server DOES on the way up rather than
+     * about what the tree says. `server/index.ts` used to call
+     * `startEconomyEpoch(getPool())` before serving a request, which stamped
+     * `app_config.economy-state` on the first boot of every village. Nothing
+     * read that row for any decision, so writing it was a boot side effect
+     * with no reader, and removing the write is the behaviour change in this
+     * lane.
+     *
+     * The child process above is a real `dist/index.js` against a scratch
+     * schema, which is the only place this can be measured honestly. Existing
+     * rows in a deployed village are left alone on purpose: an orphaned row is
+     * inert, and a migration to delete rows would risk a fork nobody can see
+     * for no gain.
+     */
+    const [epochRows] = await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT `config_key` FROM `app_config` WHERE `config_key` = 'economy-state'",
+    );
+    expect(epochRows).toEqual([]);
   });
 
   it("S13: modules ship OFF, lifecycle guards hold, and preview never leaks", async () => {

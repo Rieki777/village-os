@@ -206,37 +206,66 @@ check("a key with no approved values may only ever be empty", () => {
   assert.strictEqual(isViolation("project.tagline", "Any words at all"), true);
 });
 
-/** A config in which only the known-pending keys are populated. */
-function cleanValues(overrides = {}) {
+/**
+ * A PENDING LIST OF OUR OWN, and the rules below are driven against this one
+ * rather than the shipped `KNOWN_PENDING`.
+ *
+ * The shipped list reached ZERO on 2026-09-23 when project.fiatCurrency
+ * graduated, which is the outcome the guard's header demands. Every rule it
+ * governs is still live, because a future key can still need pending status:
+ * `season.timezone` is the known candidate the moment the guard stops walking
+ * a fixed list.
+ *
+ * These tests used to read the shipped list directly, indexing `KNOWN_PENDING[0]`
+ * and slicing it. That worked while entries existed and does two bad things as
+ * the list empties: the slicing cases THROW on an empty array, and the rest go
+ * quietly vacuous, asserting that nothing is wrong with nothing. A guard whose
+ * tests evaporate as it succeeds is the shape this repo keeps paying for.
+ *
+ * So the rules are tested against a fixture, and the SHIPPED list gets its own
+ * separate assertion further down. Two entries, because shrink and grow both
+ * need somewhere to go.
+ */
+const SAMPLE_PENDING = [
+  { key: "project.memberName", since: "2026-01-01", why: "a fixture, so the rules stay testable at any list length" },
+  { key: "project.catalystName", since: "2026-01-02", why: "the second, so a shrink has something to remove" },
+];
+const SAMPLE_CEILING = SAMPLE_PENDING.length;
+
+/** A config in which only the given pending keys are populated. */
+function cleanValues(overrides = {}, pending = SAMPLE_PENDING) {
   const values = {};
   for (const k of IDENTITY_KEYS) values[k] = "";
   values["project.name"] = "Unnamed Village";
-  for (const p of KNOWN_PENDING) values[p.key] = "something the founder has not moved yet";
+  for (const p of pending) values[p.key] = "something the founder has not moved yet";
   return { ...values, ...overrides };
 }
 
-check("POSITIVE CONTROL: the pending five alone are accepted", () => {
-  const r = auditIdentity(cleanValues());
+check("POSITIVE CONTROL: the pending keys alone are accepted", () => {
+  const r = auditIdentity(cleanValues(), SAMPLE_PENDING, SAMPLE_CEILING);
   assert.deepStrictEqual(r.missing, []);
   assert.deepStrictEqual(r.unexpected, []);
   assert.deepStrictEqual(r.stale, []);
   assert.strictEqual(r.ceiling, null);
+  // The control on the control. If the fixture stopped populating anything,
+  // every "refuses" case below would pass against an empty config.
+  assert.deepStrictEqual(r.populated, SAMPLE_PENDING.map((p) => p.key));
 });
 
 check("REFUSES a populated key outside the pending list", () => {
-  const r = auditIdentity(cleanValues({ "project.memberName": "Riverside folk" }));
-  assert.deepStrictEqual(r.unexpected, ["project.memberName"]);
+  const r = auditIdentity(cleanValues({ "project.name": "Riverside Commons" }), SAMPLE_PENDING, SAMPLE_CEILING);
+  assert.deepStrictEqual(r.unexpected, ["project.name"]);
 });
 
 check("REFUSES a pending entry whose key has gone clean", () => {
   // Was project.tagline until 2026-08-31, then project.location until
-  // 2026-09-03. Both graduated the same way: the founder entered the village's
-  // own value in the live Admin first, so the village holds its own copy, and
-  // only then did the platform default go neutral or empty. Repointed each
-  // time at a key that is still pending rather than deleted, because the rule
-  // it covers stays live while any remain. Two do.
-  const r = auditIdentity(cleanValues({ "project.fiatCurrency": "" }));
-  assert.deepStrictEqual(r.stale, ["project.fiatCurrency"]);
+  // 2026-09-03, then project.fiatCurrency until 2026-09-23. Each graduation
+  // meant repointing this at whatever was still pending, and the last one left
+  // nothing to point at. It drives the fixture now, so the rule is covered at
+  // any list length including zero.
+  const key = SAMPLE_PENDING[0].key;
+  const r = auditIdentity(cleanValues({ [key]: "" }), SAMPLE_PENDING, SAMPLE_CEILING);
+  assert.deepStrictEqual(r.stale, [key]);
 });
 
 check("REFUSES emptying the tagline now that it carries a neutral default", () => {
@@ -262,38 +291,56 @@ check("REFUSES a key that has vanished from the config", () => {
 });
 
 check("REFUSES a grown pending list", () => {
-  const grown = [...KNOWN_PENDING, { key: "project.memberName", since: "2026-09-01", why: "smuggled in" }];
-  const r = auditIdentity(cleanValues({ "project.memberName": "Riverside folk" }), grown, PENDING_CEILING);
+  const grown = [...SAMPLE_PENDING, { key: "project.footerBlurb", since: "2026-09-01", why: "smuggled in" }];
+  const r = auditIdentity(cleanValues({ "project.footerBlurb": "Riverside words" }, grown), grown, SAMPLE_CEILING);
   assert.deepStrictEqual(r.unexpected, [], "the new entry does cover the key");
-  // Derived from the constants, never hardcoded. This assertion said
+  // Derived from the fixture, never hardcoded. This assertion said
   // { listed: 6, ceiling: 5 } and broke the day the list legitimately shrank
   // from five to four, which is the one thing this list is supposed to do. A
   // test that fails when the thing it guards succeeds teaches people to edit
   // the test without reading it.
   assert.deepStrictEqual(
     r.ceiling,
-    { listed: KNOWN_PENDING.length + 1, ceiling: PENDING_CEILING },
+    { listed: SAMPLE_CEILING + 1, ceiling: SAMPLE_CEILING },
     "and the ceiling is what refuses it",
   );
 });
 
 check("REFUSES a shrunk list whose ceiling did not follow it down", () => {
-  const shrunk = KNOWN_PENDING.slice(1);
-  const values = cleanValues({ [KNOWN_PENDING[0].key]: "" });
+  const shrunk = SAMPLE_PENDING.slice(1);
+  const values = cleanValues({ [SAMPLE_PENDING[0].key]: "" });
   // Derived, for the same reason as the assertion above it.
-  assert.deepStrictEqual(auditIdentity(values, shrunk, PENDING_CEILING).ceiling, {
-    listed: KNOWN_PENDING.length - 1,
-    ceiling: PENDING_CEILING,
+  assert.deepStrictEqual(auditIdentity(values, shrunk, SAMPLE_CEILING).ceiling, {
+    listed: SAMPLE_CEILING - 1,
+    ceiling: SAMPLE_CEILING,
   });
 });
 
 check("ACCEPTS the shrink when the ceiling comes down with it", () => {
-  const shrunk = KNOWN_PENDING.slice(1);
-  const values = cleanValues({ [KNOWN_PENDING[0].key]: "" });
-  const r = auditIdentity(values, shrunk, PENDING_CEILING - 1);
+  const shrunk = SAMPLE_PENDING.slice(1);
+  const values = cleanValues({ [SAMPLE_PENDING[0].key]: "" });
+  const r = auditIdentity(values, shrunk, SAMPLE_CEILING - 1);
   assert.strictEqual(r.ceiling, null);
   assert.deepStrictEqual(r.stale, []);
   assert.deepStrictEqual(r.unexpected, []);
+});
+
+check("ACCEPTS an empty pending list with a zero ceiling, which is today", () => {
+  // The state the shipped guard is now in, tested as a rule rather than only
+  // observed. An empty list is the END of the ratchet, so it has to be an
+  // accepted configuration and not merely one nothing happens to reject.
+  const r = auditIdentity(cleanValues({}, []), [], 0);
+  assert.strictEqual(r.ceiling, null);
+  assert.deepStrictEqual(r.stale, []);
+  assert.deepStrictEqual(r.unexpected, []);
+  assert.deepStrictEqual(r.populated, [], "nothing is populated once nothing is pending");
+});
+
+check("REFUSES an emptied list whose ceiling stayed up", () => {
+  // The bookkeeping half of the graduation just made: clearing the last key
+  // without lowering the ceiling has to be caught, or the ratchet's final
+  // step is the one step nobody checks.
+  assert.deepStrictEqual(auditIdentity(cleanValues({}, []), [], 1).ceiling, { listed: 0, ceiling: 1 });
 });
 
 check("the guard carries no shebang, which would break the Vitest import", () => {
@@ -316,6 +363,27 @@ check("the shipped list and the shipped ceiling agree", () => {
     [],
     "every pending entry carries the date it was recorded",
   );
+});
+
+check("the shipped list is EMPTY, and the ceiling is zero", () => {
+  /*
+   * Today's state, pinned deliberately rather than left as something the
+   * assertion above happens to tolerate.
+   *
+   * This is the end of the ratchet: no key is waiting on the founder any more.
+   * project.fiatCurrency was the last, and it graduated on 2026-09-23 once
+   * Amora held its own currency in the live Admin screen.
+   *
+   * IT FAILING IS NOT AUTOMATICALLY A BUG. A future key can legitimately need
+   * pending status, and `season.timezone` is the known candidate: it still
+   * ships "America/Costa_Rica" and nothing watches it, because `auditIdentity`
+   * walks a FIXED list and so catches a rename but never an addition. Whoever
+   * adds that entry updates this test and says why in the same commit, which
+   * is exactly the deliberate edit the ceiling comment asks for. What this
+   * refuses is the list growing quietly.
+   */
+  assert.deepStrictEqual(KNOWN_PENDING, []);
+  assert.strictEqual(PENDING_CEILING, 0);
 });
 
 // ── The gate, against a real tree, reading the exit code ────────────────────
@@ -355,7 +423,15 @@ function configSource({ project = {}, dropFavicon = false } = {}) {
     // guard is right to refuse it. A test that wants country to violate passes
     // its own string.
     country: "",
-    fiatCurrency: "ZZZ",
+    // Was "ZZZ", the last stand-in for a key still on KNOWN_PENDING.
+    // project.fiatCurrency graduated on 2026-09-23 with an EMPTY default,
+    // after the founder entered the village's own currency on the live Admin
+    // screen, so a CLEAN fixture is empty here for the same reason location
+    // above is. There is no neutral currency to carry: `defaultDisplayCurrency`
+    // answers CHF for a project that declares nothing, which is why blank
+    // reaches the ruling without writing one country's money into this file.
+    // A test that wants this key to violate passes its own string.
+    fiatCurrency: "",
     adminPath: "/admin",
     siteUrl: "",
     eventsUrl: "",
@@ -393,11 +469,12 @@ ${images}
  * run, which made the --fork case below assert against stdout alone and pass
  * for the wrong reason. Both streams, both outcomes, every time.
  */
-function runGate(label, source, args = [], env = {}) {
+function runGate(label, source, args = [], env = {}, guardSource = null) {
   const root = path.join(FIXTURES, label);
   fs.mkdirSync(path.join(root, "scripts"), { recursive: true });
   fs.mkdirSync(path.join(root, "shared"), { recursive: true });
-  fs.copyFileSync(GUARD, path.join(root, "scripts", "check-identity-keys.mjs"));
+  if (guardSource === null) fs.copyFileSync(GUARD, path.join(root, "scripts", "check-identity-keys.mjs"));
+  else fs.writeFileSync(path.join(root, "scripts", "check-identity-keys.mjs"), guardSource);
   if (source !== null) fs.writeFileSync(path.join(root, "shared", "gameConfig.ts"), source);
   const r = spawnSync(process.execPath, [path.join(root, "scripts", "check-identity-keys.mjs"), ...args], {
     encoding: "utf8", env: { ...process.env, ...env },
@@ -405,16 +482,59 @@ function runGate(label, source, args = [], env = {}) {
   return { code: r.status, out: `${r.stdout || ""}${r.stderr || ""}`, stdout: r.stdout || "", stderr: r.stderr || "" };
 }
 
-check("FIXTURE TREE, positive control: the pending five alone exit 0", () => {
+check("FIXTURE TREE, positive control: a wholly clean config exits 0", () => {
   const { code, out } = runGate("clean", configSource());
   assert.strictEqual(code, 0, out);
   assert.match(out, /identity guard passed/);
 });
 
+/**
+ * The shipped guard with a PENDING ENTRY PUT BACK, for the CLI cases below.
+ *
+ * The shipped list is empty as of 2026-09-23, so the two rules about a pending
+ * entry have nothing real to drive. They are still live rules, so they drive a
+ * patched copy of the guard instead of quietly testing nothing.
+ *
+ * Both replacements are ASSERTED. A patch that silently matched nothing would
+ * leave these tests running against the real empty list and reporting the same
+ * green they report when they are working, which is the failure this whole
+ * file exists to make impossible.
+ */
+function guardWithPending(entry) {
+  const src = fs.readFileSync(GUARD, "utf8");
+  const listed = src.replace(
+    /export const KNOWN_PENDING = \[[\s\S]*?\n\];/,
+    `export const KNOWN_PENDING = ${JSON.stringify([entry])};`,
+  );
+  assert.notStrictEqual(listed, src, "the KNOWN_PENDING literal must have been replaced");
+  const ceilinged = listed.replace(/export const PENDING_CEILING = \d+;/, "export const PENDING_CEILING = 1;");
+  assert.notStrictEqual(ceilinged, listed, "the PENDING_CEILING literal must have been replaced");
+  return ceilinged;
+}
+
+const CLI_PENDING = {
+  key: "project.memberName",
+  since: "2026-01-01",
+  why: "a fixture entry, so the CLI rules stay covered with the real list empty",
+};
+
 check("FIXTURE TREE: the pending list prints even on a passing run", () => {
-  const { out } = runGate("clean-print", configSource());
-  for (const p of KNOWN_PENDING) assert.ok(out.includes(p.key), `${p.key} must be printed`);
+  const source = configSource({ project: { memberName: "Riverside folk" } });
+  const { code, out } = runGate("clean-print", source, [], {}, guardWithPending(CLI_PENDING));
+  assert.strictEqual(code, 0, out);
+  assert.ok(out.includes(CLI_PENDING.key), "a pending key must be printed on a PASSING run");
   assert.match(out, /only ever shrinks/);
+});
+
+check("FIXTURE TREE: an empty pending list still prints its denominator", () => {
+  // The shipped shape now. The summary line is the guard telling a reader what
+  // it looked at, and "0 known-pending (ceiling 0)" is the useful answer. A
+  // run that printed nothing here would read the same as one that checked
+  // nothing.
+  const { code, out } = runGate("clean-empty-print", configSource());
+  assert.strictEqual(code, 0, out);
+  assert.match(out, /30 checked/);
+  assert.match(out, /0 known-pending \(ceiling 0\)/);
 });
 
 check("FIXTURE TREE: a sixth key populated exits 1 and names it", () => {
@@ -430,17 +550,16 @@ check("FIXTURE TREE: a village name in project.name exits 1", () => {
 });
 
 check("FIXTURE TREE: a cleared pending key exits 1 and asks for the bookkeeping", () => {
-  // Drives whichever key is FIRST on the pending list rather than naming one.
-  // This read project.tagline until that key graduated into NEUTRAL, at which
-  // point clearing it stopped being a stale-entry case and became an emptied
-  // one, and the test failed for a reason that had nothing to do with the rule
-  // it covers.
-  const pendingKey = KNOWN_PENDING[0].key;
-  const field = pendingKey.replace(/^project\./, "");
-  const { code, out } = runGate("cleared", configSource({ project: { [field]: "" } }));
-  assert.strictEqual(code, 1);
-  assert.match(out, new RegExp(pendingKey.replace(".", "\\.")));
-  assert.match(out, new RegExp(`lower PENDING_CEILING to ${KNOWN_PENDING.length - 1}`));
+  // Read project.tagline, then project.location, then whichever key was first
+  // on the shipped list. That list reached zero on 2026-09-23, so it drives a
+  // patched guard now: the rule is live for the next key that needs pending
+  // status, and a test that could only run while the ratchet was unfinished
+  // would be gone exactly when it starts mattering again.
+  const field = CLI_PENDING.key.replace(/^project\./, "");
+  const { code, out } = runGate("cleared", configSource({ project: { [field]: "Village member" } }), [], {}, guardWithPending(CLI_PENDING));
+  assert.strictEqual(code, 1, out);
+  assert.match(out, new RegExp(CLI_PENDING.key.replace(".", "\\.")));
+  assert.match(out, /lower PENDING_CEILING to 0/);
 });
 
 check("FIXTURE TREE: emptying a NEUTRAL key exits 1 and names the outage", () => {

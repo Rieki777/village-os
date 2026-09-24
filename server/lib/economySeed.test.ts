@@ -22,7 +22,6 @@ import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { balanceOf, loadTokenRegistry, memberAccount } from "./ledger";
 import {
   CREDITS,
-  economyEpoch,
   HEARTS,
   ruleCannotPay,
   runSettlement,
@@ -89,7 +88,6 @@ describe.skipIf(!configured)("the rules a village is seeded with", () => {
     await loadTokenRegistry(pool);
     await seedEconomy(pool, VILLAGE);
     await loadTokenRegistry(pool);
-    await economyEpoch(pool);
   });
 
   /** A member holding one live seat, which is all a settlement looks for. */

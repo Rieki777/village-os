@@ -241,9 +241,7 @@ export const HUNK_FILES = {
     "applyMintRuleChanges",
     "mintRulesByIds",
     // The mints themselves.
-    "mintForConfirmedClaim",
     "runSettlement",
-    "startEconomyEpoch",
     "admin_mint",
     "mintedThisCycle",
     "pendingMints",

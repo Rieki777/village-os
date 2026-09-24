@@ -37,8 +37,10 @@ import { wrapLabel, type NestedLayout } from "@shared/mapLayout";
 import { cssColourForCircle } from "@shared/circleView";
 import { viewBoxFor, type CameraTarget, type CameraView } from "./camera";
 import { NO_NUDGE, useCameraFlight, useMeasuredBox, useNudge } from "./mapStage";
-import SeatGlyph, { seatStateWords } from "./SeatGlyph";
+import SeatGlyph, { HitArea, seatStateWords } from "./SeatGlyph";
 import CircleLabel from "./CircleLabel";
+import { buildLabelPlan } from "./labelPlacement";
+import { seatHitRadii, type SeatPoint } from "./seatTargets";
 import { fitLabelToScreen } from "./labelFit";
 import { TermArc, SeasonRing } from "./TermMarkers";
 import RelationLines, { RelationArrowDef } from "./RelationLines";
@@ -371,6 +373,52 @@ export default function PowerMap({
     : fittedView;
   const pxPerWorld = box.w > 0 ? box.w / navView[2] : 0;
 
+  /*
+   * WHERE EVERY NAME GOES, decided once for the whole picture rather than
+   * circle by circle. A name too big for its own circle is drawn outside it,
+   * and a circle holding others draws its name just inside its top edge, so
+   * names land on each other unless something reads the whole map at once.
+   * Measured live at nine window sizes before and after. See labelPlacement.
+   */
+  const labelPlan = useMemo(
+    () =>
+      buildLabelPlan(
+        layout.circles
+          .filter((pos) => maxDepth === undefined || pos.depth <= maxDepth)
+          .map((pos) => ({
+            id: pos.id,
+            x: pos.x,
+            y: pos.y,
+            r: pos.r,
+            depth: pos.depth,
+            name: byId.get(pos.id)?.name ?? pos.id,
+            shown: showLabel(pos.id),
+            hasChildren: data.circles.some((o) => o.parentCircleId === pos.id && posById.has(o.id)),
+            forming: byId.get(pos.id)?.status === "forming",
+          })),
+        pxPerWorld,
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- showLabel reads focusId and readFocus, both listed.
+    [layout, maxDepth, byId, data.circles, posById, pxPerWorld, focusId, readFocus],
+  );
+
+  /*
+   * HOW BIG EACH SEAT'S TAP AREA IS. Measured live at 390x844: every seat on
+   * the village view draws at 7x7 with 19 pixels to its nearest neighbour, so
+   * the ring is too tight for the 44px every one of them wants. Each takes
+   * what the picture allows instead, and never a pixel that belongs to the
+   * seat beside it. See seatTargets.
+   */
+  const seatHits = useMemo(() => {
+    const points: SeatPoint[] = [];
+    for (const pos of layout.circles) {
+      if (maxDepth !== undefined && pos.depth > maxDepth) continue;
+      for (const rp of pos.roles) points.push({ id: rp.id, x: rp.x, y: rp.y, r: pos.depth === 0 ? 11 : 9, hostR: pos.r, hostSeats: pos.roles.length });
+    }
+    for (const rp of layout.village.roles) points.push({ id: rp.id, x: rp.x, y: rp.y, r: 12, hostR: layout.village.r, hostSeats: layout.village.roles.length });
+    return seatHitRadii(points, pxPerWorld);
+  }, [layout, maxDepth, pxPerWorld]);
+
   return (
     <>
       <svg
@@ -514,19 +562,10 @@ export default function PowerMap({
           const opacity = Math.min(dimForFocus, dimForFilter);
           const isFocus = pos.id === focusId;
           const hovered = hoverId === pos.id && interactive && !isFocus;
-          const wrapped = wrapLabel(c?.name ?? pos.id, pos.r, pos.depth);
-          // The world-unit size the layout asked for, converted to something
-          // legible on THIS screen at THIS zoom. See fitLabelToScreen.
-          const fit = fitLabelToScreen(wrapped, pos.r, pxPerWorld);
-          const label = { lines: wrapped.lines, fontSize: fit.fontSize, lineHeight: fit.lineHeight };
+          const placed = labelPlan.get(pos.id)!;
+          const label = { lines: placed.lines, fontSize: placed.fontSize, lineHeight: placed.lineHeight };
           const hasChildren = data.circles.some((o) => o.parentCircleId === pos.id && posById.has(o.id));
-          const labelTop = fit.outside
-            ? // Above the disc, clear of its seat ring, where the circle's own
-              // width stops constraining the name.
-              pos.y - pos.r - 6 - (label.lines.length - 1) * label.lineHeight
-            : hasChildren
-              ? pos.y - pos.r + 24
-              : pos.y - ((label.lines.length - 1) * label.lineHeight) / 2 + (forming ? -6 : 0);
+          const labelTop = placed.top;
 
           return (
             <motion.g key={pos.id} animate={{ opacity }} transition={morph}>
@@ -696,6 +735,10 @@ export default function PowerMap({
                       }
                     }}
                   >
+                    {/* The tap area, which is bigger than the dot and carries
+                        no ink. Drawn first, so it sits UNDER the glyph and
+                        cannot cover the face on a held seat. */}
+                    <HitArea r={seatHits.get(rp.id) ?? dotR} drawn={dotR} />
                     <SeatGlyph
                       x={0}
                       y={0}
@@ -757,7 +800,7 @@ export default function PowerMap({
                   as a halo so it holds on any circle's tone. Not on a circle
                   whose own name is drawn CENTRED in it: the number would sit
                   across the name, and the name already says which one it is. */}
-              {compact && keys?.has(pos.id) && !(showLabel(pos.id) && !fit.outside && !hasChildren) && (
+              {compact && keys?.has(pos.id) && !(showLabel(pos.id) && !placed.outside && !hasChildren) && (
                 <text
                   x={pos.x}
                   y={pos.y}
@@ -782,7 +825,7 @@ export default function PowerMap({
                 label={label}
                 show={showLabel(pos.id)}
                 hovered={hovered}
-                drop={!!compact && fit.outside && !isFocus}
+                drop={!!compact && placed.outside && !isFocus}
                 forming={forming}
                 hasChildren={hasChildren}
                 pxPerWorld={pxPerWorld}
@@ -821,6 +864,7 @@ export default function PowerMap({
                 }
               }}
             >
+              <HitArea r={seatHits.get(rp.id) ?? 12} drawn={12} />
               <SeatGlyph
                 x={0}
                 y={0}

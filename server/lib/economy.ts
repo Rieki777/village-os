@@ -437,137 +437,6 @@ export function cycleWindow(at: Date = new Date()): { startsAt: Date; endsAt: Da
   return { startsAt: new Date(c.startsAt), endsAt: new Date(c.endsAt), key: c.id };
 }
 
-// ── The epoch ───────────────────────────────────────────────────────────────
-
-/**
- * Confirmations recorded before the engine was switched on are HISTORY.
- *
- * Without this, the day the `economy` flag flips, every quest ever consented in
- * this village becomes an unpaid mint sitting in a source query, and the first
- * settlement pays out years of backlog at once. Nobody decided that; it would
- * simply be what the query returned.
- *
- * WHAT ENFORCES THAT TODAY: nothing on a live path, and the sentence that
- * stood here said otherwise for long enough to be worth correcting in place.
- * It read "every source query filters `confirmedAt >= economyEpoch`, and
- * honouring pre-epoch work is a deliberate, audited, keyed one-shot backfill
- * an admin runs on purpose". Both halves are false, measured on this tree:
- * there is no source query over quest claims at all (`runSettlement` sweeps
- * `role.cycle` seats and the voice waning, and never reads a claim), and no
- * admin backfill was ever built (nothing writes `economy-state` except
- * `startEconomyEpoch` below). The only comparison against this stamp is in
- * `mintForConfirmedClaim`, and #264 and #269 left that function with no
- * production caller when the consent route moved to `owedForClaim`/`postOwed`.
- * The guard is not merely uncalled, it does not ship: esbuild drops the whole
- * function, so after `pnpm build` the refusal sentence the guard returns is
- * present in this file and absent from the bundle. Re-run that rather than
- * trusting this paragraph, which is prose and cannot fail a build:
- *
- *     grep -c 'confirmed before the economy epoch' dist/index.js   # 0
- *
- * Only the dist side is quoted as a number. Counting the source side from here
- * would be a measurement this very comment changes, which is how the first
- * draft of it shipped a stale 2.
- *
- * AND IT NEVER REFUSED ANYTHING IN PRODUCTION EVEN BEFORE THAT. The old
- * consent route passed `confirmedAt: consented.resolvedAt`, and the same
- * transaction had just stamped `resolvedAt` at `now`; boot stamps the epoch
- * before the first request is served, and `startEconomyEpoch` refuses to stamp
- * the future. So `at < epoch` was false at every production consent, and the
- * split removed a branch production never took rather than a guard it leaned
- * on. What actually keeps a flag flip from paying years of backlog is
- * structural: an obligation only exists because a consent created it, and a
- * consent is always now. Read that as the reason a guard here would be
- * decoration, not as permission to add a query that walks old claims.
- *
- * The default is the moment the epoch is first read and written, which means
- * "from now", which is the only safe default.
- */
-let epochCache: Date | null = null;
-
-/**
- * Start the engine's clock, once, and return where it stands.
- *
- * Kept separate from reading it because for one release the SAME call did
- * both, and the only caller was the mint. A brand new village therefore
- * confirmed its first quest, the mint asked for the epoch, the epoch did not
- * exist yet, so the mint stamped it at `now` and then measured the claim
- * against it. The claim had resolved twenty milliseconds earlier. It lost.
- *
- * That is once per village, forever, deterministically, on the FIRST piece of
- * work anybody in that village ever completes: the moment a founder is
- * watching hardest, the ledger showed Gratitude and no Village Credits and no
- * Village Voice, and the server said "confirmed before the economy epoch",
- * which is true and reads like a policy rather than the bug it was. Every
- * later quest paid correctly, so it never looked like a defect in the engine.
- *
- * `at` is the moment the clock should start FROM when it has not been started.
- * The mint passes the claim in hand, because a claim that finds no epoch is by
- * construction the first economic act this engine has seen, and the first act
- * starts the clock rather than being ruled out by it. Boot passes nothing and
- * gets `now`, which is what "the engine came up" means and is why in
- * production the mint never reaches its own fallback.
- *
- * Already stamped is the normal case and never moves. The stamp is the one
- * value in this module that must be write-once.
- */
-export async function startEconomyEpoch(pool: Pool, at?: Date): Promise<Date> {
-  if (epochCache) return epochCache;
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT `value` FROM `app_config` WHERE `config_key` = 'economy-state' LIMIT 1",
-  );
-  // `app_config.value` is a JSON column, so mysql2 has already parsed it and
-  // hands back an object. `JSON.parse(String(obj))` parses "[object Object]",
-  // throws, and lands in the catch, which re-stamps the epoch on EVERY read:
-  // the one value that must never move would move every time it was asked for,
-  // and pre-epoch work would drift back into scope moment by moment.
-  let doc: any = {};
-  const raw = rows[0]?.value;
-  if (raw && typeof raw === "object") {
-    doc = raw;
-  } else if (typeof raw === "string" && raw) {
-    try {
-      doc = JSON.parse(raw);
-    } catch {
-      doc = {};
-    }
-  }
-  if (doc.economyEpoch) {
-    epochCache = new Date(doc.economyEpoch);
-    return epochCache;
-  }
-  // Never later than now: a caller handing us a future `confirmedAt` from a
-  // skewed clock must not push the epoch forward and rule out real work
-  // between now and then.
-  const now = new Date();
-  const start = at && at < now ? at : now;
-  doc.economyEpoch = start.toISOString();
-  await pool.query(
-    "INSERT INTO `app_config` (`config_key`, `value`) VALUES ('economy-state', ?) " +
-      "ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)",
-    [JSON.stringify(doc)],
-  );
-  epochCache = start;
-  return start;
-}
-
-/**
- * Where the clock stands, starting it at `now` if it has never been started.
- *
- * The historical name and the historical behaviour, kept because callers that
- * only want to READ an already-running engine are correct to use it. Anything
- * that also decides whether a specific piece of work counts must call
- * `startEconomyEpoch` with that work's moment instead. See above.
- */
-export async function economyEpoch(pool: Pool): Promise<Date> {
-  return startEconomyEpoch(pool);
-}
-
-/** Tests and the admin backfill reset the cache after writing the document. */
-export function forgetEpoch(): void {
-  epochCache = null;
-}
-
 // ── The flag, and why a boolean is not enough ───────────────────────────────
 
 /**
@@ -648,7 +517,7 @@ export interface MintInput {
    * MINOR UNITS, which is the contract `postTransfer` states, and `mint` hands
    * this straight through without touching it. Convert where the human number
    * LEAVES ITS SOURCE TABLE and never here: both production callers already do
-   * (`mintForConfirmedClaim` and `runSettlement`, over `mint_rules.amount`, a
+   * (`priceClaim` and `runSettlement`, over `mint_rules.amount`, a
    * `decimal(18,4)` carrying the rule's own human figure), so a conversion
    * inside this function would multiply theirs a second time. Same wording as
    * `ReverseOpts.amount` above, which states the same contract for the same
@@ -2199,7 +2068,7 @@ export async function give(
         // and printed back to the member in every refusal. `postTransferOn`
         // takes MINOR units. Converting at the top of `give` instead would
         // corrupt all three of those readers at once; converting at the
-        // boundary is what `mintForConfirmedClaim` already does.
+        // boundary is what `priceClaim` does for the rule tokens.
         amount: toLedgerUnits(HEARTS, amount),
         source: "gratitude_received",
         sourceRef: noteId,
@@ -2334,9 +2203,9 @@ function reportUnpayable(context: string, unpayable: Array<{ token: string; reas
  * logged and lost: the claim read consented and the member was never paid, with
  * nothing anywhere recording that they were owed. The quests lane records these
  * rows in the consent's OWN commit and posts them afterwards, so an obligation
- * survives a crash between the status flip and the payment. `mintForConfirmedClaim`
- * is kept as the same two steps back to back on the pool, so every caller it
- * already had behaves exactly as before.
+ * survives a crash between the status flip and the payment. The direct path
+ * `mintForConfirmedClaim` took those two steps back to back on the pool; it was
+ * removed once it had no production caller left.
  *
  * `units` is MINOR units, converted exactly once, in `owedForClaim`. Nothing
  * that reads a row converts again, and neither does the table that stores it.
@@ -2413,15 +2282,28 @@ const QUEST_STAY_TOKEN = "stay-credit";
  * read on whichever it is handed, so a caller holding the claim's row lock does
  * not reach for a second connection while it waits.
  *
- * NO EPOCH GUARD HERE, on purpose, and it is not a gap. The guard stops an OLD
- * confirmation becoming a payable backlog, which is a question about work
- * priced after the fact. This prices a consent at the moment it happens, and
- * the epoch is never later than now (`startEconomyEpoch` refuses to stamp the
- * future), so the guard could not refuse it. Nor could it run here safely:
- * stamping writes `app_config` and fills a process-level cache, and doing that
- * inside a transaction that then rolls back would leave the process believing in
- * an epoch no row records. A caller pricing past work runs the guard first, the
- * way `mintForConfirmedClaim` does.
+ * NO EPOCH GUARD HERE, AND NO EPOCH ANYWHERE. There was one: a stamp taken at
+ * boot, and a comparison in `mintForConfirmedClaim` that refused a claim
+ * confirmed before it, so that switching the economy on did not turn every
+ * quest ever consented into a payable backlog. Rye ruled on 2026-09-21 that
+ * acknowledging work done before an economy launched is not merely allowed but
+ * encouraged, so the guard was removed along with the machinery behind it.
+ *
+ * It had already stopped refusing anything, which is why the removal changes no
+ * behaviour. The consent route handed the guard `confirmedAt:
+ * consented.resolvedAt`, and the same transaction had just stamped `resolvedAt`
+ * at `now`; boot stamped the epoch before the first request was served. So
+ * `at < epoch` was false at every production consent.
+ *
+ * WHAT KEEPS A FLAG FLIP FROM PAYING YEARS OF BACKLOG IS STRUCTURAL, and it is
+ * worth knowing before anybody adds a sweep here: an obligation exists only
+ * because a consent created it, and a consent is always now. Nothing reads
+ * historical claims looking for work to pay. A query that walked old claims
+ * would reintroduce exactly the problem the epoch was invented for, and there
+ * would no longer be a guard underneath it.
+ *
+ * `server/lib/economyEpoch.test.ts` keeps the whole account, including the
+ * defect that cost every village its first payout.
  *
  * Recognition is not priced here. The consent route posts it itself, with the
  * range, the cap and the standing multiplier, and has since S7.
@@ -2444,8 +2326,9 @@ export async function owedForClaim(db: Pool | PoolConnection, claim: OwedClaim):
  * The pricing both entry points share. Reports nothing; each caller reports once.
  *
  * `granted` is required on `owedForClaim` and optional here. A consent's own
- * pricing must say what the witness granted; `mintForConfirmedClaim`, the direct
- * path, states no grant and prices every rule as it always has.
+ * pricing must say what the witness granted; the removed direct path
+ * stated no grant and priced every rule. Nothing reaches that branch today,
+ * because `owedForClaim` is the only caller and a grant is required on it.
  */
 async function priceClaim(
   db: Pool | PoolConnection,
@@ -2674,117 +2557,6 @@ export async function postOwedOn(conn: PoolConnection, row: OwedPosting): Promis
 }
 
 /**
- * KEPT FOR THE ECONOMY TESTS ONLY, AND IT MUST NOT GAIN A CALLER (economics lane,
- * 2026-09-15). The consent route prices what a consent owes with `owedForClaim`,
- * records it in its own commit, and pays it with `settleOwedPosting` in
- * server/repos/questOwedPostings.ts. This is the same pricing and the same keys,
- * taken back to back on the pool behind the epoch guard, and
- * server/economy.test.ts and server/lib/economyEpoch.test.ts still hold the
- * pricing through it. A second caller would be a second path that pays, free to
- * drift from the one that does. Deleting it means those tests stand on
- * `owedForClaim` and `postOwed`, and deciding what becomes of the per-claim
- * epoch guard, which has no other home.
- *
- * Everything a confirmed quest claim mints BEYOND the recognition the consent
- * route has always posted.
- *
- * Hearts are not minted here. The consent route has minted them since S7, with
- * a reward range, a consent cap, a standing multiplier and a claim-keyed
- * ledger post, and re-minting them from a rule would pay twice for one piece of
- * work. This adds what the rules table describes and the route never knew
- * about, which today is the village's voice token.
- *
- * Three guards, and each one is the reason the function exists rather than a
- * loop over rules at the call site:
- *
- *  - the epoch, so flipping the flag does not turn every quest ever consented
- *    into a payable backlog;
- *  - the readiness check, so a village with the flag on and no seeded rules
- *    mints nothing rather than believing it is running;
- *  - the occurrence key, so a re-consent after a wrong reversal pays once for
- *    each real occurrence and never twice for one.
- *
- * It never throws into the consent route. A quest that was witnessed and
- * credited must not fail because a secondary mint had a bad day, so the
- * failure is returned and logged and the claim stands.
- *
- * UNITS, because the sweep points other callers at this function as the worked
- * example. The human number leaves `mint_rules.amount`, a `decimal(18,4)`;
- * `ceilingOutcome` converts it once, at a scale it is handed, and answers in
- * the token's minor units with the ceiling already applied to THAT integer;
- * and a rule whose amount rounds below the token's own resolution is refused
- * out loud instead of being paid as zero. Nothing below that line converts
- * again and nothing above it posts.
- *
- * THE DECIMALS SWEEP CALLED THIS PATH ALREADY RIGHT AND IT WAS NOT. The
- * conversion happened once, which is what the sweep checked, and it happened
- * AFTER the comparison the ceiling had just won: `min(0.6, 0.5)` rounded to 1
- * on a whole-unit token and posted twice the cap. The sweep's own sentence is
- * why it went unseen for a moon, so it is corrected here instead of removed.
- */
-export async function mintForConfirmedClaim(
-  pool: Pool,
-  claim: { id: string; questId: string; userId: string; confirmedAt?: Date | string | null },
-): Promise<{
-  /**
-   * WHAT THE LEDGER ROW HOLDS, and nothing derived from it.
-   *
-   * The integer in the token's minor units, the scale that integer is in, and
-   * the slug it is of: R31's shape, from the one place that knows all three.
-   * This used to report the clamp's answer in HUMAN units, taken before
-   * `toLedgerUnits` ran, so a caller reading it was reading a number that
-   * exists nowhere in the database. `SettlementResult.minted` now carries the
-   * same three fields under the same names, so the two paths can finally be
-   * read the same way; before this they differed by `10 ** decimals` and only
-   * a field name said so.
-   */
-  minted: Array<{ token: string; units: number; decimals: number }>;
-  skipped?: string;
-  /**
-   * Rules that were enabled, in force, and could not pay. An empty array is
-   * the normal case; a non-empty one is a village promising something its
-   * engine cannot deliver. Already logged by `reportUnpayable` before this
-   * returns, so a caller that ignores the field still cannot make the failure
-   * silent. Returned as well so tests can assert on it and a route can act.
-   * See `ruleCannotPay`.
-   */
-  unpayable: Array<{ token: string; reason: string }>;
-}> {
-  const ready = await economyReady(pool);
-  if (!ready.ready) return { minted: [], unpayable: [], skipped: ready.reason };
-
-  // The claim's own moment, not `now`. If this is the first confirmed work
-  // this engine has ever seen, it STARTS the clock rather than losing to it by
-  // the milliseconds between resolving and being read. In production the boot
-  // has already stamped the epoch, so this argument is ignored and a genuinely
-  // old re-consented claim is still correctly history.
-  const at = claim.confirmedAt ? new Date(claim.confirmedAt) : new Date();
-  const epoch = await startEconomyEpoch(pool, at);
-  if (at < epoch) {
-    // History, not backlog. Honouring pre-epoch work is an explicit, audited,
-    // keyed admin backfill and never a side effect of reading a table.
-    return { minted: [], unpayable: [], skipped: "confirmed before the economy epoch" };
-  }
-
-  // THE SAME TWO STEPS the quests lane takes across a commit, taken back to
-  // back on the pool: price what the claim is owed, then post each row. A
-  // refusal from posting is the same class of news as a rule that cannot pay,
-  // so it joins `unpayable` and is reported with it, as it always was.
-  const priced = await priceClaim(pool, { id: claim.id, questId: claim.questId, userId: claim.userId });
-  const minted: Array<{ token: string; units: number; decimals: number }> = [];
-  const unpayable: Array<{ token: string; reason: string }> = [...priced.unpayable];
-  for (const row of priced.owed) {
-    const res = await postOwed(pool, row);
-    // THE ROW, not the number before it was rounded: `units` plus `decimals`
-    // plus the slug is R31's shape, and a duplicate paid nothing this time.
-    if (res.outcome === "posted") minted.push({ token: row.tokenSlug, units: row.units, decimals: row.decimals });
-    if (res.outcome === "refused") unpayable.push({ token: row.tokenSlug, reason: res.message });
-  }
-  reportUnpayable(`claim ${claim.id}`, unpayable);
-  return { minted, unpayable };
-}
-
-/**
  * A steward saw this person here. Badge progress only, never currency.
  *
  * Attendance is the one thing in this economy that pays nothing, and that is
@@ -2842,7 +2614,7 @@ export interface SettlementResult {
    * inside `ceilingOutcome`, and the seat loop below posts its answer without
    * touching it again.
    *
-   * `mintForConfirmedClaim` now reports the same three fields under the same
+   * The removed direct path reported the same three fields under the same
    * names. It used to report HUMAN units under the name `amount`, and the two
    * field names were the only thing telling the paths apart, so a reader
    * copying one call site's handling onto the other was wrong by
@@ -3324,7 +3096,7 @@ export async function runSettlement(pool: Pool, at: Date = new Date()): Promise<
     // seat loop paid nothing, and `alreadyRun` then went true because
     // `payable.length > 0`. A misconfiguration was reported as a completed
     // moon, which is the reading that stops anybody looking. Named here, in
-    // the same words `mintForConfirmedClaim` uses for the same shape.
+    // the same words the claim pricing uses for the same shape.
     if (r.amount === null) {
       ruleProblems.push({
         token: r.tokenSlug,
@@ -3351,7 +3123,7 @@ export async function runSettlement(pool: Pool, at: Date = new Date()): Promise<
     // other way a rule pays nobody while looking alive. Same class, same
     // report: a rule of 0.1 on a whole-unit token posts zero.
     const human = r.amount;
-    // KEPT for the reason written at its twin in `mintForConfirmedClaim`: on a
+    // KEPT for the reason written at its twin in `priceClaim`: on a
     // token at four decimals this cannot fire, because `mint_rules.amount` is
     // `decimal(18,4)`, and it stays because the next token a village registers
     // may carry fewer. (sweep lane F)
@@ -3793,7 +3565,7 @@ export async function queueRuleChange(
      * 0, so a founder could save 0.4 Village Credits, watch the form accept
      * it, watch the Mint panel publish the rule as live, and have it pay
      * nothing for the rest of the village's life. Both mint paths already
-     * report it — `mintForConfirmedClaim` and `runSettlement` name it as
+     * report it — `priceClaim` and `runSettlement` name it as
      * unpayable — but only once somebody has already been promised it and
      * gone unpaid, in a log the founder is not reading.
      *
