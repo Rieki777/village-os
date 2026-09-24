@@ -57,6 +57,7 @@ import { memberJoined } from "./lib/arrival";
 import { climbLadder, freezeStandingAboveTheDoor, questsThatCarriedPastTheDoor, type LadderStage } from "./lib/admission";
 import { adminGateWasConsulted, markAdminGate } from "./lib/adminGate";
 import { type FaqPathway, register as registerFaqRoutes } from "./routes/faqs";
+import { register as registerBrandRoutes } from "./routes/brand";
 import { register as registerGratitudeVoiceRoutes } from "./routes/gratitudeVoices";
 import { register as registerLandRoutes } from "./routes/land";
 import { register as registerMilestonesRoutes } from "./routes/milestones";
@@ -19290,38 +19291,7 @@ ${inner}
 
   registerSitePullRoutes(app, { isAdmin, adminActor, overLimit, clientIp, uploadsDir: UPLOADS_DIR });
   // Brand overlay: the Setup Wizard reads/writes this to white-label the site live.
-  app.get("/api/admin/brand", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    res.json({ brand: getBrand(), defaults: { project: GAME_CONFIG.project, currency: GAME_CONFIG.currency, images: GAME_CONFIG.images } });
-  });
-
-  app.put("/api/admin/brand", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    if (!req.body || typeof req.body !== "object") return res.status(400).json({ error: "Body required" });
-    const current = getBrand();
-    const next = {
-      project: { ...current.project, ...(req.body.project ?? {}) },
-      currency: { ...current.currency, ...(req.body.currency ?? {}) },
-      // Stripped on the way in as well as on the way out: a wizard tab opened
-      // before this change still holds `faviconAlt` in the object it posts
-      // back, and storing it again would put the orphan straight back.
-      images: withoutOrphanedAlt({ ...current.images, ...(req.body.images ?? {}) }),
-      setup: { ...current.setup, ...(req.body.setup ?? {}) },
-      // Theme fields are validated at EMISSION (server/lib/themeCss.ts), not
-      // here — storing a value the sanitiser later rejects yields an empty
-      // stylesheet, never an injected one. Rejecting at write time too would
-      // mean two sanitisers to keep in agreement forever.
-      theme: { ...(current as any).theme, ...(req.body.theme ?? {}) },
-      identityPack: { ...(current as any).identityPack, ...(req.body.identityPack ?? {}) },
-      // Sanitised on write (unlike theme) because this object is handed to the
-      // map artifact and two of its fields land in CSS custom properties. The
-      // artifact is a separate document doing its own thing with them, so the
-      // check belongs at the boundary where the value enters storage.
-      skin: sanitiseMapSkin({ ...(current as any).skin, ...(req.body.skin ?? {}) }),
-    };
-    await brandRepo.put(next);
-    res.json({ success: true, brand: next });
-  });
+  registerBrandRoutes(app, { isAdmin, brandRepo, getBrand, withoutOrphanedAlt });
 
   /**
    * The Living Map's skin, for the shell to hand its iframe.
