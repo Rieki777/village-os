@@ -271,17 +271,44 @@ export default function RedemptionPanel() {
         confirms that you have been paid, your tokens are destroyed, and they do not come back.
       </p>
 
-      {data.money?.processText?.trim() && (
-        <div className="border border-border rounded-lg px-4 py-3">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
-            How redemption works here
-          </p>
-          {/* The village's own words, as TEXT. LongText escapes by
-              construction and linkifies http(s) only, so nothing typed in
-              Admin can style or script this page. */}
+      {/*
+        * THE VILLAGE'S OWN PROCESS, OR THE FACT THAT IT HAS NONE.
+        *
+        * This block used to render only when the text was non-empty, so a
+        * village that switched redemption on without writing its process
+        * showed nothing here at all - and nothing anywhere else either. The
+        * member read the general explanation above, was invited to ask, and
+        * had no way to learn what happens after they do.
+        *
+        * Ruling 11 (2026-09-03): warnings never block launch, but they are
+        * kept where the person who can act on them will see them. Silence is
+        * neither. The module declares `setup: "required"` and the admin card
+        * links straight at this dial, so the founder already has the loud
+        * half; this is the half the member gets, and it says plainly that the
+        * absence is the village's and not the software's.
+        *
+        * It matters more than it looks, because the process text is
+        * SNAPSHOTTED onto each request (ruling 23). An empty village process
+        * is an empty snapshot, so the record of what was agreed is blank
+        * afterwards too, and nobody reading it later can tell a village that
+        * wrote nothing from one whose text was lost.
+        */}
+      <div className="border border-border rounded-lg px-4 py-3">
+        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+          How redemption works here
+        </p>
+        {data.money?.processText?.trim() ? (
+          /* The village's own words, as TEXT. LongText escapes by
+             construction and linkifies http(s) only, so nothing typed in
+             Admin can style or script this page. */
           <LongText text={data.money.processText} className="text-sm text-foreground" />
-        </div>
-      )}
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            This village has not written it down yet. You can still ask, and somebody will
+            answer, but nothing here can tell you what happens after that.
+          </p>
+        )}
+      </div>
 
       {Object.keys(data.held).length > 0 && (
         <div className="border border-border rounded-lg px-4 py-3">
@@ -388,7 +415,7 @@ export default function RedemptionPanel() {
             </label>
             {/* Only when the village offers a choice. One currency is the
                 common case and a select with one option is furniture. */}
-            {(data.money?.currencies.length ?? 0) > 1 && (
+            {(data.money?.currencies?.length ?? 0) > 1 && (
               <label className="text-sm text-foreground">
                 <span className="block text-xs text-muted-foreground mb-1">Paid in</span>
                 <select
