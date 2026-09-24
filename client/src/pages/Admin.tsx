@@ -9548,11 +9548,11 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
       </SetupSection>
 
       <SetupSection {...step} id="map" n={6} title="Map & styling" subtitle="How the Living Map draws your land. Blank keeps the map's own look.">
-        <MapSkinPanel password={password} />
-        <WalkEditorPanel password={password} />
+        <MapSkinPanel />
+        <WalkEditorPanel />
         {/* The vocabulary route has been live since the map shipped and its
             only caller was a CLI importer. This is its first door. */}
-        <MapVocabularyPanel password={password} />
+        <MapVocabularyPanel />
       </SetupSection>
 
       <SetupSection {...step} id="technical" n={7} title="Go live" subtitle="One-time technical setup. Hand these to your developer or Claude Code.">
