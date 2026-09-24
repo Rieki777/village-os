@@ -24,7 +24,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "./db/testDb";
 import { dbCollection } from "./repos/store-db";
 import { signingOf, SIGNING_TYPE } from "../shared/membershipSigning";
 
@@ -55,13 +55,18 @@ describe.skipIf(!configured)("a signing as the repo hands it over", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 4 });
     // The one statement here, and the only reason it is not a repo call: a
     // session setting is not a query on a table, and `kind: "time"` is exactly
     // what this file is about, so a session on the host's offset would make the
     // assertion below measure the wrong thing. `provisionTestDb` hands over a
     // fresh scratch schema, so there is nothing to clear before writing.
-    await pool.query("SET time_zone = '+00:00'"); // module-review-ok: a session time zone, not a table read, and the conversion under test depends on it
+    // `testPool` pins the session zone on EVERY connection. This file used to
+    // issue one `SET time_zone` here, which reaches the ONE connection that
+    // served it and leaves the other three on the host's offset - and with
+    // connectionLimit 4 a later query can land on any of them. The assertion
+    // below depends on the session, so that was a real race, not only a
+    // ratchet violation.
   }, 300_000);
 
   afterAll(async () => {
