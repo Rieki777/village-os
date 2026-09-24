@@ -20,10 +20,45 @@
  */
 import crypto from "crypto";
 import type { Pool, RowDataPacket } from "mysql2/promise";
-import { createPublicClient, http, erc20Abi, verifyMessage, getAddress } from "viem";
-import { base } from "viem/chains";
 import { stringVar } from "./variables";
 import { guardOutboundUrl } from "./toolcheck";
+
+/**
+ * VIEM LOADS WHEN A CHAIN READ HAPPENS, NEVER AT BOOT.
+ *
+ * These two were `import ... from "viem"` and `import ... from "viem/chains"`
+ * at the top of this file, and `server/index.ts` imports this file statically.
+ * In ESM every static import in the graph is resolved and EVALUATED before the
+ * entry module's first statement runs, so every boot of the built bundle
+ * loaded viem's 1,202-module graph whether or not anything ever read the
+ * chain, and printed nothing while it did, because no server code had run yet.
+ *
+ * Measured on Windows/Node 25, 2026-09-23, booting the built dist/index.js
+ * against a scratch schema: 74.3s to the first byte of log output on the first
+ * boot after a build, and a median of 13.8s across five warm boots, against an
+ * `E2E_BOOT_DEADLINE_MS` of 120s that no environment variable can raise. That
+ * silence is the expensive part: 56 e2e suites spawn this bundle, and a boot
+ * that has not reached its first statement is indistinguishable from a boot
+ * the reader's own change broke. Two lanes in one day stopped to disprove
+ * their own diffs against it.
+ *
+ * Memoised per process, so the first chain read pays and every read after it
+ * pays nothing. Split in two because they cost separately and are wanted
+ * separately: `verifyWalletSignature` recovers a signature and needs `viem`
+ * alone, while only the dialer needs the Base chain descriptor.
+ *
+ * `scripts/check-boot-imports.mjs` is what keeps this true. Nothing about a
+ * dynamic import stops the next person writing a static one.
+ */
+let viemLib: Promise<typeof import("viem")> | null = null;
+function viem(): Promise<typeof import("viem")> {
+  return (viemLib ??= import("viem"));
+}
+
+let viemChainsLib: Promise<typeof import("viem/chains")> | null = null;
+function viemChains(): Promise<typeof import("viem/chains")> {
+  return (viemChainsLib ??= import("viem/chains"));
+}
 
 export interface OnchainBalance {
   /** Raw uint256 as a decimal string — full fixed-point, never truncated. */
@@ -138,6 +173,9 @@ async function rpcClient() {
       return null;
     }
   }
+  // After the guards, never before them: a village with no RPC configured, or
+  // one pointed at a refused host, loads no chain library at all.
+  const [{ createPublicClient, http }, { base }] = await Promise.all([viem(), viemChains()]);
   return createPublicClient({
     chain: base,
     transport: http(url, { retryCount: 1, timeout: 8_000, fetchOptions: { redirect: "error" } }),
@@ -198,6 +236,8 @@ export async function readTokenIdentity(contractAddress: string): Promise<TokenI
   try {
     const client = await rpcClient();
     if (!client) return null;
+    // Both already resolved: rpcClient awaited them to build the client above.
+    const [{ getAddress, erc20Abi }, { base }] = await Promise.all([viem(), viemChains()]);
     const address = getAddress(contractAddress);
     const [name, symbol, decimals] = await Promise.all([
       client.readContract({ address, abi: erc20Abi, functionName: "name" }),
@@ -239,6 +279,7 @@ export async function readVillageMetric(
   try {
     const client = await rpcClient();
     if (!client) return null;
+    const { getAddress, erc20Abi } = await viem();
     const address = getAddress(input.contractAddress);
     let decimals = decimalsCache.get(address.toLowerCase());
     if (decimals === undefined) {
@@ -292,6 +333,7 @@ export async function readOnchainBalance(
   try {
     const client = await rpcClient();
     if (!client) throw new Error("no RPC configured");
+    const { getAddress, erc20Abi } = await viem();
     const contract = getAddress(input.contractAddress);
     const holder = getAddress(input.walletAddress);
     let decimals = decimalsCache.get(contract.toLowerCase());
@@ -375,6 +417,10 @@ export async function verifyWalletSignature(
   if (new Date(row.expires_at).getTime() < Date.now()) {
     return { ok: false, error: "The challenge expired. Request a fresh one" };
   }
+  // Only now, and only `viem` itself: recovering a signature needs no chain
+  // descriptor, and an expired or missing challenge above returned without
+  // loading anything.
+  const { getAddress, verifyMessage } = await viem();
   let address: string;
   try {
     address = getAddress(String(input.address));
