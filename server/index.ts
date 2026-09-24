@@ -43,8 +43,13 @@ import {
   moveCapabilityToVillage,
   RETURN_NEEDS_A_VOTE,
   returnCapabilityToScaffolding,
+  villageHandoverState,
   villageHeldCapabilities,
 } from "./lib/capabilityHolding";
+// 0219: the governing purpose statement, its one writer, and its subject.
+import { writeGoverningPurpose } from "./lib/governingPurpose";
+import { GPS_CHANGE } from "../shared/governingPurpose";
+import { gpsChangeCloser } from "./lib/gpsChangeCloser";
 import {
   NOT_YET_WIRED,
   POWERS,
@@ -90,6 +95,8 @@ import { registerMoonSettlementRoutes } from "./routes/moonSettlement";
 // The dispatcher lane: the landing path, the change-set executor and the roll notice.
 import { applyDueGovernance, autoSettleExpired, digestComposerFor, itemKindsOf, markNotApplicable, overrideDials, routeOutcome, runVetoWatch, vetoWindowOn, type CloseRouting, type LandingDeps, type SubjectCloser } from "./lib/applyDue";
 import { register as registerGovernanceModeRoutes } from "./routes/governanceMode";
+import { register as registerGoverningPurposeRoutes } from "./routes/governingPurpose";
+import { register as registerCapabilityExplainerRoutes } from "./routes/capabilityExplainer";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
 import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
 import { landWeightMode } from "./lib/landingRefusal";
@@ -132,7 +139,7 @@ import { register as registerFeedbackRoutes } from "./routes/feedback";
 import { register as registerCharacterPortraitRoutes } from "./routes/characterPortraits";
 import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
 import { register as registerPowerAffinityRoutes, powersForClass, withPowerAffinity } from "./routes/powerAffinity";
-import { register as registerPowerHandRoutes } from "./routes/powerHands";
+import { register as registerPowerHandRoutes, registerSeatVote } from "./routes/powerHands";
 import { resolveGoogleConfig } from "./lib/oauthGoogle";
 import { makeIdentityGate } from "./lib/identityConfirm";
 import {
@@ -570,7 +577,7 @@ import {
 } from "./lib/villageReaders";
 import {
   ASSISTANT_MODES, DEFAULT_ASSISTANT_MODEL, borrowingPlatformKey, callAssistant, parseJsonReply, sanitizeMessages,
-  wireAssistant, type AssistantResult,
+  assistantOwnKeyReadiness, wireAssistant, type AssistantResult,
 } from "./lib/assistant";
 import { recordAssistantUsage, type AssistantPath } from "./lib/assistantUsage";
 // LANE K1: which road an organize question takes, decided without a model.
@@ -12535,12 +12542,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
         : { state: "missing" as const, detail: "No Anthropic key. Every form still works, without the guide" }),
       // S76: borrowing is fine while a village is being built and wrong at
       // handoff. The key itself is never named here, only whose it is.
-      "assistant-own-key": () => (borrowingPlatformKey()
-        ? {
-            state: "missing" as const,
-            detail: "Running on the platform's key. Add your own before handoff so nobody else's rotation can switch the guide off",
-          }
-        : { state: "ok" as const, detail: "The guide runs on this village's own key" }),
+      // Three states, decided in server/lib/assistant.ts beside resolveKey: a
+      // deployment with NO key is not borrowing either, and used to read as ok.
+      "assistant-own-key": () => assistantOwnKeyReadiness(),
       "modules-decided": () => {
         const decided = decidedModuleIds();
         return decided.length > 0
@@ -13529,53 +13533,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
 
   // ── LANE A ZONE END: the organize route ──────────────────────────────────
 
-  /**
-   * P8 (Wave 1): why can this person do that?
-   *
-   * The gate now answers from five sources (admin, badge denies, roles,
-   * badge grants, stage) and the honest failure mode is FOG: an admin
-   * cannot see which one decided. This runs the real `hasCapability` for
-   * every capability and reports the DECIDING source alongside the answer,
-   * so a surprising permission has a traceable cause instead of a shrug.
-   */
-  app.get("/api/admin/members/:id/capabilities", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const target = await members.byId(String(req.params.id));
-    if (!target) return res.status(404).json({ error: "No such member" });
-    const ctx = await capabilityCtx(target);
-    // 0098: the ladder is no longer re-implemented here. It used to be, under
-    // a comment admitting that "if that order ever changes, this explanation
-    // lies", and the gate's order changed in this very commit. `hasCapability`
-    // is now a projection of `capabilityDecision`, which reports the deciding
-    // step, so the explainer READS the decision instead of guessing at it and
-    // the two cannot drift.
-    const rows = ALL_CAPABILITIES.map((cap) => {
-      const decision = capabilityDecision(cap, ctx);
-      // The rung the GATE compared against, `capabilityDecision`'s own
-      // expression: a village that moved a rung was told the platform's.
-      const rung = ctx.stageUnlockOverrides?.[cap] ?? STAGE_UNLOCKS[cap];
-      const source =
-        decision.source === "stage" ? `stage (${rung ?? "?"})` : decision.source;
-      return {
-        capability: cap,
-        held: decision.allowed,
-        source,
-        // What the village holds, so an admin reading "not granted" on a key
-        // they used to pass can see WHY rather than filing a bug.
-        villageHolds: decision.villageHolds,
-        transferable: TRANSFERABLE[cap] === true,
-      };
-    });
-    res.json({
-      member: { id: target.id, name: target.name, role: target.role },
-      stage: await stageOf(target),
-      roles: ctx.roleCapabilities,
-      badgeGrants: ctx.badgeCapabilities,
-      badgeDenies: ctx.badgeDenies,
-      villageHeld: ctx.villageHeld,
-      capabilities: rows,
-    });
-  });
+  registerCapabilityExplainerRoutes(app, { isAdmin, members, capabilityCtx, stageOf });
 
   /**
    * ── WHAT THIS VILLAGE HOLDS, AND WHAT MOVING ONE COSTS (0098) ───────────
@@ -13589,6 +13547,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
     const holdings = await capabilityHoldings(getPool());
     const held = new Map(holdings.map((h) => [h.capability, h]));
     res.json({
+      // 0219: so the confirm dialog warns on the LAST power and on no other.
+      handover: await villageHandoverState(getPool()),
       powers: POWERS.map((p) => {
         const h = held.get(p.capability);
         return {
@@ -22579,6 +22539,14 @@ ${inner}
     }),
 
     /*
+     * The village changes what it is for (0219). Dormant on every village
+     * alive today: the route that opens one refuses while the founder holds
+     * the pen. The whole executor, and why it is a file, is in
+     * server/lib/gpsChangeCloser.ts.
+     */
+    [GPS_CHANGE]: twoPhase(gpsChangeCloser({ getPool, notify, notifyAdmins, addActivity, ballotLink, recordAudit: (text: string, actorId: string) => void recordEvent(getPool(), { kind: "audit", text, actorUserId: actorId, entityType: "app_config", entityRef: "gps", audience: "admin" }) })),
+
+    /*
      * ── THE VILLAGE DECLARES A ROLE (this lane, R90) ────────────────────────
      *
      * R90, in the founder's words: "eventually a village will be able to vote
@@ -23476,6 +23444,8 @@ ${inner}
       opensAt: b.opensAt,
       closesAt: b.closesAt,
       status: b.status,
+      // 0219: the judgement line, beside the proposal at the moment of deciding.
+      purposeAlignment: b.purposeAlignment ?? null,
       outcomeNote: b.outcomeNote,
       closedBy: b.closedBy ? await nameOf(b.closedBy) : null,
       closedAt: b.closedAt,
@@ -23719,6 +23689,11 @@ ${inner}
       // decided on the ballot, so an edit after the vote opened cannot move the
       // instant the village was shown. Absent means next_moon.
       timing: timingOf((p as { timing?: unknown }).timing),
+      // 0219: the judgement line, asked HERE and not in the wizard, because
+      // this is where a proposer takes a staged proposal to the vote and the
+      // line freezes onto the ballot. See shared/governingPurpose.ts; whether
+      // it should move onto mechanics_proposals is a live question for Rye.
+      purposeAlignment: req.body?.purposeAlignment,
       window: { elements: changeSetKinds(p.changeSet), comingBackFrom: await comingBackFrom(getPool(), p.id) }, // windows lane (19E): the strictest element decides, and anything coming back gets its grace
       onOpen: async (conn, ballotId) => {
         const [r] = await conn.query<any>(
@@ -24687,6 +24662,8 @@ ${inner}
       ),
       openedBy: user.id,
       electorate,
+      // 0219: the judgement line; openBallot decides whether one is needed.
+      purposeAlignment: req.body?.purposeAlignment,
     });
     if (!result.ok) return res.status(409).json({ error: result.error, ballotId: result.alreadyOpen?.id ?? null });
 
@@ -24935,6 +24912,8 @@ ${inner}
       ),
       openedBy: user.id,
       electorate,
+      // 0219: the judgement line; openBallot decides whether one is needed.
+      purposeAlignment: req.body?.purposeAlignment,
     });
     if (!result.ok) return res.status(409).json({ error: result.error, ballotId: result.alreadyOpen?.id ?? null });
 
@@ -25088,6 +25067,8 @@ ${inner}
       ),
       openedBy: user.id,
       electorate,
+      // 0219: the judgement line; openBallot decides whether one is needed.
+      purposeAlignment: req.body?.purposeAlignment,
     });
     if (!result.ok) return res.status(409).json({ error: result.error, ballotId: result.alreadyOpen?.id ?? null });
 
@@ -25316,154 +25297,9 @@ ${inner}
     res.json({ success: true, ballot: await serveBallot(result.ballot, user.id) });
   });
 
-  /**
-   * ── SEAT SOMEBODY IN A ROLE ────────────────────────────────────────────────
-   *
-   * WHY THIS ONE REFUSES THE TWO KEYS THAT MAKE AN ELECTORATE, and the reason
-   * is `power_grant`'s reason one step further along. That route refuses to
-   * vote `ballot.vote` or `member.vouch` onto a role because "a role is a set
-   * of PEOPLE through its seats", so granting the vote to a role and then
-   * seating three people in it is a small group choosing who else gets a say.
-   * This route is the seating half of exactly that path. Granting is fenced
-   * and seating was not, because until now seating by vote did not exist.
-   *
-   * TRANSFERABLE excludes both keys today and `power_grant` refuses them by
-   * name, so nothing a village can do reaches this refusal. It is written for
-   * the same reason the grant's is: the day an admin route or a later lane
-   * puts one of those keys on a role, this path would otherwise widen in a
-   * commit about something else.
-   *
-   * R54 IS NOT BEING FENCED OFF. A village widening its own roll is the
-   * destination, and the way there is `progression.unlock.ballot.vote`, a
-   * mechanic the whole roll changes in one vote about a rule.
-   */
-  app.post("/api/governance/role-seats", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required" });
-    const ctx = await capabilityCtx(user);
-    if (await refuseUnlessMemberMayOpen(req, res, ctx, "Seating somebody in a role")) return;
-
-    const userId = String(req.body?.userId ?? "").trim();
-    const roleId = String(req.body?.roleId ?? "").trim();
-    const reason = String(req.body?.reason ?? "").trim().slice(0, 20000);
-
-    const role = rolesRepo.all().find((r: any) => r.id === roleId) as any;
-    if (!role) return res.status(404).json({ error: "There is no role by that name." });
-    if (role.isExample) {
-      return res.status(409).json({ error: "That is one of the platform's example roles, not one of this village's. Declare a role of your own first." });
-    }
-    const carried = ((role.capabilities ?? []) as string[]).filter((c) =>
-      ["ballot.vote", "member.vouch"].includes(c), // superVouch absent: SUPER_VOUCH_PLACEMENT
-    );
-    if (carried.length) {
-      return res.status(409).json({
-        error:
-          `${role.name ?? roleId} carries ${carried.join(" and ")}, so seating somebody in it would be a few members choosing who else gets a say. ` +
-          "Who votes here is a rule of the game, and the village changes it the way it changes any rule: open a rule change on the rung that decides who is on the roll, and the whole roll decides it.",
-      });
-    }
-    const member = await members.byId(userId);
-    if (!member) return res.status(404).json({ error: "There is no member by that id." });
-    if (isExampleUser(member)) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
-    if (loadRoleHolders().some((h) => h.roleId === roleId && h.userId === userId)) {
-      return res.status(409).json({
-        error: `${firstName(member.name)} already sits in ${role.name ?? roleId}. There is nothing for the village to decide here.`,
-      });
-    }
-    // A role can require a minimum stage, and an appointment made by the whole
-    // village respects the ladder the same way an admin's does. Asked again at
-    // close, because a member can slip below it while the vote runs.
-    if (role.minStage) {
-      const needed = stageIndex(role.minStage);
-      if (needed >= 0 && stageIndex(await stageOf(member)) < needed) {
-        return res.status(409).json({
-          error: `${firstName(member.name)} has not reached the ${getStage(role.minStage)?.name ?? role.minStage} stage this role asks for.`,
-          minStage: role.minStage,
-        });
-      }
-    }
-    if (userId.includes("@") || roleId.includes("@")) {
-      return res.status(400).json({ error: "A member and a role are both named without an @ in them." });
-    }
-    const subjectRef = `${userId}@${roleId}`;
-    if (subjectRef.length > 64) {
-      return res.status(409).json({ error: "That role's name is too long for the record to hold beside the member. Shorten the role id first." });
-    }
-    if (reason.length < 40) {
-      return res.status(400).json({
-        error: "Say why this person for this role. The whole roll reads this before voting.",
-      });
-    }
-
-    const setup = await roleBallotSetup();
-    if (setup.tokenProblem) return res.status(409).json({ error: setup.tokenProblem });
-
-    const term = resolveSeatTerm({ requestedEndsOn: req.body?.termEndsOn, calendar: seatCalendar(), capAtSeasonEnd: ((role.capabilities ?? []) as string[]).includes(STEWARD_VETO), now: new Date(), startsNoEarlierThan: seatVoteLandsAt(landingDeps(), setup.durationDays) });
-    if (!term.ok) return res.status(409).json({ error: term.error, code: term.code });
-    const can = roleConsequences(role);
-    const who = role.name ?? roleId;
-    const title = `${who}: the village asks ${firstName(member.name)} to sit in it`;
-    const doc = [
-      `# ${title}`,
-      "",
-      `## The role`,
-      "",
-      `${who}. ${String(role.description ?? "").trim()}`.trim(),
-      "",
-      `## What ${firstName(member.name)} would be able to do`,
-      "",
-      can.length
-        ? `From the day this carries, with no further vote:\n\n${can.map((c) => `- ${c}`).join("\n")}`
-        : `${who} carries no powers today, so this seats somebody in a role that grants nothing yet. If the village later votes ${who} a power, whoever is sitting in it holds that power from that day.`,
-      "",
-      `## Why this person`,
-      "",
-      reason,
-      "",
-      `## How long`, "",
-      `${term.followsSeason ? `Until the season ends on ${term.endsOn}, and if the season's end date moves, this seat moves with it.` : `Until ${term.endsOn}.`} When the term ends the seat ends, and the village can seat them again.`, ...(term.caution ? ["", term.caution] : []), "",
-      `## Taking it back`,
-      "",
-      `The village can vote this seat back at any time, and that vote is an ordinary one.`,
-      "",
-      `Asked by ${firstName(user.name)} on ${new Date().toISOString().slice(0, 10)}.`,
-      "",
-    ]
-      .filter((line, i, all) => !(line === "" && all[i - 1] === ""))
-      .join("\n");
-
-    const result = await openBallot(getPool(), {
-      subjectType: "role_seat",
-      onOpen: (conn, ballotId) => freezeSeatTerm(conn, ballotId, { endsAt: term.endsAt, seasonId: term.seasonId, followsSeason: term.followsSeason }),
-      subjectRef,
-      title,
-      docMarkdown: doc,
-      method: setup.method,
-      weightMode: setup.snapshot.mode,
-      weightToken: setup.snapshot.token,
-      unityPct: setup.dials.unityPct,
-      quorumPct: setup.dials.quorumPct,
-      durationDays: setup.durationDays,
-      openedBy: user.id,
-      electorate: setup.electorate,
-    });
-    if (!result.ok) return res.status(409).json({ error: result.error, ballotId: result.alreadyOpen?.id ?? null });
-
-    await addActivity("governance", `The village is deciding whether ${firstName(member.name)} sits in ${who}.`, {
-      actorUserId: user.id,
-      entityType: "ballot",
-      entityRef: result.ballot.id,
-    });
-    void notifyRoll(result.ballot, {
-      type: "ballot_opened",
-      title: `The village is asked whether ${firstName(member.name)} sits in ${who}`,
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}.`,
-      keySuffix: "open",
-      except: [user.id],
-      roll: setup.electorate.map((e) => e.userId),
-    });
-    res.json({ success: true, ballot: await serveBallot(result.ballot, user.id) });
-  });
+  // The seat vote itself is server/routes/powerHands.ts. It registers HERE, below the
+  // requireModule("governance") mount, which is what keeps that gate in front of the door.
+  registerSeatVote(app, { authedUser, capabilityCtx, members, firstName, stageOf, getPool, rolesRepo, loadRoleHolders, refuseUnlessMemberMayOpen, roleBallotSetup, roleConsequences, seatCalendar, landingDeps, addActivity, notifyRoll, serveBallot });
 
   /**
    * ── TAKE A SEAT BACK ───────────────────────────────────────────────────────
@@ -25594,6 +25430,7 @@ ${inner}
   });
   registerGovernanceModeRoutes(app, { authedUser, getPool, capabilityCtx, firstName, weightModeNow, buildElectorate });
   registerStewardSlateRoutes(app, { authedUser, isAdmin, getPool, members, firstName });
+  registerGoverningPurposeRoutes(app, { authedUser, isAdmin, adminActor, getPool, capabilityCtx, firstName, weightModeNow, buildElectorate, addActivity });
 
   /**
    * The subset of variables the CLIENT is allowed to know, so the UI can render

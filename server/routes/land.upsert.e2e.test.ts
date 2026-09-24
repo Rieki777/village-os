@@ -26,7 +26,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { splitStatements } from "../db/migrate";
-import { upsertParcel } from "../repos/villageLand";
+import { deleteParcel, upsertParcel } from "../repos/villageLand";
 
 const DB_CONFIGURED = testDbConfigured();
 const VILLAGE = "land-upsert-probe";
@@ -190,5 +190,69 @@ describe.skipIf(!DB_CONFIGURED)("0214 leaves no moment without a unique key", ()
     }
     // One row the whole way. A 2 anywhere names the boundary that had no key.
     expect(trail).toEqual(trail.map(() => 1));
+  });
+});
+
+/**
+ * TAKING A PIECE OF LAND BACK OFF, which the Add button made necessary the
+ * day it shipped.
+ *
+ * Parcels are created from a text box, so parcels get created by mistake, and
+ * until this there was no way back from the screen: the only remedy was a hand
+ * DELETE in production. The route's judgement about WHICH parcels may go lives
+ * in land.ts; what this proves is the statement underneath it, including the
+ * property that is easy to get wrong and impossible to see in a single-village
+ * deployment.
+ */
+describe.skipIf(!DB_CONFIGURED)("removing a parcel", () => {
+  const OTHER = "land-upsert-neighbour";
+
+  const otherVillageRows = async (): Promise<any[]> => {
+    const [r] = await conn.query( // module-review-ok: reading a second village's rows back to prove the delete was scoped
+      "SELECT slug FROM village_land WHERE village_id = ?",
+      [OTHER],
+    );
+    return r as any[];
+  };
+
+  beforeAll(async () => {
+    if (!DB_CONFIGURED) return;
+    await conn.query("DELETE FROM village_land WHERE village_id IN (?, ?)", [VILLAGE, OTHER]); // module-review-ok: this block seeds its own rows in the scratch schema the suite provisioned
+    await save("r1", "home", "The home block", 0, 9.1);
+    await save("r2", "the-ridge", "The ridge", 1, 9.2);
+    await save("r3", "south-block", "South block", 2, 9.3);
+    await upsertParcel(conn, {
+      id: "r4", villageId: OTHER, slug: "the-ridge", label: "Somebody else's ridge", sortOrder: 0,
+      centreLat: 9.9, centreLon: -83.8, spanM: 800, visibility: "exact",
+      sourceText: "t", sourceFormat: "decimal", updatedBy: "f2",
+    });
+  });
+
+  afterAll(async () => {
+    if (!DB_CONFIGURED || !testDb) return;
+    await conn.query("DELETE FROM village_land WHERE village_id = ?", [OTHER]).catch(() => {}); // module-review-ok: cleaning the second village this block seeded
+  });
+
+  it("takes the named parcel and leaves the others in their order", async () => {
+    await deleteParcel(conn, VILLAGE, "the-ridge");
+    const r = await rows();
+    expect(r.map((x) => x.slug)).toEqual(["home", "south-block"]);
+  });
+
+  it("leaves another village's parcel of the same name alone", async () => {
+    /*
+     * The delete is scoped to the village as well as the slug. This
+     * deployment is one village today, so a statement missing the village
+     * clause would pass every other test in this file and go wrong only after
+     * the retrofit 0069 exists for. Slugs are chosen by founders, so two
+     * villages naming a parcel 'the-ridge' is the ordinary case.
+     */
+    expect((await otherVillageRows()).map((x) => x.slug)).toEqual(["the-ridge"]);
+  });
+
+  it("is a quiet no-op on a name that is not there", async () => {
+    const before = (await rows()).map((x) => x.slug);
+    await deleteParcel(conn, VILLAGE, "never-existed");
+    expect((await rows()).map((x) => x.slug)).toEqual(before);
   });
 });

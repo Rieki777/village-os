@@ -247,8 +247,9 @@ the whole frozen roll was notified when the ballot opened, the document named th
   printing them.
 - `client/src/components/GameDashboard.tsx`. Reads `lastAdvance` off `/api/game/me` and celebrates a
   crossing once, keyed on `stage:<toStage>:<at>`.
-- `client/src/pages/Admin.tsx`. The Players roster with the per-member "Grant" select, and `GameRolesTab`
-  for appointments.
+- `client/src/pages/Admin.tsx`. The Players roster with the per-member "Grant" select.
+- `client/src/components/admin/GameRolesTab.tsx`. `GameRolesTab` for appointments, moved out of
+  `Admin.tsx` unchanged.
 - `client/src/components/admin/HandoverTab.tsx`. Not this module's route, but it edits `roles` rows: moving
   a capability to the village writes the key onto a role's `capabilities` list first.
 - `client/src/pages/QuestDetail.tsx` and `client/src/components/governance/pickSources.ts` both read

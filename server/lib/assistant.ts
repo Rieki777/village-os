@@ -553,3 +553,35 @@ export async function callAssistant(req: AssistantRequest): Promise<AssistantRes
 export function borrowingPlatformKey(env: NodeJS.ProcessEnv = process.env): boolean {
   return resolveKey(env)?.source === "platform";
 }
+
+/**
+ * WHOSE KEY THE GUIDE WOULD SPEND, in three answers rather than two.
+ *
+ * The launch checklist asked `borrowingPlatformKey()` and treated a false as
+ * "this village has its own". A deployment with NO key at all is not
+ * borrowing either, so nothing configured read as good news: the checklist
+ * said "The guide runs on this village's own key" two lines below
+ * `assistant-key` correctly reporting that there is no key. A readiness list
+ * exists to tell a founder the truth about their deployment before they go
+ * live, so a false green on it is worse than a missing row.
+ *
+ * It is three states because the question has three answers, and the boolean
+ * could only ever name two of them.
+ */
+export function assistantKeyOwner(env: NodeJS.ProcessEnv = process.env): "own" | "platform" | "none" {
+  const source = resolveKey(env)?.source;
+  if (source === "platform") return "platform";
+  return source ? "own" : "none";
+}
+
+/**
+ * The launch checklist's own words for each of those three, kept beside the
+ * function that decides which one applies rather than in server/index.ts. The
+ * borrowed and own sentences are unchanged; only the third is new.
+ */
+export function assistantOwnKeyReadiness(env: NodeJS.ProcessEnv = process.env): { state: "ok" | "missing"; detail: string } {
+  const owner = assistantKeyOwner(env);
+  if (owner === "platform") return { state: "missing", detail: "Running on the platform's key. Add your own before handoff so nobody else's rotation can switch the guide off" };
+  if (owner === "own") return { state: "ok", detail: "The guide runs on this village's own key" };
+  return { state: "missing", detail: "No key at all, so there is nothing to move onto your own. Connect the guide first, or leave it off deliberately" };
+}

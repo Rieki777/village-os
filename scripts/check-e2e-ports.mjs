@@ -51,6 +51,26 @@
  * server that the boot poll can never see. `server/adminTokens.e2e.test.ts`
  * held eight of them in 400 ports and failed CI on 6668, 6669 and 6679, each
  * time with "Server listening" in the log it printed beside "did not start".
+ *
+ * And no window may hold a port this project itself binds. `fetch` dials those
+ * happily; the bind is what loses. `server/handbackVote.routes.e2e.test.ts`
+ * sat on 3000-3399, which holds all three of ours at once, and on 2026-09-24 a
+ * pid ending in 306 put it on MySQL's 3306: the suite failed CI with "port 3306
+ * is already held by another process" while its neighbour run, one pid apart,
+ * passed. A hazard that fires on 4 pids in 400 is one this guard reports clean
+ * 99% of the time, which is why it needed listing rather than watching.
+ *
+ * 3306 and 3307 fail on opposite machines, which is why both are listed. CI
+ * binds 3306 and nothing is listening on 3307; a developer here runs MariaDB on
+ * 3307 and nothing on 3306. So a suite landing on 3307 passes every CI run and
+ * collides locally with the very database the suite is about to use -- failing
+ * in the direction that looks like your own change broke the database.
+ *
+ * None of this was unknown. SEASON2_FLEET_LEDGER.md records a lane choosing
+ * windows 1200-1599 and 1600-1999 and noting that "3000-4001 was passed over
+ * because local MariaDB holds 3307". The knowledge was written down and the
+ * next window was assigned into that range anyway, because prose is not
+ * compiled and this guard is. That is the whole argument for the list.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -80,12 +100,44 @@ const FETCH_BLOCKED_PORTS = [
   6669, 6679, 6697, 10080,
 ];
 
-/** The widest run of ports inside [lo, hi] that fetch will dial, or null. */
+/**
+ * The ports this project binds itself, each with the file that says so. A suite
+ * landing on one boots against a stranger or fails to bind at all; which of the
+ * two you get depends on ordering, so both are worth keeping out of every window.
+ */
+const OCCUPIED_PORTS = [
+  {
+    port: 3000,
+    by: "this app's own HTTP port",
+    where: "vite.config.ts's `port: 3000` and server/index.ts's `process.env.PORT || 3000`",
+  },
+  {
+    port: 3001,
+    by: "the API the dev client proxies to",
+    where: "vite.config.ts's /api and /health proxy targets",
+  },
+  {
+    port: 3306,
+    by: "MySQL on CI",
+    where: ".github/workflows/ci.yml runs `image: mysql:8` and points TEST_DATABASE_URL at 3306",
+  },
+  {
+    port: 3307,
+    by: "the local MariaDB the tests actually run against",
+    where: "SEASON2_FLEET_LEDGER.md: \"Test MySQL is 127.0.0.1:3307 (local, not production)\"",
+  },
+];
+
+/** Either hazard: fetch will not dial it, or something of ours already holds it. */
+const isUnusable = (p) =>
+  FETCH_BLOCKED_PORTS.includes(p) || OCCUPIED_PORTS.some((o) => o.port === p);
+
+/** The widest run of ports inside [lo, hi] that is clear of BOTH hazards, or null. */
 function widestCleanStretch(lo, hi) {
   let best = null;
   let start = lo;
   for (let p = lo; p <= hi + 1; p++) {
-    if (p <= hi && !FETCH_BLOCKED_PORTS.includes(p)) continue;
+    if (p <= hi && !isUnusable(p)) continue;
     if (p > start && (!best || p - start > best.hi - best.lo + 1)) best = { lo: start, hi: p - 1 };
     start = p + 1;
   }
@@ -172,6 +224,23 @@ for (const w of windows) {
   );
 }
 
+for (const w of windows) {
+  const held = OCCUPIED_PORTS.filter((o) => o.port >= w.lo && o.port <= w.hi);
+  if (held.length === 0) continue;
+  const clean = widestCleanStretch(w.lo, w.hi);
+  problems.push(
+    `${w.file}: ${w.name} [${w.lo}-${w.hi}] holds ` +
+      held.map((o) => `${o.port} (${o.by}, per ${o.where})`).join(", ") +
+      `. A run whose pid lands there either fails to bind at all or boots against the stranger ` +
+      `and asserts on its answers. It fires on ${held.length} pid(s) in ${w.hi - w.lo + 1}, so a ` +
+      `green here is mostly luck rather than evidence. ` +
+      (clean
+        ? `The widest clean stretch inside this window is [${clean.lo}-${clean.hi}], ` +
+          `${clean.hi - clean.lo + 1} port(s).`
+        : `No port inside this window is clean; move it.`),
+  );
+}
+
 for (let i = 0; i < windows.length; i++) {
   for (let j = i + 1; j < windows.length; j++) {
     const a = windows[i];
@@ -196,5 +265,6 @@ const hi = Math.max(...windows.map((w) => w.hi));
 console.log(
   `e2e port guard passed. ${windows.length} window(s) across ` +
     `${new Set(windows.map((w) => w.file)).size} file(s), disjoint between files, ${lo}-${hi}, ` +
-    `clear of the ${EPHEMERAL_FLOOR}+ ephemeral range and of every port fetch() refuses.`,
+    `clear of the ${EPHEMERAL_FLOOR}+ ephemeral range, of every port fetch() refuses, and of the ` +
+    `${OCCUPIED_PORTS.length} this project binds itself.`,
 );

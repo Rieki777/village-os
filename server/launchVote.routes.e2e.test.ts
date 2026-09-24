@@ -31,6 +31,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
 import { HANDOVER_SET } from "../shared/capabilities";
+import { PURPOSE_EXAMPLE } from "../shared/governingPurpose";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -314,6 +315,24 @@ beforeAll(async () => {
    */
   expect((await call("POST", "/api/admin/launch/confirm", {
     body: { id: "issuance-cap", done: "declined" },
+  })).status).toBe(200);
+
+  /*
+   * THE GOVERNING PURPOSE STATEMENT, WHICH BLOCKS THE LAUNCH VOTE (0219).
+   *
+   * Rye ruled that a village writes what it is for before it births, and the
+   * row is BLOCKING, so a suite that launches a village has to satisfy it the
+   * way a real founder does. There is no manual confirm to tick here: the
+   * check reads the document and runs the same validator the wizard runs, so
+   * the statement has to actually be written.
+   *
+   * That refusal is not left unobserved by satisfying it here. It has its own
+   * case in `server/governingPurpose.routes.e2e.test.ts`, which drives the
+   * door shut and asserts the sentence a founder reads, plus the two
+   * plausible non-answers the floor exists to refuse.
+   */
+  expect((await call("PUT", "/api/admin/purpose", {
+    body: { statement: PURPOSE_EXAMPLE },
   })).status).toBe(200);
 }, 240_000);
 

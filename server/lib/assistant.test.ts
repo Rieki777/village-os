@@ -12,6 +12,8 @@ import {
   ASSISTANT_MODES,
   MAX_MESSAGE_CHARS,
   MAX_TURNS,
+  assistantKeyOwner,
+  assistantOwnKeyReadiness,
   borrowingPlatformKey,
   callAssistant,
   parseJsonReply,
@@ -136,6 +138,49 @@ describe("resolveKey", () => {
     harness({ villageKey: "" });
     expect(resolveKey()).toBeNull();
     expect(borrowingPlatformKey()).toBe(false);
+  });
+});
+
+/*
+ * THREE ANSWERS, BECAUSE THE QUESTION HAS THREE.
+ *
+ * The case directly above is the whole defect in one line: with no key at all,
+ * `borrowingPlatformKey()` is FALSE, which is true and was read as "this
+ * village has its own". The launch checklist said "The guide runs on this
+ * village's own key" while `assistant-key` two rows above it correctly said
+ * there is no key. A readiness list exists to tell a founder the truth about
+ * their deployment before they go live, so a false green on it is worse than a
+ * missing row.
+ *
+ * ALL THREE STATES ARE HERE and the third is the point: a fix that only
+ * distinguished "borrowed" from "not borrowed" is the code that shipped.
+ */
+describe("whose key the guide would spend", () => {
+  it("says own when the village has one, and the checklist agrees", () => {
+    harness({ villageKey: "village-key" });
+    expect(assistantKeyOwner()).toBe("own");
+    expect(assistantOwnKeyReadiness()).toEqual({ state: "ok", detail: "The guide runs on this village's own key" });
+  });
+
+  it("says platform when it is borrowing, and the checklist asks for its own", () => {
+    harness({ villageKey: "" });
+    process.env.PLATFORM_ASSISTANT_KEY = "platform-key";
+    expect(assistantKeyOwner()).toBe("platform");
+    const r = assistantOwnKeyReadiness();
+    expect(r.state).toBe("missing");
+    expect(r.detail).toContain("Running on the platform's key");
+  });
+
+  it("says none when there is no key anywhere, and the checklist does NOT report ok", () => {
+    harness({ villageKey: "" });
+    delete process.env.PLATFORM_ASSISTANT_KEY;
+    // The true fact the old check misread: not borrowing, and not owning either.
+    expect(borrowingPlatformKey()).toBe(false);
+    expect(assistantKeyOwner()).toBe("none");
+    const r = assistantOwnKeyReadiness();
+    expect(r.state, "nothing configured must never read as ok").toBe("missing");
+    expect(r.detail).not.toContain("runs on this village's own key");
+    expect(r.detail).toContain("No key at all");
   });
 });
 
