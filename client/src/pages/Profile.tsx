@@ -9,6 +9,7 @@ import ProfileHero from "@/components/ProfileHero";
 import OnchainCard from "@/components/OnchainCard";
 import WalletCard from "@/components/WalletCard";
 import SendTokensCard from "@/components/SendTokensCard";
+import RedemptionPanel from "@/components/RedemptionPanel";
 import MaturityLadder from "@/components/profile/MaturityLadder";
 import PowersMap from "@/components/profile/PowersMap";
 import PathsPanel, { type PathTile } from "@/components/profile/PathsPanel";
@@ -23,6 +24,7 @@ import TheVessel from "@/components/profile/TheVessel";
 import MoonDock from "@/components/profile/MoonDock";
 import NightMotes from "@/components/profile/NightMotes";
 import { useAuth } from "@/contexts/AuthContext";
+import { useModule } from "@/modules/ModuleProvider";
 import { authToken, fetchGameMe, gameFetch, useGameConfig, type GameMe, type ProgressionCapability } from "@/lib/gameApi";
 import { motion, AnimatePresence } from "framer-motion";
 import { Heart, Edit2, LogOut, ArrowRight, CheckCircle2 } from "lucide-react";
@@ -77,6 +79,7 @@ export default function Profile() {
   const [, navigate] = useLocation();
   const tokenName = useTokenName("Recognition");
   const { user, logout, loading, updateProfile } = useAuth();
+  const redemptionModule = useModule("redemption");
   const [editingBio, setEditingBio] = useState(false);
   const [bioText, setBioText] = useState(user?.bio || "");
   const [savingBio, setSavingBio] = useState(false);
@@ -787,6 +790,45 @@ export default function Profile() {
                   village running only the core four still has credits arriving
                   from the cycle pool, and this is where they can go. */}
               <SendTokensCard />
+
+              {/*
+                * ASKING TO REDEEM, AND WHY IT IS HERE RATHER THAN BESIDE THE
+                * BALANCES CARD ABOVE.
+                *
+                * `/wallet` was redemption's only member-facing door, and that
+                * whole page short-circuits on `ModuleGate moduleId="exchange"`.
+                * So a village that switched redemption fully on, answered all
+                * fourteen of its settings and left the exchange off had no way
+                * for a member to reach it, while the routes and the ledger
+                * worked. A funds-bearing feature whose door sits inside an
+                * unrelated module is reachable by accident, not by design.
+                *
+                * IT IS NOT BESIDE `WalletCard` ON PURPOSE, and this is the
+                * load-bearing part. That card is gated on `useModule("exchange")`
+                * too, so putting the panel next to it would have closed the same
+                * door in a second place and looked like a fix. What makes this
+                * spot work is `SendTokensCard` directly above: it is deliberately
+                * ungated, which is what proves this section still renders with
+                * the exchange off. A fork that later gates this section takes the
+                * door away again, silently.
+                *
+                * `user &&` IS DEFENSIVE RATHER THAN LOAD-BEARING, and the
+                * difference is worth stating because I got it wrong first. The
+                * panel asks `/api/redemptions` on mount and that route answers
+                * 401 to a stranger, so an unguarded mount here would be the
+                * defect #353 closed. What keeps it quiet TODAY is not this
+                * check: `/profile` renders a sign-in form for a signed-out
+                * visitor, so this JSX never runs for them at all. Removing
+                * `user &&` changes nothing measurable right now, which I proved
+                * by removing it and watching the suite stay green.
+                *
+                * It stays because that is a guarantee about a render path
+                * rather than about this line, and a render path is somebody
+                * else's to change. The component's own effects DO run for a
+                * signed-out visitor, which is exactly how #353's two reads got
+                * out; only the JSX is spared.
+                */}
+              {user && redemptionModule && <RedemptionPanel />}
 
               {/* S47: on-chain holdings, renders nothing until the village
                   turns the economics section on */}
