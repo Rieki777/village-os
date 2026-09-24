@@ -142,7 +142,10 @@ export type OpenSeatVote = (ask: SeatVoteAsk) => Promise<SeatVoteOpened>;
 export function deferredSeatVote(): { opener: OpenSeatVote; fill(built: OpenSeatVote): void } {
   let built: OpenSeatVote | null = null;
   return {
-    opener: (ask) => {
+    // ASYNC so the refusal is a REJECTION and not a synchronous throw. Every
+    // caller is an `await` inside an express handler, and the two are not the
+    // same thing to a caller that wraps its await.
+    opener: async (ask) => {
       if (!built) throw new Error("A seat vote was asked for before registerSeatVote ran.");
       return built(ask);
     },

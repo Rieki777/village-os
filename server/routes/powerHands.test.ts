@@ -28,7 +28,7 @@ import type { Pool } from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { CapabilityCtx } from "../../shared/capabilities";
 import { liveHoldersOfCapability } from "../lib/roleGrants";
-import { register, registerSeatVote } from "./powerHands";
+import { deferredSeatVote, register, registerSeatVote } from "./powerHands";
 
 const LIBRARY = "library.keep";
 const LIBRARY_LABEL = "Keep the shared library and its loans";
@@ -410,5 +410,42 @@ describe("both doors open a seat vote through ONE function", () => {
     const hand = await ask("/api/powers/hands/hand-ana/put-to-village");
     expect(seat.status).toBe(409);
     expect(hand.body.error).toBe(seat.body.error);
+  });
+});
+
+/**
+ * The carriage between the two registrations, on its own. server/index.ts is
+ * three lines of wiring over this, and those three lines are the one part of
+ * the pair that no suite can drive over HTTP: the hand door registers
+ * thousands of lines above the seat vote, so the opener it is handed has to
+ * resolve later than its own registration.
+ */
+describe("deferredSeatVote", () => {
+  it("refuses BY NAME before registerSeatVote has run", async () => {
+    const seatVote = deferredSeatVote();
+    await expect(seatVote.opener({ userId: "u", roleId: "r", reason: "", openedBy: { id: "u", name: "U" } })).rejects.toThrow(
+      "A seat vote was asked for before registerSeatVote ran.",
+    );
+  });
+
+  it("calls what it was filled with, and hands the answer straight back", async () => {
+    const seatVote = deferredSeatVote();
+    const asks: unknown[] = [];
+    seatVote.fill(async (ask) => {
+      asks.push(ask);
+      return { ok: false, status: 409, body: { error: "the filled function answered" } };
+    });
+    const out = await seatVote.opener({ userId: "u", roleId: "r", reason: "", openedBy: { id: "u", name: "U" } });
+    expect(asks).toHaveLength(1);
+    expect(out).toEqual({ ok: false, status: 409, body: { error: "the filled function answered" } });
+  });
+
+  it("gives each call its OWN opener, so two apps in one process cannot share one", async () => {
+    const a = deferredSeatVote();
+    const b = deferredSeatVote();
+    a.fill(async () => ({ ok: false, status: 418, body: { error: "a" } }));
+    await expect(b.opener({ userId: "u", roleId: "r", reason: "", openedBy: { id: "u", name: "U" } })).rejects.toThrow(
+      "before registerSeatVote ran",
+    );
   });
 });
