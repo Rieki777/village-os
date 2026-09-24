@@ -89,9 +89,13 @@ async function postVaultDoc(bytes: Buffer, name: string, type: string) {
   return { status: res.status, json, text };
 }
 
-async function fetchUpload(filename: string): Promise<{ status: number; bytes: Buffer }> {
+async function fetchUpload(filename: string): Promise<{ status: number; bytes: Buffer; cacheControl: string }> {
   const res = await fetch(`${BASE}/api/uploads/${filename}`); // module-review-ok: the test client dialling the built server on localhost
-  return { status: res.status, bytes: Buffer.from(await res.arrayBuffer()) };
+  return {
+    status: res.status,
+    bytes: Buffer.from(await res.arrayBuffer()),
+    cacheControl: String(res.headers.get("cache-control") ?? ""),
+  };
 }
 
 async function plainJpeg(w = 1200, h = 900): Promise<Buffer> {
@@ -375,5 +379,49 @@ describe.skipIf(!DB_CONFIGURED)("the brand image door", () => {
       expect((await sharp(onDisk).metadata()).exif).toBeFalsy();
       expect(onDisk.includes(Buffer.from(FIXTURE_CAMERA))).toBe(false);
     }
+  });
+});
+
+
+/**
+ * WHOSE CACHE MAY HOLD IT, driven against the real header the real route sets.
+ *
+ * Erasure unlinks a member's files, so the origin answers 404 the moment they
+ * leave. The header said `public, max-age=31536000, immutable`, so every
+ * shared cache that had fetched one went on serving it for up to a year
+ * without ever asking, and a member's face could be handed to somebody else
+ * by a proxy after they had gone.
+ *
+ * BOTH DIRECTIONS ARE ASSERTED IN ONE CASE ON PURPOSE. A rule that answered
+ * `private` for everything would pass the member half and quietly cost every
+ * viewer of the village's own images a shared cache they could have used.
+ *
+ * THE FILE STANDING FOR "NOT A MEMBER'S" IS A VAULT IMAGE, AND THAT IS NOT AN
+ * ENDORSEMENT. `vaultBase` keeps the uploader's own filename, so an investor
+ * document carries no prefix to read and lands on the public side here. A
+ * vault PDF is already served `private, no-cache` by type and an image is
+ * not. That gap is real, it is a different argument from this one, and it is
+ * filed separately. If somebody closes it, this assertion is the one to
+ * change, and it should be changed deliberately rather than discovered.
+ */
+describe.skipIf(!DB_CONFIGURED)("the one-year header", () => {
+  it("is private for a member's own file and public for one that is not", async () => {
+    const mine = await postAttachment(await plainJpeg(40, 30), "my-face.jpg", "image/jpeg");
+    expect(mine.status, mine.text).toBe(200);
+    const mineName = String(mine.json?.filename ?? "");
+    expect(mineName, "the attachment door mints the member prefix").toMatch(/^proposal-/);
+
+    const theirs = await postVaultDoc(await plainJpeg(40, 30), "cap-table.jpg", "image/jpeg");
+    expect(theirs.status, theirs.text).toBe(200);
+    const theirsName = String(theirs.json?.url ?? "").replace("/api/uploads/", "");
+    expect(theirsName, "the vault keeps the uploader's own name, so it carries no prefix").toMatch(/^cap-table-/);
+
+    const served = await fetchUpload(mineName);
+    expect(served.status).toBe(200);
+    expect(served.cacheControl).toBe("private, max-age=31536000, immutable");
+
+    const other = await fetchUpload(theirsName);
+    expect(other.status).toBe(200);
+    expect(other.cacheControl).toBe("public, max-age=31536000, immutable");
   });
 });
