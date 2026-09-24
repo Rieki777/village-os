@@ -8,13 +8,28 @@
  *
  * The half that was missing is the half that does not cancel out. A value
  * written through the driver and read back through the driver is right either
- * way, which is most assertions and is why every suite passes today. A value
- * written by `NOW()` and read with `UNIX_TIMESTAMP`, or two instants compared
- * in SQL, is displaced by the database host's offset, and that offset is not
- * even constant: it follows the date being read across daylight-saving
- * boundaries. Measured on this tree, a February instant read at -08:00 on a
- * host whose `NOW()` reported -07:00, in the same second on the same
- * connection.
+ * way, which is most assertions and is why every suite passes today. What is
+ * displaced is a `NOW()`-written value read back THROUGH THE DRIVER, which
+ * parses the returned wall clock as UTC, and any comparison between such a
+ * value and a JS `Date` bound as a true instant.
+ *
+ * Measured on one unpinned connection at UTC-7: the driver read was 25,201
+ * seconds out, `UNIX_TIMESTAMP` of the same column was 1 second out, and
+ * `UNIX_TIMESTAMP` of a February LITERAL was 28,800 seconds out. Three
+ * different answers, and the last two are the ones people get wrong.
+ * `UNIX_TIMESTAMP` of a stored value is the REMEDY, because both ends are
+ * evaluated in the session's own frame; an earlier version of this header
+ * named it as the harm and was wrong. And 28,800 against 25,200 in the same
+ * run is the other lesson: the offset that applies is the one for the DATE
+ * BEING READ, so a suite cannot correct for this by measuring "the" offset.
+ *
+ * ── NEITHER ENVIRONMENT IS EVIDENCE ON ITS OWN ─────────────────────────────
+ *
+ * CI's MySQL container runs UTC, so every reading agrees there and this whole
+ * class is invisible. Developer machines here sit hours away, so they expose it
+ * and hide the opposite failure, where a comparison that is only correct
+ * BECAUSE of a local offset passes locally and breaks on CI. A green suite on
+ * one is not evidence about the other, in either direction.
  *
  * `server/db/testDb.ts` exports `testPool` for this. The guard exists because
  * the convention it replaces was already written down, on `TestDb.url`, and was
@@ -146,8 +161,9 @@ if (total > baseline.total) {
   );
   for (const u of unpinned.slice(0, 40)) console.error(`  ${u.file}:${u.line}`);
   console.error(
-    `\nA pool built with mysql.createPool({ timezone: "Z" }) reads NOW() and UNIX_TIMESTAMP in the\n` +
-      `database host's zone, not UTC, and the error changes size across a daylight-saving boundary.\n` +
+    `\nA pool built with mysql.createPool({ timezone: "Z" }) leaves NOW() evaluated in the database\n` +
+      `host's zone, so reading it back through the driver is wrong by that offset, and comparing it\n` +
+      `against a JS Date is wrong the same way. CI's MySQL runs UTC and cannot see any of it.\n` +
       `Use testPool(db, { connectionLimit: n }) from server/db/testDb.ts. If the missing pin is the\n` +
       `thing your test is measuring, put "test-pool-ok: <reason>" on the createPool line itself.`,
   );
