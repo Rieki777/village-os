@@ -2754,7 +2754,7 @@ function mergedConfig() {
       // 0083 (P8): where the project lives and what it counts in. Display
       // only, like every overlay field; blank inherits the platform default.
       country: pick((brand.project as any).country, p.country),
-      fiatCurrency: pick((brand.project as any).fiatCurrency, p.fiatCurrency),
+      fiatCurrency: pick(String((brand.project as any).fiatCurrency ?? "").trim(), p.fiatCurrency), // trimmed: shared/money.ts
       adminPath: p.adminPath,
       // Blank INHERITS the platform default, like every overlay field. A fork
       // that wants NO outside links clears the gameConfig default too — the

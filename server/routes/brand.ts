@@ -33,6 +33,7 @@
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { sanitiseMapSkin } from "../../shared/mapSkin";
+import { normaliseProjectCurrency } from "../../shared/money";
 import { GAME_CONFIG } from "../../shared/gameConfig";
 
 /** The brand document as this module hands it back and takes it in. */
@@ -67,6 +68,11 @@ export function register(app: Express, deps: Deps): void {
   app.put("/api/admin/brand", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     if (!req.body || typeof req.body !== "object") return res.status(400).json({ error: "Body required" });
+    // The one overlay field that is a CODE rather than words, so it is
+    // normalised and judged before it is merged. Why, and why whitespace
+    // normalises to blank rather than being refused: shared/money.ts.
+    const badCurrency = normaliseProjectCurrency(req.body.project);
+    if (badCurrency) return res.status(400).json({ error: badCurrency });
     const current = getBrand();
     const next = {
       project: { ...current.project, ...(req.body.project ?? {}) },
