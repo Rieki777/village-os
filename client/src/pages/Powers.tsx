@@ -38,11 +38,12 @@
  * tests are pure logic; there is no jsdom).
  */
 import Layout from "@/components/Layout";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authToken, useCatalyst } from "@/lib/gameApi";
 import { KeyRound } from "lucide-react";
 import { holderSentence, type PowerRow } from "@/lib/powersCopy";
+import HandsForPower, { type HandRow } from "@/components/power/HandsForPower";
 
 export default function Powers() {
   const { user } = useAuth();
@@ -50,6 +51,19 @@ export default function Powers() {
   // act by the same people, and it still writes the same line on the feed.
   const catalyst = useCatalyst();
   const [powers, setPowers] = useState<PowerRow[] | null>(null);
+  // Rye, 2026-09-23: the hands that are up, and what their authors wrote, are
+  // read by any member. The server decides per hand who may put one to the
+  // village, so nothing here is drawn from a stale opinion about who holds what.
+  const [hands, setHands] = useState<readonly HandRow[]>([]);
+
+  const readHands = useCallback(() => {
+    const token = authToken();
+    if (!token) return;
+    fetch("/api/powers/hands", { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setHands(d?.hands ?? []))
+      .catch(() => setHands([]));
+  }, []);
 
   useEffect(() => {
     const token = authToken();
@@ -58,7 +72,8 @@ export default function Powers() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setPowers(d?.powers ?? []))
       .catch(() => setPowers([]));
-  }, [user?.id]);
+    readHands();
+  }, [user?.id, readHands]);
 
   return (
     <Layout>
@@ -107,6 +122,7 @@ export default function Powers() {
                       {p.heldBy?.byBallot && (
                         <p className="text-sm text-teal-deep mt-1">The village voted this one across.</p>
                       )}
+                      <HandsForPower capability={p.capability} hands={hands} onOpened={readHands} />
                     </div>
                   </div>
                 </li>

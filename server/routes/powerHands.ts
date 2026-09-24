@@ -2,16 +2,37 @@
  * The two doors between a member and a power: asking for one, and being
  * seated where one lives.
  *
- *   POST /api/powers/:key/raise-hand   { note? }   file a hand in the inbox
- *   POST /api/governance/role-seats                open a vote on a seat
+ *   POST /api/powers/:key/raise-hand          { note? }   file a hand in the inbox
+ *   GET  /api/powers/hands                                the hands that are up
+ *   POST /api/powers/hands/:id/put-to-village { roleId?, reason?, termEndsOn? }
+ *   POST /api/governance/role-seats                       open a vote on a seat
  *
- * The rest of this header is about the hand. The seat vote keeps its own
- * reasoning beside `registerSeatVote` at the foot of the file, which is where
- * it was written and where the server/index.ts ratchet cannot reach it.
+ * The first three are the hand, and the rest of this header is about them. The
+ * seat vote keeps its own reasoning beside `registerSeatVote` at the foot of the
+ * file, which is where it was written and where the server/index.ts ratchet
+ * cannot reach it.
+ *
+ * ── THE TWO DOORS SHARE ONE `openSeatVote` ─────────────────────────────────
+ *
+ * `registerSeatVote` RETURNS the function its own route calls, and the hand
+ * door calls that same function. So every check, the term, the document and the
+ * notice are one copy: a seating rule cannot grow a second, more lenient
+ * spelling for one door to find. server/index.ts holds the two registrations at
+ * the lines they were lifted from, for the reason written above
+ * `registerSeatVote`, and carries the returned function between them.
  *
  * The rules are in shared/powerHands.ts, including why there is no route to
  * take a hand down yet. This file asks who is asking, reads their catalogue
  * fresh, and files the row.
+ *
+ * ── THE TWO ROUTES RYE'S RULINGS OF 2026-09-23 ADDED ───────────────────────
+ *
+ * A hand asks and never grants, and until those rulings nothing carried one to
+ * a vote: the only answer available was an admin moving the inbox row. The GET
+ * is ruling 2 (members read the notes), the POST is ruling 1 (who may put a
+ * hand to the village). Both of them read one function, `whoMayPutHandToVillage`
+ * and `publicHands` in shared/powerHands.ts, so the rule is provable without a
+ * database and stated in one place.
  *
  * ── THE PROFILE IS NEVER THE AUTHORITY ─────────────────────────────────────
  *
@@ -50,8 +71,19 @@
  * hand permits nothing, so no power guards the asking.
  */
 import type { Express } from "express";
-import { asOffer, POWER_APPLICATION, raiseHandRefusal, standingHands } from "../../shared/powerHands";
+import { isVillageHeld, type Capability } from "../../shared/capabilities";
+import {
+  asOffer,
+  POWER_APPLICATION,
+  publicHands,
+  putToVillageRefusal,
+  raiseHandRefusal,
+  standingHands,
+  whoMayPutHandToVillage,
+  type PublicHand,
+} from "../../shared/powerHands";
 import type { AppDeps } from "../lib/appDeps";
+import { capabilityHoldings } from "../lib/capabilityHolding";
 import { villageId } from "../lib/economy";
 import { recordEvent } from "../lib/events";
 import { readPowerAffinity } from "../lib/powerAffinity";
@@ -64,18 +96,92 @@ import type { BallotMethod } from "../../shared/governanceEngine";
 import { resolveSeatTerm, type SeatCalendar } from "../../shared/seatTerms";
 import type { LandingDeps } from "../lib/applyDue";
 import type { RollNotice } from "../lib/ballotNotices";
-import { openBallot } from "../lib/ballots";
+import { openBallot, type BallotRow } from "../lib/ballots";
 import { EXAMPLE_REFUSAL_BODY, isExampleUser } from "../lib/examples";
 import type { WeightModeSnapshot } from "../lib/governanceWeights";
 import { seatVoteLandsAt } from "../lib/seatTermLanding";
 import { STEWARD_VETO } from "../lib/stewardship";
 import { freezeSeatTerm } from "../repos/ballotSeatTerms";
 
+/**
+ * WHAT ONE DOOR HANDS THE OTHER. `registerSeatVote` returns `openSeatVote`,
+ * server/index.ts carries it to the hand door's registration, and this is the
+ * shape it travels in. Exported so that carriage is typed at both ends.
+ */
+export interface SeatVoteAsk {
+  userId: string;
+  roleId: string;
+  /** Why this person for this role. The whole roll reads it before voting. */
+  reason: string;
+  termEndsOn?: unknown;
+  /** Who is opening it: named on the document, and not rung by the notice. */
+  openedBy: { id: string; name: string };
+}
+export type SeatVoteOpened =
+  | { ok: true; ballot: BallotRow }
+  | { ok: false; status: number; body: Record<string, unknown> };
+export type OpenSeatVote = (ask: SeatVoteAsk) => Promise<SeatVoteOpened>;
+
+/**
+ * ── HOW THE HAND DOOR REACHES `openSeatVote` ───────────────────────────────
+ *
+ * The two registrations cannot move to sit beside each other, and no gate can
+ * see why. `server/index.ts` mounts `requireModule("governance")` on
+ * `/api/governance` partway down the file and Express matches in registration
+ * order, so `registerSeatVote` has to stay BELOW that mount while the hand
+ * door registers thousands of lines above it. Registering them together would
+ * take the governance module's lifecycle gate off a governance route with
+ * every gate still green. `notifyRoll` and `landingDeps` are consts declared
+ * lower still, so the opener cannot even be BUILT at the hand door's line.
+ *
+ * So the hand door is handed `opener`, which resolves at REQUEST time, and
+ * `registerSeatVote`'s return goes into `fill` when the lower line runs. Both
+ * live in one call rather than in module state, because a test builds two apps
+ * in one process and they must not share a seat vote.
+ */
+export function deferredSeatVote(): { opener: OpenSeatVote; fill(built: OpenSeatVote): void } {
+  let built: OpenSeatVote | null = null;
+  return {
+    // ASYNC so the refusal is a REJECTION and not a synchronous throw. Every
+    // caller is an `await` inside an express handler, and the two are not the
+    // same thing to a caller that wraps its await.
+    opener: async (ask) => {
+      if (!built) throw new Error("A seat vote was asked for before registerSeatVote ran.");
+      return built(ask);
+    },
+    fill: (o) => {
+      built = o;
+    },
+  };
+}
+
 type Deps = Pick<
   AppDeps,
-  "authedUser" | "capabilityCtx" | "stageOf" | "firstName" | "notifyAdmins" | "getPool" | "overLimit"
+  | "authedUser"
+  | "capabilityCtx"
+  | "stageOf"
+  | "firstName"
+  | "isPresent"
+  | "members"
+  | "notifyAdmins"
+  | "getPool"
+  | "overLimit"
 > & {
   submissionsRepo: DbCollection;
+  /**
+   * Who holds a power live, counted the way the gate counts (lapsed terms out,
+   * carried keys in, a warning badge's deny beating a role). One spelling,
+   * shared with the redemption door: `liveHoldersOf` in server/index.ts.
+   */
+  liveHoldersOf(capability: string): Promise<string[]>;
+  /** This village's own roles whose list carries a power, example roles out. */
+  rolesCarrying(capability: string): Array<{ id: string; name: string }>;
+  /**
+   * Open a `role_seat` ballot, every check and the term and the document and
+   * the notice included. The SAME function `POST /api/governance/role-seats`
+   * calls, so this route cannot grow a more lenient copy of a seating rule.
+   */
+  openSeatVote: OpenSeatVote;
 };
 
 /** The longest note a hand carries, the same as a seat hand. */
@@ -86,6 +192,7 @@ const HAND_WINDOW_MS = 10 * 60 * 1000;
 
 export function register(app: Express, deps: Deps): void {
   const { authedUser, capabilityCtx, stageOf, firstName, notifyAdmins, getPool, overLimit, submissionsRepo } = deps;
+  const { isPresent, members, liveHoldersOf, rolesCarrying, openSeatVote } = deps;
 
   const queues = new Map<string, Promise<void>>();
   /** Run the work after every earlier request for the same member and power has finished. */
@@ -179,6 +286,207 @@ export function register(app: Express, deps: Deps): void {
       res.json({ success: true, hand: { status: "new", submittedAt } });
     });
   });
+
+  /**
+   * How a power stands for one member: who may put a hand for it to the
+   * village, and which role a vote would seat somebody into.
+   *
+   * Both halves are one read each, so the GET below asks per POWER and never
+   * per hand. Ten hands for one power cost the same as one.
+   */
+  async function standingOf(capability: string, ctx: { villageHeld?: readonly string[] }, holdingRoleId: string | null) {
+    const rule = whoMayPutHandToVillage(
+      isVillageHeld(capability as Capability, ctx.villageHeld),
+      await liveHoldersOf(capability),
+    );
+    const carrying = rolesCarrying(capability);
+    /*
+     * WHICH ROLE THE VOTE WOULD USE. A power the village holds names its
+     * holding role in `capability_holding`, so that one is settled. Otherwise
+     * one role carrying it is settled too, and several means the opener says
+     * which. None means there is no seat to vote somebody into yet, and the
+     * refusal says where that door is.
+     */
+    const held = holdingRoleId ? carrying.find((r) => r.id === holdingRoleId) : undefined;
+    const role = held ?? (carrying.length === 1 ? carrying[0] : null);
+    return { rule, carrying, role: role ?? null };
+  }
+
+  /** The `role-application` neighbour is a seat hand and a separate question. */
+  const handsNow = async (): Promise<PublicHand[]> => {
+    const roster = new Map((await members.all()).map((m: any) => [String(m.id), m]));
+    return publicHands(submissionsRepo.all(), (id) => {
+      const m = roster.get(id);
+      return !!m && isPresent(m);
+    });
+  };
+
+  /**
+   * ── RULING 2: THE HANDS THAT ARE UP, NOTES AND ALL ─────────────────────────
+   *
+   * Rye chose "Everything public" over the recommended "Ask public, note
+   * private", and then chose "All notes public" over "only new notes public"
+   * when asked about writing already in the inbox. So this serves every
+   * standing hand's note, whenever it was written, to any signed in member.
+   *
+   * ── WHAT IT CANNOT LEAK, BY CONSTRUCTION ───────────────────────────────────
+   *
+   * `submissions` is one table holding membership requests, visit inquiries,
+   * investor enquiries and work-with-us letters beside these. `publicHands`
+   * builds each row field by field from a row it has already checked is a
+   * `power-application`, so nothing else in the table has a path out of here,
+   * and `email`, which the raise-hand route stores beside the note, is a field
+   * it never names. Widening this read by status or by type is the one change
+   * that would turn it into a privacy break, which is why the filter is in the
+   * pure function with a test on it and not in this handler.
+   *
+   * A HAND THAT IS DOWN IS NOT LISTED. "A raised hand" is the thing the ruling
+   * is about, and `STANDING_HAND_STATUSES` is already what raised means
+   * everywhere else in this loop, so an answered hand leaves this list exactly
+   * as it leaves the member's own profile. Its note stays where every
+   * submission's note has always been, in the founders' inbox.
+   *
+   * A MEMBER WHO ASKED TO BE FORGOTTEN IS NOT LISTED EITHER. The erasure step
+   * anonymises an inbox row and keeps it, and `note` is not among the fields it
+   * scrubs, so their writing survives. It survives in the admin inbox where it
+   * always was; it does not join a list members read.
+   */
+  app.get("/api/powers/hands", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to read the hands that are up." });
+    const hands = await handsNow();
+    const ctx = await capabilityCtx(user);
+    const holdings = await capabilityHoldings(getPool());
+    const holdingRole = new Map(holdings.map((h) => [h.capability, h.holderRoleId]));
+    const byPower = new Map<string, Awaited<ReturnType<typeof standingOf>>>();
+    for (const key of Array.from(new Set(hands.map((h) => h.capability)))) {
+      byPower.set(key, await standingOf(key, ctx, holdingRole.get(key) ?? null));
+    }
+    res.json({
+      hands: hands.map((h) => {
+        const state = byPower.get(h.capability)!;
+        return {
+          ...h,
+          /** May the member reading this put THIS hand to the village today. */
+          youMayPut: putToVillageRefusal(state.rule, String(user.id), h.powerLabel) === null,
+          whoMay: state.rule.who,
+          because: state.rule.because,
+          seatRole: state.role,
+          rolesCarrying: state.carrying,
+        };
+      }),
+    });
+  });
+
+  /**
+   * ── RULING 1: PUT A STANDING HAND TO THE VILLAGE ───────────────────────────
+   *
+   * The hole this fills is precise. A hand asks and never grants, and the only
+   * answer it could get was an admin moving its row, with the appointment a
+   * separate act somewhere else. This is the path from a standing hand to a
+   * vote, and `whoMayPutHandToVillage` is Rye's ruling about who may walk it.
+   *
+   * ── WHAT IT OPENS, AND WHY THAT ONE ────────────────────────────────────────
+   *
+   * A `role_seat` ballot, through the same `openSeatVote` that
+   * `POST /api/governance/role-seats` calls. A power reaches a member through a
+   * role that carries it and a seat on that role, so seating them in the role
+   * that carries the power is the vote that answers the hand. Every refusal
+   * that route makes is made here, including the one about `ballot.vote` and
+   * `member.vouch`, because it is the same function and not a copy of it. The
+   * term comes from `resolveSeatTerm` inside it, so every seat still has one.
+   *
+   * ── THE ONE GATE THAT IS DELIBERATELY NOT ASKED ────────────────────────────
+   *
+   * Every other vote-opening route asks `refuseUnlessMemberMayOpen`, which
+   * wants `proposal.open` held as a member. This one does not, and that is
+   * ruling 1 taken at its word: "any member can select hands and put them to
+   * the village once the village holds the approving power". `proposal.open`
+   * unlocks at the co-creator rung (STAGE_UNLOCKS), so asking for it would put
+   * every member below that rung outside a ruling that says "any member".
+   *
+   * WHAT IS LEFT HOLDING THE DOOR, stated plainly because this is the widest
+   * thing in the change: the hand has to exist and be up, its author has to
+   * still be here, the vote can only seat that author into a role that already
+   * carries that power, and one member gets ten of these in ten minutes. Rye
+   * ruled it and the reason he gave is that the vote decides, so proposing
+   * costs nothing.
+   */
+  app.post("/api/powers/hands/:id/put-to-village", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to put a hand to the village." });
+    if (await overLimit(`hand-to-village:${String(user.id)}`, HANDS_PER_WINDOW, HAND_WINDOW_MS)) {
+      return res.status(429).json({
+        error: "too_many_asks",
+        message: "That is a lot of votes to open in a few minutes. Wait a little and try again.",
+      });
+    }
+    const id = String(req.params.id ?? "").trim();
+    const hand = (await handsNow()).find((h) => h.id === id);
+    if (!hand) {
+      return res.status(404).json({
+        error: "hand_not_up",
+        message: "That hand is not up any more. It may have been answered already.",
+      });
+    }
+    const ctx = await capabilityCtx(user);
+    const holdings = await capabilityHoldings(getPool());
+    const state = await standingOf(hand.capability, ctx, holdings.find((h) => h.capability === hand.capability)?.holderRoleId ?? null);
+    const refusal = putToVillageRefusal(state.rule, String(user.id), hand.powerLabel);
+    if (refusal) return res.status(refusal.status).json({ error: refusal.error, message: refusal.message, whoMay: state.rule.who, because: state.rule.because });
+
+    const asked = String(req.body?.roleId ?? "").trim();
+    const role = asked ? state.carrying.find((r) => r.id === asked) : state.role;
+    if (!state.carrying.length) {
+      return res.status(409).json({
+        error: "no_role_carries_it",
+        message:
+          `No role in this village carries ${hand.powerLabel ? `"${hand.powerLabel}"` : "that power"} yet, so there is no seat to vote anybody into. ` +
+          "The village votes a power onto a role first, and then a hand for it has somewhere to go.",
+        rolesCarrying: state.carrying,
+      });
+    }
+    if (!role) {
+      return res.status(409).json({
+        error: "which_role",
+        message: "More than one role carries this power. Say which one the village is being asked to seat them in.",
+        rolesCarrying: state.carrying,
+      });
+    }
+
+    const said = String(req.body?.reason ?? "").trim().slice(0, 16000);
+    const offered = hand.powerLabel ? `to ${asOffer(hand.powerLabel)}` : `for the power ${hand.capability}`;
+    const quoted = hand.note.trim()
+      ? `They wrote:\n\n${hand.note.trim().split("\n").map((l) => `> ${l}`).join("\n")}`
+      : "They wrote nothing with it.";
+    const reason = [
+      `${hand.userName || "A member"} raised a hand ${offered} on ${hand.submittedAt.slice(0, 10)}.`,
+      quoted,
+      said,
+      `${firstName(user.name)} put that hand to the village.`,
+    ]
+      .filter((part) => part.trim() !== "")
+      .join("\n\n");
+
+    const opened = await openSeatVote({
+      userId: hand.userId,
+      roleId: role.id,
+      reason,
+      termEndsOn: req.body?.termEndsOn,
+      openedBy: user,
+    });
+    if (!opened.ok) return res.status(opened.status).json(opened.body);
+
+    await recordEvent(getPool(), {
+      kind: "role",
+      text: `${firstName(user.name)} put a raised hand ${offered} to the village`,
+      actorUserId: String(user.id),
+      entityType: "capability",
+      entityRef: hand.capability,
+      audience: "admin",
+    });
+    res.json({ success: true, ballot: { id: opened.ballot.id, closesAt: opened.ballot.closesAt }, seatRole: role });
+  });
 }
 
 /**
@@ -236,8 +544,13 @@ type SeatVoteDeps = Pick<
  * Calling this beside the power-hand route at the top of the file would put
  * the door IN FRONT of that mount, and the governance module would stop
  * gating it. So the call stays at the line the route was lifted from.
+ *
+ * IT RETURNS `openSeatVote`, which is how the OTHER door reaches the same act.
+ * The hand door registers thousands of lines above this call, so it cannot be
+ * handed a built opener at its own registration line; server/index.ts keeps
+ * what this returns and the hand door calls it at request time.
  */
-export function registerSeatVote(app: Express, deps: SeatVoteDeps): void {
+export function registerSeatVote(app: Express, deps: SeatVoteDeps): OpenSeatVote {
   const {
     authedUser, capabilityCtx, members, firstName, stageOf, getPool,
     rolesRepo, loadRoleHolders, refuseUnlessMemberMayOpen, roleBallotSetup, roleConsequences,
@@ -264,37 +577,59 @@ export function registerSeatVote(app: Express, deps: SeatVoteDeps): void {
    * R54 IS NOT BEING FENCED OFF. A village widening its own roll is the
    * destination, and the way there is `progression.unlock.ballot.vote`, a
    * mechanic the whole roll changes in one vote about a rule.
+   *
+   * ── OPENING A SEAT VOTE, ONCE, FOR EVERY DOOR THAT OPENS ONE ──────────────
+   *
+   * Lifted whole out of the route below on 2026-09-23, when a second door onto
+   * the same act arrived: a member putting a standing hand for a power to the
+   * village (`put-to-village`, above). Nothing about the checks, the term, the
+   * document or the notice changed in the move.
+   *
+   * ONE FUNCTION RATHER THAN TWO COPIES, for the reason `carriedBy` is exported
+   * from shared/capabilities.ts: every check below is a rule about what a
+   * village may vote on, and a rule with two spellings grows a lenient one, and
+   * the lenient one is the one somebody finds. The refusal about `ballot.vote`
+   * and `member.vouch` is the sharpest example. A second seat-vote path that
+   * forgot it would let a few members choose who else gets a say.
+   *
+   * WHAT THE TWO DOORS DO DIFFER ON IS WHO MAY KNOCK, and that stays at each
+   * route. The one below asks for `proposal.open` held as a member
+   * (`refuseUnlessMemberMayOpen`). The hand route asks Rye's ruling of
+   * 2026-09-23 instead (`whoMayPutHandToVillage`, shared/powerHands.ts).
+   *
+   * HOW THE HAND DOOR REACHES IT: this function is RETURNED, and server/index.ts
+   * carries it to a registration that runs THOUSANDS of lines earlier. Both
+   * registrations stay where they are, because Express matches in registration
+   * order and the `requireModule("governance")` mount sits between them.
+   *
+   * The caller owns the reply, so a refusal comes back as a status and a body
+   * rather than being sent from here.
    */
-  app.post("/api/governance/role-seats", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required" });
-    const ctx = await capabilityCtx(user);
-    if (await refuseUnlessMemberMayOpen(req, res, ctx, "Seating somebody in a role")) return;
-
-    const userId = String(req.body?.userId ?? "").trim();
-    const roleId = String(req.body?.roleId ?? "").trim();
-    const reason = String(req.body?.reason ?? "").trim().slice(0, 20000);
+  async function openSeatVote(ask: SeatVoteAsk): Promise<SeatVoteOpened> {
+    const { userId, roleId, reason } = ask;
+    const user = ask.openedBy;
+    const no = (status: number, body: Record<string, unknown>): SeatVoteOpened => ({ ok: false, status, body });
 
     const role = rolesRepo.all().find((r: any) => r.id === roleId) as any;
-    if (!role) return res.status(404).json({ error: "There is no role by that name." });
+    if (!role) return no(404, { error: "There is no role by that name." });
     if (role.isExample) {
-      return res.status(409).json({ error: "That is one of the platform's example roles, not one of this village's. Declare a role of your own first." });
+      return no(409, { error: "That is one of the platform's example roles, not one of this village's. Declare a role of your own first." });
     }
     const carried = ((role.capabilities ?? []) as string[]).filter((c) =>
       ["ballot.vote", "member.vouch"].includes(c), // superVouch absent: SUPER_VOUCH_PLACEMENT
     );
     if (carried.length) {
-      return res.status(409).json({
+      return no(409, {
         error:
           `${role.name ?? roleId} carries ${carried.join(" and ")}, so seating somebody in it would be a few members choosing who else gets a say. ` +
           "Who votes here is a rule of the game, and the village changes it the way it changes any rule: open a rule change on the rung that decides who is on the roll, and the whole roll decides it.",
       });
     }
     const member = await members.byId(userId);
-    if (!member) return res.status(404).json({ error: "There is no member by that id." });
-    if (isExampleUser(member)) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
+    if (!member) return no(404, { error: "There is no member by that id." });
+    if (isExampleUser(member)) return no(409, EXAMPLE_REFUSAL_BODY);
     if (loadRoleHolders().some((h) => h.roleId === roleId && h.userId === userId)) {
-      return res.status(409).json({
+      return no(409, {
         error: `${firstName(member.name)} already sits in ${role.name ?? roleId}. There is nothing for the village to decide here.`,
       });
     }
@@ -304,30 +639,30 @@ export function registerSeatVote(app: Express, deps: SeatVoteDeps): void {
     if (role.minStage) {
       const needed = stageIndex(role.minStage);
       if (needed >= 0 && stageIndex(await stageOf(member)) < needed) {
-        return res.status(409).json({
+        return no(409, {
           error: `${firstName(member.name)} has not reached the ${getStage(role.minStage)?.name ?? role.minStage} stage this role asks for.`,
           minStage: role.minStage,
         });
       }
     }
     if (userId.includes("@") || roleId.includes("@")) {
-      return res.status(400).json({ error: "A member and a role are both named without an @ in them." });
+      return no(400, { error: "A member and a role are both named without an @ in them." });
     }
     const subjectRef = `${userId}@${roleId}`;
     if (subjectRef.length > 64) {
-      return res.status(409).json({ error: "That role's name is too long for the record to hold beside the member. Shorten the role id first." });
+      return no(409, { error: "That role's name is too long for the record to hold beside the member. Shorten the role id first." });
     }
     if (reason.length < 40) {
-      return res.status(400).json({
+      return no(400, {
         error: "Say why this person for this role. The whole roll reads this before voting.",
       });
     }
 
     const setup = await roleBallotSetup();
-    if (setup.tokenProblem) return res.status(409).json({ error: setup.tokenProblem });
+    if (setup.tokenProblem) return no(409, { error: setup.tokenProblem });
 
-    const term = resolveSeatTerm({ requestedEndsOn: req.body?.termEndsOn, calendar: seatCalendar(), capAtSeasonEnd: ((role.capabilities ?? []) as string[]).includes(STEWARD_VETO), now: new Date(), startsNoEarlierThan: seatVoteLandsAt(landingDeps(), setup.durationDays) });
-    if (!term.ok) return res.status(409).json({ error: term.error, code: term.code });
+    const term = resolveSeatTerm({ requestedEndsOn: ask.termEndsOn, calendar: seatCalendar(), capAtSeasonEnd: ((role.capabilities ?? []) as string[]).includes(STEWARD_VETO), now: new Date(), startsNoEarlierThan: seatVoteLandsAt(landingDeps(), setup.durationDays) });
+    if (!term.ok) return no(409, { error: term.error, code: term.code });
     const can = roleConsequences(role);
     const who = role.name ?? roleId;
     const title = `${who}: the village asks ${firstName(member.name)} to sit in it`;
@@ -375,7 +710,7 @@ export function registerSeatVote(app: Express, deps: SeatVoteDeps): void {
       openedBy: user.id,
       electorate: setup.electorate,
     });
-    if (!result.ok) return res.status(409).json({ error: result.error, ballotId: result.alreadyOpen?.id ?? null });
+    if (!result.ok) return no(409, { error: result.error, ballotId: result.alreadyOpen?.id ?? null });
 
     await addActivity("governance", `The village is deciding whether ${firstName(member.name)} sits in ${who}.`, {
       actorUserId: user.id,
@@ -390,6 +725,24 @@ export function registerSeatVote(app: Express, deps: SeatVoteDeps): void {
       except: [user.id],
       roll: setup.electorate.map((e) => e.userId),
     });
-    res.json({ success: true, ballot: await serveBallot(result.ballot, user.id) });
+    return { ok: true, ballot: result.ballot };
+  }
+
+  app.post("/api/governance/role-seats", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    const ctx = await capabilityCtx(user);
+    if (await refuseUnlessMemberMayOpen(req, res, ctx, "Seating somebody in a role")) return;
+    const opened = await openSeatVote({
+      userId: String(req.body?.userId ?? "").trim(),
+      roleId: String(req.body?.roleId ?? "").trim(),
+      reason: String(req.body?.reason ?? "").trim().slice(0, 20000),
+      termEndsOn: req.body?.termEndsOn,
+      openedBy: user,
+    });
+    if (!opened.ok) return res.status(opened.status).json(opened.body);
+    res.json({ success: true, ballot: await serveBallot(opened.ballot, user.id) });
   });
+
+  return openSeatVote;
 }
