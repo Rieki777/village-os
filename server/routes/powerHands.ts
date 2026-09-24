@@ -1,7 +1,13 @@
 /**
- * A member raises a hand for a power the village puts to them.
+ * The two doors between a member and a power: asking for one, and being
+ * seated where one lives.
  *
  *   POST /api/powers/:key/raise-hand   { note? }   file a hand in the inbox
+ *   POST /api/governance/role-seats                open a vote on a seat
+ *
+ * The rest of this header is about the hand. The seat vote keeps its own
+ * reasoning beside `registerSeatVote` at the foot of the file, which is where
+ * it was written and where the server/index.ts ratchet cannot reach it.
  *
  * The rules are in shared/powerHands.ts, including why there is no route to
  * take a hand down yet. This file asks who is asking, reads their catalogue
@@ -51,6 +57,19 @@ import { recordEvent } from "../lib/events";
 import { readPowerAffinity } from "../lib/powerAffinity";
 import { capabilityCatalogue } from "../lib/progressionPayload";
 import type { DbCollection } from "../repos/store-db";
+import type { Request, Response } from "express";
+import type { CapabilityCtx } from "../../shared/capabilities";
+import { getStage, stageIndex } from "../../shared/gameConfig";
+import type { BallotMethod } from "../../shared/governanceEngine";
+import { resolveSeatTerm, type SeatCalendar } from "../../shared/seatTerms";
+import type { LandingDeps } from "../lib/applyDue";
+import type { RollNotice } from "../lib/ballotNotices";
+import { openBallot } from "../lib/ballots";
+import { EXAMPLE_REFUSAL_BODY, isExampleUser } from "../lib/examples";
+import type { WeightModeSnapshot } from "../lib/governanceWeights";
+import { seatVoteLandsAt } from "../lib/seatTermLanding";
+import { STEWARD_VETO } from "../lib/stewardship";
+import { freezeSeatTerm } from "../repos/ballotSeatTerms";
 
 type Deps = Pick<
   AppDeps,
@@ -159,5 +178,218 @@ export function register(app: Express, deps: Deps): void {
       await notifyAdmins("submission", said, `${POWER_APPLICATION}:${entry.id}`, "/admin?tab=submissions");
       res.json({ success: true, hand: { status: "new", submittedAt } });
     });
+  });
+}
+
+/**
+ * WHAT THE SEAT VOTE IS HANDED, and why none of it moved with it.
+ *
+ * Every name below is read live out of `server/index.ts` and every one of them
+ * has other callers there, so the route came across alone. Three are the
+ * arithmetic and the wording that three sibling ceremonies share
+ * (`roleBallotSetup`, `roleConsequences`, `refuseUnlessMemberMayOpen`), and a
+ * second copy of a threshold or a refusal is the thing an extraction is most
+ * likely to leave behind.
+ */
+type SeatVoteDeps = Pick<
+  AppDeps,
+  "authedUser" | "capabilityCtx" | "members" | "firstName" | "stageOf" | "getPool"
+> & {
+  /** Every role this village defines, live. `RoleDef` stays private to server/index.ts. */
+  rolesRepo: { all(): any[] };
+  /** Who sits where, live. */
+  loadRoleHolders(): { roleId: string; userId: string }[];
+  /** The refusal the role ceremonies share, so each keeps its own noun for the act. */
+  refuseUnlessMemberMayOpen(req: Request, res: Response, ctx: CapabilityCtx, act: string): Promise<boolean>;
+  /** The dials, the weight snapshot, the roll and the window, gathered once. */
+  roleBallotSetup(): Promise<{
+    method: BallotMethod;
+    dials: { unityPct: number; quorumPct: number };
+    snapshot: WeightModeSnapshot;
+    tokenProblem: string | null;
+    electorate: Array<{ userId: string; weight: number }>;
+    durationDays: number;
+  }>;
+  /** What a role can do today, in the words every other ceremony uses. */
+  roleConsequences(role: any): string[];
+  /** What every seat's term is decided against (shared/seatTerms.ts). */
+  seatCalendar(): SeatCalendar;
+  /** The landing reader server/index.ts builds fresh on every call. */
+  landingDeps(): LandingDeps;
+  /** The village's own record of what happened. */
+  addActivity(
+    kind: string,
+    text: string,
+    extra?: { actorUserId?: string | null; entityType?: string | null; entityRef?: string | null },
+  ): Promise<void>;
+  /** Tell the whole roll that a ballot opened. */
+  notifyRoll(b: { id: string }, input: RollNotice): Promise<number>;
+  /** The ballot in the shape a page reads. */
+  serveBallot(b: any, viewerId?: string): Promise<any>;
+};
+
+/**
+ * REGISTERED WHERE THE HANDLER USED TO SIT, and that is not a formality.
+ *
+ * `server/index.ts` mounts `requireModule("governance")` on `/api/governance`
+ * partway down the file, and Express runs middleware in registration order.
+ * Calling this beside the power-hand route at the top of the file would put
+ * the door IN FRONT of that mount, and the governance module would stop
+ * gating it. So the call stays at the line the route was lifted from.
+ */
+export function registerSeatVote(app: Express, deps: SeatVoteDeps): void {
+  const {
+    authedUser, capabilityCtx, members, firstName, stageOf, getPool,
+    rolesRepo, loadRoleHolders, refuseUnlessMemberMayOpen, roleBallotSetup, roleConsequences,
+    seatCalendar, landingDeps, addActivity, notifyRoll, serveBallot,
+  } = deps;
+
+  /**
+   * ── SEAT SOMEBODY IN A ROLE ────────────────────────────────────────────────
+   *
+   * WHY THIS ONE REFUSES THE TWO KEYS THAT MAKE AN ELECTORATE, and the reason
+   * is `power_grant`'s reason one step further along. That route refuses to
+   * vote `ballot.vote` or `member.vouch` onto a role because "a role is a set
+   * of PEOPLE through its seats", so granting the vote to a role and then
+   * seating three people in it is a small group choosing who else gets a say.
+   * This route is the seating half of exactly that path. Granting is fenced
+   * and seating was not, because until now seating by vote did not exist.
+   *
+   * TRANSFERABLE excludes both keys today and `power_grant` refuses them by
+   * name, so nothing a village can do reaches this refusal. It is written for
+   * the same reason the grant's is: the day an admin route or a later lane
+   * puts one of those keys on a role, this path would otherwise widen in a
+   * commit about something else.
+   *
+   * R54 IS NOT BEING FENCED OFF. A village widening its own roll is the
+   * destination, and the way there is `progression.unlock.ballot.vote`, a
+   * mechanic the whole roll changes in one vote about a rule.
+   */
+  app.post("/api/governance/role-seats", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    const ctx = await capabilityCtx(user);
+    if (await refuseUnlessMemberMayOpen(req, res, ctx, "Seating somebody in a role")) return;
+
+    const userId = String(req.body?.userId ?? "").trim();
+    const roleId = String(req.body?.roleId ?? "").trim();
+    const reason = String(req.body?.reason ?? "").trim().slice(0, 20000);
+
+    const role = rolesRepo.all().find((r: any) => r.id === roleId) as any;
+    if (!role) return res.status(404).json({ error: "There is no role by that name." });
+    if (role.isExample) {
+      return res.status(409).json({ error: "That is one of the platform's example roles, not one of this village's. Declare a role of your own first." });
+    }
+    const carried = ((role.capabilities ?? []) as string[]).filter((c) =>
+      ["ballot.vote", "member.vouch"].includes(c), // superVouch absent: SUPER_VOUCH_PLACEMENT
+    );
+    if (carried.length) {
+      return res.status(409).json({
+        error:
+          `${role.name ?? roleId} carries ${carried.join(" and ")}, so seating somebody in it would be a few members choosing who else gets a say. ` +
+          "Who votes here is a rule of the game, and the village changes it the way it changes any rule: open a rule change on the rung that decides who is on the roll, and the whole roll decides it.",
+      });
+    }
+    const member = await members.byId(userId);
+    if (!member) return res.status(404).json({ error: "There is no member by that id." });
+    if (isExampleUser(member)) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
+    if (loadRoleHolders().some((h) => h.roleId === roleId && h.userId === userId)) {
+      return res.status(409).json({
+        error: `${firstName(member.name)} already sits in ${role.name ?? roleId}. There is nothing for the village to decide here.`,
+      });
+    }
+    // A role can require a minimum stage, and an appointment made by the whole
+    // village respects the ladder the same way an admin's does. Asked again at
+    // close, because a member can slip below it while the vote runs.
+    if (role.minStage) {
+      const needed = stageIndex(role.minStage);
+      if (needed >= 0 && stageIndex(await stageOf(member)) < needed) {
+        return res.status(409).json({
+          error: `${firstName(member.name)} has not reached the ${getStage(role.minStage)?.name ?? role.minStage} stage this role asks for.`,
+          minStage: role.minStage,
+        });
+      }
+    }
+    if (userId.includes("@") || roleId.includes("@")) {
+      return res.status(400).json({ error: "A member and a role are both named without an @ in them." });
+    }
+    const subjectRef = `${userId}@${roleId}`;
+    if (subjectRef.length > 64) {
+      return res.status(409).json({ error: "That role's name is too long for the record to hold beside the member. Shorten the role id first." });
+    }
+    if (reason.length < 40) {
+      return res.status(400).json({
+        error: "Say why this person for this role. The whole roll reads this before voting.",
+      });
+    }
+
+    const setup = await roleBallotSetup();
+    if (setup.tokenProblem) return res.status(409).json({ error: setup.tokenProblem });
+
+    const term = resolveSeatTerm({ requestedEndsOn: req.body?.termEndsOn, calendar: seatCalendar(), capAtSeasonEnd: ((role.capabilities ?? []) as string[]).includes(STEWARD_VETO), now: new Date(), startsNoEarlierThan: seatVoteLandsAt(landingDeps(), setup.durationDays) });
+    if (!term.ok) return res.status(409).json({ error: term.error, code: term.code });
+    const can = roleConsequences(role);
+    const who = role.name ?? roleId;
+    const title = `${who}: the village asks ${firstName(member.name)} to sit in it`;
+    const doc = [
+      `# ${title}`,
+      "",
+      `## The role`,
+      "",
+      `${who}. ${String(role.description ?? "").trim()}`.trim(),
+      "",
+      `## What ${firstName(member.name)} would be able to do`,
+      "",
+      can.length
+        ? `From the day this carries, with no further vote:\n\n${can.map((c) => `- ${c}`).join("\n")}`
+        : `${who} carries no powers today, so this seats somebody in a role that grants nothing yet. If the village later votes ${who} a power, whoever is sitting in it holds that power from that day.`,
+      "",
+      `## Why this person`,
+      "",
+      reason,
+      "",
+      `## How long`, "",
+      `${term.followsSeason ? `Until the season ends on ${term.endsOn}, and if the season's end date moves, this seat moves with it.` : `Until ${term.endsOn}.`} When the term ends the seat ends, and the village can seat them again.`, ...(term.caution ? ["", term.caution] : []), "",
+      `## Taking it back`,
+      "",
+      `The village can vote this seat back at any time, and that vote is an ordinary one.`,
+      "",
+      `Asked by ${firstName(user.name)} on ${new Date().toISOString().slice(0, 10)}.`,
+      "",
+    ]
+      .filter((line, i, all) => !(line === "" && all[i - 1] === ""))
+      .join("\n");
+
+    const result = await openBallot(getPool(), {
+      subjectType: "role_seat",
+      onOpen: (conn, ballotId) => freezeSeatTerm(conn, ballotId, { endsAt: term.endsAt, seasonId: term.seasonId, followsSeason: term.followsSeason }),
+      subjectRef,
+      title,
+      docMarkdown: doc,
+      method: setup.method,
+      weightMode: setup.snapshot.mode,
+      weightToken: setup.snapshot.token,
+      unityPct: setup.dials.unityPct,
+      quorumPct: setup.dials.quorumPct,
+      durationDays: setup.durationDays,
+      openedBy: user.id,
+      electorate: setup.electorate,
+    });
+    if (!result.ok) return res.status(409).json({ error: result.error, ballotId: result.alreadyOpen?.id ?? null });
+
+    await addActivity("governance", `The village is deciding whether ${firstName(member.name)} sits in ${who}.`, {
+      actorUserId: user.id,
+      entityType: "ballot",
+      entityRef: result.ballot.id,
+    });
+    void notifyRoll(result.ballot, {
+      type: "ballot_opened",
+      title: `The village is asked whether ${firstName(member.name)} sits in ${who}`,
+      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}.`,
+      keySuffix: "open",
+      except: [user.id],
+      roll: setup.electorate.map((e) => e.userId),
+    });
+    res.json({ success: true, ballot: await serveBallot(result.ballot, user.id) });
   });
 }
