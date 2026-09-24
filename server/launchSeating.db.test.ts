@@ -150,15 +150,28 @@ async function stoodAtLaunch(pool: Pool, userId: string, stands = true): Promise
   );
 }
 
-/** Every power this village has entrusted, and to whom. */
-async function entrusted(pool: Pool): Promise<Array<{ capability: string; holder: string; ballot: string | null }>> {
+/**
+ * Every power this village has entrusted, to whom, and WHEN IT CROSSED.
+ *
+ * `moved_at` is in here for the retry case and it is the load-bearing column
+ * there. A crossing that ran again and rewrote the row it should have left
+ * alone is a different answer from one that did nothing, and without the
+ * timestamp the two are indistinguishable: the count stays nineteen either
+ * way. Read through `UNIX_TIMESTAMP` for the reason `seatOf` gives, which is
+ * that a driver read of a TIMESTAMP shifts by the database host's offset.
+ */
+async function entrusted(
+  pool: Pool,
+): Promise<Array<{ capability: string; holder: string; ballot: string | null; movedAt: number }>> {
   const [rows]: any = await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-    "SELECT capability, holder_role_id, moved_by_ballot_id FROM capability_holding ORDER BY capability",
+    "SELECT capability, holder_role_id, moved_by_ballot_id, UNIX_TIMESTAMP(moved_at) AS moved " +
+      "FROM capability_holding ORDER BY capability",
   );
   return rows.map((r: any) => ({
     capability: String(r.capability),
     holder: String(r.holder_role_id),
     ballot: r.moved_by_ballot_id === null ? null : String(r.moved_by_ballot_id),
+    movedAt: Number(r.moved),
   }));
 }
 
@@ -387,6 +400,10 @@ describe.skipIf(!configured)("the launch seats the village's founders as steward
     const before = log.rung.length;
     const pulseBefore = log.pulse.length;
     const movedBefore = await entrusted(pool);
+    // A whole second between the two crossings, so a rewritten `moved_at`
+    // really is a different number. Without it the retry can land inside the
+    // same second and the comparison below passes on a row that moved.
+    await new Promise((r) => setTimeout(r, 1100));
     const again = await seatFoundersAtLaunch(log.deps());
 
     expect(again.ok).toBe(true);
