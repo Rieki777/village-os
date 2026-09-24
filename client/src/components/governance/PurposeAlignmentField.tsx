@@ -1,5 +1,5 @@
 /**
- * HOW THIS PROPOSAL SERVES THE VILLAGE'S GOVERNING PURPOSE (0217).
+ * HOW THIS PROPOSAL SERVES THE VILLAGE'S GOVERNING PURPOSE (0219).
  *
  * Rye, 2026-09-23: on a proposal that changes how the village works, the
  * proposer writes one line on how it serves the purpose, it shows beside the

@@ -528,7 +528,7 @@ export default function GameMechanics() {
    */
   const [answerable, setAnswerable] = useState<AnswerableObjection[]>([]);
   const [answersFor, setAnswersFor] = useState<Record<string, string>>({});
-  const alignment = usePurposeAlignment(); // 0217: the judgement line, per proposal
+  const alignment = usePurposeAlignment(); // 0219: the judgement line, per proposal
 
   // A notification about a proposal lands ON the proposal. The dependency is
   // the list length because the target arrives with the fetch, not with the
@@ -1150,7 +1150,7 @@ export default function GameMechanics() {
                               Open the village vote
                             </button>
                           )}
-                          {/* 0217: the field asks itself whether to render, from
+                          {/* 0219: the field asks itself whether to render, from
                               the same condition the route refuses on. */}
                           {mayOpenBallotOn(p) && <PurposeAlignmentField {...alignment.propsFor(p.id)} />}
                           {/* THE PROPOSER NAMES WHAT THIS ANSWERS (0102).

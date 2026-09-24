@@ -1,5 +1,5 @@
 /**
- * THE GOVERNING PURPOSE STATEMENT, DRIVEN (0217), against the built server.
+ * THE GOVERNING PURPOSE STATEMENT, DRIVEN (0219), against the built server.
  *
  * Rye, 2026-09-23. Four rulings, and this file drives each of them rather
  * than asserting about them:
@@ -34,7 +34,7 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
 import { HANDOVER_SET } from "../shared/capabilities";
 import { purposeStatementProblem } from "../shared/governingPurpose";
@@ -158,7 +158,7 @@ beforeAll(async () => {
   }
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-gps-"));
   testDb = await provisionTestDb();
-  pool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+  pool = testPool(testDb, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
   await pool.query( // module-review-ok: a fixture on the scratch schema this suite provisioned
     "INSERT INTO roles (id, name, capabilities) VALUES ('keepers','The Keepers',?)",
     [JSON.stringify([])],

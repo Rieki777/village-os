@@ -347,7 +347,7 @@ function HandOverDialog({
   const open = !!power && !!role;
   const roleName = role?.name ?? role?.id ?? "";
   /*
-   * THE LAST POWER, AND ONLY THE LAST ONE (0217).
+   * THE LAST POWER, AND ONLY THE LAST ONE (0219).
    *
    * Crossing this one completes the handover, and completing the handover
    * moves the pen over the governing purpose statement from the founder to

@@ -80,7 +80,7 @@ export interface Ballot {
   title: string;
   docMarkdown: string;
   /**
-   * The proposer's one line on how this serves the governing purpose (0217).
+   * The proposer's one line on how this serves the governing purpose (0219).
    *
    * Null on every subject that carries none and on every ballot opened before
    * the column existed, which are different facts with the same value: the

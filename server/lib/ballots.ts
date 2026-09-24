@@ -82,7 +82,7 @@ import { numberVar, stringVar } from "./variables";
 import { defaultTimingFor, kindOfSubject, noCloserRefusal, timingOf, type ProposalTiming } from "../../shared/governanceKinds";
 // Windows lane: the open path is gated, and only the open path (19E).
 import { openingRefusal } from "./governanceWindows";
-// 0217: the judgement line the proposer writes, and which subjects carry one.
+// 0219: the judgement line the proposer writes, and which subjects carry one.
 import { normaliseAlignment } from "../../shared/governingPurpose";
 import { purposeAlignmentRefusal } from "./governingPurpose";
 import type { WeightMode } from "./governanceWeights";
@@ -119,7 +119,7 @@ export interface BallotRow {
   /** Dispatcher lane, 0172: the timing FROZEN at open, like the dials. */
   timing: ProposalTiming;
   /**
-   * WHAT THE PROPOSER SAID THIS SERVES (0217).
+   * WHAT THE PROPOSER SAID THIS SERVES (0219).
    *
    * Null on every subject that carries no judgement line, and null on every
    * ballot opened before the column existed. Those are the same value and
@@ -267,7 +267,7 @@ export interface OpenBallotInput {
   /** Dispatcher lane, 0172: at_acceptance or next_moon. Defaults to next_moon. */
   timing?: ProposalTiming;
   /**
-   * THE PROPOSER'S ONE LINE ON HOW THIS SERVES THE GOVERNING PURPOSE (0217).
+   * THE PROPOSER'S ONE LINE ON HOW THIS SERVES THE GOVERNING PURPOSE (0219).
    *
    * Required for the five subjects that change how the village works and
    * refused everywhere else, both decided by `shared/governingPurpose.ts`.

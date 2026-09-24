@@ -51,7 +51,7 @@ const completeAnswersFor = (typeId: string): Record<string, unknown> => {
        * WORDS AND NOT ONE LONG TOKEN. `"x".repeat(80)` satisfied every
        * character-length validator this config had and is a single word, so
        * the first validator that counted WORDS (the governing purpose
-       * statement, 0217) failed here on a config that is correct. Eighty
+       * statement, 0219) failed here on a config that is correct. Eighty
        * words also clears every character floor in the file, so nothing that
        * passed before stops passing.
        */

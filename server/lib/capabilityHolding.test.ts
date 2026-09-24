@@ -145,7 +145,7 @@ describe.skipIf(!configured)("capability holding", () => {
   });
 
   /**
-   * HOW FAR THE HANDOVER HAS GOT (0217).
+   * HOW FAR THE HANDOVER HAS GOT (0219).
    *
    * Two readers depend on the shape of this answer and neither can see the
    * other: the governing purpose statement's pen moves when `complete` turns

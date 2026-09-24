@@ -46,7 +46,7 @@ import {
   villageHandoverState,
   villageHeldCapabilities,
 } from "./lib/capabilityHolding";
-// 0217: the governing purpose statement, its one writer, and its subject.
+// 0219: the governing purpose statement, its one writer, and its subject.
 import { writeGoverningPurpose } from "./lib/governingPurpose";
 import { GPS_CHANGE } from "../shared/governingPurpose";
 import { gpsChangeCloser } from "./lib/gpsChangeCloser";
@@ -13547,7 +13547,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
     const holdings = await capabilityHoldings(getPool());
     const held = new Map(holdings.map((h) => [h.capability, h]));
     res.json({
-      // 0217: so the confirm dialog warns on the LAST power and on no other.
+      // 0219: so the confirm dialog warns on the LAST power and on no other.
       handover: await villageHandoverState(getPool()),
       powers: POWERS.map((p) => {
         const h = held.get(p.capability);
@@ -22548,7 +22548,7 @@ ${inner}
     }),
 
     /*
-     * The village changes what it is for (0217). Dormant on every village
+     * The village changes what it is for (0219). Dormant on every village
      * alive today: the route that opens one refuses while the founder holds
      * the pen. The whole executor, and why it is a file, is in
      * server/lib/gpsChangeCloser.ts.
@@ -23453,7 +23453,7 @@ ${inner}
       opensAt: b.opensAt,
       closesAt: b.closesAt,
       status: b.status,
-      // 0217: the judgement line, beside the proposal at the moment of deciding.
+      // 0219: the judgement line, beside the proposal at the moment of deciding.
       purposeAlignment: b.purposeAlignment ?? null,
       outcomeNote: b.outcomeNote,
       closedBy: b.closedBy ? await nameOf(b.closedBy) : null,
@@ -23698,7 +23698,7 @@ ${inner}
       // decided on the ballot, so an edit after the vote opened cannot move the
       // instant the village was shown. Absent means next_moon.
       timing: timingOf((p as { timing?: unknown }).timing),
-      // 0217: the judgement line, asked HERE and not in the wizard, because
+      // 0219: the judgement line, asked HERE and not in the wizard, because
       // this is where a proposer takes a staged proposal to the vote and the
       // line freezes onto the ballot. See shared/governingPurpose.ts; whether
       // it should move onto mechanics_proposals is a live question for Rye.
@@ -24671,7 +24671,7 @@ ${inner}
       ),
       openedBy: user.id,
       electorate,
-      // 0217: the judgement line; openBallot decides whether one is needed.
+      // 0219: the judgement line; openBallot decides whether one is needed.
       purposeAlignment: req.body?.purposeAlignment,
     });
     if (!result.ok) return res.status(409).json({ error: result.error, ballotId: result.alreadyOpen?.id ?? null });
@@ -24921,7 +24921,7 @@ ${inner}
       ),
       openedBy: user.id,
       electorate,
-      // 0217: the judgement line; openBallot decides whether one is needed.
+      // 0219: the judgement line; openBallot decides whether one is needed.
       purposeAlignment: req.body?.purposeAlignment,
     });
     if (!result.ok) return res.status(409).json({ error: result.error, ballotId: result.alreadyOpen?.id ?? null });
@@ -25076,7 +25076,7 @@ ${inner}
       ),
       openedBy: user.id,
       electorate,
-      // 0217: the judgement line; openBallot decides whether one is needed.
+      // 0219: the judgement line; openBallot decides whether one is needed.
       purposeAlignment: req.body?.purposeAlignment,
     });
     if (!result.ok) return res.status(409).json({ error: result.error, ballotId: result.alreadyOpen?.id ?? null });

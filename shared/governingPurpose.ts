@@ -119,6 +119,35 @@ export const PURPOSE_MIN_WORDS = 80;
 /** A statement longer than this is a document, and a document is a different thing. */
 export const PURPOSE_MAX_CHARS = 20_000;
 
+/**
+ * ONE STATEMENT IN THE TEMPLATE'S SHAPE, for a founder to read before writing
+ * their own and for a fixture to launch a village with.
+ *
+ * It carries the five moves the workshop template asks for, in order: who it
+ * serves, what they are up against, the move from one way of living to
+ * another, by what means, and what becomes true as a result. A founder facing
+ * an empty box and an eighty-word floor is being asked to invent a form as
+ * well as a purpose, and the form is the part we can hand them.
+ *
+ * NAMES NO VILLAGE, deliberately. Platform code carries no village's brand and
+ * `check-brand-refs` enforces it, so this reads as any village could have
+ * written it. A fork that wants its own example replaces this one.
+ *
+ * It is also what the launch-path test suites write before they launch, which
+ * is worth knowing before anybody edits it: `gps-written` is a BLOCKING launch
+ * requirement, so a suite that launches a village has to satisfy it the way a
+ * real village does. Shortening this below the floor turns those suites red,
+ * which is the requirement working.
+ */
+export const PURPOSE_EXAMPLE =
+  "This village exists to help the households, growers, makers, carers and elders who are worn " +
+  "down by doing everything alone, by the cost of time, and by distance from the land, move from " +
+  "private survival inside systems that take more than they give, to a shared home held in " +
+  "common, by building housing people can afford, growing food where it is eaten, teaching in " +
+  "the open air, keeping a place for healing, and deciding together in the open, so that " +
+  "families are fed, children grow up among neighbours, the land recovers, and what is built " +
+  "here outlives the people who began it.";
+
 /** Words, counted the way a person counts them: runs of non-whitespace. */
 export function countWords(text: unknown): number {
   const t = String(text ?? "").trim();

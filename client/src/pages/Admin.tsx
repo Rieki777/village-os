@@ -9490,7 +9490,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
         <p className="text-xs text-gray-400 mt-2">Instantly updates the game layer (profile, gratitude, season banner, pulse). Page marketing copy is edited under Content below.</p>
       </SetupSection>
 
-      {/* 0217: the sentence every later change is judged against, and the one
+      {/* 0219: the sentence every later change is judged against, and the one
           launch requirement a founder can only answer in their own words. */}
       <PurposeStatementPanel password={password} />
 

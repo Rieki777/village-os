@@ -37,6 +37,7 @@ import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { PURPOSE_EXAMPLE } from "../shared/governingPurpose";
 import { waitForHealth } from "./db/e2eBoot";
 
 const DB_CONFIGURED = testDbConfigured();
@@ -259,6 +260,17 @@ beforeAll(async () => {
    */
   expect((await call("POST", "/api/admin/launch/confirm", {
     body: { id: "issuance-cap", done: "declined" },
+  })).status).toBe(200);
+
+  /*
+   * THE GOVERNING PURPOSE STATEMENT, WHICH BLOCKS THE LAUNCH VOTE (0219).
+   *
+   * A blocking row with a real check rather than a manual confirm, so it has
+   * to actually be written. The refusal keeps its own case in
+   * `server/governingPurpose.routes.e2e.test.ts`, which drives the door shut.
+   */
+  expect((await call("PUT", "/api/admin/purpose", {
+    body: { statement: PURPOSE_EXAMPLE },
   })).status).toBe(200);
 }, 240_000);
 

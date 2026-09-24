@@ -1,5 +1,5 @@
 /**
- * CHANGE WHAT THIS VILLAGE IS FOR, BY THE VILLAGE'S VOTE (0217).
+ * CHANGE WHAT THIS VILLAGE IS FOR, BY THE VILLAGE'S VOTE (0219).
  *
  * `POST /api/governance/purpose-changes` opens the vote that moves the
  * governing purpose statement. Rye, 2026-09-23: "all upgrades going forward
@@ -20,7 +20,7 @@ import type { WizardTypeConfig } from "./wizardConfig";
 // would refuse and says the same sentence while saying it earlier.
 import { purposeAlignmentProblem, purposeStatementProblem } from "@shared/governingPurpose";
 /*
- * ── CHANGING WHAT THE VILLAGE IS FOR (0217) ──────────────────────────────
+ * ── CHANGING WHAT THE VILLAGE IS FOR (0219) ──────────────────────────────
  *
  * Rye, 2026-09-23: "all upgrades going forward will be judged against it."
  * This card is how a village that has finished its handover moves the

@@ -246,6 +246,10 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
             : problem
           : `Written, ${countWords(doc.statement)} words`,
       });
+      continue;
+    }
+
+    /*
      * WHERE THE VILLAGE IS, resolved HERE for the reason the `decide:` branch
      * above gives: `server/index.ts` sits at exactly its line baseline, and
      * the gate's own message is that the one big file may only ever get

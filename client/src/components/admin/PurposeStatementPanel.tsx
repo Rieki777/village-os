@@ -1,5 +1,5 @@
 /**
- * THE GOVERNING PURPOSE STATEMENT, IN THE SETUP WIZARD (0217).
+ * THE GOVERNING PURPOSE STATEMENT, IN THE SETUP WIZARD (0219).
  *
  * Rye, 2026-09-23: every village writes one, and "all upgrades going forward
  * will be judged against it." It blocks the Birthing, so it belongs on the

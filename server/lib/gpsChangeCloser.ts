@@ -1,5 +1,5 @@
 /**
- * WHAT HAPPENS WHEN A VILLAGE CARRIES A CHANGE OF PURPOSE (0217).
+ * WHAT HAPPENS WHEN A VILLAGE CARRIES A CHANGE OF PURPOSE (0219).
  *
  * `server/lib/mechanics.ts` moves Ring-2 game variables and cannot touch an
  * `app_config` document, so the governing purpose statement needed a subject

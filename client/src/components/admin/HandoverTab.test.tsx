@@ -403,7 +403,7 @@ describe("HandoverTab: bringing a power back (ask 7)", () => {
 });
 
 /**
- * THE LAST POWER, AND ONLY THE LAST ONE (0217).
+ * THE LAST POWER, AND ONLY THE LAST ONE (0219).
  *
  * Crossing the final power completes the handover, and a completed handover
  * moves the pen over the governing purpose statement from the founder to the
@@ -418,7 +418,7 @@ describe("HandoverTab: bringing a power back (ask 7)", () => {
  * empty and nothing seeds it, so both states below are fabricated here, and a
  * green says what the dialog does when a village gets there.
  */
-describe("HandoverTab: the last power moves the pen (0217)", () => {
+describe("HandoverTab: the last power moves the pen (0219)", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();

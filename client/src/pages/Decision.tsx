@@ -578,7 +578,7 @@ export default function Decision() {
 
             <VoterRoll votes={ballot.votes} silent={ballot.silent} live={open} />
 
-            {/* HOW THE PROPOSER SAYS THIS SERVES THE GOVERNING PURPOSE (0217).
+            {/* HOW THE PROPOSER SAYS THIS SERVES THE GOVERNING PURPOSE (0219).
 
                 Rye's ruling: the line shows beside the proposal when people
                 vote, and it stays on the record. So it sits ABOVE the

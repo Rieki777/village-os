@@ -365,7 +365,7 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
           },
           /*
            * NO JUDGEMENT LINE FIELD HERE, AND ITS ABSENCE IS DELIBERATE
-           * (0217).
+           * (0219).
            *
            * A rule change IS one of the five subjects that carry one. What it
            * is not is a type this wizard takes to a vote: it publishes a
@@ -660,7 +660,7 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
             required: true,
             problem: atLeast(40, "The case for it"),
           },
-          // 0217: moving a power is one of the five subjects Rye scoped the
+          // 0219: moving a power is one of the five subjects Rye scoped the
           // judgement line to. OPTIONAL here and required by the route once
           // the village has a statement, because a wizard step cannot know
           // whether there is anything to judge against yet.
@@ -753,7 +753,7 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
             required: true,
             problem: atLeast(40, "The case for it"),
           },
-          // 0217: moving a power is one of the five subjects Rye scoped the
+          // 0219: moving a power is one of the five subjects Rye scoped the
           // judgement line to. OPTIONAL here and required by the route once
           // the village has a statement, because a wizard step cannot know
           // whether there is anything to judge against yet.
@@ -840,7 +840,7 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
             required: true,
             problem: atLeast(40, "The reason"),
           },
-          // 0217: moving a power is one of the five subjects Rye scoped the
+          // 0219: moving a power is one of the five subjects Rye scoped the
           // judgement line to. OPTIONAL here and required by the route once
           // the village has a statement, because a wizard step cannot know
           // whether there is anything to judge against yet.

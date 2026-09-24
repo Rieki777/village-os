@@ -81,7 +81,7 @@ export const CONDUCTABLE_TYPES: readonly WizardType[] = [
   "power_return",
   // The route opens the seat vote itself and freezes the seat's term (0199).
   "role_seat",
-  // The route opens the change and the closer writes the statement (0217).
+  // The route opens the change and the closer writes the statement (0219).
   "gps_change",
 ];
 
