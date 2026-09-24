@@ -55,7 +55,6 @@ import SetupNeeded from "@/components/modules/SetupNeeded";
 import VillageAnswers from "@/components/admin/VillageAnswers";
 import CurrencyAnswerNote from "@/components/admin/CurrencyAnswerNote";
 import SeasonTimezoneField from "@/components/admin/SeasonTimezoneField";
-import { useSettingFocus } from "@/components/admin/settingFocus";
 import { CONTENT_SECTIONS, emptyContentFor } from "@/components/admin/contentSections";
 import { displayCurrencyProblem } from "@shared/money";
 import { formatTokenAmount } from "@/lib/tokenAmount";
@@ -8911,9 +8910,6 @@ export function SeasonTab({ password }: { password: string }) {
   }, [password]);
 
   useEffect(() => { load(); }, [load]);
-  // The launch checklist and the admin banner send a founder to this control
-  // by name; this is where they land.
-  useSettingFocus("season.timezone", "season-timezone", !!cfg);
 
   const save = async (extra: Record<string, unknown> = {}) => {
     setSaving(true);
@@ -9192,10 +9188,6 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
   const [defaults, setDefaults] = useState<any>(null);
   const [savingSection, setSavingSection] = useState<string | null>(null);
   const needsSetup = useNeedsSetupObservation(password);
-  // Where the launch checklist and the admin banner land somebody sent to say
-  // which currency this village counts in. Above the early return, like every
-  // other hook on this screen.
-  useSettingFocus("project.fiatCurrency", "project-fiat-currency", !!brand);
   /**
    * Which currency codes the daily rate table actually carries.
    *
@@ -10169,10 +10161,8 @@ export default function Admin() {
               filter, so the rail and the card ride one fetch. */}
           <AdminGoLive token={password} moduleId={TAB_MODULE[activeTab] ?? null}
             onLifecycles={(m) => setModuleLifecycles(m as Record<string, ModuleLifecycle>)} />
-          {/* The two facts only this village can state, on every admin screen
-              until they are stated. The launch checklist carries them too and
-              goes quiet the moment a village launches, which is the village
-              that has been running on somebody else's clock the longest. */}
+          {/* The two facts only this village can state, asked until they are
+              (VillageAnswers.tsx says why it outlives the launch checklist). */}
           <VillageAnswers password={password} />
           {activeTab === "setup" && <SetupWizard password={password} onOpenTab={setActiveTab} />}
           {activeTab === "events-admin" && <EventsAdminPanel password={password} />}

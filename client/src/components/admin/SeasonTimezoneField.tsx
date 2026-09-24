@@ -20,6 +20,8 @@
  * only ever turns down, and because the label, the box, the question and the
  * confirmation are one thing. Light-only, like the rest of this folder.
  */
+import { useSettingFocus } from "@/components/admin/settingFocus";
+
 export default function SeasonTimezoneField({
   value,
   answered,
@@ -34,6 +36,7 @@ export default function SeasonTimezoneField({
   onChange: (timezone: string) => void;
   onConfirm: () => void;
 }) {
+  useSettingFocus("season.timezone", "season-timezone", true);
   return (
     <div>
       {/* The label was tied to nothing, so a screen reader met an unnamed box,

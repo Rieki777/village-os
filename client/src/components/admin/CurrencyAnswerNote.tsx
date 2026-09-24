@@ -17,8 +17,19 @@
  * only turns down, and because the picker beside it belongs to another lane:
  * this owns the question, that owns the field. Light-only, like the rest of
  * this folder.
+ *
+ * IT ALSO OWNS THE ARRIVAL, for the same reason the timezone field does: the
+ * launch checklist and the admin banner send a founder to that box by name,
+ * and the component asking the question is the one that knows which control
+ * answers it. The hook runs before the early return below, because a hook that
+ * only runs on some renders is not a hook, and because landing on an answered
+ * box is harmless while failing to land on an unanswered one is the whole
+ * defect.
  */
+import { useSettingFocus } from "@/components/admin/settingFocus";
+
 export default function CurrencyAnswerNote({ answered }: { answered: boolean }) {
+  useSettingFocus("project.fiatCurrency", "project-fiat-currency", true);
   if (answered) return null;
   return (
     <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
