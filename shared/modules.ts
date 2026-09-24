@@ -1262,6 +1262,76 @@ export const MODULES: ModuleDef[] = [
     hyphaOnly: true,
     // readiness attached by the server at boot (needs the pool).
   },
+  /**
+   * THE FIRST CONNECTED LISTING IN THIS REGISTRY.
+   *
+   * An outside service that keeps a village's organisational memory and can
+   * SUGGEST changes to its chart. Suggest is the whole word: nothing this
+   * module receives writes a seat. It lands in the review queue like any other
+   * outside claim and a steward decides, which is the path this platform
+   * already runs.
+   *
+   * `dataClass` is `village-content` and holding it there is deliberate work
+   * rather than a description. `server/lib/saberraRecords.ts` is the one door,
+   * an allow list per record kind, and every field that names a person is
+   * absent from it. The day one crosses, this becomes `member-pii` and may not
+   * go live without a signed processing agreement, a documented hard-delete
+   * endpoint and a `forgetMember` driver in the erasure sweep.
+   *
+   * `setup: "required"` because a village holds its own connection: its own
+   * subdomain at the vendor and its own token. There is nothing shared between
+   * two villages here, which is what `tier: "connected"` means in the first
+   * place.
+   */
+  {
+    id: "saberra",
+    tier: "connected",
+    dataClass: "village-content",
+    group: "know-and-decide",
+    setup: "required",
+    name: "Organisational Memory",
+    description:
+      "An outside service reads your meetings and records, and suggests changes to your circles and roles. Every suggestion is reviewed before anything changes.",
+    requires: [],
+    // The suggestions land in the review queue, which the org chart owns.
+    recommends: ["org"],
+    capabilities: [],
+    variableKeys: [],
+    apiPrefixes: ["/api/saberra"],
+    vendor: {
+      legalName: "Saberra LLC",
+      url: "https://saberra.com",
+      supportUrl: "https://saberra.com/about/#contact",
+      supportEmail: "hello@saberra.com",
+      // They run no status page and said so plainly rather than send a link
+      // that would fail at the moment somebody needed it.
+      statusUrl: null,
+      termsUrl: "https://saberra.com/terms/",
+      // Lowercase here to match this store's convention; `envNameFor`
+      // uppercases it, which lands on the name the vendor uses internally.
+      secretKeys: ["sera_api_secret"],
+      // Their connector is PULLED by this module and never pushes, so silence
+      // between calls is normal and is not a failure signal. Their founder
+      // gave that reasoning and it is the right mode for a read-on-demand
+      // integration.
+      liveness: { mode: "on-demand" },
+      // A village needs nothing done inside the vendor's product beyond having
+      // a token issued. Every step here would be a permanent per-village human
+      // cost, so an empty list is the goal rather than an omission.
+      setupSteps: [],
+    },
+    defaultConfig: { dashboardUrl: "" },
+    validateConfig: (config: unknown): string | null => {
+      const c = config && typeof config === "object" ? (config as Record<string, unknown>) : {};
+      const url = typeof c.dashboardUrl === "string" ? c.dashboardUrl.trim() : "";
+      // Empty is fine: the village has not been given its dashboard yet, and a
+      // module that refuses to save until every optional field is filled is a
+      // module nobody finishes setting up.
+      if (url === "") return null;
+      if (!/^https:\/\/[^\s]+$/.test(url)) return "The dashboard address has to be an https link.";
+      return null;
+    },
+  },
 ];
 
 export const MODULES_BY_ID: Record<string, ModuleDef> = Object.fromEntries(
