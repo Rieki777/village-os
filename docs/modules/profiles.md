@@ -261,7 +261,8 @@ identity, because `userIdForHandle` and `loadProfile` both carry `is_example = 0
   no balances, no party and no thanks, so a new member does not meet a screenful of zeros.
 - `client/src/components/ProfileHero.tsx`. The primary character's art at the top of the page, with
   a three-state load so an empty party is never claimed before the answer arrives.
-- `client/src/components/ProfileJourney.tsx`. Stage history, capabilities and roles held, gratitude
+- `client/src/components/ProfileJourney.tsx`. The member's own Love Letter signing, stage history,
+  capabilities and roles held, gratitude
   breadth, per-cycle settlements, and the ledger, over four endpoints: three share a loader
   (`SECTIONS`: `/api/game/progression`, `/api/game/gratitude/flows`, `/api/game/ledger`) and a
   fourth, `/api/game/gratitude/me`, drives the acknowledgment bloom. The file's own header says
