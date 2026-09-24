@@ -42,18 +42,22 @@ import TransferCeremony from "@/components/governance/TransferCeremony";
 import VoteClock from "@/components/governance/VoteClock";
 import VoteResult from "@/components/governance/VoteResult";
 import VoteWidget from "@/components/governance/VoteWidget";
+import StewardSlate from "@/components/governance/StewardSlate";
 import VoterRoll from "@/components/governance/VoterRoll";
 import WeightRecord from "@/components/governance/WeightRecord";
 import { subjectNoun } from "@/components/governance/wizardConfig";
 import { CYCLE_SETTLEMENT } from "@shared/moonSettlement";
+import { VILLAGE_LAUNCH } from "@shared/ballotSubjects";
 import { useCatalyst } from "@/lib/gameApi";
 import { weightText } from "@/components/governance/voteBars";
 import {
+  answerNomination,
   castVote,
   closeBallot,
   fetchBallot,
   fetchLanding,
   fetchStanding,
+  fetchStewardSlate,
   fetchWeightRecord,
   fileObjection,
   ruleObjection,
@@ -63,6 +67,7 @@ import {
   type Landing,
   type PriorAttempt,
   type Standing,
+  type StewardSlate as StewardSlateData,
   type WeightRecord as WeightRecordData,
 } from "@/components/governance/governanceApi";
 
@@ -160,6 +165,19 @@ export default function Decision() {
   // deciding it were allocated, and hidden power is what the record exists to
   // prevent.
   const [record, setRecord] = useState<WeightRecordData | null>(null);
+  /**
+   * The stewards this proposal names, and what each of them answered (0220).
+   *
+   * FETCHED BESIDE THE BALLOT and never folded into it, for the reason the
+   * objection lineage is not folded in either: it exists on exactly one
+   * subject type, `village_launch`, which a village holds once in its life.
+   * Every other decision page would carry an empty field.
+   *
+   * Null covers two different things and the page treats them the same, which
+   * is correct here: this is not a launch vote, or the read failed. Neither is
+   * a reason to put a half-rendered seat panel in front of a village.
+   */
+  const [slate, setSlate] = useState<StewardSlateData | null>(null);
   const [missing, setMissing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -194,6 +212,10 @@ export default function Decision() {
       // A carried decision counts down to its landing (Rye, 2026-09-14). Nothing else has one.
       if (answer.data.status === "passed") void fetchLanding(params.id).then((l) => setLanding(l.ok ? l.data : null));
       if (answer.data.subjectType === CYCLE_SETTLEMENT) setShowDoc(true);
+      if (answer.data.subjectType === VILLAGE_LAUNCH) {
+        const s = await fetchStewardSlate(params.id);
+        setSlate(s.ok ? s.data : null);
+      }
       setChronicle({
         appliedKeys: Array.isArray(answer.data.appliedKeys) ? answer.data.appliedKeys : [],
         priorAttempts: Array.isArray(answer.data.priorAttempts) ? answer.data.priorAttempts : [],
@@ -219,8 +241,20 @@ export default function Decision() {
     setBusy(false);
   };
 
-  const onVote = async (choice: VoteChoice, reason?: string) => {
-    await act(() => castVote(params.id!, choice, reason));
+  const onVote = async (choice: VoteChoice, reason?: string, standsForSteward?: boolean) => {
+    await act(() => castVote(params.id!, choice, reason, standsForSteward));
+  };
+
+  /**
+   * Accept or decline the steward's seat this proposal named the reader for.
+   *
+   * Goes through `act` so the refusal reaches the page as a sentence, and so
+   * `load` runs afterwards: the slate panel and the vote widget both read the
+   * answer, and a decline that cleared the acceptance has to stop showing as
+   * an acceptance in the same breath.
+   */
+  const onAnswerNomination = async (accept: boolean) => {
+    await act(() => answerNomination(params.id!, accept));
   };
 
   /**
@@ -452,7 +486,28 @@ export default function Decision() {
               </div>
             </section>
 
-            {open && user && <VoteWidget ballot={ballot} onVote={onVote} busy={busy} />}
+            {/* THE SLATE, ABOVE THE VOTE. A member has to know who this
+                proposal seats before they are offered the three buttons, and a
+                nominee has to have met the decline before they meet the
+                acceptance checkbox. It renders on a CLOSED launch vote too,
+                where it is the record of who was asked and what they said. */}
+            {slate && <StewardSlate slate={slate} onAnswer={onAnswerNomination} busy={busy} />}
+
+            {open && user && (
+              <VoteWidget
+                ballot={ballot}
+                onVote={onVote}
+                busy={busy}
+                nomination={
+                  /* Undefined unless this proposal named THIS reader, which is
+                     what makes the acceptance control invisible to everybody
+                     else on the most-read page in the village. */
+                  slate?.members.find((m) => m.mine)
+                    ? { answer: slate.members.find((m) => m.mine)!.answer, powerCount: slate.powerCount }
+                    : undefined
+                }
+              />
+            )}
 
             {ballot.method === "consent" && (
               <ObjectionPanel

@@ -55,14 +55,39 @@ export default function VoteWidget({
   ballot,
   onVote,
   busy,
+  nomination,
 }: {
   ballot: Ballot;
-  onVote: (choice: VoteChoice, reason?: string) => Promise<void>;
+  onVote: (choice: VoteChoice, reason?: string, standsForSteward?: boolean) => Promise<void>;
   busy: boolean;
+  /**
+   * SET ONLY WHEN THIS VILLAGE'S LAUNCH PROPOSAL NAMED THIS READER for the
+   * steward's seat (0220). Undefined on every other ballot and for every other
+   * member, and the whole block below then renders nothing.
+   *
+   * THE ACCEPTANCE IS PART OF THE VOTE AND NOT A BUTTON BESIDE IT, because it
+   * has nowhere else to live: `ballot_votes.stands_for_steward` is the one home
+   * of a yes, and `ballot_votes.choice` is NOT NULL, so there is no row to carry
+   * an acceptance until this member votes. Rye's design puts the slate in the
+   * proposal to be voted on, and this is what that means for the person named:
+   * you answer the village and you answer the seat in one act.
+   *
+   * DECLINING IS NOT HERE. It lives in the slate panel, where the village can
+   * see it, because a decline has to be sayable by somebody who has not voted
+   * and has to be visible to everybody once it is.
+   */
+  nomination?: { answer: "accepted" | "declined" | "waiting"; powerCount: number };
 }) {
   const [reason, setReason] = useState(ballot.myVote?.reason ?? "");
   const [reasonFor, setReasonFor] = useState<VoteChoice | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  /**
+   * Seeded from what the server recorded, so a reload shows the answer the
+   * close will actually read rather than an unticked box beside an accepted
+   * seat. A declined nominee sees no box at all, so this starts false for them
+   * and nothing can send a yes underneath a no.
+   */
+  const [accepts, setAccepts] = useState(nomination?.answer === "accepted");
 
   const consent = ballot.method === "consent";
   const decided = ballot.status !== "open";
@@ -117,7 +142,7 @@ export default function VoteWidget({
       setProblem("A no here is an objection, and an objection carries its reasoning. Say what you see.");
       return;
     }
-    await onVote(choice, reason.trim() || undefined);
+    await onVote(choice, reason.trim() || undefined, nomination ? accepts : undefined);
     setReasonFor(null);
   };
 
@@ -184,6 +209,43 @@ export default function VoteWidget({
       <p className="mt-2 text-xs text-stone-500">
         {CHOICES.map((c) => `${c.label}: ${c.meaning}`).join(" · ")}
       </p>
+
+      {/* WHAT ACCEPTING COSTS, SAID WHERE SOMEBODY ACCEPTS. Not on a help
+          page, not in a tooltip: the number of powers is the whole weight of
+          the decision and it belongs against the control. `powerCount` comes
+          from the server, off HANDOVER_SET, so it cannot go stale when a new
+          transferable power joins the set. */}
+      {nomination && nomination.answer !== "declined" && (
+        <div className="mt-3 rounded-lg border border-teal-deep/30 bg-teal-deep/5 p-3">
+          <label className="flex min-h-[44px] items-start gap-3 text-sm text-stone-800">
+            <input
+              type="checkbox"
+              checked={accepts}
+              disabled={busy}
+              onChange={(e) => setAccepts(e.target.checked)}
+              className="mt-0.5 h-5 w-5 shrink-0 rounded border-stone-400 text-teal-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+            />
+            <span>
+              <strong className="font-semibold text-stone-900">I accept the steward's seat.</strong> This proposal names
+              you for it. Carrying it for this first season means holding all {nomination.powerCount} of the powers this
+              village has to give, and being able to stop a decision the village has already carried inside the window
+              before it lands.
+            </span>
+          </label>
+          <p className="mt-2 text-xs text-stone-600 leading-relaxed">
+            {accepts
+              ? "Your answer is stored with your vote, so cast or re-cast your vote to record it. You can uncheck this and vote again, or decline below, until the voting period closes."
+              : "Leave it unchecked and you are not seated. You can say no out loud instead, below, and the village sees that."}
+          </p>
+        </div>
+      )}
+
+      {nomination?.answer === "declined" && (
+        <p className="mt-3 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-700 leading-relaxed">
+          You declined the steward's seat, so nothing here can seat you. Change your mind below and the acceptance comes
+          back to this vote.
+        </p>
+      )}
 
       {(consent || reasonFor === "no" || (mine === "no" && reason)) && (
         <div className="mt-3">

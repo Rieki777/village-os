@@ -302,6 +302,35 @@ export async function catalystUserIds(pool: Pool): Promise<string[]> {
 }
 
 /**
+ * The same founders, WITH THEIR NAMES, for the two surfaces that have to show
+ * a person rather than count one.
+ *
+ * Both callers are the steward slate a launch proposal names (0220): the
+ * picker the proposer chooses from, and `launchSlateProblem`, which refuses a
+ * slate naming anybody who is not a founding member. Neither can use
+ * `catalystUserIds` and then look each id up one at a time, because the picker
+ * would become N queries and the validator would ask the table once per name
+ * to answer one question.
+ *
+ * THE SAME WHERE AND THE SAME ORDER BY, deliberately. Everything the block
+ * above says about asking by the stored `founder` value, about example members
+ * being included on purpose, and about `id` being a total order applies word
+ * for word here, and the two statements are kept identical so no village can
+ * ever be told it has one set of founders on one screen and another set on the
+ * next.
+ *
+ * The name is whatever the column holds; shortening it to what a member reads
+ * is the caller's job, because the one function that decides that lives in
+ * server/index.ts and a second copy of it here is exactly the two-homes trap.
+ */
+export async function catalystRoster(pool: Pool): Promise<Array<{ id: string; name: string }>> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT id, name FROM users WHERE role = 'founder' ORDER BY id",
+  );
+  return rows.map((r) => ({ id: String(r.id), name: String(r.name ?? "") }));
+}
+
+/**
  * Lock one member's row FOR UPDATE, ON THE CALLER'S CONNECTION.
  *
  * A `PoolConnection` and never a pool: the lock is only worth anything inside

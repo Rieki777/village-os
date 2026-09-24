@@ -85,6 +85,7 @@ import { register as registerGovernanceWizardRoutes } from "./routes/governanceW
 import { register as registerDelegationRoutes } from "./routes/delegation";
 import { register as registerGovernanceVetoRoutes } from "./routes/governanceVetoes";
 import { register as registerGovernanceLandingRoutes } from "./routes/governanceLanding";
+import { register as registerStewardSlateRoutes } from "./routes/stewardSlate";
 import { registerMoonSettlementRoutes } from "./routes/moonSettlement";
 // The dispatcher lane: the landing path, the change-set executor and the roll notice.
 import { applyDueGovernance, autoSettleExpired, digestComposerFor, itemKindsOf, markNotApplicable, overrideDials, routeOutcome, runVetoWatch, vetoWindowOn, type CloseRouting, type LandingDeps, type SubjectCloser } from "./lib/applyDue";
@@ -98,6 +99,8 @@ import { isPresentMember, presenceTest } from "./lib/memberPresence";
 import { runSeasonReminders } from "./lib/seasonReminders";
 import { forgetStewardActs, holdingHasLapsed, recordTermStarted, runTermWatch, setVetoWindowCheck, STEWARD_ROLE_ID, STEWARD_VETO, stewardMailRefusal, termWatchLookaheadDays } from "./lib/stewardship";
 import { seatFoundersAtLaunch } from "./lib/launchSeating";
+import { launchProposalDoc, launchSlateProblem } from "./lib/launchProposal";
+import { insertSlate } from "./repos/stewardSlate";
 import { freezeSeatTerm } from "./repos/ballotSeatTerms";
 import { roleVoteDays, seatVoteLandsAt, termForCarriedSeat } from "./lib/seatTermLanding";
 import { raisedHandTerm } from "./lib/raisedHandTerm";
@@ -14265,31 +14268,21 @@ Send an empty drafts array when you are still listening. A role payload is {name
       quorumPct: Math.max(0, numberVar("governance.quorum_pct")),
     });
 
+    // 0220: the proposal NAMES its founding stewards, founders only, and the
+    // reasoning for every rule is in server/lib/launchProposal.ts.
+    const slate = await launchSlateProblem(getPool(), req.body?.slate, electorate, firstName);
+    if (!slate.ok) return res.status(409).json({ error: slate.error });
     const villageName = mergedConfig().project.name;
-    const doc = [
-      `# Start the Game`,
-      "",
-      `${villageName} is built. This vote is what starts it.`,
-      "",
-      "## What changes when this carries",
-      "",
-      "Token issuance turns on. Until then this village can be set up in every other way, and nothing can be issued to anybody.",
-      "",
-      "## What this vote asks",
-      "",
-      `Everyone on the roll votes yes: ${dials.quorumPct}% participation and ${dials.unityPct}% agreement. ${electorate.length} people hold a voice today, and this vote is frozen to those ${electorate.length}.`,
-      "",
-      // The one subject where an abstention is not an answer. The reason is
-      // on the village_launch entry in shared/ballotSubjects.ts.
-      "An abstention is not a yes here, and neither is a vote nobody cast. If somebody takes no side, this vote closes short of participation and the village can ask again.",
-      "",
-      // How weight was assigned when this froze, in the document itself. The
-      // roll and the dials are already frozen here; the rule that turned
-      // members into weights was not written down anywhere a member reads.
-      ...(weightModeNote() ? [weightModeNote(), ""] : []),
-      `Every item on the journey to launch read done when ${firstName(user.name)} opened this, on ${new Date().toISOString().slice(0, 10)}.`,
-      "",
-    ].join("\n");
+    const doc = launchProposalDoc({
+      villageName,
+      quorumPct: dials.quorumPct,
+      unityPct: dials.unityPct,
+      onTheRoll: electorate.length,
+      weightNote: weightModeNote(),
+      openedBy: firstName(user.name),
+      openedOn: new Date().toISOString().slice(0, 10),
+      slate: slate.members,
+    });
 
     const result = await openBallot(getPool(), {
       subjectType: VILLAGE_LAUNCH,
@@ -14304,6 +14297,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       durationDays: Math.max(1, numberVar("governance.vote_days")),
       openedBy: user.id,
       electorate,
+      onOpen: (conn, ballotId) => insertSlate(conn, ballotId, slate.members.map((m) => m.id), user.id),
     });
     if (!result.ok) return res.status(409).json({ error: result.error, ballotId: result.alreadyOpen?.id ?? null });
 
@@ -25599,6 +25593,7 @@ ${inner}
     landDue: () => applyDueGovernance(landingDeps()),
   });
   registerGovernanceModeRoutes(app, { authedUser, getPool, capabilityCtx, firstName, weightModeNow, buildElectorate });
+  registerStewardSlateRoutes(app, { authedUser, isAdmin, getPool, members, firstName });
 
   /**
    * The subset of variables the CLIENT is allowed to know, so the UI can render

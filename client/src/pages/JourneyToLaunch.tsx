@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import type { LaunchGroup } from "@shared/launchRequirements";
 import { villageMoonLabel, type VillageMoon } from "@shared/villageMoon";
+import StewardSlatePicker, { type StewardCandidate } from "@/components/governance/StewardSlatePicker";
 
 /**
  * S65: the launch guide. Same brain as the Work With Us guide, different
@@ -278,12 +279,20 @@ function StartTheGame({
   isFounder,
   busy,
   onAsk,
+  candidates,
+  powerCount,
+  slate,
+  onToggleSlate,
 }: {
   status: any;
   vote: LaunchVote | null;
   isFounder: boolean;
   busy: boolean;
   onAsk: () => void;
+  candidates: StewardCandidate[];
+  powerCount: number;
+  slate: string[];
+  onToggleSlate: (id: string) => void;
 }) {
   const running = vote?.openBallot ?? null;
   const shortOfPeople = !!vote?.tooFew;
@@ -334,6 +343,13 @@ function StartTheGame({
           </button>
         )}
       </div>
+
+      {/* THE SLATE IS PART OF THE PROPOSAL, so it is picked on the same card
+          that opens it and never in a step of its own. It is hidden once a
+          vote is running, because the slate froze when that vote opened and an
+          editable list beside a frozen one would read as a list somebody could
+          still change. */}
+      {!running && isFounder && <StewardSlatePicker candidates={candidates} powerCount={powerCount} chosen={slate} onToggle={onToggleSlate} disabled={busy} />}
 
       {/*
         * Every time this village has asked before. A vote that closed without
@@ -616,6 +632,21 @@ export default function JourneyToLaunch() {
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState("");
   const [view, setView] = useState<"launch" | "economics">("launch");
+  /**
+   * The founding members this proposal may name, and how many powers the seat
+   * carries, both from the server (0220).
+   *
+   * ASKED OF THE SERVER rather than filtered out of a member list here,
+   * because "founders only for this first season" has to be the same rule the
+   * proposal is validated against and the same rule the seating applies at the
+   * close. A third copy in a browser is how a village gets offered a name the
+   * next screen refuses. `powerCount` comes down for the same reason: it is
+   * derived from HANDOVER_SET and a number typed into this page would be a
+   * promise nobody checks.
+   */
+  const [candidates, setCandidates] = useState<StewardCandidate[]>([]);
+  const [powerCount, setPowerCount] = useState(0);
+  const [slate, setSlate] = useState<string[]>([]);
   const [guideOpen, setGuideOpen] = useState(false);
 
   const load = useCallback(() => {
@@ -625,6 +656,16 @@ export default function JourneyToLaunch() {
       .catch(() => setFailed(true));
   }, []);
   useEffect(() => { if (isAdmin) load(); }, [isAdmin, load]);
+  useEffect(() => {
+    if (!isAdmin) return;
+    fetch("/api/admin/launch/steward-candidates", { headers: headers() })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((d) => { setCandidates(d.candidates ?? []); setPowerCount(Number(d.powerCount ?? 0)); })
+      // An empty list renders no picker at all, which is the right failure:
+      // the vote can still be opened and it names nobody, which is a state the
+      // village is told about in the proposal itself.
+      .catch(() => { setCandidates([]); });
+  }, [isAdmin]);
 
   /**
    * The three answers this page can give about one checklist row.
@@ -658,7 +699,7 @@ export default function JourneyToLaunch() {
       return;
     }
     setBusy("launch");
-    fetch("/api/admin/launch/propose", { method: "POST", headers: headers() })
+    fetch("/api/admin/launch/propose", { method: "POST", headers: headers(), body: JSON.stringify({ slate }) })
       .then(async (r) => {
         const d = await r.json();
         if (!r.ok) throw new Error(d.message ?? d.error ?? "Refused");
@@ -914,7 +955,19 @@ export default function JourneyToLaunch() {
                 * to next season wants the same tool.
                 */}
               <TestRun />
-              {!launched && <StartTheGame status={status} vote={vote} isFounder={user?.role === "founder"} busy={busy === "launch"} onAsk={askTheVillage} />}
+              {!launched && (
+                <StartTheGame
+                  status={status}
+                  vote={vote}
+                  isFounder={user?.role === "founder"}
+                  busy={busy === "launch"}
+                  onAsk={askTheVillage}
+                  candidates={candidates}
+                  powerCount={powerCount}
+                  slate={slate}
+                  onToggleSlate={(id) => setSlate((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))}
+                />
+              )}
             </>
           )}
         </div>

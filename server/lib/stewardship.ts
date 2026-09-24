@@ -176,6 +176,7 @@ import {
   type CarriedUnseating,
 } from "../repos/stewardshipBallots";
 import { catalystUserIds } from "../repos/users";
+import { slateFor } from "../repos/stewardSlate";
 import { moveCapabilityToVillage } from "./capabilityHolding";
 import { boolVar, stringVar } from "./variables";
 
@@ -1468,22 +1469,51 @@ export interface SeatingReport {
   /** User ids that already held the seat, so this call left them alone. */
   alreadySeated: string[];
   /**
-   * Everyone who stood for the seat on the launch ballot, founder or not.
+   * Everyone the launch PROPOSAL named for the seat, whatever they answered.
    *
-   * The denominator behind `seated`: without it, "nobody was seated" cannot be
-   * told apart from "nobody asked", and those are different things to say to a
-   * village.
+   * The denominator behind every other list here (0220). Without it, "nobody
+   * was seated" cannot be told apart from "nobody was named" or "everybody
+   * named said no", and those are three different things to say to a village.
    */
-  stoodForSeat: string[];
+  slate: string[];
   /**
-   * Members who stood and were not seated because they are not founders.
+   * The members on the slate who said NO, and Rye asked for these to be shown.
    *
-   * Rye's ruling seats "whomever of the founding members" stood, so an ordinary
-   * member's signal seats nobody. Reported rather than dropped, because a
-   * signal that vanishes with no record is the silent failure this module's
-   * caller exists to prevent.
+   * "founders only for this first season ... and show the declines"
+   * (2026-09-24). A decline is a fact about the village's own proposal, not a
+   * private matter between one member and a form, so it is reported here, put
+   * on the ballot page, and never quietly folded into "did not accept".
    */
-  stoodButNotFounding: string[];
+  declined: string[];
+  /**
+   * The members on the slate who ACCEPTED and have not declined.
+   *
+   * `ballot_votes.stands_for_steward` is the acceptance (0218, re-meant by
+   * 0220). This list is already narrowed to the slate, so it is the set the
+   * founder test below is applied to.
+   */
+  accepted: string[];
+  /**
+   * Members who accepted and were not seated because they are not founders.
+   *
+   * Rye's ruling seats "whomever of the founding members", and `users.role`
+   * can move between the proposal and the close, so the founder test is asked
+   * HERE and not when the slate was chosen. Reported rather than dropped,
+   * because a signal that vanishes with no record is the silent failure this
+   * module's caller exists to prevent.
+   */
+  acceptedNotFounding: string[];
+  /**
+   * Members carrying the acceptance flag whom the proposal never named.
+   *
+   * SEATED BY NOBODY, and this list is how that is provable rather than
+   * merely true. `stands_for_steward` sits on `ballot_votes` and any member on
+   * the roll can set it by sending one field with their vote; since 0220 it
+   * means "I accept the nomination this proposal made of me", so setting it
+   * without a nomination accepts nothing. An empty list is the ordinary case
+   * and a non-empty one is worth an audit line, never a seat.
+   */
+  flaggedNotOnSlate: string[];
   /** The term written on every new seating, as an ISO instant. */
   termEndsAt: string | null;
   /** Present only when ok is false. */
@@ -1538,22 +1568,46 @@ export function stewardHoldingId(userId: string): string {
  * other fifteen are personal acts and deployment plumbing that were never
  * anyone's to hold.
  *
- * ONLY THE ONES WHO STOOD. `standingForStewardOn` reads the signal off the
- * launch ballot's own vote rows (0218), and the seated list is that set
- * INTERSECTED with the catalysts. A founder who did not stand is not seated,
- * which is what makes the seat something somebody takes on rather than
- * something that lands on them.
+ * ── AND THE SHAPE OF THE ASKING CHANGED ON 2026-09-24, SAME DAY ───────────
+ *
+ * Shown two designs, Rye picked the second: "is whoever is clicking the
+ * 'launch village' button then selects from a list of members in the proposal
+ * to carry the steward role so then it's there in the proposal to be voted on.
+ * I like this second route better." And, on who may be named and what happens
+ * to somebody who does not want it: "founders only for this first season
+ * (after that anyone can raise their hand for a steward role and fill it if
+ * voted in), and show the declines".
+ *
+ * So the seat is no longer something a founder volunteers for. It is something
+ * the PROPOSAL offers them, and they answer. `ballot_steward_slate` (0220) is
+ * the offer and `ballot_votes.stands_for_steward` is the yes, which is the
+ * same column 0218 added and a narrower meaning for it: it meant "I volunteer"
+ * and it now means "I ACCEPT THE NOMINATION THIS PROPOSAL MADE OF ME".
+ *
+ * WHY THE ACCEPTANCE STEP IS LOAD-BEARING AND NOT CEREMONY. A slate chosen by
+ * whoever clicked the button can name somebody who does not want the job, and
+ * being handed nineteen powers you never asked for is precisely what the
+ * opt-in ruling of the same morning was protecting against. The consent step
+ * is what carries that protection across to the design Rye preferred, and
+ * "show the declines" only means anything if declining exists.
+ *
+ * ONLY THE ONES THE PROPOSAL NAMED WHO ACCEPTED. The seated list is the slate,
+ * narrowed by the acceptance, the decline and the founder test, each of which
+ * is spelled out at step 2 below. A founder the proposal did not name is not
+ * seated, a named founder who declined is not seated, and a named founder who
+ * has not answered is not seated: the seat is something somebody takes on
+ * rather than something that lands on them.
  *
  * THE FLOOR OF THREE IS THE BALLOT'S, AND IT IS NOT RE-CHECKED HERE.
  * `SUBJECT_THRESHOLDS[VILLAGE_LAUNCH].minElectorate` is 3 and
  * `electorateFloorProblem` holds it before a launch can carry at all, so by
  * the time this runs the village has at least three founding members. The
- * ruling's "(3 minimum)" is about that roll, not about how many of them stand:
- * "any of the founding 3 can apply" would mean nothing if all three had to. A
- * second floor here would be a copy of a rule that already has a home, and it
- * would be a floor on the wrong number.
+ * ruling's "(3 minimum)" is about that roll, not about how many of them are
+ * named or accept: "any of the founding 3 can apply" would mean nothing if all
+ * three had to. A second floor here would be a copy of a rule that already has
+ * a home, and it would be a floor on the wrong number.
  *
- * SO FEWER THAN THREE MAY STAND, AND ONE IS A SEAT. Nobody standing is a seat
+ * SO FEWER THAN THREE MAY ACCEPT, AND ONE IS A SEAT. Nobody accepting is a seat
  * that stands empty, which `vacancyState` calls healthy in so many words and
  * which stops nothing: decisions land at their landing time either way, and
  * the village seats whoever it likes afterwards through an ordinary
@@ -1615,8 +1669,11 @@ export async function seatCatalystsAsStewards(
     holdingHeld: null,
     seated: [],
     alreadySeated: [],
-    stoodForSeat: [],
-    stoodButNotFounding: [],
+    slate: [],
+    declined: [],
+    accepted: [],
+    acceptedNotFounding: [],
+    flaggedNotOnSlate: [],
     termEndsAt: termDate ? termDate.toISOString() : null,
   };
 
@@ -1676,32 +1733,63 @@ export async function seatCatalystsAsStewards(
   }
 
   /*
-   * 2. SEAT THE FOUNDERS WHO STOOD, and nobody else.
+   * 2. SEAT THE PEOPLE THE PROPOSAL NAMED WHO ACCEPTED, and nobody else.
    *
-   *    The stored role value is `founder` and the word a player reads is
-   *    Catalyst; `catalystUserIds` in server/repos/users.ts holds the statement
-   *    and the argument for asking by the stored value. `standingForStewardOn`
-   *    reads who said at the launch vote that they wanted the seat (0218).
+   *    THREE CONDITIONS, AND EVERY ONE OF THEM CAN FAIL ON ITS OWN (0220).
+   *    Rye chose the design where the slate is part of the proposal: "whoever
+   *    is clicking the 'launch village' button then selects from a list of
+   *    members in the proposal to carry the steward role so then it's there in
+   *    the proposal to be voted on."
    *
-   *    THE INTERSECTION IS THE RULE. "Whomever of the founding members ...
-   *    carry the inaugural role" seats a founder who stood; a founder who did
-   *    not stand is left alone, and an ordinary member who stood is not a
-   *    founding member and is not seated. The second half is reported rather
-   *    than dropped, so the caller can say something to somebody whose signal
-   *    went nowhere.
+   *    ON THE SLATE. `slateFor` reads the members this ballot's own proposal
+   *    named, frozen with the roll inside the opening transaction. A member
+   *    the proposal never named is not seated however they answered, which is
+   *    the condition that makes `stands_for_steward` mean something narrower
+   *    than it used to: since a slate exists, the flag is an ANSWER to a
+   *    nomination rather than a request for the seat, and an answer nobody
+   *    asked for seats nobody. `flaggedNotOnSlate` carries anybody in that
+   *    state so the fact is provable and not merely true.
+   *
+   *    ACCEPTED, AND NOT DECLINED. `standingForStewardOn` reads the
+   *    acceptance off the vote row; `declinedAt` on the slate row is the
+   *    refusal, which has to live there because a `NOT NULL DEFAULT 0` column
+   *    cannot tell a no from a silence and because somebody must be able to
+   *    refuse before they have voted. The two are written by one function
+   *    (`answerNomination`) and cannot disagree; the decline is checked here
+   *    ANYWAY, because the fail-safe direction on "the two disagree" is never
+   *    to seat somebody who said no.
+   *
+   *    STILL A FOUNDER. The stored role value is `founder` and the word a
+   *    player reads is Catalyst; `catalystUserIds` in server/repos/users.ts
+   *    holds the statement and the argument for asking by the stored value.
+   *    THE TEST IS AT THE CLOSE AND NOT AT THE PROPOSAL, because `users.role`
+   *    can change between a vote opening and carrying, and the ruling seats
+   *    "whomever of the founding members" as of the moment the seat is filled.
+   *    `launchSlateProblem` asks the same question when the slate is chosen,
+   *    which refuses an impossible proposal early; this is the one that
+   *    decides.
    *
    *    THIS STEP MOVED AHEAD OF THE CROSSING, which it used to follow. The
    *    crossing below now has to know whether anybody holds the seat, and it
    *    could not know that while it ran first. Nothing else about the order
    *    changed: the role still carries the powers before they cross.
    */
+  const slate = await slateFor(pool, launchBallotId);
+  const named = new Set(slate.map((s) => s.userId));
+  const declined = new Set(slate.filter((s) => s.declinedAt !== null).map((s) => s.userId));
   const standing = await standingForStewardOn(pool, launchBallotId);
   const stood = new Set(standing);
-  base.stoodForSeat = [...standing].sort();
+  base.slate = slate.map((s) => s.userId);
+  // Off the rows and not out of the Set, because `slateFor` already orders by
+  // user id and a Set iterates in insertion order rather than in a sorted one.
+  base.declined = slate.filter((s) => s.declinedAt !== null).map((s) => s.userId);
+  base.accepted = base.slate.filter((id) => stood.has(id) && !declined.has(id));
+  base.flaggedNotOnSlate = [...standing].sort().filter((id) => !named.has(id));
   const catalysts = await catalystUserIds(pool);
   const founding = new Set(catalysts);
-  base.stoodButNotFounding = base.stoodForSeat.filter((id) => !founding.has(id));
+  base.acceptedNotFounding = base.accepted.filter((id) => !founding.has(id));
   const already = new Set(await userIdsHolding(pool, STEWARD_ROLE_ID));
+  const seatable = new Set(base.accepted);
 
   for (const userId of catalysts) {
     if (already.has(userId)) {
@@ -1709,13 +1797,16 @@ export async function seatCatalystsAsStewards(
       continue;
     }
     /*
-     * A FOUNDER WHO DID NOT STAND IS NOT SEATED, which is the whole of the
-     * opt-in. The check is here and not in the loop's source, so a founder who
-     * already holds the seat from an earlier `role_seat` vote is still
-     * reported in `alreadySeated` whether or not they stood on this ballot:
-     * a seat the village voted them into is not this call's to reconsider.
+     * A FOUNDER THE PROPOSAL DID NOT NAME, OR WHO DECLINED, OR WHO HAS NOT
+     * ACCEPTED, IS NOT SEATED. All three are folded into `seatable`, which is
+     * the slate narrowed by both halves of the answer.
+     *
+     * The check is here and not in the loop's source, so a founder who already
+     * holds the seat from an earlier `role_seat` vote is still reported in
+     * `alreadySeated` whether or not this proposal named them: a seat the
+     * village voted them into is not this call's to reconsider.
      */
-    if (!stood.has(userId)) continue;
+    if (!seatable.has(userId)) continue;
     /*
      * BOUND AS A Date, NEVER AS THE ISO STRING. MySQL refuses
      * `2026-12-01T00:00:00.000Z` for a `timestamp` column outright, so passing
