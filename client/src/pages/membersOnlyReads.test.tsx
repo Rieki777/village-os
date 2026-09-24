@@ -29,7 +29,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
 
-const session = vi.hoisted(() => ({ token: null as string | null, user: null as null | { id: string; name: string; handle: string; paths: string[]; role?: string } }));
+const session = vi.hoisted(() => ({ token: null as string | null, user: null as null | { id: string; name: string; handle: string; paths: string[]; role?: string }, mayConfirm: false }));
 const gameFetchMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/components/Layout", () => ({
@@ -97,6 +97,7 @@ import Review from "./Review";
 import Training from "./Training";
 import LivingMap from "./LivingMap";
 import Profile from "./Profile";
+import RedemptionQueue from "@/components/RedemptionQueue";
 
 /** Every URL the page asked for, through either `fetch` or `gameFetch`. */
 let asked: string[] = [];
@@ -119,6 +120,9 @@ const MEMBERS_ONLY = [
   "/api/profile/prefs",
   // Mounted on /profile when the redemption module is on, so it joins this
   // list the moment that page gained a third members-only read.
+  // 2026-09-24. The steward queue used to learn whether it was allowed by
+  // REQUESTING the admin route and reading the 401, so every member wallet
+  // loaded red. It now asks the member route, which answers the hint.
   "/api/redemptions",
 ];
 
@@ -142,11 +146,14 @@ function answer(url: string): Response {
   if (url.startsWith("/api/game/progression"))
     return json({ stage: null, stageIndex: 0, consentedQuests: 0, capabilities: [], capabilityCatalogue: [], roles: [], history: [], firsts: {}, signing: null });
   if (url.startsWith("/api/profile/prefs")) return json({ sawSections: {} });
+  if (url.startsWith("/api/admin/redemptions")) return json({ redemptions: [] });
   // The whole `Payload` shape RedemptionPanel reads, so a field it uses
   // unguarded fails here the way it would in a browser rather than as an
-  // unhandled error after the assertions have already passed.
+  // unhandled error after the assertions have already passed. Plus
+  // `mayConfirm`, which decides whether RedemptionQueue asks the admin
+  // route at all, so the two readers of this one route share one answer.
   if (url.startsWith("/api/redemptions"))
-    return json({ open: [], history: [], held: {}, holds: false, confirmedBy: "", votePathBuilt: false, perCycle: 0, openedThisCycle: 0, tokens: [] });
+    return json({ open: [], history: [], held: {}, holds: false, confirmedBy: "", votePathBuilt: false, perCycle: 0, openedThisCycle: 0, tokens: [], mayConfirm: session.mayConfirm });
   return json({});
 }
 
@@ -160,6 +167,7 @@ function signIn() {
 function signOut() {
   session.token = null;
   session.user = null;
+  session.mayConfirm = false;
 }
 
 beforeEach(() => {
@@ -312,5 +320,45 @@ describe("/profile", () => {
     // page because /wallet is behind the exchange module, so a guard that
     // stopped it asking for everybody would take the door away a second time.
     await waitFor(() => expect(asked.some((u) => u.startsWith("/api/redemptions"))).toBe(true));
+  });
+});
+
+/*
+ * THE SAME CLASS ONE STEP IN: signed IN, and refused anyway.
+ *
+ * Every case above is about a stranger. This one is about a member, which is
+ * the larger population: `RedemptionQueue` is mounted for anyone whose village
+ * runs the module, and it used to discover whether it was allowed by asking
+ * `GET /api/admin/redemptions` and reading the refusal. A member who does not
+ * hold `redemption.confirm` is not a failed sign-in, so a 401 on every wallet
+ * load was both the wrong status and the noise ruling 28 asked us to stop.
+ *
+ * THE TWIN MATTERS MORE HERE THAN ANYWHERE. The cheap fix is to mount this
+ * only for admins, and that would pass the first case while taking the queue
+ * away from every steward who holds the key through a role rather than a badge
+ * of office - which is the entire reason the component asks the server at all.
+ */
+describe("the steward queue, for a member who does not hold the key", () => {
+  it("asks the member route and never the admin one", async () => {
+    signIn();
+    session.mayConfirm = false;
+    inRouter(<RedemptionQueue />);
+    /*
+     * Settle on the component having asked ANYTHING before judging what it
+     * asked. Waiting on the member route specifically would make the old code
+     * fail here, on "it never asked", rather than below on the assertion that
+     * names the defect - a red for the wrong reason reads as a broken test.
+     */
+    await waitFor(() => expect(asked.length).toBeGreaterThan(0));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(asked.filter((u) => u.startsWith("/api/admin/redemptions"))).toEqual([]);
+    expect(asked.filter((u) => u.startsWith("/api/redemptions"))).not.toEqual([]);
+  });
+
+  it("and a holder still asks for the queue", async () => {
+    signIn();
+    session.mayConfirm = true;
+    inRouter(<RedemptionQueue />);
+    await waitFor(() => expect(asked).toContain("/api/admin/redemptions"));
   });
 });

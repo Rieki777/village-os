@@ -274,6 +274,35 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
     expect((await call("POST", "/api/redemptions", { token: CREDITS, amount: 1, askedFor: "x" }, null)).status).toBe(401);
   });
 
+  /*
+   * WHETHER TO ASK, driven against the built server rather than reasoned.
+   *
+   * The steward queue used to find out whether it was allowed by requesting
+   * `GET /api/admin/redemptions` and reading the refusal, so every ordinary
+   * member's wallet took a 401 on every load (ruling 28, 2026-09-21: a
+   * permanent 401 on an ordinary page is noise nobody wants). The member route
+   * now answers the question up front.
+   *
+   * BOTH SIDES ARE HERE and the second is the one that matters. A hint that
+   * said "no" to everybody would silence the noise and take the queue away
+   * from every steward who holds `redemption.confirm` through a role rather
+   * than by being an admin, which is the whole reason the component asks the
+   * server instead of checking for an admin.
+   */
+  it("tells a member whether to ask for the queue at all", async () => {
+    const member = await call("GET", "/api/redemptions", undefined, wrenToken);
+    expect(member.status).toBe(200);
+    expect(member.json?.mayConfirm, "a plain member does not hold the key").toBe(false);
+    // And the hint is honest about the door it describes: the admin route
+    // really does refuse them, so nothing was hidden by not asking.
+    expect((await call("GET", "/api/admin/redemptions", undefined, wrenToken)).status).not.toBe(200);
+
+    const founder = await call("GET", "/api/redemptions", undefined, founderToken);
+    expect(founder.status).toBe(200);
+    expect(founder.json?.mayConfirm, "the founder still sees the queue").toBe(true);
+    expect((await call("GET", "/api/admin/redemptions", undefined, founderToken)).status).toBe(200);
+  });
+
   it("offers a member the tokens this village redeems, and no others", async () => {
     const r = await call("GET", "/api/redemptions", undefined, wrenToken);
     expect(r.status).toBe(200);
