@@ -74,7 +74,13 @@ const DIST = path.resolve(process.cwd(), "dist/index.js");
 // Its window is checked by scripts/check-e2e-ports.mjs, not claimed here: the
 // hand-written surveys this replaces had gone stale and were describing a tree
 // that had moved on.
-const PORT = 3000 + (process.pid % 400);
+//
+// It was 3000-3399, which held this app's own port, the API port the dev client
+// proxies to, and MySQL's 3306. On 2026-09-24 a pid ending in 306 put it on the
+// database and CI failed to bind; the run one pid away passed. 3660-4044 is open
+// ground between exitLevers (2600-2999) and decimals (4191-4401), and stops short
+// of 3659 and 4045, which fetch() will not dial.
+const PORT = 3660 + (process.pid % 385);
 const BASE = `http://localhost:${PORT}`;
 const ADMIN = "handback-vote-admin";
 const PASSWORD = "HandbackVote123!";

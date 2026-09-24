@@ -127,6 +127,32 @@ function check(label, got, want) {
   check("the widest clean stretch passes", r.status, 0);
 }
 
+// 13. A window holding a port this project binds itself. This is the defect
+//     that failed CI on 2026-09-24: handbackVote.routes.e2e sat on 3000-3399
+//     and a pid ending in 306 landed it on the database.
+{
+  const r = run({ "a.e2e.test.ts": "const PORT = 3200 + (process.pid % 400);\n" });
+  check("a window holding an occupied port refused", r.status, 1);
+  check("and names the holder", /holds 3306 \(MySQL, per /.test(r.out), true);
+}
+
+// 14. The window handbackVote.routes.e2e moved to passes.
+{
+  const r = run({ "a.e2e.test.ts": "const PORT = 3660 + (process.pid % 385);\n" });
+  check("the window it moved to passes", r.status, 0);
+}
+
+// 15. The stretch it recommends must be clear of BOTH hazards. A guard that
+//     subtracted only the fetch-blocked ports would send you onto 3306, which
+//     is how one hazard list quietly undoes the other.
+{
+  const r = run({ "a.e2e.test.ts": "const PORT = 3300 + (process.pid % 400);\n" });
+  check("both hazards in one window refused", r.status, 1);
+  check("fetch-blocked 3659 named", /holds 3659/.test(r.out), true);
+  check("occupied 3306 named", /holds 3306 \(MySQL/.test(r.out), true);
+  check("and the advice skips both", /\[3307-3658\], 352 port\(s\)/.test(r.out), true);
+}
+
 if (failures > 0) {
   console.error(`\n${failures} of ${checks} check(s) FAILED.`);
   process.exit(1);
