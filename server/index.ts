@@ -129,7 +129,7 @@ import { register as registerFeedbackRoutes } from "./routes/feedback";
 import { register as registerCharacterPortraitRoutes } from "./routes/characterPortraits";
 import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
 import { register as registerPowerAffinityRoutes, powersForClass, withPowerAffinity } from "./routes/powerAffinity";
-import { register as registerPowerHandRoutes } from "./routes/powerHands";
+import { register as registerPowerHandRoutes, registerSeatVote } from "./routes/powerHands";
 import { resolveGoogleConfig } from "./lib/oauthGoogle";
 import { makeIdentityGate } from "./lib/identityConfirm";
 import {
@@ -25322,154 +25322,9 @@ ${inner}
     res.json({ success: true, ballot: await serveBallot(result.ballot, user.id) });
   });
 
-  /**
-   * ── SEAT SOMEBODY IN A ROLE ────────────────────────────────────────────────
-   *
-   * WHY THIS ONE REFUSES THE TWO KEYS THAT MAKE AN ELECTORATE, and the reason
-   * is `power_grant`'s reason one step further along. That route refuses to
-   * vote `ballot.vote` or `member.vouch` onto a role because "a role is a set
-   * of PEOPLE through its seats", so granting the vote to a role and then
-   * seating three people in it is a small group choosing who else gets a say.
-   * This route is the seating half of exactly that path. Granting is fenced
-   * and seating was not, because until now seating by vote did not exist.
-   *
-   * TRANSFERABLE excludes both keys today and `power_grant` refuses them by
-   * name, so nothing a village can do reaches this refusal. It is written for
-   * the same reason the grant's is: the day an admin route or a later lane
-   * puts one of those keys on a role, this path would otherwise widen in a
-   * commit about something else.
-   *
-   * R54 IS NOT BEING FENCED OFF. A village widening its own roll is the
-   * destination, and the way there is `progression.unlock.ballot.vote`, a
-   * mechanic the whole roll changes in one vote about a rule.
-   */
-  app.post("/api/governance/role-seats", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required" });
-    const ctx = await capabilityCtx(user);
-    if (await refuseUnlessMemberMayOpen(req, res, ctx, "Seating somebody in a role")) return;
-
-    const userId = String(req.body?.userId ?? "").trim();
-    const roleId = String(req.body?.roleId ?? "").trim();
-    const reason = String(req.body?.reason ?? "").trim().slice(0, 20000);
-
-    const role = rolesRepo.all().find((r: any) => r.id === roleId) as any;
-    if (!role) return res.status(404).json({ error: "There is no role by that name." });
-    if (role.isExample) {
-      return res.status(409).json({ error: "That is one of the platform's example roles, not one of this village's. Declare a role of your own first." });
-    }
-    const carried = ((role.capabilities ?? []) as string[]).filter((c) =>
-      ["ballot.vote", "member.vouch"].includes(c), // superVouch absent: SUPER_VOUCH_PLACEMENT
-    );
-    if (carried.length) {
-      return res.status(409).json({
-        error:
-          `${role.name ?? roleId} carries ${carried.join(" and ")}, so seating somebody in it would be a few members choosing who else gets a say. ` +
-          "Who votes here is a rule of the game, and the village changes it the way it changes any rule: open a rule change on the rung that decides who is on the roll, and the whole roll decides it.",
-      });
-    }
-    const member = await members.byId(userId);
-    if (!member) return res.status(404).json({ error: "There is no member by that id." });
-    if (isExampleUser(member)) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
-    if (loadRoleHolders().some((h) => h.roleId === roleId && h.userId === userId)) {
-      return res.status(409).json({
-        error: `${firstName(member.name)} already sits in ${role.name ?? roleId}. There is nothing for the village to decide here.`,
-      });
-    }
-    // A role can require a minimum stage, and an appointment made by the whole
-    // village respects the ladder the same way an admin's does. Asked again at
-    // close, because a member can slip below it while the vote runs.
-    if (role.minStage) {
-      const needed = stageIndex(role.minStage);
-      if (needed >= 0 && stageIndex(await stageOf(member)) < needed) {
-        return res.status(409).json({
-          error: `${firstName(member.name)} has not reached the ${getStage(role.minStage)?.name ?? role.minStage} stage this role asks for.`,
-          minStage: role.minStage,
-        });
-      }
-    }
-    if (userId.includes("@") || roleId.includes("@")) {
-      return res.status(400).json({ error: "A member and a role are both named without an @ in them." });
-    }
-    const subjectRef = `${userId}@${roleId}`;
-    if (subjectRef.length > 64) {
-      return res.status(409).json({ error: "That role's name is too long for the record to hold beside the member. Shorten the role id first." });
-    }
-    if (reason.length < 40) {
-      return res.status(400).json({
-        error: "Say why this person for this role. The whole roll reads this before voting.",
-      });
-    }
-
-    const setup = await roleBallotSetup();
-    if (setup.tokenProblem) return res.status(409).json({ error: setup.tokenProblem });
-
-    const term = resolveSeatTerm({ requestedEndsOn: req.body?.termEndsOn, calendar: seatCalendar(), capAtSeasonEnd: ((role.capabilities ?? []) as string[]).includes(STEWARD_VETO), now: new Date(), startsNoEarlierThan: seatVoteLandsAt(landingDeps(), setup.durationDays) });
-    if (!term.ok) return res.status(409).json({ error: term.error, code: term.code });
-    const can = roleConsequences(role);
-    const who = role.name ?? roleId;
-    const title = `${who}: the village asks ${firstName(member.name)} to sit in it`;
-    const doc = [
-      `# ${title}`,
-      "",
-      `## The role`,
-      "",
-      `${who}. ${String(role.description ?? "").trim()}`.trim(),
-      "",
-      `## What ${firstName(member.name)} would be able to do`,
-      "",
-      can.length
-        ? `From the day this carries, with no further vote:\n\n${can.map((c) => `- ${c}`).join("\n")}`
-        : `${who} carries no powers today, so this seats somebody in a role that grants nothing yet. If the village later votes ${who} a power, whoever is sitting in it holds that power from that day.`,
-      "",
-      `## Why this person`,
-      "",
-      reason,
-      "",
-      `## How long`, "",
-      `${term.followsSeason ? `Until the season ends on ${term.endsOn}, and if the season's end date moves, this seat moves with it.` : `Until ${term.endsOn}.`} When the term ends the seat ends, and the village can seat them again.`, ...(term.caution ? ["", term.caution] : []), "",
-      `## Taking it back`,
-      "",
-      `The village can vote this seat back at any time, and that vote is an ordinary one.`,
-      "",
-      `Asked by ${firstName(user.name)} on ${new Date().toISOString().slice(0, 10)}.`,
-      "",
-    ]
-      .filter((line, i, all) => !(line === "" && all[i - 1] === ""))
-      .join("\n");
-
-    const result = await openBallot(getPool(), {
-      subjectType: "role_seat",
-      onOpen: (conn, ballotId) => freezeSeatTerm(conn, ballotId, { endsAt: term.endsAt, seasonId: term.seasonId, followsSeason: term.followsSeason }),
-      subjectRef,
-      title,
-      docMarkdown: doc,
-      method: setup.method,
-      weightMode: setup.snapshot.mode,
-      weightToken: setup.snapshot.token,
-      unityPct: setup.dials.unityPct,
-      quorumPct: setup.dials.quorumPct,
-      durationDays: setup.durationDays,
-      openedBy: user.id,
-      electorate: setup.electorate,
-    });
-    if (!result.ok) return res.status(409).json({ error: result.error, ballotId: result.alreadyOpen?.id ?? null });
-
-    await addActivity("governance", `The village is deciding whether ${firstName(member.name)} sits in ${who}.`, {
-      actorUserId: user.id,
-      entityType: "ballot",
-      entityRef: result.ballot.id,
-    });
-    void notifyRoll(result.ballot, {
-      type: "ballot_opened",
-      title: `The village is asked whether ${firstName(member.name)} sits in ${who}`,
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}.`,
-      keySuffix: "open",
-      except: [user.id],
-      roll: setup.electorate.map((e) => e.userId),
-    });
-    res.json({ success: true, ballot: await serveBallot(result.ballot, user.id) });
-  });
+  // The seat vote itself is server/routes/powerHands.ts. It registers HERE, below the
+  // requireModule("governance") mount, which is what keeps that gate in front of the door.
+  registerSeatVote(app, { authedUser, capabilityCtx, members, firstName, stageOf, getPool, rolesRepo, loadRoleHolders, refuseUnlessMemberMayOpen, roleBallotSetup, roleConsequences, seatCalendar, landingDeps, addActivity, notifyRoll, serveBallot });
 
   /**
    * ── TAKE A SEAT BACK ───────────────────────────────────────────────────────
