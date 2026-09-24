@@ -14,7 +14,7 @@ import { launchProposalDoc } from "./lib/launchProposal";
 import { HANDOVER_SET } from "../shared/capabilities";
 
 const BASE = {
-  villageName: "Amora",
+  villageName: "Larksfield",
   quorumPct: 100,
   unityPct: 100,
   onTheRoll: 4,
@@ -77,7 +77,7 @@ describe("the launch proposal's frozen document", () => {
      */
     const doc = launchProposalDoc({ ...BASE, weightNote: "Everybody's voice weighs the same here." });
     expect(doc).toContain("# Start the Game");
-    expect(doc).toContain("Amora is built. This vote is what starts it.");
+    expect(doc).toContain("Larksfield is built. This vote is what starts it.");
     expect(doc).toContain("## What changes when this carries");
     expect(doc).toContain("Token issuance turns on.");
     expect(doc).toContain("## What this vote asks");
