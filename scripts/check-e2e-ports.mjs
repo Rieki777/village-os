@@ -57,8 +57,20 @@
  * sat on 3000-3399, which holds all three of ours at once, and on 2026-09-24 a
  * pid ending in 306 put it on MySQL's 3306: the suite failed CI with "port 3306
  * is already held by another process" while its neighbour run, one pid apart,
- * passed. A hazard that fires on 3 pids in 400 is one this guard reports clean
- * 99.25% of the time, which is why it needed listing rather than watching.
+ * passed. A hazard that fires on 4 pids in 400 is one this guard reports clean
+ * 99% of the time, which is why it needed listing rather than watching.
+ *
+ * 3306 and 3307 fail on opposite machines, which is why both are listed. CI
+ * binds 3306 and nothing is listening on 3307; a developer here runs MariaDB on
+ * 3307 and nothing on 3306. So a suite landing on 3307 passes every CI run and
+ * collides locally with the very database the suite is about to use -- failing
+ * in the direction that looks like your own change broke the database.
+ *
+ * None of this was unknown. SEASON2_FLEET_LEDGER.md records a lane choosing
+ * windows 1200-1599 and 1600-1999 and noting that "3000-4001 was passed over
+ * because local MariaDB holds 3307". The knowledge was written down and the
+ * next window was assigned into that range anyway, because prose is not
+ * compiled and this guard is. That is the whole argument for the list.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -106,8 +118,13 @@ const OCCUPIED_PORTS = [
   },
   {
     port: 3306,
-    by: "MySQL",
+    by: "MySQL on CI",
     where: ".github/workflows/ci.yml runs `image: mysql:8` and points TEST_DATABASE_URL at 3306",
+  },
+  {
+    port: 3307,
+    by: "the local MariaDB the tests actually run against",
+    where: "SEASON2_FLEET_LEDGER.md: \"Test MySQL is 127.0.0.1:3307 (local, not production)\"",
   },
 ];
 

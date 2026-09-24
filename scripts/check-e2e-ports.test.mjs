@@ -133,7 +133,8 @@ function check(label, got, want) {
 {
   const r = run({ "a.e2e.test.ts": "const PORT = 3200 + (process.pid % 400);\n" });
   check("a window holding an occupied port refused", r.status, 1);
-  check("and names the holder", /holds 3306 \(MySQL, per /.test(r.out), true);
+  check("and names the holder", /holds 3306 \(MySQL on CI, per /.test(r.out), true);
+  check("and the local database beside it", /3307 \(the local MariaDB/.test(r.out), true);
 }
 
 // 14. The window handbackVote.routes.e2e moved to passes.
@@ -149,8 +150,19 @@ function check(label, got, want) {
   const r = run({ "a.e2e.test.ts": "const PORT = 3300 + (process.pid % 400);\n" });
   check("both hazards in one window refused", r.status, 1);
   check("fetch-blocked 3659 named", /holds 3659/.test(r.out), true);
-  check("occupied 3306 named", /holds 3306 \(MySQL/.test(r.out), true);
-  check("and the advice skips both", /\[3307-3658\], 352 port\(s\)/.test(r.out), true);
+  check("occupied 3306 named", /holds 3306 \(MySQL on CI/.test(r.out), true);
+  check("and the advice skips all of them", /\[3308-3658\], 351 port\(s\)/.test(r.out), true);
+}
+
+// 16. 3307 is the local MariaDB. Nothing listens on it during CI, so a suite
+//     landing there passes every CI run and collides only on a developer's
+//     machine, with the database the suite is about to use. The ledger recorded
+//     a lane passing over 3000-4001 for exactly this reason; the next window
+//     was assigned into that range anyway. Prose is not compiled.
+{
+  const r = run({ "a.e2e.test.ts": "const PORT = 3307 + (process.pid % 2);\n" });
+  check("the local database port refused", r.status, 1);
+  check("and named as local", /3307 \(the local MariaDB/.test(r.out), true);
 }
 
 if (failures > 0) {
