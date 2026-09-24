@@ -98,6 +98,35 @@ describe("what a listing must carry", () => {
     expect(problems.join(" ")).toContain("supportUrl");
   });
 
+  /*
+   * A VENDOR THAT RUNS NO STATUS PAGE, which is the ordinary case for a small
+   * one. Rye's word to a vendor on 2026-09-23: if a status page does not
+   * exist, say so and it is recorded instead of leaving a dead link. The three
+   * cases below are the whole rule, and the middle one is the point: a made-up
+   * URL used to be the ONLY way to satisfy this field, and it renders as a
+   * link that fails at the moment somebody needs it.
+   */
+  it("ACCEPTS a listing that says plainly there is no status page", () => {
+    expect(
+      moduleListingProblems([base({ tier: "connected", vendor: { ...goodVendor, statusUrl: null } })]),
+    ).toEqual([]);
+  });
+
+  it("refuses a listing that says nothing at all about a status page", () => {
+    const { statusUrl: _dropped, ...noMention } = goodVendor;
+    const problems = moduleListingProblems([
+      base({ tier: "connected", vendor: noMention as unknown as typeof goodVendor }),
+    ]);
+    expect(problems.join(" ")).toContain("whether the vendor runs a status page");
+  });
+
+  it("still refuses a status page that is not an https address", () => {
+    const problems = moduleListingProblems([
+      base({ tier: "connected", vendor: { ...goodVendor, statusUrl: "ask us" } }),
+    ]);
+    expect(problems.join(" ")).toContain("statusUrl");
+  });
+
   it("refuses a managed listing that puts its credential in the village's store", () => {
     const problems = moduleListingProblems([
       base({ tier: "managed", vendor: { ...goodVendor, managedEnvKey: "EXAMPLE_PLATFORM_KEY" } }),

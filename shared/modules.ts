@@ -278,7 +278,23 @@ export interface ModuleVendor {
   url: string;
   supportUrl: string;
   supportEmail: string;
-  statusUrl: string;
+  /**
+   * The vendor's status page, or `null` where they do not run one.
+   *
+   * NULL IS A VALUE HERE AND NEVER AN OVERSIGHT. Rye's word to a vendor on
+   * 2026-09-23: "If a status page does not exist, say so and I will record that
+   * it does not rather than leave a dead link." A required string forced the
+   * opposite, since the only way to satisfy it was to invent a URL, and an
+   * invented URL is worse than an absence: it renders as a link, a founder
+   * clicks it during an outage, and it fails at the moment it was supposed to
+   * help. The key stays REQUIRED so a listing cannot be silent about it; what
+   * changed is that "there is none" became sayable.
+   *
+   * `supportUrl` above is deliberately NOT nullable, and the difference is
+   * provenance. It is Rye's ruling of 2026-08-14, quoted below, with a reason
+   * of its own. Moving it is his call and not a listing's convenience.
+   */
+  statusUrl: string | null;
   termsUrl: string;
   /**
    * Secret slots this listing contributes to the village's own secrets store,
@@ -1557,10 +1573,15 @@ export function moduleListingProblems(defs: readonly ModuleDef[] = MODULES): str
     for (const [field, value] of [
       ["url", v.url],
       ["supportUrl", v.supportUrl],
-      ["statusUrl", v.statusUrl],
       ["termsUrl", v.termsUrl],
     ] as const) {
       if (!HTTPS.test(String(value ?? ""))) say(m.id, `${field} must be an https address`);
+    }
+    // `null` says the vendor runs no status page and somebody checked. Absent
+    // says nobody asked. The first is recorded, the second is refused.
+    if (v.statusUrl === undefined) say(m.id, "must say whether the vendor runs a status page, with a url or null");
+    else if (v.statusUrl !== null && !HTTPS.test(String(v.statusUrl))) {
+      say(m.id, "statusUrl must be an https address or null");
     }
     // Rye's ruling, settled 2026-08-14: a support URL AND a support email, at
     // every tier, stored as fields the product renders. A listing whose
