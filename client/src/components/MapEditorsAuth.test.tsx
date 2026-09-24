@@ -68,7 +68,7 @@ import MapVocabularyPanel from "./admin/MapVocabularyPanel";
 // copies of this literal is eight chances for a fork's rename to miss one.
 import { TOKEN_KEY } from "@/lib/gameApi";
 
-const TOKEN = "session-token-under-test";
+const TOKEN = "session-token-under-test"; // module-review-ok: a fixture string this file writes into localStorage to stand in for a session; it authenticates nothing and reaches no server
 
 /** What each route answers, in the shape the panel destructures. */
 const BODIES: Record<string, unknown> = {
