@@ -41,6 +41,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Hand } from "lucide-react";
 import { authToken, type ProgressionCapability } from "@/lib/gameApi";
+import { NOTE_IS_PUBLIC } from "@shared/powerHands";
 
 export type RowHand = NonNullable<ProgressionCapability["hand"]>;
 
@@ -129,6 +130,13 @@ export default function PowerHand({ row }: { row: ProgressionCapability }) {
           <label htmlFor={noteId} className="text-xs text-muted-foreground">
             Why this power calls to you (optional)
           </label>
+          {/*
+            Rye, 2026-09-23: a note on a raised hand is public, and existing
+            notes went public with it. Said HERE, above the empty box, because
+            the one thing a build owes somebody under a ruling like that is
+            that they knew before they wrote.
+          */}
+          <p className="text-xs text-muted-foreground">{NOTE_IS_PUBLIC}</p>
           <textarea
             id={noteId}
             autoFocus

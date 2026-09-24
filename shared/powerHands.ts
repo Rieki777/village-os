@@ -62,13 +62,14 @@ export interface InboxRow {
   type?: unknown;
   status?: unknown;
   userId?: unknown;
+  userName?: unknown;
   submittedAt?: unknown;
   data?: unknown;
 }
 
-/** Why a hand cannot go up, with the words a member reads. */
+/** Why a hand cannot go up, or cannot be put to the village, in a member's words. */
 export interface HandRefusal {
-  status: 404 | 409;
+  status: 403 | 404 | 409;
   error: string;
   message: string;
 }
@@ -146,6 +147,206 @@ function namesOf(names: readonly string[]): string {
   if (names.length <= 1) return names[0] ?? "";
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ *
+ * RULING 1 (Rye, 2026-09-23): WHO MAY PUT A RAISED HAND TO THE VILLAGE.
+ *
+ * A hand asks and never grants, so something has to carry it from the inbox to
+ * a vote. Until this, nothing did: the only answer a hand could get was an
+ * admin moving its row (`PUT /api/admin/submissions/:id/status`), and the
+ * appointment was a separate act somewhere else. Asked who may take a standing
+ * hand and open a vote from it, Rye answered:
+ *
+ *   "It's both 1 and 2 depending on who owns the power (if roles hold the
+ *    power it's option 1 if the village holds the power it's option 2)"
+ *
+ * Option 1 was "Only holders": ordinary members read the inbox and nothing
+ * more. Option 2 was "Members can propose": any member can select hands and put
+ * them to the village once the village holds the approving power, because the
+ * vote decides and proposing costs nothing.
+ *
+ * ── THE TWO INPUTS, AND WHY THEY ARE INPUTS ────────────────────────────────
+ *
+ * This function is handed the two answers rather than working them out, and
+ * both of them already have exactly one home:
+ *
+ *   villageHolds   `isVillageHeld(cap, ctx.villageHeld)` in shared/capabilities.ts
+ *   liveHolders    `liveHoldersOfCapability(...)` in server/lib/roleGrants.ts,
+ *                  which already honours lapsed terms, carried keys and the
+ *                  deny a warning badge lands
+ *
+ * A second walk of the tables here would be a twin of both, and the docblock on
+ * `carriedBy` says what twins do: the gate lets a `member.superVouch` holder
+ * vouch while the counter reports that nobody can. Two answers, one question.
+ *
+ * ── THE TWO CASES THE RULING DOES NOT NAME ─────────────────────────────────
+ *
+ * The ruling's two conditions are neither exhaustive nor mutually exclusive, so
+ * both gaps are read here on purpose rather than fallen into.
+ *
+ * BOTH TRUE, the village holds it AND a role carries it. This reads it as
+ * option 2, any member, because village-held is already the stronger statement
+ * everywhere else in the gate: on a village-held key the admin short-circuit
+ * does not apply (`capabilityDecision`, shared/capabilities.ts), which is the
+ * one place in the whole order of authority where holding beats being admin.
+ * Reading it the other way would mean a village that took a power on ended up
+ * with a NARROWER door than a village that never did. THIS IS A READING OF THE
+ * RULING AND NOT A THING RYE SAID.
+ *
+ * NEITHER TRUE, no live holder and the village does not hold it. This reads it
+ * as option 2 as well, and that one is NOT this ruling at all: it comes from
+ * Rye's `org.decide` ruling of 2026-09-14, "holder publishes live or sends to
+ * ballot, no holder means a ballot". A power nobody holds has nobody to ask, so
+ * the alternative is a hand that can never be answered. Stated separately
+ * because it stands on a separate ruling, and if that one is ever revisited
+ * this branch goes with it rather than with the one above.
+ *
+ * ── WHAT THIS IS ON A VILLAGE THAT HOLDS NOTHING ───────────────────────────
+ *
+ * Measured, and it matters: `capability_holding` is created empty by migration
+ * 0098 and no seed or migration ever writes a row into it, so every village
+ * begins holding nothing, and live Amora still held 0 of 20 on 2026-09-19. On a
+ * village in that state the first branch below never fires. What the feature
+ * does there is the other two branches: holder-only on a power some role still
+ * carries, open to any member on a power nobody holds.
+ */
+
+/** Which of the three states a power is in, in this rule's own vocabulary. */
+export type HandOpenerReason =
+  /** The village holds it (`capability_holding`). Option 2, in Rye's words. */
+  | "village-holds-it"
+  /** A role holds it and somebody is live in the chair. Option 1. */
+  | "a-role-holds-it"
+  /** Nobody holds it live and the village does not hold it. The org.decide reading. */
+  | "nobody-holds-it";
+
+/** Who may put a hand for one power to the village, and which reading said so. */
+export interface HandOpenerRule {
+  who: "any-member" | "live-holders";
+  because: HandOpenerReason;
+  /** Who holds it live. Empty when nobody does, and never the deciding fact on its own. */
+  holders: readonly string[];
+}
+
+/**
+ * Ruling 1 as one expression. Pure, so both readings above are provable
+ * without a database.
+ */
+export function whoMayPutHandToVillage(
+  villageHolds: boolean,
+  liveHolders: readonly string[],
+): HandOpenerRule {
+  const holders = liveHolders.filter((h) => h !== "");
+  if (villageHolds) return { who: "any-member", because: "village-holds-it", holders };
+  if (holders.length > 0) return { who: "live-holders", because: "a-role-holds-it", holders };
+  return { who: "any-member", because: "nobody-holds-it", holders: [] };
+}
+
+/**
+ * Why this member cannot put this hand to the village, or null when they can.
+ *
+ * The refusal names the door rather than saying no: a member who is not one of
+ * the holders is told who to ask, which is the same courtesy
+ * `STEWARD_SEAT_REFUSAL` pays an administrator.
+ */
+export function putToVillageRefusal(
+  rule: HandOpenerRule,
+  userId: string,
+  /** What the power is called, for the sentence. Falls back to a plain noun. */
+  powerLabel = "",
+): HandRefusal | null {
+  if (rule.who === "any-member") return null;
+  if (userId && rule.holders.includes(userId)) return null;
+  const power = powerLabel.trim() ? `"${powerLabel.trim()}"` : "this power";
+  return {
+    status: 403,
+    error: "not_a_holder",
+    message:
+      `${power} belongs to a role, so putting a hand for it to the village is for whoever holds it. ` +
+      "Ask one of them, or ask the village to take the power on, and then anybody can.",
+  };
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ *
+ * RULING 2 (Rye, 2026-09-23): THE NOTE ON A RAISED HAND IS PUBLIC.
+ *
+ * He was offered "Ask public, note private" and chose "Everything public",
+ * members see the notes too. Asked again specifically about notes ALREADY
+ * written, against a recommended "only new notes public" whose own description
+ * warned that the alternative "publishes writing done under a different
+ * expectation", he chose "All notes public". That is deliberate and it is his
+ * call, so there is no written-before cutoff here and no consent step.
+ *
+ * What the build owes in return is that nobody writes a note without being
+ * told first, which is `NOTE_IS_PUBLIC` below, said on the writing screen
+ * before the box rather than after the send.
+ *
+ * ── THE PROJECTION IS A LIST OF NAMES, NEVER A SPREAD ──────────────────────
+ *
+ * `submissions` is one table carrying every kind of thing a village collects:
+ * membership requests, visit inquiries, investor enquiries, work-with-us. A
+ * read widened by status or by nothing at all would publish those, which is a
+ * real privacy break and not a bug you notice. So this builds the public row
+ * FIELD BY FIELD from a row it has already checked is a `power-application`,
+ * and `email`, which the raise-hand route stores beside the note, is one of the
+ * fields it does not name.
+ */
+
+/** A raised hand as anybody in the village may read it. No email, ever. */
+export interface PublicHand {
+  id: string;
+  capability: string;
+  powerLabel: string;
+  userId: string;
+  userName: string;
+  status: StandingHandStatus;
+  submittedAt: string;
+  /** What they wrote. Public by Rye's ruling of 2026-09-23, existing notes included. */
+  note: string;
+}
+
+/**
+ * The hands that are up across the whole village, oldest first, as members
+ * read them.
+ *
+ * `present` decides whose hands are listed. A member who has asked to be
+ * forgotten keeps their inbox row (the erasure step anonymises it rather than
+ * removing it) and NOT their place in a list members read, so the caller hands
+ * in the test for whether somebody is still here. Absent means everybody.
+ */
+export function publicHands(
+  rows: readonly InboxRow[],
+  present?: (userId: string) => boolean,
+): PublicHand[] {
+  const out: PublicHand[] = [];
+  for (const row of rows) {
+    if (row.type !== POWER_APPLICATION) continue;
+    const status = row.status;
+    if (!isStanding(status)) continue;
+    const capability = handCapability(row);
+    if (!capability) continue;
+    const userId = String(row.userId ?? "");
+    if (!userId) continue;
+    if (present && !present(userId)) continue;
+    const data = row.data !== null && typeof row.data === "object" ? (row.data as Record<string, unknown>) : {};
+    out.push({
+      id: String(row.id ?? ""),
+      capability,
+      powerLabel: typeof data.powerLabel === "string" ? data.powerLabel : "",
+      userId,
+      userName: typeof row.userName === "string" ? row.userName : "",
+      status,
+      submittedAt: String(row.submittedAt ?? ""),
+      note: typeof data.note === "string" ? data.note : "",
+    });
+  }
+  return out.sort((a, b) => (a.submittedAt < b.submittedAt ? -1 : a.submittedAt > b.submittedAt ? 1 : 0));
+}
+
+/** Said on the writing screen, above the box, before anybody types into it. */
+export const NOTE_IS_PUBLIC = "Everyone in the village can read what you write here.";
 
 /** The data keys the inbox says in a sentence, which its generic table leaves out. */
 export const POWER_HAND_KEYS: readonly string[] = ["capability", "powerLabel", "suits"];

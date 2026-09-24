@@ -112,7 +112,8 @@ import { freezeSeatTerm } from "./repos/ballotSeatTerms";
 import { roleVoteDays, seatVoteLandsAt, termForCarriedSeat } from "./lib/seatTermLanding";
 import { raisedHandTerm } from "./lib/raisedHandTerm";
 import { resolveSeatTerm, type SeatCalendar } from "../shared/seatTerms";
-import { decideRoleCapabilities, liveHolderCount, liveHoldersOfCapability, stewardSeatRefusal } from "./lib/roleGrants";
+import { decideRoleCapabilities, liveHolderCount, rolesCarryingCapability, stewardSeatRefusal } from "./lib/roleGrants";
+import { liveHoldersNow, type HolderReads } from "./lib/holdersNow";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
 import { type ConsentActor, register as registerQuestClaimRoutes } from "./routes/questClaims";
 import { countInWindow, limitState, recordHit as recordRateHit } from "./repos/rateHits";
@@ -139,7 +140,7 @@ import { register as registerFeedbackRoutes } from "./routes/feedback";
 import { register as registerCharacterPortraitRoutes } from "./routes/characterPortraits";
 import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
 import { register as registerPowerAffinityRoutes, powersForClass, withPowerAffinity } from "./routes/powerAffinity";
-import { register as registerPowerHandRoutes, registerSeatVote } from "./routes/powerHands";
+import { deferredSeatVote, register as registerPowerHandRoutes, registerSeatVote } from "./routes/powerHands";
 import { resolveGoogleConfig } from "./lib/oauthGoogle";
 import { makeIdentityGate } from "./lib/identityConfirm";
 import {
@@ -3075,36 +3076,20 @@ function lapseContext(): LapseContext {
  * down with the move that emptied that neighbourhood.)
  */
 /**
- * WHO HOLDS THE REDEMPTION KEY, for the door that has to know whether this
- * village has a steward at all (Rye, 2026-09-15).
- *
- * The counting rule is `liveHoldersOfCapability`, which walks the gate's own
- * planes and deliberately leaves out the admin short-circuit. This function is
- * only the wire: the two caches this file owns, plus one read of the badge rows
- * for the whole village.
- *
- * The badge half honours the SAME dormancy rule the gate does. A seasonally
- * dormant badge grants nothing while its season is not running, and a deny is
- * never dormant (0050), so a sleeping badge cannot make somebody a steward and
- * a warning badge still takes it away.
+ * The wire between this file's caches and server/lib/holdersNow.ts, which
+ * holds the counting rule and the badge read and says why they left here.
+ * Both doors that ask who holds a power go through it, and so does the seat
+ * vote's question about which roles carry one.
  */
-async function redemptionKeyHolders(): Promise<string[]> {
-  const badges: Record<string, { grants: string[]; denies: string[] }> = {};
-  if (effectiveLifecycle("badges") !== "off") {
-    const asleep = new Set(await dormantBadgeIds());
-    for (const r of await badgeCapabilityRows(getPool())) {
-      const userId = String((r as any).user_id);
-      const plane = (badges[userId] ??= { grants: [], denies: [] });
-      const parse = (v: unknown): string[] => {
-        if (Array.isArray(v)) return v.map(String);
-        try { const p = JSON.parse(String(v ?? "[]")); return Array.isArray(p) ? p.map(String) : []; } catch { return []; }
-      };
-      if (!asleep.has(String((r as any).badge_id))) plane.grants.push(...parse((r as any).capabilities));
-      plane.denies.push(...parse((r as any).denies));
-    }
-  }
-  return liveHoldersOfCapability(loadRoleHolders(), loadRoles(), "redemption.confirm", new Date(), badges);
-}
+const holderReads: HolderReads = {
+  badgesLive: () => effectiveLifecycle("badges") !== "off",
+  dormantBadgeIds,
+  badgeRows: () => badgeCapabilityRows(getPool()),
+  roleHolders: loadRoleHolders,
+  roles: loadRoles,
+};
+const liveHoldersOf = (capability: string): Promise<string[]> => liveHoldersNow(holderReads, capability);
+const rolesCarrying = (capability: string) => rolesCarryingCapability(loadRoles(), capability);
 
 async function capabilityCtx(user: any) {
   // S36: badge grants and denies join the one gate — but only while the
@@ -18913,7 +18898,7 @@ ${inner}
     const out = await openRedemptionBallot(getPool(), setup, redemptionId);
     return out.ok ? { ok: true } : { ok: false, error: out.error };
   };
-  registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify, openRedemptionBallot: (id: string) => openRedemptionVote(id), overLimit, projectCurrency: () => mergedConfig().project.fiatCurrency, redemptionKeyHolders });
+  registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify, openRedemptionBallot: (id: string) => openRedemptionVote(id), overLimit, projectCurrency: () => mergedConfig().project.fiatCurrency, redemptionKeyHolders: () => liveHoldersOf("redemption.confirm") });
 
   // â”€â”€ Project Settings (village dues + other editable numbers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -19961,7 +19946,10 @@ ${inner}
   registerCharacterPortraitRoutes(app, { authedUser, getPool, uploadsDir: UPLOADS_DIR });
   registerArchetypeAdminRoutes(app, { isAdmin, guardCapability, getPool });
   registerPowerAffinityRoutes(app, { isAdmin, guardCapability, getPool });
-  registerPowerHandRoutes(app, { authedUser, capabilityCtx, stageOf, firstName, notifyAdmins, getPool, overLimit, submissionsRepo });
+  // The seat vote registers far below, behind the governance mount, so its opener
+  // arrives here deferred and resolves per request (server/routes/powerHands.ts).
+  const seatVote = deferredSeatVote();
+  registerPowerHandRoutes(app, { authedUser, capabilityCtx, stageOf, firstName, isPresent: (m: any) => isPresentMember(m, AUTH_TOKEN_SECRET), members, notifyAdmins, getPool, overLimit, submissionsRepo, liveHoldersOf, rolesCarrying, openSeatVote: seatVote.opener });
 
   /** The five classes, as this village names them. Public: it is the front door. */
   app.get("/api/archetypes", async (_req, res) => {
@@ -25299,7 +25287,7 @@ ${inner}
 
   // The seat vote itself is server/routes/powerHands.ts. It registers HERE, below the
   // requireModule("governance") mount, which is what keeps that gate in front of the door.
-  registerSeatVote(app, { authedUser, capabilityCtx, members, firstName, stageOf, getPool, rolesRepo, loadRoleHolders, refuseUnlessMemberMayOpen, roleBallotSetup, roleConsequences, seatCalendar, landingDeps, addActivity, notifyRoll, serveBallot });
+  seatVote.fill(registerSeatVote(app, { authedUser, capabilityCtx, members, firstName, stageOf, getPool, rolesRepo, loadRoleHolders, refuseUnlessMemberMayOpen, roleBallotSetup, roleConsequences, seatCalendar, landingDeps, addActivity, notifyRoll, serveBallot }));
 
   /**
    * ── TAKE A SEAT BACK ───────────────────────────────────────────────────────
