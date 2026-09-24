@@ -29,14 +29,22 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
 
-const session = vi.hoisted(() => ({ token: null as string | null, user: null as null | { id: string } }));
+const session = vi.hoisted(() => ({ token: null as string | null, user: null as null | { id: string; role?: string } }));
 const gameFetchMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/components/Layout", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
+/*
+ * `useIsAdmin` is mocked BY ITS REAL RULE, never as a constant. `/map` mounts
+ * the village settings panel, which asks this module who is looking, and a
+ * mock that answered a fixed value would make these tests agree with
+ * themselves about a viewer the app would treat differently. The rule is the
+ * one in AuthContext: a member whose account role is admin or founder.
+ */
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: session.user, token: session.token, loading: false }),
+  useIsAdmin: () => session.user?.role === "admin" || session.user?.role === "founder",
 }));
 vi.mock("@/lib/gameApi", () => ({
   authToken: () => session.token,
