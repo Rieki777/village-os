@@ -343,6 +343,29 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   is invisible on all four channels and is taken anyway per the brief that opened this lane, which
   is exactly the untracked-claim case 27b describes, so it is left alone and never refilled.
   Confirmed again at landing.
+- **steward-slate lane (the slate is part of the launch proposal, and a nominee accepts or
+  declines), 2026-09-24: holds 0220** for
+  `drizzle/0220_a_launch_proposal_names_its_stewards.sql` on `wt/steward-slate`: one new table,
+  `ballot_steward_slate`, `CREATE TABLE IF NOT EXISTS`, no `ALTER`, no index on an existing table,
+  no foreign key. Expand-only and replay-safe by construction; the previous release neither reads
+  nor writes it, so a rollback over it is a no-op. `ENGINE=InnoDB` with no `CHARSET` clause and
+  `varchar(40)`/`varchar(64)` key widths, copied from `ballot_electorate` in `0089`, so a fork
+  cannot end up with a mixed collation on the two halves of one join.
+  Measured four ways on 2026-09-24 after `git fetch origin --prune`, immediately before the file
+  was created. The `--diff-filter=AR` scan over every ref reaches **0219**
+  (`drizzle/0219_a_proposal_says_what_it_serves.sql`, held on BOTH `refs/heads/wt/gps-model` and
+  `refs/remotes/origin/wt/gps-model`); the `drizzle/` directories on disk across every sibling
+  worktree reach **0219**, the same file, in `wt-gps-model` — that scan is also the untracked
+  channel, because `ls` sees a file git has never heard of; the scratchpad worktrees reach
+  **0199**; `origin/main` reaches **0218**. `check-migration-numbers.mjs --next` answers **0219**
+  and is wrong by one in the usual direction, because it reads main's ceiling and not the
+  in-flight branch — the same under-report this section has recorded five times.
+  The scratchpad channel came back EMPTY on its first run and that was the scan's fault rather
+  than the disk's: the pattern `[0-9]{4}_` matched digits inside the temp path's own UUID
+  segments and threw the filename numbers away. Re-run as `/[0-9]{4}_` against a known-positive
+  control (1,827 `.sql` files across 25 `drizzle/` directories) it answers 0199. An empty channel
+  is a channel to re-ask, never a channel to believe.
+  `0216` stays burned and unrefilled, per the launch-powers row above. Confirmed again at landing.
 - **membrane lane (invitations), 2026-09-14: holds 0209** for
   `drizzle/0209_a_member_arrives_by_invitation.sql` (one new table, `member_invites`). Measured three
   ways before the file was created: every remote and local ref and every worktree disk reached 0207
