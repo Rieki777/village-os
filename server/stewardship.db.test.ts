@@ -220,7 +220,7 @@ describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
     const caps = typeof roles[0].capabilities === "string" ? JSON.parse(roles[0].capabilities) : roles[0].capabilities;
     expect([...caps].sort(), "the role really carries them, read off the row").toEqual([...HANDOVER_SET].sort());
 
-    const [holdings]: any = await pool.query(
+    const [holdings]: any = await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT capability, holder_role_id, moved_by_ballot_id FROM capability_holding",
     );
     expect(
@@ -236,7 +236,7 @@ describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
   it("does not seat an ordinary member who voted and did not stand", async () => {
     // `mem-1` has a vote row on the launch ballot with the signal off, so this
     // is the filter working and not an empty query answering nothing.
-    const [rows]: any = await pool.query(
+    const [rows]: any = await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COUNT(*) AS n FROM role_holders WHERE role_id = ? AND user_id = 'mem-1'",
       [STEWARD_ROLE_ID],
     );
@@ -276,7 +276,7 @@ describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
   });
 
   it("seats nobody twice and moves nothing twice: a retried close is one row per catalyst", async () => {
-    const [before]: any = await pool.query("SELECT COUNT(*) AS n, MAX(moved_at) AS last FROM capability_holding");
+    const [before]: any = await pool.query("SELECT COUNT(*) AS n, MAX(moved_at) AS last FROM capability_holding"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     const again = await seatCatalystsAsStewards(pool, LAUNCH_BALLOT, SEASON);
     expect(again.seated, "nothing to do, and that is different from a failure").toEqual([]);
     expect(again.alreadySeated.sort()).toEqual(["cat-1", "cat-2"]);
@@ -287,7 +287,7 @@ describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
     // `ON DUPLICATE KEY UPDATE` buys. The table is the measurement, not the
     // report: nineteen rows before and nineteen after.
     expect(again.holdingMoved, "and the powers are still the village's").toBe(true);
-    const [after]: any = await pool.query("SELECT COUNT(*) AS n FROM capability_holding");
+    const [after]: any = await pool.query("SELECT COUNT(*) AS n FROM capability_holding"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(Number(after[0].n), "one row per power, not two").toBe(Number(before[0].n));
     expect(Number(after[0].n)).toBe(HANDOVER_SET.length);
 

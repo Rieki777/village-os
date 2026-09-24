@@ -23998,26 +23998,15 @@ ${inner}
     if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to vote" });
     const voteGate = capabilityDecision("ballot.vote", await capabilityCtx(user));
     const result = await castVote(
-      getPool(),
-      req.params.id,
-      user.id,
+      getPool(), req.params.id, user.id,
       String(req.body?.choice ?? ""),
       req.body?.reason === undefined ? undefined : String(req.body.reason),
       { mayVoteNow: voteGate.allowed, deniedByWarning: voteGate.source === "denied by warning badge" },
-      // 0218: "I want the inaugural steward's seat", which a founding member
-      // says at the launch vote and nowhere else (Rye, 2026-09-24). `castVote`
-      // decides whether the ballot is one where that means anything, so this
-      // passes the ask through and reads back what was recorded.
-      req.body?.standsForSteward === true,
+      req.body?.standsForSteward === true, // 0218: castVote honours it on the Birthing alone, and reports what it stored
     );
     if (!result.ok) return res.status(409).json({ error: result.error });
     const b = await ballotById(getPool(), req.params.id);
-    res.json({
-      success: true,
-      choice: result.choice,
-      standsForSteward: result.standsForSteward,
-      ballot: b ? await serveBallot(b, user.id) : null,
-    });
+    res.json({ success: true, choice: result.choice, standsForSteward: result.standsForSteward, ballot: b ? await serveBallot(b, user.id) : null });
   });
 
   /** File an objection on a consent ballot without voting no. */
