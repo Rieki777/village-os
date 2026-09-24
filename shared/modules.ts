@@ -34,6 +34,47 @@ export type ModuleGroup =
  */
 export type ModuleSetup = "none" | "optional" | "required";
 
+/**
+ * THE ONE THING THIS MODULE IS WAITING FOR, as an address rather than a
+ * sentence about one.
+ *
+ * Rye, 2026-09-21, asked whether a module owning a place-dependent default
+ * must say setup is required: "Yes - and whenever this happens have a link to
+ * direct people to exactly what they need." A hint alone cannot keep that
+ * promise. "Say which hemisphere this village is in first" is true, and a
+ * founder still has to guess which of twenty-four cards holds the dial, so
+ * the readiness answer carries where it lives and `shared/moduleSetupLink.ts`
+ * turns it into one address.
+ *
+ *   setting  a game variable, on this module's own card in Admin. Reachable
+ *            at every lifecycle, because a village sets a module up before it
+ *            switches it on.
+ *   config   the module's structural config editor, mounted on the same card.
+ *   tab      content the village makes on the module's own admin screen (a
+ *            room, a product, a circle). NOT reachable while the module is
+ *            off: the nav rail hides that tab and its routes answer 404
+ *            behind requireModule, so the link falls back to the card and the
+ *            copy says to turn it on first.
+ *
+ * `label` is what a person is told they are going to, so it is the dial's own
+ * label for a setting and the module's name for the other two.
+ */
+export type SetupTarget =
+  | { kind: "setting"; key: string; label: string }
+  | { kind: "config"; module: string; label: string }
+  | { kind: "tab"; tab: string; label: string };
+
+/**
+ * What a readiness reader answers. `target` is optional in the TYPE so a test
+ * fixture stays small; every reader the server attaches carries one, and
+ * `server/lib/moduleReadiness.test.ts` fails the build when one does not.
+ */
+export interface ModuleReadiness {
+  ready: boolean;
+  hint: string;
+  target?: SetupTarget;
+}
+
 /** Rank order for posture comparisons: off < preview < members < public. */
 export const LIFECYCLE_RANK: Record<ModuleLifecycle, number> = {
   off: 0,
@@ -237,7 +278,23 @@ export interface ModuleVendor {
   url: string;
   supportUrl: string;
   supportEmail: string;
-  statusUrl: string;
+  /**
+   * The vendor's status page, or `null` where they do not run one.
+   *
+   * NULL IS A VALUE HERE AND NEVER AN OVERSIGHT. Rye's word to a vendor on
+   * 2026-09-23: "If a status page does not exist, say so and I will record that
+   * it does not rather than leave a dead link." A required string forced the
+   * opposite, since the only way to satisfy it was to invent a URL, and an
+   * invented URL is worse than an absence: it renders as a link, a founder
+   * clicks it during an outage, and it fails at the moment it was supposed to
+   * help. The key stays REQUIRED so a listing cannot be silent about it; what
+   * changed is that "there is none" became sayable.
+   *
+   * `supportUrl` above is deliberately NOT nullable, and the difference is
+   * provenance. It is Rye's ruling of 2026-08-14, quoted below, with a reason
+   * of its own. Moving it is his call and not a listing's convenience.
+   */
+  statusUrl: string | null;
   termsUrl: string;
   /**
    * Secret slots this listing contributes to the village's own secrets store,
@@ -290,7 +347,7 @@ export interface ModuleDef {
    * stays import-clean for the client bundle. Default reader: real rows in
    * the module's own tables (`server/lib/modules.ts`).
    */
-  readiness?: () => Promise<{ ready: boolean; hint: string }>;
+  readiness?: () => Promise<ModuleReadiness>;
   /** The named counterparty. Required at connected and managed, absent at included. */
   vendor?: ModuleVendor;
   /**
@@ -1034,7 +1091,27 @@ export const MODULES: ModuleDef[] = [
     tier: "included",
     dataClass: "member-pii",
     group: "coordinate",
-    setup: "none",
+    /*
+     * `none` UNTIL 2026-09-23, and it was never true. This module owns
+     * `calendar.hemisphere`, whose default is "north": right for a village in
+     * Costa Rica, and upside down for one south of the equator, where the
+     * solstices swap over and the moon is lit on the other side. "Nothing to
+     * set up" told every fork in the southern hemisphere that a calendar
+     * drawing the wrong seasons was finished.
+     *
+     * Rye ruled on 2026-09-21 that a module owning a place-dependent default
+     * must say setup is required, and that the founder must be sent to the
+     * exact dial. So: `required`, plus a readiness reader of this module's own
+     * in `attachModuleReadiness` (server/lib/modules.ts). The reader is not
+     * optional decoration — without one this module would fall to the default
+     * reader, which counts rows in a module's own tables, and events has no
+     * examples-engine entry at all, so it would have answered "not ready"
+     * forever and the Go-live card would never have appeared.
+     *
+     * What ready MEANS here is that somebody answered, never what they
+     * answered: a village saying "north" is as ready as one saying "south".
+     */
+    setup: "required",
     // "Village Calendar", by L5a's request: the module carries the one
     // calendar, village time and the lunar wheel now, and "Events" undersold
     // it. The id stays `events`.
@@ -1211,9 +1288,18 @@ export const MODULES_BY_ID: Record<string, ModuleDef> = Object.fromEntries(
  *
  * A prefix that names no module is NOT an oversight and is the normal case:
  * `exit.*`, `economy.*`, `ledger.*`, `needs.*`, `org.*`, `village.*`,
- * `abuse.*`, `auth.*`, `retention.*`, `uploads.*`, `platform.*` and
- * `redemption.*` are platform dials that no module owns, and they stay in Game
- * Mechanics for exactly that reason.
+ * `abuse.*`, `auth.*`, `retention.*`, `uploads.*` and `platform.*` are
+ * platform dials that no module owns, and they stay in Game Mechanics for
+ * exactly that reason.
+ *
+ * `redemption.*` WAS on that list and was true when it was written: the dials
+ * predate the module. Ruling 22 gave redemption a registry entry and ruling 23
+ * gave it fourteen dials, which it owns through `variableKeys` rather than
+ * through this map, so `modulesOwning` has been putting them on the redemption
+ * card while this sentence still called them ownerless. A prefix entry here
+ * would say the same thing more plainly, and it is deliberately not added in
+ * the same breath as correcting the prose: that would move where every one of
+ * those dials is filed, which is a behaviour change wanting its own reason.
  */
 export const MODULE_KEY_PREFIXES: Record<string, string> = {
   quest: "quests",
@@ -1487,10 +1573,15 @@ export function moduleListingProblems(defs: readonly ModuleDef[] = MODULES): str
     for (const [field, value] of [
       ["url", v.url],
       ["supportUrl", v.supportUrl],
-      ["statusUrl", v.statusUrl],
       ["termsUrl", v.termsUrl],
     ] as const) {
       if (!HTTPS.test(String(value ?? ""))) say(m.id, `${field} must be an https address`);
+    }
+    // `null` says the vendor runs no status page and somebody checked. Absent
+    // says nobody asked. The first is recorded, the second is refused.
+    if (v.statusUrl === undefined) say(m.id, "must say whether the vendor runs a status page, with a url or null");
+    else if (v.statusUrl !== null && !HTTPS.test(String(v.statusUrl))) {
+      say(m.id, "statusUrl must be an https address or null");
     }
     // Rye's ruling, settled 2026-08-14: a support URL AND a support email, at
     // every tier, stored as fields the product renders. A listing whose

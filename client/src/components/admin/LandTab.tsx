@@ -89,7 +89,7 @@ export default function LandTab({ password }: { password: string }) {
   const [span, setSpan] = useState(String(DEFAULT_SPAN_M));
   const [visibility, setVisibility] = useState<Parcel["visibility"]>("hidden");
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<"" | "saving" | "fetching">("");
+  const [busy, setBusy] = useState<"" | "saving" | "fetching" | "removing">("");
   const [newLabel, setNewLabel] = useState("");
 
   const load = useCallback(async () => {
@@ -136,6 +136,31 @@ export default function LandTab({ password }: { password: string }) {
     setText(`${SEED.centre.lat.toFixed(7)}, ${SEED.centre.lon.toFixed(7)}`);
     setSpan(String(SEED.spanM));
   };
+
+  /*
+   * WHAT THIS WIDTH BUYS, worked out while the founder is still typing it.
+   *
+   * The number in that box decides two things at once: how much land is in
+   * shot, and how much ground each pixel covers. Nothing on the page connected
+   * them, so a width was picked for the first reason and its cost turned up
+   * after the fetch. A founder who can see "about 1.08 m per pixel" beside the
+   * box can make the trade themselves.
+   *
+   * The three figures come from the server (`configured`) so that this stays
+   * right when the ceiling moves. A deployment serving an older payload sends
+   * none of them, the memo answers null, and the line is simply not drawn.
+   */
+  const frameDetail = useMemo(() => {
+    const res = Number(provider?.groundResolutionM);
+    const max = Number(provider?.maxPixels);
+    const min = Number(provider?.minPixels);
+    const ok =
+      Number.isFinite(spanNum) && spanNum > 0 && Number.isFinite(res) && res > 0 &&
+      Number.isFinite(max) && Number.isFinite(min);
+    if (!ok) return null;
+    const pixels = Math.max(min, Math.min(max, Math.round(spanNum / res)));
+    return { pixels, mpp: spanNum / pixels };
+  }, [spanNum, provider]);
 
   const save = async (confirmSwapped = false) => {
     setBusy("saving");
@@ -197,7 +222,13 @@ export default function LandTab({ password }: { password: string }) {
     const d = await res.json().catch(() => ({}));
     setBusy("");
     if (!res.ok) return toast.error(refusal(d, "The picture could not be fetched"));
-    toast.success("Picture fetched and kept.");
+    const kept = Number(d?.metresPerPixel);
+    /* What it cost, because a coarser rung can answer where the place holds less detail. */
+    toast.success(
+      Number.isFinite(kept) && kept > 0
+        ? `Picture fetched and kept, at about ${kept} m per pixel.`
+        : "Picture fetched and kept.",
+    );
     await load();
   };
 
@@ -227,6 +258,43 @@ export default function LandTab({ password }: { password: string }) {
     ]);
     setSlug(s);
     setNewLabel("");
+  };
+
+  /*
+   * TAKE A PIECE OF LAND BACK OFF, which the Add button made necessary the day
+   * it shipped: a parcel is added from a text box, so a parcel gets added by
+   * mistake, and until this there was no way back from the screen.
+   *
+   * ONE BUTTON COVERS TWO STATES ON PURPOSE. A parcel that was added and never
+   * saved exists only in this component, and a saved one is a row. Asking the
+   * server either way and treating its `no-parcel` as a plain yes means the
+   * screen never has to track which kind it is holding, and a draft that WAS
+   * saved by another tab still gets properly removed instead of vanishing from
+   * this view and staying in the database.
+   *
+   * The first parcel has no button. The server refuses it too, because the
+   * public payload publishes the first row as the village's own ground, so
+   * removing it would move the map to somebody else's land.
+   */
+  const removeParcel = async () => {
+    if (slug === DEFAULT_PARCEL_SLUG) return;
+    const name = active?.label || label || "this piece of land";
+    const kept = active?.imagery?.url ? " Its picture is deleted with it." : "";
+    if (!window.confirm(`Remove ${name}?${kept} The map stops offering it.`)) return;
+    setBusy("removing");
+    const res = await fetch(`${API_BASE}/admin/land/parcel?slug=${encodeURIComponent(slug)}`, {
+      method: "DELETE",
+      headers: authHeaders(password),
+    });
+    const d = await res.json().catch(() => ({}));
+    setBusy("");
+    if (!res.ok && d?.error !== "no-parcel") {
+      return toast.error(refusal(d, "That piece of land could not be removed"));
+    }
+    setParcels((prev) => prev.filter((p) => p.slug !== slug));
+    setSlug(DEFAULT_PARCEL_SLUG);
+    toast.success(`${name} is off the project.`);
+    await load();
   };
 
   if (loading) return <div className="text-center py-12 text-gray-400">Loading...</div>;
@@ -356,6 +424,15 @@ export default function LandTab({ password }: { password: string }) {
               {DEFAULT_SPAN_M}.
             </div>
           )}
+          {!spanBad && frameDetail && (
+            <p className="mt-1.5 text-xs text-gray-500">
+              About {frameDetail.mpp.toFixed(2)} m per pixel, in a picture {frameDetail.pixels} pixels
+              wide.
+              {provider?.detailVariesByPlace
+                ? " This source holds less detail over open country than over a city, so a narrow frame can come back softer than this."
+                : ""}
+            </p>
+          )}
         </div>
 
         <div>
@@ -409,6 +486,20 @@ export default function LandTab({ password }: { password: string }) {
               className="text-sm border border-red-200 text-red-700 rounded-lg px-4 py-2 font-medium disabled:opacity-40"
             >
               Remove the picture
+            </button>
+          )}
+          {/*
+            Only on a parcel added after the first. The first one is the
+            village's own ground and the server refuses to remove it, so
+            offering the button there would be offering a refusal.
+          */}
+          {slug !== DEFAULT_PARCEL_SLUG && (
+            <button
+              onClick={removeParcel}
+              disabled={busy !== ""}
+              className="text-sm border border-red-200 text-red-700 rounded-lg px-4 py-2 font-medium disabled:opacity-40"
+            >
+              {busy === "removing" ? "Removing..." : "Remove this piece of land"}
             </button>
           )}
         </div>

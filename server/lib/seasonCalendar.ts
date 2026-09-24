@@ -202,10 +202,31 @@ export function suggestNextSeasonDates(
 // So a save whose list is empty, or is exactly what would be derived for its
 // cadence and zone at that moment, stores an empty list.
 
+/** Who said the timezone is right, and when. Absent until somebody says. */
+export interface TimezoneAnswer {
+  at: string;
+  by: string | null;
+}
+
 export interface SeasonConfig {
   seasons: any[];
   cadence: string;
   timezone: string;
+  /**
+   * SOMEBODY HERE CONFIRMED THE ZONE, which the stored zone itself cannot say.
+   *
+   * The Season tab is handed the NORMALISED document, so a fresh village's form
+   * already holds the platform's `America/Costa_Rica` and every save writes it
+   * back. A stored zone therefore proves only that somebody once saved this
+   * tab, which renaming a season does. This field is written on a real change
+   * or on an explicit confirmation, and nothing else touches it, so it is the
+   * one honest reading of "a village said where it is".
+   *
+   * Absent on every document written before it existed, which is the normal
+   * case and reads as unanswered: no village's clock changes, and each is
+   * asked once.
+   */
+  timezoneAnswer?: TimezoneAnswer | null;
 }
 
 /** Whether this runtime can format a date in the named zone. */
@@ -253,6 +274,12 @@ export function normalizeSeasonConfig(raw: any, at: Date = new Date()): SeasonCo
       })),
       cadence: raw.cadence ?? def.cadence,
       timezone: raw.timezone ?? def.timezone,
+      // CARRIED IN ALL THREE BRANCHES, because this function rebuilds the
+      // document from a fixed field list on read AS WELL AS on write. That is
+      // how `patternId` was silently dropped on every save and every load
+      // (0050, the note above), and an answer that vanished on the next read
+      // would ask a village the same question forever.
+      timezoneAnswer: answerOf(raw),
     };
   }
   // Legacy single-season file: lift it into a one-item list.
@@ -266,6 +293,7 @@ export function normalizeSeasonConfig(raw: any, at: Date = new Date()): SeasonCo
       }],
       cadence: def.cadence,
       timezone: def.timezone,
+      timezoneAnswer: answerOf(raw),
     };
   }
   // Written nothing, OR WRITTEN AN EMPTY LIST, gets a list DERIVED from the
@@ -279,7 +307,17 @@ export function normalizeSeasonConfig(raw: any, at: Date = new Date()): SeasonCo
     seasons: (def.seasons.length ? def.seasons : defaultSeasonsFor(cadence, timezone, at)) as any[],
     cadence,
     timezone,
+    timezoneAnswer: answerOf(raw),
   };
+}
+
+/** The stored answer, kept only when it is the shape this file writes. */
+function answerOf(raw: any): TimezoneAnswer | null {
+  const a = raw?.timezoneAnswer;
+  if (!a || typeof a !== "object") return null;
+  const at = typeof a.at === "string" ? a.at : "";
+  if (!at) return null;
+  return { at, by: typeof a.by === "string" && a.by ? a.by : null };
 }
 
 /** Two season lists are the same when every field a season stores matches. */
@@ -296,16 +334,39 @@ function sameSeasonList(a: readonly any[], b: readonly any[]): boolean {
  * The document `PUT /api/admin/seasons` stores, or the sentence it refuses
  * with. An empty list, and a list identical to the one that would be derived
  * right now, are both stored as an empty list, so the village keeps deriving.
+ *
+ * WHEN A VILLAGE HAS ANSWERED ITS TIMEZONE. Two ways, and neither of them is
+ * "saved this tab":
+ *
+ *   - `confirmTimezone: true`, the button beside the field, which is the only
+ *     way to agree with a zone that is already showing; and
+ *   - a save that genuinely CHANGES the zone, because choosing a different one
+ *     is an answer by any reading.
+ *
+ * Everything else carries the previous answer forward untouched. The tab sends
+ * back the normalised document it was given, so treating an ordinary save as an
+ * answer would mean a village renaming a season had silently confirmed Costa
+ * Rica's clock.
  */
 export function seasonDocumentToStore(
   body: any,
   at: Date = new Date(),
+  previous?: { timezone?: string; timezoneAnswer?: TimezoneAnswer | null } | null,
+  by?: string | null,
 ): { ok: true; doc: SeasonConfig } | { ok: false; error: string } {
   if (body?.timezone !== undefined) {
     const refusal = timeZoneRefusal(body.timezone);
     if (refusal) return { ok: false, error: refusal };
   }
   const doc = normalizeSeasonConfig(body, at);
+  const changed =
+    body?.timezone !== undefined &&
+    previous?.timezone !== undefined &&
+    String(body.timezone) !== String(previous.timezone);
+  doc.timezoneAnswer =
+    body?.confirmTimezone === true || changed
+      ? { at: at.toISOString(), by: by ?? null }
+      : previous?.timezoneAnswer ?? null;
   const sent = Array.isArray(body?.seasons) && body.seasons.length > 0;
   if (!sent && !body?.name) return { ok: true, doc: { ...doc, seasons: [] } };
   if (sent) {

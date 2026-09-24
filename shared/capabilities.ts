@@ -485,6 +485,43 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
 };
 
 /**
+ * THE POWERS THE FOUNDING STEWARDS HOLD AT LAUNCH, AND THE POWERS THAT HAVE
+ * TO REACH THE VILLAGE BEFORE THE HANDOVER COUNTS AS DONE.
+ *
+ * Rye, 2026-09-24: "The founders automatically become stewards and hold all
+ * powers at launch." Asked what "all powers" names, he said ALL NINETEEN
+ * ENTRUSTABLE POWERS and not a chosen subset. Rye, 2026-09-23, on who holds
+ * the pen over the governing purpose statement: "Founder keeps the pen until
+ * they give over all steward powers to the village." Both sentences are about
+ * the same set, at its two ends, so there is one constant for both.
+ *
+ * ── THIS IS A READING OF THOSE WORDS, AND IT HAS A PRODUCT CONSEQUENCE ─────
+ *
+ * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 19 keys
+ * today. The other 15 are not withheld from anybody: they are personal acts
+ * and deployment plumbing that were never anyone's to hold, and `TRANSFERABLE`
+ * carries the reasoning key by key.
+ *
+ * Read this way, a launched village holds all 19 in the founding seat and has
+ * handed over none of them, which is the arc starting rather than finishing.
+ * `villageHandoverState` in server/lib/capabilityHolding.ts measures how far
+ * along it is, and it asks the narrow question on purpose: a power counts as
+ * handed over only once a role OTHER than the founding seat holds it.
+ *
+ * So this is ONE constant that the seating and the handover read, and
+ * narrowing it is an edit to this one expression. Every caller and every test
+ * follows it, and nothing else in the codebase has to be found.
+ *
+ * DERIVED, NEVER HAND-LISTED. `TRANSFERABLE` is a `Record` on purpose, so a
+ * capability added to the union with no line there is a type error and a
+ * decision somebody makes. A hand-kept list beside it would be a promise
+ * nobody checks, and it would go stale in exactly the direction that matters:
+ * a new transferable power missing from the set would be a power the founding
+ * stewards never received and the handover never had to move.
+ */
+export const HANDOVER_SET: readonly Capability[] = ALL_CAPABILITIES.filter((c) => TRANSFERABLE[c]);
+
+/**
  * WHICH KEYS A WARNING BADGE MAY EVER TAKE AWAY (0109).
  *
  * R65 and R66, the founder's ruling: "denying a voice is not a power anyone
@@ -674,6 +711,120 @@ export function isDeniable(cap: string): boolean {
 }
 
 /**
+ * MAY A BADGE GRANT THIS CAPABILITY? (Rye, 2026-09-23)
+ *
+ * The ruling, asked whether a badge could carry the steward's veto: seats
+ * only, "so that an admin cannot mint a badge and give themselves a veto".
+ *
+ * ── WHAT WAS MEASURED, BECAUSE THE PROSE SAID OTHERWISE ────────────────────
+ *
+ * `server/lib/roleGrants.ts` opened with "`steward.veto` is UNGRANTABLE and
+ * UNREMOVABLE by any admin route, admin path included, in both directions",
+ * and the two bullets under it were both about ROLES: the holders route and
+ * the capabilities route. `stewardSeatRefusal` enforces exactly those two.
+ * The badge plane was never fenced. `POST /api/admin/badges` took
+ * `capabilities: ["steward.veto"]`, `badgeProblem` checked only that the key
+ * was one the platform knows, and step 4 of the gate below returned
+ * `decided(true, "badge")` for it. So the one key an admin route may not
+ * touch had an admin route that handed it out, and the file asserting
+ * otherwise was three directories away from the one doing it.
+ *
+ * `DENIABLE` marks this key `false`, so a warning badge could not take the
+ * veto away while a granted badge could hand it out. That asymmetry was the
+ * tell, and it is the shape this map ends.
+ *
+ * ── WHY THIS KEY AND NOT ITS NEIGHBOURS ───────────────────────────────────
+ *
+ * `steward.veto` is the ONLY key with no admin route to it at all once this
+ * map is in place. The obvious neighbours each still have an ordinary admin
+ * path, so closing the badge door on them would be a new policy and not a
+ * defect fix, and the founder ruled on the veto:
+ *
+ *   `ballot.vote`      fenced off `power_grant` and off `role-seats` for the
+ *                      reason those routes give, and reachable anyway: its
+ *                      rung is `member`, and who is a member is an admin act.
+ *   `member.vouch`     fenced the same way, rung `contributor`, same reason.
+ *   `member.superVouch` an admin may put it on a role and seat somebody, so
+ *                      the badge is not the only door.
+ *   `proposal.decide`  the same: an admin route writes it onto a role, behind
+ *                      the escalation confirmation and nothing more.
+ *
+ * ── A RECORD AND NOT A SET, for the reason TRANSFERABLE and DENIABLE are ──
+ *
+ * A new capability with no line here is a TYPE ERROR, so whether a badge may
+ * carry it is a decision somebody makes rather than a default somebody
+ * inherits. `capabilities.test.ts` pins that the keys are exactly
+ * ALL_CAPABILITIES.
+ *
+ * THREE LOCKS ON THE SAME DOOR, in the shape `DENIABLE` uses. The gate below
+ * ignores a badge grant naming a key marked `false`; `badgeProblem` refuses
+ * to save one and says why; and `drizzle/0215` clears the rows already
+ * stored, which is REQUIRED rather than tidy-up because
+ * `assertBadgeInvariants` runs `badgeProblem` over every active badge at boot
+ * and a village holding such a row would otherwise fail to start.
+ */
+export const BADGE_GRANTABLE: Record<Capability, boolean> = {
+  /*
+   * FALSE: the seat, and only the seat. A village fills it with a `role_seat`
+   * ballot and empties it with a `role_unseat` ballot; the admin roles routes
+   * refuse the key in both directions (`stewardSeatRefusal`), and from today
+   * so does the badge panel. The break-glass reads `roleCapabilities` and
+   * never the badge plane, so this line and `BREAK_GLASS_SEAT` agree: a badge
+   * carrying the veto grants nothing and opens no override.
+   */
+  "steward.veto": false,
+
+  // ── TRUE: every other key. A badge is an ordinary way to hand out a power
+  // nobody should have to climb to, and the Cartographer badge over the
+  // village map is the worked example the whole plane exists for.
+  "quest.consent": true,
+  "forum.post": true,
+  "forum.moderate": true,
+  "proposal.open": true,
+  "proposal.decide": true,
+  "map.viewPeople": true,
+  "map.contact": true,
+  "map.edit": true,
+  "map.publish": true,
+  "map.photograph": true,
+  "map.curatePhotos": true,
+  "feed.announce": true,
+  "stay.member_rate": true,
+  "exchange.buy": true,
+  "exchange.swap": true,
+  "exchange.manage": true,
+  "health.record": true,
+  "message.send": true,
+  "mechanics.propose": true,
+  "event.rsvp": true,
+  "event.manage": true,
+  "org.declare": true,
+  "ballot.vote": true,
+  "member.vouch": true,
+  "member.superVouch": true,
+  "org.seat": true,
+  "org.seatAgent": true,
+  "intake.moderate": true,
+  "library.keep": true,
+  "story.tell": true,
+  "dial.set": true,
+  "quest.approve": true,
+  "redemption.confirm": true,
+};
+
+/**
+ * May a badge grant this capability?
+ *
+ * Takes a plain string because both callers hold one: the gate reads keys off
+ * a badge row, and `badgeProblem` validates whatever an admin typed. A key
+ * the platform does not know answers `false`, which is the safe direction and
+ * the one `badgeProblem` already refuses on its own line.
+ */
+export function isBadgeGrantable(cap: string): boolean {
+  return BADGE_GRANTABLE[cap as Capability] === true;
+}
+
+/**
  * Is this capability one the village is holding right now?
  *
  * Checks the TRANSFERABLE map as well as the holdings, so a row written by
@@ -790,7 +941,9 @@ export interface CapabilityDecision {
  *      role trivially overrides is not a warning. It reaches only the keys
  *      DENIABLE marks, and it can never reach a voice (0109, R65/R66).
  *   3. roleCapabilities  -> true.  Appointments.
- *   4. badgeCapabilities -> true.  Earned/granted badges.
+ *   4. badgeCapabilities -> true.  Earned/granted badges, ON A KEY
+ *      `BADGE_GRANTABLE` lets a badge reach. A badge naming the steward's
+ *      seat grants nothing (Rye, 2026-09-23: seats only).
  *   5. stage unlock      -> true.  The ladder everyone climbs.
  *   6. otherwise false.
  *
@@ -801,11 +954,15 @@ export interface CapabilityDecision {
  * commit later: a gate that can lock an operator out of a live village must
  * never exist without its escape hatch.
  *
- * SINCE 2026-09-21 THE GLASS IS A FOUNDER-STEWARD'S, and an operator who is
- * not one has one door left: handing the power back to the admin panel
- * (`DELETE /api/admin/capabilities/:capability/holding`), which leaves the
- * same public line the crossing did. That route is outside this gate and the
- * ruling did not reach it, so it is named here instead of changed.
+ * SINCE 2026-09-21 THE GLASS IS A FOUNDER-STEWARD'S, and on 2026-09-23 Rye
+ * closed the door that was left beside it. Handing a power back to the admin
+ * panel (`DELETE /api/admin/capabilities/:capability/holding`) used to ask
+ * only `isAdmin`, so any operator the gate had just refused could take the
+ * power back and then pass. That route now asks THIS function, for the
+ * capability being returned, and carries on only when the answer is
+ * `reachedPastVillage`: the village votes the power back with a
+ * `power_return` ballot, and the one exception is the same founder-steward
+ * the step above names, leaving the same public record.
  */
 /**
  * KEYS THAT CARRY OTHER KEYS, because holding the greater already means holding
@@ -926,7 +1083,11 @@ export function capabilityDecision(cap: Capability, ctx: CapabilityCtx): Capabil
   if (ctx.roleCapabilities.includes(cap)) return decided(true, "role");
   // A greater key the actor already holds may carry this one. See CARRIES.
   if (carriedBy(ctx.roleCapabilities, cap)) return decided(true, "carried by a greater key");
-  if ((ctx.badgeCapabilities ?? []).includes(cap)) return decided(true, "badge");
+  // A badge grant reaches only a key `BADGE_GRANTABLE` lets it reach. The
+  // check is FIRST in the condition so the ungrantable key is refused before
+  // the row is even consulted: there is no state of the badge table that
+  // makes this step answer yes for the steward's seat.
+  if (isBadgeGrantable(cap) && (ctx.badgeCapabilities ?? []).includes(cap)) return decided(true, "badge");
   const unlockStage = ctx.stageUnlockOverrides?.[cap] ?? STAGE_UNLOCKS[cap];
   if (unlockStage && unlockStage !== "none") {
     const needed = ctx.stageIndexOf(unlockStage);

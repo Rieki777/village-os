@@ -37,8 +37,11 @@ import { wrapLabel, type NestedLayout } from "@shared/mapLayout";
 import { cssColourForCircle } from "@shared/circleView";
 import { viewBoxFor, type CameraTarget, type CameraView } from "./camera";
 import { NO_NUDGE, useCameraFlight, useMeasuredBox, useNudge } from "./mapStage";
-import SeatGlyph, { seatStateWords } from "./SeatGlyph";
-import { captionSize, fitLabelToScreen } from "./labelFit";
+import SeatGlyph, { HitArea, seatStateWords } from "./SeatGlyph";
+import CircleLabel from "./CircleLabel";
+import { buildLabelPlan } from "./labelPlacement";
+import { seatHitRadii, type SeatPoint } from "./seatTargets";
+import { fitLabelToScreen } from "./labelFit";
 import { TermArc, SeasonRing } from "./TermMarkers";
 import RelationLines, { RelationArrowDef } from "./RelationLines";
 import type { Filters, PowerData, PowerSeat, Selection } from "./types";
@@ -370,6 +373,52 @@ export default function PowerMap({
     : fittedView;
   const pxPerWorld = box.w > 0 ? box.w / navView[2] : 0;
 
+  /*
+   * WHERE EVERY NAME GOES, decided once for the whole picture rather than
+   * circle by circle. A name too big for its own circle is drawn outside it,
+   * and a circle holding others draws its name just inside its top edge, so
+   * names land on each other unless something reads the whole map at once.
+   * Measured live at nine window sizes before and after. See labelPlacement.
+   */
+  const labelPlan = useMemo(
+    () =>
+      buildLabelPlan(
+        layout.circles
+          .filter((pos) => maxDepth === undefined || pos.depth <= maxDepth)
+          .map((pos) => ({
+            id: pos.id,
+            x: pos.x,
+            y: pos.y,
+            r: pos.r,
+            depth: pos.depth,
+            name: byId.get(pos.id)?.name ?? pos.id,
+            shown: showLabel(pos.id),
+            hasChildren: data.circles.some((o) => o.parentCircleId === pos.id && posById.has(o.id)),
+            forming: byId.get(pos.id)?.status === "forming",
+          })),
+        pxPerWorld,
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- showLabel reads focusId and readFocus, both listed.
+    [layout, maxDepth, byId, data.circles, posById, pxPerWorld, focusId, readFocus],
+  );
+
+  /*
+   * HOW BIG EACH SEAT'S TAP AREA IS. Measured live at 390x844: every seat on
+   * the village view draws at 7x7 with 19 pixels to its nearest neighbour, so
+   * the ring is too tight for the 44px every one of them wants. Each takes
+   * what the picture allows instead, and never a pixel that belongs to the
+   * seat beside it. See seatTargets.
+   */
+  const seatHits = useMemo(() => {
+    const points: SeatPoint[] = [];
+    for (const pos of layout.circles) {
+      if (maxDepth !== undefined && pos.depth > maxDepth) continue;
+      for (const rp of pos.roles) points.push({ id: rp.id, x: rp.x, y: rp.y, r: pos.depth === 0 ? 11 : 9, hostR: pos.r, hostSeats: pos.roles.length });
+    }
+    for (const rp of layout.village.roles) points.push({ id: rp.id, x: rp.x, y: rp.y, r: 12, hostR: layout.village.r, hostSeats: layout.village.roles.length });
+    return seatHitRadii(points, pxPerWorld);
+  }, [layout, maxDepth, pxPerWorld]);
+
   return (
     <>
       <svg
@@ -510,25 +559,19 @@ export default function PowerMap({
           const inChain = chain.has(pos.id);
           const dimForFocus = focusId !== null && !interactive && !inChain ? 0.3 : 1;
           const dimForFilter = filtersOn && !circleAnyPass(pos.id) ? 0.2 : 1;
-          const opacity = Math.min(dimForFocus, dimForFilter) * (forming ? 0.6 : 1);
+          const opacity = Math.min(dimForFocus, dimForFilter);
           const isFocus = pos.id === focusId;
           const hovered = hoverId === pos.id && interactive && !isFocus;
-          const wrapped = wrapLabel(c?.name ?? pos.id, pos.r, pos.depth);
-          // The world-unit size the layout asked for, converted to something
-          // legible on THIS screen at THIS zoom. See fitLabelToScreen.
-          const fit = fitLabelToScreen(wrapped, pos.r, pxPerWorld);
-          const label = { lines: wrapped.lines, fontSize: fit.fontSize, lineHeight: fit.lineHeight };
+          const placed = labelPlan.get(pos.id)!;
+          const label = { lines: placed.lines, fontSize: placed.fontSize, lineHeight: placed.lineHeight };
           const hasChildren = data.circles.some((o) => o.parentCircleId === pos.id && posById.has(o.id));
-          const labelTop = fit.outside
-            ? // Above the disc, clear of its seat ring, where the circle's own
-              // width stops constraining the name.
-              pos.y - pos.r - 6 - (label.lines.length - 1) * label.lineHeight
-            : hasChildren
-              ? pos.y - pos.r + 24
-              : pos.y - ((label.lines.length - 1) * label.lineHeight) / 2 + (forming ? -6 : 0);
+          const labelTop = placed.top;
 
           return (
             <motion.g key={pos.id} animate={{ opacity }} transition={morph}>
+              {/* The circle, its links and its seats: this is what goes quiet
+                  while a circle is still forming. */}
+              <g opacity={forming ? 0.6 : 1}>
               <motion.circle
                 id={`power-node-${pos.id}`}
                 animate={{ cx: pos.x, cy: pos.y, r: pos.r }}
@@ -621,145 +664,7 @@ export default function PowerMap({
                 pointerEvents="none"
               />
 
-              {/* THE NUMBER THE KEY UNDER THE MAP NAMES. Sized in SCREEN
-                  pixels through pxPerWorld, like every label here, so it reads
-                  at 13px whatever the camera is doing, with the page's ground
-                  as a halo so it holds on any circle's tone. Not on a circle
-                  whose own name is drawn CENTRED in it: the number would sit
-                  across the name, and the name already says which one it is. */}
-              {compact && keys?.has(pos.id) && !(showLabel(pos.id) && !fit.outside && !hasChildren) && (
-                <text
-                  x={pos.x}
-                  y={pos.y}
-                  dy="0.35em"
-                  textAnchor="middle"
-                  aria-hidden="true"
-                  className="fill-foreground font-semibold pointer-events-none"
-                  fontSize={pxPerWorld > 0 ? 13 / pxPerWorld : 12}
-                  paintOrder="stroke"
-                  stroke="var(--background)"
-                  strokeWidth={pxPerWorld > 0 ? 3 / pxPerWorld : 3}
-                  strokeLinejoin="round"
-                >
-                  {keys.get(pos.id)}
-                </text>
-              )}
 
-              {/* On a compact stage a promoted label is dropped rather
-                  than piled on its neighbours. See `compact` above. */}
-              {(showLabel(pos.id) || hovered) && !(compact && fit.outside && !isFocus) && (
-                <motion.text
-                  animate={{ x: pos.x, y: labelTop }}
-                  initial={false}
-                  transition={morph}
-                  textAnchor="middle"
-                  className="fill-foreground font-semibold pointer-events-none"
-                  /*
-                   * fontSize IS AN ATTRIBUTE HERE, NOT A STYLE, AND THAT IS
-                   * THE WHOLE FIX.
-                   *
-                   * framer-motion owns the `style` object on a motion
-                   * component. A static style value that CHANGES between
-                   * renders is not reliably re-applied: the first render
-                   * happens before the ResizeObserver has measured, so
-                   * pxPerWorld is 0, the label takes its raw wrapLabel size,
-                   * and framer wrote that. The second render computed the
-                   * correct size and framer kept the first one.
-                   *
-                   * Measured live at build f045f3c: the tspan `dy` (a plain
-                   * SVG attribute React owns) updated to the fitted 23 while
-                   * `font-size` stayed at the unfitted 12, on the same
-                   * element, in the same render. Two numbers from one object,
-                   * disagreeing, which is what named the cause. The "forming"
-                   * caption below is a plain <text> and was correct all along.
-                   *
-                   * `fontSize` as a presentation attribute goes through React,
-                   * not framer, so it tracks every render.
-                   */
-                  fontSize={label.fontSize}
-                  {...(fit.outside
-                    ? {
-                        // A label pushed outside its circle crosses whatever
-                        // is behind it, so it carries the page's own ground
-                        // as a halo. `paint-order` puts that stroke UNDER the
-                        // glyphs; without it the stroke draws over them and
-                        // the text thins to nothing at small sizes.
-                        //
-                        // Attributes, not style: `fit.outside` changes as the
-                        // camera moves, and framer would keep whichever value
-                        // the first render happened to produce, exactly as it
-                        // did with fontSize above.
-                        paintOrder: "stroke" as const,
-                        stroke: "var(--background)",
-                        strokeWidth: 3.5,
-                        strokeLinejoin: "round" as const,
-                      }
-                    : {})}
-                >
-                  {/* x=0, NOT pos.x, AND THAT IS A BUG FIX.
-                      The <text> is already moved to pos.x by framer's
-                      `animate={{x, y}}`, which is a transform. A tspan's `x`
-                      is ABSOLUTE inside that already-moved frame, so setting
-                      it to pos.x again put every label at 2 x pos.x.
-                      Measured live at 9b41ae0: all 15 labels displaced, each
-                      by exactly its own `pos.x * scale`, and the tspan's x
-                      attribute equalled the transform's translateX to the
-                      decimal. This is why "Health & Healing Council" and
-                      "Development Circle" floated unanchored to the right of
-                      the ring in the very first screenshot of this surface.
-                      Zero re-centres each line on the text's own origin,
-                      which textAnchor="middle" then centres on the circle. */}
-                  {label.lines.map((ln, i) => (
-                    <tspan key={ln + i} x={0} dy={i === 0 ? 0 : label.lineHeight}>
-                      {ln}
-                    </tspan>
-                  ))}
-                </motion.text>
-              )}
-              {forming && showLabel(pos.id) && !(compact && fit.outside && !isFocus) && (
-                <text
-                  x={pos.x}
-                  y={labelTop + (label.lines.length - (hasChildren ? 0 : 1)) * label.lineHeight + (hasChildren ? 14 : 16)}
-                  textAnchor="middle"
-                  className="fill-muted-foreground pointer-events-none"
-                  style={{
-                    // This caption was the worst offender on the live page: a
-                    // hard floor of 9 WORLD units measured 6px on screen. Its
-                    // floor is a screen size now, like the name above it.
-                    fontSize: captionSize(label.fontSize, pxPerWorld),
-                  }}
-                >
-                  forming
-                </text>
-              )}
-
-              {/* WHAT HOVER ACTUALLY ANSWERS: is this the circle I want.
-                  Name plus the two counts a reader weighs before deciding to
-                  step in, so surveying the village no longer means entering
-                  and leaving every circle in turn. Pointer only, and never on
-                  the circle you are already inside. */}
-              {hovered && (
-                <text
-                  x={pos.x}
-                  y={labelTop + (label.lines.length - (hasChildren ? 0 : 1)) * label.lineHeight + (forming ? 30 : 16)}
-                  textAnchor="middle"
-                  className="fill-muted-foreground pointer-events-none"
-                  style={{
-                    fontSize: captionSize(label.fontSize, pxPerWorld),
-                    paintOrder: "stroke" as const,
-                    stroke: "var(--background)",
-                    strokeWidth: 3,
-                    strokeLinejoin: "round" as const,
-                  }}
-                >
-                  {(() => {
-                    const mine = data.roles.filter((r) => r.circleId === pos.id);
-                    const places = mine.reduce((n, r) => n + r.seats, 0);
-                    const openN = places - mine.reduce((n, r) => n + r.holderCount, 0);
-                    return `${mine.length} role${mine.length === 1 ? "" : "s"}${openN > 0 ? `, ${openN} open` : ""}`;
-                  })()}
-                </text>
-              )}
 
               {/* ── THE DOUBLE LINK, DRAWN ────────────────────────────────
                   Sociocracy's one structural idea that a normal org chart
@@ -830,6 +735,10 @@ export default function PowerMap({
                       }
                     }}
                   >
+                    {/* The tap area, which is bigger than the dot and carries
+                        no ink. Drawn first, so it sits UNDER the glyph and
+                        cannot cover the face on a held seat. */}
+                    <HitArea r={seatHits.get(rp.id) ?? dotR} drawn={dotR} />
                     <SeatGlyph
                       x={0}
                       y={0}
@@ -879,6 +788,50 @@ export default function PowerMap({
                   +{pos.questOverflow} more quests
                 </text>
               )}
+              </g>
+
+              {/* The number and the name are drawn AFTER the seats and OUTSIDE
+                  the fade above: a name is a circle's identity, so a seat glyph
+                  never sits on top of it, and a forming circle stays named at
+                  full strength while its disc is the thing that goes quiet. */}
+              {/* THE NUMBER THE KEY UNDER THE MAP NAMES. Sized in SCREEN
+                  pixels through pxPerWorld, like every label here, so it reads
+                  at 13px whatever the camera is doing, with the page's ground
+                  as a halo so it holds on any circle's tone. Not on a circle
+                  whose own name is drawn CENTRED in it: the number would sit
+                  across the name, and the name already says which one it is. */}
+              {compact && keys?.has(pos.id) && !(showLabel(pos.id) && !placed.outside && !hasChildren) && (
+                <text
+                  x={pos.x}
+                  y={pos.y}
+                  dy="0.35em"
+                  textAnchor="middle"
+                  aria-hidden="true"
+                  className="fill-foreground font-semibold pointer-events-none"
+                  fontSize={pxPerWorld > 0 ? 13 / pxPerWorld : 12}
+                  paintOrder="stroke"
+                  stroke="var(--background)"
+                  strokeWidth={pxPerWorld > 0 ? 3 / pxPerWorld : 3}
+                  strokeLinejoin="round"
+                >
+                  {keys.get(pos.id)}
+                </text>
+              )}
+
+              <CircleLabel
+                circleId={pos.id}
+                x={pos.x}
+                labelTop={labelTop}
+                label={label}
+                show={showLabel(pos.id)}
+                hovered={hovered}
+                drop={!!compact && placed.outside && !isFocus}
+                forming={forming}
+                hasChildren={hasChildren}
+                pxPerWorld={pxPerWorld}
+                morph={morph}
+                roles={data.roles}
+              />
             </motion.g>
           );
         })}
@@ -911,6 +864,7 @@ export default function PowerMap({
                 }
               }}
             >
+              <HitArea r={seatHits.get(rp.id) ?? 12} drawn={12} />
               <SeatGlyph
                 x={0}
                 y={0}

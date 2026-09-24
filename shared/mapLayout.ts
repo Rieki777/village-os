@@ -112,6 +112,27 @@ export function radiusForLabel(name: string): number {
 }
 
 /**
+ * THE CLEAR INTERIOR: how wide a name may run inside a circle without touching
+ * the seats on its ring.
+ *
+ * This is the one definition of that width, and it exists because there were
+ * two. `wrapLabel` wrapped to the clear interior and `radiusForLabel` sized
+ * every circle by it, while `fitLabelToScreen` GREW a name for legibility
+ * against the full radius, so a name fitted to a zoomed-out screen was wider
+ * than the seat ring its circle had been sized to clear. Measured live on
+ * 2026-09-23 at 1440x900: eleven names with a seat drawn through them, every
+ * one of them a small circle's own centred name.
+ *
+ * `seatAngle` already said this in a comment, having tried moving the seats
+ * instead: "a name fitted to a zoomed-out screen is wider than the seat ring
+ * it was sized for". Moving the seats cleared none of them, because the seats
+ * were never the thing that was wrong.
+ */
+export function clearChord(radius: number): number {
+  return Math.max(24, (radius - ROLE_RING_INSET - ROLE_DOT_R) * 1.8);
+}
+
+/**
  * WHERE SEAT j OF n SITS ON ITS CIRCLE'S RING.
  *
  * Every ring used to start at twelve o'clock, which is where a circle that
@@ -334,7 +355,7 @@ export function wrapLabel(name: string, radius: number, depth: number): WrappedL
   const base = depth === 0 ? 17 : depth === 1 ? 14 : 12;
   // The usable chord is the CLEAR interior, inside the seat ring. Measuring
   // against the full radius let a label run out under its own seat dots.
-  const usable = Math.max(24, (radius - ROLE_RING_INSET - ROLE_DOT_R) * 1.8);
+  const usable = clearChord(radius);
 
   let fontSize = base;
   let lines: string[] = [];

@@ -127,9 +127,10 @@ top to bottom in that function; the stages below are the landmarks:
    the `tokens` table into memory. `ensureStayToken` and `ensureLibraryToken`
    create module tokens even while their modules are off, so rewards never
    race an enable click. `seedEconomy` upserts the archetypes and inserts the
-   starting rules only when absent, then the registry reloads and
-   `startEconomyEpoch` starts the clock before the first confirmed quest is
-   measured against it.
+   starting rules only when absent, then the registry reloads. There is no
+   economy epoch any more: the stamp boot used to take was read by one
+   function with no production caller, and Rye ruled on 2026-09-21 that work
+   done before an economy launched should be payable.
 4. **Ledger invariants refuse boot.** `checkLedgerInvariants` in
    `server/lib/ledger.ts`; any problem throws and the process does not serve.
    "A server that boots over a broken ledger normalizes the break."
@@ -339,7 +340,13 @@ of it, checked against the code on 2026-09-21:
 4. `roleCapabilities` → true (appointments);
 5. a key a role already carries through `CARRIES` → true (a super vouch
    carries a vouch);
-6. `badgeCapabilities` → true (earned/granted badges);
+6. `badgeCapabilities` → true (earned/granted badges), on a key
+   `BADGE_GRANTABLE` lets a badge reach. Rye ruled on 2026-09-23 that
+   `steward.veto` comes from a seat the village votes somebody into and from
+   nowhere else, "so that an admin cannot mint a badge and give themselves a
+   veto": the gate ignores a badge naming it, `badgeProblem` refuses to save
+   one, and `drizzle/0215_a_badge_may_not_carry_the_stewards_veto.sql` clears
+   the rows already stored;
 7. stage unlock (`STAGE_UNLOCKS`, deliberately only a handful of real
    gates) → true;
 8. otherwise false.
@@ -347,10 +354,16 @@ of it, checked against the code on 2026-09-21:
 On a village-held key a warning badge's deny therefore reaches an ADMIN too,
 which is why the break-glass shipped in the same commit: a gate that can lock
 an operator out of a live village must never exist without its escape hatch.
-Since the 2026-09-21 ruling an operator who is not a founder-steward has one
-door left, handing the power back to the panel
-(`DELETE /api/admin/capabilities/:capability/holding`), which leaves the same
-public line the crossing did.
+The 2026-09-21 ruling left one door beside the glass, and the 2026-09-23
+ruling closed it. Handing the power back to the panel
+(`DELETE /api/admin/capabilities/:capability/holding`) asked only `isAdmin`,
+so any operator the gate had just refused could take the power back and then
+pass. That route now asks the gate for the key being returned and carries on
+only on `reachedPastVillage`. A village takes its power back the way it took
+it on: a `power_return` ballot (`POST /api/governance/power-returns`), closed
+through the same landing path and the same veto window as every other
+decision. The founder-steward's break-glass is the one exception, and it
+leaves the same public line the crossing did.
 
 Server side, `capabilityCtx(user)` in `server/index.ts` builds the context
 once per request; badge grants and denies are only queried while the badges

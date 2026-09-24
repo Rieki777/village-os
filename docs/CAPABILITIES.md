@@ -34,7 +34,7 @@ In one line: `admin` then `admin-override` then `denied by warning badge` then `
 | 3 | `denied by warning badge` | refused | `isDeniable(cap) && (ctx.badgeDenies ?? []).includes(cap)` |
 | 4 | `role` | allowed | `ctx.roleCapabilities.includes(cap)` |
 | 5 | `carried by a greater key` | allowed | `carriedBy(ctx.roleCapabilities, cap)` |
-| 6 | `badge` | allowed | `(ctx.badgeCapabilities ?? []).includes(cap)` |
+| 6 | `badge` | allowed | `isBadgeGrantable(cap) && (ctx.badgeCapabilities ?? []).includes(cap)` |
 | 7 | `stage` | allowed | `unlockStage && unlockStage !== "none"` and `needed >= 0 && ctx.stageIndex >= needed` |
 | 8 | `not granted` | refused | nothing above it decided |
 
@@ -58,9 +58,9 @@ The member holds a role whose `capabilities` list carries this key. A treasurer 
 
 One key can make another absurd to refuse. A steward holding `member.superVouch` can admit a member outright, so declining them the smaller act of adding a single vouch would be nonsense, and Rye ruled that stewards may always vouch so a village always has a path to its next member. The alternative was to seat `member.vouch` on the steward circle, and that is a trap: seating into a role carrying that key is refused, so the circle would have become permanently unseatable. Carrying does not chain, so a key carries what it names and never what those carry in turn.
 
-**6. `badge`.** A badge the member earned or was granted. It beats the ladder, and it loses to a role and to a deny.
+**6. `badge`.** A badge the member earned or was granted, ON A KEY `BADGE_GRANTABLE` lets a badge reach. It beats the ladder, and it loses to a role and to a deny.
 
-The grant half of the badge system. It is how a founder hands out a power that nobody should reach by climbing, the Cartographer badge over the village map being the worked example.
+The grant half of the badge system. It is how a founder hands out a power that nobody should reach by climbing, the Cartographer badge over the village map being the worked example. Rye ruled on 2026-09-23 that the steward's veto is not one of them: that seat is filled by a vote of the village, so that an admin cannot mint a badge and give themselves a veto. The map is consulted BEFORE the badge row, so there is no state of the badge table that makes this step answer yes for a key it fences.
 
 **7. `stage`.** The ladder everyone climbs. It is the last thing consulted, so every path above it can open a door earlier.
 
@@ -96,151 +96,158 @@ These rows are not a description of the order. They are answers: the generator c
 
 34 keys. `ALL_CAPABILITIES` is a flat list, so they are grouped here by the prefix each key carries in its own name, in the order the list gives them: `quest`, `forum`, `proposal`, `map`, `feed`, `stay`, `exchange`, `health`, `message`, `mechanics`, `event`, `org`, `ballot`, `member`, `intake`, `library`, `story`, `dial`, `redemption`, `steward`.
 
-Three columns need a word before the tables:
+Four columns need a word before the tables:
 
 - **A warning badge may deny it.** `DENIABLE` in `shared/capabilities.ts`. A `no` marks a VOICE: a member's own say in a decision the village makes, which nothing may take away.
+- **A badge may grant it.** `BADGE_GRANTABLE`. A `no` means the badge plane cannot hand this key to anybody: the gate ignores a badge naming it, the badge validator refuses to save one, and a migration cleared the rows already stored.
 - **The village may hold it.** `TRANSFERABLE`. A `yes` means this key can leave the admin panel: once the village records a holder, an admin stops passing the gate by being an admin, and only a founder seated as a steward with the veto may reach past the village, in the open.
 - **Stage that unlocks it.** `STAGE_UNLOCKS`, against the ladder in `shared/gameConfig.ts`. A key with no rung is an appointment, reached by a role or a badge and never by climbing.
 
 ### `quest`
 
-| Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
-| --- | --- | --- | --- | --- | --- |
-| `quest.consent` | Release value on someone else's quest | yes | yes | no rung | Quests |
-| `quest.approve` | Put a proposed quest on the board and set what it pays | yes | yes | no rung | no module |
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `quest.consent` | Release value on someone else's quest | yes | yes | yes | no rung | Quests |
+| `quest.approve` | Put a proposed quest on the board and set what it pays | yes | yes | yes | no rung | no module |
 
 ### `forum`
 
-| Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
-| --- | --- | --- | --- | --- | --- |
-| `forum.post` | Start a thread in the forum | yes | no | `member` (rung 5 of 12) | Forum & Decisions |
-| `forum.moderate` | Act on the community's behalf in the forum | yes | yes | no rung | Forum & Decisions |
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `forum.post` | Start a thread in the forum | yes | yes | no | `member` (rung 5 of 12) | Forum & Decisions |
+| `forum.moderate` | Act on the community's behalf in the forum | yes | yes | yes | no rung | Forum & Decisions |
 
 ### `proposal`
 
-| Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
-| --- | --- | --- | --- | --- | --- |
-| `proposal.open` | Open a governance decision | yes | no | `co-creator` (rung 9 of 12) | Stages & Roles |
-| `proposal.decide` | Record a decision's outcome | yes | yes | no rung | Stages & Roles |
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `proposal.open` | Open a governance decision | yes | yes | no | `co-creator` (rung 9 of 12) | Stages & Roles |
+| `proposal.decide` | Record a decision's outcome | yes | yes | yes | no rung | Stages & Roles |
 
 ### `map`
 
-| Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
-| --- | --- | --- | --- | --- | --- |
-| `map.viewPeople` | See who holds seats on the village map | yes | no | `guest` (rung 2 of 12) | How Power Is Held |
-| `map.contact` | Reach a role holder through the contact relay | yes | no | `member` (rung 5 of 12) | How Power Is Held |
-| `map.edit` | Draft changes to the land in build mode | yes | no | no rung | no module |
-| `map.publish` | Publish a draft onto the live map | yes | yes | no rung | no module |
-| `map.photograph` | Add a photograph to a place on the map | yes | no | `member` (rung 5 of 12) | How Power Is Held |
-| `map.curatePhotos` | Take a photograph down and choose a place's lead shot | yes | yes | no rung | How Power Is Held |
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `map.viewPeople` | See who holds seats on the village map | yes | yes | no | `guest` (rung 2 of 12) | How Power Is Held |
+| `map.contact` | Reach a role holder through the contact relay | yes | yes | no | `member` (rung 5 of 12) | How Power Is Held |
+| `map.edit` | Draft changes to the land in build mode | yes | yes | no | no rung | no module |
+| `map.publish` | Publish a draft onto the live map | yes | yes | yes | no rung | no module |
+| `map.photograph` | Add a photograph to a place on the map | yes | yes | no | `member` (rung 5 of 12) | How Power Is Held |
+| `map.curatePhotos` | Take a photograph down and choose a place's lead shot | yes | yes | yes | no rung | How Power Is Held |
 
 ### `feed`
 
-| Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
-| --- | --- | --- | --- | --- | --- |
-| `feed.announce` | Post announcements to the village feed | yes | yes | no rung | Village Feed |
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `feed.announce` | Post announcements to the village feed | yes | yes | yes | no rung | Village Feed |
 
 ### `stay`
 
-| Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
-| --- | --- | --- | --- | --- | --- |
-| `stay.member_rate` | Book a stay at the member price | yes | no | `member` (rung 5 of 12) | Stays |
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `stay.member_rate` | Book a stay at the member price | yes | yes | no | `member` (rung 5 of 12) | Stays |
 
 ### `exchange`
 
-| Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
-| --- | --- | --- | --- | --- | --- |
-| `exchange.buy` | Buy listed tokens | yes | no | `member` (rung 5 of 12) | Exchange |
-| `exchange.swap` | Swap one village token for another | yes | no | `member` (rung 5 of 12) | Exchange |
-| `exchange.manage` | List tokens, post prices, and stock the treasury | yes | yes | no rung | Exchange |
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `exchange.buy` | Buy listed tokens | yes | yes | no | `member` (rung 5 of 12) | Exchange |
+| `exchange.swap` | Swap one village token for another | yes | yes | no | `member` (rung 5 of 12) | Exchange |
+| `exchange.manage` | List tokens, post prices, and stock the treasury | yes | yes | yes | no rung | Exchange |
 
 ### `health`
 
-| Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
-| --- | --- | --- | --- | --- | --- |
-| `health.record` | Log the land's own measurements | yes | yes | no rung | Village Health |
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `health.record` | Log the land's own measurements | yes | yes | yes | no rung | Village Health |
 
 ### `message`
 
-| Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
-| --- | --- | --- | --- | --- | --- |
-| `message.send` | Start a conversation and post to one | yes | no | `member` (rung 5 of 12) | Messages |
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `message.send` | Start a conversation and post to one | yes | yes | no | `member` (rung 5 of 12) | Messages |
 
 ### `mechanics`
 
-| Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
-| --- | --- | --- | --- | --- | --- |
-| `mechanics.propose` | Propose a change to the game's rules | no | no | `member` (rung 5 of 12) | no module |
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `mechanics.propose` | Propose a change to the game's rules | no | yes | no | `member` (rung 5 of 12) | no module |
 
 ### `event`
 
-| Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
-| --- | --- | --- | --- | --- | --- |
-| `event.rsvp` | Say you are coming to a gathering | yes | no | `guest` (rung 2 of 12) | Village Calendar |
-| `event.manage` | Put a gathering on the village calendar | yes | yes | no rung | Village Calendar |
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `event.rsvp` | Say you are coming to a gathering | yes | yes | no | `guest` (rung 2 of 12) | Village Calendar |
+| `event.manage` | Put a gathering on the village calendar | yes | yes | yes | no rung | Village Calendar |
 
 ### `org`
 
-| Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
-| --- | --- | --- | --- | --- | --- |
-| `org.declare` | Declare how the village holds power | yes | yes | no rung | no module |
-| `org.seat` | Seat and unseat the holders of the village's seats | yes | yes | no rung | no module |
-| `org.seatAgent` | Seat and unseat the software agents that hold seats | yes | yes | no rung | no module |
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `org.declare` | Declare how the village holds power | yes | yes | yes | no rung | no module |
+| `org.seat` | Seat and unseat the holders of the village's seats | yes | yes | yes | no rung | no module |
+| `org.seatAgent` | Seat and unseat the software agents that hold seats | yes | yes | yes | no rung | no module |
 
 ### `ballot`
 
-| Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
-| --- | --- | --- | --- | --- | --- |
-| `ballot.vote` | Cast a vote on a ballot | no | no | `member` (rung 5 of 12) | Governance |
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `ballot.vote` | Cast a vote on a ballot | no | yes | no | `member` (rung 5 of 12) | Governance |
 
 ### `member`
 
-| Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
-| --- | --- | --- | --- | --- | --- |
-| `member.vouch` | Vouch for an applicant | no | no | `contributor` (rung 6 of 12) | Governance |
-| `member.superVouch` | Admit a member outright | no | no | no rung | no module |
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `member.vouch` | Vouch for an applicant | no | yes | no | `contributor` (rung 6 of 12) | Governance |
+| `member.superVouch` | Admit a member outright | no | yes | no | no rung | no module |
 
 ### `intake`
 
-| Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
-| --- | --- | --- | --- | --- | --- |
-| `intake.moderate` | Work the village's queues and act on what gets reported | yes | yes | no rung | no module |
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `intake.moderate` | Work the village's queues and act on what gets reported | yes | yes | yes | no rung | no module |
 
 ### `library`
 
-| Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
-| --- | --- | --- | --- | --- | --- |
-| `library.keep` | Keep the shared library and its loans | yes | yes | no rung | no module |
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `library.keep` | Keep the shared library and its loans | yes | yes | yes | no rung | no module |
 
 ### `story`
 
-| Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
-| --- | --- | --- | --- | --- | --- |
-| `story.tell` | Say what the village is, in public, in its own words | yes | yes | no rung | no module |
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `story.tell` | Say what the village is, in public, in its own words | yes | yes | yes | no rung | no module |
 
 ### `dial`
 
-| Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
-| --- | --- | --- | --- | --- | --- |
-| `dial.set` | Turn the village's own dials | yes | yes | no rung | no module |
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `dial.set` | Turn the village's own dials | yes | yes | yes | no rung | no module |
 
 ### `redemption`
 
-| Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
-| --- | --- | --- | --- | --- | --- |
-| `redemption.confirm` | Confirm that a member was paid, and destroy the tokens they redeemed | yes | yes | no rung | Redemption |
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `redemption.confirm` | Confirm that a member was paid, and destroy the tokens they redeemed | yes | yes | yes | no rung | Redemption |
 
 ### `steward`
 
-| Key | What it lets a member do | A warning badge may deny it | The village may hold it | Stage that unlocks it | Declared by |
-| --- | --- | --- | --- | --- | --- |
-| `steward.veto` | Stop a carried decision inside its window, and say why | no | yes | no rung | no module |
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `steward.veto` | Stop a carried decision inside its window, and say why | no | no | yes | no rung | no module |
 
 ## The voices
 
 5 of the 34 keys may never be taken away by a warning badge: `mechanics.propose`, `ballot.vote`, `member.vouch`, `member.superVouch` and `steward.veto`. Each is a member's own say in a decision the village makes. The gate ignores a deny naming one of them, the badge validator refuses to save one, and a migration cleared the ones already stored. Three locks on the same door, because a hand-written UPDATE is invisible to code review by definition and a stored row outlives the admin who wrote it.
 
 The rule underneath: waning is not removal. A rule under which unused voice decays over time is legitimate. An act by which one party strips another's earned voice is not, at any tier, held by anybody.
+
+## The keys no badge may grant
+
+1 of the 34 keys cannot be handed out by a badge: `steward.veto`. Rye ruled on 2026-09-23 that the steward's veto comes from a seat the village votes somebody into and from nowhere else, so that an admin cannot mint a badge and give themselves a veto. Three locks again: the gate ignores a badge naming one of these, the badge validator refuses to save one and says where the seat is actually filled, and a migration cleared the rows already stored.
+
+The line this draws is narrow on purpose. A key stays grantable while an ordinary admin route can already put it on a role or a rung, because closing the badge door on those would be a new policy rather than a fix. The keys above are the ones with no admin route left to them at all.
 
 ## The keys a village can take off the admin panel
 
@@ -280,6 +287,7 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
     "steps": 8,
     "voices": 5,
     "villageHoldable": 19,
+    "badgeUngrantable": 1,
     "climbable": 13,
     "undeclared": 13
   },
@@ -330,7 +338,7 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
       "source": "badge",
       "allowed": true,
       "conditions": [
-        "(ctx.badgeCapabilities ?? []).includes(cap)"
+        "isBadgeGrantable(cap) && (ctx.badgeCapabilities ?? []).includes(cap)"
       ]
     },
     {

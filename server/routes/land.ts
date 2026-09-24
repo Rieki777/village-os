@@ -1,14 +1,16 @@
 /**
  * Where the village is: the founder's answer, and the picture that comes back.
  *
- * Four routes, following server/routes/faqs.ts's shape exactly: `register`
+ * Six routes, following server/routes/faqs.ts's shape exactly: `register`
  * is the only export that touches Express, and `deps` is a slice of AppDeps
  * naming everything these routes can reach.
  *
- *   GET  /api/land                 what a visitor may know, and no more
- *   GET  /api/admin/land           the whole record, plus what is configured
- *   PUT  /api/admin/land           set the centre, the span, the visibility
- *   POST /api/admin/land/imagery   fetch the picture and keep it
+ *   GET    /api/land                 what a visitor may know, and no more
+ *   GET    /api/admin/land           the whole record, plus what is configured
+ *   PUT    /api/admin/land           set the centre, the span, the visibility
+ *   POST   /api/admin/land/imagery   fetch the picture and keep it
+ *   DELETE /api/admin/land/imagery   take the picture down again
+ *   DELETE /api/admin/land/parcel    take a piece of land off the project
  *
  * ── THE PUBLIC ROUTE IS THE PRIVACY BOUNDARY ─────────────────────────────
  *
@@ -60,13 +62,17 @@ import {
 } from "../../shared/land";
 import {
   LicenceForbidsCaching,
+  MAX_IMAGE_PIXELS,
+  MIN_IMAGE_PIXELS,
   NotAnImage,
   PROVIDERS,
   configuredProvider,
   fetchAndCache,
+  pixelsFor,
 } from "../lib/satellite";
 import {
   clearParcelImagery,
+  deleteParcel,
   recordParcelImagery,
   recordParcelImageryError,
   upsertParcel,
@@ -81,8 +87,12 @@ type Deps = Pick<
 /** This deployment is one village; the column exists for the retrofit (0069). */
 const VILLAGE = "local";
 
-/** How many pixels wide to ask a provider for. */
-const IMAGE_PIXELS = 1024;
+/*
+ * How wide a picture to ask for is no longer one number here: it depends on
+ * what the chosen provider can actually resolve over the ground being framed.
+ * `pixelsFor` in server/lib/satellite.ts owns it, beside the resolutions it
+ * reads. See its header for why a bigger number is not always a better one.
+ */
 
 interface LandRow {
   /* The parcel's identity. Every row an older release wrote is 'home'. */
@@ -312,6 +322,22 @@ export function register(app: Express, deps: Deps): void {
         missingEnv: status.missingEnv,
         caching: status.provider?.caching ?? null,
         licenceNote: status.provider?.licenceNote ?? null,
+        /*
+         * ENOUGH ARITHMETIC FOR THE SCREEN TO SAY WHAT A WIDTH BUYS, while the
+         * founder is still typing it. The number in that box decides how much
+         * ground each pixel covers, and until it was shown nothing on the page
+         * connected the two: a founder picked a width by how much land they
+         * wanted in shot and found out the cost after the fetch.
+         *
+         * The three figures are published rather than mirrored in the client,
+         * because a copy of `MAX_IMAGE_PIXELS` in the browser is a copy that
+         * goes stale the next time the ceiling moves, and the guidance would
+         * then be a confident wrong number.
+         */
+        groundResolutionM: status.provider?.groundResolutionM ?? null,
+        detailVariesByPlace: status.provider?.detailVariesByPlace ?? false,
+        maxPixels: MAX_IMAGE_PIXELS,
+        minPixels: MIN_IMAGE_PIXELS,
       },
       /* The catalogue, so the screen can explain the choice honestly. */
       providers: PROVIDERS.map((p) => ({
@@ -528,7 +554,8 @@ export function register(app: Express, deps: Deps): void {
       });
     }
 
-    const request = { centre: row.centre, spanM: row.spanM ?? DEFAULT_SPAN_M, pixels: IMAGE_PIXELS };
+    const spanM = row.spanM ?? DEFAULT_SPAN_M;
+    const request = { centre: row.centre, spanM, pixels: pixelsFor(status.provider, spanM) };
     try {
       const cached = await fetchAndCache(status, request, uploadsDir);
       await recordParcelImagery(pool, VILLAGE, slug, {
@@ -541,6 +568,15 @@ export function register(app: Express, deps: Deps): void {
         url: `/api/uploads/${cached.filename}`,
         attribution: cached.attribution,
         bytes: cached.bytes,
+        /*
+         * WHAT WAS ACTUALLY KEPT, which is not always what was asked for. A
+         * provider whose detail varies by place can answer a coarser rung, and
+         * a founder who is told "kept at 1.3 m per pixel" can decide whether
+         * that is good enough for their land. Told nothing, they would be left
+         * comparing two pictures by eye.
+         */
+        pixels: cached.pixels,
+        metresPerPixel: Number((spanM / cached.pixels).toFixed(2)),
       });
     } catch (err) {
       /*
@@ -589,5 +625,52 @@ export function register(app: Express, deps: Deps): void {
     await clearParcelImagery(pool, VILLAGE, slug);
     const fileRemoved = filename ? removeFromVolume(uploadsDir, filename) : false;
     res.json({ success: true, removed: filename !== null, fileRemoved });
+  });
+
+  /**
+   * Take a piece of land off the project.
+   *
+   * Parcels are added from a text box and a button, which means they are added
+   * by mistake, and until this route the only way back was a hand DELETE in
+   * production. A surface that can only ever grow is a surface founders stop
+   * touching.
+   *
+   * THE FIRST PARCEL CANNOT GO, and the reason is structural rather than a
+   * matter of taste. `/api/land` publishes the first row as the village's own
+   * ground, which is what a shell deployed before parcels existed reads, and
+   * `readRow` with no slug answers with it. Removing it would silently promote
+   * whichever parcel sorted next into being the village, moving the map to
+   * different ground with nobody having asked for that. A founder who added
+   * the first one wrongly edits it; every later one may be removed outright.
+   *
+   * SAME ORDER AS THE PICTURE REMOVAL, row before file, so a failure between
+   * the two leaves an orphan that /health counts and never a row pointing at
+   * a file that is gone.
+   */
+  app.delete("/api/admin/land/parcel", async (req, res) => {
+    if (!(await guardCapability(req, res, "map.publish"))) return;
+    const slug = (req.query ?? {}).slug;
+    if (!isParcelSlug(slug)) {
+      return res.status(400).json({ error: "bad-parcel", message: "That parcel name is not one this village has." });
+    }
+    if (slug === DEFAULT_PARCEL_SLUG) {
+      return res.status(400).json({
+        error: "first-parcel",
+        message:
+          "The first piece of land is the village's own ground and stays. Change where it is if it is wrong, and remove any piece added after it.",
+      });
+    }
+    const pool = getPool();
+    const existing = await readParcels(pool);
+    const row = existing.find((p) => p.slug === slug);
+    if (!row) {
+      return res.status(404).json({
+        error: "no-parcel",
+        message: "There is no piece of land by that name to remove.",
+      });
+    }
+    await deleteParcel(pool, VILLAGE, slug);
+    const fileRemoved = row.imageryFilename ? removeFromVolume(uploadsDir, row.imageryFilename) : false;
+    res.json({ success: true, slug, label: row.label, fileRemoved });
   });
 }

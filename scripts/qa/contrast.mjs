@@ -94,6 +94,57 @@ const PROBE = () => {
     return { rgb: out, gradient };
   };
 
+  /**
+   * WHAT IS ACTUALLY PAINTED UNDER THIS TEXT, which the ancestor walk cannot see.
+   *
+   * `backdrop` walks ANCESTORS, so it finds a gradient or image set on one of
+   * them. It cannot find a photo that is a SIBLING - the shape every hero card
+   * uses: an <img> filling a positioned card with an absolutely positioned
+   * caption over it. Nothing in the caption's ancestor chain has a background,
+   * so the walk runs to an opaque white and reports white-on-white at 1:1.
+   *
+   * This is the case the header above has always promised to report as NOT
+   * MEASURABLE rather than as a failure, and until now only the gradient half
+   * was implemented. Measured on live `41debc4`: 60 such failures on /quests
+   * alone, every one legible white text over a dark-scrimmed photograph, while
+   * the four other flagged routes carried 77 REAL sub-AA failures. A gate
+   * crying wolf on 60 lines teaches the next reader to skim the 77.
+   *
+   * TWO WAYS THIS WAS WRONG BEFORE IT WAS RIGHT, both worth keeping:
+   *   - `elementsFromPoint` answers only for the visible viewport, so every
+   *     card below the fold read as "nothing behind it" - which is all 60.
+   *   - stopping at the nearest positioned ancestor looks INSIDE the caption,
+   *     because the caption is itself the positioned element; the photo is a
+   *     sibling of the caption, one level further out.
+   */
+  const imageBehind = (el, rect) => {
+    const overlaps = (r) => !(r.right <= rect.left || r.left >= rect.right
+                           || r.bottom <= rect.top || r.top >= rect.bottom);
+    let a = el.parentElement;
+    for (let depth = 0; a && a !== document.body && depth < 6; depth++, a = a.parentElement) {
+      for (const cand of a.children) {
+        if (cand === el || cand.contains(el)) continue; // our own line: backdrop sees it
+        let painted = /^(IMG|VIDEO|CANVAS|PICTURE|SVG)$/i.test(cand.tagName);
+        if (!painted) {
+          const ccs = getComputedStyle(cand);
+          painted = !!ccs.backgroundImage && ccs.backgroundImage !== "none";
+        }
+        if (!painted) {
+          const inner = cand.querySelector("img, video, canvas, picture");
+          if (!inner) continue;
+          const ir = inner.getBoundingClientRect();
+          if (ir.width >= 4 && ir.height >= 4 && overlaps(ir)) return true;
+          continue;
+        }
+        const r = cand.getBoundingClientRect();
+        if (r.width >= 4 && r.height >= 4 && overlaps(r)) return true;
+      }
+      const av = rgba(getComputedStyle(a).backgroundColor);
+      if (av && av[3] >= 0.999) return false; // opaque ground: backdrop is right
+    }
+    return false;
+  };
+
   // Its OWN text, not a descendant's, so an icon beside a label does not hide the label.
   const ownText = (el) => {
     let t = "";
@@ -115,6 +166,7 @@ const PROBE = () => {
     if (!fgRaw) { unmeasurable.push(`"${t.slice(0, 30)}" — unparseable colour`); continue; }
     const bg = backdrop(el);
     if (bg.gradient) { unmeasurable.push(`"${t.slice(0, 30)}" — gradient or image in the backdrop`); continue; }
+    if (imageBehind(el, b)) { unmeasurable.push(`"${t.slice(0, 30)}" — a picture is painted behind it, not in its ancestors`); continue; }
 
     measured++;
     const fg = over(fgRaw, bg.rgb);

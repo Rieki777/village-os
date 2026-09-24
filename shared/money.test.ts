@@ -10,8 +10,7 @@ import {
   defaultDisplayCurrency,
   displayCurrencyProblem,
   exponentOf,
-  formatMoney,
-} from "./money";
+  formatMoney, hasDailyRate, projectCurrencyToStore, FX_QUOTES } from "./money";
 
 describe("exponents", () => {
   it("reads them from Intl: two for francs, none for yen", () => {
@@ -100,5 +99,72 @@ describe("the preference gate", () => {
     expect(displayCurrencyProblem(null)).toBeNull();
     expect(displayCurrencyProblem("FRANCS")).toContain("three letter");
     expect(displayCurrencyProblem(12)).toContain("three letter");
+  });
+});
+
+/**
+ * WHAT A VILLAGE STORES AS ITS OWN CURRENCY, and what it means when it stores
+ * nothing.
+ *
+ * `PUT /api/admin/brand` merged whatever arrived, so a value of spaces was
+ * stored as spaces and three surfaces disagreed: the site fell back, because
+ * every reader trims; the box showed empty behind the platform's own code; and
+ * anything asking "has this village said?" saw a non-empty string and answered
+ * yes. After the platform default moves to CHF, that mismatch stops being
+ * visible anywhere, and this rule is the only thing that can still catch it.
+ */
+describe("projectCurrencyToStore", () => {
+  it("keeps a real code, uppercased", () => {
+    expect(projectCurrencyToStore(" chf ")).toEqual({ ok: true, value: "CHF" });
+    expect(projectCurrencyToStore("CRC")).toEqual({ ok: true, value: "CRC" });
+  });
+
+  it("turns whitespace into blank, because blank means inherit", () => {
+    // Not a refusal. The brand save carries the whole Make This Yours form in
+    // one request, so refusing over characters the form never showed would
+    // throw away the name, the tagline and the rest of somebody's afternoon.
+    expect(projectCurrencyToStore("   ")).toEqual({ ok: true, value: "" });
+    expect(projectCurrencyToStore("")).toEqual({ ok: true, value: "" });
+    expect(projectCurrencyToStore(null)).toEqual({ ok: true, value: "" });
+    expect(projectCurrencyToStore(undefined)).toEqual({ ok: true, value: "" });
+  });
+
+  it("refuses a code that is still wrong after trimming, in the shared sentence", () => {
+    for (const bad of [" CH ", "EURO", "C1F", 12]) {
+      const r = projectCurrencyToStore(bad);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error).toBe(displayCurrencyProblem("nope"));
+    }
+  });
+});
+
+/**
+ * WHETHER A CURRENCY CONVERTS BY ITSELF. A question the rate source answers,
+ * never a rule about what a village may choose.
+ */
+describe("hasDailyRate", () => {
+  it("answers yes for the base and for every quote actually fetched", () => {
+    expect(hasDailyRate("EUR")).toBe(true);
+    for (const q of FX_QUOTES) expect(hasDailyRate(q)).toBe(true);
+  });
+
+  it("answers no for CRC, which the ECB daily list does not carry", () => {
+    // Measured 2026-08-21 and the reason this is a question: the first
+    // village's own currency is the one that would fail a rule.
+    expect(hasDailyRate("CRC")).toBe(false);
+  });
+
+  it("is case and space insensitive, and says no to nothing at all", () => {
+    expect(hasDailyRate(" chf ")).toBe(true);
+    expect(hasDailyRate("")).toBe(false);
+    expect(hasDailyRate(null)).toBe(false);
+  });
+
+  it("is derived from the list the fetcher uses, so it cannot go stale", () => {
+    // The list lives in this file and `server/lib/fxRates.ts` imports it. A
+    // hand-typed copy beside the picker was the alternative, and it would
+    // have been wrong the first time a quote was added.
+    expect(FX_QUOTES.length).toBeGreaterThan(5);
+    expect((FX_QUOTES as readonly string[]).includes("CRC")).toBe(false);
   });
 });

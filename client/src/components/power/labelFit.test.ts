@@ -18,7 +18,7 @@
 import fs from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
-import { layoutNestedMap, wrapLabel, type NestedInput } from "@shared/mapLayout";
+import { clearChord, layoutNestedMap, wrapLabel, type NestedInput } from "@shared/mapLayout";
 import { viewFor, viewBoxFor, type CameraView } from "./camera";
 import { fitLabelToScreen, captionSize, MIN_LABEL_PX } from "./labelFit";
 
@@ -127,16 +127,46 @@ describe("the label floor, at the sizes a reader actually gets", () => {
     expect(px).toBeGreaterThanOrEqual(MIN_LABEL_PX - 2);
   });
 
-  it("never grows a label wider than the circle can hold", () => {
-    // The cap that stops a rescued label running out over its neighbours.
+  it("never grows a label wider than the circle's CLEAR interior, inside the seat ring", () => {
+    /*
+     * The cap that stops a rescued label running out over its own seats.
+     *
+     * It used to be `pos.r * 1.75`, the whole disc, and that is the defect
+     * Rye chose to fix: measured live at 1440x900, eleven names had a seat
+     * drawn through them, every one a small circle's own centred name. The
+     * layout sizes each circle to hold its name inside the ring and
+     * `wrapLabel` wraps to that same interior, so this step was the only one
+     * of the three measuring something else.
+     *
+     * `clearChord` is now the one definition, and this asserts against it: a
+     * chord that went back to the full radius fails here by name.
+     */
     for (const pos of layout.circles) {
       const wrapped = wrapLabel("Regenerative Agriculture & Permaculture Circle", pos.r, pos.depth);
       const fit = fitLabelToScreen(wrapped, pos.r, pxPerWorld);
       if (fit.outside) continue; // moved out; the chord no longer applies
       const widest = Math.max(...wrapped.lines.map((l) => l.length));
       const drawnWidth = widest * fit.fontSize * 0.55;
-      expect(drawnWidth, `fits inside r=${pos.r.toFixed(0)}`).toBeLessThanOrEqual(pos.r * 1.75);
+      expect(drawnWidth, `fits the clear interior of r=${pos.r.toFixed(0)}`).toBeLessThanOrEqual(clearChord(pos.r));
     }
+  });
+
+  it("sends a name that cannot be legible inside the ring OUT, rather than over its seats", () => {
+    /*
+     * The two halves of the same rule, on one circle. A small disc at a
+     * zoomed-out camera cannot hold this name at the screen floor inside its
+     * ring, so it goes outside, where labelPlacement finds it a clear place.
+     * The control beside it is a circle with room to spare, which must stay in.
+     */
+    const tight = wrapLabel("Intergenerational Wisdom Council", 46, 1);
+    const out = fitLabelToScreen(tight, 46, 0.45);
+    expect(out.outside, "a name with no room inside the ring goes out").toBe(true);
+
+    const roomy = wrapLabel("Land", 220, 0);
+    const stays = fitLabelToScreen(roomy, 220, 0.45);
+    expect(stays.outside, "a name with room stays in").toBe(false);
+    const widest = Math.max(...roomy.lines.map((l) => l.length));
+    expect(widest * stays.fontSize * 0.55).toBeLessThanOrEqual(clearChord(220));
   });
 
   it("leaves an already-legible label exactly as the layout sized it", () => {
@@ -181,11 +211,19 @@ describe("the component actually feeds the floor a measurement", () => {
    * instead of passing over nothing.
    */
   const stage = fs.readFileSync(path.resolve(__dirname, "mapStage.ts"), "utf8");
+  /*
+   * And the name itself moved to CircleLabel.tsx (2026-09-23), when every text
+   * on the canvas needed the same halo and PowerMap.tsx stood at 996 of its
+   * 1000 lines. Same rule as the hook above: the assertion follows the code,
+   * and this file carries its own positive control.
+   */
+  const label = fs.readFileSync(path.resolve(__dirname, "CircleLabel.tsx"), "utf8");
 
-  it("finds both files and the ref (the positive control)", () => {
+  it("finds all three files and the ref (the positive control)", () => {
     expect(src).toContain("useMeasuredBox");
     expect(src).toMatch(/ref=\{/);
     expect(stage).toContain("export function useMeasuredBox");
+    expect(label).toContain("export default function CircleLabel");
   });
 
   it("attaches the SVG through a STABLE ref, never an inline arrow", () => {
@@ -213,7 +251,7 @@ describe("the component actually feeds the floor a measurement", () => {
      * Same trap on the circle: `fillOpacity` changes on hover, so through
      * `style` the hover lift would have been dead on arrival.
      */
-    expect(src, "the label's size is an attribute").toMatch(/fontSize=\{label\.fontSize\}/);
+    expect(label, "the label's size is an attribute").toMatch(/fontSize=\{label\.fontSize\}/);
     expect(src, "the circle's fill is an attribute").toMatch(/fill=\{tone\}/);
     expect(src, "the circle's fill opacity is an attribute").toMatch(/fillOpacity=\{isFocus/);
 
@@ -230,17 +268,19 @@ describe("the component actually feeds the floor a measurement", () => {
      * ends and reported the plain elements as violations.
      */
     const motionTags: string[] = [];
-    for (let i = src.indexOf("<motion."); i !== -1; i = src.indexOf("<motion.", i + 1)) {
+    for (const file of [src, label]) {
+    for (let i = file.indexOf("<motion."); i !== -1; i = file.indexOf("<motion.", i + 1)) {
       let depth = 0;
-      for (let j = i; j < src.length; j++) {
-        const ch = src[j];
+      for (let j = i; j < file.length; j++) {
+        const ch = file[j];
         if (ch === "{") depth++;
         else if (ch === "}") depth--;
         else if (ch === ">" && depth === 0) {
-          motionTags.push(src.slice(i, j + 1));
+          motionTags.push(file.slice(i, j + 1));
           break;
         }
       }
+    }
     }
     expect(motionTags.length, "there are motion elements to check").toBeGreaterThan(0);
     for (const tag of motionTags) {
@@ -264,8 +304,8 @@ describe("the component actually feeds the floor a measurement", () => {
      * the first screenshot anybody took of this surface, which the plan for
      * this work misread as "names too long for their circles".
      */
-    expect(src, "tspans sit at the text's own origin").toMatch(/<tspan[^>]*\sx=\{0\}/);
-    expect(src, "no tspan re-applies the circle's absolute x").not.toMatch(/<tspan[^>]*\sx=\{pos\.x\}/);
+    expect(label, "tspans sit at the text's own origin").toMatch(/<tspan[^>]*\sx=\{0\}/);
+    expect(label, "no tspan re-applies the circle's absolute x").not.toMatch(/<tspan[^>]*\sx=\{(pos\.)?x\}/);
   });
 
   it("refuses a zero measurement instead of dividing by it", () => {

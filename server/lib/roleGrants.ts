@@ -23,9 +23,26 @@
  *   - a role that carries the key cannot have its capability list edited at
  *     all, and no capability list may gain the key.
  *
+ * ── THE SENTENCE ABOVE WAS FALSE FOR AS LONG AS IT STOOD HERE ─────────────
+ *
+ * "By any admin route" is what it claimed, and the two bullets under it are
+ * both about ROLES, because `stewardSeatRefusal` below guards exactly two
+ * routes. THE BADGE PLANE WAS NEVER FENCED. `POST /api/admin/badges` took
+ * `capabilities: ["steward.veto"]`, `badgeProblem` checked only that the key
+ * was known, and step 4 of the gate answered `decided(true, "badge")` for it.
+ * So the one power this file exists to keep out of an administrator's hands
+ * had an administrator's route that handed it over, and the claim that it did
+ * not lived three directories from the code that did.
+ *
+ * It is true NOW, and by a map rather than by this paragraph: `BADGE_GRANTABLE`
+ * in shared/capabilities.ts marks the key ungrantable, the gate reads it, and
+ * `badgeProblem` refuses to store such a badge (Rye, 2026-09-23: seats only,
+ * "so that an admin cannot mint a badge and give themselves a veto").
+ *
  * The seat is filled and emptied by the `role_seat` and `role_unseat` ballots
  * and by nothing else. The refusal says so by name, so an administrator who
- * meets it is told where the door actually is rather than being told no.
+ * meets it is told where the door actually is rather than being told no, and
+ * the badge panel now sends back the same sentence.
  *
  * FREEZING THE WHOLE LIST, not only the key, is deliberate. An admin who could
  * still edit the rest of a steward-capable role's capabilities could strip
@@ -43,7 +60,13 @@
  * drafts.ts holds the arithmetic both callers share.
  */
 import { applyEscalationChoices, computeEscalations } from "./drafts";
-import { ALL_CAPABILITIES, carriedBy, isDeniable, type Capability } from "../../shared/capabilities";
+import {
+  ALL_CAPABILITIES,
+  carriedBy,
+  isBadgeGrantable,
+  isDeniable,
+  type Capability,
+} from "../../shared/capabilities";
 import { STEWARD_VETO, holdingHasLapsed, roleCapabilityList } from "./stewardship";
 
 /**
@@ -81,7 +104,7 @@ export function liveHolderCount(
  *   counted    a role the person holds, whose capability list carries the key,
  *              on a holding that has not lapsed (`holdingHasLapsed`)
  *   counted    a capability a greater key carries, through `carriedBy`
- *   counted    a badge grant
+ *   counted    a badge grant, on a key `BADGE_GRANTABLE` lets a badge reach
  *   subtracted a warning badge that DENIES the key, which beats a role, exactly
  *              as the gate has it, and only where the key may be denied at all
  *   EXCLUDED   the admin short-circuit
@@ -122,8 +145,15 @@ export function liveHoldersOfCapability(
     if (holdingHasLapsed(h, now)) continue;
     held.add(String(h.userId));
   }
-  for (const [userId, plane] of Object.entries(badges)) {
-    if ((plane.grants ?? []).includes(capability)) held.add(userId);
+  // A BADGE GRANT COUNTS ONLY WHERE THE GATE WOULD COUNT IT. `BADGE_GRANTABLE`
+  // refuses the steward's seat to the badge plane, and a counter that added a
+  // holder the gate answers no for is the twin this function's header exists
+  // to refuse: it would report that somebody could veto while the veto route
+  // turned them away.
+  if (isBadgeGrantable(capability)) {
+    for (const [userId, plane] of Object.entries(badges)) {
+      if ((plane.grants ?? []).includes(capability)) held.add(userId);
+    }
   }
   // A DENY BEATS A ROLE, which is the gate's own order, and it only lands on a
   // key that may be taken away (`isDeniable`). A warning badge naming a key

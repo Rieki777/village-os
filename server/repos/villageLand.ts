@@ -121,6 +121,24 @@ export async function recordParcelImageryError(
 }
 
 /**
+ * Take a whole parcel off this village, row and all.
+ *
+ * Scoped to the village as well as the slug, like every other statement here,
+ * so a slug that exists in two villages can never be crossed.
+ *
+ * The caller unlinks the picture AFTER this returns, for the same reason
+ * `clearParcelImagery` says: in this order a failure between the two leaves an
+ * orphan file that nothing shows, and /health counts orphans. The other order
+ * leaves a live row pointing at a file that is gone.
+ *
+ * Which parcels MAY be removed is the route's judgement, not this file's. The
+ * statement is willing to delete any of them.
+ */
+export async function deleteParcel(db: Queryable, villageId: string, slug: string): Promise<void> {
+  await db.query("DELETE FROM village_land WHERE village_id = ? AND slug = ?", [villageId, slug]);
+}
+
+/**
  * Forget a parcel's picture. The caller deletes the file AFTER this returns,
  * so a failure between the two leaves an orphan nothing shows, never a
  * reference to a file that is gone.

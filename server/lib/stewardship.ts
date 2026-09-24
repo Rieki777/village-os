@@ -138,7 +138,7 @@
  */
 import type { Pool } from "mysql2/promise";
 import type { Criticality } from "../../shared/governanceEngine";
-import type { Capability } from "../../shared/capabilities";
+import { HANDOVER_SET, type Capability } from "../../shared/capabilities";
 import { kindOfSet, kindOfSubject, type GovernanceKind } from "../../shared/governanceKinds";
 import { cycleBoundsFor, cycleStartMs } from "../../shared/lunar";
 import { clockFor, type CycleClock } from "../../shared/cycleClock";
@@ -171,6 +171,7 @@ import {
   blankBallotVetoReason,
   blankBallotVetoReasonsBy,
   carriedUnseatingsOf,
+  standingForStewardOn,
   subjectTypesOnBallots,
   type CarriedUnseating,
 } from "../repos/stewardshipBallots";
@@ -1444,17 +1445,45 @@ export interface SeatingReport {
   ok: boolean;
   /** The role was created by this call rather than found. */
   roleCreated: boolean;
-  /** The veto was added to the role by this call. */
+  /** At least one of the nineteen was added to the role by this call. */
   capabilityGranted: boolean;
+  /** Which of the nineteen this call added. Empty on a retry, not a failure. */
+  capabilitiesGranted: string[];
   /**
-   * The veto was handed to the village by this call, so an administrator now
-   * meets the break-glass door on it instead of walking through.
+   * Every one of the nineteen is now entrusted to the seat, so an administrator
+   * meets the break-glass door on all of them instead of walking through.
+   *
+   * FALSE WHEN NOBODY WAS SEATED, on purpose and not as a failure. See the
+   * block above the crossing in `seatCatalystsAsStewards` for why entrusting
+   * powers to a role with nobody in it would lock the village out of all
+   * nineteen with no way back.
    */
   holdingMoved: boolean;
+  /** Which of the nineteen crossed on this call. Empty on a retry. */
+  capabilitiesMoved: string[];
+  /** Why the crossing did not happen, when it did not. Null when it did. */
+  holdingHeld: string | null;
   /** User ids seated by this call. Empty means nothing to do, not a failure. */
   seated: string[];
   /** User ids that already held the seat, so this call left them alone. */
   alreadySeated: string[];
+  /**
+   * Everyone who stood for the seat on the launch ballot, founder or not.
+   *
+   * The denominator behind `seated`: without it, "nobody was seated" cannot be
+   * told apart from "nobody asked", and those are different things to say to a
+   * village.
+   */
+  stoodForSeat: string[];
+  /**
+   * Members who stood and were not seated because they are not founders.
+   *
+   * Rye's ruling seats "whomever of the founding members" stood, so an ordinary
+   * member's signal seats nobody. Reported rather than dropped, because a
+   * signal that vanishes with no record is the silent failure this module's
+   * caller exists to prevent.
+   */
+  stoodButNotFounding: string[];
   /** The term written on every new seating, as an ISO instant. */
   termEndsAt: string | null;
   /** Present only when ok is false. */
@@ -1480,7 +1509,8 @@ export function stewardHoldingId(userId: string): string {
 }
 
 /**
- * Seat every catalyst as a steward, once, with a term that really ends.
+ * Seat the founders who STOOD for the seat, once, with a term that really
+ * ends, and entrust the seat with all nineteen powers.
  *
  * THE WRITES ONLY. `seatFoundersAtLaunch` in server/lib/launchSeating.ts is
  * the caller, and it is where the term is decided (`resolveSeatTerm`, so the
@@ -1490,11 +1520,52 @@ export function stewardHoldingId(userId: string): string {
  * closer called it; for eight weeks nothing outside the tests did, which is
  * why the caller is now named rather than described.
  *
- * The founder's rule:
- * the catalysts INHERIT the seat rather than standing for it, and then have to
- * be voted back in, which is what makes relinquishment automatic rather than
- * an act of virtue. Nobody has to decide they are ready to give up power; they
- * have to be re-granted it.
+ * ── RYE'S RULING OF 2026-09-24, WHICH THIS FUNCTION IS THE WHOLE OF ────────
+ *
+ * "The founders automatically become stewards and hold all powers at launch
+ * for whomever of the founding members (3 minimum) carry the inaugural role of
+ * steward for the first season. Any of the founding 3 can apply for this role
+ * by self signaling at founding they want it."
+ *
+ * Three things, and until this change the code did none of them. It created
+ * the role carrying `steward.veto` alone, it moved that one capability, and it
+ * seated EVERY catalyst with no opt-in.
+ *
+ * ALL POWERS IS ALL NINETEEN. Asked whether "all powers" named a chosen
+ * subset, Rye said all nineteen entrustable powers. `HANDOVER_SET` in
+ * shared/capabilities.ts is that set, derived from `TRANSFERABLE` so a new
+ * power classified as entrustable joins it without anybody remembering to. The
+ * other fifteen are personal acts and deployment plumbing that were never
+ * anyone's to hold.
+ *
+ * ONLY THE ONES WHO STOOD. `standingForStewardOn` reads the signal off the
+ * launch ballot's own vote rows (0218), and the seated list is that set
+ * INTERSECTED with the catalysts. A founder who did not stand is not seated,
+ * which is what makes the seat something somebody takes on rather than
+ * something that lands on them.
+ *
+ * THE FLOOR OF THREE IS THE BALLOT'S, AND IT IS NOT RE-CHECKED HERE.
+ * `SUBJECT_THRESHOLDS[VILLAGE_LAUNCH].minElectorate` is 3 and
+ * `electorateFloorProblem` holds it before a launch can carry at all, so by
+ * the time this runs the village has at least three founding members. The
+ * ruling's "(3 minimum)" is about that roll, not about how many of them stand:
+ * "any of the founding 3 can apply" would mean nothing if all three had to. A
+ * second floor here would be a copy of a rule that already has a home, and it
+ * would be a floor on the wrong number.
+ *
+ * SO FEWER THAN THREE MAY STAND, AND ONE IS A SEAT. Nobody standing is a seat
+ * that stands empty, which `vacancyState` calls healthy in so many words and
+ * which stops nothing: decisions land at their landing time either way, and
+ * the village seats whoever it likes afterwards through an ordinary
+ * `role_seat` ballot. What must NOT happen is making the number up by seating
+ * a founder who declined, which is conscription into a power, or refusing the
+ * launch, which is covered below and in launchSeating.ts's header.
+ *
+ * ── THE PART OF THE OLD RULE THAT SURVIVES ────────────────────────────────
+ *
+ * The seat still has to be VOTED back in when the term ends, which is what
+ * makes relinquishment automatic rather than an act of virtue. Nobody has to
+ * decide they are ready to give up power; they have to be re-granted it.
  *
  * THE TERM IS THE SEASON'S END, RESOLVED TO AN INSTANT. Rye, 2026-09-14: a
  * steward's seat resets each season at the latest. The audit of 2026-09-03
@@ -1538,9 +1609,14 @@ export async function seatCatalystsAsStewards(
     ok: true,
     roleCreated: false,
     capabilityGranted: false,
+    capabilitiesGranted: [],
     holdingMoved: false,
+    capabilitiesMoved: [],
+    holdingHeld: null,
     seated: [],
     alreadySeated: [],
+    stoodForSeat: [],
+    stoodButNotFounding: [],
     termEndsAt: termDate ? termDate.toISOString() : null,
   };
 
@@ -1557,9 +1633,24 @@ export async function seatCatalystsAsStewards(
     };
   }
 
-  // 1. Find or create the role. A village that already renamed it keeps its
-  //    name: only the slug is looked up, and the name column is never
-  //    overwritten by this call.
+  /*
+   * 1. FIND OR CREATE THE ROLE, CARRYING ALL NINETEEN.
+   *
+   *    A village that already renamed it keeps its name: only the slug is
+   *    looked up, and the name column is never overwritten by this call.
+   *
+   *    THE GRANT COMES FIRST AND IT HAS TO. `moveCapabilityToVillage` REFUSES
+   *    a role whose capability list does not already carry the key, and it
+   *    refuses for a good reason its own header gives: entrusting a power to a
+   *    role that cannot exercise it leaves the power belonging to nobody at
+   *    all. So the role is given the nineteen, and only then do they cross.
+   *
+   *    The union is computed here and the repo writes what it is handed, so
+   *    this call can never be silently additive: a caller that meant to REMOVE
+   *    a power uses the same door. A village that has already handed some of
+   *    the nineteen to a circle of its own keeps every other capability on the
+   *    role untouched, because this is a union and not a replacement.
+   */
   const existing = await roleCapabilityRow(pool, STEWARD_ROLE_ID);
   if (!existing) {
     await insertRoleIfAbsent(pool, {
@@ -1567,54 +1658,49 @@ export async function seatCatalystsAsStewards(
       name: STEWARD_ROLE_NAME,
       description:
         "Can stop a decision the village has already carried, inside the window before it lands, and has to say why. Training wheels: a village that no longer needs the seat lets it stand empty, and its decisions land the same way.",
-      capabilitiesJson: JSON.stringify([STEWARD_VETO]),
+      capabilitiesJson: JSON.stringify([...HANDOVER_SET]),
       sortOrder: 0,
     });
     base.roleCreated = true;
     base.capabilityGranted = true;
+    base.capabilitiesGranted = [...HANDOVER_SET];
   } else {
     const list = roleCapabilityList(existing.capabilities);
-    if (!list.includes(STEWARD_VETO)) {
-      // The union is computed here and the repo writes what it is handed, so
-      // this call can never be silently additive: a caller that meant to
-      // REMOVE a power uses the same door.
-      await setRoleCapabilities(pool, STEWARD_ROLE_ID, JSON.stringify([...list, STEWARD_VETO]));
+    const held = new Set(list);
+    const missing = HANDOVER_SET.filter((c) => !held.has(c));
+    if (missing.length > 0) {
+      await setRoleCapabilities(pool, STEWARD_ROLE_ID, JSON.stringify([...list, ...missing]));
       base.capabilityGranted = true;
+      base.capabilitiesGranted = [...missing];
     }
   }
 
   /*
-   * 2. HAND THE VETO TO THE VILLAGE, and this is the step whose absence made
-   *    the whole seat decorative.
+   * 2. SEAT THE FOUNDERS WHO STOOD, and nobody else.
    *
-   *    `capability_holding` is what turns an admin's silent yes into a
-   *    break-glass with a public record: `isVillageHeld` reads that table, and
-   *    a capability the table does not name lets any administrator through the
-   *    gate as an ordinary admin, with nothing anywhere saying they reached
-   *    past anybody. So a village could seat a steward, grant them the veto,
-   *    and every admin account would still be able to stop a decision without
-   *    the village ever hearing about it. Granting the role the power and
-   *    moving the holding are two acts by design (see capabilityHolding.ts),
-   *    and for THIS key they have to happen together, because the point of the
-   *    seat is that it holds the village's last word.
+   *    The stored role value is `founder` and the word a player reads is
+   *    Catalyst; `catalystUserIds` in server/repos/users.ts holds the statement
+   *    and the argument for asking by the stored value. `standingForStewardOn`
+   *    reads who said at the launch vote that they wanted the seat (0218).
    *
-   *    Idempotent on the capability, and it refuses rather than throws, so a
-   *    retried close moves nothing twice and a refusal is reported instead of
-   *    aborting a launch that has already carried.
+   *    THE INTERSECTION IS THE RULE. "Whomever of the founding members ...
+   *    carry the inaugural role" seats a founder who stood; a founder who did
+   *    not stand is left alone, and an ordinary member who stood is not a
+   *    founding member and is not seated. The second half is reported rather
+   *    than dropped, so the caller can say something to somebody whose signal
+   *    went nowhere.
+   *
+   *    THIS STEP MOVED AHEAD OF THE CROSSING, which it used to follow. The
+   *    crossing below now has to know whether anybody holds the seat, and it
+   *    could not know that while it ran first. Nothing else about the order
+   *    changed: the role still carries the powers before they cross.
    */
-  const moved = await moveCapabilityToVillage(pool, {
-    capability: STEWARD_VETO,
-    holderRoleId: STEWARD_ROLE_ID,
-    movedByBallotId: launchBallotId,
-    note: "The village's own last word on a decision it carried.",
-  });
-  base.holdingMoved = moved.ok;
-  if (!moved.ok) base.error = moved.error;
-
-  // 3. Every catalyst. The stored role value is `founder` and the word a
-  //    player reads is Catalyst; `catalystUserIds` in server/repos/users.ts
-  //    holds the statement and the argument for asking by the stored value.
+  const standing = await standingForStewardOn(pool, launchBallotId);
+  const stood = new Set(standing);
+  base.stoodForSeat = [...standing].sort();
   const catalysts = await catalystUserIds(pool);
+  const founding = new Set(catalysts);
+  base.stoodButNotFounding = base.stoodForSeat.filter((id) => !founding.has(id));
   const already = new Set(await userIdsHolding(pool, STEWARD_ROLE_ID));
 
   for (const userId of catalysts) {
@@ -1622,6 +1708,14 @@ export async function seatCatalystsAsStewards(
       base.alreadySeated.push(userId);
       continue;
     }
+    /*
+     * A FOUNDER WHO DID NOT STAND IS NOT SEATED, which is the whole of the
+     * opt-in. The check is here and not in the loop's source, so a founder who
+     * already holds the seat from an earlier `role_seat` vote is still
+     * reported in `alreadySeated` whether or not they stood on this ballot:
+     * a seat the village voted them into is not this call's to reconsider.
+     */
+    if (!stood.has(userId)) continue;
     /*
      * BOUND AS A Date, NEVER AS THE ISO STRING. MySQL refuses
      * `2026-12-01T00:00:00.000Z` for a `timestamp` column outright, so passing
@@ -1651,6 +1745,82 @@ export async function seatCatalystsAsStewards(
       startedAt: now,
     });
     base.seated.push(userId);
+  }
+
+  /*
+   * 3. ENTRUST ALL NINETEEN TO THE SEAT, and this is the step whose absence
+   *    made the whole seat decorative when it reached only one of them.
+   *
+   *    `capability_holding` is what turns an admin's silent yes into a
+   *    break-glass with a public record: `isVillageHeld` reads that table, and
+   *    a capability the table does not name lets any administrator through the
+   *    gate as an ordinary admin, with nothing anywhere saying they reached
+   *    past anybody. So a village could seat a steward, grant them the powers,
+   *    and every admin account would still be able to act on all of them
+   *    without the village ever hearing about it. Granting the role the power
+   *    and entrusting it are two acts by design (see capabilityHolding.ts),
+   *    and at a launch they happen together, because the point of the seat is
+   *    that it holds the village's own hand on all nineteen.
+   *
+   *    Idempotent on each capability, and each one refuses rather than throws,
+   *    so a retried close moves nothing twice and a refusal is reported
+   *    instead of aborting a launch that has already carried.
+   *
+   *    ── AND NOT ONE OF THEM CROSSES TO AN EMPTY SEAT ──────────────────────
+   *
+   *    NOBODY IN THE ROLE MEANS NOBODY CAN ACT, AND NOBODY CAN GET BACK IN.
+   *    This is the sharpest consequence of making the seat opt-in, and it is
+   *    worth spelling out because the arithmetic is not obvious.
+   *
+   *    `moveCapabilityToVillage` checks that the ROLE carries the key. It does
+   *    not, and should not, check that anybody is IN the role: an empty seat is
+   *    an ordinary state a village passes through. But entrusting all nineteen
+   *    to an empty seat at a LAUNCH is different in kind, because launch is
+   *    also the moment the founders' standing powers end
+   *    (`founderPowerStands`, server/lib/gameStart.ts). Every admin would stop
+   *    passing the gate on all nineteen, nobody would hold them, and the
+   *    break-glass would be shut too: `capabilityDecision` opens it only for a
+   *    founder whose `roleCapabilities` carry `steward.veto`, which comes from
+   *    a live seat and from nothing else. Nineteen powers, no holder, no way
+   *    back through the product.
+   *
+   *    So the crossing waits for somebody to actually hold the seat. With
+   *    nobody seated the powers stay with the scaffolding, exactly where every
+   *    unlaunched village keeps them, the admin panel goes on working, and the
+   *    village entrusts them whenever it votes somebody in. That is a village
+   *    one ordinary ballot away from its stewards rather than one locked out
+   *    of its own panel.
+   *
+   *    The condition reads `seated` OR `alreadySeated` because a retried close
+   *    seats nobody new and must still finish a crossing that failed halfway.
+   */
+  const holdsTheSeat = base.seated.length + base.alreadySeated.length > 0;
+  if (!holdsTheSeat) {
+    base.holdingHeld =
+      "Nobody holds the steward's seat, so the village's powers stay where they were. " +
+      "A power entrusted to a seat nobody sits in belongs to nobody at all. " +
+      "They cross the moment the village votes somebody into the seat.";
+  } else {
+    const refusals: string[] = [];
+    for (const capability of HANDOVER_SET) {
+      const moved = await moveCapabilityToVillage(pool, {
+        capability,
+        holderRoleId: STEWARD_ROLE_ID,
+        movedByBallotId: launchBallotId,
+        note: "The village's own hand on this, from the vote that started its Game.",
+      });
+      if (moved.ok) base.capabilitiesMoved.push(capability);
+      else refusals.push(`${capability}: ${moved.error}`);
+    }
+    // TRUE ONLY WHEN ALL NINETEEN ARE THERE, which is what the caller's own
+    // "the powers did not cross" notice means. `capabilitiesMoved` counts this
+    // call's crossings and goes empty on a retry, so it is the wrong thing to
+    // read: the question is the state of the table, not the work of this run.
+    base.holdingMoved = refusals.length === 0;
+    if (refusals.length > 0) {
+      base.holdingHeld = refusals.join(" ");
+      base.error = base.error ?? base.holdingHeld;
+    }
   }
 
   return base;

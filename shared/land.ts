@@ -157,8 +157,34 @@ const fail = (problem: LandProblem, message: string): ParseFailure => ({
 export const MIN_SPAN_M = 50;
 export const MAX_SPAN_M = 20000;
 
-/** What a founder gets before they have touched the number. */
-export const DEFAULT_SPAN_M = 800;
+/**
+ * What a founder gets before they have touched the number.
+ *
+ * THIS WAS 800 AND 800 COULD NOT BE FETCHED. Esri World Imagery holds finer
+ * detail over a city than over open country, and `pixelsFor` asks for the
+ * provider's best, so at 800 m it asked Amora's coast for 0.5 m per pixel and
+ * was answered with an error page. Every width under about 1490 m failed
+ * there, which is to say the default failed, for the rural land this platform
+ * is mostly for. The fetch now steps down until the place says yes, so 800
+ * would work today; it is still the wrong number to start a founder on.
+ *
+ * 2400 is chosen for three reasons that agree:
+ *
+ *   IT SHOWS THE COAST. The picture is there to say where the land sits in a
+ *   real landscape, and the first thing anyone wants to know is how close the
+ *   sea, the road and the town are. 800 m is the parcel and its fence.
+ *
+ *   IT LANDS ON A ROUND NUMBER. At `MAX_IMAGE_PIXELS` of 2400 it is exactly
+ *   one metre per pixel, and one pixel per unit of the map's own 2400-wide
+ *   world, so nothing is magnified to fill the frame.
+ *
+ *   IT IS INSIDE WHAT A MOSAIC SERVES. At 1 m per pixel a request is coarse
+ *   enough that open country answers it first time.
+ *
+ * It is a starting point and not a rule. The field is right there, most
+ * founders will move it, and `MIN_SPAN_M` to `MAX_SPAN_M` stays wide open.
+ */
+export const DEFAULT_SPAN_M = 2400;
 
 /**
  * The polar circles, used only to grade a suspected transposition.

@@ -30,6 +30,7 @@ import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
+import { HANDOVER_SET } from "../shared/capabilities";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -163,8 +164,25 @@ const tryToIssue = (reason: string) =>
     body: { toUserId: wrenId, amount: 5, reason },
   });
 
-async function vote(ballotId: string, token: string, choice: string): Promise<Answer> {
-  return await call("POST", `/api/governance/ballots/${ballotId}/vote`, { token, body: { choice } });
+/**
+ * One vote, and on the Birthing, whether this member stands for the seat.
+ *
+ * Rye, 2026-09-24: a founding member says at the launch vote that they want the
+ * inaugural steward's seat. This drives that over HTTP, against the built
+ * server, which is the only way to know the route actually carries the field:
+ * a unit test writing the column by hand proves the seating and nothing about
+ * the door in.
+ */
+async function vote(
+  ballotId: string,
+  token: string,
+  choice: string,
+  standsForSteward?: boolean,
+): Promise<Answer> {
+  return await call("POST", `/api/governance/ballots/${ballotId}/vote`, {
+    token,
+    body: standsForSteward === undefined ? { choice } : { choice, standsForSteward },
+  });
 }
 
 beforeAll(async () => {
@@ -464,9 +482,19 @@ describe.skipIf(!DB_CONFIGURED)("everybody answers and everybody agrees", () => 
     const running = rows[rows.length - 1];
     expect(running.status).toBe("open");
 
-    for (const t of [founderToken, wrenToken, idaToken]) {
-      expect((await vote(running.id, t, "yes")).status).toBe(200);
-    }
+    /*
+     * THE FOUNDER STANDS FOR THE SEAT AND THE TWO MEMBERS DO NOT, which is the
+     * ruling of 2026-09-24 driven through the real door. Wren asks for it as
+     * well, and is not a founding member, so the seating below has to filter
+     * on both halves and not on either one alone.
+     */
+    const stood = await vote(running.id, founderToken, "yes", true);
+    expect(stood.status, JSON.stringify(stood.json)).toBe(200);
+    expect(stood.json?.standsForSteward, "the route recorded the ask, and said so").toBe(true);
+    const wrenStood = await vote(running.id, wrenToken, "yes", true);
+    expect(wrenStood.status).toBe(200);
+    expect(wrenStood.json?.standsForSteward, "a member may ask; the seating is where it is weighed").toBe(true);
+    expect((await vote(running.id, idaToken, "yes")).status).toBe(200);
     await expire(running.id);
     const closed = await call("POST", `/api/governance/ballots/${running.id}/close`, {
       body: { outcomeNote: "All three of us agreed. Larksfield starts today." },
@@ -489,34 +517,64 @@ describe.skipIf(!DB_CONFIGURED)("everybody answers and everybody agrees", () => 
     expect(now.json?.toBalance).toBe(5);
   });
 
-  it("seats the founder as a steward, with a term, and leaves the members where they were", async () => {
+  it("seats the founder who STOOD for it, with a term, and leaves the members where they were", async () => {
     /*
-     * Rye, 2026-09-23: "Seat them at launch." The close is the only thing that
-     * has run since the previous case, so a seat here was written by the
-     * closer and by nothing else. Larksfield's roll is a founder and two
-     * members, so this also drives the filter: the seating asks for the stored
-     * role `founder` and never for the roll.
+     * Rye, 2026-09-23: "Seat them at launch." Rye, 2026-09-24: for "whomever of
+     * the founding members ... carry the inaugural role", who say so by "self
+     * signaling at founding". The close is the only thing that has run since
+     * the previous case, so a seat here was written by the closer and by
+     * nothing else.
+     *
+     * Larksfield's roll is a founder and two members, and BOTH the founder and
+     * Wren asked for the seat. So this drives both halves of the filter at
+     * once: the stored role `founder` and the signal on the vote, and neither
+     * on its own would produce this answer.
      */
     const rows = await launchBallots();
     const carried = rows[rows.length - 1];
     expect(carried.status).toBe("passed");
 
     const seats = await stewardSeats();
-    expect(seats.map((s) => s.userId), "the founder, and only the founder").toEqual([founderId]);
+    expect(seats.map((s) => s.userId), "the founder who stood, and nobody else").toEqual([founderId]);
     expect(seats[0].endsAt, "no seat may enter with an indefinite time").not.toBeNull();
     expect(seats[0].endsAt!).toBeGreaterThan(Date.now());
     expect(seats[0].grantedBy, "the village put them here, not an administrator").toBe(carried.id);
 
-    // The seat is worth something: the role carries the veto, and the veto has
-    // crossed to the village, which is what makes an admin meet a break-glass.
+    // Wren asked and is not a founding member. The known positive for that
+    // empty answer is the seat above, written by the same call.
+    const [wrenAsked] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT stands_for_steward FROM ballot_votes WHERE ballot_id = ? AND user_id = ?",
+      [carried.id, wrenId],
+    );
+    expect(Number(wrenAsked[0]?.stands_for_steward), "they really did ask, through the route").toBe(1);
+
+    /*
+     * THE SEAT IS WORTH SOMETHING, AND IT IS WORTH ALL NINETEEN.
+     *
+     * Rye, 2026-09-24: the founding stewards "hold all powers at launch", which
+     * he confirmed means all nineteen entrustable powers. Two facts and not
+     * one: the role CARRIES each power, or nobody in it could act, and the
+     * village HOLDS each power, or an administrator walks through the gate
+     * with nothing anywhere saying they reached past anybody.
+     *
+     * Compared as whole sets against `HANDOVER_SET`, because `toContain` on one
+     * key is green on a seat carrying eighteen, and eighteen is the shape of
+     * the defect this lane closes.
+     */
     const [roles] = await pool.query<any[]>("SELECT capabilities FROM roles WHERE id = 'steward'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     const caps = typeof roles[0]?.capabilities === "string" ? JSON.parse(roles[0].capabilities) : roles[0]?.capabilities;
-    expect(caps).toContain("steward.veto");
-    const [holding] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-      "SELECT holder_role_id, moved_by_ballot_id FROM capability_holding WHERE capability = 'steward.veto'",
+    expect([...caps].sort(), "the role carries every one of them").toEqual([...HANDOVER_SET].sort());
+    const [holdings] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT capability, holder_role_id, moved_by_ballot_id FROM capability_holding ORDER BY capability",
     );
-    expect(String(holding[0]?.holder_role_id)).toBe("steward");
-    expect(String(holding[0]?.moved_by_ballot_id)).toBe(carried.id);
+    expect(
+      holdings.map((h: any) => String(h.capability)),
+      "and every one of them is the village's, from this vote",
+    ).toEqual([...HANDOVER_SET].sort());
+    for (const h of holdings) {
+      expect(String(h.holder_role_id)).toBe("steward");
+      expect(String(h.moved_by_ballot_id)).toBe(carried.id);
+    }
 
     // And the founder was told, on the same spine every other seating uses.
     const [rung] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table

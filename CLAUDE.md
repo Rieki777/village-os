@@ -28,6 +28,57 @@ code carries no village's brand — that rule is enforced mechanically (see Gate
 `MODULES_MASTER_PLAN.md` Part 1 is known-stale; never trust it over code. The repo skill lives
 in `.claude/skills/`.
 
+## Starting a lane: make the worktree with the script
+
+```
+node scripts/new-worktree.mjs <name>
+```
+
+It makes `../wt-<name>` on `wt/<name>` off `origin/main`, copies a sibling's `.env`, installs,
+and prints the push command. `--dry-run` shows the plan, `--no-install` skips the install,
+`--base <ref>` branches from somewhere else.
+
+**Use it rather than `git worktree add` by hand.** On 2026-09-23 three separate branches were
+made by hand on the same day and all three carried the same defect, which is the tell that it
+is a property of the procedure rather than of anybody's care. The four traps it closes:
+
+- **THE INHERITED UPSTREAM, which reaches production.** `git worktree add -b wt/thing <path>
+  origin/main` sets the new branch's upstream to `origin/main`, so a later bare `git push`
+  pushes your commits TO MAIN, and merging to main deploys production here. Three near-misses
+  in one day, none of them fired, which is luck. `--no-track` means the upstream is never
+  created; the script passes it and then asks the question back, because a flag that silently
+  stopped working would leave exactly the state it exists to prevent. **If you ever do make one
+  by hand, check `git rev-parse --abbrev-ref --symbolic-full-name @{u}` before your first push.**
+- **A worktree under a temp directory is deleted while you work**, by Storage Sense. They live
+  beside the repository.
+- **No `.env` is a hollow green.** Without `TEST_DATABASE_URL` every database-backed suite
+  SKIPS, and a skip is not a pass. A fresh worktree without one reports a green that means
+  nothing.
+- **No `node_modules` is an empty test log.** A run in a tree that was never installed dies
+  before any test executes and prints no `Test Files` line at all, which reads like "nothing to
+  run" rather than "this never started". It has cost a red CI run.
+
+**Push by naming the refspec on both sides**, which is what the script prints:
+
+```
+git push origin refs/heads/wt/<name>:refs/heads/wt/<name>
+```
+
+There is no upstream to fall back on, which is the point, and this form says where it is going.
+
+**REMOVING a worktree can delete the SHARED `node_modules`, machine-wide** (ledger 27f). If its
+`node_modules` is a junction, `git worktree remove --force` FOLLOWS the junction and deletes out
+of the shared store; it once cost every lane on this machine `npx tsc` and `npx vitest` for
+twenty minutes. Unlink first, then remove:
+
+```
+cmd /c rmdir <worktree>\node_modules
+git worktree remove <worktree>
+```
+
+A worktree this script made has a real `node_modules` from `pnpm install` rather than a junction,
+so it is not the dangerous shape, and checking which one you have costs one `ls`.
+
 ## Gates — all of these before calling anything done
 
 The authoritative list is printed straight from the workflows themselves, so it is right on the
@@ -240,6 +291,11 @@ constant comes back.
   holds, the admin short-circuit does not apply, so a warning badge's deny beats an admin.
   The break-glass (`adminOverride`) passes only a FOUNDER seated in a live role carrying
   `steward.veto` (Rye, 2026-09-21; `BREAK_GLASS_SEAT`), and from anybody else it is refused.
+  A BADGE may not grant `steward.veto` (Rye, 2026-09-23; `BADGE_GRANTABLE`): the seat is the
+  only source, so an admin cannot mint a badge and give themselves a veto. Handing a
+  village-held power BACK to the panel is a village VOTE (Rye, 2026-09-23): the admin route
+  asks the gate and carries on only for a founder-steward who broke the glass, and everybody
+  else opens a `power_return` ballot.
   Do not restate the order from memory, and do not count its steps here: this bullet said
   SEVEN while the gate had eight, and before that `0f8d041` (2026-08-22) added the
   break-glass step and the bullet spent two weeks reading as authoritative and being wrong.

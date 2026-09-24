@@ -111,6 +111,26 @@ export interface SatelliteProvider {
    * makes the honest comparison possible in the admin screen.
    */
   groundResolutionM: number;
+  /**
+   * Whether `groundResolutionM` is a promise this provider keeps EVERYWHERE.
+   *
+   * For a satellite with one sensor it is: Sentinel-2 is ten metres over the
+   * whole earth. For a mosaic stitched from many surveys it is not. Esri World
+   * Imagery holds half-metre detail over a city and less over open country,
+   * and asking it for detail a place does not have answers HTTP 500 with an
+   * error page. Measured on 2026-09-24: Amora's coast refuses anything finer
+   * than 0.62 m per pixel and serves 0.667 happily, while the identical
+   * request over Manhattan returns 0.333 without complaint.
+   *
+   * So `groundResolutionM` is that provider's BEST, and true here means the
+   * fetch must be ready to be told no and ask again for less. See
+   * `pixelLadder`.
+   *
+   * It is deliberately not optional. A provider added later has to answer this
+   * question, and the answer costs a failed fetch for every village in open
+   * country when it is guessed wrong.
+   */
+  detailVariesByPlace: boolean;
   /** Build the request URL. Null when the provider is not fetched over HTTP. */
   buildUrl: ((req: ImageryRequest, key: string | null) => string) | null;
 }
@@ -137,6 +157,23 @@ export class NotAnImage extends Error {
 }
 
 /**
+ * Thrown when the provider was still thinking when the clock ran out.
+ *
+ * It EXTENDS `NotAnImage` deliberately, and the subclassing carries two
+ * meanings at once. The route already answers a `NotAnImage` by showing its
+ * message to the founder, so a slow provider stops arriving as the catch-all
+ * "could not be reached", which was a sentence that described a dead host and
+ * got shown for a live one. And `fetchAndCache` treats it as a reason to ask
+ * for a smaller picture, because a shorter render is the one lever there is.
+ */
+export class ProviderTooSlow extends NotAnImage {
+  constructor(ms: number) {
+    super(`The imagery provider was still working after ${Math.round(ms / 1000)} seconds.`);
+    this.name = "ProviderTooSlow";
+  }
+}
+
+/**
  * The village's own aerial photograph.
  *
  * No URL and no key: the bytes arrive through the ordinary upload path and
@@ -153,6 +190,8 @@ const VILLAGE_UPLOAD: SatelliteProvider = {
   licenceNote: "The village took the photograph and holds the copyright, so there is no third party licence to satisfy.",
   keyEnv: null,
   groundResolutionM: 0.05,
+  /* The village's own camera over the village's own land. There is no service to say no. */
+  detailVariesByPlace: false,
   buildUrl: null,
 };
 
@@ -165,6 +204,8 @@ const SENTINEL2: SatelliteProvider = {
     "Copernicus data is free and open for reproduction and distribution, including commercially, as long as the modification notice is shown.",
   keyEnv: "SENTINEL_WMS_URL",
   groundResolutionM: 10,
+  /* One sensor, ten metres, the whole earth. The figure holds wherever a village is. */
+  detailVariesByPlace: false,
   buildUrl: (req, key) => {
     // The endpoint is configuration and not a constant, because every route to
     // Sentinel-2 that does not require a personal account is a WMS somebody
@@ -196,6 +237,8 @@ const MAPBOX: SatelliteProvider = {
     "The Mapbox Product Terms forbid distributing map content from a cache, by proxying, or as a static image instead of calling the API directly. Storing a copy on this server and serving it is the case those terms name.",
   keyEnv: "MAPBOX_TOKEN",
   groundResolutionM: 0.5,
+  /* A tile API answers every zoom with a picture, upsampling past its detail instead of refusing. */
+  detailVariesByPlace: false,
   buildUrl: (req, key) => {
     const z = zoomFor(req.centre, req.spanM, req.pixels);
     const { lon, lat } = req.centre;
@@ -216,6 +259,8 @@ const GOOGLE: SatelliteProvider = {
     "The Google Maps Platform terms prohibit storing or caching map content, with one narrow exception for a temporary performance cache under 30 days that is explicitly not redistributed. Serving a stored copy to a village page is redistribution.",
   keyEnv: "GOOGLE_MAPS_STATIC_KEY",
   groundResolutionM: 0.5,
+  /* Same shape as Mapbox: a tile API answers, so there is no no to catch. */
+  detailVariesByPlace: false,
   buildUrl: (req, key) => {
     const z = zoomFor(req.centre, req.spanM, req.pixels);
     const params = new URLSearchParams({
@@ -239,6 +284,8 @@ const ESRI: SatelliteProvider = {
     "Esri World Imagery is governed by the Esri Master Licence Agreement, and the standard layer is not intended for exporting tiles to hold offline. Esri publishes a separate export layer, which is a licensing conversation and not an API key.",
   keyEnv: "ESRI_API_KEY",
   groundResolutionM: 0.5,
+  /* A mosaic of many surveys, so 0.5 is its best and not its promise. See the flag's note. */
+  detailVariesByPlace: true,
   buildUrl: (req, key) => {
     const b = boundsFor(req.centre, req.spanM);
     const params = new URLSearchParams({
@@ -286,6 +333,8 @@ const ESRI_OPEN: SatelliteProvider = {
     "Kept by a deployment owner's decision. This project is open source and treats its own use of the public World Imagery export endpoint as acceptable for itself. That is a policy choice made here on 2026-09-19, and it is not a licence grant. The keyed `esri` entry above records the stricter reading and is unchanged. A fork that has not made the same decision should leave this provider unnamed.",
   keyEnv: null,
   groundResolutionM: 0.5,
+  /* The same World Imagery service as the keyed entry above, with the same varying detail. */
+  detailVariesByPlace: true,
   buildUrl: (req) => {
     const b = boundsForAspect(req.centre, req.spanM, MAP_WORLD_ASPECT);
     /*
@@ -317,6 +366,94 @@ export const PROVIDERS: readonly SatelliteProvider[] = [
   GOOGLE,
   ESRI,
 ];
+
+/**
+ * The widest picture this platform will ask any provider for, and keep.
+ *
+ * 2400 is not arbitrary: it is the width of the plate baked into the map
+ * artifact, which covers 2592 m, so a village framed like that one gets
+ * 1.08 m per pixel and a fetched picture is as sharp as the one the map
+ * already draws. Before this, every fetch asked for 1024 whatever the span,
+ * which for that frame is 2.53 m per pixel: a founder who fetched their own
+ * land got a picture visibly softer than the seed they were replacing.
+ */
+export const MAX_IMAGE_PIXELS = 2400;
+
+/**
+ * Small enough that a tiny parcel does not pay for pixels, large enough that
+ * an image is still worth looking at. Only a very coarse provider over a very
+ * small parcel can reach it.
+ */
+export const MIN_IMAGE_PIXELS = 256;
+
+/**
+ * How many pixels to ask this provider for, to cover `spanM` of ground.
+ *
+ * NEVER MORE THAN THE PROVIDER CAN RESOLVE. Asking Sentinel-2, at ten metres
+ * per pixel, for a 2400-wide image of a 2592 m village is asking for ten times
+ * the detail that exists: the answer is an upscale, five times the bytes, and
+ * a picture that LOOKS like it resolves a greenhouse and does not. This map
+ * may not present invented detail as real, and a resampled pixel is invented
+ * detail with a filename.
+ *
+ * So the ask is the ground divided by what the provider actually resolves,
+ * capped at what this platform will store. For a 0.5 m provider over 2592 m
+ * that is 5184, capped to 2400. For Sentinel-2 over the same ground it is
+ * 259, which is the honest size of what Copernicus has.
+ */
+export function pixelsFor(provider: SatelliteProvider, spanM: number): number {
+  const span = Number.isFinite(spanM) && spanM > 0 ? spanM : 0;
+  const res = provider.groundResolutionM > 0 ? provider.groundResolutionM : 1;
+  const native = Math.round(span / res);
+  return Math.max(MIN_IMAGE_PIXELS, Math.min(MAX_IMAGE_PIXELS, native));
+}
+
+/**
+ * Each step down is a quarter less detail, which lands near the tile levels a
+ * mosaic is actually cut at without throwing away half the sharpness the way
+ * halving would. From 0.5 m per pixel the rungs are 0.67, 0.89, 1.19, 1.58.
+ */
+export const COARSER_STEP = 0.75;
+
+/** How many times to accept being told no before giving up. */
+export const COARSER_ATTEMPTS = 4;
+
+/**
+ * The smallest image worth keeping, which is BELOW `MIN_IMAGE_PIXELS` on
+ * purpose.
+ *
+ * That floor exists so a small parcel is not served a thumbnail when a real
+ * picture is available. Down here the question is different: the place holds
+ * no finer detail, so a small real picture is the only picture there is, and
+ * refusing it would leave the founder with nothing over a rule about comfort.
+ */
+export const FLOOR_IMAGE_PIXELS = 64;
+
+/**
+ * The sizes to ask for, finest first, stopping at the first one that answers.
+ *
+ * A provider whose detail is the same everywhere gets a list of one, so
+ * nothing about its behaviour changes and no second request is ever spent on
+ * it. That matters for the keyed providers, where a retry is a charge.
+ *
+ * For a mosaic the list is the whole point. Esri answers HTTP 500 when asked
+ * for detail a place does not hold, so the first ask can fail for a reason
+ * that has nothing to do with the request being wrong: Amora's own coast
+ * refuses 0.5 m per pixel, which is exactly what `pixelsFor` computes for it.
+ * Before this, every village in open country got a failed fetch and an error
+ * naming somebody else's status code.
+ */
+export function pixelLadder(provider: SatelliteProvider, pixels: number): number[] {
+  const first = Math.max(FLOOR_IMAGE_PIXELS, Math.round(pixels));
+  if (!provider.detailVariesByPlace) return [first];
+  const rungs = [first];
+  for (let i = 0; i < COARSER_ATTEMPTS; i += 1) {
+    const next = Math.round(rungs[rungs.length - 1] * COARSER_STEP);
+    if (next < FLOOR_IMAGE_PIXELS || next >= rungs[rungs.length - 1]) break;
+    rungs.push(next);
+  }
+  return rungs;
+}
 
 export function providerById(id: string | null | undefined): SatelliteProvider | null {
   if (!id) return null;
@@ -375,8 +512,37 @@ export function configuredProvider(env: NodeJS.ProcessEnv = process.env): Provid
 /** How big a satellite image this platform will accept, in bytes. */
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
-/** How long to wait on a provider before giving up, in milliseconds. */
-export const FETCH_TIMEOUT_MS = 20000;
+/**
+ * How long to wait on one ask, in milliseconds.
+ *
+ * THIS WAS 20000 AND IT WAS SIZED FOR A PICTURE WE NO LONGER ASK FOR. When
+ * `MAX_IMAGE_PIXELS` went from 1024 to 2400 the ask grew about five and a half
+ * times in pixels and five times in bytes, and the export endpoint RENDERS on
+ * demand, so a bigger ask is a longer wait and not only a bigger download.
+ * The timeout was left where it was.
+ *
+ * Measured against the live service on 2026-09-24, the same 2400 px request
+ * four times running: 12.7 s, 24.8 s, 29.5 s, 27.2 s. Three of the four were
+ * over the old ceiling. That is a founder pressing Fetch on a correctly
+ * configured village and being told the provider could not be reached, on a
+ * request that was working and slow.
+ *
+ * 45 s is half again beyond the worst of those four. The whole staircase is
+ * bounded separately by `LADDER_BUDGET_MS`, so a generous single wait cannot
+ * turn into five of them.
+ */
+export const FETCH_TIMEOUT_MS = 45000;
+
+/**
+ * How long the whole ladder may take before it stops asking.
+ *
+ * A slow answer is a reason to ask for LESS, because a smaller picture is a
+ * shorter render, and a village on a thin rural connection is exactly who
+ * needs that. So a timeout steps down instead of ending the attempt. The
+ * budget is what stops that being five long waits in a row: once this much has
+ * gone by, whatever rung is next does not get asked.
+ */
+export const LADDER_BUDGET_MS = 100000;
 
 export type Fetcher = (url: string, init: { signal: AbortSignal }) => Promise<{
   ok: boolean;
@@ -397,15 +563,41 @@ export type Fetcher = (url: string, init: { signal: AbortSignal }) => Promise<{
 export async function fetchImageBytes(
   url: string,
   fetcher: Fetcher = globalThis.fetch as unknown as Fetcher,
+  /*
+   * Overridable ONLY so a test can reach the timeout branch. A suite that
+   * waited out the real 45 seconds would be skipped by whoever ran it next,
+   * and the branch this parameter exists to cover is the one that shipped
+   * broken: a slow provider read as an unreachable one.
+   */
+  timeoutMs: number = FETCH_TIMEOUT_MS,
 ): Promise<Buffer> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    /*
+     * The flag is set BEFORE the abort, so that by the time the rejection is
+     * caught below it is already true. Asking `controller.signal.aborted`
+     * instead would answer true for a caller's own cancellation as well, and
+     * those two want opposite handling.
+     */
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  /*
+   * The clock can run out at either await, and a big picture makes the SECOND
+   * one the likely place: the headers come back quickly and the megabyte after
+   * them is what takes the time. Both are wrapped for that reason.
+   */
+  const whileWaiting = (err: unknown): never => {
+    if (timedOut) throw new ProviderTooSlow(timeoutMs);
+    throw err;
+  };
   try {
-    const res = await fetcher(url, { signal: controller.signal });
+    const res = await fetcher(url, { signal: controller.signal }).catch(whileWaiting);
     if (!res.ok) {
       throw new NotAnImage(`The imagery provider answered ${res.status}.`);
     }
-    const buf = Buffer.from(await res.arrayBuffer());
+    const buf = Buffer.from(await res.arrayBuffer().catch(whileWaiting));
     if (buf.length > MAX_IMAGE_BYTES) {
       throw new NotAnImage(
         `The image came back at ${Math.round(buf.length / 1024)} kB, over the ${Math.round(MAX_IMAGE_BYTES / 1024)} kB ceiling.`,
@@ -426,6 +618,18 @@ export interface CachedImage {
   filename: string;
   bytes: number;
   attribution: string;
+}
+
+/**
+ * A picture that was fetched as well as kept, so it knows what it cost.
+ *
+ * `pixels` is the rung that answered, which is the first ask for most places
+ * and a coarser one where the provider held less detail. The screen says it
+ * back to the founder, because "kept at 1.3 m per pixel" is the difference
+ * between a picture that looks soft and a picture that IS the ground.
+ */
+export interface FetchedImage extends CachedImage {
+  pixels: number;
 }
 
 /**
@@ -480,7 +684,7 @@ export async function fetchAndCache(
   request: ImageryRequest,
   uploadsDir: string,
   options: { fetcher?: Fetcher; env?: NodeJS.ProcessEnv } = {},
-): Promise<CachedImage> {
+): Promise<FetchedImage> {
   const env = options.env ?? process.env;
   const { provider, ready, key } = status;
   if (!provider) throw new NotAnImage("No imagery provider is configured for this village.");
@@ -493,6 +697,70 @@ export async function fetchAndCache(
     throw new LicenceForbidsCaching(provider.label, provider.licenceNote);
   }
   if (!ready) throw new NotAnImage(`${provider.label} is selected and its key is not set.`);
-  const bytes = await fetchImageBytes(provider.buildUrl(request, key), options.fetcher);
-  return cacheAsUpload(provider, bytes, uploadsDir, env);
+
+  /*
+   * ASK FINEST FIRST, AND ACCEPT BEING TOLD NO.
+   *
+   * Only a `NotAnImage` is worth another ask: that is the provider answering,
+   * with a status or a body that says this request was too much. A timeout or
+   * a dropped socket is the network, and walking the whole ladder on those
+   * would spend five twenty-second waits to arrive at the same place, so the
+   * loop stops on the first failure that is not the provider's own answer.
+   */
+  const rungs = pixelLadder(provider, request.pixels);
+  const started = Date.now();
+  let bytes: Buffer | null = null;
+  let kept = rungs[0];
+  let asked = 0;
+  let refusal: NotAnImage | null = null;
+  for (const pixels of rungs) {
+    if (asked > 0 && Date.now() - started > LADDER_BUDGET_MS) break;
+    asked += 1;
+    try {
+      bytes = await fetchImageBytes(provider.buildUrl({ ...request, pixels }, key), options.fetcher);
+      kept = pixels;
+      break;
+    } catch (err) {
+      if (!(err instanceof NotAnImage)) throw err;
+      refusal = err;
+    }
+  }
+  if (!bytes) throw ladderRanOut(request.spanM, rungs.slice(0, asked), refusal);
+  return { ...(await cacheAsUpload(provider, bytes, uploadsDir, env)), pixels: kept };
 }
+
+/**
+ * What to say when every ask came back no.
+ *
+ * The two reasons want different sentences, and giving one sentence for both
+ * is how this route came to tell a founder their provider was unreachable
+ * when it was answering fine and slowly:
+ *
+ *   TOO SLOW. The place may hold all the detail in the world. Nothing the
+ *   founder types will change that today, so the honest advice is the clock.
+ *
+ *   REFUSED. The service answered, and what it said is that this place has no
+ *   picture this fine. A wider frame asks for coarser ground per pixel, which
+ *   is a lever the founder does hold.
+ *
+ * A single-rung provider keeps its own message either way, because no stepping
+ * down happened and there is nothing to add to what it said.
+ *
+ * Kept short on purpose. `recordParcelImageryError` clips at 255 characters,
+ * which is the width of the column, so a longer sentence loses its own ending.
+ */
+function ladderRanOut(spanM: number, asked: number[], refusal: NotAnImage | null): NotAnImage {
+  if (asked.length < 2 || !refusal) {
+    return refusal ?? new NotAnImage("The imagery provider sent nothing this platform could keep.");
+  }
+  if (refusal instanceof ProviderTooSlow) {
+    return new NotAnImage(
+      `${refusal.message} It was asked ${asked.length} times, each one smaller than the last. The service is slow right now, so the same button in a few minutes usually works.`,
+    );
+  }
+  const coarsest = (spanM / asked[asked.length - 1]).toFixed(1);
+  return new NotAnImage(
+    `No picture of this place at the detail asked for. It was asked ${asked.length} times, down to ${coarsest} m per pixel, and refused each time. A wider frame is the usual fix: this source holds less detail over open country than over a city.`,
+  );
+}
+

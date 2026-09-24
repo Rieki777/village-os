@@ -63,7 +63,7 @@ import type { CarriedUnseating } from "../repos/stewardshipBallots";
 import { capabilityDecision } from "../../shared/capabilities";
 import { NOTIFICATION_KINDS } from "../../shared/notificationKinds";
 import { badgeProblem } from "./badges";
-import { stewardSeatRefusal, STEWARD_SEAT_REFUSAL } from "./roleGrants";
+import { liveHoldersOfCapability, stewardSeatRefusal, STEWARD_SEAT_REFUSAL } from "./roleGrants";
 import { ALL_CAPABILITIES, CAPABILITY_LABELS, TRANSFERABLE, DENIABLE } from "../../shared/capabilities";
 import { CAPABILITY_CONSEQUENCE } from "../../shared/draftKinds";
 import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
@@ -571,6 +571,58 @@ describe("the capability, in all five places", () => {
     });
     expect(problem).toBeTruthy();
     expect(String(problem)).toContain(CAPABILITY_LABELS[STEWARD_VETO]);
+  });
+
+  /*
+   * THE OTHER HALF OF THE SAME DOOR, and it stood open for as long as the
+   * deny half was shut (Rye, 2026-09-23: seats only, "so that an admin cannot
+   * mint a badge and give themselves a veto").
+   *
+   * `stewardSeatRefusal` fences the two ROLES routes and roleGrants.ts opened
+   * by claiming the key was ungrantable "by any admin route". The badge panel
+   * is an admin route: `POST /api/admin/badges` took
+   * `capabilities: ["steward.veto"]`, `badgeProblem` checked only that the
+   * key was known, and step 4 of the gate answered yes for it. So an admin
+   * could mint a badge, award it to themselves and veto a carried decision.
+   *
+   * Verified red by flipping BADGE_GRANTABLE["steward.veto"] to true: the
+   * decision below reads "badge" and `badgeProblem` returns null.
+   */
+  it("cannot be granted by a badge either, and the sentence names where the seat is filled", () => {
+    const granted = capabilityDecision(STEWARD_VETO, {
+      stageIndex: 0,
+      stageIndexOf: () => -1,
+      roleCapabilities: [],
+      badgeCapabilities: [STEWARD_VETO],
+    });
+    expect(granted.allowed).toBe(false);
+    expect(granted.source).toBe("not granted");
+
+    const problem = badgeProblem({
+      kind: "granted",
+      capabilities: [STEWARD_VETO],
+      denies: [],
+      rule: null,
+    });
+    expect(problem).toBeTruthy();
+    expect(String(problem)).toContain(CAPABILITY_LABELS[STEWARD_VETO]);
+    expect(String(problem)).toContain("role_seat");
+    expect(String(problem)).toContain("role_unseat");
+  });
+
+  it("is not counted as held by a badge, so the counter and the gate cannot disagree", () => {
+    // `liveHoldersOfCapability` walks the gate's own planes. A counter that
+    // added a badge holder the gate refuses would report that somebody could
+    // veto while the veto route turned them away.
+    const holders = liveHoldersOfCapability([], [], STEWARD_VETO, new Date(), {
+      "u-1": { grants: [STEWARD_VETO] },
+    });
+    expect(holders).toEqual([]);
+    // The same badge on an ordinary key still counts, so this is a fence and
+    // not the badge plane being dropped from the count.
+    expect(
+      liveHoldersOfCapability([], [], "library.keep", new Date(), { "u-1": { grants: ["library.keep"] } }),
+    ).toEqual(["u-1"]);
   });
 });
 

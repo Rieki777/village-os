@@ -367,6 +367,26 @@ export function register(app: Express, deps: Deps): void {
       holds: holdsOnPropose(),
       confirmedBy: await confirmMode(),
       votePathBuilt: VOTE_PATH_BUILT,
+      /*
+       * WHETHER TO ASK, and never whether they may act.
+       *
+       * The steward queue used to find out by requesting the admin route and
+       * reading the refusal, so every ordinary member's wallet fired
+       * `GET /api/admin/redemptions` and took a 401 on every load. The screen
+       * was right and the wire was not: ruling 28 (2026-09-21) is that a
+       * permanent 401 on an ordinary page is noise nobody wants, and a member
+       * who simply does not hold a key has not failed to authenticate.
+       *
+       * This is a HINT for the client's next request, not a permission. The
+       * gate is still `guardCapability` on the admin route, so a hint that is
+       * wrong in the permissive direction costs one refused request and grants
+       * nothing. Wrong in the RESTRICTIVE direction is the expensive one, and
+       * it is why the admin short-circuit is added back here: the holder list
+       * deliberately leaves admins out (see redemptionKeyHolders), and a
+       * founder who stopped seeing the queue would be a real loss.
+       */
+      mayConfirm: user.role === "admin" || user.role === "founder"
+        || (await redemptionKeyHolders().catch(() => [] as string[])).includes(String(user.id)),
       perCycle,
       openedThisCycle,
       // ONE RESOLUTION PER TOKEN, so the form can show what each is worth

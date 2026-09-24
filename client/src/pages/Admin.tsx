@@ -41,15 +41,19 @@ import { CIRCLE_STATUSES } from "@shared/draftKinds";
 import TypographyPanel from "@/components/TypographyPanel";
 import LookPanel from "@/components/LookPanel";
 import IdentityPackPanel from "@/components/IdentityPackPanel";
-import MapSkinPanel from "@/components/MapSkinPanel";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import LandTab from "@/components/admin/LandTab";
-import MapVocabularyPanel from "@/components/admin/MapVocabularyPanel";
+import GameRolesTab from "@/components/admin/GameRolesTab";
 import ArchetypesPanel from "@/components/admin/ArchetypesPanel";
 import EventsAdminPanel from "@/components/EventsAdminPanel";
 import ResourcesAdminPanel from "@/components/power/ResourcesAdminPanel";
 import { CrowdpoolAdminTab, ForumCategoriesEditor, ToolsCategoriesEditor } from "@/components/admin/ModuleConfigPanels";
 import ModuleSettingsSection from "@/components/admin/ModuleSettingsSection";
+import { useModuleDeepLink } from "@/components/admin/moduleDeepLink";
+import SetupNeeded from "@/components/modules/SetupNeeded";
+import VillageAnswers from "@/components/admin/VillageAnswers";
+import CurrencyAnswerNote from "@/components/admin/CurrencyAnswerNote";
+import SeasonTimezoneField from "@/components/admin/SeasonTimezoneField";
 import { CONTENT_SECTIONS, emptyContentFor } from "@/components/admin/contentSections";
 import { displayCurrencyProblem } from "@shared/money";
 import { formatTokenAmount } from "@/lib/tokenAmount";
@@ -70,7 +74,6 @@ import VotingWeightsPanel from "@/components/admin/VotingWeightsPanel";
 import NeedsPanel, { NeedsSetupStep, useNeedsSetupObservation } from "@/components/admin/NeedsPanel";
 import RelationsEditor from "@/components/admin/RelationsEditor";
 import HousingAdminPanel from "@/components/HousingAdminPanel";
-import WalkEditorPanel from "@/components/WalkEditorPanel";
 import { ExampleChip, ExamplesBanner, forgetExamplesCache, RETIRES_WITH } from "@/components/ExamplesBanner";
 // visit-inquiry and membership-508 were missing, and they are the two highest-value
 // submissions on the site: a request to walk the land, and a signed 508(c)(1)(a)
@@ -901,6 +904,9 @@ export function SubmissionsTab({ password }: { password: string }) {
       const data = await res.json();
       if (!res.ok) throw new Error();
       if (data.rewarded) toast.success("Accepted. The member was welcomed into the game.");
+      else if (data.admitted) toast.success("Accepted. They hold membership now.");
+      // A stranger signed with no account, so the accept stands and admits nobody.
+      else if (data.admitted === false) toast.success("Accepted. This signing carries no account, so nobody was admitted. Invite them to join.");
       // Whether the person who sent this heard about the move. Members hear;
       // a public form filled in by a stranger has no account to reach, and a
       // founder who knows which is which can pick up the phone.
@@ -3479,110 +3485,6 @@ function PlayersTab({ password }: { password: string }) {
   );
 }
 
-// ── Game Admin: Role appointments (S3 — no more curl) ────────────────────────
-
-function GameRolesTab({ password }: { password: string }) {
-  const [roles, setRoles] = useState<any[]>([]);
-  const [players, setPlayers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [rRes, pRes] = await Promise.all([
-        fetch(`${API_BASE}/roles`, { headers: authHeaders(password) }),
-        fetch(`${API_BASE}/admin/players`, { headers: authHeaders(password) }),
-      ]);
-      const r = await rRes.json();
-      const p = await pRes.json();
-      setRoles(Array.isArray(r) ? r : []);
-      setPlayers(Array.isArray(p) ? p : []);
-    } catch { setRoles([]); }
-    setLoading(false);
-  }, [password]);
-
-  useEffect(() => { load(); }, [load]);
-
-  // `termEndsOn` empty sends no date: the seat ends with the season (0199).
-  const change = async (roleId: string, userId: string, action: "add" | "remove", termEndsOn = ""): Promise<boolean> => {
-    try {
-      const res = await fetch(`${API_BASE}/admin/roles/${roleId}/holders`, {
-        method: "POST",
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ userId, action, ...(termEndsOn ? { termEndsOn } : {}) }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(refusal(data, "failed"));
-      toast.success(action === "add" ? "Appointed" : "Removed");
-      load();
-      return true;
-    } catch (e: any) {
-      // The stage-floor and term refusals come back as sentences written for humans; show them verbatim.
-      toast.error(e?.message || "Change failed");
-      return false;
-    }
-  };
-
-  return (
-    <div>
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-gray-900">Game Roles</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          Appoint and remove role holders. Appointments respect each role's stage
-          floor; role grants are one of the two ways a member gains capabilities.
-        </p>
-      </div>
-      {loading ? <div className="text-center py-12 text-gray-400">Loading...</div> : roles.length === 0 ? (
-        <p className="text-sm text-gray-400">No roles defined yet.</p>
-      ) : (
-        <div className="space-y-4">
-          {roles.map((r) => (
-            <div key={r.id} className="border border-gray-200 rounded-xl p-5">
-              <div className="flex flex-wrap items-start justify-between gap-3 mb-2">
-                <div>
-                  <h3 className="font-semibold text-gray-900">{r.name}</h3>
-                  {r.description && <p className="text-sm text-gray-500 mt-0.5 max-w-xl">{r.description}</p>}
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {r.minStage && (
-                    <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">
-                      stage ≥ {r.minStage}
-                    </span>
-                  )}
-                  {(r.capabilities ?? []).map((c: string) => (
-                    <span key={c} className="text-xs bg-teal-deep/10 text-teal-deep px-2 py-0.5 rounded-full font-mono">
-                      {c}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 mt-3">
-                {(r.holders ?? []).length === 0 && (
-                  <span className="text-xs text-gray-400 italic">Vacant, an open call</span>
-                )}
-                {(r.holders ?? []).map((h: any) => (
-                  <span key={h.userId} className="inline-flex items-center gap-1.5 text-xs bg-gray-100 text-gray-700 pl-2.5 pr-1 py-1 rounded-full">
-                    {h.name}
-                    <button
-                      onClick={() => change(r.id, h.userId, "remove")}
-                      title="Remove from this role"
-                      className="w-4 h-4 rounded-full hover:bg-gray-300 text-gray-500 flex items-center justify-center"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-                <AppointToRole role={r} players={players} onAppoint={(userId, termEndsOn) => change(r.id, userId, "add", termEndsOn)} />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Modules (S13): the catalog, lifecycles, and the Hypha integration card ───
 //
 // BUILDER_GUIDE_URL and POOL_REASON_COPY moved to shared/moduleCatalog.ts
@@ -3600,7 +3502,7 @@ const LIFECYCLE_HINT: Record<ModuleLifecycle, string> = {
   public: "Everyone. Capability gates still apply.",
 };
 
-function ModulesTab({ password }: { password: string }) {
+export function ModulesTab({ password }: { password: string }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string>("");
@@ -3616,21 +3518,12 @@ function ModulesTab({ password }: { password: string }) {
   /**
    * Which listing has its SETTINGS open, and the deep link that opens one.
    *
-   * `/admin?tab=modules&module=<id>` is the address Game Mechanics sends a
-   * founder to for a group of dials that lives on a card now, so the link has
-   * to land on the settings rather than on the catalog.
+   * `/admin?tab=modules&module=<id>&setting=<key>` is the address Game
+   * Mechanics and every setup hint send a founder to, so the link lands on the
+   * settings, and on the one dial where it names one. The reading lives in
+   * `moduleDeepLink.ts`; this file is on a line ratchet that only turns down.
    */
-  const [settingsId, setSettingsId] = useState<string | null>(() => {
-    try {
-      return new URLSearchParams(window.location.search).get("module");
-    } catch {
-      return null;
-    }
-  });
-  useEffect(() => {
-    if (loading || !settingsId) return;
-    document.getElementById(`module-card-${settingsId}`)?.scrollIntoView?.({ block: "start" });
-  }, [loading, settingsId]);
+  const { settingsId, setSettingsId, focusKey, setFocusKey, clearFocusKey } = useModuleDeepLink(!loading);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -4180,6 +4073,18 @@ function ModulesTab({ password }: { password: string }) {
                     </div>
                   )}
                 </div>
+                {/* What this module is still waiting for, at every lifecycle,
+                    with the link to the control. The Go-live card only speaks
+                    in preview and this card said nothing at all, so a village
+                    already live could never be told. */}
+                <SetupNeeded
+                  moduleId={m.id}
+                  setup={m.setup ?? "none"}
+                  ready={m.ready}
+                  lifecycle={String(m.served ?? m.lifecycle ?? "off")}
+                  className="mt-3"
+                  onOpen={({ moduleId, settingKey }) => { setSettingsId(moduleId); setFocusKey(settingKey); }}
+                />
                 {!m.core && m.lifecycle !== "off" && (
                   <p className="text-xs text-gray-600 mt-3">
                     {/* `m` is the untyped catalog row, so the cast is where the
@@ -4201,6 +4106,8 @@ function ModulesTab({ password }: { password: string }) {
                     lifecycle={String(m.served ?? m.lifecycle ?? "off")}
                     moduleNames={Object.fromEntries(all.map((x: any) => [x.id, x.name]))}
                     password={password}
+                    focusKey={focusKey}
+                    onFocused={clearFocusKey}
                   />
                 )}
 
@@ -8885,7 +8792,7 @@ const CADENCES = [
   { value: "custom", label: "Custom / set by hand" },
 ];
 
-function SeasonTab({ password }: { password: string }) {
+export function SeasonTab({ password }: { password: string }) {
   const [cfg, setCfg] = useState<any>(null);
   const [saving, setSaving] = useState(false);
 
@@ -8898,13 +8805,13 @@ function SeasonTab({ password }: { password: string }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const save = async () => {
+  const save = async (extra: Record<string, unknown> = {}) => {
     setSaving(true);
     try {
       const res = await fetch(`${API_BASE}/admin/seasons`, {
         method: "PUT",
         headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ seasons: cfg.seasons, cadence: cfg.cadence, timezone: cfg.timezone }),
+        body: JSON.stringify({ seasons: cfg.seasons, cadence: cfg.cadence, timezone: cfg.timezone, ...extra }),
       });
       if (!res.ok) throw new Error();
       toast.success("Seasons saved");
@@ -8938,7 +8845,8 @@ function SeasonTab({ password }: { password: string }) {
             whichever season covers today. Queue the next one and it hands over by itself.
           </p>
         </div>
-        <button onClick={save} disabled={saving} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50 shrink-0">
+        {/* Arrow, not `save` itself: it takes body fields now, and onClick would pass the event as one. */}
+        <button onClick={() => save()} disabled={saving} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50 shrink-0">
           {saving ? "Saving..." : "Save"}
         </button>
       </div>
@@ -8962,17 +8870,13 @@ function SeasonTab({ password }: { password: string }) {
           </select>
           <p className="text-[11px] text-gray-400 mt-1">Used to suggest dates for the next season.</p>
         </div>
-        <div>
-          <label className="text-sm font-medium text-gray-700 block mb-1">Timezone</label>
-          <input
-            type="text"
-            value={cfg.timezone ?? ""}
-            onChange={(e) => setCfg({ ...cfg, timezone: e.target.value })}
-            placeholder="America/Costa_Rica"
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg"
-          />
-          <p className="text-[11px] text-gray-400 mt-1">A season turns at midnight where the village is.</p>
-        </div>
+        <SeasonTimezoneField
+          value={cfg.timezone ?? ""}
+          answered={!!cfg.timezoneAnswer}
+          saving={saving}
+          onChange={(timezone) => setCfg({ ...cfg, timezone })}
+          onConfirm={() => save({ confirmTimezone: true })}
+        />
       </div>
 
       <div className="space-y-4">
@@ -9344,6 +9248,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
             site is quoted in, and what a member sees before choosing their own display currency.
           </p>
         )}
+        <CurrencyAnswerNote answered={!!code} />
       </div>
     );
   };
@@ -9540,12 +9445,30 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
         <ArchetypesPanel password={password} />
       </SetupSection>
 
-      <SetupSection {...step} id="map" n={6} title="Map & styling" subtitle="How the Living Map draws your land. Blank keeps the map's own look.">
-        <MapSkinPanel password={password} />
-        <WalkEditorPanel password={password} />
-        {/* The vocabulary route has been live since the map shipped and its
-            only caller was a CLI importer. This is its first door. */}
-        <MapVocabularyPanel password={password} />
+      {/*
+        * THE EDITORS LEFT THIS PAGE ON 2026-09-23. A founder styling their
+        * land wants to watch it change while they decide, which a wizard step
+        * cannot do. All three now open from the map's own dock, under the
+        * Village Settings button the artifact already carried, and that button
+        * used to send a founder HERE: the trip was a round one.
+        *
+        * The panels moved without changing, which is what makes this a link
+        * and not a rewrite (map/VillageSettingsDoor.tsx mounts the same
+        * three). The step stays because a missing step six reads as one
+        * somebody forgot.
+        */}
+      <SetupSection {...step} id="map" n={6} title="Map & styling" subtitle="How the Living Map draws your land. The editors live on the map itself.">
+        <p className="text-sm text-gray-600 mb-4">
+          Your colours, the welcome walk and the village's own words for roads, water and zones are all
+          edited on the map. Open the land and use the Village Settings button on the map's dock: the map
+          repaints as you save, so you see every change where it lands.
+        </p>
+        <Link
+          href="/map"
+          className="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-deep"
+        >
+          Open the map
+        </Link>
       </SetupSection>
 
       <SetupSection {...step} id="technical" n={7} title="Go live" subtitle="One-time technical setup. Hand these to your developer or Claude Code.">
@@ -10148,6 +10071,8 @@ export default function Admin() {
               filter, so the rail and the card ride one fetch. */}
           <AdminGoLive token={password} moduleId={TAB_MODULE[activeTab] ?? null}
             onLifecycles={(m) => setModuleLifecycles(m as Record<string, ModuleLifecycle>)} />
+          {/* The two facts only this village can state. VillageAnswers.tsx says why it outlives the checklist. */}
+          <VillageAnswers password={password} />
           {activeTab === "setup" && <SetupWizard password={password} onOpenTab={setActiveTab} />}
           {activeTab === "events-admin" && <EventsAdminPanel password={password} />}
           {activeTab === "submissions" && <SubmissionsTab password={password} />}

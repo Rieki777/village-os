@@ -50,8 +50,9 @@ export const LONGTEXT_MAX = 4000;
  *      value that round-trips through the database with a carriage return in
  *      it compares unequal to the same words typed on a Mac. `setVariable`
  *      stores deltas only and DELETES the row when the value equals the
- *      platform default, so an invisible CR is the difference between a
- *      village inheriting future defaults and being frozen on today's.
+ *      platform default (except for a `placeDependent` dial, which keeps its
+ *      row on purpose), so an invisible CR is the difference between a village
+ *      inheriting future defaults and being frozen on today's.
  *   2. Control characters go, and newlines and tabs stay. A NUL or an escape
  *      sequence in a value that is rendered to members is never something a
  *      person typed on purpose; \n and \t are, and they are the whole reason
@@ -120,6 +121,33 @@ export interface VariableDef {
   ring?: VariableRing;
   /** Apply-timing override. Absent = derived by applyTimingOf(). */
   applyTiming?: VariableApplyTiming;
+  /**
+   * THIS DIAL'S DEFAULT DEPENDS ON WHERE THE VILLAGE IS, so the platform's
+   * value is a starting guess and never an answer.
+   *
+   * `calendar.hemisphere` is the case that named the field. It ships "north",
+   * which is right for a village in Costa Rica and silently upside down for
+   * one south of the equator: the solstices swap over and the moon is lit on
+   * the other side. Nothing in the product could tell the two apart, because a
+   * village that never looked and a village that looked and agreed both leave
+   * the same trace, which is none.
+   *
+   * TWO THINGS FOLLOW, and they are the whole field.
+   *
+   *   1. `setVariable` KEEPS THE ROW for a flagged dial even when the value
+   *      equals the default, so the row itself is the fossil of a choice —
+   *      the same rule `decidedModuleIds` already reads a module_settings row
+   *      by. `storedOverride(key) !== undefined` is then "somebody here
+   *      answered this", which is a question no value comparison can answer.
+   *   2. The module that owns it may not say `setup: "none"`. A fork is owed
+   *      the question, and shared/moduleCatalog.test.ts holds that pairing.
+   *
+   * The cost is small and named: a flagged dial stops inheriting a later
+   * platform default once it is answered. That is correct here rather than
+   * regrettable, because the answer is a fact about the village, not an
+   * opinion the platform is entitled to revise.
+   */
+  placeDependent?: true;
   /**
    * HOW CRITICAL THIS DIAL IS, and therefore how much of the village has to
    * show up and agree before it moves (the founder's ruling of 2026-09-02,
@@ -2625,6 +2653,12 @@ export const VARIABLES: VariableDef[] = [
       "Which way the seasons turn. Sets which solstice is the longest day and which the shortest, and rotates the example moon names by six months for a village south of the equator.",
     type: "choice",
     default: "north",
+    // The dial `placeDependent` was written for: "north" is where the platform
+    // starts, and only a village can say whether it is true of them. Keeping
+    // the row (server/lib/variables.ts) is what lets the calendar tell an
+    // answer from a silence, and the events module's readiness reads exactly
+    // that (server/lib/modules.ts).
+    placeDependent: true,
     choices: [
       { value: "north", label: "Northern" },
       { value: "south", label: "Southern" },

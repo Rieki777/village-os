@@ -31,6 +31,14 @@ import {
   providerById,
   type Fetcher,
 } from "./satellite";
+import { pixelsFor, MAX_IMAGE_PIXELS, MIN_IMAGE_PIXELS } from "./satellite";
+import {
+  COARSER_ATTEMPTS,
+  FETCH_TIMEOUT_MS,
+  FLOOR_IMAGE_PIXELS,
+  ProviderTooSlow,
+  pixelLadder,
+} from "./satellite";
 
 const CR = { lat: 9.2345, lon: -83.8412 };
 const REQUEST = { centre: CR, spanM: 800, pixels: 512 };
@@ -327,5 +335,214 @@ describe("the keyless Esri entry is a decision, kept apart from the licence read
     if (!open) throw new Error("esri-open missing");
     const url = new URL(open.buildUrl!({ centre: { lat: 9.2, lon: -83.8 }, spanM: 800, pixels: 512 }, null));
     expect(url.searchParams.get("token")).toBeNull();
+  });
+});
+describe("how many pixels to ask a provider for", () => {
+  /* The seed plate's frame: 2592 m across, drawn 2400 px wide, so 1.08 m/px. */
+  const SEED_SPAN = 2592;
+  const res = (id: string) => providerById(id)!;
+
+  it("matches the baked plate's sharpness for a half-metre provider on that frame", () => {
+    const px = pixelsFor(res("esri-open"), SEED_SPAN);
+    expect(px).toBe(MAX_IMAGE_PIXELS);
+    expect(SEED_SPAN / px).toBeCloseTo(1.08, 2);
+  });
+
+  it("never asks Sentinel-2 for more detail than Copernicus has", () => {
+    // 10 m/px over 2592 m is 259 real pixels. Asking for 2400 would be an
+    // upscale: five times the bytes, and a picture that looks like it
+    // resolves a greenhouse and does not.
+    const px = pixelsFor(res("sentinel2"), SEED_SPAN);
+    expect(px).toBe(Math.round(SEED_SPAN / 10));
+    expect(px).toBeLessThan(MAX_IMAGE_PIXELS);
+  });
+
+  it("asks a small parcel's true size rather than the cap", () => {
+    // 800 m at 0.5 m/px is 1600, which is under the ceiling and is what exists.
+    expect(pixelsFor(res("esri-open"), 800)).toBe(1600);
+  });
+
+  it("caps a very large parcel instead of storing an enormous file", () => {
+    expect(pixelsFor(res("esri-open"), 20000)).toBe(MAX_IMAGE_PIXELS);
+  });
+
+  it("keeps a floor, so a tiny parcel still returns a picture worth looking at", () => {
+    expect(pixelsFor(res("sentinel2"), 50)).toBe(MIN_IMAGE_PIXELS);
+  });
+
+  it("answers sanely for a span that is missing or nonsense", () => {
+    for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const px = pixelsFor(res("esri-open"), bad as number);
+      expect(Number.isFinite(px)).toBe(true);
+      expect(px).toBeGreaterThanOrEqual(MIN_IMAGE_PIXELS);
+      expect(px).toBeLessThanOrEqual(MAX_IMAGE_PIXELS);
+    }
+  });
+
+  it("gives every provider a usable answer, so none can ask for zero", () => {
+    for (const p of PROVIDERS) {
+      const px = pixelsFor(p, SEED_SPAN);
+      expect(px).toBeGreaterThanOrEqual(MIN_IMAGE_PIXELS);
+      expect(px).toBeLessThanOrEqual(MAX_IMAGE_PIXELS);
+    }
+  });
+});
+
+/*
+ * A MOSAIC SAYS NO, AND THE FETCH ASKS FOR LESS.
+ *
+ * Esri World Imagery holds half-metre detail over a city and less over open
+ * country. `pixelsFor` asks for the provider's best, so over open country the
+ * first ask is for detail that is not there, and the service answers HTTP 500
+ * with an error page. Measured against the live service on 2026-09-24: Amora's
+ * coast refuses 0.5 m per pixel and serves 0.667, while the same request over
+ * Manhattan returns 0.333. Before this, EVERY width under about 1490 m failed
+ * there, which included the default a founder started on.
+ */
+describe("asking for less when a place holds less", () => {
+  const varying = providerById("esri-open")!;
+  const fixed = providerById("sentinel2")!;
+
+  /*
+   * The size asked for, read back out of whatever URL the provider built.
+   *
+   * Tolerant on purpose, and it cost a red run to learn why: Sentinel-2 builds
+   * a RELATIVE url from an operator-supplied WMS base, so `new URL(url)` threw
+   * a TypeError inside the fake fetcher, `fetchAndCache` correctly passed a
+   * non-NotAnImage straight through, and the test blamed the code. A helper
+   * that only understood one provider's URL was the whole defect.
+   */
+  const askedPixels = (url: string): number => {
+    const q = new URL(url, "https://base.test/").searchParams;
+    const size = q.get("size");
+    if (size) return Number(size.split(",")[0]);
+    return Number(q.get("width"));
+  };
+
+  /** Answers `ok` on the nth ask and refuses every earlier one, counting as it goes. */
+  const succeedsOnAsk = (n: number, asks: number[]): Fetcher =>
+    async (url) => {
+      asks.push(askedPixels(url));
+      if (asks.length < n) return { ok: false, status: 500, arrayBuffer: async () => new ArrayBuffer(0) };
+      return {
+        ok: true,
+        status: 200,
+        arrayBuffer: async () =>
+          PNG.buffer.slice(PNG.byteOffset, PNG.byteOffset + PNG.byteLength) as ArrayBuffer,
+      };
+    };
+
+  it("gives a provider whose detail is the same everywhere exactly one rung", () => {
+    expect(fixed.detailVariesByPlace).toBe(false);
+    expect(pixelLadder(fixed, 1600)).toEqual([1600]);
+  });
+
+  it("gives a mosaic a descending ladder, finest first", () => {
+    const rungs = pixelLadder(varying, 1600);
+    expect(rungs[0]).toBe(1600);
+    expect(rungs.length).toBe(COARSER_ATTEMPTS + 1);
+    for (let i = 1; i < rungs.length; i += 1) expect(rungs[i]).toBeLessThan(rungs[i - 1]);
+  });
+
+  it("steps below the comfort floor for a tiny parcel, because a small real picture beats none", () => {
+    // 100 m over a 0.5 m provider is 200 native, which pixelsFor raises to the floor.
+    const rungs = pixelLadder(varying, MIN_IMAGE_PIXELS);
+    expect(rungs[rungs.length - 1]).toBeLessThan(MIN_IMAGE_PIXELS);
+    expect(rungs[rungs.length - 1]).toBeGreaterThanOrEqual(FLOOR_IMAGE_PIXELS);
+  });
+
+  it("keeps the picture the second rung answered with, and says what size it kept", async () => {
+    const asks: number[] = [];
+    const got = await fetchAndCache(
+      { provider: varying, ready: true, missingEnv: null, key: null },
+      { centre: CR, spanM: 800, pixels: 1600 },
+      tempDir(),
+      { fetcher: succeedsOnAsk(2, asks) },
+    );
+    expect(asks).toEqual([1600, 1200]);
+    expect(got.pixels).toBe(1200);
+  });
+
+  it("spends ONE request on a provider whose detail does not vary, however it fails", async () => {
+    const asks: number[] = [];
+    await expect(
+      fetchAndCache(
+        { provider: fixed, ready: true, missingEnv: null, key: null },
+        { centre: CR, spanM: 800, pixels: 80 },
+        tempDir(),
+        { fetcher: succeedsOnAsk(99, asks) },
+      ),
+    ).rejects.toThrow(NotAnImage);
+    // A retry on a keyed provider is a charge. Only a mosaic earns a second ask.
+    expect(asks.length).toBe(1);
+  });
+
+  it("stops asking after a failure that is the network rather than the provider", async () => {
+    let asks = 0;
+    const broken: Fetcher = async () => {
+      asks += 1;
+      throw new Error("ECONNRESET");
+    };
+    await expect(
+      fetchAndCache(
+        { provider: varying, ready: true, missingEnv: null, key: null },
+        { centre: CR, spanM: 800, pixels: 1600 },
+        tempDir(),
+        { fetcher: broken },
+      ),
+    ).rejects.toThrow("ECONNRESET");
+    expect(asks).toBe(1);
+  });
+
+  it("tells a founder the lever they have when every rung was refused", async () => {
+    const asks: number[] = [];
+    const err = (await fetchAndCache(
+      { provider: varying, ready: true, missingEnv: null, key: null },
+      { centre: CR, spanM: 800, pixels: 1600 },
+      tempDir(),
+      { fetcher: succeedsOnAsk(99, asks) },
+    ).catch((e) => e)) as Error;
+    expect(err).toBeInstanceOf(NotAnImage);
+    expect(err.message).toContain("A wider frame");
+    expect(err.message).toContain("5 times");
+    // The old sentence described a dead host and was shown for a live one.
+    expect(err.message).not.toContain("could not be reached");
+    // The column clips at 255, so a longer sentence loses its own ending.
+    expect(err.message.length).toBeLessThanOrEqual(255);
+  });
+});
+
+/*
+ * A SLOW PROVIDER IS NOT AN UNREACHABLE ONE.
+ *
+ * Raising MAX_IMAGE_PIXELS from 1024 to 2400 made the ask about five times
+ * bigger, and the export endpoint renders on demand, so the wait grew with it.
+ * The timeout stayed at 20 s. Measured live on 2026-09-24, the same 2400 px
+ * request four times running took 12.7, 24.8, 29.5 and 27.2 seconds: three of
+ * the four over the old ceiling, on a village that was configured correctly.
+ */
+describe("a provider that is slow rather than absent", () => {
+  const varying = providerById("esri-open")!;
+
+  /** Honours the abort signal and otherwise never answers. */
+  const silent: Fetcher = (_url, init) =>
+    new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => reject(new Error("aborted")));
+    });
+
+  it("names the wait instead of claiming the provider could not be reached", async () => {
+    const err = (await fetchImageBytes("https://example.test/x", silent, 20).catch((e) => e)) as Error;
+    expect(err).toBeInstanceOf(ProviderTooSlow);
+    expect(err.message).toContain("still working");
+  });
+
+  it("is a NotAnImage, which is what makes the fetch ask for a smaller picture", () => {
+    expect(new ProviderTooSlow(45000)).toBeInstanceOf(NotAnImage);
+  });
+
+  it("keeps the clock generous enough for the picture this platform now asks for", () => {
+    // The worst of four live 2400 px fetches was 29.5 s. A ceiling under that
+    // fails a working village, which is exactly what shipped.
+    expect(FETCH_TIMEOUT_MS).toBeGreaterThan(30000);
   });
 });

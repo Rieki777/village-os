@@ -294,3 +294,110 @@ describe("HandoverTab: is the village ready to hold this power (ask 6)", () => {
     expect(within(dialog).queryByText(/Nobody holds/)).not.toBeInTheDocument();
   });
 });
+
+/**
+ * ASK 7: BRINGING A POWER BACK IS THE VILLAGE'S DECISION (Rye, 2026-09-23).
+ *
+ * The server refuses the hand-back and names the `power_return` ballot, and
+ * carries on only for a founder seated as a steward with the veto who says
+ * they mean to reach past the village. THE PANEL DECIDES NONE OF THAT. It
+ * asks, shows what comes back, and offers the glass only when the server says
+ * this account has it (`overrideAvailable`). A button that predicted the
+ * answer would be a second gate living in the browser, and the one rule this
+ * codebase has about gates is that there is one of them.
+ */
+const HELD = {
+  roles: [{ id: "keepers", name: "Keeper of the Gate", isExample: false, capabilities: ["membership.admit"], holderCount: 2 }],
+  powers: [
+    {
+      capability: "membership.admit",
+      title: "Who joins the village",
+      surface: "The membership queue",
+      consequence: "let somebody in",
+      movable: true,
+      heldBy: { roleId: "keepers", roleName: "Keeper of the Gate", movedAt: "2026-09-01", byBallot: true },
+    },
+  ],
+};
+
+function heldServer(deleteAnswer: (glass: boolean) => { status: number; json: any }) {
+  const calls: Call[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init: any = {}) => {
+      const method = String(init.method ?? "GET");
+      const glass = String(init.headers?.["x-capability-override"] ?? "") === "true";
+      calls.push({ url, method, body: glass ? { glass: true } : undefined });
+      if (method === "GET") return { ok: true, status: 200, json: async () => HELD };
+      const r = deleteAnswer(glass);
+      return { ok: r.status < 400, status: r.status, json: async () => r.json };
+    }),
+  );
+  return { writes: () => calls.filter((c) => c.method !== "GET") };
+}
+
+describe("HandoverTab: bringing a power back (ask 7)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  const REFUSAL = {
+    error: "Keeper of the Gate looks after this one. Open a power_return ballot.",
+    requiresOverride: true,
+    overrideAvailable: true,
+    holderName: "Keeper of the Gate",
+  };
+
+  it("sends the plain request first, carrying no glass", async () => {
+    const server = heldServer(() => ({ status: 409, json: REFUSAL }));
+    const user = userEvent.setup();
+    renderTab();
+    await user.click(await screen.findByRole("button", { name: "Bring it back" }));
+    await waitFor(() => expect(server.writes()).toHaveLength(1));
+    const [first] = server.writes();
+    expect(first.method).toBe("DELETE");
+    expect(first.body, "the first press must not reach past the village").toBeUndefined();
+  });
+
+  it("shows the server's sentence and offers the glass only when the server said so", async () => {
+    heldServer(() => ({ status: 409, json: REFUSAL }));
+    const user = userEvent.setup();
+    renderTab();
+    await user.click(await screen.findByRole("button", { name: "Bring it back" }));
+    expect(await screen.findByRole("button", { name: "Reach past the village and bring it back" })).toBeInTheDocument();
+  });
+
+  it("leaves the button alone when the server says this account has no way through", async () => {
+    heldServer(() => ({ status: 409, json: { ...REFUSAL, overrideAvailable: false } }));
+    const user = userEvent.setup();
+    renderTab();
+    await user.click(await screen.findByRole("button", { name: "Bring it back" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Bring it back" })).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: /Reach past the village/ })).not.toBeInTheDocument();
+  });
+
+  it("asks before the second press, and only then sends the glass", async () => {
+    const server = heldServer((glass) => (glass ? { status: 200, json: { success: true } } : { status: 409, json: REFUSAL }));
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+    renderTab();
+    await user.click(await screen.findByRole("button", { name: "Bring it back" }));
+    await user.click(await screen.findByRole("button", { name: "Reach past the village and bring it back" }));
+
+    await waitFor(() => expect(server.writes()).toHaveLength(2));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(String(confirm.mock.calls[0][0])).toContain("The village sees this on its own feed");
+    expect(server.writes()[1].body).toEqual({ glass: true });
+  });
+
+  it("cancelling the second question sends nothing at all", async () => {
+    const server = heldServer((glass) => (glass ? { status: 200, json: { success: true } } : { status: 409, json: REFUSAL }));
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    const user = userEvent.setup();
+    renderTab();
+    await user.click(await screen.findByRole("button", { name: "Bring it back" }));
+    await user.click(await screen.findByRole("button", { name: "Reach past the village and bring it back" }));
+    await waitFor(() => expect(server.writes()).toHaveLength(1));
+  });
+});

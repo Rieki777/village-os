@@ -15,6 +15,7 @@ import multer from "multer";
 import bcrypt from "bcrypt";
 import { claimPaths, GAME_CONFIG, getStage, stageIndex, withCommitmentName } from "../shared/gameConfig";
 import { recognitionNameCheck } from "../shared/launchRequirements";
+import { signingOf } from "../shared/membershipSigning";
 // `daysRemainingInCycle` is gone with the clock seam: every consumer reads
 // the active clock now, and it had no caller left here. `sceneStopsFor` and
 // `cleanCrewName` go with main's dead-import pass for the same reason,
@@ -40,6 +41,7 @@ import {
   assertCapabilityHoldingInvariants,
   capabilityHoldings,
   moveCapabilityToVillage,
+  RETURN_NEEDS_A_VOTE,
   returnCapabilityToScaffolding,
   villageHeldCapabilities,
 } from "./lib/capabilityHolding";
@@ -55,6 +57,7 @@ import { memberJoined } from "./lib/arrival";
 import { climbLadder, freezeStandingAboveTheDoor, questsThatCarriedPastTheDoor, type LadderStage } from "./lib/admission";
 import { adminGateWasConsulted, markAdminGate } from "./lib/adminGate";
 import { type FaqPathway, register as registerFaqRoutes } from "./routes/faqs";
+import { register as registerBrandRoutes } from "./routes/brand";
 import { register as registerGratitudeVoiceRoutes } from "./routes/gratitudeVoices";
 import { register as registerLandRoutes } from "./routes/land";
 import { register as registerMilestonesRoutes } from "./routes/milestones";
@@ -102,6 +105,7 @@ import { resolveSeatTerm, type SeatCalendar } from "../shared/seatTerms";
 import { carriesCapability, decideRoleCapabilities, liveHolderCount, liveHoldersOfCapability, stewardSeatRefusal } from "./lib/roleGrants";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
 import { type ConsentActor, register as registerQuestClaimRoutes } from "./routes/questClaims";
+import { countInWindow, limitState, recordHit as recordRateHit } from "./repos/rateHits";
 import { register as registerHousingRoutes } from "./routes/housing";
 import { register as registerJourneyRoutes } from "./routes/journey";
 import { register as registerProfileRoutes } from "./routes/profile";
@@ -125,7 +129,7 @@ import { register as registerFeedbackRoutes } from "./routes/feedback";
 import { register as registerCharacterPortraitRoutes } from "./routes/characterPortraits";
 import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
 import { register as registerPowerAffinityRoutes, powersForClass, withPowerAffinity } from "./routes/powerAffinity";
-import { register as registerPowerHandRoutes } from "./routes/powerHands";
+import { register as registerPowerHandRoutes, registerSeatVote, type OpenSeatVote } from "./routes/powerHands";
 import { resolveGoogleConfig } from "./lib/oauthGoogle";
 import { makeIdentityGate } from "./lib/identityConfirm";
 import {
@@ -150,12 +154,7 @@ import {
 } from "../shared/mapAddress";
 import { isPromiseKind, type PromiseReason, type PromiseResult } from "../shared/mapPromise";
 import { goingCountFor, missingReason, rowByMapKey } from "./lib/mapPromise";
-import {
-  CarriesLocationData,
-  sanitiseForVolume,
-  stampedName,
-  writeToVolume,
-} from "./lib/uploads";
+import { CarriesLocationData, isMemberOwnedUpload, sanitiseForVolume, stampedName, writeToVolume } from "./lib/uploads";
 import {
   classifyVolume,
   humanBytes,
@@ -347,7 +346,7 @@ import {
   spendSurfacesFor,
 } from "./lib/spending";
 import { seatChargeFor, seatEscrowDrift, seatPriceFor, settleFinishedSeats } from "./lib/eventSeats";
-import { allowanceFor, applyMintRuleChanges, canConfirm, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, runSettlement, startEconomyEpoch, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
+import { allowanceFor, applyMintRuleChanges, canConfirm, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, runSettlement, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
 import { addCharacter, avatarFor, listArchetypes, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
 import { loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
@@ -2755,7 +2754,7 @@ function mergedConfig() {
       // 0083 (P8): where the project lives and what it counts in. Display
       // only, like every overlay field; blank inherits the platform default.
       country: pick((brand.project as any).country, p.country),
-      fiatCurrency: pick((brand.project as any).fiatCurrency, p.fiatCurrency),
+      fiatCurrency: pick(String((brand.project as any).fiatCurrency ?? "").trim(), p.fiatCurrency), // trimmed: shared/money.ts
       adminPath: p.adminPath,
       // Blank INHERITS the platform default, like every overlay field. A fork
       // that wants NO outside links clears the gameConfig default too — the
@@ -3205,8 +3204,10 @@ interface CapabilityVerdict {
   /**
    * Would the gate let THIS requester through if they broke the glass? Asked
    * of `capabilityDecision` itself and never re-spelled here (Rye, 2026-09-21:
-   * only a founder seated as a steward with the veto). False everywhere
-   * `needsOverride` is false.
+   * only a founder seated as a steward with the veto). Answered on a REFUSAL
+   * and on an allowed verdict over a village-held key, because a route may
+   * refuse an act the gate allowed and still owe the browser the door; false
+   * on every verdict where the village holds nothing to reach past.
    */
   overrideAvailable: boolean;
   /**
@@ -3380,7 +3381,19 @@ async function mayAct(req: express.Request, cap: Capability): Promise<Capability
   if (decision.allowed) {
     return {
       ok: true, reachedPast: false, villageHolds: decision.villageHolds,
-      source: decision.source, message: "", needsOverride: false, overrideAvailable: false, holderName: null,
+      source: decision.source, message: "", needsOverride: false,
+      /*
+       * ANSWERED ON AN ALLOWED VERDICT TOO, because a route may refuse an act
+       * the gate allowed. `DELETE /api/admin/capabilities/:capability/holding`
+       * carries on only for a reach PAST the village (Rye, 2026-09-23), so a
+       * founder seated as a steward who also holds the power by that seat
+       * arrives here with `ok: true` and still has to be told the door is
+       * there. Asked of `capabilityDecision` itself, never re-spelled.
+       */
+      overrideAvailable: decision.villageHolds
+        ? capabilityDecision(cap, { ...ctx, adminOverride: true }).reachedPastVillage
+        : false,
+      holderName: null,
     };
   }
   if (decision.villageHolds && ctx.isAdmin) {
@@ -3819,14 +3832,15 @@ function firstName(name: string): string {
  * to it, and the two are separate steps now because they were always two
  * different things.
  *
- * NOBODY IS DEMOTED BY THIS. The only surface that has ever posted
- * `membership-508` is the Love Letter page, which sends no `Authorization`
- * header and never has, in any commit. `authedUser` reads that header alone
- * with no cookie fallback, so a real signing has always stored `user_id` NULL
- * and has never once satisfied the rule this removes. Every row that could
- * satisfy it was a request somebody hand-built. Members who are actually here
- * hold `membershipGranted` (the 0058 freeze wrote it) or a `stageGranted`
- * rung, and this function and `computeStage` still answer for both.
+ * NOBODY WAS DEMOTED BY THIS, and read that in the past tense. Up to 29473e4
+ * the Love Letter sent no `Authorization` header, so every signing stored
+ * before 2026-08-29 carries `user_id` NULL and never once satisfied the rule
+ * this removes; members actually here hold `membershipGranted` (the 0058
+ * freeze wrote it) or a `stageGranted` rung. THE SAME COMMIT CHANGED THE PAGE,
+ * so a signing made since DOES carry `user_id`, which is what gives an
+ * accepted one a person to admit. This said "never has, in any commit" in the
+ * present tense until 2026-09-23, when a session believed it and reported the
+ * accept flow broken while it works.
  */
 function hasMembership(user: any): boolean {
   return !!user.membershipGranted;
@@ -4937,58 +4951,25 @@ function recipientsForType(type: string): string[] {
  * login down with it; the guard protects against abuse, not outages.
  */
 async function overLimit(bucket: string, max: number, windowMs: number): Promise<boolean> {
-  try {
-    const pool = getPool();
-    const since = new Date(Date.now() - windowMs);
-    const [[row]] = await pool.query<any[]>(
-      "SELECT COUNT(*) AS n FROM rate_hits WHERE bucket = ? AND at > ?",
-      [bucket, since],
-    );
-    if (Number(row?.n ?? 0) >= max) return true;
-    await pool.query("INSERT INTO rate_hits (bucket, at) VALUES (?, CURRENT_TIMESTAMP(3))", [bucket]);
-    // Opportunistic sweep (~1% of calls): the table stays a day deep, forever.
-    if (Math.random() < 0.01) {
-      void pool.query("DELETE FROM rate_hits WHERE at < (NOW() - INTERVAL 1 DAY) LIMIT 5000").catch(() => {});
-    }
-    return false;
-  } catch (e) {
-    console.error("[abuse-guard] check failed (failing open)", e);
-    return false;
-  }
+  // `unavailable` reads as not-over-limit HERE, in one visible place, which is
+  // what fail-open means for the twenty-odd callers written against it.
+  return (await limitState(getPool(), bucket, max, windowMs)) === "over";
 }
 
 /**
  * Check-only half of overLimit: counts, never inserts. For guards where the
  * hit is recorded separately (login records only on credential FAILURE, so a
- * correct sign-in never spends anyone's budget). Fail-open like overLimit.
+ * correct sign-in never spends anyone's budget). Fail-open like overLimit:
+ * a count that could not be taken is not a caller over their budget.
  */
 async function atLimit(bucket: string, max: number, windowMs: number): Promise<boolean> {
-  try {
-    const pool = getPool();
-    const since = new Date(Date.now() - windowMs);
-    const [[row]] = await pool.query<any[]>(
-      "SELECT COUNT(*) AS n FROM rate_hits WHERE bucket = ? AND at > ?",
-      [bucket, since],
-    );
-    return Number(row?.n ?? 0) >= max;
-  } catch (e) {
-    console.error("[abuse-guard] check failed (failing open)", e);
-    return false;
-  }
+  const n = await countInWindow(getPool(), bucket, windowMs);
+  return n !== null && n >= max;
 }
 
 /** Record-only half: call when the guarded event actually happened. */
 async function recordHit(bucket: string): Promise<void> {
-  try {
-    const pool = getPool();
-    await pool.query("INSERT INTO rate_hits (bucket, at) VALUES (?, CURRENT_TIMESTAMP(3))", [bucket]);
-    // Opportunistic sweep (~1% of calls): the table stays a day deep, forever.
-    if (Math.random() < 0.01) {
-      void pool.query("DELETE FROM rate_hits WHERE at < (NOW() - INTERVAL 1 DAY) LIMIT 5000").catch(() => {});
-    }
-  } catch (e) {
-    console.error("[abuse-guard] record failed", e);
-  }
+  await recordRateHit(getPool(), bucket);
 }
 
 /**
@@ -5207,9 +5188,6 @@ async function startServer() {
   // village's own amounts are never restored to a default by a redeploy.
   await seedEconomy(getPool(), villageId());
   await loadTokenRegistry(getPool());
-  // At boot, so the first confirmed quest is never the thing that starts the
-  // clock it is then measured against. See `startEconomyEpoch`.
-  await startEconomyEpoch(getPool());
   // Suggested class tags on work that already exists, so a fresh village does
   // not meet five classes that appear to open nothing. Only rows where
   // `archetypes IS NULL` are touched, so a tag a human confirmed or cleared is
@@ -8006,17 +7984,12 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
      * to admit; the acceptance is still recorded and still means what it says.
      * Matching a typed email to an account is exactly the hole that was closed
      * before this one, and it stays closed.
+     *
+     * `admitted` tells the desk which of the two it was; the why is in `shared/membershipSigning.ts`.
      */
-    if (
-      status === "accepted" &&
-      !wasAccepted &&
-      submissions[idx].type === "membership-508" &&
-      submissions[idx].userId
-    ) {
-      await members.update(String(submissions[idx].userId), (m: any) => {
-        m.membershipGranted = true;
-      });
-    }
+    const signingAccepted = status === "accepted" && !wasAccepted && submissions[idx].type === "membership-508";
+    const admitted: boolean | null = signingAccepted ? !!submissions[idx].userId : null;
+    if (admitted) await members.update(String(submissions[idx].userId), (m: any) => { m.membershipGranted = true; });
     await submissionsRepo.replaceAll(submissions);
 
     /*
@@ -8060,7 +8033,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // sentence, the status moved and the recognition did not, and the desk has
     // to be told which: "accepted" with a silent unpaid mint is the shape this
     // guard exists to stop.
-    res.json({ success: true, rewarded, rewardRefused, notified });
+    res.json({ success: true, rewarded, rewardRefused, notified, admitted });
   });
 
   // Admin: Export Submissions as CSV
@@ -10299,7 +10272,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       },
       viewer: {
         viewPeople,
-        canContact: false,
+        canContact: false, mayStyleMap: admin, mayEditWalk: admin, mayNameMapThings: admin, // the three map editors: admin today because their endpoints are, see power/types.ts
         mayArrange: admin, // the drag publishes an org draft: admin until the decide gate lands
         // Where this viewer may declare (P10): "village" and/or circle ids.
         // The pencil shows where this says; the server re-checks on write.
@@ -13694,18 +13667,43 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
   });
 
   /**
-   * Hand a power back to the scaffolding.
+   * Hand a power back to the scaffolding — and since 2026-09-23 only as the
+   * village's own decision, or by a founder-steward breaking the glass.
    *
-   * This is not a hedge and it is not paternalism. The platform is custodian
-   * of deployments whose operator did not choose any of this and may not be
-   * able to pull a redeploy, so a transfer nothing can undo would leave a
-   * captured village with no way out. What makes the transfer real is the
-   * witness, never the one-way door: this leaves the same public line the
-   * crossing did.
+   * The reasoning and the refusal sentence live on `RETURN_NEEDS_A_VOTE` in
+   * server/lib/capabilityHolding.ts, beside the writer they both guard. The
+   * two facts this route has to carry: it asks the ONE gate for the key being
+   * returned and carries on only on `reachedPast`, which is `BREAK_GLASS_SEAT`
+   * and nothing else; and `mayAct` has already written the public line and
+   * told the holder by the time we get there, so the records below are the
+   * hand-back's own, exactly as they were.
    */
   app.delete("/api/admin/capabilities/:capability/holding", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const cap = String(req.params.capability);
+    // The holding is read BEFORE the gate and the delete: a 404 must stay a
+    // 404, and refusing somebody "this needs a vote" over a power the village
+    // is not holding would send them to open a ballot nothing can close.
+    const holding = (await capabilityHoldings(getPool())).find((h) => h.capability === cap);
+    if (!holding || !ALL_CAPABILITIES.includes(cap as Capability)) {
+      return res.status(404).json({ error: "The village was not holding that one." });
+    }
+    const verdict = await mayAct(req, cap as Capability);
+    if (!verdict.reachedPast) {
+      const who = holding.holderRoleName ?? holding.holderRoleId;
+      return res.status(409).json({
+        error:
+          `${who} looks after this one. ${RETURN_NEEDS_A_VOTE} ${BREAK_GLASS_WAY_THROUGH} ` +
+          "Send the x-capability-override header with this request to do it that way, and the village will see that you did.",
+        // The browser's half of the same answer (0103's shape): the panel
+        // sends people to the ballot, and offers the glass only to somebody
+        // the gate would actually let through.
+        requiresOverride: true,
+        overrideAvailable: verdict.overrideAvailable,
+        holderName: who,
+        ballotRoute: "/api/governance/power-returns",
+      });
+    }
     const existed = await returnCapabilityToScaffolding(getPool(), cap);
     if (!existed) return res.status(404).json({ error: "The village was not holding that one." });
     const what = CAPABILITY_CONSEQUENCE[cap as Capability] ?? cap;
@@ -16904,8 +16902,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
    * The cap's own arithmetic lives in `server/lib/mintCap.ts`, with the
    * ruling it enforces written beside it: the cap bounds ALL ISSUANCE of a
    * token in a cycle, by every door, NET of what came back to the faucet
-   * inside the same cycle. Nine doors write `sys:mint` and three of them meet
-   * `mintCapGuard`; the counter has always seen all nine, and what it grew
+   * inside the same cycle. Twelve doors write `sys:mint` and five of them meet
+   * `mintCapGuard`; the counter has always seen all twelve, and what it grew
    * was a subtraction, because `spendSinkFor("stay-credit")` is that same
    * faucet and a spent credit was being counted as a second issue.
    *
@@ -18736,7 +18734,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
       // bytes behind a URL never change, and a UI tick that costs a
       // conditional request every time it fires is a tick nobody ships.
       if (type.startsWith("image/") || type.startsWith("font/") || type.startsWith("audio/")) {
-        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        // `private` for a member's own file, because erasure unlinks it and a shared cache would outlive that. Why it costs no page load: `isMemberOwnedUpload`.
+        res.setHeader("Cache-Control", `${isMemberOwnedUpload(safe) ? "private" : "public"}, max-age=31536000, immutable`);
       } else {
         // Investor documents and the like live behind a request-and-email gate.
         // The gate is weak (anyone with the URL can fetch), but `public` would
@@ -19311,38 +19310,7 @@ ${inner}
 
   registerSitePullRoutes(app, { isAdmin, adminActor, overLimit, clientIp, uploadsDir: UPLOADS_DIR });
   // Brand overlay: the Setup Wizard reads/writes this to white-label the site live.
-  app.get("/api/admin/brand", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    res.json({ brand: getBrand(), defaults: { project: GAME_CONFIG.project, currency: GAME_CONFIG.currency, images: GAME_CONFIG.images } });
-  });
-
-  app.put("/api/admin/brand", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    if (!req.body || typeof req.body !== "object") return res.status(400).json({ error: "Body required" });
-    const current = getBrand();
-    const next = {
-      project: { ...current.project, ...(req.body.project ?? {}) },
-      currency: { ...current.currency, ...(req.body.currency ?? {}) },
-      // Stripped on the way in as well as on the way out: a wizard tab opened
-      // before this change still holds `faviconAlt` in the object it posts
-      // back, and storing it again would put the orphan straight back.
-      images: withoutOrphanedAlt({ ...current.images, ...(req.body.images ?? {}) }),
-      setup: { ...current.setup, ...(req.body.setup ?? {}) },
-      // Theme fields are validated at EMISSION (server/lib/themeCss.ts), not
-      // here — storing a value the sanitiser later rejects yields an empty
-      // stylesheet, never an injected one. Rejecting at write time too would
-      // mean two sanitisers to keep in agreement forever.
-      theme: { ...(current as any).theme, ...(req.body.theme ?? {}) },
-      identityPack: { ...(current as any).identityPack, ...(req.body.identityPack ?? {}) },
-      // Sanitised on write (unlike theme) because this object is handed to the
-      // map artifact and two of its fields land in CSS custom properties. The
-      // artifact is a separate document doing its own thing with them, so the
-      // check belongs at the boundary where the value enters storage.
-      skin: sanitiseMapSkin({ ...(current as any).skin, ...(req.body.skin ?? {}) }),
-    };
-    await brandRepo.put(next);
-    res.json({ success: true, brand: next });
-  });
+  registerBrandRoutes(app, { isAdmin, brandRepo, getBrand, withoutOrphanedAlt });
 
   /**
    * The Living Map's skin, for the shell to hand its iframe.
@@ -19686,6 +19654,10 @@ ${inner}
     isAdmin, authedUser, adminActor, getPool, uploadsDir: UPLOADS_DIR, members,
     questsRepo, claimsRepo, crewsRepo, firstName, notify, stageOf, loadRoles,
     roleIdsFor, currentPatternId, questConsentRecipients, overLimit, clientIp,
+    // The share-card raster reads the guard's third answer for itself: it is
+    // the one route here that rasters for an anonymous caller, so it refuses
+    // when the guard cannot check rather than serving unguarded (Rye, 2026-09-23).
+    limitState: (bucket: string, max: number, windowMs: number) => limitState(getPool(), bucket, max, windowMs),
   });
 
   // Quests: team consent (value release is always human-gated)
@@ -20058,7 +20030,22 @@ ${inner}
   registerCharacterPortraitRoutes(app, { authedUser, getPool, uploadsDir: UPLOADS_DIR });
   registerArchetypeAdminRoutes(app, { isAdmin, guardCapability, getPool });
   registerPowerAffinityRoutes(app, { isAdmin, guardCapability, getPool });
-  registerPowerHandRoutes(app, { authedUser, capabilityCtx, stageOf, firstName, isPresent: (m: any) => isPresentMember(m, AUTH_TOKEN_SECRET), members, notifyAdmins, getPool, overLimit, submissionsRepo, liveHoldersOf, rolesCarrying, openSeatVote: (ask) => openSeatVote(ask) });
+  /**
+   * WHY THE SEAT VOTE ARRIVES HERE AS A DEFERRED CALL. `registerSeatVote`
+   * returns the one `openSeatVote` both doors open a `role_seat` ballot
+   * through, and it registers far below this line, AFTER the
+   * `requireModule("governance")` mount that Express applies only to what is
+   * registered behind it. Neither call may move to sit beside the other, and
+   * `notifyRoll` and `landingDeps` are consts declared lower still, so the hand
+   * door cannot be handed a built opener at its own registration line. It takes
+   * a call that resolves at REQUEST time, by which point both have run.
+   */
+  let seatVoteOpener: OpenSeatVote | null = null;
+  const openSeatVote: OpenSeatVote = (ask) => {
+    if (!seatVoteOpener) throw new Error("A seat vote was asked for before registerSeatVote ran.");
+    return seatVoteOpener(ask);
+  };
+  registerPowerHandRoutes(app, { authedUser, capabilityCtx, stageOf, firstName, isPresent: (m: any) => isPresentMember(m, AUTH_TOKEN_SECRET), members, notifyAdmins, getPool, overLimit, submissionsRepo, liveHoldersOf, rolesCarrying, openSeatVote });
 
   /** The five classes, as this village names them. Public: it is the front door. */
   app.get("/api/archetypes", async (_req, res) => {
@@ -20241,6 +20228,14 @@ ${inner}
       daysRemaining: cycleDaysRemaining(now),
       moonPhase: moonPhase(now),
       moonPhaseName: moonPhaseName(moonPhase(now)),
+      // WHICH WAY UP THE MOON IS, from the one clock route every surface can
+      // reach. The Gratitude Wall's cycle clock drew a northern sky for every
+      // village however `calendar.hemisphere` was set, because the only
+      // readers of that dial sit behind the events module: `/api/events` is
+      // gated by requireModule, and the public mechanics page hides an off
+      // module's dials. Gratitude is core, this route is already fetched by
+      // the clock, and the phase beside it is the same kind of fact.
+      hemisphere: stringVar("calendar.hemisphere") === "south" ? "south" : "north",
       budget: user ? await gratitudeBudget(user) : null,
     });
   });
@@ -20481,6 +20476,7 @@ ${inner}
     const consentedQuests = await claimsRepo.consentedCount(user.id);
     const stageId = computeStage(user, consentedQuests, await completionsFor(getPool(), user.id), await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()));
     const ctx = await capabilityCtx(user);
+    const inbox: any[] = submissionsRepo.all(); // once, for both answers below: `all()` copies every row.
     res.json({
       stage: servedStage(stageId),
       stageIndex: stageIndex(stageId),
@@ -20493,13 +20489,15 @@ ${inner}
       // The same keys with the closed ones included, and the rung that opens
       // each. `capabilities` above is exactly the rows here whose `held` is
       // true, by construction rather than by agreement.
-      capabilityCatalogue: await withPowerAffinity(capabilityCatalogue(ctx), { pool: getPool(), villageId: villageId(), userId: user.id, stageId, inbox: submissionsRepo.all() }),
+      capabilityCatalogue: await withPowerAffinity(capabilityCatalogue(ctx), { pool: getPool(), villageId: villageId(), userId: user.id, stageId, inbox }),
       roles: rolesFor(user.id),
       history: events
         .filter((e) => e.userId === user.id)
         .sort((a, b) => String(b.at).localeCompare(String(a.at)))
         .map((e) => ({ fromStage: e.fromStage, toStage: e.toStage, unlocked: e.unlocked, reason: e.reason, at: e.at })),
       firsts: await firstTimesFor(user.id),
+      // The signing this account carries, free off `inbox`. See `shared/membershipSigning.ts`.
+      signing: signingOf(inbox, user.id),
     });
   });
 
@@ -24004,16 +24002,15 @@ ${inner}
     if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to vote" });
     const voteGate = capabilityDecision("ballot.vote", await capabilityCtx(user));
     const result = await castVote(
-      getPool(),
-      req.params.id,
-      user.id,
+      getPool(), req.params.id, user.id,
       String(req.body?.choice ?? ""),
       req.body?.reason === undefined ? undefined : String(req.body.reason),
       { mayVoteNow: voteGate.allowed, deniedByWarning: voteGate.source === "denied by warning badge" },
+      req.body?.standsForSteward === true, // 0218: castVote honours it on the Birthing alone, and reports what it stored
     );
     if (!result.ok) return res.status(409).json({ error: result.error });
     const b = await ballotById(getPool(), req.params.id);
-    res.json({ success: true, choice: result.choice, ballot: b ? await serveBallot(b, user.id) : null });
+    res.json({ success: true, choice: result.choice, standsForSteward: result.standsForSteward, ballot: b ? await serveBallot(b, user.id) : null });
   });
 
   /** File an objection on a consent ballot without voting no. */
@@ -25011,6 +25008,11 @@ ${inner}
    * not ready had to ask the scaffolding to take it back, which is the one
    * sentence the whole round exists to stop a village having to say.
    *
+   * SINCE 2026-09-23 THIS ROUTE IS THE WAY AND NOT ONE OF TWO. Rye ruled that
+   * handing a village-held power back to the panel needs a village vote, so
+   * that admin route refuses everybody but a founder seated as a steward with
+   * the veto, and the sentence it sends back names this one.
+   *
    * ── THE SUBJECT REF IS THE CAPABILITY ALONE ────────────────────────────
    *
    * A transfer and a grant both name a power AND a role, because both are
@@ -25358,201 +25360,9 @@ ${inner}
     res.json({ success: true, ballot: await serveBallot(result.ballot, user.id) });
   });
 
-  /**
-   * ── SEAT SOMEBODY IN A ROLE ────────────────────────────────────────────────
-   *
-   * WHY THIS ONE REFUSES THE TWO KEYS THAT MAKE AN ELECTORATE, and the reason
-   * is `power_grant`'s reason one step further along. That route refuses to
-   * vote `ballot.vote` or `member.vouch` onto a role because "a role is a set
-   * of PEOPLE through its seats", so granting the vote to a role and then
-   * seating three people in it is a small group choosing who else gets a say.
-   * This route is the seating half of exactly that path. Granting is fenced
-   * and seating was not, because until now seating by vote did not exist.
-   *
-   * TRANSFERABLE excludes both keys today and `power_grant` refuses them by
-   * name, so nothing a village can do reaches this refusal. It is written for
-   * the same reason the grant's is: the day an admin route or a later lane
-   * puts one of those keys on a role, this path would otherwise widen in a
-   * commit about something else.
-   *
-   * R54 IS NOT BEING FENCED OFF. A village widening its own roll is the
-   * destination, and the way there is `progression.unlock.ballot.vote`, a
-   * mechanic the whole roll changes in one vote about a rule.
-   */
-  /**
-   * ── OPENING A SEAT VOTE, ONCE, FOR EVERY DOOR THAT OPENS ONE ──────────────
-   *
-   * Lifted whole out of `POST /api/governance/role-seats` on 2026-09-23, when
-   * a second door onto the same act arrived: a member putting a standing hand
-   * for a power to the village (server/routes/powerHands.ts). Nothing about the
-   * checks, the term, the document or the notice changed in the move.
-   *
-   * ONE FUNCTION RATHER THAN TWO COPIES, for the reason `carriedBy` is exported
-   * from shared/capabilities.ts: every check below is a rule about what a
-   * village may vote on, and a rule with two spellings grows a lenient one, and
-   * the lenient one is the one somebody finds. The refusal about `ballot.vote`
-   * and `member.vouch` is the sharpest example. A second seat-vote path that
-   * forgot it would let a few members choose who else gets a say.
-   *
-   * WHAT THE TWO DOORS DO DIFFER ON IS WHO MAY KNOCK, and that stays at each
-   * route. This one asks for `proposal.open` held as a member
-   * (`refuseUnlessMemberMayOpen`). The hand route asks Rye's ruling of
-   * 2026-09-23 instead (`whoMayPutHandToVillage`, shared/powerHands.ts).
-   *
-   * The caller owns the reply, so a refusal comes back as a status and a body
-   * rather than being sent from here.
-   */
-  interface SeatVoteAsk {
-    userId: string;
-    roleId: string;
-    /** Why this person for this role. The whole roll reads it before voting. */
-    reason: string;
-    termEndsOn?: unknown;
-    /** Who is opening it: named on the document, and not rung by the notice. */
-    openedBy: { id: string; name: string };
-  }
-  type SeatVoteResult =
-    | { ok: true; ballot: any }
-    | { ok: false; status: number; body: Record<string, unknown> };
-
-  async function openSeatVote(ask: SeatVoteAsk): Promise<SeatVoteResult> {
-    const { userId, roleId, reason } = ask;
-    const user = ask.openedBy;
-    const no = (status: number, body: Record<string, unknown>): SeatVoteResult => ({ ok: false, status, body });
-
-    const role = rolesRepo.all().find((r: any) => r.id === roleId) as any;
-    if (!role) return no(404, { error: "There is no role by that name." });
-    if (role.isExample) {
-      return no(409, { error: "That is one of the platform's example roles, not one of this village's. Declare a role of your own first." });
-    }
-    const carried = ((role.capabilities ?? []) as string[]).filter((c) =>
-      ["ballot.vote", "member.vouch"].includes(c), // superVouch absent: SUPER_VOUCH_PLACEMENT
-    );
-    if (carried.length) {
-      return no(409, {
-        error:
-          `${role.name ?? roleId} carries ${carried.join(" and ")}, so seating somebody in it would be a few members choosing who else gets a say. ` +
-          "Who votes here is a rule of the game, and the village changes it the way it changes any rule: open a rule change on the rung that decides who is on the roll, and the whole roll decides it.",
-      });
-    }
-    const member = await members.byId(userId);
-    if (!member) return no(404, { error: "There is no member by that id." });
-    if (isExampleUser(member)) return no(409, EXAMPLE_REFUSAL_BODY);
-    if (loadRoleHolders().some((h) => h.roleId === roleId && h.userId === userId)) {
-      return no(409, {
-        error: `${firstName(member.name)} already sits in ${role.name ?? roleId}. There is nothing for the village to decide here.`,
-      });
-    }
-    // A role can require a minimum stage, and an appointment made by the whole
-    // village respects the ladder the same way an admin's does. Asked again at
-    // close, because a member can slip below it while the vote runs.
-    if (role.minStage) {
-      const needed = stageIndex(role.minStage);
-      if (needed >= 0 && stageIndex(await stageOf(member)) < needed) {
-        return no(409, {
-          error: `${firstName(member.name)} has not reached the ${getStage(role.minStage)?.name ?? role.minStage} stage this role asks for.`,
-          minStage: role.minStage,
-        });
-      }
-    }
-    if (userId.includes("@") || roleId.includes("@")) {
-      return no(400, { error: "A member and a role are both named without an @ in them." });
-    }
-    const subjectRef = `${userId}@${roleId}`;
-    if (subjectRef.length > 64) {
-      return no(409, { error: "That role's name is too long for the record to hold beside the member. Shorten the role id first." });
-    }
-    if (reason.length < 40) {
-      return no(400, {
-        error: "Say why this person for this role. The whole roll reads this before voting.",
-      });
-    }
-
-    const setup = await roleBallotSetup();
-    if (setup.tokenProblem) return no(409, { error: setup.tokenProblem });
-
-    const term = resolveSeatTerm({ requestedEndsOn: ask.termEndsOn, calendar: seatCalendar(), capAtSeasonEnd: ((role.capabilities ?? []) as string[]).includes(STEWARD_VETO), now: new Date(), startsNoEarlierThan: seatVoteLandsAt(landingDeps(), setup.durationDays) });
-    if (!term.ok) return no(409, { error: term.error, code: term.code });
-    const can = roleConsequences(role);
-    const who = role.name ?? roleId;
-    const title = `${who}: the village asks ${firstName(member.name)} to sit in it`;
-    const doc = [
-      `# ${title}`,
-      "",
-      `## The role`,
-      "",
-      `${who}. ${String(role.description ?? "").trim()}`.trim(),
-      "",
-      `## What ${firstName(member.name)} would be able to do`,
-      "",
-      can.length
-        ? `From the day this carries, with no further vote:\n\n${can.map((c) => `- ${c}`).join("\n")}`
-        : `${who} carries no powers today, so this seats somebody in a role that grants nothing yet. If the village later votes ${who} a power, whoever is sitting in it holds that power from that day.`,
-      "",
-      `## Why this person`,
-      "",
-      reason,
-      "",
-      `## How long`, "",
-      `${term.followsSeason ? `Until the season ends on ${term.endsOn}, and if the season's end date moves, this seat moves with it.` : `Until ${term.endsOn}.`} When the term ends the seat ends, and the village can seat them again.`, ...(term.caution ? ["", term.caution] : []), "",
-      `## Taking it back`,
-      "",
-      `The village can vote this seat back at any time, and that vote is an ordinary one.`,
-      "",
-      `Asked by ${firstName(user.name)} on ${new Date().toISOString().slice(0, 10)}.`,
-      "",
-    ]
-      .filter((line, i, all) => !(line === "" && all[i - 1] === ""))
-      .join("\n");
-
-    const result = await openBallot(getPool(), {
-      subjectType: "role_seat",
-      onOpen: (conn, ballotId) => freezeSeatTerm(conn, ballotId, { endsAt: term.endsAt, seasonId: term.seasonId, followsSeason: term.followsSeason }),
-      subjectRef,
-      title,
-      docMarkdown: doc,
-      method: setup.method,
-      weightMode: setup.snapshot.mode,
-      weightToken: setup.snapshot.token,
-      unityPct: setup.dials.unityPct,
-      quorumPct: setup.dials.quorumPct,
-      durationDays: setup.durationDays,
-      openedBy: user.id,
-      electorate: setup.electorate,
-    });
-    if (!result.ok) return no(409, { error: result.error, ballotId: result.alreadyOpen?.id ?? null });
-
-    await addActivity("governance", `The village is deciding whether ${firstName(member.name)} sits in ${who}.`, {
-      actorUserId: user.id,
-      entityType: "ballot",
-      entityRef: result.ballot.id,
-    });
-    void notifyRoll(result.ballot, {
-      type: "ballot_opened",
-      title: `The village is asked whether ${firstName(member.name)} sits in ${who}`,
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}.`,
-      keySuffix: "open",
-      except: [user.id],
-      roll: setup.electorate.map((e) => e.userId),
-    });
-    return { ok: true, ballot: result.ballot };
-  }
-
-  app.post("/api/governance/role-seats", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required" });
-    const ctx = await capabilityCtx(user);
-    if (await refuseUnlessMemberMayOpen(req, res, ctx, "Seating somebody in a role")) return;
-    const opened = await openSeatVote({
-      userId: String(req.body?.userId ?? "").trim(),
-      roleId: String(req.body?.roleId ?? "").trim(),
-      reason: String(req.body?.reason ?? "").trim().slice(0, 20000),
-      termEndsOn: req.body?.termEndsOn,
-      openedBy: user,
-    });
-    if (!opened.ok) return res.status(opened.status).json(opened.body);
-    res.json({ success: true, ballot: await serveBallot(opened.ballot, user.id) });
-  });
+  // The seat vote itself is server/routes/powerHands.ts. It registers HERE, below the
+  // requireModule("governance") mount, which is what keeps that gate in front of the door.
+  seatVoteOpener = registerSeatVote(app, { authedUser, capabilityCtx, members, firstName, stageOf, getPool, rolesRepo, loadRoleHolders, refuseUnlessMemberMayOpen, roleBallotSetup, roleConsequences, seatCalendar, landingDeps, addActivity, notifyRoll, serveBallot });
 
   /**
    * ── TAKE A SEAT BACK ───────────────────────────────────────────────────────
@@ -26429,11 +26239,15 @@ ${inner}
    * miss and not a page. Without this, /.well-known/anything falls through to
    * the SPA and answers HTML with a 200, which is how a peer probing for a
    * capability document concludes this village has one.
+   *
+   * Neither miss repeats the path back. The caller already knows what it
+   * asked for, and a body built from the request is the reflection CodeQL
+   * reports, which is why the file misses further down answer a constant too.
    */
-  app.get("/.well-known/{*splat}", (req, res) => notPublished(res, `Not found: ${req.path}`));
+  app.get("/.well-known/{*splat}", (_req, res) => notPublished(res, "Not found"));
 
   app.get("/org", (_req, res) => res.redirect(308, "/org/index.md"));
-  app.get("/org/{*splat}", (req, res) => notPublished(res, `Not found: ${req.path}`));
+  app.get("/org/{*splat}", (_req, res) => notPublished(res, "Not found"));
 
   // Links, structural drafts, seat history and the admin edits to the org
   // chart, all nineteen registered at exactly the point they used to sit.
@@ -27196,12 +27010,15 @@ ${inner}
    * A 404 lets each of those be seen: fetch clients get an honest status,
    * broken assets show as broken, and a browser asking for a bundle that no
    * longer exists gets an error a reload can fix rather than a blank page.
+   *
+   * The asset miss answers a constant: repeating the requested path is the
+   * reflection CodeQL reports, and the status is what a caller needs anyway.
    */
   app.all("/api/{*splat}", (req, res) => {
     res.status(404).json({ error: `No such endpoint: ${req.method} ${req.path}` });
   });
-  app.get("/assets/{*splat}", (req, res) => {
-    res.status(404).type("text/plain").send(`Not found: ${req.path}`);
+  app.get("/assets/{*splat}", (_req, res) => {
+    res.status(404).type("text/plain").send("Not found");
   });
   /*
    * A PATH THAT LOOKS LIKE A FILE FAILS LIKE ONE.

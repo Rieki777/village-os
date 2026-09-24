@@ -733,6 +733,11 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
    * scaffolding to take the power back. That is the one sentence this whole
    * round exists to stop a village having to say.
    *
+   * AND SINCE 2026-09-23 THIS IS THE WAY, not one of two. Rye ruled that
+   * handing a village-held power back to the panel needs a village vote, so
+   * the admin route refuses everybody but a founder seated as a steward with
+   * the veto, and names this card.
+   *
    * THE COPY HERE IS THE DESIGN. Handing a power back is an ordinary act of a
    * village being honest about its capacity. Nothing on this card frames it
    * as failing, as being behind, or as a thing to try again later, and it

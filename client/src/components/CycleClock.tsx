@@ -70,14 +70,30 @@ const pt = (angle: number, r: number) => {
   return [CENTRE + r * Math.cos(a), CENTRE + r * Math.sin(a)] as const;
 };
 
-export default function CycleClock({ hemisphere = "north" }: { hemisphere?: Hemisphere }) {
+/**
+ * WHICH WAY UP THE SKY IS, ASKED RATHER THAN ASSUMED.
+ *
+ * The prop stays, because the calendar's own views pass the village's answer
+ * down and should keep deciding for themselves. What changed is the fallback:
+ * it used to be the literal "north", so the Gratitude Wall, which renders this
+ * clock with no prop at all, drew northern quarter marks and a northern moon
+ * for a village that had chosen south. A page-level fix would not have been
+ * enough either, because every reader of `calendar.hemisphere` sits behind the
+ * events module and the Gratitude Wall is core. `/api/game/cycle` is core, is
+ * already fetched here for the day count, and now carries the answer.
+ */
+export default function CycleClock({ hemisphere }: { hemisphere?: Hemisphere }) {
   const [season, setSeason] = useState<string>("");
   const [cycle, setCycle] = useState<{ daysRemaining: number; clock?: string } | null>(null);
+  const [villageHemisphere, setVillageHemisphere] = useState<Hemisphere>("north");
   useEffect(() => {
     fetch("/api/season").then((r) => (r.ok ? r.json() : null))
       .then((d) => setSeason(d?.current?.name ?? "")).catch(() => {});
     fetch("/api/game/cycle").then((r) => (r.ok ? r.json() : null))
-      .then((d) => setCycle(d ? { daysRemaining: Number(d.daysRemaining) || 0, clock: d.clock } : null))
+      .then((d) => {
+        setCycle(d ? { daysRemaining: Number(d.daysRemaining) || 0, clock: d.clock } : null);
+        if (d?.hemisphere === "south" || d?.hemisphere === "north") setVillageHemisphere(d.hemisphere);
+      })
       .catch(() => {});
   }, []);
 
@@ -86,7 +102,9 @@ export default function CycleClock({ hemisphere = "north" }: { hemisphere?: Hemi
   // wheelState wants the moon's AGE IN DAYS and divides by 29.53 itself.
   // This passed the 0..1 phase straight in, so the ring never filled past
   // 3% (round 4 measured it); the age is the phase times the month.
-  const state = wheelState(now, phase * SYNODIC_MONTH_DAYS, hemisphere);
+  // A caller's answer wins; otherwise the village's own, once it arrives.
+  const sky: Hemisphere = hemisphere ?? villageHemisphere;
+  const state = wheelState(now, phase * SYNODIC_MONTH_DAYS, sky);
   // Null until the server answers. "Counting" says the number is on its way,
   // which is a different sentence from a confident zero.
   const daysLeft = cycle?.daysRemaining ?? null;
@@ -113,7 +131,7 @@ export default function CycleClock({ hemisphere = "north" }: { hemisphere?: Hemi
             this figure renders at. Four evenly spaced marks on a year ring say
             "the four turnings" structurally, and the caption carries what a
             reader actually needs, which is where in the cycle they stand. */}
-        {quarterMarks(hemisphere).map((q) => {
+        {quarterMarks(sky).map((q) => {
           const [x1, y1] = pt(q.angle, YEAR_R - 6);
           const [x2, y2] = pt(q.angle, YEAR_R + 6);
           return (
@@ -158,7 +176,7 @@ export default function CycleClock({ hemisphere = "north" }: { hemisphere?: Hemi
 
         {/* THE MOON ITSELF, at the centre where the text used to crowd. */}
         <g transform={`translate(${CENTRE - 34} ${CENTRE - 34})`}>
-          <MoonGlyph phase={phase} size={68} hemisphere={hemisphere} />
+          <MoonGlyph phase={phase} size={68} hemisphere={sky} />
         </g>
       </svg>
 

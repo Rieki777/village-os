@@ -67,13 +67,36 @@ export default function RedemptionQueue() {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
 
+  /*
+   * ASK THE MEMBER ROUTE FIRST, and the admin route only when it says to.
+   *
+   * This used to request `/api/admin/redemptions` for everybody and read the
+   * refusal, so every ordinary member's wallet took a 401 on every load. The
+   * screen was already right - a member without the key gets no queue and no
+   * error, because a refusal card here would tell most of the village about a
+   * door that is not theirs - but the wire was wrong, and ruling 28
+   * (2026-09-21) is that a permanent 401 on an ordinary page is noise nobody
+   * wants to be looking at.
+   *
+   * `mayConfirm` is a hint, never the gate. `redemption.confirm` can be held
+   * through a role rather than a badge of office, which is why this component
+   * asks the server at all instead of checking for an admin; the admin route
+   * still runs `guardCapability`, so a hint that is too generous costs one
+   * refused request and grants nothing.
+   *
+   * A member route that fails is treated as "do not ask": a village whose
+   * module is off answers 404 here, and following that with an admin request
+   * would put back the noise this removes.
+   */
   const load = () => {
-    fetch("/api/admin/redemptions", { headers: headers() })
+    fetch("/api/redemptions", { headers: headers() })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setRows(d ? d.redemptions : null))
-      // A member without the key gets no queue and no error. This surface is
-      // for whoever holds it, and a refusal card here would be telling most of
-      // the village about a door that is not theirs.
+      .then((d) => {
+        if (!d?.mayConfirm) return setRows(null);
+        return fetch("/api/admin/redemptions", { headers: headers() })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((q) => setRows(q ? q.redemptions : null));
+      })
       .catch(() => setRows(null));
   };
   useEffect(load, []);

@@ -212,7 +212,24 @@ async function disarmRole(cap: string): Promise<void> {
 }
 
 const cross = (cap: string) => call("PUT", `/api/admin/capabilities/${cap}/holding`, { roleId: ROLE });
-const handBack = (cap: string) => call("DELETE", `/api/admin/capabilities/${cap}/holding`);
+/**
+ * THE GLASS IS PART OF THE HAND-BACK NOW (Rye, 2026-09-23).
+ *
+ * Handing a village-held power back to the panel is the village's own
+ * decision: the route refuses an administrator and names the `power_return`
+ * ballot, and carries on only for a founder seated as a steward with the veto
+ * who says they mean to reach past the village. This suite's founder is
+ * exactly that person — the seat is written in the fixture below for the
+ * 2026-09-21 ruling — so the header is what the hand-back costs here, and it
+ * is written into the helper rather than at fourteen call sites.
+ *
+ * WHAT THAT CHANGES FOR THIS FILE, and it is nothing: each of these is a
+ * teardown between scenarios, the village reads the reach as it reads every
+ * other one, and the assertions this suite actually makes are about the
+ * routes on the other side of the gate.
+ */
+const handBack = (cap: string) =>
+  call("DELETE", `/api/admin/capabilities/${cap}/holding`, undefined, founderToken, { "x-capability-override": "true" });
 
 /** The server's own output, kept across restarts so a failed boot can print it. */
 const serverLogs: string[] = [];
@@ -905,5 +922,39 @@ describe.skipIf(!DB_CONFIGURED)("ballot.vote did not cross, and the refusal says
     const mine = await call("GET", "/api/governance/standing", undefined, kiraToken);
     expect(mine.status, mine.text).toBe(200);
     expect(mine.json?.eligible).toBe(true);
+  });
+
+  /*
+   * The three map editors, and the widening they are shaped to prevent.
+   *
+   * Styling the map, writing the newcomer's walk and naming its paths and
+   * waters are moving off the admin page onto /map, so each needs the payload
+   * to say whether this reader may use it. Every endpoint behind them is
+   * gated by isAdmin and nothing else, and shared/capabilities.ts has no key
+   * about style, brand, look or identity, so the flags read `admin`: the
+   * panels change WHERE they live, never WHO may use them.
+   *
+   * THIS SUITE IS THE RIGHT PLACE because of the state it has already built.
+   * By now the village HOLDS seven real capabilities and kira is an ordinary
+   * member under them. So asserting she gets false is not the trivial case of
+   * a member with no powers at all; it is the case that reaching for the
+   * nearest existing key would have broken.
+   */
+  it("hands the three map editors to an admin", async () => {
+    const r = await call("GET", "/api/map");
+    expect(r.status, r.text).toBe(200);
+    expect(r.json?.viewer?.mayStyleMap).toBe(true);
+    expect(r.json?.viewer?.mayEditWalk).toBe(true);
+    expect(r.json?.viewer?.mayNameMapThings).toBe(true);
+  });
+
+  it("withholds all three from a member, even one standing under seven held powers", async () => {
+    const r = await call("GET", "/api/map", undefined, kiraToken);
+    expect(r.status, r.text).toBe(200);
+    expect(r.json?.viewer?.mayStyleMap ?? false).toBe(false);
+    expect(r.json?.viewer?.mayEditWalk ?? false).toBe(false);
+    expect(r.json?.viewer?.mayNameMapThings ?? false).toBe(false);
+    // The reader still gets the map itself; only the editing chrome is withheld.
+    expect(r.json?.viewer).toBeTruthy();
   });
 });

@@ -1,0 +1,58 @@
+-- 0218: a founder says, on the launch vote itself, that they want the seat.
+--
+-- Rye's ruling of 2026-09-24: "The founders automatically become stewards and
+-- hold all powers at launch for whomever of the founding members (3 minimum)
+-- carry the inaugural role of steward for the first season. Any of the
+-- founding 3 can apply for this role by self signaling at founding they want
+-- it." Asked when the signalling happens, he said it happens AT THE LAUNCH
+-- VOTE: a founding member signals as part of voting to launch, so the roll and
+-- the stewards are decided in one moment.
+--
+-- ── WHY THE COLUMN SITS ON THE VOTE AND NOT ON A TABLE OF ITS OWN ──────────
+--
+-- The signal IS part of the launch vote. `ballot_votes` already holds one row
+-- per (ballot, member), already carries the UNIQUE key that makes a member's
+-- second thought a rewrite rather than a second row, and already freezes when
+-- the ballot closes, so the record of who stood is as permanent and as
+-- unforgeable as the record of who voted yes. A separate table would be a
+-- second place a member's launch-day act can live, joined to this one on the
+-- same two ids, and it would have to invent its own answer for what happens
+-- when the vote is recast.
+--
+-- It is NOT a `village_launch`-only table for the same reason `reason` is not
+-- one: the column belongs to a vote, and which votes may carry a meaningful
+-- value is the application's business. `castVote` writes it only on a
+-- `village_launch` ballot and stores 0 everywhere else.
+--
+-- ── EXPAND-ONLY, AND THE ROLLBACK REALLY HOLDS ─────────────────────────────
+--
+-- A new column, NOT NULL, with a DEFAULT, which the compatibility table in
+-- CLAUDE.md names as safe to land now. The trap that makes that table's other
+-- row ("making an existing column NOT NULL") unsafe here does NOT apply,
+-- because it is a `dbCollection` trap: `server/repos/store-db.ts` names every
+-- spec'd column on every INSERT, so a repo-backed table gets an explicit NULL
+-- where a caller meant "absent". There is no repo spec above `ballot_votes`.
+-- Every writer of it is raw SQL naming its columns by hand -- `castVote` in
+-- server/lib/ballots.ts and `upsertDelegatedRow` in server/lib/delegation.ts
+-- -- so the previous release simply omits this column and the DEFAULT applies.
+-- Checked by reading both statements, not assumed from the column type.
+--
+-- ── A DELEGATED VOTE CARRIES NO SIGNAL, BY CONSTRUCTION ────────────────────
+--
+-- `upsertDelegatedRow` copies a delegate's CHOICE into the rows of everybody
+-- following them. It names `(ballot_id, user_id, choice, reason,
+-- followed_user_id)` and nothing else, so a copied vote takes the default and
+-- stands for nobody. That is the right answer rather than an accident worth
+-- correcting: standing for a seat is a personal act, and a member cannot be
+-- delegated into a power they never asked for.
+--
+-- ── WHAT AN ALREADY-VOTED BALLOT READS AS ──────────────────────────────────
+--
+-- Zero, which means nobody stood. A village that had a launch vote open when
+-- this file ran therefore seats nobody at the close and is told so, and votes
+-- its stewards in through the ordinary `role_seat` ballot. That is the safe
+-- direction: nobody is handed a power they did not ask for. No village has
+-- launched, so this is a statement about the shape rather than about anybody's
+-- data.
+
+ALTER TABLE `ballot_votes` ADD COLUMN `stands_for_steward` TINYINT(1) NOT NULL DEFAULT 0;

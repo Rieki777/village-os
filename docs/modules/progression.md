@@ -130,7 +130,11 @@ member-facing reads. Everything else that moves this module's data sits outside 
   Serves `stage` (as played, not as configured), `stageIndex`, `consentedQuests`, `capabilities` (held),
   `capabilityCatalogue` (all of them, with the rung that opens each, on every power the village entrusts
   the classes it `suits` and whether it is `recommended` to this member, and the member's own `hand` on a power
-  while one is up), `roles` (id and name), `history` (this member's stage events, newest first) and `firsts`.
+  while one is up), `roles` (id and name), `history` (this member's stage events, newest first), `firsts`,
+  and `signing`: this member's own Love Letter signing as `at` plus one of `waiting`, `welcomed` or `left`,
+  or null for somebody who never signed. It costs no query, because the inbox is already in hand for the
+  catalogue above. `shared/membershipSigning.ts` maps the pipeline's five statuses onto those three and
+  says why the pipeline's own words (`new`, `reviewing`, `in-conversation`) never reach a member's page.
 - `GET /api/roles` (`server/index.ts`). No auth required, no module gate. Serves the village's SHAPE to
   anyone: role id, name, description, `capabilities`, `minStage`, `circleId`, `seats`, `holderCount`,
   `isExample`. It answers with a **bare array**, not an object; reading `.roles` off it yields `undefined`,
@@ -243,8 +247,9 @@ the whole frozen roll was notified when the ballot opened, the document named th
   printing them.
 - `client/src/components/GameDashboard.tsx`. Reads `lastAdvance` off `/api/game/me` and celebrates a
   crossing once, keyed on `stage:<toStage>:<at>`.
-- `client/src/pages/Admin.tsx`. The Players roster with the per-member "Grant" select, and `GameRolesTab`
-  for appointments.
+- `client/src/pages/Admin.tsx`. The Players roster with the per-member "Grant" select.
+- `client/src/components/admin/GameRolesTab.tsx`. `GameRolesTab` for appointments, moved out of
+  `Admin.tsx` unchanged.
 - `client/src/components/admin/HandoverTab.tsx`. Not this module's route, but it edits `roles` rows: moving
   a capability to the village writes the key onto a role's `capabilities` list first.
 - `client/src/pages/QuestDetail.tsx` and `client/src/components/governance/pickSources.ts` both read
@@ -350,7 +355,15 @@ the power suits, and they do not hold it. Below the rung the class is named and 
 member. The capability gate never reads the map, and `shared/powerAffinity.test.ts` fails if
 `shared/capabilities.ts` ever reaches it, directly or through any file it imports. The proof that matters is
 behavioural: `server/powerAffinity.routes.e2e.test.ts` has the member the map suggests `story.tell` to try to
-edit the map, and she is refused. The Builder suits no power yet, by the same ruling.
+edit the map, and she is refused.
+
+**Every class suits something, The Builder since 2026-09-23.** It suited nothing under the 2026-09-09 ruling.
+The correction is that building is making in every form and not only making on the land: "in this context
+'building' is in all the forms (like developers for code are building the game, same builder archetype)". So
+`org.seatAgent` wires the software agents that hold seats and `dial.set` tunes the village's own dials, one
+wiring what runs and the other tuning it. `mechanics.propose` was the first choice and cannot live in this map:
+`STAGE_UNLOCKS` opens it at the member rung, so every member already holds it by climbing, and this map only
+ever names powers the village ENTRUSTS by appointment. A power the ladder opens needs nobody to suggest it.
 
 **A hand asks for a power, and it never grants one.** A member a power is `recommended` to can raise a hand for
 it (`server/routes/powerHands.ts`), and the hand is a `power-application` row in the same `submissions` inbox a

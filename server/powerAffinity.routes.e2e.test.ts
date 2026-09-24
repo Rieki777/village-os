@@ -11,8 +11,10 @@
  * Architect, and the same read that recommends her The Architect's powers
  * recommends her nothing of The Storyteller's. Dell plays The Architect too and
  * stands below the rung. Ezra stands at the rung and plays only The Builder, who
- * suits no power by the ruling. A build that recommended everything, or nothing,
- * or ignored the rung, fails a named line below.
+ * since 2026-09-23 suits the two powers that wire and tune the machine and no
+ * others, so he is also the control for a power that suits a DIFFERENT class.
+ * A build that recommended everything, or nothing, or ignored the rung, fails a
+ * named line below.
  *
  * AND A SUGGESTION NEVER PERMITS. The last case suggests `story.tell` to Cass
  * and then has her try to use it.
@@ -254,10 +256,15 @@ describe.skipIf(!DB_CONFIGURED)("the platform's suggestion, before the village d
     expect(rows.filter((r) => r.recommended).map((r) => r.key)).toEqual([]);
   });
 
-  it("recommends nothing to a Contributor who plays only The Builder", async () => {
+  it("puts The Builder's two powers to a Contributor who plays only The Builder, and nothing else", async () => {
+    // Until 2026-09-23 this read the other way: The Builder suited nothing, so
+    // a Contributor playing only that class was recommended nothing at all.
     const rows = await catalogueOf(ezraToken);
-    expect(rows.filter((r) => r.recommended).map((r) => r.key)).toEqual([]);
-    expect(rows.some((r) => (r.suits ?? []).some((s: any) => s.key === "building"))).toBe(false);
+    expect(rows.filter((r) => r.recommended).map((r) => r.key)).toEqual(["org.seatAgent", "dial.set"]);
+    // The Architect's powers are still somebody else's, which is the half that
+    // would break if a build recommended everything to everybody.
+    expect(rowOf(rows, "map.publish").recommended).toBe(false);
+    expect(rowOf(rows, "library.keep").recommended).toBe(false);
   });
 
   it("lists a class's powers on its card, leaving out a power whose module is off", async () => {
@@ -265,7 +272,10 @@ describe.skipIf(!DB_CONFIGURED)("the platform's suggestion, before the village d
     // The Storyteller's photo and announcement powers belong to modules that
     // are off here, so the card names only the one that reaches anybody.
     expect(await cardOf("storytelling")).toEqual(["story.tell"]);
-    expect(await cardOf("building")).toEqual([]);
+    // Both of The Builder's powers reach this village, so its card is not the
+    // empty-card case any more. `catalyzing` is, since intake.moderate's own
+    // surface is off here.
+    expect(await cardOf("building")).toEqual(["org.seatAgent", "dial.set"]);
   });
 });
 
@@ -357,9 +367,10 @@ describe.skipIf(!DB_CONFIGURED)("a power the village takes off its ladder", () =
 });
 
 describe.skipIf(!DB_CONFIGURED)("a suggestion never permits", () => {
-  it("leaves the map to whoever holds story.tell, even for the member it suggests story.tell to", async () => {
+  it("leaves the map to whoever holds org.declare, even for the member it suggests story.tell to", async () => {
     // Fern holds nothing. Cass is the member the map now suggests story.tell
-    // to, and a suggestion is not the power.
+    // to, and a suggestion is not the power. Since 2026-09-23 the map is
+    // written by `org.declare`, so holding story.tell would not open it either.
     for (const token of [fernToken, cassToken]) {
       const tried = await call("PUT", "/api/admin/power-affinity/library.keep", { token, body: { classes: ["catalyzing"] } });
       expect([401, 403], JSON.stringify(tried.json)).toContain(tried.status);

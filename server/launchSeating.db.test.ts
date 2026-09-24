@@ -27,10 +27,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
 import type { Pool } from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "./db/testDb";
 import { loadVariables } from "./lib/variables";
 import { seatFoundersAtLaunch, type LaunchSeatingDeps } from "./lib/launchSeating";
 import { holdingHasLapsed, stewardHoldingId, STEWARD_ROLE_ID, STEWARD_VETO } from "./lib/stewardship";
+import { HANDOVER_SET } from "../shared/capabilities";
 import { civilDateInstant, type SeatCalendar } from "../shared/seatTerms";
 
 const configured = testDbConfigured();
@@ -114,7 +115,7 @@ function recorder(pool: Pool) {
  * So this suite runs the app's own discipline and then reads the true instant.
  */
 function connect(url: string): Pool {
-  const p = mysql.createPool({ uri: url, timezone: "Z", connectionLimit: 6 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+  const p = testPool(url, { connectionLimit: 6 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
   p.on("connection", (c) => {
     c.query("SET time_zone = '+00:00'"); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
   });
@@ -126,6 +127,52 @@ async function member(pool: Pool, id: string, name: string, role: string): Promi
     "INSERT INTO users (id, name, email, password_hash, role) VALUES (?,?,?,?,?)",
     [id, name, `${id}@example.invalid`, "x", role],
   );
+}
+
+/**
+ * A vote on the launch ballot, saying whether this member STOOD for the seat.
+ *
+ * Rye, 2026-09-24: "Any of the founding 3 can apply for this role by self
+ * signaling at founding they want it", and the signalling happens at the launch
+ * vote itself. `castVote` writes this column on a `village_launch` ballot; here
+ * the row is written straight, because this suite drives the seating and not
+ * the route.
+ *
+ * EVERY FIXTURE SAYS THIS OUT LOUD, including the ones that say `false`. A
+ * suite with no vote rows at all is a village where nobody stood, which is a
+ * different test from the one most of these files mean to be.
+ */
+async function stoodAtLaunch(pool: Pool, userId: string, stands = true): Promise<void> {
+  await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema
+    "INSERT INTO ballot_votes (ballot_id, user_id, choice, stands_for_steward) VALUES (?,?,?,?) " +
+      "ON DUPLICATE KEY UPDATE stands_for_steward = VALUES(stands_for_steward)",
+    [LAUNCH_BALLOT, userId, "yes", stands ? 1 : 0],
+  );
+}
+
+/**
+ * Every power this village has entrusted, to whom, and WHEN IT CROSSED.
+ *
+ * `moved_at` is in here for the retry case and it is the load-bearing column
+ * there. A crossing that ran again and rewrote the row it should have left
+ * alone is a different answer from one that did nothing, and without the
+ * timestamp the two are indistinguishable: the count stays nineteen either
+ * way. Read through `UNIX_TIMESTAMP` for the reason `seatOf` gives, which is
+ * that a driver read of a TIMESTAMP shifts by the database host's offset.
+ */
+async function entrusted(
+  pool: Pool,
+): Promise<Array<{ capability: string; holder: string; ballot: string | null; movedAt: number }>> {
+  const [rows]: any = await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    "SELECT capability, holder_role_id, moved_by_ballot_id, UNIX_TIMESTAMP(moved_at) AS moved " +
+      "FROM capability_holding ORDER BY capability",
+  );
+  return rows.map((r: any) => ({
+    capability: String(r.capability),
+    holder: String(r.holder_role_id),
+    ballot: r.moved_by_ballot_id === null ? null : String(r.moved_by_ballot_id),
+    movedAt: Number(r.moved),
+  }));
 }
 
 /**
@@ -196,13 +243,28 @@ describe.skipIf(!configured)("the launch seats the village's founders as steward
     db = await provisionTestDb();
     pool = connect(db.url);
     await loadVariables(pool);
-    // Rye has ruled a village has three founders. All three are seated, and
-    // the member beside them is what makes the seating a filter rather than a
-    // sweep of the roll.
+    /*
+     * THE ROLL THIS SUITE DRIVES, and every part of it is load-bearing now.
+     *
+     * Rye has ruled a village has three founders. TWO of them stood for the
+     * seat at the launch vote and the third did not, which is the filter the
+     * ruling of 2026-09-24 added: "whomever of the founding members ... carry
+     * the inaugural role", and they say so by "self signaling at founding".
+     * The ordinary member beside them stood as well, which is the other half:
+     * standing is not the whole of it, and a member who is not a founding
+     * member is not seated on it.
+     *
+     * So four people, three signals, two seats, and every wrong answer looks
+     * different from every other.
+     */
     await member(pool, "cat-1", "Wren Alder", "founder");
     await member(pool, "cat-2", "Iris Fenn", "founder");
     await member(pool, "cat-3", "Bram Quill", "founder");
     await member(pool, "mem-1", "Rook Salt", "member");
+    await stoodAtLaunch(pool, "cat-1");
+    await stoodAtLaunch(pool, "cat-2");
+    await stoodAtLaunch(pool, "cat-3", false);
+    await stoodAtLaunch(pool, "mem-1");
     log = recorder(pool);
   });
 
@@ -218,16 +280,24 @@ describe.skipIf(!configured)("the launch seats the village's founders as steward
     expect(Number(rows[0].n)).toBe(0);
   });
 
-  it("seats every founder, with a term, and the term is the season's end", async () => {
+  it("seats the founders who STOOD for it, with a term, and the term is the season's end", async () => {
     const out = await seatFoundersAtLaunch(log.deps());
     expect(out.ok).toBe(true);
     expect(out.held).toBeNull();
-    expect(out.seated.sort()).toEqual(["cat-1", "cat-2", "cat-3"]);
+    expect(out.seated.sort(), "the two who asked for it, and neither of the other two").toEqual([
+      "cat-1",
+      "cat-2",
+    ]);
     expect(out.alreadySeated).toEqual([]);
+    expect(out.stoodForSeat, "the denominator, so an empty seat can be told from an empty ask").toEqual([
+      "cat-1",
+      "cat-2",
+      "mem-1",
+    ]);
     expect(out.termEndsOn).toBe(SEASON_ENDS_ON);
 
     const capAt = civilDateInstant(SEASON_ENDS_ON, TZ)!.getTime();
-    for (const id of ["cat-1", "cat-2", "cat-3"]) {
+    for (const id of ["cat-1", "cat-2"]) {
       const seat = await seatOf(pool, id);
       expect(seat, `${id} holds a seat`).not.toBeNull();
       // NOT "has a term": the term is the season's end to the second, which is
@@ -246,16 +316,72 @@ describe.skipIf(!configured)("the launch seats the village's founders as steward
     expect(Number(rows[0].n)).toBe(0);
   });
 
-  it("does not seat a member who is not a founder", async () => {
+  it("does not seat a member who is not a founder, however loudly they stood", async () => {
+    /*
+     * `mem-1` DID stand, and has the vote row to prove it, so this is the
+     * founding-member half of the rule working and not an empty query
+     * answering nothing. The known positive is the two seats above.
+     */
     expect(await seatOf(pool, "mem-1")).toBeNull();
     expect(log.rung.some((r) => r.userId === "mem-1")).toBe(false);
+    const [rows]: any = await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT stands_for_steward FROM ballot_votes WHERE ballot_id = ? AND user_id = 'mem-1'",
+      [LAUNCH_BALLOT],
+    );
+    expect(Number(rows[0]?.stands_for_steward), "they really did stand").toBe(1);
+    // And their name is on the admin spine, so a signal that seated nobody
+    // left a record instead of vanishing.
+    expect(log.audits.some((a) => a.startsWith("role:stood-not-founding:") && a.includes("mem-1"))).toBe(true);
+  });
+
+  it("does not seat a founder who did not stand", async () => {
+    /*
+     * THE OPT-IN, AND THE WHOLE OF IT. `cat-3` is a founder, was on the roll,
+     * and did not ask for the seat. Rye made this something a founding member
+     * applies for, so inheriting it anyway would be the defect this lane
+     * closes. Nobody is conscripted into a power.
+     */
+    expect(await seatOf(pool, "cat-3")).toBeNull();
+    expect(log.rung.some((r) => r.userId === "cat-3")).toBe(false);
+    expect(log.audits.some((a) => a.includes("cat-3")), "and nothing is recorded about them").toBe(false);
+  });
+
+  it("entrusts ALL NINETEEN powers to the seat, and the seat carries all nineteen", async () => {
+    /*
+     * Rye, 2026-09-24: the founding stewards "hold all powers at launch", and
+     * asked whether that named a subset, all nineteen entrustable powers.
+     *
+     * TWO FACTS AND NOT ONE. The role has to CARRY each power, or nobody in it
+     * could act; the village has to HOLD each power, or an administrator walks
+     * through the gate with nothing anywhere saying they reached past anybody.
+     * `moveCapabilityToVillage` refuses the second without the first, so a
+     * suite asserting only the holdings would pass on a village where the role
+     * carried nothing and nothing had crossed.
+     *
+     * Compared as whole sets. `toContain` on a key would be green on a seat
+     * carrying eighteen, which is the shape this lane exists to fix.
+     */
+    const [roles]: any = await pool.query("SELECT capabilities FROM roles WHERE id = ?", [STEWARD_ROLE_ID]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const carried = typeof roles[0].capabilities === "string" ? JSON.parse(roles[0].capabilities) : roles[0].capabilities;
+    expect([...carried].sort(), "the role carries every one of them").toEqual([...HANDOVER_SET].sort());
+
+    const rows = await entrusted(pool);
+    expect(rows.map((r) => r.capability), "and every one of them is the village's").toEqual(
+      [...HANDOVER_SET].sort(),
+    );
+    for (const r of rows) {
+      expect(r.holder).toBe(STEWARD_ROLE_ID);
+      expect(r.ballot, "the vote that started the Game moved it, not an administrator").toBe(LAUNCH_BALLOT);
+    }
+    expect(rows).toHaveLength(19);
   });
 
   it("tells each seated founder, once, and says when the seat ends", async () => {
     const seatNotices = log.rung.filter((r) => r.type === "role_appointed");
-    expect(seatNotices.map((r) => r.userId).sort()).toEqual(["cat-1", "cat-2", "cat-3"]);
+    expect(seatNotices.map((r) => r.userId).sort()).toEqual(["cat-1", "cat-2"]);
     expect(seatNotices[0].dedupeKey).toBe(`role:${stewardHoldingId(seatNotices[0].userId)}`);
     expect(String(seatNotices[0].body)).toContain(SEASON_ENDS_ON);
+    expect(String(seatNotices[0].body), "and that they asked for it").toContain("asked for this seat");
     expect(String(seatNotices[0].title)).toContain("Steward");
   });
 
@@ -267,30 +393,151 @@ describe.skipIf(!configured)("the launch seats the village's founders as steward
     expect(log.admins, "nothing here needs an administrator").toEqual([]);
   });
 
-  it("seats nobody twice and tells nobody twice when the close is retried", async () => {
+  it("seats nobody twice, moves nothing twice, and tells nobody twice on a retried close", async () => {
     // A failed at-close landing parks `village_launch` and the landing job runs
     // `execute` again (server/lib/atCloseLanding.ts), so this is the ordinary
     // case and not an exotic one.
     const before = log.rung.length;
     const pulseBefore = log.pulse.length;
+    const movedBefore = await entrusted(pool);
+    // A whole second between the two crossings, so a rewritten `moved_at`
+    // really is a different number. Without it the retry can land inside the
+    // same second and the comparison below passes on a row that moved.
+    await new Promise((r) => setTimeout(r, 1100));
     const again = await seatFoundersAtLaunch(log.deps());
 
     expect(again.ok).toBe(true);
     expect(again.seated, "nothing to do, which is not a failure").toEqual([]);
-    expect(again.alreadySeated.sort()).toEqual(["cat-1", "cat-2", "cat-3"]);
+    expect(again.alreadySeated.sort()).toEqual(["cat-1", "cat-2"]);
     expect(log.rung.length - before, "no second notice").toBe(0);
     expect(log.pulse.length - pulseBefore, "no second line on the pulse").toBe(0);
+    expect(log.admins, "and nothing an administrator has to fix").toEqual([]);
 
     const [rows]: any = await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COUNT(*) AS n FROM role_holders WHERE role_id = ?",
       [STEWARD_ROLE_ID],
     );
-    expect(Number(rows[0].n), "one seat each, not two").toBe(3);
+    expect(Number(rows[0].n), "one seat each, not two").toBe(2);
     const [terms]: any = await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT COUNT(*) AS n FROM role_holder_terms WHERE role_id = ?",
       [STEWARD_ROLE_ID],
     );
-    expect(Number(terms[0].n), "one mandate each in the history").toBe(3);
+    expect(Number(terms[0].n), "one mandate each in the history").toBe(2);
+
+    /*
+     * AND NOTHING CROSSED TWICE. The report's `capabilitiesMoved` is the work
+     * of one run and is the wrong thing to read here; the table is the fact.
+     * Compared WHOLE, so a second row on any key shows up, and compared
+     * including `moved_at`, so a crossing that rewrote a row it should have
+     * left alone is a different answer from one that did nothing.
+     */
+    const movedAfter = await entrusted(pool);
+    expect(movedAfter, "the same nineteen rows, held by the same seat").toEqual(movedBefore);
+    expect(again.report?.capabilitiesGranted, "the role already carried all nineteen").toEqual([]);
+    expect(again.report?.holdingMoved, "and they are still the village's").toBe(true);
+  });
+});
+
+describe.skipIf(!configured)("a launch nobody stood for", () => {
+  let db: TestDb;
+  let pool: Pool;
+  let log: ReturnType<typeof recorder>;
+  /** The one seating this suite runs, so three cases read one state. */
+  let out: Awaited<ReturnType<typeof seatFoundersAtLaunch>>;
+
+  beforeAll(async () => {
+    db = await provisionTestDb();
+    pool = connect(db.url);
+    await loadVariables(pool);
+    // Three founders, a carried launch, and not one of them asked for the seat.
+    await member(pool, "cat-1", "Wren Alder", "founder");
+    await member(pool, "cat-2", "Iris Fenn", "founder");
+    await member(pool, "cat-3", "Bram Quill", "founder");
+    await stoodAtLaunch(pool, "cat-1", false);
+    await stoodAtLaunch(pool, "cat-2", false);
+    await stoodAtLaunch(pool, "cat-3", false);
+    log = recorder(pool);
+    out = await seatFoundersAtLaunch(log.deps());
+  });
+
+  afterAll(async () => {
+    await pool?.end();
+    await db?.drop();
+  });
+
+  /**
+   * THE DECISION THIS PINS, and it is the sharpest one in the lane.
+   *
+   * Rye made the inaugural seat something a founding member ASKS for, so a
+   * launch where nobody asked is reachable. The floor of three is the launch
+   * ballot's own `minElectorate` and it is about the ROLL, so it is already
+   * met here: three founders voted and the launch carried.
+   *
+   * Three answers were possible and two are wrong. REFUSING THE LAUNCH is
+   * wrong for the reason the whole module exists: it has carried,
+   * `recordGameStart` has run, nothing un-starts a Game, and `village_launch`
+   * is retry-safe, so throwing would have the landing job retry a checkbox
+   * every five minutes forever. SEATING SOMEBODY ANYWAY to make the number up
+   * is worse: it conscripts a founder into a power they declined, which is the
+   * exact thing the ruling changed.
+   *
+   * So the Game starts, the seat stands empty, and the village is told. The
+   * empty seat is the ordinary empty seat `vacancyState` calls healthy, and an
+   * ordinary `role_seat` ballot fills it whenever somebody wants it.
+   */
+  it("starts the Game, seats nobody, refuses nothing, and tells the village", async () => {
+    expect(out.ok, "every write it had to run, ran").toBe(true);
+    expect(out.seated).toEqual([]);
+    expect(out.alreadySeated).toEqual([]);
+    expect(out.stoodForSeat, "and the reason is that nobody asked").toEqual([]);
+    expect(out.termEndsOn, "the calendar was never the problem").toBe(SEASON_ENDS_ON);
+
+    expect(String(out.held)).toContain("started its Game");
+    expect(String(out.held)).toContain("nobody stood");
+    expect(log.pulse, "the village reads it").toEqual([out.held]);
+    expect(log.rung, "and nobody is told they hold a seat they do not").toEqual([]);
+    expect(
+      log.admins,
+      "and no administrator is rung, because there is nothing for one to fix",
+    ).toEqual([]);
+  });
+
+  /**
+   * NOT ONE OF THE NINETEEN CROSSES TO AN EMPTY SEAT, and this is the
+   * assertion the lane would be dangerous without.
+   *
+   * `moveCapabilityToVillage` asks whether the ROLE carries the power and
+   * never whether anybody is in it, which is right for every other caller. At
+   * a LAUNCH it is not enough, because launch is also the moment the founders'
+   * standing powers end. Entrust nineteen powers to a seat nobody sits in and
+   * every admin stops passing the gate on all nineteen, nobody holds them, and
+   * the break-glass is shut too: `capabilityDecision` opens it only for a
+   * founder whose live roles carry `steward.veto`. Nineteen powers, no holder,
+   * no way back through the product.
+   *
+   * So with nobody seated the powers stay with the scaffolding, which is where
+   * every village keeps them until it launches.
+   */
+  it("entrusts NOTHING to a seat nobody sits in, so the village is not locked out of its own panel", async () => {
+    expect(await entrusted(pool), "the holding table is untouched").toEqual([]);
+    expect(out.report?.holdingMoved).toBe(false);
+    expect(String(out.report?.holdingHeld)).toContain("belongs to nobody");
+
+    const [holders]: any = await pool.query("SELECT COUNT(*) AS n FROM role_holders"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(Number(holders[0].n)).toBe(0);
+  });
+
+  it("still leaves the role carrying all nineteen, ready for the first vote that fills it", async () => {
+    /*
+     * The grant is harmless and it is what makes the way back cheap: a
+     * `role_seat` ballot seats somebody, and the powers can cross the moment
+     * they do, because `moveCapabilityToVillage` refuses a role that does not
+     * already carry the key.
+     */
+    const [roles]: any = await pool.query("SELECT capabilities FROM roles WHERE id = ?", [STEWARD_ROLE_ID]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(roles, "the role was created even though nobody sits in it").toHaveLength(1);
+    const carried = typeof roles[0].capabilities === "string" ? JSON.parse(roles[0].capabilities) : roles[0].capabilities;
+    expect([...carried].sort()).toEqual([...HANDOVER_SET].sort());
   });
 });
 
@@ -307,6 +554,17 @@ describe.skipIf(!configured)("a founder who already holds the seat", () => {
     await loadVariables(pool);
     await member(pool, "cat-1", "Wren Alder", "founder");
     await member(pool, "cat-2", "Iris Fenn", "founder");
+    /*
+     * ONLY `cat-2` STOOD, and `cat-1` deliberately did not.
+     *
+     * A seat the village VOTED somebody into is not this call's to reconsider,
+     * so a founder who already holds it is reported in `alreadySeated` whether
+     * or not they stood on this ballot. Leaving `cat-1` out of the signals is
+     * what makes the assertion below about that rule rather than about a
+     * fixture that happened to tick every box.
+     */
+    await stoodAtLaunch(pool, "cat-1", false);
+    await stoodAtLaunch(pool, "cat-2");
     log = recorder(pool);
     // Voted into the seat before the launch, on a shorter term of their own.
     await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema
@@ -355,6 +613,12 @@ describe.skipIf(!configured)("a calendar that cannot give the seat a term", () =
     await loadVariables(pool);
     await member(pool, "cat-1", "Wren Alder", "founder");
     await member(pool, "cat-2", "Iris Fenn", "founder");
+    // BOTH STOOD, so the calendar is the only thing standing between this
+    // village and a seated steward. Without these rows the suite below would
+    // pass for the wrong reason: nobody seated because nobody asked, which is
+    // a different branch and a different sentence.
+    await stoodAtLaunch(pool, "cat-1");
+    await stoodAtLaunch(pool, "cat-2");
   });
 
   afterAll(async () => {
@@ -420,6 +684,8 @@ describe.skipIf(!configured)("the break-glass a founder gets by being seated (PR
     await loadVariables(pool);
     await member(pool, "cat-1", "Wren Alder", "founder");
     await member(pool, "mem-1", "Rook Salt", "member");
+    // The founder stood for the seat, which is what hands them the key below.
+    await stoodAtLaunch(pool, "cat-1");
   });
 
   afterAll(async () => {

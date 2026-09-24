@@ -362,7 +362,8 @@ export const MODULE_CATALOG: Record<string, ModuleCatalogEntry> = {
       "Other surfaces read it, so the map lights the building something is in",
     ],
     forWhom: "Villages that live by more than one clock.",
-    setupSummary: "Nothing to set up. Post the first gathering when it is time.",
+    setupSummary:
+      "Say which hemisphere the village is in, so the seasons turn the right way round, then post the first gathering when it is time.",
     dataSummary: "Events and RSVPs, tied to named members.",
     hue: 280,
     emblem: "CalendarDays",

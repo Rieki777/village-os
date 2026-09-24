@@ -11,13 +11,16 @@
 import { describe, expect, it } from "vitest";
 import {
   ALL_CAPABILITIES,
+  BADGE_GRANTABLE,
   BREAK_GLASS_SEAT,
   BREAK_GLASS_WAY_THROUGH,
   CAPABILITY_LABELS,
   capabilityDecision,
   capabilityLabel,
   DENIABLE,
+  HANDOVER_SET,
   hasCapability,
+  isBadgeGrantable,
   isDeniable,
   isVillageHeld,
   STAGE_UNLOCKS,
@@ -262,6 +265,75 @@ describe("hasCapability truth table", () => {
       });
     });
 
+    /*
+     * RYE, 2026-09-23: a badge may NOT grant `steward.veto`. He was offered
+     * "a badge may" and chose seats only, "so that an admin cannot mint a
+     * badge and give themselves a veto".
+     *
+     * WHAT WAS MEASURED BEFORE THIS BLOCK EXISTED, and it is why these are
+     * here rather than one line up in the break-glass suite: the gate already
+     * refused a BADGE-granted seat at the break-glass step (the test above),
+     * and it still answered `decided(true, "badge")` for the veto ITSELF. So
+     * an administrator could mint a badge, award it to themselves and veto a
+     * carried decision — not reach past the village, which is the act the
+     * step above fences, but exercise the seat's own power. Two different
+     * doors, and only one of them was shut.
+     */
+    describe("a badge may not grant the steward's veto", () => {
+      const SEAT = BREAK_GLASS_SEAT;
+
+      it("marks the seat ungrantable and every other key grantable", () => {
+        expect(BADGE_GRANTABLE[SEAT]).toBe(false);
+        expect(isBadgeGrantable(SEAT)).toBe(false);
+        for (const cap of ALL_CAPABILITIES) {
+          if (cap === SEAT) continue;
+          expect(isBadgeGrantable(cap), cap).toBe(true);
+        }
+      });
+
+      it("REGRESSION: a badge naming the seat does not pass the gate", () => {
+        const d = capabilityDecision(SEAT, ctx({ badgeCapabilities: [SEAT] }));
+        expect(d.allowed).toBe(false);
+        expect(d.source).toBe("not granted");
+      });
+
+      it("a SEAT granting it still does, which is the whole of the ruling", () => {
+        const d = capabilityDecision(SEAT, ctx({ roleCapabilities: [SEAT] }));
+        expect([d.allowed, d.source]).toEqual([true, "role"]);
+      });
+
+      it("the badge does not become the seat by being held alongside an admin", () => {
+        // On a key the village does NOT hold the admin short-circuit answers
+        // first and always has. What this pins is that the BADGE never does.
+        const d = capabilityDecision(SEAT, ctx({ isAdmin: true, isFounder: true, badgeCapabilities: [SEAT] }));
+        expect(d.source).toBe("admin");
+        expect(capabilityDecision(SEAT, ctx({ isFounder: true, badgeCapabilities: [SEAT] })).allowed).toBe(false);
+      });
+
+      it("and it still opens no override on a village-held power", () => {
+        // The other door, kept shut: #312's behaviour has to survive this map.
+        const d = capabilityDecision(
+          MOVED,
+          ctx({ isAdmin: true, isFounder: true, adminOverride: true, badgeCapabilities: [SEAT], ...held }),
+        );
+        expect([d.allowed, d.reachedPastVillage]).toEqual([false, false]);
+      });
+
+      it("an unknown key is ungrantable, which is the safe direction", () => {
+        expect(isBadgeGrantable("nope.invented")).toBe(false);
+      });
+    });
+
+    describe("the BADGE_GRANTABLE map", () => {
+      it("names exactly the capabilities that exist", () => {
+        expect(Object.keys(BADGE_GRANTABLE).sort()).toEqual([...ALL_CAPABILITIES].sort());
+      });
+
+      it("fences exactly one key, so a widening is a deliberate edit and not a drift", () => {
+        expect(ALL_CAPABILITIES.filter((c) => !BADGE_GRANTABLE[c])).toEqual(["steward.veto"]);
+      });
+    });
+
     it("a holding row naming a NON-transferable key cannot close a door", () => {
       // The second lock, beside the boot assertion. A hand-written INSERT is
       // invisible to code review by definition.
@@ -287,6 +359,46 @@ describe("hasCapability truth table", () => {
       // error with a lockout attached.
       for (const personal of ["forum.post", "message.send", "event.rsvp", "exchange.buy"] as Capability[]) {
         expect(TRANSFERABLE[personal], personal).toBe(false);
+      }
+    });
+  });
+
+  /**
+   * THE SET THE FOUNDING STEWARDS TAKE AT LAUNCH (Rye, 2026-09-24).
+   *
+   * "The founders automatically become stewards and hold all powers at
+   * launch", and asked whether "all powers" named a chosen subset, all
+   * nineteen entrustable powers.
+   */
+  describe("the HANDOVER_SET", () => {
+    it("is every transferable power and nothing else", () => {
+      expect([...HANDOVER_SET].sort()).toEqual(ALL_CAPABILITIES.filter((c) => TRANSFERABLE[c]).sort());
+    });
+
+    it("is nineteen keys, which is the number the ruling was given in", () => {
+      /*
+       * A NUMBER AND NOT ONLY A DERIVATION, deliberately.
+       *
+       * The line above is true of any derivation of itself and would stay green
+       * if a power quietly changed sides, because both halves would move
+       * together. Rye was told nineteen and ruled on nineteen, so a change to
+       * the count is a change to what he agreed to. Whoever moves it is
+       * answering that question rather than breaking an invariant, and this is
+       * where they find out they are being asked.
+       */
+      expect(HANDOVER_SET).toHaveLength(19);
+    });
+
+    it("carries the steward's veto, which is what opens the break-glass", () => {
+      // The launch seating entrusts the whole set, so if this key were ever
+      // classified out of it a launched village would have no break-glass at
+      // all: `capabilityDecision` reads exactly this one.
+      expect(HANDOVER_SET).toContain(BREAK_GLASS_SEAT);
+    });
+
+    it("holds no personal act, so no launch can lock a member out of their own voice", () => {
+      for (const personal of ["forum.post", "message.send", "event.rsvp", "exchange.buy"] as Capability[]) {
+        expect(HANDOVER_SET, personal).not.toContain(personal);
       }
     });
   });
@@ -433,11 +545,26 @@ describe("a badge may never take away a voice", () => {
     expect(roll).toEqual(["no badge", "warned on the vote", "warned on posting"]);
   });
 
+  /*
+   * ASSERTED ON THE SOURCE, NOT ON THE ANSWER, and the difference is the
+   * whole of this test. The invariant is that a DENY never decides one of
+   * these keys; "the member still holds it" was only ever a proxy for that,
+   * and the proxy broke honestly on 2026-09-23. `steward.veto` is in this
+   * list because `DENIABLE` marks it false, and `BADGE_GRANTABLE` now marks
+   * it ungrantable too, so the badge row that used to grant it grants
+   * nothing. The answer is false and NO DENY WAS INVOLVED, which is exactly
+   * what this test exists to police. Reading the step keeps it policing that
+   * and stops it quietly becoming a defence of the badge grant.
+   */
   it("a deny cannot reach a voice key by any route: role, badge or stage held it", () => {
     for (const cap of VOICE) {
       for (const source of ["roleCapabilities", "badgeCapabilities"] as const) {
         const c = ctx({ [source]: [cap], badgeDenies: [cap] });
-        expect(hasCapability(cap, c), `${cap} via ${source}`).toBe(true);
+        const d = capabilityDecision(cap, c);
+        expect(d.source, `${cap} via ${source}`).not.toBe("denied by warning badge");
+        if (source === "roleCapabilities" || BADGE_GRANTABLE[cap]) {
+          expect(d.allowed, `${cap} via ${source}`).toBe(true);
+        }
       }
     }
   });

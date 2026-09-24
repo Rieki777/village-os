@@ -274,6 +274,35 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
     expect((await call("POST", "/api/redemptions", { token: CREDITS, amount: 1, askedFor: "x" }, null)).status).toBe(401);
   });
 
+  /*
+   * WHETHER TO ASK, driven against the built server rather than reasoned.
+   *
+   * The steward queue used to find out whether it was allowed by requesting
+   * `GET /api/admin/redemptions` and reading the refusal, so every ordinary
+   * member's wallet took a 401 on every load (ruling 28, 2026-09-21: a
+   * permanent 401 on an ordinary page is noise nobody wants). The member route
+   * now answers the question up front.
+   *
+   * BOTH SIDES ARE HERE and the second is the one that matters. A hint that
+   * said "no" to everybody would silence the noise and take the queue away
+   * from every steward who holds `redemption.confirm` through a role rather
+   * than by being an admin, which is the whole reason the component asks the
+   * server instead of checking for an admin.
+   */
+  it("tells a member whether to ask for the queue at all", async () => {
+    const member = await call("GET", "/api/redemptions", undefined, wrenToken);
+    expect(member.status).toBe(200);
+    expect(member.json?.mayConfirm, "a plain member does not hold the key").toBe(false);
+    // And the hint is honest about the door it describes: the admin route
+    // really does refuse them, so nothing was hidden by not asking.
+    expect((await call("GET", "/api/admin/redemptions", undefined, wrenToken)).status).not.toBe(200);
+
+    const founder = await call("GET", "/api/redemptions", undefined, founderToken);
+    expect(founder.status).toBe(200);
+    expect(founder.json?.mayConfirm, "the founder still sees the queue").toBe(true);
+    expect((await call("GET", "/api/admin/redemptions", undefined, founderToken)).status).toBe(200);
+  });
+
   it("offers a member the tokens this village redeems, and no others", async () => {
     const r = await call("GET", "/api/redemptions", undefined, wrenToken);
     expect(r.status).toBe(200);
@@ -602,6 +631,18 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
     expect(b.status, b.text.slice(0, 200)).toBe(200);
     return String(b.json?.brand?.project?.fiatCurrency ?? "");
   };
+  /**
+   * The MERGED value, raw, before `defaultDisplayCurrency` has an opinion.
+   *
+   * This is what decides whether the case below can separate its two readers
+   * at all, so it is read rather than assumed. Blank here means the platform
+   * default is blank too, because merged is the default under the stored value.
+   */
+  const mergedCurrency = async (): Promise<string> => {
+    const cfg = await call("GET", "/api/game/config", undefined, null);
+    expect(cfg.status, cfg.text.slice(0, 200)).toBe(200);
+    return String(cfg.json?.project?.fiatCurrency ?? "");
+  };
   const setStoredCurrency = async (code: string) => {
     const r = await call("PUT", "/api/admin/brand", { project: { fiatCurrency: code } }, founderToken);
     expect(r.status, r.text.slice(0, 200)).toBe(200);
@@ -610,12 +651,42 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
   it("counts a redemption in the currency the site displays when the village never set one", async () => {
     // The known positive, checked before anything is measured: nothing is
     // stored, and the site shows a currency the old private fallback is not.
-    // Were the platform default ever CHF, this case could not tell the defect
-    // from the fix, so it says that rather than passing.
     expect(await storedCurrency(), "this village must never have set a currency").toBe("");
     const site = await siteCurrency();
     expect(site, "the site must display some currency").toMatch(/^[A-Z]{3}$/);
-    expect(site, "the platform default must differ from CHF for this case to measure anything").not.toBe("CHF");
+
+    /*
+     * WHETHER THIS CASE CAN SEPARATE ITS TWO READERS AT ALL, ASKED RATHER THAN
+     * ASSUMED.
+     *
+     * The defect was redemption reading the STORED document where the site
+     * reads the MERGED config. Those two differ only when the stored value is
+     * blank AND the platform default is not, which is what made this case
+     * sharp: the site said CRC while redemption said a private CHF.
+     *
+     * `project.fiatCurrency` went BLANK on 2026-09-23 (Rye's ruling), so for a
+     * village that never chose, merged and stored are now the SAME empty
+     * string and both readers land on `defaultDisplayCurrency`, which answers
+     * CHF. The old strengthener asserted the default was not CHF and failed
+     * this test the moment the default went blank, which is the assertion
+     * doing its job: it refused to keep passing once it had stopped measuring.
+     *
+     * So it is conditional now instead of deleted. While the default is blank
+     * the defect is not merely invisible here, it is IMPOSSIBLE, because there
+     * is no difference between the two values to read wrongly. The moment
+     * anybody gives the platform a non-blank currency again, this recovers its
+     * full strength automatically and with no edit.
+     */
+    const merged = await mergedCurrency();
+    if (merged) {
+      expect(site, "with a non-blank platform default this case must not collapse onto CHF").not.toBe("CHF");
+      expect(site, "and the site must be reading the merged value").toBe(merged);
+    } else {
+      // Blank default: pin the reason, so a future reader knows this branch is
+      // a measured state and not a forgotten assertion.
+      expect(await storedCurrency(), "blank default and blank stored value is why CHF on both sides proves nothing").toBe("");
+      expect(site, "defaultDisplayCurrency answers CHF for a village that declares nothing").toBe("CHF");
+    }
 
     // What the member's form offers, and what each token is quoted in.
     const mine = await call("GET", "/api/redemptions", undefined, wrenToken);
