@@ -28,7 +28,7 @@ import type { Pool } from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { CapabilityCtx } from "../../shared/capabilities";
 import { liveHoldersOfCapability } from "../lib/roleGrants";
-import { register } from "./powerHands";
+import { register, registerSeatVote } from "./powerHands";
 
 const LIBRARY = "library.keep";
 const LIBRARY_LABEL = "Keep the shared library and its loans";
@@ -289,5 +289,126 @@ describe("ruling 1: who may put a hand to the village", () => {
     expect((await call("/api/powers/hands")).body.hands).toHaveLength(0);
     const r = await call("/api/powers/hands/hand-ana/put-to-village", { method: "POST" });
     expect(r.status).toBe(404);
+  });
+});
+
+/**
+ * ── THE CONTROL THE SHARED FUNCTION EXISTS FOR ─────────────────────────────
+ *
+ * The suite above hands `register` a STUB `openSeatVote`. That proves the hand
+ * door calls its dependency and says nothing about WHICH function that is. So
+ * this one wires the two doors the way server/index.ts wires them: the real
+ * `registerSeatVote` runs, its RETURN is handed to `register`, and both routes
+ * are driven against the same app.
+ *
+ * The rule it drives through both is the sharpest one in the function, the
+ * refusal about a role carrying `ballot.vote` or `member.vouch`. The assertion
+ * is that the two doors answer with the SAME SENTENCE, which a second, more
+ * lenient copy behind either of them could not do. That copy is the twin this
+ * refactor exists to prevent, and nothing else in the repository would see it.
+ *
+ * It reaches no database: every check it exercises runs before `openBallot`.
+ */
+describe("both doors open a seat vote through ONE function", () => {
+  const REFUSED_ROLE = "role-vote-carrier";
+  const LONG_ENOUGH = "Ana has kept the shelves and the loans for six years now.";
+  let shared: http.Server;
+  let sharedBase = "";
+
+  async function ask(path: string, body?: unknown) {
+    const r = await fetch(`${sharedBase}${path}`, { // module-review-ok: the test client dialling its own in-process server on localhost, as every e2e suite does
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    return { status: r.status, body: (await r.json().catch(() => ({}))) as any };
+  }
+
+  /** Reached only if a refusal above it failed to answer, which is the defect. */
+  const unreached = (name: string) => () => {
+    throw new Error(`${name} was reached: a refusal should have answered first`);
+  };
+
+  beforeAll(async () => {
+    const app = express();
+    app.use(express.json());
+    const openSeatVote = registerSeatVote(app, {
+      authedUser: async () => caller,
+      capabilityCtx: async () => ({ villageHeld: [...villageHeld] }) as unknown as CapabilityCtx,
+      members: {
+        all: async () => [ANA, HOLDER, GONE],
+        byId: async (id: string) => [ANA, HOLDER, GONE].find((m) => m.id === id) ?? null,
+      } as any,
+      firstName: (n: string) => String(n ?? "").split(" ")[0] ?? "",
+      stageOf: async () => "co-creator",
+      getPool: () => pool,
+      rolesRepo: { all: () => roles },
+      loadRoleHolders: () => [],
+      refuseUnlessMemberMayOpen: async () => false,
+      roleBallotSetup: unreached("roleBallotSetup") as any,
+      roleConsequences: () => [],
+      seatCalendar: () => ({ seasons: [], currentSeasonId: null, timezone: "UTC" }),
+      landingDeps: unreached("landingDeps") as any,
+      addActivity: async () => undefined,
+      notifyRoll: async () => 0,
+      serveBallot: async (b: any) => b,
+    });
+    register(app, {
+      authedUser: async () => caller,
+      capabilityCtx: async () => ({ villageHeld: [...villageHeld] }) as unknown as CapabilityCtx,
+      stageOf: async () => "co-creator",
+      firstName: (n: string) => String(n ?? "").split(" ")[0] ?? "",
+      isPresent: (m: any) => !absent.has(String(m?.id)),
+      members: {
+        all: async () => [ANA, HOLDER, GONE],
+        byId: async (id: string) => [ANA, HOLDER, GONE].find((m) => m.id === id) ?? null,
+      } as any,
+      notifyAdmins: async () => undefined,
+      getPool: () => pool,
+      overLimit: async () => false,
+      submissionsRepo: { all: () => inbox, insert: async () => undefined } as any,
+      liveHoldersOf: async (capability: string) =>
+        liveHoldersOfCapability(seats as any, roles, capability, new Date(), badges),
+      rolesCarrying: (capability: string) =>
+        roles.filter((r) => r.capabilities.includes(capability)).map((r) => ({ id: r.id, name: r.name })),
+      openSeatVote,
+    } as any);
+    shared = http.createServer(app);
+    await new Promise<void>((done) => shared.listen(0, "127.0.0.1", done));
+    sharedBase = `http://127.0.0.1:${(shared.address() as any).port}`;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((done) => shared.close(() => done()));
+  });
+
+  beforeEach(() => {
+    // One role, carrying the power the hand asks for AND the vote itself.
+    roles = [{ id: REFUSED_ROLE, name: "The Library Keepers", capabilities: [LIBRARY, "ballot.vote"] }];
+    villageHeld = [LIBRARY];
+    holdingRows = [
+      { capability: LIBRARY, holder_role_id: REFUSED_ROLE, role_name: "The Library Keepers", moved_at: "2026-09-01T00:00:00.000Z", moved_by_ballot_id: "b0", moved_by_user_id: null, note: null },
+    ];
+  });
+
+  it("refuses a role carrying ballot.vote at POST /api/governance/role-seats", async () => {
+    const r = await ask("/api/governance/role-seats", { userId: ANA.id, roleId: REFUSED_ROLE, reason: LONG_ENOUGH });
+    expect(r.status).toBe(409);
+    expect(r.body.error).toContain("carries ballot.vote");
+    expect(r.body.error).toContain("Who votes here is a rule of the game");
+  });
+
+  it("refuses the same role at POST /api/powers/hands/:id/put-to-village", async () => {
+    const r = await ask("/api/powers/hands/hand-ana/put-to-village");
+    expect(r.status).toBe(409);
+    expect(r.body.error).toContain("carries ballot.vote");
+    expect(r.body.error).toContain("Who votes here is a rule of the game");
+  });
+
+  it("answers both doors with the SAME sentence, which two copies could not", async () => {
+    const seat = await ask("/api/governance/role-seats", { userId: ANA.id, roleId: REFUSED_ROLE, reason: LONG_ENOUGH });
+    const hand = await ask("/api/powers/hands/hand-ana/put-to-village");
+    expect(seat.status).toBe(409);
+    expect(hand.body.error).toBe(seat.body.error);
   });
 });
