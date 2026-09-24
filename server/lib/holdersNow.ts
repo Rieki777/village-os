@@ -23,6 +23,9 @@
  * It moved out of `server/index.ts` on 2026-09-24. Nothing about the counting
  * changed in the move: the caller still owns the caches and the pool, and hands
  * them in as `HolderReads`.
+ *
+ * NOT TO BE CONFUSED WITH `server/liveHolders.test.ts`, which is the suite for
+ * `liveHoldersOfCapability` in ./roleGrants, the rule this file feeds.
  */
 import { liveHoldersOfCapability } from "./roleGrants";
 

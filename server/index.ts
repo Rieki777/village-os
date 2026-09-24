@@ -110,7 +110,7 @@ import { roleVoteDays, seatVoteLandsAt, termForCarriedSeat } from "./lib/seatTer
 import { raisedHandTerm } from "./lib/raisedHandTerm";
 import { resolveSeatTerm, type SeatCalendar } from "../shared/seatTerms";
 import { decideRoleCapabilities, liveHolderCount, rolesCarryingCapability, stewardSeatRefusal } from "./lib/roleGrants";
-import { liveHoldersNow, type HolderReads } from "./lib/liveHolders";
+import { liveHoldersNow, type HolderReads } from "./lib/holdersNow";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
 import { type ConsentActor, register as registerQuestClaimRoutes } from "./routes/questClaims";
 import { countInWindow, limitState, recordHit as recordRateHit } from "./repos/rateHits";
@@ -3073,7 +3073,7 @@ function lapseContext(): LapseContext {
  * down with the move that emptied that neighbourhood.)
  */
 /**
- * The wire between this file's caches and server/lib/liveHolders.ts, which
+ * The wire between this file's caches and server/lib/holdersNow.ts, which
  * holds the counting rule and the badge read and says why they left here.
  * Both doors that ask who holds a power go through it, and so does the seat
  * vote's question about which roles carry one.
