@@ -485,6 +485,43 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
 };
 
 /**
+ * THE POWERS THE FOUNDING STEWARDS HOLD AT LAUNCH, AND THE POWERS THAT HAVE
+ * TO REACH THE VILLAGE BEFORE THE HANDOVER COUNTS AS DONE.
+ *
+ * Rye, 2026-09-24: "The founders automatically become stewards and hold all
+ * powers at launch." Asked what "all powers" names, he said ALL NINETEEN
+ * ENTRUSTABLE POWERS and not a chosen subset. Rye, 2026-09-23, on who holds
+ * the pen over the governing purpose statement: "Founder keeps the pen until
+ * they give over all steward powers to the village." Both sentences are about
+ * the same set, at its two ends, so there is one constant for both.
+ *
+ * ── THIS IS A READING OF THOSE WORDS, AND IT HAS A PRODUCT CONSEQUENCE ─────
+ *
+ * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 19 keys
+ * today. The other 15 are not withheld from anybody: they are personal acts
+ * and deployment plumbing that were never anyone's to hold, and `TRANSFERABLE`
+ * carries the reasoning key by key.
+ *
+ * Read this way, a launched village holds all 19 in the founding seat and has
+ * handed over none of them, which is the arc starting rather than finishing.
+ * `villageHandoverState` in server/lib/capabilityHolding.ts measures how far
+ * along it is, and it asks the narrow question on purpose: a power counts as
+ * handed over only once a role OTHER than the founding seat holds it.
+ *
+ * So this is ONE constant that the seating and the handover read, and
+ * narrowing it is an edit to this one expression. Every caller and every test
+ * follows it, and nothing else in the codebase has to be found.
+ *
+ * DERIVED, NEVER HAND-LISTED. `TRANSFERABLE` is a `Record` on purpose, so a
+ * capability added to the union with no line there is a type error and a
+ * decision somebody makes. A hand-kept list beside it would be a promise
+ * nobody checks, and it would go stale in exactly the direction that matters:
+ * a new transferable power missing from the set would be a power the founding
+ * stewards never received and the handover never had to move.
+ */
+export const HANDOVER_SET: readonly Capability[] = ALL_CAPABILITIES.filter((c) => TRANSFERABLE[c]);
+
+/**
  * WHICH KEYS A WARNING BADGE MAY EVER TAKE AWAY (0109).
  *
  * R65 and R66, the founder's ruling: "denying a voice is not a power anyone

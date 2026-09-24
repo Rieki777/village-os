@@ -1,5 +1,21 @@
 /**
- * The four `ballots` statements the stewardship lane makes.
+ * The four `ballots` statements the stewardship lane makes, and one read of
+ * `ballot_votes`.
+ *
+ * ── THE FIFTH STATEMENT IS ON A DIFFERENT TABLE, AND IT BELONGS HERE ───────
+ *
+ * `standingForStewardOn` reads `ballot_votes.stands_for_steward` (0218), which
+ * is where a founding member says at the launch vote that they want the
+ * inaugural steward's seat. The column is the BALLOTS lane's to write, and
+ * `castVote` writes it; who stood is the STEWARDSHIP lane's to read, because
+ * `seatCatalystsAsStewards` is the only thing in the codebase that asks. A
+ * read whose one caller is the steward's seating belongs beside the other
+ * statements that seating makes, rather than in a file it would be the only
+ * stewardship line in.
+ *
+ * The note below about `ballot_votes.reason` still holds exactly as written:
+ * the words a steward types into a blocking no are the ballots lane's sweep
+ * and not this file's.
  *
  * ── THIS FILE IS NOT THE WHOLE OF THE BALLOTS TABLE, AND SAYS SO ────────────
  *
@@ -56,6 +72,43 @@
  * at once.
  */
 import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+
+/**
+ * WHO STOOD FOR THE INAUGURAL STEWARD'S SEAT ON THE LAUNCH VOTE (0218).
+ *
+ * Rye, 2026-09-24: "Any of the founding 3 can apply for this role by self
+ * signaling at founding they want it", and the signalling happens at the
+ * launch vote itself. `ballot_votes.stands_for_steward` is where `castVote`
+ * records it, and this is the read the seating makes.
+ *
+ * ── IT NAMES NO CHOICE, AND THAT IS NOT AN OVERSIGHT ───────────────────────
+ *
+ * A `village_launch` ballot carries `minYesHeads: "all"` at 100% quorum and
+ * 100% unity, so a launch that reached the close has every member on the roll
+ * answering and every one of them answering yes. Filtering on `choice = 'yes'`
+ * here would be a condition that cannot fail, and a condition that cannot fail
+ * reads as a rule the caller is relying on. The thresholds are the one place
+ * that decides what a launch needs (`shared/ballotSubjects.ts`), and a second
+ * copy of it in a SELECT would be two homes for one rule.
+ *
+ * ── A DELEGATED ROW CANNOT APPEAR HERE ─────────────────────────────────────
+ *
+ * `upsertDelegatedRow` names five columns and this is not one of them, so a
+ * vote copied from a delegate takes the DEFAULT and stands for nobody.
+ * Standing for a seat is a personal act, and nobody can be delegated into a
+ * power they did not ask for. The guard is the statement's own shape rather
+ * than a clause here.
+ *
+ * Ordered, so the seating's report and the sentence a village reads are stable
+ * between two runs over the same rows.
+ */
+export async function standingForStewardOn(pool: Pool, ballotId: string): Promise<string[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT user_id FROM ballot_votes WHERE ballot_id = ? AND stands_for_steward = 1 ORDER BY user_id",
+    [ballotId],
+  );
+  return rows.map((r) => String(r.user_id));
+}
 
 /**
  * The subject types this village has actually voted on.
