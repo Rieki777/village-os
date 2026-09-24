@@ -68,28 +68,47 @@ import { cycleIssuanceRows } from "../repos/tokenLedger";
 export const MINT_CAP_KEY = "ledger.admin_mint_cycle_cap";
 
 /**
- * The `token_ledger.source` values the three doors that MEET the guard write.
+ * The `token_ledger.source` values a HAND MINT writes. Three of the FOUR
+ * sources that meet the guard, and deliberately not the fourth.
  *
- * `exchange_stock` is treasury stocking, `admin_mint` is both the hand-mint
- * and its co-signed approval, and `circle_treasury_fund` (0200) is a steward
- * minting a circle its treasury. Everything else out of this faucet is a door
- * that issues without passing the guard: the Stripe stay-purchase settle, the
- * member-triggered quest work-exchange release, the three stays routes, and
- * any `mint_rules` rule on stay-credit, because `faucetFor("stay-credit")`
- * returns this faucet.
+ * MEETING THE GUARD AND BEING A HAND MINT ARE TWO DIFFERENT QUESTIONS, and
+ * this list answers only the second. Five call sites pass `mintCapGuard` and
+ * between them write four sources: `exchange_stock` is treasury stocking,
+ * `admin_mint` is both the hand-mint and its co-signed approval (two call
+ * sites, one source), `circle_treasury_fund` (0200) is a steward minting a
+ * circle its treasury, and `circle_cap_bonus` is a circle being paid for room
+ * it did not use (`payCircleBonus`, server/lib/circleBonus.ts).
+ *
+ * THE BONUS IS GUARDED AND IS OFF THIS LIST ON PURPOSE. The header of
+ * server/lib/circleBonus.ts is where that is decided and this is what the
+ * decision is for: `capRefusal` subtracts these sources to tell a founder how
+ * much of the lunation nobody in the room minted by hand. A bonus is issued
+ * because the VILLAGE voted a circle's work complete, so a founder refused a
+ * hand mint should be told their room went on bonuses. Adding it here would
+ * hide that from the sentence written to reveal it.
+ *
+ * Everything else out of this faucet issues without passing the guard at all:
+ * the three stays routes (comp, adjust, manual purchase), the Stripe
+ * stay-purchase settle, the quest work-exchange release, and any `mint_rules`
+ * rule on stay-credit, on either trigger, because `faucetFor("stay-credit")`
+ * returns this faucet. Twelve doors write `sys:mint`; five meet the guard.
  *
  * HARDCODED AND TESTED, not derived: there is no registry of door sources to
  * derive it from. `server/mintCap.e2e.test.ts` drives every guarded door and
- * asserts the rows they wrote carry exactly these values, so a further guarded
- * door with a new source goes red instead of quietly being reported to a
- * founder as somebody else's issuance.
+ * asserts the rows they wrote carry exactly these values and the bonus's, so
+ * a further guarded door with a new source goes red instead of quietly being
+ * reported to a founder as somebody else's issuance.
  *
  * `circle_treasury_fund` WAS ADDED BY WATCHING THAT TEST GO RED, which is the
  * tripwire doing its job. It belongs on this list because funding a circle
- * treasury is a steward deciding to issue, the same act the other three are.
+ * treasury is a steward deciding to issue, the same act the other two are.
  * Left off, `capRefusal` would have told a founder who had just funded ten
  * circles that their own issuance "was issued by circle_treasury_fund, which
  * no admin minted by hand", which is the opposite of true.
+ *
+ * `circle_cap_bonus` LANDED WITHOUT TURNING IT RED, which is the tripwire NOT
+ * doing its job: the test drove four doors and never the bonus, so the fifth
+ * guarded door arrived unmeasured. The bonus is driven there now.
  */
 export const HAND_MINT_SOURCES: readonly string[] = [
   "admin_mint",
@@ -167,8 +186,19 @@ export async function readCycleIssuance(
  * the rest went. This names the amount and the doors, so the sentence answers
  * the question it provokes.
  *
- * `mint cap` stays in the first clause: three routes map this to a 409 by
- * matching that substring.
+ * `mint cap` stays in the first clause: five routes map this to a 409 by
+ * matching that substring (three in server/index.ts, two in
+ * server/routes/circleTreasury.ts).
+ *
+ * THE CLOSING CLAUSE POINTS AT THE LIST IT JUST WROTE, and does not enumerate
+ * doors a second time. It used to end "a busy month of stays or quests can
+ * use it up", which was a second, shorter list of the same thing and went
+ * stale the moment a door landed that was neither: a circle bonus
+ * (`circle_cap_bonus`) meets the guard and is still not a hand mint, so it is
+ * named in `otherSources` and then told to a founder as stays or quests. A
+ * seat thanks (`role_cycle` on stay-credit) is the same. Naming the doors
+ * once, and referring to that naming, is a sentence that cannot drift from
+ * the sources the query actually returned.
  */
 export function capRefusal(slug: string, capHuman: number, issuance: CycleIssuance): string {
   const head =
@@ -182,20 +212,20 @@ export function capRefusal(slug: string, capHuman: number, issuance: CycleIssuan
     (issuance.otherSources.length > shown.length ? ` and ${issuance.otherSources.length - shown.length} more` : "");
   return (
     `${head}, and ${fromLedgerUnits(slug, issuance.byOtherDoors)} of that was issued by ${named}, ` +
-    "which no admin minted by hand. The cap bounds every door that issues, so a busy month of " +
-    "stays or quests can use it up before a steward mints anything"
+    "which no admin minted by hand. The cap bounds every door that issues, so a busy month at " +
+    "the doors just named can use it up before a steward mints anything"
   );
 }
 
 /**
  * THE PER-CYCLE MINT CAP, ENFORCED WHERE IT CANNOT BE RACED.
  *
- * Three doors mint from `sys:mint` through this guard, and all three used to
- * read the cycle's running total, compare it, and then post several awaits
- * later. Two admins clicking at once both read the same stale total, both
- * decide there is room, and both post: the cap is exceeded while every
- * individual request looks lawful, and nothing downstream notices because
- * conservation still holds.
+ * Five call sites mint from `sys:mint` through this guard. The three that
+ * existed when it was written used to read the cycle's running total, compare
+ * it, and then post several awaits later. Two admins clicking at once both
+ * read the same stale total, both decide there is room, and both post: the
+ * cap is exceeded while every individual request looks lawful, and nothing
+ * downstream notices because conservation still holds.
  *
  * "Caps fail closed" is a platform invariant, so this runs as a ledger guard
  * instead, inside the transaction, after `sys:mint` and the destination are

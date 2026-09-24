@@ -12,6 +12,12 @@
  *              (0109, R65/R66).
  *   hypha    — a mirror of an external fact. Display only (caps must be []).
  *
+ * A GRANT REACHES ONLY WHAT `BADGE_GRANTABLE` LETS IT REACH. Rye ruled on
+ * 2026-09-23 that the steward's veto comes from a seat the village votes
+ * somebody into and from nowhere else, "so that an admin cannot mint a badge
+ * and give themselves a veto". `badgeProblem` refuses such a badge by name
+ * and the gate ignores one already stored.
+ *
  * The recognition firewall: a capability-bearing EARNED badge may never ride
  * a recognition metric (gratitude_breadth). Recognition is social proof —
  * letting applause auto-mint permissions would let bought reach become
@@ -23,8 +29,18 @@
  * from raw sends.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
-import { ALL_CAPABILITIES, capabilityLabel, isDeniable, type Capability } from "../../shared/capabilities";
+import {
+  ALL_CAPABILITIES,
+  capabilityLabel,
+  isBadgeGrantable,
+  isDeniable,
+  type Capability,
+} from "../../shared/capabilities";
 import { CAPABILITY_CONSEQUENCE } from "../../shared/draftKinds";
+// The sentence that names where the seat is actually filled, borrowed rather
+// than re-spelled: the roles routes and the badge panel are two doors onto
+// one rule, and a second wording of it is a twin that drifts.
+import { STEWARD_SEAT_REFUSAL } from "./roleGrants";
 
 export const BADGE_KINDS = ["self", "earned", "granted", "warning", "hypha"] as const;
 export type BadgeKind = (typeof BADGE_KINDS)[number];
@@ -122,6 +138,22 @@ export function badgeProblem(b: {
   const known = new Set<string>(ALL_CAPABILITIES);
   for (const c of b.capabilities) {
     if (!known.has(c)) return `unknown capability key "${c}": the gate would silently ignore it`;
+    /*
+     * Rye, 2026-09-23: the steward's veto comes from a seat the village votes
+     * somebody into, and from nowhere else, "so that an admin cannot mint a
+     * badge and give themselves a veto". The gate already ignores a badge
+     * grant naming a key `BADGE_GRANTABLE` refuses, so this is the second of
+     * three locks on the same door, and it is the one that SPEAKS: an admin
+     * who tries is told where the seat is filled instead of watching a badge
+     * save and do nothing. `drizzle/0215` is the third, clearing the rows
+     * already stored, and it runs at boot BEFORE `assertBadgeInvariants`
+     * reaches this line, so an existing badge cannot refuse the boot.
+     */
+    if (!isBadgeGrantable(c)) {
+      return (
+        `a badge cannot grant "${capabilityLabel(c)}". ${STEWARD_SEAT_REFUSAL}`
+      );
+    }
   }
   for (const d of b.denies) {
     if (!known.has(d)) return `unknown capability key "${d}" in denies`;

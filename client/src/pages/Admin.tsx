@@ -50,6 +50,8 @@ import EventsAdminPanel from "@/components/EventsAdminPanel";
 import ResourcesAdminPanel from "@/components/power/ResourcesAdminPanel";
 import { CrowdpoolAdminTab, ForumCategoriesEditor, ToolsCategoriesEditor } from "@/components/admin/ModuleConfigPanels";
 import ModuleSettingsSection from "@/components/admin/ModuleSettingsSection";
+import { useModuleDeepLink } from "@/components/admin/moduleDeepLink";
+import SetupNeeded from "@/components/modules/SetupNeeded";
 import { CONTENT_SECTIONS, emptyContentFor } from "@/components/admin/contentSections";
 import { displayCurrencyProblem } from "@shared/money";
 import { formatTokenAmount } from "@/lib/tokenAmount";
@@ -3603,7 +3605,7 @@ const LIFECYCLE_HINT: Record<ModuleLifecycle, string> = {
   public: "Everyone. Capability gates still apply.",
 };
 
-function ModulesTab({ password }: { password: string }) {
+export function ModulesTab({ password }: { password: string }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string>("");
@@ -3619,21 +3621,12 @@ function ModulesTab({ password }: { password: string }) {
   /**
    * Which listing has its SETTINGS open, and the deep link that opens one.
    *
-   * `/admin?tab=modules&module=<id>` is the address Game Mechanics sends a
-   * founder to for a group of dials that lives on a card now, so the link has
-   * to land on the settings rather than on the catalog.
+   * `/admin?tab=modules&module=<id>&setting=<key>` is the address Game
+   * Mechanics and every setup hint send a founder to, so the link lands on the
+   * settings, and on the one dial where it names one. The reading lives in
+   * `moduleDeepLink.ts`; this file is on a line ratchet that only turns down.
    */
-  const [settingsId, setSettingsId] = useState<string | null>(() => {
-    try {
-      return new URLSearchParams(window.location.search).get("module");
-    } catch {
-      return null;
-    }
-  });
-  useEffect(() => {
-    if (loading || !settingsId) return;
-    document.getElementById(`module-card-${settingsId}`)?.scrollIntoView?.({ block: "start" });
-  }, [loading, settingsId]);
+  const { settingsId, setSettingsId, focusKey, setFocusKey, clearFocusKey } = useModuleDeepLink(!loading);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -4183,6 +4176,18 @@ function ModulesTab({ password }: { password: string }) {
                     </div>
                   )}
                 </div>
+                {/* What this module is still waiting for, at every lifecycle,
+                    with the link to the control. The Go-live card only speaks
+                    in preview and this card said nothing at all, so a village
+                    already live could never be told. */}
+                <SetupNeeded
+                  moduleId={m.id}
+                  setup={m.setup ?? "none"}
+                  ready={m.ready}
+                  lifecycle={String(m.served ?? m.lifecycle ?? "off")}
+                  className="mt-3"
+                  onOpen={({ moduleId, settingKey }) => { setSettingsId(moduleId); setFocusKey(settingKey); }}
+                />
                 {!m.core && m.lifecycle !== "off" && (
                   <p className="text-xs text-gray-600 mt-3">
                     {/* `m` is the untyped catalog row, so the cast is where the
@@ -4204,6 +4209,8 @@ function ModulesTab({ password }: { password: string }) {
                     lifecycle={String(m.served ?? m.lifecycle ?? "off")}
                     moduleNames={Object.fromEntries(all.map((x: any) => [x.id, x.name]))}
                     password={password}
+                    focusKey={focusKey}
+                    onFocused={clearFocusKey}
                   />
                 )}
 

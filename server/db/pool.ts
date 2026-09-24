@@ -12,6 +12,7 @@
  *    not the other.
  */
 import mysql from "mysql2/promise";
+import { pinSessionZone, zoneProblem } from "./sessionZone";
 
 let _pool: mysql.Pool | null = null;
 
@@ -31,42 +32,21 @@ export function getPool(): mysql.Pool {
     connectTimeout: 10_000,
   });
   /*
-   * The driver half of the timezone discipline was never enough on its own.
+   * The driver half of the timezone discipline was never enough on its own,
+   * and the reasoning now lives in `server/db/sessionZone.ts` beside the hook,
+   * because the test harness needs the same hook and a second copy of the
+   * explanation would drift from the one the tests read.
    *
-   * `timezone: 'Z'` above only tells mysql2 how to RENDER JS Dates and parse
-   * DATETIME strings. `NOW()` and `CURRENT_TIMESTAMP` are evaluated by MySQL
-   * in the SESSION zone, which stays at the server's default — so on any
-   * deployment whose MySQL is not UTC, a bound Date and a NOW() lived in
-   * different frames. Two load-bearing comparisons mixed them: the abuse
+   * What belongs HERE is which of this server's comparisons rest on it.
+   * `timezone: 'Z'` above only tells mysql2 how to render JS Dates and parse
+   * DATETIME strings; `NOW()` and `CURRENT_TIMESTAMP` are evaluated in the
+   * SESSION zone. Two load-bearing comparisons mixed the two frames: the abuse
    * guard's window (`at > ?` against a JS Date, rows written with
    * CURRENT_TIMESTAMP) and the scheduler's dueness check. Both fail in the
-   * unsafe direction — a rate limit that never triggers, hourly jobs firing
+   * unsafe direction, a rate limit that never triggers and hourly jobs firing
    * every tick.
-   *
-   * The numeric offset, never the name 'UTC': a server without the timezone
-   * tables loaded throws on 'UTC', and a throwing init query takes the whole
-   * pool down. On a UTC MySQL (Railway) this is a no-op.
    */
-  _pool.on("connection", (c) => {
-    c.query("SET time_zone = '+00:00'");
-    /*
-     * A dropped connection belongs to NO awaited query. It happens between
-     * requests, the connection emits 'error', and an EventEmitter 'error' with
-     * no listener THROWS. That reaches installCrashHandlers as an uncaught
-     * exception, which deliberately exits the process, so a village's server
-     * dies on a transient blip from a hosted MySQL behind a proxy. In
-     * production the platform restarts it and nobody learns why; in an
-     * eight-minute end-to-end run it is a wall of ECONNRESET.
-     *
-     * mysql2 already discards the broken connection and dials a new one. The
-     * only thing missing was somewhere for the event to land. Logged, never
-     * alerted: a redial is normal, and an admin alert per reconnect would
-     * train everyone to ignore the channel that matters.
-     */
-    c.on("error", (err: any) => {
-      console.error(`[pool] connection dropped, the pool will redial: ${err?.code ?? ""} ${err?.message ?? err}`);
-    });
-  });
+  pinSessionZone(_pool, "pool");
   void verifySessionZone(_pool);
   return _pool;
 }
@@ -74,7 +54,8 @@ export function getPool(): mysql.Pool {
 /**
  * SAY IT OUT LOUD IF THE PIN DID NOT TAKE.
  *
- * The `SET time_zone` above is fire-and-forget, and a sweep of `server/**`
+ * The `SET time_zone` that `pinSessionZone` runs is fire-and-forget, and a
+ * sweep of `server/**`
  * counted about ten comparisons whose correctness rests entirely on it: the
  * abuse guard's window and the scheduler's dueness check named in the comment
  * above, the ballot close time (`ballots.closes_at`, written by
@@ -99,19 +80,8 @@ export function getPool(): mysql.Pool {
  * correct whatever this query does.
  */
 async function verifySessionZone(pool: mysql.Pool): Promise<void> {
-  try {
-    const [rows] = await pool.query<any[]>("SELECT @@session.time_zone AS tz");
-    const tz = String(rows?.[0]?.tz ?? "");
-    if (tz !== "+00:00") {
-      console.error(
-        `[pool] SESSION ZONE IS ${tz || "unreadable"}, not +00:00. Every comparison between a ` +
-          "NOW()-written column and this process's clock is now wrong by that offset, silently. " +
-          "Rate limits, job cadence, ballot close times and the mint cap all read it.",
-      );
-    }
-  } catch (e: any) {
-    console.error(`[pool] could not confirm the session zone: ${e?.message ?? e}`);
-  }
+  const problem = await zoneProblem(pool);
+  if (problem) console.error(`[pool] ${problem}`);
 }
 
 /** For tests and graceful shutdown. */

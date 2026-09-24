@@ -410,7 +410,7 @@ describe.skipIf(!configured)("the Hypha Bridge, driven against a chain", () => {
    * in exactly the place it needed to be red.
    */
   function zonedPool(url: string, offset: string): mysql.Pool {
-    const p = mysql.createPool({ uri: url, timezone: "Z", connectionLimit: 2 }); // module-review-ok: the S5 scratch-schema harness pool, the shape this file already uses
+    const p = mysql.createPool({ uri: url, timezone: "Z", connectionLimit: 2 }); // module-review-ok: the S5 scratch-schema harness pool, the shape this file already uses. test-pool-ok: this pool is pinned to a deliberate non-UTC offset below, which is what the file measures
     p.on("connection", (c) => {
       c.query(`SET time_zone = '${offset}'`); // module-review-ok: the session pin is the thing under test, on the S5 scratch schema
     });

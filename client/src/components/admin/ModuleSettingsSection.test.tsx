@@ -241,3 +241,153 @@ describe("ModuleSettingsSection", () => {
     expect(await screen.findByText("Village Network has no settings of its own.")).toBeInTheDocument();
   });
 });
+
+
+/**
+ * LANDING ON THE EXACT DIAL, and being able to agree with it.
+ *
+ * Rye, 2026-09-21: "Yes - and whenever this happens have a link to direct
+ * people to exactly what they need." The link is only half a promise if
+ * arriving leaves a founder looking at a card of twenty settings with focus
+ * still at the top of the page, so these pin where focus lands, what a screen
+ * reader is told when it gets there, and the one control that lets a village
+ * answer a question whose honest answer is the value already showing.
+ */
+describe("ModuleSettingsSection, arriving from a setup link", () => {
+  const HEMISPHERE = {
+    categories: [
+      {
+        name: "Calendar",
+        variables: [
+          {
+            key: "calendar.hemisphere",
+            label: "Hemisphere",
+            description: "Which way the seasons turn",
+            category: "Calendar",
+            type: "choice",
+            value: "north",
+            default: "north",
+            isDefault: true,
+            answered: false,
+            placeDependent: true,
+            choices: [
+              { value: "north", label: "Northern" },
+              { value: "south", label: "Southern" },
+            ],
+            ring: "open",
+            applyTiming: "instant",
+            modules: ["events"],
+          },
+          {
+            key: "events.upcoming_days",
+            label: "Shows this far ahead",
+            description: "How far into the future the calendar looks",
+            category: "Events",
+            type: "integer",
+            value: "90",
+            default: "90",
+            isDefault: true,
+            answered: false,
+            ring: "open",
+            applyTiming: "instant",
+            modules: ["events"],
+          },
+        ],
+      },
+    ],
+  };
+
+  const withCalendar = (answered: boolean) => {
+    const body = JSON.parse(JSON.stringify(HEMISPHERE));
+    body.categories[0].variables[0].answered = answered;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: any) => {
+        if (init?.method === "PUT") return { status: 200, ok: true, json: async () => ({ ok: true }) };
+        if (String(url).includes("/admin/variables")) return { status: 200, ok: true, json: async () => body };
+        return { status: 404, ok: false, json: async () => ({}) };
+      }),
+    );
+  };
+
+  const renderCalendar = (props: any = {}) =>
+    render(
+      <ModuleSettingsSection
+        moduleId="events"
+        moduleName="Village Calendar"
+        lifecycle="public"
+        moduleNames={{ events: "Village Calendar" }}
+        password="secret"
+        {...props}
+      />,
+    );
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("puts focus on the dial the link named, once the dials have arrived", async () => {
+    withCalendar(false);
+    const onFocused = vi.fn();
+    renderCalendar({ focusKey: "calendar.hemisphere", onFocused });
+    // The control itself, so the next keystroke changes it. Not the card, not
+    // the heading: a founder who followed "Set Hemisphere" is here to answer.
+    await waitFor(() => {
+      expect((document.activeElement as HTMLElement)?.getAttribute("aria-label")).toBe("Hemisphere");
+    });
+    expect(onFocused).toHaveBeenCalled();
+  });
+
+  it("tells a screen reader why it is asking, tied to the control", async () => {
+    withCalendar(false);
+    renderCalendar({ focusKey: "calendar.hemisphere" });
+    const control = await screen.findByLabelText("Hemisphere");
+    const describedBy = control.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy!)?.textContent).toMatch(/Needs your answer/);
+  });
+
+  it("says so when the link names a setting this card does not hold", async () => {
+    withCalendar(false);
+    renderCalendar({ focusKey: "stay.grace_nights" });
+    // An honest miss beats silence: a stale link that scrolled nowhere reads
+    // as a product that ignored the click.
+    expect(await screen.findByText(/does not hold any more/)).toBeInTheDocument();
+    expect(document.activeElement?.textContent).toBe("Settings");
+  });
+
+  it("offers This is right, so agreeing with the default is possible at all", async () => {
+    withCalendar(false);
+    renderCalendar();
+    const confirm = await screen.findByRole("button", { name: "This is right" });
+    // Save stays disabled because nothing changed. That is exactly the state
+    // in which this dial could not be answered before.
+    const save = screen.getAllByRole("button", { name: "Save" })[0];
+    expect(save).toBeDisabled();
+    fireEvent.click(confirm);
+    await waitFor(() => {
+      const put = (globalThis.fetch as any).mock.calls.find((c: any[]) => c[1]?.method === "PUT");
+      expect(put[0]).toContain("/admin/variables/calendar.hemisphere");
+      expect(JSON.parse(put[1].body)).toEqual({ value: "north" });
+    });
+  });
+
+  it("stops asking once the village has answered", async () => {
+    withCalendar(true);
+    renderCalendar();
+    await screen.findByLabelText("Hemisphere");
+    expect(screen.queryByText(/Needs your answer/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "This is right" })).toBeNull();
+  });
+
+  it("asks nothing about an ordinary dial sitting on its default", async () => {
+    // The flag is the whole gate. Every dial ships a default and only a few
+    // are a guess about where the village is; asking about all of them would
+    // be noise nobody reads.
+    withCalendar(false);
+    renderCalendar();
+    await screen.findByLabelText("Shows this far ahead");
+    expect(screen.getAllByText(/Needs your answer/)).toHaveLength(1);
+  });
+});

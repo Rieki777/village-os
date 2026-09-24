@@ -240,6 +240,11 @@ constant comes back.
   holds, the admin short-circuit does not apply, so a warning badge's deny beats an admin.
   The break-glass (`adminOverride`) passes only a FOUNDER seated in a live role carrying
   `steward.veto` (Rye, 2026-09-21; `BREAK_GLASS_SEAT`), and from anybody else it is refused.
+  A BADGE may not grant `steward.veto` (Rye, 2026-09-23; `BADGE_GRANTABLE`): the seat is the
+  only source, so an admin cannot mint a badge and give themselves a veto. Handing a
+  village-held power BACK to the panel is a village VOTE (Rye, 2026-09-23): the admin route
+  asks the gate and carries on only for a founder-steward who broke the glass, and everybody
+  else opens a `power_return` ballot.
   Do not restate the order from memory, and do not count its steps here: this bullet said
   SEVEN while the gate had eight, and before that `0f8d041` (2026-08-22) added the
   break-glass step and the bullet spent two weeks reading as authoritative and being wrong.

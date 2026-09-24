@@ -40,6 +40,10 @@ describe("the platform's suggestion", () => {
       "feed.announce": ["storytelling"], // "The Story Teller for posting announcements"
       "story.tell": ["storytelling"], // "tell the village's story publicly = storytelling"
       "intake.moderate": ["catalyzing"], // the queue half of "the welcome aboard work"
+      // 2026-09-23. Building is making in EVERY form, code included: "like
+      // developers for code are building the game, same builder archetype".
+      "org.seatAgent": ["building"], // wiring the software agents that do the work
+      "dial.set": ["building"], // tuning the machine, within the ring the village left open
     });
   });
 
@@ -67,10 +71,13 @@ describe("the platform's suggestion", () => {
     }
   });
 
-  it("gives The Builder nothing yet, as the ruling says, and every other class something", () => {
+  it("gives every class something, The Builder included since 2026-09-23", () => {
+    // It asserted The Builder had nothing, which was the ruling of 2026-09-09.
+    // The correction is that building means making in every form, so the powers
+    // that wire and tune the machine are a builder's. In capability order.
     const map = resolvePowerAffinity({}, FIVE);
-    expect(powersSuitedTo("building", map)).toEqual([]);
-    for (const k of ["researching", "facilitating", "catalyzing", "storytelling"]) {
+    expect(powersSuitedTo("building", map)).toEqual(["org.seatAgent", "dial.set"]);
+    for (const k of FIVE) {
       expect(powersSuitedTo(k, map).length, k).toBeGreaterThan(0);
     }
   });

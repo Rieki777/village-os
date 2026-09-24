@@ -362,10 +362,28 @@ describe.skipIf(!DB_CONFIGURED)("harm metric 2: a founder seated as a steward re
     expect(viaHeader.status, viaHeader.text).toBe(200);
   });
 
+  /*
+   * AND THE HAND-BACK IS ITSELF A REACH NOW (Rye, 2026-09-23). Taking a
+   * village-held power back to the panel is the village's own decision: an
+   * administrator is refused and told to open a `power_return` ballot, and the
+   * one exception is the founder seated as a steward with the veto this whole
+   * block is about. So the header goes on the request, and the village reads
+   * TWO lines rather than one — the reach, and the hand-back itself.
+   */
   it("hands the power back, and says so on the same public surface", async () => {
-    const back = await call("DELETE", "/api/admin/capabilities/intake.moderate/holding");
-    expect(back.status).toBe(200);
-    expect((await publicPulse()).some((t) => t.includes("This went back to the admin panel"))).toBe(true);
+    const refused = await call("DELETE", "/api/admin/capabilities/intake.moderate/holding");
+    expect(refused.status, refused.text).toBe(409);
+    expect(String(refused.json?.error)).toContain("power_return");
+    expect(refused.json?.overrideAvailable, "the seated founder is offered the door").toBe(true);
+
+    const back = await call(
+      "DELETE", "/api/admin/capabilities/intake.moderate/holding",
+      undefined, founderToken, { "x-capability-override": "true" },
+    );
+    expect(back.status, back.text).toBe(200);
+    const pulse = await publicPulse();
+    expect(pulse.some((t) => t.includes("This went back to the admin panel"))).toBe(true);
+    expect(pulse.some((t) => t.includes("acted on a power this village holds"))).toBe(true);
     // And the admin passes again with no ceremony at all.
     const queue = await call("GET", "/api/admin/submissions");
     const id = String((queue.json?.[0] ?? queue.json?.submissions?.[0])?.id ?? "");

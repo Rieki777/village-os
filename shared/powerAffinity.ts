@@ -20,10 +20,33 @@
  *           the map in build mode: architecting. Managing events: space
  *           holding.
  *   19:02Z  "The catalyst taking the welcome aboard work is great", and "Leave
- *           the map edit to the architect". The Builder has no power yet, by
- *           the same ruling: "we just don't seem to have a lot of powers for
- *           builders or catalysts for some reason, but maybe we will as we go
- *           forward."
+ *           the map edit to the architect". The Builder had no power at that
+ *           point, by the same ruling: "we just don't seem to have a lot of
+ *           powers for builders or catalysts for some reason, but maybe we
+ *           will as we go forward."
+ *
+ * ── 2026-09-23, WHAT BUILDING MEANS, AND THE BUILDER'S FIRST POWERS ────────
+ *
+ * The narrow reading of The Builder was the problem, and the correction is the
+ * useful part. Building is making in EVERY form, not only making on the land:
+ * "in this context 'building' is in all the forms (like developers for code
+ * are building the game, same builder archetype)".
+ *
+ * `org.seatAgent` seats and unseats the software agents that hold seats, and
+ * `dial.set` turns the village's own dials inside the ring it left open. One
+ * wires what runs, the other tunes it. The land-shaped powers stay where they
+ * are: `library.keep`, `map.photograph` and `map.edit` were each considered
+ * under the wider reading and called less good fits, because tending what
+ * exists is a different act from making it.
+ *
+ * `mechanics.propose` WAS THE FIRST CHOICE AND CANNOT LIVE HERE, which is
+ * worth recording so nobody adds it later. Rye picked it, and it is the most
+ * builder-shaped power in the product. But `STAGE_UNLOCKS` opens it at the
+ * member rung, so every member already holds it by climbing. This map only
+ * ever names powers the village ENTRUSTS by appointment, and a power the
+ * ladder opens needs nobody to suggest it. A Builder can already propose a
+ * change to the game's rules, which is the ruling honoured in a stronger form
+ * than a suggestion. `powerAffinity.test.ts` pins that rule for every entry.
  *
  * `intake.moderate` for the Catalyst is the queue half of the welcome-aboard
  * work, as it was proposed and approved. The board itself does not exist yet,
@@ -68,6 +91,8 @@ export const DEFAULT_POWER_AFFINITY: PowerAffinity = {
   "feed.announce": ["storytelling"],
   "story.tell": ["storytelling"],
   "intake.moderate": ["catalyzing"],
+  "org.seatAgent": ["building"],
+  "dial.set": ["building"],
 };
 
 /**

@@ -41,6 +41,7 @@ import {
   assertCapabilityHoldingInvariants,
   capabilityHoldings,
   moveCapabilityToVillage,
+  RETURN_NEEDS_A_VOTE,
   returnCapabilityToScaffolding,
   villageHeldCapabilities,
 } from "./lib/capabilityHolding";
@@ -103,6 +104,7 @@ import { resolveSeatTerm, type SeatCalendar } from "../shared/seatTerms";
 import { decideRoleCapabilities, liveHolderCount, liveHoldersOfCapability, stewardSeatRefusal } from "./lib/roleGrants";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
 import { type ConsentActor, register as registerQuestClaimRoutes } from "./routes/questClaims";
+import { countInWindow, limitState, recordHit as recordRateHit } from "./repos/rateHits";
 import { register as registerHousingRoutes } from "./routes/housing";
 import { register as registerJourneyRoutes } from "./routes/journey";
 import { register as registerProfileRoutes } from "./routes/profile";
@@ -3183,8 +3185,10 @@ interface CapabilityVerdict {
   /**
    * Would the gate let THIS requester through if they broke the glass? Asked
    * of `capabilityDecision` itself and never re-spelled here (Rye, 2026-09-21:
-   * only a founder seated as a steward with the veto). False everywhere
-   * `needsOverride` is false.
+   * only a founder seated as a steward with the veto). Answered on a REFUSAL
+   * and on an allowed verdict over a village-held key, because a route may
+   * refuse an act the gate allowed and still owe the browser the door; false
+   * on every verdict where the village holds nothing to reach past.
    */
   overrideAvailable: boolean;
   /**
@@ -3358,7 +3362,19 @@ async function mayAct(req: express.Request, cap: Capability): Promise<Capability
   if (decision.allowed) {
     return {
       ok: true, reachedPast: false, villageHolds: decision.villageHolds,
-      source: decision.source, message: "", needsOverride: false, overrideAvailable: false, holderName: null,
+      source: decision.source, message: "", needsOverride: false,
+      /*
+       * ANSWERED ON AN ALLOWED VERDICT TOO, because a route may refuse an act
+       * the gate allowed. `DELETE /api/admin/capabilities/:capability/holding`
+       * carries on only for a reach PAST the village (Rye, 2026-09-23), so a
+       * founder seated as a steward who also holds the power by that seat
+       * arrives here with `ok: true` and still has to be told the door is
+       * there. Asked of `capabilityDecision` itself, never re-spelled.
+       */
+      overrideAvailable: decision.villageHolds
+        ? capabilityDecision(cap, { ...ctx, adminOverride: true }).reachedPastVillage
+        : false,
+      holderName: null,
     };
   }
   if (decision.villageHolds && ctx.isAdmin) {
@@ -4916,58 +4932,25 @@ function recipientsForType(type: string): string[] {
  * login down with it; the guard protects against abuse, not outages.
  */
 async function overLimit(bucket: string, max: number, windowMs: number): Promise<boolean> {
-  try {
-    const pool = getPool();
-    const since = new Date(Date.now() - windowMs);
-    const [[row]] = await pool.query<any[]>(
-      "SELECT COUNT(*) AS n FROM rate_hits WHERE bucket = ? AND at > ?",
-      [bucket, since],
-    );
-    if (Number(row?.n ?? 0) >= max) return true;
-    await pool.query("INSERT INTO rate_hits (bucket, at) VALUES (?, CURRENT_TIMESTAMP(3))", [bucket]);
-    // Opportunistic sweep (~1% of calls): the table stays a day deep, forever.
-    if (Math.random() < 0.01) {
-      void pool.query("DELETE FROM rate_hits WHERE at < (NOW() - INTERVAL 1 DAY) LIMIT 5000").catch(() => {});
-    }
-    return false;
-  } catch (e) {
-    console.error("[abuse-guard] check failed (failing open)", e);
-    return false;
-  }
+  // `unavailable` reads as not-over-limit HERE, in one visible place, which is
+  // what fail-open means for the twenty-odd callers written against it.
+  return (await limitState(getPool(), bucket, max, windowMs)) === "over";
 }
 
 /**
  * Check-only half of overLimit: counts, never inserts. For guards where the
  * hit is recorded separately (login records only on credential FAILURE, so a
- * correct sign-in never spends anyone's budget). Fail-open like overLimit.
+ * correct sign-in never spends anyone's budget). Fail-open like overLimit:
+ * a count that could not be taken is not a caller over their budget.
  */
 async function atLimit(bucket: string, max: number, windowMs: number): Promise<boolean> {
-  try {
-    const pool = getPool();
-    const since = new Date(Date.now() - windowMs);
-    const [[row]] = await pool.query<any[]>(
-      "SELECT COUNT(*) AS n FROM rate_hits WHERE bucket = ? AND at > ?",
-      [bucket, since],
-    );
-    return Number(row?.n ?? 0) >= max;
-  } catch (e) {
-    console.error("[abuse-guard] check failed (failing open)", e);
-    return false;
-  }
+  const n = await countInWindow(getPool(), bucket, windowMs);
+  return n !== null && n >= max;
 }
 
 /** Record-only half: call when the guarded event actually happened. */
 async function recordHit(bucket: string): Promise<void> {
-  try {
-    const pool = getPool();
-    await pool.query("INSERT INTO rate_hits (bucket, at) VALUES (?, CURRENT_TIMESTAMP(3))", [bucket]);
-    // Opportunistic sweep (~1% of calls): the table stays a day deep, forever.
-    if (Math.random() < 0.01) {
-      void pool.query("DELETE FROM rate_hits WHERE at < (NOW() - INTERVAL 1 DAY) LIMIT 5000").catch(() => {});
-    }
-  } catch (e) {
-    console.error("[abuse-guard] record failed", e);
-  }
+  await recordRateHit(getPool(), bucket);
 }
 
 /**
@@ -13668,18 +13651,43 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
   });
 
   /**
-   * Hand a power back to the scaffolding.
+   * Hand a power back to the scaffolding — and since 2026-09-23 only as the
+   * village's own decision, or by a founder-steward breaking the glass.
    *
-   * This is not a hedge and it is not paternalism. The platform is custodian
-   * of deployments whose operator did not choose any of this and may not be
-   * able to pull a redeploy, so a transfer nothing can undo would leave a
-   * captured village with no way out. What makes the transfer real is the
-   * witness, never the one-way door: this leaves the same public line the
-   * crossing did.
+   * The reasoning and the refusal sentence live on `RETURN_NEEDS_A_VOTE` in
+   * server/lib/capabilityHolding.ts, beside the writer they both guard. The
+   * two facts this route has to carry: it asks the ONE gate for the key being
+   * returned and carries on only on `reachedPast`, which is `BREAK_GLASS_SEAT`
+   * and nothing else; and `mayAct` has already written the public line and
+   * told the holder by the time we get there, so the records below are the
+   * hand-back's own, exactly as they were.
    */
   app.delete("/api/admin/capabilities/:capability/holding", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const cap = String(req.params.capability);
+    // The holding is read BEFORE the gate and the delete: a 404 must stay a
+    // 404, and refusing somebody "this needs a vote" over a power the village
+    // is not holding would send them to open a ballot nothing can close.
+    const holding = (await capabilityHoldings(getPool())).find((h) => h.capability === cap);
+    if (!holding || !ALL_CAPABILITIES.includes(cap as Capability)) {
+      return res.status(404).json({ error: "The village was not holding that one." });
+    }
+    const verdict = await mayAct(req, cap as Capability);
+    if (!verdict.reachedPast) {
+      const who = holding.holderRoleName ?? holding.holderRoleId;
+      return res.status(409).json({
+        error:
+          `${who} looks after this one. ${RETURN_NEEDS_A_VOTE} ${BREAK_GLASS_WAY_THROUGH} ` +
+          "Send the x-capability-override header with this request to do it that way, and the village will see that you did.",
+        // The browser's half of the same answer (0103's shape): the panel
+        // sends people to the ballot, and offers the glass only to somebody
+        // the gate would actually let through.
+        requiresOverride: true,
+        overrideAvailable: verdict.overrideAvailable,
+        holderName: who,
+        ballotRoute: "/api/governance/power-returns",
+      });
+    }
     const existed = await returnCapabilityToScaffolding(getPool(), cap);
     if (!existed) return res.status(404).json({ error: "The village was not holding that one." });
     const what = CAPABILITY_CONSEQUENCE[cap as Capability] ?? cap;
@@ -16878,8 +16886,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
    * The cap's own arithmetic lives in `server/lib/mintCap.ts`, with the
    * ruling it enforces written beside it: the cap bounds ALL ISSUANCE of a
    * token in a cycle, by every door, NET of what came back to the faucet
-   * inside the same cycle. Nine doors write `sys:mint` and three of them meet
-   * `mintCapGuard`; the counter has always seen all nine, and what it grew
+   * inside the same cycle. Twelve doors write `sys:mint` and five of them meet
+   * `mintCapGuard`; the counter has always seen all twelve, and what it grew
    * was a subtraction, because `spendSinkFor("stay-credit")` is that same
    * faucet and a spent credit was being counted as a second issue.
    *
@@ -19660,6 +19668,10 @@ ${inner}
     isAdmin, authedUser, adminActor, getPool, uploadsDir: UPLOADS_DIR, members,
     questsRepo, claimsRepo, crewsRepo, firstName, notify, stageOf, loadRoles,
     roleIdsFor, currentPatternId, questConsentRecipients, overLimit, clientIp,
+    // The share-card raster reads the guard's third answer for itself: it is
+    // the one route here that rasters for an anonymous caller, so it refuses
+    // when the guard cannot check rather than serving unguarded (Rye, 2026-09-23).
+    limitState: (bucket: string, max: number, windowMs: number) => limitState(getPool(), bucket, max, windowMs),
   });
 
   // Quests: team consent (value release is always human-gated)
@@ -20215,6 +20227,14 @@ ${inner}
       daysRemaining: cycleDaysRemaining(now),
       moonPhase: moonPhase(now),
       moonPhaseName: moonPhaseName(moonPhase(now)),
+      // WHICH WAY UP THE MOON IS, from the one clock route every surface can
+      // reach. The Gratitude Wall's cycle clock drew a northern sky for every
+      // village however `calendar.hemisphere` was set, because the only
+      // readers of that dial sit behind the events module: `/api/events` is
+      // gated by requireModule, and the public mechanics page hides an off
+      // module's dials. Gratitude is core, this route is already fetched by
+      // the clock, and the phase beside it is the same kind of fact.
+      hemisphere: stringVar("calendar.hemisphere") === "south" ? "south" : "north",
       budget: user ? await gratitudeBudget(user) : null,
     });
   });
@@ -24988,6 +25008,11 @@ ${inner}
    * not ready had to ask the scaffolding to take it back, which is the one
    * sentence the whole round exists to stop a village having to say.
    *
+   * SINCE 2026-09-23 THIS ROUTE IS THE WAY AND NOT ONE OF TWO. Rye ruled that
+   * handing a village-held power back to the panel needs a village vote, so
+   * that admin route refuses everybody but a founder seated as a steward with
+   * the veto, and the sentence it sends back names this one.
+   *
    * ── THE SUBJECT REF IS THE CAPABILITY ALONE ────────────────────────────
    *
    * A transfer and a grant both name a power AND a role, because both are
@@ -26359,11 +26384,15 @@ ${inner}
    * miss and not a page. Without this, /.well-known/anything falls through to
    * the SPA and answers HTML with a 200, which is how a peer probing for a
    * capability document concludes this village has one.
+   *
+   * Neither miss repeats the path back. The caller already knows what it
+   * asked for, and a body built from the request is the reflection CodeQL
+   * reports, which is why the file misses further down answer a constant too.
    */
-  app.get("/.well-known/{*splat}", (req, res) => notPublished(res, `Not found: ${req.path}`));
+  app.get("/.well-known/{*splat}", (_req, res) => notPublished(res, "Not found"));
 
   app.get("/org", (_req, res) => res.redirect(308, "/org/index.md"));
-  app.get("/org/{*splat}", (req, res) => notPublished(res, `Not found: ${req.path}`));
+  app.get("/org/{*splat}", (_req, res) => notPublished(res, "Not found"));
 
   // Links, structural drafts, seat history and the admin edits to the org
   // chart, all nineteen registered at exactly the point they used to sit.
@@ -27126,12 +27155,15 @@ ${inner}
    * A 404 lets each of those be seen: fetch clients get an honest status,
    * broken assets show as broken, and a browser asking for a bundle that no
    * longer exists gets an error a reload can fix rather than a blank page.
+   *
+   * The asset miss answers a constant: repeating the requested path is the
+   * reflection CodeQL reports, and the status is what a caller needs anyway.
    */
   app.all("/api/{*splat}", (req, res) => {
     res.status(404).json({ error: `No such endpoint: ${req.method} ${req.path}` });
   });
-  app.get("/assets/{*splat}", (req, res) => {
-    res.status(404).type("text/plain").send(`Not found: ${req.path}`);
+  app.get("/assets/{*splat}", (_req, res) => {
+    res.status(404).type("text/plain").send("Not found");
   });
   /*
    * A PATH THAT LOOKS LIKE A FILE FAILS LIKE ONE.
