@@ -400,7 +400,29 @@ export const GAME_CONFIG: GameConfig = {
     // If a future feature starts reading this key, that feature is what makes
     // it renderable again, and it inherits the blank rather than Costa Rica.
     country: "",
-    fiatCurrency: "CRC",
+    // Empty on purpose, and CHF is still the answer a village gets. Rye's
+    // ruling on 2026-09-23 was that CHF is the default and members may pick any
+    // currency carrying a live conversion. `defaultDisplayCurrency` in
+    // shared/money.ts ALREADY returns CHF for a project that declares nothing,
+    // so blanking reaches that outcome without writing one country's currency
+    // into platform code, exactly as `country` above does.
+    //
+    // GRADUATED OUT OF KNOWN_PENDING on 2026-09-23, in the order this guard
+    // exists to enforce: the founder entered Amora's own currency in the live
+    // Admin screen FIRST and confirmed it, so the village holds its own copy,
+    // and only then did the default move. It went the other way round on
+    // 2026-08-31 and that is the outage.
+    //
+    // WHAT MADE IT WAIT, and the reason is bigger than the one recorded here
+    // before. The old note said "prices render against it", which is wrong:
+    // `formatMoney` returns the amount's OWN currency whenever there is no
+    // rate, so a relabel was never possible, and its docblock has the worked
+    // example. The real reader is `redemptionCurrencies` in
+    // server/lib/redemption.ts, "the currencies this village will settle a
+    // redemption in", which falls back to the MERGED project currency. So this
+    // default decides what a village PAYS OUT in. Money leaving, not a label,
+    // which is why it waited on the founder rather than on a tidier moment.
+    fiatCurrency: "",
     adminPath: "/admin",
     // Blank on purpose, same pattern as the hero images and the header/footer
     // marks below: Layout.tsx and Quests.tsx already render these links only
