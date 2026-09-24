@@ -737,7 +737,7 @@ import {
   type ResourcesViewer,
 } from "./lib/resources";
 import { CAPITALS } from "../shared/capitals";
-import { defaultDisplayCurrency, normaliseProjectCurrency } from "../shared/money";
+import { defaultDisplayCurrency } from "../shared/money";
 import {
   addMember as addPatternMember,
   applyRoll,
