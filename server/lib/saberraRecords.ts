@@ -81,8 +81,26 @@ const ALLOWED: Readonly<Record<string, readonly string[]>> = {
    * holds a seat is a fact this village already keeps, in `org_role_assignments`,
    * and it is the half of the join worth disagreeing about rather than copying.
    */
+  /**
+   * `Assignment Title` IS ABSENT AND THIS IS THE REASON, because the field name
+   * reads like structure and the values are not.
+   *
+   * Measured against the live service on 2026-09-24. Every one of the three
+   * values sampled had the form "<a person's full name> - <their seat>", and
+   * two of the three named the same person twice. The field is CONSTRUCTED from
+   * a person's name and their seat. Taking it is taking the vendor's mapping of
+   * people to seats for everybody, which is exactly what `Active Holders` was
+   * excluded for, arriving under a name that sounds like a label.
+   *
+   * The real values are deliberately not quoted here. They are two named
+   * members of a living village and this file is public.
+   *
+   * It was in this list for a day. Nothing caught it: the address net looks for
+   * an address and this is a name, and the field name passes any reading that
+   * does not look at a value. The lesson is in the name of the test that now
+   * holds it: read the VALUES of a field before allowing it, never the name.
+   */
   roleAssignment: [
-    "Assignment Title",
     "Role",
     "Circle",
     "Status",

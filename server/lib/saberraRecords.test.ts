@@ -210,6 +210,47 @@ describe("the fields the vendor named on 2026-09-23", () => {
     }
   });
 
+  it("READS THE VALUES OF A FIELD AND NOT ITS NAME, which is how one got through", () => {
+    // `Assignment Title` sat in the roleAssignment allow list for a day. It
+    // sounds like a label. Sampled against the live service on 2026-09-24,
+    // every value had the form "<a person's full name> - <their seat>", so the
+    // field is the vendor's people-to-seats mapping wearing a label's name.
+    //
+    // Nothing caught it. The address net looks for an address and this is a
+    // name. The field name passes any review that does not look at a value.
+    // The shape below is the real one; the people are not real, because this
+    // file is public and they are not.
+    const r = readVendorRecord("roleAssignment", {
+      Role: "Finance Steward",
+      Circle: "Economics & Finance",
+      Status: "Active",
+      "Assignment Title": "Ada Fenwick - Finance Steward",
+    });
+    expect(r.fields).toEqual({
+      Role: "Finance Steward",
+      Circle: "Economics & Finance",
+      Status: "Active",
+    });
+    expect(r.ignored).toEqual(["Assignment Title"]);
+    expect(JSON.stringify(r.fields)).not.toContain("Ada Fenwick");
+  });
+
+  it("keeps the assignment fields that are state about a seat", () => {
+    // What is left is genuinely about the seat and not about who sits in it.
+    const r = readVendorRecord("roleAssignment", {
+      Role: "Finance Steward",
+      "Assignment Type": "Appointed",
+      "Energization Level": "Partial",
+      "Term Length": "One season",
+      "Next Review Date": "2027-01-15",
+      "Role Holder": "Ada Fenwick",
+    });
+    expect(r.fields["Energization Level"]).toBe("Partial");
+    expect(r.fields["Term Length"]).toBe("One season");
+    expect(r.fields).not.toHaveProperty("Role Holder");
+    expect(r.ignored).toEqual(["Role Holder"]);
+  });
+
   it("names every kind that has a door, so adding one is a deliberate act", () => {
     // If this list grows, somebody widened the boundary. That should be a
     // conversation and a failing test, not a quiet commit.
