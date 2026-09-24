@@ -425,10 +425,77 @@ export interface Landing {
 
 export const fetchLanding = (id: string) => call<Landing>(`/api/governance/ballots/${encodeURIComponent(id)}/landing`);
 
-export const castVote = (id: string, choice: VoteChoice, reason?: string) =>
+/**
+ * `standsForSteward` is the ACCEPTANCE of a nomination (0218, re-meant by
+ * 0220), and it rides on the vote because that is the only row that can hold
+ * it: `ballot_votes.choice` is NOT NULL, so a member who has not voted has no
+ * row. It is sent on every vote a nominee casts, true or false, because it is
+ * their current answer the same way `reason` is their current words. A vote
+ * from anybody the proposal did not name carries it harmlessly: the seating
+ * intersects it with the slate, so an acceptance nobody asked for seats
+ * nobody.
+ */
+export const castVote = (id: string, choice: VoteChoice, reason?: string, standsForSteward?: boolean) =>
   call<{ success: true; choice: VoteChoice; ballot: Ballot | null }>(
     `/api/governance/ballots/${encodeURIComponent(id)}/vote`,
-    { method: "POST", body: JSON.stringify({ choice, ...(reason ? { reason } : {}) }) },
+    {
+      method: "POST",
+      body: JSON.stringify({
+        choice,
+        ...(reason ? { reason } : {}),
+        ...(standsForSteward === undefined ? {} : { standsForSteward }),
+      }),
+    },
+  );
+
+/** What one named member has said about the seat, as one word a page switches on. */
+export type NominationAnswer = "accepted" | "declined" | "waiting";
+
+export interface SlateMember {
+  id: string;
+  name: string;
+  answer: NominationAnswer;
+  declinedAt: string | null;
+  /** The viewer is this person. Sent as a fact: a page cannot match a first name to a reader. */
+  mine: boolean;
+}
+
+/**
+ * THE STEWARDS A LAUNCH PROPOSAL NAMES, AND WHAT EACH OF THEM ANSWERED (0220).
+ *
+ * Fetched beside the ballot rather than carried inside it, for the reason the
+ * objection lineage is: it is NULL on every subject but `village_launch`, and
+ * a village holds exactly one of those in its life. Folding it into
+ * `serveBallot` would put an empty field on every decision page ever rendered.
+ *
+ * `proposedBy` is null only when the slate is empty, which is the one case
+ * where there is nobody to name as the chooser.
+ */
+export interface StewardSlate {
+  subjectType: string;
+  /** False once the vote closes: the same two lists then read as a record rather than as a question. */
+  open: boolean;
+  proposedBy: string | null;
+  /** How many powers the seat carries, from the server, never typed into a page. */
+  powerCount: number;
+  members: SlateMember[];
+}
+
+export const fetchStewardSlate = (id: string) =>
+  call<StewardSlate>(`/api/governance/ballots/${encodeURIComponent(id)}/steward-slate`);
+
+/**
+ * Accept the seat, or decline it.
+ *
+ * The answer that comes back is the one that was RECORDED and not the one
+ * that was asked for. Accepting before voting stores no yes anywhere, because
+ * the yes lives on the vote row, so the honest reply there is `waiting` with
+ * the acceptance still to be given alongside the vote.
+ */
+export const answerNomination = (id: string, accept: boolean) =>
+  call<{ success: true; answer: NominationAnswer }>(
+    `/api/governance/ballots/${encodeURIComponent(id)}/steward-slate`,
+    { method: "POST", body: JSON.stringify({ accept }) },
   );
 
 export const fileObjection = (id: string, text: string) =>

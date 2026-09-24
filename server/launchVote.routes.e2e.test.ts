@@ -409,7 +409,15 @@ describe.skipIf(!DB_CONFIGURED)("the third member arrives and the vote can be as
     const staged = await call("PUT", `/api/admin/players/${idaId}/stage`, { body: { stageId: "member" } });
     expect(staged.status).toBe(200);
 
-    const asked = await call("POST", "/api/admin/launch/propose");
+    /*
+     * THE SLATE IS PART OF THE PROPOSAL (0220). Rye, 2026-09-24: "whoever is
+     * clicking the 'launch village' button then selects from a list of members
+     * in the proposal to carry the steward role so then it's there in the
+     * proposal to be voted on." Driven through the real door, because a unit
+     * test writing the rows by hand proves the seating and nothing about the
+     * route that writes them.
+     */
+    const asked = await call("POST", "/api/admin/launch/propose", { body: { slate: [founderId] } });
     expect(asked.status, JSON.stringify(asked.json)).toBe(200);
 
     const rows = await launchBallots();
@@ -418,6 +426,54 @@ describe.skipIf(!DB_CONFIGURED)("the third member arrives and the vote can be as
     expect(Number(rows[0].unity)).toBe(100);
     expect(Number(rows[0].quorum)).toBe(100);
     expect(rows[0].roll).toBe(3);
+  });
+
+  it("puts the slate IN the frozen document, so a member votes on it", async () => {
+    // "so it's there in the proposal to be voted on" is a requirement about
+    // `ballots.doc_markdown`, which is the string every member reads.
+    const [running] = await launchBallots();
+    const read = await call("GET", `/api/governance/ballots/${running.id}`, { token: idaToken });
+    expect(read.status, JSON.stringify(read.json)).toBe(200);
+    const doc = String(read.json?.docMarkdown);
+    expect(doc).toContain("Who carries the steward's seat");
+    expect(doc, "the person who chose the list is named in it").toContain("chose who it puts forward");
+    expect(doc, "and what accepting costs is in it too").toContain(
+      `all ${HANDOVER_SET.length} of the powers this village has to give`,
+    );
+  });
+
+  it("shows a DECLINE to an ordinary member, which is what Rye asked for", async () => {
+    /*
+     * Rye, 2026-09-24: "founders only for this first season ... and show the
+     * declines". SHOWN means shown to the VILLAGE. Ida is an ordinary member
+     * who is not on the slate and did not choose it, and she is the reader
+     * this control is about.
+     */
+    const [running] = await launchBallots();
+    const declined = await call("POST", `/api/governance/ballots/${running.id}/steward-slate`, {
+      token: founderToken,
+      body: { accept: false },
+    });
+    expect(declined.status, JSON.stringify(declined.json)).toBe(200);
+    expect(declined.json?.answer).toBe("declined");
+
+    const seen = await call("GET", `/api/governance/ballots/${running.id}/steward-slate`, { token: idaToken });
+    expect(seen.status, JSON.stringify(seen.json)).toBe(200);
+    expect(seen.json?.members?.length).toBe(1);
+    expect(seen.json?.members?.[0]?.answer, "an ordinary member can see it").toBe("declined");
+    expect(seen.json?.members?.[0]?.declinedAt, "with the time it was given").toBeTruthy();
+    expect(seen.json?.members?.[0]?.mine, "and it is not hers").toBe(false);
+    expect(String(seen.json?.proposedBy), "the page can say whose list this was").toBeTruthy();
+    expect(seen.json?.powerCount).toBe(HANDOVER_SET.length);
+
+    // AND SOMEBODY THE PROPOSAL NEVER NAMED HAS NOTHING TO ANSWER. The known
+    // positive is the 200 four lines up, from the same route.
+    const notNamed = await call("POST", `/api/governance/ballots/${running.id}/steward-slate`, {
+      token: idaToken,
+      body: { accept: true },
+    });
+    expect(notNamed.status).toBe(409);
+    expect(String(notNamed.json?.error)).toContain("did not name you");
   });
 
   it("refuses a second one while the first is running", async () => {
@@ -457,6 +513,16 @@ describe.skipIf(!DB_CONFIGURED)("a vote one person never answered does not carry
   });
 
   it("can be asked again the same hour, on a new freeze", async () => {
+    /*
+     * FOUNDERS ONLY, FOR THIS FIRST SEASON, refused at the door. Wren is a
+     * member, and the known positive is the proposal two lines below, which
+     * opens with no slate at all.
+     */
+    const badSlate = await call("POST", "/api/admin/launch/propose", { body: { slate: [wrenId] } });
+    expect(badSlate.status, JSON.stringify(badSlate.json)).toBe(409);
+    expect(String(badSlate.json?.error)).toContain("Only founding members");
+    expect((await launchBallots()).length, "and it opened nothing on its way out").toBe(1);
+
     const again = await call("POST", "/api/admin/launch/propose");
     expect(again.status, JSON.stringify(again.json)).toBe(200);
     const rows = await launchBallots();
@@ -495,24 +561,28 @@ describe.skipIf(!DB_CONFIGURED)("everybody answers and one says no", () => {
 
 describe.skipIf(!DB_CONFIGURED)("everybody answers and everybody agrees", () => {
   it("carries, and that is the moment token issuance opens", async () => {
-    const opened = await call("POST", "/api/admin/launch/propose");
+    const opened = await call("POST", "/api/admin/launch/propose", { body: { slate: [founderId] } });
     expect(opened.status, JSON.stringify(opened.json)).toBe(200);
     const rows = await launchBallots();
     const running = rows[rows.length - 1];
     expect(running.status).toBe("open");
 
     /*
-     * THE FOUNDER STANDS FOR THE SEAT AND THE TWO MEMBERS DO NOT, which is the
-     * ruling of 2026-09-24 driven through the real door. Wren asks for it as
-     * well, and is not a founding member, so the seating below has to filter
-     * on both halves and not on either one alone.
+     * THE FOUNDER ACCEPTS THE NOMINATION AND WREN SETS THE FLAG WITHOUT ONE,
+     * which is the whole of 0220 driven through the real door. Since the slate
+     * exists, `standsForSteward` means "I accept the nomination this proposal
+     * made of me", so Wren's is an answer to a question nobody asked her and
+     * the seating below has to ignore it. She is also not a founding member,
+     * so two separate rules would each stop her; the unit control that
+     * isolates the slate rule from the founder rule is in
+     * `server/stewardSlate.db.test.ts`.
      */
     const stood = await vote(running.id, founderToken, "yes", true);
     expect(stood.status, JSON.stringify(stood.json)).toBe(200);
-    expect(stood.json?.standsForSteward, "the route recorded the ask, and said so").toBe(true);
+    expect(stood.json?.standsForSteward, "the route recorded the acceptance, and said so").toBe(true);
     const wrenStood = await vote(running.id, wrenToken, "yes", true);
     expect(wrenStood.status).toBe(200);
-    expect(wrenStood.json?.standsForSteward, "a member may ask; the seating is where it is weighed").toBe(true);
+    expect(wrenStood.json?.standsForSteward, "anybody may set it; the seating is where it is weighed").toBe(true);
     expect((await vote(running.id, idaToken, "yes")).status).toBe(200);
     await expire(running.id);
     const closed = await call("POST", `/api/governance/ballots/${running.id}/close`, {
@@ -565,7 +635,7 @@ describe.skipIf(!DB_CONFIGURED)("everybody answers and everybody agrees", () => 
       "SELECT stands_for_steward FROM ballot_votes WHERE ballot_id = ? AND user_id = ?",
       [carried.id, wrenId],
     );
-    expect(Number(wrenAsked[0]?.stands_for_steward), "they really did ask, through the route").toBe(1);
+    expect(Number(wrenAsked[0]?.stands_for_steward), "they really did set it, through the route").toBe(1);
 
     /*
      * THE SEAT IS WORTH SOMETHING, AND IT IS WORTH ALL NINETEEN.

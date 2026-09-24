@@ -116,6 +116,31 @@ async function stoodAtLaunch(userId: string, stands = true): Promise<void> {
   );
 }
 
+/**
+ * The launch PROPOSAL names this member for the seat (0220).
+ *
+ * Rye, 2026-09-24: the slate is chosen by whoever opens the vote and is part
+ * of the proposal, so a founder who is not on it is not seated however they
+ * answered. Every fixture below that expects a seating therefore has to name
+ * somebody, and one of them deliberately does not: `mem-1` sets the
+ * acceptance flag and is never named, which is the control for "the flag on
+ * its own seats nobody".
+ */
+async function namedOnTheSlate(userId: string, proposedBy = "cat-1"): Promise<void> {
+  await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema
+    "INSERT IGNORE INTO ballot_steward_slate (ballot_id, user_id, proposed_by) VALUES (?,?,?)",
+    [LAUNCH_BALLOT, userId, proposedBy],
+  );
+}
+
+/** Named, and said no out loud. */
+async function declinedTheSeat(userId: string): Promise<void> {
+  await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema
+    "UPDATE ballot_steward_slate SET declined_at = NOW() WHERE ballot_id = ? AND user_id = ?",
+    [LAUNCH_BALLOT, userId],
+  );
+}
+
 /** The permission gate's own predicate, run over the rows the gate reads. */
 async function capabilitiesOf(userId: string): Promise<string[]> {
   const [holders]: any = await pool.query(
@@ -147,6 +172,8 @@ describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
     // Both founders stood for the seat at the launch vote, which is what makes
     // the seating below seat them (Rye, 2026-09-24). The ordinary member voted
     // and did not stand, so the roll is bigger than the signal.
+    await namedOnTheSlate("cat-1");
+    await namedOnTheSlate("cat-2");
     await stoodAtLaunch("cat-1");
     await stoodAtLaunch("cat-2");
     await stoodAtLaunch("mem-1", false);
@@ -214,7 +241,13 @@ describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
     expect(r.holdingHeld).toBeNull();
     expect(r.seated.sort()).toEqual(["cat-1", "cat-2"]);
     expect(r.alreadySeated).toEqual([]);
-    expect(r.stoodForSeat).toEqual(["cat-1", "cat-2"]);
+    expect(r.slate, "the proposal named both of them").toEqual(["cat-1", "cat-2"]);
+    expect(r.accepted).toEqual(["cat-1", "cat-2"]);
+    expect(r.declined).toEqual([]);
+    expect(
+      r.flaggedNotOnSlate,
+      "mem-1 set the acceptance flag and the proposal never named them, so it seated nobody and says so",
+    ).toEqual([]);
 
     const [roles]: any = await pool.query("SELECT capabilities FROM roles WHERE id = ?", [STEWARD_ROLE_ID]);
     const caps = typeof roles[0].capabilities === "string" ? JSON.parse(roles[0].capabilities) : roles[0].capabilities;
@@ -349,6 +382,8 @@ describe.skipIf(!configured)("the veto on a carried decision", () => {
     // Both founders stood for the seat at the launch vote, which is what the
     // seating now asks for (Rye, 2026-09-24). Without these rows the whole
     // suite below would be about a village that seated nobody.
+    await namedOnTheSlate("st-1", "st-1");
+    await namedOnTheSlate("st-2", "st-1");
     await stoodAtLaunch("st-1");
     await stoodAtLaunch("st-2");
     await seatCatalystsAsStewards(pool, LAUNCH_BALLOT, SEASON);
@@ -656,6 +691,7 @@ describe.skipIf(!configured)("a term that runs out, and the vacancy it leaves", 
     await member("lapse-1", "Wren Alder", "founder");
     await member("roll-1", "Rook Salt", "member");
     // The founder stood for the seat at the launch vote (Rye, 2026-09-24).
+    await namedOnTheSlate("lapse-1", "lapse-1");
     await stoodAtLaunch("lapse-1");
     await seatCatalystsAsStewards(pool, LAUNCH_BALLOT, SEASON);
     await ballot("bal-held", "mechanics", "passed", "roll-1");

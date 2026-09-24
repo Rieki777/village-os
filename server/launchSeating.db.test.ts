@@ -151,6 +151,25 @@ async function stoodAtLaunch(pool: Pool, userId: string, stands = true): Promise
 }
 
 /**
+ * The launch PROPOSAL names this member for the seat (0220).
+ *
+ * Rye, 2026-09-24, on the design he chose: the slate is picked by whoever
+ * opens the vote and is part of the proposal, so being named is the first of
+ * the three conditions a seating needs. Written straight here, because this
+ * suite drives the seating and not the route that writes it.
+ *
+ * `mem-1` is deliberately NEVER named in any fixture in this file while still
+ * setting the acceptance flag, which keeps the "a flag on its own seats
+ * nobody" control honest against a known positive two lines away.
+ */
+async function namedOnTheSlate(pool: Pool, userId: string, proposedBy = "cat-1"): Promise<void> {
+  await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema
+    "INSERT IGNORE INTO ballot_steward_slate (ballot_id, user_id, proposed_by) VALUES (?,?,?)",
+    [LAUNCH_BALLOT, userId, proposedBy],
+  );
+}
+
+/**
  * Every power this village has entrusted, to whom, and WHEN IT CROSSED.
  *
  * `moved_at` is in here for the retry case and it is the load-bearing column
@@ -261,6 +280,19 @@ describe.skipIf(!configured)("the launch seats the village's founders as steward
     await member(pool, "cat-2", "Iris Fenn", "founder");
     await member(pool, "cat-3", "Bram Quill", "founder");
     await member(pool, "mem-1", "Rook Salt", "member");
+    await namedOnTheSlate(pool, "cat-1");
+    await namedOnTheSlate(pool, "cat-2");
+    await namedOnTheSlate(pool, "cat-3");
+    /*
+     * `mem-1` IS ON THE SLATE AND IS NOT A FOUNDER, which is the state the
+     * founder test at the close exists for. `launchSlateProblem` refuses a
+     * proposal naming a non-founder, so the only way to reach this is for
+     * `users.role` to move between the vote opening and carrying, and the
+     * ruling asks "whomever of the founding members" as of the close. Written
+     * straight because a fixture cannot wait a fortnight for somebody's role
+     * to change.
+     */
+    await namedOnTheSlate(pool, "mem-1");
     await stoodAtLaunch(pool, "cat-1");
     await stoodAtLaunch(pool, "cat-2");
     await stoodAtLaunch(pool, "cat-3", false);
@@ -289,11 +321,13 @@ describe.skipIf(!configured)("the launch seats the village's founders as steward
       "cat-2",
     ]);
     expect(out.alreadySeated).toEqual([]);
-    expect(out.stoodForSeat, "the denominator, so an empty seat can be told from an empty ask").toEqual([
+    expect(out.slate, "the denominator, so an empty seat can be told from an empty slate").toEqual([
       "cat-1",
       "cat-2",
+      "cat-3",
       "mem-1",
     ]);
+    expect(out.declined, "nobody said no here").toEqual([]);
     expect(out.termEndsOn).toBe(SEASON_ENDS_ON);
 
     const capAt = civilDateInstant(SEASON_ENDS_ON, TZ)!.getTime();
@@ -328,7 +362,7 @@ describe.skipIf(!configured)("the launch seats the village's founders as steward
       "SELECT stands_for_steward FROM ballot_votes WHERE ballot_id = ? AND user_id = 'mem-1'",
       [LAUNCH_BALLOT],
     );
-    expect(Number(rows[0]?.stands_for_steward), "they really did stand").toBe(1);
+    expect(Number(rows[0]?.stands_for_steward), "they really did accept").toBe(1);
     // And their name is on the admin spine, so a signal that seated nobody
     // left a record instead of vanishing.
     expect(log.audits.some((a) => a.startsWith("role:stood-not-founding:") && a.includes("mem-1"))).toBe(true);
@@ -381,7 +415,8 @@ describe.skipIf(!configured)("the launch seats the village's founders as steward
     expect(seatNotices.map((r) => r.userId).sort()).toEqual(["cat-1", "cat-2"]);
     expect(seatNotices[0].dedupeKey).toBe(`role:${stewardHoldingId(seatNotices[0].userId)}`);
     expect(String(seatNotices[0].body)).toContain(SEASON_ENDS_ON);
-    expect(String(seatNotices[0].body), "and that they asked for it").toContain("asked for this seat");
+    expect(String(seatNotices[0].body), "and how they came to hold it").toContain("named you for this seat");
+    expect(String(seatNotices[0].body), "and that they said yes to it").toContain("you accepted");
     expect(String(seatNotices[0].title)).toContain("Steward");
   });
 
@@ -453,6 +488,9 @@ describe.skipIf(!configured)("a launch nobody stood for", () => {
     await member(pool, "cat-1", "Wren Alder", "founder");
     await member(pool, "cat-2", "Iris Fenn", "founder");
     await member(pool, "cat-3", "Bram Quill", "founder");
+    await namedOnTheSlate(pool, "cat-1");
+    await namedOnTheSlate(pool, "cat-2");
+    await namedOnTheSlate(pool, "cat-3");
     await stoodAtLaunch(pool, "cat-1", false);
     await stoodAtLaunch(pool, "cat-2", false);
     await stoodAtLaunch(pool, "cat-3", false);
@@ -489,11 +527,12 @@ describe.skipIf(!configured)("a launch nobody stood for", () => {
     expect(out.ok, "every write it had to run, ran").toBe(true);
     expect(out.seated).toEqual([]);
     expect(out.alreadySeated).toEqual([]);
-    expect(out.stoodForSeat, "and the reason is that nobody asked").toEqual([]);
+    expect(out.slate, "three people were named").toEqual(["cat-1", "cat-2", "cat-3"]);
+    expect(out.declined, "and none of them said no; they simply did not accept").toEqual([]);
     expect(out.termEndsOn, "the calendar was never the problem").toBe(SEASON_ENDS_ON);
 
     expect(String(out.held)).toContain("started its Game");
-    expect(String(out.held)).toContain("nobody stood");
+    expect(String(out.held)).toContain("nobody its proposal named");
     expect(log.pulse, "the village reads it").toEqual([out.held]);
     expect(log.rung, "and nobody is told they hold a seat they do not").toEqual([]);
     expect(
@@ -563,6 +602,8 @@ describe.skipIf(!configured)("a founder who already holds the seat", () => {
      * what makes the assertion below about that rule rather than about a
      * fixture that happened to tick every box.
      */
+    await namedOnTheSlate(pool, "cat-1");
+    await namedOnTheSlate(pool, "cat-2");
     await stoodAtLaunch(pool, "cat-1", false);
     await stoodAtLaunch(pool, "cat-2");
     log = recorder(pool);
@@ -613,10 +654,12 @@ describe.skipIf(!configured)("a calendar that cannot give the seat a term", () =
     await loadVariables(pool);
     await member(pool, "cat-1", "Wren Alder", "founder");
     await member(pool, "cat-2", "Iris Fenn", "founder");
-    // BOTH STOOD, so the calendar is the only thing standing between this
-    // village and a seated steward. Without these rows the suite below would
-    // pass for the wrong reason: nobody seated because nobody asked, which is
-    // a different branch and a different sentence.
+    // BOTH NAMED AND BOTH ACCEPTED, so the calendar is the only thing standing
+    // between this village and a seated steward. Without these rows the suite
+    // below would pass for the wrong reason: nobody seated because nobody was
+    // named, which is a different branch and a different sentence.
+    await namedOnTheSlate(pool, "cat-1");
+    await namedOnTheSlate(pool, "cat-2");
     await stoodAtLaunch(pool, "cat-1");
     await stoodAtLaunch(pool, "cat-2");
   });
@@ -684,7 +727,9 @@ describe.skipIf(!configured)("the break-glass a founder gets by being seated (PR
     await loadVariables(pool);
     await member(pool, "cat-1", "Wren Alder", "founder");
     await member(pool, "mem-1", "Rook Salt", "member");
-    // The founder stood for the seat, which is what hands them the key below.
+    // The proposal named the founder and they accepted, which is what hands
+    // them the key below.
+    await namedOnTheSlate(pool, "cat-1");
     await stoodAtLaunch(pool, "cat-1");
   });
 

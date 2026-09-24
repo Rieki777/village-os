@@ -1,6 +1,6 @@
 /**
- * THE FOUNDERS WHO STOOD FOR IT TAKE THE STEWARD'S SEAT, WITH ALL NINETEEN
- * POWERS, WHEN THE VILLAGE STARTS ITS GAME.
+ * THE FOUNDERS THE PROPOSAL NAMED, AND WHO ACCEPTED, TAKE THE STEWARD'S SEAT,
+ * WITH ALL NINETEEN POWERS, WHEN THE VILLAGE STARTS ITS GAME.
  *
  * ── THE RULE, IN THE FOUNDER'S WORDS ───────────────────────────────────────
  *
@@ -15,12 +15,30 @@
  * the founding stewards are selected at the launch Vote."
  *
  * Three readings were put back to him and answered. ALL POWERS is all nineteen
- * entrustable powers, not a named subset. The SIGNAL happens at the launch
+ * entrustable powers, not a named subset. The signalling happens at the launch
  * vote, so the roll and the stewards are decided in one moment. And the
  * ONGOING case needs no new machinery: after launch, wanting the seat is the
  * path that already exists, where a member raises a hand and a `role_seat`
- * ballot seats them. The self-signal is a one-time founding mechanism and
- * there is deliberately no second door beside the one that is already there.
+ * ballot seats them. The founding mechanism is a one-time one and there is
+ * deliberately no second door beside the one that is already there.
+ *
+ * ── AND THE FOUNDING MECHANISM CHANGED SHAPE LATER THE SAME DAY ───────────
+ *
+ * Rye, 2026-09-24, choosing between two designs: "is whoever is clicking the
+ * 'launch village' button then selects from a list of members in the proposal
+ * to carry the steward role so then it's there in the proposal to be voted on.
+ * I like this second route better." And: "founders only for this first season
+ * (after that anyone can raise their hand for a steward role and fill it if
+ * voted in), and show the declines".
+ *
+ * So a founder no longer volunteers. The PROPOSAL names them
+ * (`ballot_steward_slate`, 0220) and they answer, and both halves of the
+ * answer are visible to the whole village. Nothing above changes: it is still
+ * a one-time founding mechanism, still founders only, still no second door.
+ * What changed is who does the asking, and therefore that a consent step is
+ * now load-bearing rather than implied. A slate chosen by one hand can name
+ * somebody who does not want nineteen powers, and being handed them anyway is
+ * exactly what the morning's opt-in ruling was protecting against.
  *
  * Rye, 2026-09-14: "By default seats should end with the ending of a season
  * ... this includes stewards where all seats are reset each season at a max."
@@ -189,7 +207,7 @@ export interface LaunchSeatingOutcome {
    * True when a term was found and the writes ran.
    *
    * IT DOES NOT MEAN ANYBODY WAS SEATED, and the two facts came apart when the
-   * seat became opt-in. A launch where nobody stood runs every write it has to
+   * seat became opt-in. A launch nobody accepted runs every write it has to
    * run, finds nobody to seat, and is `ok` with an empty `seated` and a `held`
    * sentence. Read `seated` for who holds the seat and `held` for what to tell
    * the village.
@@ -199,15 +217,23 @@ export interface LaunchSeatingOutcome {
   seated: string[];
   /** User ids that already held the seat, left exactly as they were. */
   alreadySeated: string[];
-  /** Everyone who stood for the seat on the launch ballot, founder or not. */
-  stoodForSeat: string[];
+  /** Everyone the launch PROPOSAL named for the seat, whatever they answered (0220). */
+  slate: string[];
+  /**
+   * The named members who said NO, which Rye asked for by name.
+   *
+   * "show the declines" (2026-09-24). Carried up out of the report so the
+   * closer and the ballot page read one list, and so a decline is never
+   * quietly folded into "did not accept".
+   */
+  declined: string[];
   /** The civil date every new seat ends on, in the village's zone. */
   termEndsOn: string | null;
   /**
    * Why nobody was seated, in the village's words. Null when somebody was.
    *
    * Two things reach it: a calendar that could not give the seat a term, and
-   * a launch nobody stood for. Both are said out loud on the public pulse,
+   * a launch whose slate seated nobody. Both are said out loud on the public pulse,
    * because a village that believes it has stewards and has none finds out at
    * the worst possible moment.
    */
@@ -233,13 +259,28 @@ export function stewardsHeld(refusal: string): string {
 }
 
 /**
- * WHAT A VILLAGE READS WHEN THE LAUNCH CARRIED AND NOBODY STOOD FOR THE SEAT.
+ * WHAT A VILLAGE READS WHEN THE LAUNCH CARRIED AND THE SEAT IS STILL EMPTY.
  *
- * Rye made the inaugural seat something a founding member ASKS for at the
- * launch vote, so a launch where nobody asked is a real outcome rather than a
- * fault. It is still said out loud, for the reason every other branch in this
- * module is said out loud: a village that believes it has stewards and has
- * none finds out at the worst possible moment.
+ * Rye made the inaugural seat something a launch PROPOSAL offers and a named
+ * member answers, so a launch that seats nobody is a real outcome rather than
+ * a fault. It is still said out loud, for the reason every other branch in
+ * this module is said out loud: a village that believes it has stewards and
+ * has none finds out at the worst possible moment.
+ *
+ * THREE DIFFERENT THINGS CAN PUT A VILLAGE HERE AND THEY ARE NOT THE SAME
+ * SENTENCE. One sentence for all three is how "show the declines" becomes "we
+ * mentioned it somewhere". So this takes the two counts it needs to tell them
+ * apart:
+ *
+ *   NOBODY WAS NAMED. The proposal put nobody forward, so there was nothing
+ *   to accept. Nothing happened to anybody and the village chose this.
+ *
+ *   EVERYBODY NAMED DECLINED. People were asked and said no, which is the
+ *   case Rye specifically wanted visible, and the village should hear that
+ *   its offer was refused rather than that nothing happened.
+ *
+ *   NAMED, AND NOT EVERYBODY ANSWERED. The vote carried before the answers
+ *   came in. Nobody refused anything; the seat is simply unfilled.
  *
  * IT NAMES THE ORDINARY DOOR AND BUILDS NO SECOND ONE. Rye's clarification is
  * that after the launch vote people can still signal they want the seat, and
@@ -251,19 +292,26 @@ export function stewardsHeld(refusal: string): string {
  * cannot reach. Read the crossing in `seatCatalystsAsStewards` for why the
  * last of those is true.
  */
-export function nobodyStood(): string {
+export function nobodyStood(named: number, declined: number): string {
+  const opening =
+    named === 0
+      ? `The village started its Game, and its proposal named nobody for the ${STEWARD_ROLE_NAME}'s seat.`
+      : declined >= named
+        ? `The village started its Game, and everybody its proposal named for the ${STEWARD_ROLE_NAME}'s seat declined it.`
+        : `The village started its Game, and nobody its proposal named for the ${STEWARD_ROLE_NAME}'s seat accepted it.`;
   return (
-    `The village started its Game, and nobody stood for the ${STEWARD_ROLE_NAME}'s seat at the vote. ` +
+    `${opening} ` +
     `The seat stands empty, which stops nothing: decisions land at their landing time either way. ` +
     `The village can vote anybody into it whenever it likes, and whoever wants it can say so.`
   );
 }
 
 /**
- * Seat the founders who stood, at the moment the launch vote carries.
+ * Seat the founders the proposal named who accepted, at the moment the launch
+ * vote carries.
  *
  * Never throws for a calendar that cannot give a term, and never refuses a
- * launch because nobody stood: see the header for why a launch that has
+ * launch because nobody accepted: see the header for why a launch that has
  * already carried must not be refused or retried over either.
  */
 export async function seatFoundersAtLaunch(deps: LaunchSeatingDeps): Promise<LaunchSeatingOutcome> {
@@ -272,7 +320,8 @@ export async function seatFoundersAtLaunch(deps: LaunchSeatingDeps): Promise<Lau
     ok: false,
     seated: [],
     alreadySeated: [],
-    stoodForSeat: [],
+    slate: [],
+    declined: [],
     termEndsOn: null,
     report: null,
   };
@@ -319,35 +368,42 @@ export async function seatFoundersAtLaunch(deps: LaunchSeatingDeps): Promise<Lau
   const holdsTheSeat = report.seated.length + report.alreadySeated.length > 0;
 
   /*
-   * A SIGNAL THAT SEATED NOBODY IS RECORDED, never dropped.
+   * AN ACCEPTANCE THAT SEATED NOBODY IS RECORDED, never dropped.
    *
-   * An ordinary member who ticked the box at the launch vote is not a founding
-   * member, so the ruling seats nobody on it. They are not left to find out by
-   * noticing they have no seat: the admin spine carries their names, and the
-   * ordinary `role_seat` ballot is the same door for them as for anybody else.
-   * This is a line on the audit trail rather than a notice, because the surface
-   * that offers the box is the place to say who it is for, and a product this
-   * lane does not own should not start apologising on its behalf.
+   * Somebody the proposal named and who accepted can still fail the founder
+   * test, because `users.role` can move between the vote opening and carrying
+   * and the ruling asks the question at the close. They are not left to find
+   * out by noticing they have no seat: the admin spine carries their names,
+   * and the ordinary `role_seat` ballot is the same door for them as for
+   * anybody else. This is a line on the audit trail rather than a notice,
+   * because the surface that offered them the seat is the place to say who it
+   * is for, and a product this lane does not own should not start apologising
+   * on its behalf.
+   *
+   * The key keeps the word it has always had. It is an audit string a village
+   * may already have rows of, and renaming one is a search that silently
+   * stops finding the old ones.
    */
-  for (const userId of report.stoodButNotFounding) {
+  for (const userId of report.acceptedNotFounding) {
     deps.audit(`role:stood-not-founding:${STEWARD_ROLE_ID}:${userId}:${deps.ballotId}`);
   }
 
   /*
-   * NOBODY STOOD. The Game started, the term was real, every write ran, and
-   * the seat is empty because nobody asked for it. That is an outcome and not
+   * NOBODY ACCEPTED. The Game started, the term was real, every write ran, and
+   * the seat is empty because nobody took it. That is an outcome and not
    * a fault, so no administrator is rung: there is nothing for one to fix, and
    * a bell for a village's own choice is noise. The village hears it instead,
    * on the pulse, the same way it hears everything else about the launch.
    */
   if (!holdsTheSeat) {
-    const held = nobodyStood();
+    const held = nobodyStood(report.slate.length, report.declined.length);
     await deps.addActivity(held, STEWARD_ROLE_ID);
     return {
       ok: true,
       seated: [],
       alreadySeated: [],
-      stoodForSeat: report.stoodForSeat,
+      slate: report.slate,
+      declined: report.declined,
       termEndsOn: term.endsOn,
       held,
       report,
@@ -378,7 +434,7 @@ export async function seatFoundersAtLaunch(deps: LaunchSeatingDeps): Promise<Lau
       type: "role_appointed",
       title: `The village started its Game, and you hold the ${STEWARD_ROLE_NAME}'s seat`,
       body:
-        `You asked for this seat at the vote, and the village started its Game, so you hold it. ` +
+        `The launch proposal named you for this seat, you accepted, and the village started its Game, so you hold it. ` +
         `You can stop a decision the village has already carried, inside the window before it lands, and you have to say why. ` +
         `The seat also holds every power this village has to give, until it hands them on. ` +
         `The seat ends on ${term.endsOn}, with the season, and after that the village votes on who holds it.`,
@@ -393,7 +449,7 @@ export async function seatFoundersAtLaunch(deps: LaunchSeatingDeps): Promise<Lau
 
   if (report.seated.length > 0) {
     await deps.addActivity(
-      `The founders who stood for it hold the ${STEWARD_ROLE_NAME}'s seat until ${term.endsOn}, with every power this village has to give, by the vote that started the Game.`,
+      `The founders this village named and who accepted hold the ${STEWARD_ROLE_NAME}'s seat until ${term.endsOn}, with every power this village has to give, by the vote that started the Game.`,
       STEWARD_ROLE_ID,
     );
   }
@@ -402,7 +458,8 @@ export async function seatFoundersAtLaunch(deps: LaunchSeatingDeps): Promise<Lau
     ok: true,
     seated: report.seated,
     alreadySeated: report.alreadySeated,
-    stoodForSeat: report.stoodForSeat,
+    slate: report.slate,
+    declined: report.declined,
     termEndsOn: term.endsOn,
     held: null,
     report,
