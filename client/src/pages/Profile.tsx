@@ -23,7 +23,7 @@ import TheVessel from "@/components/profile/TheVessel";
 import MoonDock from "@/components/profile/MoonDock";
 import NightMotes from "@/components/profile/NightMotes";
 import { useAuth } from "@/contexts/AuthContext";
-import { fetchGameMe, gameFetch, useGameConfig, type GameMe, type ProgressionCapability } from "@/lib/gameApi";
+import { authToken, fetchGameMe, gameFetch, useGameConfig, type GameMe, type ProgressionCapability } from "@/lib/gameApi";
 import { motion, AnimatePresence } from "framer-motion";
 import { Heart, Edit2, LogOut, ArrowRight, CheckCircle2 } from "lucide-react";
 import { useTokenName } from "@/hooks/useTokenNames";
@@ -143,6 +143,10 @@ export default function Profile() {
 
   useEffect(() => {
     let live = true;
+    // Signed out there is no progression to read and the route answers 401,
+    // which every browser logs as a failure on the page itself. `authToken`
+    // reads a blocked store as no session, so it cannot throw here.
+    if (!authToken()) return;
     gameFetch("/api/game/progression")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
