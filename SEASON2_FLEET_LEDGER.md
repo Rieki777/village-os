@@ -616,6 +616,28 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   0064, 0065, 0080, 0094, 0100, 0103 and 0107 are gaps of the same kind that the register does
   not name. The gate enforces the general rule instead: a migration added since the base ref
   must be numbered above every number that ref already has. Only forward, no list to maintain.
+- **gps lane (the governing purpose statement), 2026-09-23: holds 0217** for
+  `drizzle/0217_a_proposal_says_what_it_serves.sql` on `wt/gps-model`: one nullable `text`
+  column on `ballots` (`purpose_alignment`) and one new table created `IF NOT EXISTS`
+  (`gps_change_proposals`). Both expand-only, no index, no foreign key. Measured four ways
+  after `git fetch origin`, with the coordinator's own warning as the fourth channel:
+  `--diff-filter=AR` over every ref reaches **0215**; every `drizzle/` on disk across the
+  Desktop worktrees reaches **0215**; the disk scan covers untracked files by construction,
+  since it lists the filesystem and not the index; and `check-migration-numbers --next`
+  answers **0215**, which is below the real ceiling exactly as this section warns. **0215 and
+  0216 are spoken for by other lanes** and were handed to this lane as taken, which is the
+  only channel that could see `0216`: there is no file and no ref for it anywhere, which is
+  the invisible-reservation case this section names. So 0217 is above every channel and above
+  both claimed numbers. Renumbering this file is safe while it has run nowhere but a scratch
+  schema: the `CREATE TABLE` is `IF NOT EXISTS` and the `ALTER TABLE ... ADD COLUMN` is not
+  replay-safe, which is stated here so whoever renumbers it knows which half to check.
+- **gps lane, 2026-09-23: takes ~90 lines of `server/index.ts` slack**, no baseline change.
+  One route-module import and one register call (both exempt), one `SUBJECT_CLOSERS` entry for
+  the `gps_change` subject, one field on `serveBallot`, one field on the
+  `/api/admin/capabilities/holding` payload, and the judgement line threaded into four
+  existing openBallot calls. The ratchet stood at 27264 lines against a baseline of 27507 when
+  this lane started, so the slack is there; a lane lowering that baseline should measure after
+  this lands rather than before.
 - **Ports.** Test MySQL is 127.0.0.1:3307 (local, not production). Preview servers pick
   their own; record any long-lived port here.
 
@@ -3263,6 +3285,7 @@ Both look like intentional work and neither is.
 | 2026-09-23 | quests lane (ADMIN, abuse guard) | `server/index.ts` (28 lines FEWER: the three rate-limit guards become wrappers over the new `server/repos/rateHits.ts`, and the quests route gains a `limitState` dependency); the raw-SQL register and `BURNDOWN_CEILING`, lowered 725 to 719 as `server/index.ts` falls 32 to 26 | `wt/abuse-guard-raster-and-race` | OPEN. The guard counted its window on a clock the database does not share, so on any non-UTC session it counted 0 and bounded nobody; it also counted and inserted in two statements, so a parallel burst all passed. Both fixed, with a concurrency suite. The share-card raster now refuses when the guard cannot check (Rye, 2026-09-23: refuse on the raster only); every other caller still fails open. |
 | 2026-09-24 | admin-gameroles lane | `client/src/pages/Admin.tsx` HEADROOM, measured with `scripts/check-file-lines.mjs` and not with `wc`: the file stood at **10236 of a 10236 baseline, zero headroom**, so every addition to it failed however small, and #349 was blocked there at five lines. `GameRolesTab` moves to `client/src/components/admin/GameRolesTab.tsx` and the file falls to **10133**, which is 103 lines of headroom for whoever comes next. The baseline is NOT lowered: it is downward-only and lowering it would spend the headroom again. Imported statically, so `check-dist-budget` reads 508 KB main and 6088 KB total before and after, identical, with the same 214 files | `wt/admin-gameroles` | RECORDED (a measurement, not a claim). **The brief that opened this lane said GameRolesTab was 871 lines and it is 101.** 871 is the distance from `function GameRolesTab` to the next line matching `^function `, and `ModulesTab` sits between them as `export function`, so the span swallowed a whole second component. The largest single tab in `Admin.tsx` is `ModulesTab` at **721 lines**, and it is the extraction worth doing next. A lane measuring a component by grepping for the next top-level `function` will undercount its neighbours the same way |
 
+| 2026-09-23 | gps lane (the governing purpose statement) | migration **0217**, `drizzle/0217_a_proposal_says_what_it_serves.sql`; about 90 lines of `server/index.ts` slack with NO baseline change; the `gps` key in `app_config`; the `gps_change` ballot subject and its `governance.window_gps_change` dial | `wt/gps-model` | HELD. Measured four ways after `git fetch origin`: refs reach 0215, disk reaches 0215, `--next` answers 0215 (below the real ceiling, as 27b warns), and the coordinator handed this lane **0215 and 0216 as taken by other lanes** — which was the only channel that could see 0216, since a reservation with no file and no ref is invisible to every scan. `server/index.ts` is touched but NOT extracted from, and no ratchet baseline moves, so this does not collide with an extraction lane; it does spend slack, and a lane about to lower that baseline should measure after this lands. Two other lanes (admin setup wizard, Saberra) build against `shared/governingPurpose.ts`, which landed first and on its own at `df56daa` so they were not blocked on the rest. |
 ### 27d — Verification: CI runs the full suite, lanes run what they touched
 
 **Measured, 2026-09-03/04.** A local full suite is 25 minutes on a quiet machine and 46.6 minutes

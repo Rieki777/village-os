@@ -28,7 +28,7 @@
  * scan of a table that cannot grow past that.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
-import { ALL_CAPABILITIES, TRANSFERABLE, type Capability } from "../../shared/capabilities";
+import { ALL_CAPABILITIES, HANDOVER_SET, TRANSFERABLE, type Capability } from "../../shared/capabilities";
 import { WIRED_BUT_HELD_BACK } from "./capabilityRegistry";
 
 export interface CapabilityHoldingRow {
@@ -69,6 +69,133 @@ export async function villageHeldCapabilities(pool: Pool): Promise<string[]> {
     console.error("[capabilityHolding] read failed, treating the village as holding nothing", e);
     return [];
   }
+}
+
+/**
+ * THE FOUNDING SEAT'S ROLE ID, and it lives here rather than in
+ * `stewardship.ts` for a dependency reason worth stating.
+ *
+ * `stewardship.ts` already imports `moveCapabilityToVillage` from this file, so
+ * importing back would be a cycle. The low-level module owns the constant and
+ * `stewardship.ts` re-exports it under the name it has always had, so nothing
+ * that reads it changed and there is exactly one literal.
+ */
+export const STEWARD_ROLE_ID = "steward";
+
+/** Where this village has got to in moving power out of the founding seat. */
+export interface VillageHandoverState {
+  /** No power in `HANDOVER_SET` is still held by the founding steward seat. */
+  complete: boolean;
+  /** The ones that have left the steward seat, in the platform's own order. */
+  held: string[];
+  /** The ones the stewards still hold, in the platform's own order. */
+  remaining: string[];
+  /** How many there are in all. `held.length + remaining.length`. */
+  total: number;
+}
+
+/**
+ * HOW FAR THE HANDOVER HAS GOT, from the same map and the same table the
+ * capability gate reads.
+ *
+ * It reads `capability_holding` through `capabilityHoldings`, the same table
+ * the gate reads, so the two can never disagree about where a power sits. Two
+ * reads of one table through two statements is how two answers about one fact
+ * start drifting, and the drift here would be a founder told the pen had moved
+ * while the gate still answered for them.
+ *
+ * ── WHAT `complete` MEANS, AND WHY IT IS NOT "IS IT ENTRUSTED" ─────────────
+ *
+ * Rye ruled on 2026-09-24 that the founding stewards hold ALL 19 entrustable
+ * powers from the moment the launch vote carries, and separately that the
+ * founder keeps the purpose statement's pen "until they give over all steward
+ * powers to the village".
+ *
+ * So this cannot ask "is the power entrusted to somebody", which is what an
+ * earlier draft asked. Under that reading a launch entrusts all 19 at once and
+ * the handover would read COMPLETE on day one, moving the pen at the exact
+ * moment the ruling says it must not move. It asks the narrower question
+ * instead: has this power LEFT THE FOUNDING SEAT.
+ *
+ * That also makes the number mean the thing Rye is describing. Launch is 0 of
+ * 19. Every power the stewards hand to another role, and every power a member
+ * applies for and is seated into, moves it up. When it reaches 19 the founding
+ * seat holds nothing, the village governs itself, and the pen goes with it.
+ *
+ * What `HANDOVER_SET` MEANS is a reading of his words and the reasoning is at
+ * the constant, in shared/capabilities.ts, where narrowing it is one edit.
+ *
+ * ── `remaining` IS NOT DECORATION ──────────────────────────────────────────
+ *
+ * The handover confirm screen warns a founder on the LAST power only, which
+ * is `remaining.length === 1`. A warning on every handover is a warning
+ * people learn to click past, and the one crossing that changes what the
+ * founder may do afterwards is the one that has to land differently.
+ *
+ * NO LIVE VILLAGE HAS EVER BEEN IN THAT STATE, or in any state but the first.
+ * `capability_holding` is created empty by 0098 and nothing seeds it, so every
+ * village alive sits at 0 of 19 with the SCAFFOLDING holding all of them, and
+ * Amora has not launched. Every branch below except that one is reached today
+ * only from a seeded fixture, and a green test about `complete` is a statement
+ * about the fixture rather than about production. Say so when reporting one.
+ *
+ * ── IT FAILS TOWARDS THE STEWARDS, WHICH IS THE OPPOSITE OF BEFORE ─────────
+ *
+ * This used to borrow `villageHeldCapabilities`, whose read fails OPEN and
+ * answers "the village holds nothing". Under the old question that was the
+ * safe direction. Under this one it is the dangerous direction, because
+ * "nothing is held" would mean "the stewards hold nothing", which is
+ * `complete`. So the read is caught here and a failure answers that the
+ * stewards still hold all of it: the state every village starts in, and the
+ * one that takes nothing away from anybody.
+ */
+export async function villageHandoverState(pool: Pool): Promise<VillageHandoverState> {
+  let holder: Map<string, string>;
+  try {
+    holder = new Map((await capabilityHoldings(pool)).map((r) => [r.capability, r.holderRoleId]));
+  } catch {
+    /*
+     * FAIL TOWARDS THE STEWARDS STILL HOLDING EVERYTHING, and the direction is
+     * the opposite of the one this function used to need.
+     *
+     * When it measured "is it entrusted at all", an unreadable table answered
+     * "the village holds nothing", which left the scaffolding reachable. Now it
+     * measures "does the founding seat still hold it", so an unreadable table
+     * read through the same shrug would answer "the stewards hold NOTHING",
+     * mark the handover COMPLETE, and move the purpose statement's pen to the
+     * village on a database hiccup. So a failed read says the stewards hold all
+     * of it, which is the state every village starts in and the one that takes
+     * nothing away from anybody.
+     */
+    return { complete: false, held: [], remaining: [...HANDOVER_SET], total: HANDOVER_SET.length };
+  }
+  /*
+   * THREE STATES, AND ONLY ONE OF THEM IS A HANDOVER. Reading this as "not the
+   * stewards" was wrong and would have called an UNLAUNCHED village complete.
+   *
+   *   absent from the table  the SCAFFOLDING holds it, which is where every
+   *                          village starts and what `returnCapabilityToScaffolding`
+   *                          puts it back to. Not handed over.
+   *   held by the stewards   where all 19 sit the moment a launch carries.
+   *                          Not handed over; this is what the arc starts from.
+   *   held by another role   moved out of the founding seat to a role the
+   *                          village put somebody in. THIS is the handover.
+   *
+   * So a power counts only when a role OTHER than the steward seat holds it,
+   * and everything else is still to come.
+   */
+  const held = HANDOVER_SET.filter((c) => {
+    const roleId = holder.get(c);
+    return roleId !== undefined && roleId !== STEWARD_ROLE_ID;
+  });
+  const heldSet = new Set(held);
+  const remaining = HANDOVER_SET.filter((c) => !heldSet.has(c));
+  return {
+    complete: remaining.length === 0,
+    held: [...held],
+    remaining: [...remaining],
+    total: HANDOVER_SET.length,
+  };
 }
 
 /** Every holding, with the holding role's name, newest crossing first. */

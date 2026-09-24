@@ -57,6 +57,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useFocusTarget } from "@/lib/useFocusTarget";
 import InfoTip, { DialFact } from "@/components/InfoTip";
 import LongText from "@/components/LongText";
+import PurposeAlignmentField, { usePurposeAlignment } from "@/components/governance/PurposeAlignmentField";
 
 interface MechanicsVariable {
   key: string;
@@ -527,6 +528,7 @@ export default function GameMechanics() {
    */
   const [answerable, setAnswerable] = useState<AnswerableObjection[]>([]);
   const [answersFor, setAnswersFor] = useState<Record<string, string>>({});
+  const alignment = usePurposeAlignment(); // 0219: the judgement line, per proposal
 
   // A notification about a proposal lands ON the proposal. The dependency is
   // the list length because the target arrives with the fetch, not with the
@@ -717,10 +719,8 @@ export default function GameMechanics() {
      * this picker existed.
      */
     const answers = answersFor[p.id];
-    const d = await act(
-      `/api/governance/mechanics/${p.id}/open-ballot`,
-      answers ? { answersObjectionId: answers } : undefined,
-    );
+    const body = { ...(answers ? { answersObjectionId: answers } : {}), ...alignment.bodyFor(p.id) };
+    const d = await act(`/api/governance/mechanics/${p.id}/open-ballot`, Object.keys(body).length ? body : undefined);
     /*
      * ASK THE RECORD AGAIN EITHER WAY. Self-audit after this was green: the
      * refresh sat inside the success branch, so the one case that most needs
@@ -1150,6 +1150,9 @@ export default function GameMechanics() {
                               Open the village vote
                             </button>
                           )}
+                          {/* 0219: the field asks itself whether to render, from
+                              the same condition the route refuses on. */}
+                          {mayOpenBallotOn(p) && <PurposeAlignmentField {...alignment.propsFor(p.id)} />}
                           {/* THE PROPOSER NAMES WHAT THIS ANSWERS (0102).
                               An objection that changed a proposal should say
                               so on its own page, and the only person who knows

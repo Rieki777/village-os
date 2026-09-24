@@ -298,6 +298,7 @@ export default function HandoverTab({ password }: { password: string }) {
       })}
 
       <HandOverDialog
+        handover={data?.handover ?? null}
         power={confirming ? (data?.powers ?? []).find((p: any) => p.capability === confirming.capability) ?? null : null}
         role={confirming ? roles.find((r) => r.id === confirming.roleId) ?? null : null}
         busy={!!confirming && busy === confirming.capability}
@@ -330,18 +331,44 @@ export default function HandoverTab({ password }: { password: string }) {
 function HandOverDialog({
   power,
   role,
+  handover,
   busy,
   onCancel,
   onConfirm,
 }: {
-  power: { title?: string; consequence?: string } | null;
+  power: { title?: string; consequence?: string; capability?: string } | null;
   role: { id: string; name?: string; holderCount?: number } | null;
+  /** How far the handover has got, from GET /api/admin/capabilities/holding. */
+  handover: { complete?: boolean; remaining?: string[]; total?: number } | null;
   busy: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
   const open = !!power && !!role;
   const roleName = role?.name ?? role?.id ?? "";
+  /*
+   * THE LAST POWER, AND ONLY THE LAST ONE (0219).
+   *
+   * Crossing this one completes the handover, and completing the handover
+   * moves the pen over the governing purpose statement from the founder to
+   * the village. That is a different kind of consequence from the other
+   * eighteen crossings and the founder should meet it once, here, before
+   * pressing the button.
+   *
+   * IT FIRES ON `remaining.length === 1` AND THE REMAINING ONE IS THIS ONE. A
+   * warning on every handover is a warning an admin learns to click past, and
+   * by the time the one that mattered arrived they would already have learned
+   * to. That is why this is the only extra sentence in this dialog and why it
+   * is not a general "you are getting close" nudge.
+   *
+   * ONLY A SERVED ANSWER COUNTS, the same rule `nobodyHolds` follows. A server
+   * that predates this field sends nothing, and nothing is not one, so the
+   * warning stays hidden. A false "this is the last one" would be worse than
+   * no warning at all.
+   */
+  const remaining = Array.isArray(handover?.remaining) ? handover!.remaining : null;
+  const isLastPower =
+    !!remaining && remaining.length === 1 && !!power?.capability && remaining[0] === power.capability;
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) onCancel(); }}>
       <DialogContent className="max-w-lg bg-white text-gray-900 border-gray-200">
@@ -361,6 +388,14 @@ function HandOverDialog({
             feed carries a line naming that admin and this power, and whoever holds it
             is told.
           </p>
+          {isLastPower && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+              This is the last of the {handover?.total} powers. Once it crosses, this village
+              looks after all of them, and the governing purpose statement becomes the
+              village's to change by a vote. You will not be able to rewrite it from here
+              afterwards.
+            </p>
+          )}
           {nobodyHolds(role) && (
             <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
               Nobody holds {roleName} yet. Until someone is appointed, the only way

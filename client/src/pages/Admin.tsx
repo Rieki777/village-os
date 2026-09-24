@@ -73,6 +73,7 @@ import FailuresTab from "@/components/admin/FailuresTab";
 import VariablesTab from "@/components/admin/VariablesTab";
 import VotingWeightsPanel from "@/components/admin/VotingWeightsPanel";
 import NeedsPanel, { NeedsSetupStep, useNeedsSetupObservation } from "@/components/admin/NeedsPanel";
+import PurposeStatementPanel from "@/components/admin/PurposeStatementPanel";
 import RelationsEditor from "@/components/admin/RelationsEditor";
 import HousingAdminPanel from "@/components/HousingAdminPanel";
 import { ExampleChip, ExamplesBanner, forgetExamplesCache, RETIRES_WITH } from "@/components/ExamplesBanner";
@@ -8906,6 +8907,10 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
         </button>
         <p className="text-xs text-gray-400 mt-2">Instantly updates the game layer (profile, gratitude, season banner, pulse). Page marketing copy is edited under Content below.</p>
       </SetupSection>
+
+      {/* 0219: the sentence every later change is judged against, and the one
+          launch requirement a founder can only answer in their own words. */}
+      <PurposeStatementPanel password={password} />
 
       <NeedsSetupStep {...step} onOpenTab={onOpenTab} summary={needsSetup.summary} />
 

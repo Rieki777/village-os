@@ -1786,6 +1786,10 @@ const SUBJECT_WORDS = {
   // A member asked for their tokens to become something real, and nobody in
   // the village holds the key that confirms one, so the village decides it.
   redemption: "Confirms that a member was paid off the platform for the tokens they asked to redeem, and destroys those tokens. Voting it down, or letting it lapse, gives them back.",
+  // The statement every other change is judged against (0219). Dormant until
+  // the village holds every transferable power: until then the founder writes
+  // it directly and this subject cannot be opened at all.
+  gps_change: "Rewrites the governing purpose statement, the sentence every proposal opened after it answers to. Nothing already decided is reopened.",
 };
 
 /**
@@ -1862,6 +1866,9 @@ const KNOWN_DIALS = [
   "governance.window_power_transfer",
   "governance.window_power_grant",
   "governance.window_power_return",
+  // The governing purpose statement's own window (0219), same shape as the
+  // eight above and shipping always open like all of them.
+  "governance.window_gps_change",
   "governance.window_grace_days",
   "governance.weight_mode",
   "governance.weight_token",
