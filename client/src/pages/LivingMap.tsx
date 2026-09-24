@@ -49,6 +49,7 @@ import { MAP_SKIN_SAVED_EVENT, MAP_SKIN_SAVED_KEY } from "@shared/mapSkin";
 import { isPromiseKind } from "@shared/mapPromise";
 import { isSceneVerb } from "@shared/mapScene";
 import { authToken, gameFetch } from "@/lib/gameApi";
+import VillageSettingsDoor, { isVillageSettingsRoute } from "@/components/map/VillageSettingsDoor";
 
 /** Where the staged artifact is served from, and its presence probe. */
 const GROUNDS = "/grounds/index.html";
@@ -204,6 +205,13 @@ export default function LivingMap() {
    * is restored on a timer that runs whatever else happens.
    */
   const [zoomStuck, setZoomStuck] = useState(false);
+  /*
+   * The map's dock already carries a Village Settings button, and it says the
+   * village's colours and words. The shell answers that one door here instead
+   * of handing a founder off the land to change how the land looks. See
+   * VillageSettingsDoor: nothing is added to the map.
+   */
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const resetZoom = useCallback(() => {
     const meta = document.querySelector('meta[name="viewport"]');
@@ -798,7 +806,24 @@ export default function LivingMap() {
           return original.call(win, ev, route);
         }
         ev?.preventDefault?.();
-        navigate(route);
+        /*
+         * The one door answered in place. Every other route still travels.
+         *
+         * AND THE ARTIFACT'S OWN CARD CLOSES BEHIND IT. Measured: the card
+         * that describes Village Settings ("theme, accent, parchment, labels,
+         * icon style") stayed open under the panel that now carries those very
+         * dials, so a founder saw the same room described twice and edited it
+         * in one of them. `closeDoor` is the artifact's own global, the same
+         * one its "Back to the land" button calls.
+         */
+        if (isVillageSettingsRoute(route)) {
+          setSettingsOpen(true);
+          try {
+            win.closeDoor?.();
+          } catch {
+            /* The card stays open; the panel still works. */
+          }
+        } else navigate(route);
         return false;
       };
       shim.__shimmed = true;
@@ -870,6 +895,15 @@ export default function LivingMap() {
        * Not rendered in the `absent` branch, which already offers this exact
        * way out inline and would otherwise carry two controls with one name.
        */}
+      <VillageSettingsDoor
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onOpenFullPage={() => {
+          setSettingsOpen(false);
+          navigate("/admin?tab=setup");
+        }}
+      />
+
       {presence !== "absent" && !pocket && (
         <button
           type="button"
