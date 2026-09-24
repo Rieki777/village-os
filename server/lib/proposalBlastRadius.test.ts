@@ -29,7 +29,7 @@
  */
 import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { landProposal } from "./externalProposals";
 import { recentEvents } from "./events";
 
@@ -61,7 +61,7 @@ async function adminEvents(tries = 40): Promise<{ kind: string; text: string }[]
 describe.skipIf(!configured)("how far a vendor's claim reaches", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 4 });
   });
   afterAll(async () => {
     await pool?.end();
