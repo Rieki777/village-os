@@ -20,6 +20,23 @@
  * concentrate a power the village may already hold, so whoever wires adoption
  * reads the holding and routes on it.
  *
+ * THE ROUTER ALREADY EXISTS. DO NOT WRITE A SECOND ONE.
+ * `whoMayPutHandToVillage` in `shared/powerHands.ts` is that decision as one
+ * pure expression. Its NAME is hand-specific and its body is not: it takes
+ * whether the village holds the power and who is live in a role carrying it,
+ * and answers `live-holders` (a human adopts, and it names which humans),
+ * `any-member` (it goes to a ballot), plus a `because` so a screen can say
+ * which of the three cases it is in. Feed it `isVillageHeld` and
+ * `liveHoldersOfCapability`, which already honour a lapsed term, a carried key
+ * and a warning badge's deny, and nothing else. A third spelling of "who holds
+ * this" is the twin that drifts, and the drift here concentrates a power the
+ * village may already hold.
+ *
+ * Its third case, `nobody-holds-it`, routes to a ballot, which is the
+ * `org.decide` ruling of 2026-09-14 already encoded. That is the branch that
+ * fires on a real village today: `capability_holding` is empty at birth, so
+ * every village starts there.
+ *
  * ── WHY A REFERENCE AND NOT A PERSON ─────────────────────────────────────
  *
  * The `seat_holder` draft payload is `{ userId, displayName }` today, filled
