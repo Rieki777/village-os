@@ -343,6 +343,16 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   is invisible on all four channels and is taken anyway per the brief that opened this lane, which
   is exactly the untracked-claim case 27b describes, so it is left alone and never refilled.
   Confirmed again at landing.
+- **saberra lane (a seat carries what a module knows about it), 2026-09-24: holds 0221** for
+  `drizzle/0221_a_seat_carries_what_a_module_knows.sql` on `wt/saberra-boundary-fix`. One new
+  table, `module_entity_facts`, no `ALTER` and no touch to an existing object, so the rollback is
+  free: the previous release neither reads nor writes it.
+  **`--next` said 0219 and would have collided.** `origin/main` already carries
+  `0219_a_proposal_says_what_it_serves.sql` and another lane holds `0220`, so the four-way check
+  is what found 0221 and the script alone would not have. That is the second time the flag has
+  been wrong in this document's history, and it is wrong for the same reason both times: it reads
+  the working tree and the working tree is one lane's view of a number claimed across all of them.
+  Verified free on disk, across every remote ref, and here.
 - **membrane lane (invitations), 2026-09-14: holds 0209** for
   `drizzle/0209_a_member_arrives_by_invitation.sql` (one new table, `member_invites`). Measured three
   ways before the file was created: every remote and local ref and every worktree disk reached 0207
