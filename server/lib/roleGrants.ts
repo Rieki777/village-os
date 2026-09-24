@@ -181,6 +181,26 @@ export function carriesCapability(list: readonly string[], capability: string): 
   return carriedBy(list, capability as Capability);
 }
 
+/**
+ * WHICH ROLES CARRY A POWER, so a door that wants to seat somebody knows where.
+ *
+ * It uses `carriesCapability`, which is the test `liveHoldersOfCapability`
+ * above uses, for the reason that function's header gives: a list built from a
+ * second spelling would offer a role whose holders the counter does not count,
+ * and a seat vote would be opened on a role that grants nothing.
+ *
+ * EXAMPLE ROLES ARE LEFT OUT. They belong to the platform rather than to this
+ * village, and a vote cannot seat anybody in one.
+ */
+export function rolesCarryingCapability(
+  roles: ReadonlyArray<{ id: unknown; name?: unknown; capabilities?: unknown; isExample?: unknown }>,
+  capability: string,
+): Array<{ id: string; name: string }> {
+  return roles
+    .filter((r) => !r.isExample && carriesCapability(roleCapabilityList(r.capabilities), capability))
+    .map((r) => ({ id: String(r.id), name: String(r.name ?? r.id) }));
+}
+
 /** A refusal a route can send straight back: a status and a body. */
 export interface RouteRefusal {
   status: number;

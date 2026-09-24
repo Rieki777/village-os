@@ -122,6 +122,36 @@ export type SeatVoteOpened =
   | { ok: false; status: number; body: Record<string, unknown> };
 export type OpenSeatVote = (ask: SeatVoteAsk) => Promise<SeatVoteOpened>;
 
+/**
+ * ── HOW THE HAND DOOR REACHES `openSeatVote` ───────────────────────────────
+ *
+ * The two registrations cannot move to sit beside each other, and no gate can
+ * see why. `server/index.ts` mounts `requireModule("governance")` on
+ * `/api/governance` partway down the file and Express matches in registration
+ * order, so `registerSeatVote` has to stay BELOW that mount while the hand
+ * door registers thousands of lines above it. Registering them together would
+ * take the governance module's lifecycle gate off a governance route with
+ * every gate still green. `notifyRoll` and `landingDeps` are consts declared
+ * lower still, so the opener cannot even be BUILT at the hand door's line.
+ *
+ * So the hand door is handed `opener`, which resolves at REQUEST time, and
+ * `registerSeatVote`'s return goes into `fill` when the lower line runs. Both
+ * live in one call rather than in module state, because a test builds two apps
+ * in one process and they must not share a seat vote.
+ */
+export function deferredSeatVote(): { opener: OpenSeatVote; fill(built: OpenSeatVote): void } {
+  let built: OpenSeatVote | null = null;
+  return {
+    opener: (ask) => {
+      if (!built) throw new Error("A seat vote was asked for before registerSeatVote ran.");
+      return built(ask);
+    },
+    fill: (o) => {
+      built = o;
+    },
+  };
+}
+
 type Deps = Pick<
   AppDeps,
   | "authedUser"

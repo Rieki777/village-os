@@ -208,6 +208,7 @@ export const WINDOW_KINDS: Readonly<Record<string, WindowKindDef>> = {
   power_transfer: { key: "governance.window_power_transfer", label: "moving a power to a role" },
   power_grant: { key: "governance.window_power_grant", label: "granting a power" },
   power_return: { key: "governance.window_power_return", label: "handing a power back" },
+  gps_change: { key: "governance.window_gps_change", label: "changing the governing purpose" },
 };
 
 /** Every window setting key, for the registry test and the doc generator. */

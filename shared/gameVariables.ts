@@ -1269,6 +1269,16 @@ export const VARIABLES: VariableDef[] = [
     default: "always_open",
   },
   {
+    key: "governance.window_gps_change",
+    category: "Governance",
+    label: "When changing the governing purpose can go to the vote",
+    criticality: "structural",
+    description:
+      "The window a proposal that changes this village's governing purpose statement opens in, in the same words as the change set window above. This is the sentence every other change is judged against, so a village that wants it read together is the village most likely to window it.",
+    type: "text",
+    default: "always_open",
+  },
+  {
     key: "governance.window_grace_days",
     category: "Governance",
     label: "How long a proposal coming back may open outside its window",

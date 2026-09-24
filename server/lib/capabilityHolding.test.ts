@@ -17,8 +17,11 @@ import {
   capabilityHoldings,
   moveCapabilityToVillage,
   returnCapabilityToScaffolding,
+  STEWARD_ROLE_ID,
+  villageHandoverState,
   villageHeldCapabilities,
 } from "./capabilityHolding";
+import { ALL_CAPABILITIES, HANDOVER_SET } from "../../shared/capabilities";
 import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 
 const configured = testDbConfigured();
@@ -32,8 +35,11 @@ describe.skipIf(!configured)("capability holding", () => {
     pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
     await pool.query( // module-review-ok: a fixture on the scratch schema this suite provisioned
       "INSERT INTO roles (id, name, capabilities) VALUES " +
-        "('keepers','The Library Keepers',?), ('greeters','The Greeters',?)",
-      [JSON.stringify(["library.keep"]), JSON.stringify([])],
+        "('keepers','The Library Keepers',?), ('greeters','The Greeters',?), ('steward','Steward',?)",
+      // The founding seat has to exist and has to CARRY the power, because
+      // `moveCapabilityToVillage` refuses a role that could not act on it.
+      // That refusal is tested above; here the seat is the fixture.
+      [JSON.stringify(["library.keep"]), JSON.stringify([]), JSON.stringify(["library.keep"])],
     );
   });
 
@@ -135,6 +141,159 @@ describe.skipIf(!configured)("capability holding", () => {
     it("a clean table boots", async () => {
       await moveCapabilityToVillage(pool, { capability: "library.keep", holderRoleId: "keepers" });
       await expect(assertCapabilityHoldingInvariants(pool)).resolves.toBeUndefined();
+    });
+  });
+
+  /**
+   * HOW FAR THE HANDOVER HAS GOT (0219).
+   *
+   * Two readers depend on the shape of this answer and neither can see the
+   * other: the governing purpose statement's pen moves when `complete` turns
+   * true, and the handover confirm screen warns when `remaining.length` is
+   * exactly one.
+   *
+   * EVERY STATE BELOW EXCEPT THE FIRST IS FABRICATED. `capability_holding` is
+   * created empty and nothing seeds it, so a live village holds nothing and
+   * no village has ever been one power from done. These assertions say what
+   * the code does when a village gets there, and nothing at all about any
+   * village having got there.
+   */
+  describe("the handover state the pen and the confirm screen both read", () => {
+    it("reads nothing held as the live posture: incomplete, and everything remaining", async () => {
+      const state = await villageHandoverState(pool);
+      expect(state.complete).toBe(false);
+      expect(state.held).toEqual([]);
+      expect(state.remaining).toEqual([...HANDOVER_SET]);
+      expect(state.total).toBe(HANDOVER_SET.length);
+    });
+
+    it("counts what is held and what is left, from the same map the gate reads", async () => {
+      await moveCapabilityToVillage(pool, { capability: "library.keep", holderRoleId: "keepers" });
+      const state = await villageHandoverState(pool);
+      expect(state.held).toEqual(["library.keep"]);
+      expect(state.complete).toBe(false);
+      expect(state.remaining).not.toContain("library.keep");
+      expect(state.held.length + state.remaining.length).toBe(state.total);
+    });
+
+    it("says one remains when one remains, which is what the confirm warns on", async () => {
+      for (const cap of HANDOVER_SET.slice(0, HANDOVER_SET.length - 1)) {
+        await pool.query( // module-review-ok: a fabricated handover state on the scratch schema this suite provisioned
+          "INSERT INTO capability_holding (capability, holder_role_id) VALUES (?, 'keepers')",
+          [cap],
+        );
+      }
+      const state = await villageHandoverState(pool);
+      expect(state.remaining).toEqual([HANDOVER_SET[HANDOVER_SET.length - 1]]);
+      expect(state.remaining.length).toBe(1);
+      expect(state.complete, "one short is not complete").toBe(false);
+    });
+
+    /*
+     * THE THREE STATES, AND THE ONE THE EARLIER DRAFT GOT WRONG.
+     *
+     * Every case above holds powers as `keepers`, so all of them passed both
+     * before and after the rule changed and none of them said anything about
+     * the change. These are the ones that fail against the earlier predicate,
+     * which asked "is it entrusted to anybody" rather than "has it left the
+     * founding seat".
+     *
+     * The second is the important one: it is the shape of a launched village
+     * under Rye's ruling of 2026-09-24, and the earlier predicate called it
+     * COMPLETE, which would have moved the purpose statement's pen to the
+     * village at the moment the ruling says the founder keeps it.
+     */
+    it("does not count a power the FOUNDING SEAT still holds", async () => {
+      await moveCapabilityToVillage(pool, { capability: "library.keep", holderRoleId: STEWARD_ROLE_ID });
+      const state = await villageHandoverState(pool);
+      expect(state.held, "the stewards holding it is where the arc STARTS").toEqual([]);
+      expect(state.remaining).toContain("library.keep");
+      expect(state.complete).toBe(false);
+    });
+
+    it("CONTROL: a launched village, all 19 with the stewards, is 0 of 19 and NOT complete", async () => {
+      for (const cap of HANDOVER_SET) {
+        await pool.query( // module-review-ok: a fabricated handover state on the scratch schema this suite provisioned
+          "INSERT INTO capability_holding (capability, holder_role_id) VALUES (?, ?)",
+          [cap, STEWARD_ROLE_ID],
+        );
+      }
+      const state = await villageHandoverState(pool);
+      expect(state.complete, "a village that has just launched has handed over nothing").toBe(false);
+      expect(state.held).toEqual([]);
+      expect(state.remaining.length).toBe(HANDOVER_SET.length);
+    });
+
+    it("counts a power the moment it leaves the founding seat for another role", async () => {
+      await moveCapabilityToVillage(pool, { capability: "library.keep", holderRoleId: STEWARD_ROLE_ID });
+      expect((await villageHandoverState(pool)).held).toEqual([]);
+      // The same door, pointed somewhere else. This is the transition itself.
+      await moveCapabilityToVillage(pool, { capability: "library.keep", holderRoleId: "keepers" });
+      const after = await villageHandoverState(pool);
+      expect(after.held).toEqual(["library.keep"]);
+      expect(after.remaining).not.toContain("library.keep");
+    });
+
+    /*
+     * THE DENOMINATOR, PINNED BY NAME.
+     *
+     * `total` counts the HANDOVER SET and never `ALL_CAPABILITIES`, and the
+     * difference is the kind of number nobody questions. `villageHeldCapabilities`
+     * already filters what it returns through `TRANSFERABLE`, so a denominator
+     * taken from the full list could never be reached: a village would hold 19
+     * of 34 with nothing left to hand over, `complete` would rest on a
+     * comparison that never balances, and every progress readout would say the
+     * handover was permanently unfinished.
+     *
+     * So all three fields come from one derived set, and this case is what
+     * says so out loud.
+     */
+    it("is complete only when every transferable power is across, counted against the handover set", async () => {
+      for (const cap of HANDOVER_SET) {
+        await pool.query( // module-review-ok: a fabricated handover state on the scratch schema this suite provisioned
+          "INSERT INTO capability_holding (capability, holder_role_id) VALUES (?, 'keepers')",
+          [cap],
+        );
+      }
+      const state = await villageHandoverState(pool);
+      expect(state.complete).toBe(true);
+      expect(state.remaining).toEqual([]);
+      expect(state.held.length).toBe(state.total);
+      expect(state.total).toBe(HANDOVER_SET.length);
+      expect(state.total, "the whole capability list is the wrong denominator").toBeLessThan(
+        ALL_CAPABILITIES.length,
+      );
+    });
+
+    /*
+     * THE CASE THE FIRST READING OF THE PEN RULING GOT WRONG, pinned so it
+     * cannot come back. `founderPowerStands` answers whether the GAME has
+     * started, and Rye tied the pen to whether the POWERS have been handed
+     * over. They diverge the day a launch vote carries and hands the village
+     * `steward.veto`: one power of nineteen is not all steward powers.
+     */
+    it("a village holding only the steward's veto has not completed its handover", async () => {
+      await pool.query( // module-review-ok: a fabricated handover state on the scratch schema this suite provisioned
+        "INSERT INTO capability_holding (capability, holder_role_id) VALUES ('steward.veto','keepers')",
+      );
+      const state = await villageHandoverState(pool);
+      expect(state.held).toEqual(["steward.veto"]);
+      expect(state.complete).toBe(false);
+    });
+
+    it("ignores a hand-written row naming a key that may never move", async () => {
+      for (const cap of HANDOVER_SET) {
+        await pool.query( // module-review-ok: a fabricated handover state on the scratch schema this suite provisioned
+          "INSERT INTO capability_holding (capability, holder_role_id) VALUES (?, 'keepers')",
+          [cap],
+        );
+      }
+      await pool.query( // module-review-ok: the hand-written row this test exists to catch, on the scratch schema this suite provisioned
+        "INSERT INTO capability_holding (capability, holder_role_id) VALUES ('message.send','keepers')",
+      );
+      const state = await villageHandoverState(pool);
+      expect(state.held).not.toContain("message.send");
+      expect(state.total).toBe(HANDOVER_SET.length);
     });
   });
 });

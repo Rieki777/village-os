@@ -28,7 +28,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-import { OrgChartTab } from "./Admin";
+import { OrgChartTab } from "@/components/admin/OrgChartTab";
 
 const circle = (id: string, name: string) => ({
   id, name, status: "active", purpose: "", parentId: null, isExample: false,

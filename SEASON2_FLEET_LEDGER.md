@@ -616,6 +616,28 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   0064, 0065, 0080, 0094, 0100, 0103 and 0107 are gaps of the same kind that the register does
   not name. The gate enforces the general rule instead: a migration added since the base ref
   must be numbered above every number that ref already has. Only forward, no list to maintain.
+- **gps lane (the governing purpose statement), 2026-09-23: holds 0217** for
+  `drizzle/0217_a_proposal_says_what_it_serves.sql` on `wt/gps-model`: one nullable `text`
+  column on `ballots` (`purpose_alignment`) and one new table created `IF NOT EXISTS`
+  (`gps_change_proposals`). Both expand-only, no index, no foreign key. Measured four ways
+  after `git fetch origin`, with the coordinator's own warning as the fourth channel:
+  `--diff-filter=AR` over every ref reaches **0215**; every `drizzle/` on disk across the
+  Desktop worktrees reaches **0215**; the disk scan covers untracked files by construction,
+  since it lists the filesystem and not the index; and `check-migration-numbers --next`
+  answers **0215**, which is below the real ceiling exactly as this section warns. **0215 and
+  0216 are spoken for by other lanes** and were handed to this lane as taken, which is the
+  only channel that could see `0216`: there is no file and no ref for it anywhere, which is
+  the invisible-reservation case this section names. So 0217 is above every channel and above
+  both claimed numbers. Renumbering this file is safe while it has run nowhere but a scratch
+  schema: the `CREATE TABLE` is `IF NOT EXISTS` and the `ALTER TABLE ... ADD COLUMN` is not
+  replay-safe, which is stated here so whoever renumbers it knows which half to check.
+- **gps lane, 2026-09-23: takes ~90 lines of `server/index.ts` slack**, no baseline change.
+  One route-module import and one register call (both exempt), one `SUBJECT_CLOSERS` entry for
+  the `gps_change` subject, one field on `serveBallot`, one field on the
+  `/api/admin/capabilities/holding` payload, and the judgement line threaded into four
+  existing openBallot calls. The ratchet stood at 27264 lines against a baseline of 27507 when
+  this lane started, so the slack is there; a lane lowering that baseline should measure after
+  this lands rather than before.
 - **Ports.** Test MySQL is 127.0.0.1:3307 (local, not production). Preview servers pick
   their own; record any long-lived port here.
 
@@ -3265,6 +3287,7 @@ Both look like intentional work and neither is.
 | 2026-09-23 | hand-answers lane (Rye's two rulings of 2026-09-23) | `server/index.ts`: ONE contiguous block, the body of `POST /api/governance/role-seats` lifted into a local `openSeatVote` so the new hand route calls the same function instead of growing a twin of the seating rules. Also `redemptionKeyHolders` generalised to `liveHoldersOf(capability)` with its old name kept as a one-line alias, a new `rolesCarrying`, and the deps handed to `registerPowerHandRoutes`. **NO NEW ROUTE REGISTRATION IN `server/index.ts`**: both new routes live in `server/routes/powerHands.ts`, which the ratchet exempts, so the 5 remaining registrations are untouched. Also `server/lib/roleGrants.ts` (`carriesCapability` exported), `shared/powerHands.ts`, `client/src/pages/Powers.tsx`, `client/src/components/profile/PowerHand.tsx`, and `docs/GOVERNANCE.md` plus its lineage regenerated only | `wt/hand-answers` | HELD. No migration, no baseline moved, no capability key, no game variable. A lane editing the seat-vote route rebases over this: the checks, the term, the document and the notice are unchanged line for line, they simply now sit in a function above the route. |
 | 2026-09-24 | hand-answers lane (merge with batch 12) | `server/routes/powerHands.ts` owns the seat vote OUTRIGHT, and `server/index.ts` MEASURED after the merge with `check-server-index-size.mjs`: **27149 of a 27256 baseline (107 lines of headroom) and 391 of 392 route registrations (1 left)**; `powerHands.ts` is 715 of its 2000-line route-module cap. Baseline NOT moved | `wt/hand-answers`, PR #336 | RECORDED (a measurement, not a claim), plus the correction to my row above. #371 moved `POST /api/governance/role-seats` out of `server/index.ts` into `registerSeatVote` with the body inline; this branch had lifted the same body into a local `openSeatVote` in `server/index.ts`. **Both wanted one spelling and they collided, so the 195-line block named in my row above is GONE from `server/index.ts` and `openSeatVote` now lives inside `registerSeatVote`, which RETURNS it.** `server/index.ts` captures that return and hands the hand door a deferred call. **NEITHER REGISTRATION MOVED and no gate can see why**: the hand door registers ~5,300 lines above the `requireModule("governance")` mount and the seat vote registers below it, Express matches in registration order, and putting them side by side would silently take the governance module's lifecycle gate off a governance route with every gate still green. The deferred call is also what `notifyRoll` and `landingDeps` need, both being consts declared lower than the hand door. **A lane editing either registration reads the header of `server/routes/powerHands.ts` first.** `server/routes/powerHands.test.ts` now carries the control: the real `registerSeatVote` wired to the real `register`, asserting both doors answer one refusal with the SAME sentence. Breaking the shared function turns 3 named tests there and 8 in `steward.routes.e2e.test.ts` / `stewardSeat.routes.e2e.test.ts` red; the 17 older tests in the same file, which stub `openSeatVote`, stay GREEN, so they were never able to see a twin. |
 
+| 2026-09-23 | gps lane (the governing purpose statement) | migration **0217**, `drizzle/0217_a_proposal_says_what_it_serves.sql`; about 90 lines of `server/index.ts` slack with NO baseline change; the `gps` key in `app_config`; the `gps_change` ballot subject and its `governance.window_gps_change` dial | `wt/gps-model` | HELD. Measured four ways after `git fetch origin`: refs reach 0215, disk reaches 0215, `--next` answers 0215 (below the real ceiling, as 27b warns), and the coordinator handed this lane **0215 and 0216 as taken by other lanes** — which was the only channel that could see 0216, since a reservation with no file and no ref is invisible to every scan. `server/index.ts` is touched but NOT extracted from, and no ratchet baseline moves, so this does not collide with an extraction lane; it does spend slack, and a lane about to lower that baseline should measure after this lands. Two other lanes (admin setup wizard, Saberra) build against `shared/governingPurpose.ts`, which landed first and on its own at `df56daa` so they were not blocked on the rest. |
 ### 27d — Verification: CI runs the full suite, lanes run what they touched
 
 **Measured, 2026-09-03/04.** A local full suite is 25 minutes on a quiet machine and 46.6 minutes

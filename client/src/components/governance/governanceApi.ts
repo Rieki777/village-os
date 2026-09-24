@@ -79,6 +79,15 @@ export interface Ballot {
   binding: boolean;
   title: string;
   docMarkdown: string;
+  /**
+   * The proposer's one line on how this serves the governing purpose (0219).
+   *
+   * Null on every subject that carries none and on every ballot opened before
+   * the column existed, which are different facts with the same value: the
+   * page says nothing at all in either case, because "nobody was asked" is
+   * not a sentence worth putting beside somebody's proposal.
+   */
+  purposeAlignment: string | null;
   method: BallotMethod;
   weightMode: "equal" | "token" | "custom";
   weightToken: string | null;

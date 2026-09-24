@@ -47,7 +47,15 @@ const completeAnswersFor = (typeId: string): Record<string, unknown> => {
       if (f.kind === "changeSet") answers[f.key] = [{ key: "governance.sensing_days", to: "10" }];
       else if (f.kind === "percent") answers[f.key] = 50;
       else if (f.kind === "number") answers[f.key] = 12;
-      else answers[f.key] = "x".repeat(80);
+      /*
+       * WORDS AND NOT ONE LONG TOKEN. `"x".repeat(80)` satisfied every
+       * character-length validator this config had and is a single word, so
+       * the first validator that counted WORDS (the governing purpose
+       * statement, 0219) failed here on a config that is correct. Eighty
+       * words also clears every character floor in the file, so nothing that
+       * passed before stops passing.
+       */
+      else answers[f.key] = Array.from({ length: 80 }, (_, i) => `word${i}`).join(" ");
     }
   }
   return answers;
