@@ -903,6 +903,9 @@ export function SubmissionsTab({ password }: { password: string }) {
       const data = await res.json();
       if (!res.ok) throw new Error();
       if (data.rewarded) toast.success("Accepted. The member was welcomed into the game.");
+      else if (data.admitted) toast.success("Accepted. They hold membership now.");
+      // A stranger signed with no account, so the accept stands and admits nobody.
+      else if (data.admitted === false) toast.success("Accepted. This signing carries no account, so nobody was admitted. Invite them to join.");
       // Whether the person who sent this heard about the move. Members hear;
       // a public form filled in by a stranger has no account to reach, and a
       // founder who knows which is which can pick up the phone.
@@ -9548,11 +9551,11 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
       </SetupSection>
 
       <SetupSection {...step} id="map" n={6} title="Map & styling" subtitle="How the Living Map draws your land. Blank keeps the map's own look.">
-        <MapSkinPanel password={password} />
-        <WalkEditorPanel password={password} />
+        <MapSkinPanel />
+        <WalkEditorPanel />
         {/* The vocabulary route has been live since the map shipped and its
             only caller was a CLI importer. This is its first door. */}
-        <MapVocabularyPanel password={password} />
+        <MapVocabularyPanel />
       </SetupSection>
 
       <SetupSection {...step} id="technical" n={7} title="Go live" subtitle="One-time technical setup. Hand these to your developer or Claude Code.">

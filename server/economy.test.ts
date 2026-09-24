@@ -27,13 +27,11 @@ import {
   CREDITS,
   cycleWindow,
   decayVoice,
-  economyEpoch,
   faucetFor,
   publicSupply,
   ruleCannotPay,
   economyReady,
   ensureVoiceToken,
-  forgetEpoch,
   fromLedgerUnits,
   give,
   HEARTS,
@@ -41,8 +39,9 @@ import {
   keys,
   MAX_KEY,
   mint,
-  mintForConfirmedClaim,
   mintView,
+  owedForClaim,
+  postOwed,
   queueRuleChange,
   applyPendingRules,
   rulesFor,
@@ -107,6 +106,65 @@ async function scaleOf(p: mysql.Pool, slug: string): Promise<number> {
     [slug],
   );
   return 10 ** Number(rows[0]?.decimals ?? 0);
+}
+
+/**
+ * THE LIVE PATH, ANSWERING IN THE SHAPE THE DIRECT PATH USED TO ANSWER IN.
+ *
+ * These cases called `mintForConfirmedClaim`, which priced and posted in one
+ * breath. The consent route prices with `owedForClaim` on the consent's own
+ * connection and posts each row afterwards with `postOwed`
+ * (`server/routes/questClaims.ts`), so these take the two steps and this
+ * reports the three fields the old return value carried.
+ *
+ * IT IS A TRANSLATION AND NOT A MOVE. Three things differ, and each one is a
+ * way a case could go green while proving nothing:
+ *
+ *  - `granted` is REQUIRED on `OwedClaim`, and `priceClaim`'s `noRules` is
+ *    true whenever it is zero or less. A case that left it out would price
+ *    NOTHING, and "posted no more than the ceiling" would then pass over an
+ *    empty set: a test defending the absence of the thing it checks. A grant
+ *    above zero is passed on every call, and `owedPostings.test.ts` passes one
+ *    for the same reason.
+ *  - `owedForClaim` answers rows PRICED AND NOT YET POSTED, so `minted` here
+ *    is the rows whose posting came back `posted`, which is what the old field
+ *    meant.
+ *  - the direct path folded POSTING refusals into `unpayable` beside pricing
+ *    refusals, so both are collected here.
+ *
+ * `priced` and `considered` exist so a case can assert its DENOMINATOR before
+ * it asserts its point. `considered` is every rule the pricing reached a
+ * decision about, owed or unpayable; a rule a village set to zero is neither,
+ * by design. A case that silently prices nothing fails on the denominator
+ * instead of passing on an assertion about an empty set.
+ */
+async function payClaim(
+  p: mysql.Pool,
+  claim: { id: string; questId: string; userId: string; granted?: number },
+): Promise<{
+  priced: string[];
+  considered: number;
+  minted: Array<{ token: string; units: number; decimals: number }>;
+  unpayable: Array<{ token: string; reason: string }>;
+  skipped?: string;
+}> {
+  const out = await owedForClaim(p, { granted: 1, ...claim });
+  const minted: Array<{ token: string; units: number; decimals: number }> = [];
+  const unpayable = [...out.unpayable];
+  for (const row of out.owed) {
+    const res = await postOwed(p, row);
+    if (res.outcome === "posted") {
+      minted.push({ token: row.tokenSlug, units: row.units, decimals: row.decimals });
+    }
+    if (res.outcome === "refused") unpayable.push({ token: row.tokenSlug, reason: res.message });
+  }
+  return {
+    priced: out.owed.map((o) => o.tokenSlug),
+    considered: out.owed.length + out.unpayable.length,
+    minted,
+    unpayable,
+    skipped: out.skipped,
+  };
 }
 
 /** A member with a ledger account, which `give` needs to lock. */
@@ -954,19 +1012,6 @@ describe.skipIf(!configured)("the village economy engine", () => {
     expect(await balanceOf(pool, memberAccount(u), VILLAGE_VOICE)).toBe(1);
   });
 
-  // ── The epoch and the flag ───────────────────────────────────────────────
-
-  it("stamps an epoch on first read and keeps it", async () => {
-    forgetEpoch();
-    const first = await economyEpoch(pool);
-    forgetEpoch();
-    const second = await economyEpoch(pool);
-    // Without a stored epoch, every quest ever consented becomes an unpaid
-    // mint the moment the engine reads the table, and the first settlement
-    // pays out years of backlog nobody chose.
-    expect(second.getTime()).toBe(first.getTime());
-  });
-
   // ── What a confirmed claim mints ─────────────────────────────────────────
 
   describe("a confirmed claim", () => {
@@ -981,10 +1026,11 @@ describe.skipIf(!configured)("the village economy engine", () => {
 
     it("mints the village voice the rule describes", async () => {
       const u = await makeMember("econ-src-1");
-      const out = await mintForConfirmedClaim(pool, {
-        id: "claim-src-1", questId: "q-src", userId: u, confirmedAt: new Date(),
-      });
+      const out = await payClaim(pool, { id: "claim-src-1", questId: "q-src", userId: u });
       expect(out.skipped).toBeUndefined();
+      // DENOMINATOR FIRST. Without this, a pricing that returned nothing would
+      // leave every assertion below reading an empty set.
+      expect(out.priced).toContain(VILLAGE_VOICE);
       expect(out.minted.map((m) => m.token)).toContain(VILLAGE_VOICE);
 
       // AND IT REPORTS WHAT IT POSTED. The rule reads 0.1 and the ledger row
@@ -1003,9 +1049,11 @@ describe.skipIf(!configured)("the village economy engine", () => {
 
     it("does not mint Hearts again, because consent already did", async () => {
       const u = await makeMember("econ-src-2");
-      const out = await mintForConfirmedClaim(pool, {
-        id: "claim-src-2", questId: "q-src", userId: u, confirmedAt: new Date(),
-      });
+      const out = await payClaim(pool, { id: "claim-src-2", questId: "q-src", userId: u });
+      // DENOMINATOR FIRST, and this case needs it more than most: it asserts an
+      // ABSENCE, so a pricing that produced nothing at all would satisfy it
+      // while proving nothing about the rule engine's treatment of Hearts.
+      expect(out.considered).toBeGreaterThan(0);
       // The consent route has minted recognition since S7 with the range, the
       // cap and the standing multiplier. A rule minting it again pays twice
       // for one piece of work.
@@ -1015,9 +1063,12 @@ describe.skipIf(!configured)("the village economy engine", () => {
 
     it("pays one occurrence once, however many times it is confirmed", async () => {
       const u = await makeMember("econ-src-3");
-      const claim = { id: "claim-src-3", questId: "q-src", userId: u, confirmedAt: new Date() };
-      await mintForConfirmedClaim(pool, claim);
-      const again = await mintForConfirmedClaim(pool, claim);
+      const claim = { id: "claim-src-3", questId: "q-src", userId: u };
+      const first = await payClaim(pool, claim);
+      // DENOMINATOR FIRST. "The second call paid nothing" is only evidence of
+      // idempotency if the FIRST call paid something.
+      expect(first.minted.map((m) => m.token)).toContain(VILLAGE_VOICE);
+      const again = await payClaim(pool, claim);
       expect(again.minted).toHaveLength(0);
       // 0.1 Voice is what the rule promises, and the ledger holds it in the
       // token's own minor units: a rule of 0.1 posted with no conversion posts
@@ -1029,19 +1080,6 @@ describe.skipIf(!configured)("the village economy engine", () => {
       expect(fromLedgerUnits(VILLAGE_VOICE, voiceUnits)).toBeCloseTo(0.1);
     });
 
-    it("treats a confirmation older than the epoch as history", async () => {
-      const u = await makeMember("econ-src-4");
-      const out = await mintForConfirmedClaim(pool, {
-        id: "claim-src-4", questId: "q-src", userId: u,
-        confirmedAt: new Date("2020-01-01T00:00:00Z"),
-      });
-      // The day the flag flips, every quest ever consented would otherwise
-      // become a payable backlog and the first settlement would pay out years
-      // of it at once. Nobody decided that; it is just what the query returns.
-      expect(out.skipped).toMatch(/epoch/);
-      expect(out.minted).toHaveLength(0);
-      expect(await balanceOf(pool, memberAccount(u), VILLAGE_VOICE)).toBe(0);
-    });
   });
 
   // ── A rule that cannot pay says so ───────────────────────────────────────
@@ -1077,9 +1115,8 @@ describe.skipIf(!configured)("the village economy engine", () => {
 
     it("actually pays a member the credits the rule promises", async () => {
       const u = await makeMember("econ-credits-1");
-      const out = await mintForConfirmedClaim(pool, {
-        id: "claim-credits-1", questId: "q-credits", userId: u, confirmedAt: new Date(),
-      });
+      const out = await payClaim(pool, { id: "claim-credits-1", questId: "q-credits", userId: u });
+      expect(out.priced).toContain(CREDITS); // denominator
       expect(out.minted.map((m) => m.token)).toContain(CREDITS);
       // The assertion that would have caught the original defect. 25 is what
       // the rule promises, in credits; the ledger holds 25 times whatever scale
@@ -1133,9 +1170,11 @@ describe.skipIf(!configured)("the village economy engine", () => {
         [villageId(), HYPHA_MIRROR],
       );
       const u = await makeMember("econ-unpayable-1");
-      const out = await mintForConfirmedClaim(pool, {
-        id: "claim-unpayable-1", questId: "q-unpayable", userId: u, confirmedAt: new Date(),
-      });
+      const out = await payClaim(pool, { id: "claim-unpayable-1", questId: "q-unpayable", userId: u });
+      // DENOMINATOR FIRST: the pricing reached a decision about at least one
+      // rule, so an empty `unpayable` below would mean the engine stayed silent
+      // rather than that it never looked.
+      expect(out.considered).toBeGreaterThan(0);
       // The whole point: the caller now HAS something to log. Before this the
       // consent route had no way to know one of the village's rules had just
       // paid nobody.
@@ -1164,9 +1203,8 @@ describe.skipIf(!configured)("the village economy engine", () => {
         [villageId()],
       );
       const u = await makeMember("econ-fromsource-1");
-      const out = await mintForConfirmedClaim(pool, {
-        id: "claim-fromsource-1", questId: "q-fromsource", userId: u, confirmedAt: new Date(),
-      });
+      const out = await payClaim(pool, { id: "claim-fromsource-1", questId: "q-fromsource", userId: u });
+      expect(out.priced).toContain(CREDITS); // denominator
       const said = out.unpayable.find((x) => x.token === "stay-credit");
       expect(said?.reason).toMatch(/reads its amount/);
       // The credits rule beside it is untouched and still pays.
@@ -1185,9 +1223,11 @@ describe.skipIf(!configured)("the village economy engine", () => {
         [villageId()],
       );
       const u = await makeMember("econ-zero-1");
-      const out = await mintForConfirmedClaim(pool, {
-        id: "claim-zero-1", questId: "q-zero", userId: u, confirmedAt: new Date(),
-      });
+      const out = await payClaim(pool, { id: "claim-zero-1", questId: "q-zero", userId: u });
+      // DENOMINATOR FIRST. This asserts SILENCE about one rule, so it has to
+      // show the pricing was speaking about others: a run that decided nothing
+      // is silent about everything and would pass while proving nothing.
+      expect(out.considered).toBeGreaterThan(0);
       expect(out.unpayable.map((x) => x.token)).not.toContain("library-credit");
       await pool.query("DELETE FROM `mint_rules` WHERE `id` = 'rule-zero-test'");
     });
@@ -1447,9 +1487,8 @@ describe.skipIf(!configured)("the village economy engine", () => {
     it("pays the ceiling, not the amount, when a rule was left above its own ceiling", async () => {
       await setRule(25, 5);
       const u = await makeMember("econ-ceil-1");
-      const out = await mintForConfirmedClaim(pool, {
-        id: "claim-ceil-1", questId: "q-ceil", userId: u, confirmedAt: new Date(),
-      });
+      const out = await payClaim(pool, { id: "claim-ceil-1", questId: "q-ceil", userId: u });
+      expect(out.priced).toContain(TOKEN); // denominator
       // Read on the balance and on the row, never on the return value: a mint
       // that reported 5 and posted 25 would pass an assertion on `minted`.
       expect(await balanceOf(pool, memberAccount(u), TOKEN)).toBe(5);
@@ -1494,9 +1533,12 @@ describe.skipIf(!configured)("the village economy engine", () => {
       // this is fail-closed by the same reading the swap caps use.
       await setRule(25, 0);
       const u = await makeMember("econ-ceil-zero");
-      const out = await mintForConfirmedClaim(pool, {
-        id: "claim-ceil-zero", questId: "q-ceil", userId: u, confirmedAt: new Date(),
-      });
+      const out = await payClaim(pool, { id: "claim-ceil-zero", questId: "q-ceil", userId: u });
+      // DENOMINATOR FIRST. A ceiling of zero prices NO row, so the denominator
+      // here cannot be `priced`: it is that the pricing reached a decision at
+      // all, which is what makes the refusal below a refusal rather than a
+      // pricing that never ran.
+      expect(out.considered).toBeGreaterThan(0);
       expect(await balanceOf(pool, memberAccount(u), TOKEN)).toBe(0);
       expect(await posted(memberAccount(u))).toEqual({ rows: 0, units: 0 });
       // A refusal a person can read, naming the number to change. An amount of
@@ -1511,9 +1553,12 @@ describe.skipIf(!configured)("the village economy engine", () => {
     it("still pays once for one occurrence, whatever the clamp did", async () => {
       await setRule(25, 5);
       const u = await makeMember("econ-ceil-idem");
-      const claim = { id: "claim-ceil-idem", questId: "q-ceil", userId: u, confirmedAt: new Date() };
-      await mintForConfirmedClaim(pool, claim);
-      const again = await mintForConfirmedClaim(pool, claim);
+      const claim = { id: "claim-ceil-idem", questId: "q-ceil", userId: u };
+      const first = await payClaim(pool, claim);
+      // DENOMINATOR FIRST: a second call paying nothing only proves idempotency
+      // if the first one paid.
+      expect(first.minted.find((m) => m.token === TOKEN)).toBeTruthy();
+      const again = await payClaim(pool, claim);
       // The key shape is untouched by this change, so a re-confirm is still a
       // duplicate and still pays nothing a second time.
       expect(again.minted.find((m) => m.token === TOKEN)).toBeUndefined();
@@ -1549,9 +1594,15 @@ describe.skipIf(!configured)("the village economy engine", () => {
        * 2026-09-03: one run in three of exactly this pair of calls.
        */
       const settled = await Promise.allSettled([
-        mintForConfirmedClaim(pool, { id: "claim-race-a", questId: "q-ceil", userId: a, confirmedAt: new Date() }),
-        mintForConfirmedClaim(pool, { id: "claim-race-b", questId: "q-ceil", userId: b, confirmedAt: new Date() }),
+        payClaim(pool, { id: "claim-race-a", questId: "q-ceil", userId: a }),
+        payClaim(pool, { id: "claim-race-b", questId: "q-ceil", userId: b }),
       ]);
+      // DENOMINATOR FIRST, and under contention it has to allow for a lost
+      // race: at least one side must have PRICED the token, or two calls that
+      // priced nothing would satisfy every bound below by doing nothing.
+      expect(
+        settled.some((s) => s.status === "fulfilled" && s.value.priced.includes(TOKEN)),
+      ).toBe(true);
       for (const s of settled) {
         // Narrow, so a NEW kind of failure still turns this red rather than
         // being absorbed by a tolerant assertion.
@@ -1619,9 +1670,10 @@ describe.skipIf(!configured)("the village economy engine", () => {
       await setRule(25, 250);
       const u = await makeMember("econ-ceil-eleven");
       for (let i = 1; i <= 11; i += 1) {
-        await mintForConfirmedClaim(pool, {
-          id: `claim-ceil-11-${i}`, questId: "q-ceil", userId: u, confirmedAt: new Date(),
-        });
+        const out = await payClaim(pool, { id: `claim-ceil-11-${i}`, questId: "q-ceil", userId: u });
+        // DENOMINATOR, on every pass rather than once: eleven iterations that
+        // priced nothing would post nothing and read as a clamp holding.
+        expect(out.priced).toContain(TOKEN);
       }
       expect(await posted(memberAccount(u))).toEqual({ rows: 11, units: 275 });
       expect(await balanceOf(pool, memberAccount(u), TOKEN)).toBe(275);
@@ -2580,7 +2632,6 @@ describe.skipIf(!configured)("the village economy engine", () => {
       await loadVariables(dpool);
       await ensureVoiceToken(dpool, "Village Voice");
       await loadTokenRegistry(dpool);
-      await economyEpoch(dpool);
     });
 
     afterAll(async () => {
@@ -3311,9 +3362,11 @@ describe.skipIf(!configured)("the village economy engine", () => {
         await atScale(row.decimals);
         await setRule(row.amount, row.ceiling);
         const u = await makeMember(`mx-ceil-${tag}`);
-        await mintForConfirmedClaim(pool, {
-          id: `claim-mx-${tag}`, questId: "q-mx", userId: u, confirmedAt: new Date(),
-        });
+        const out = await payClaim(pool, { id: `claim-mx-${tag}`, questId: "q-mx", userId: u });
+        // DENOMINATOR. Two rows of this table expect 0 units, so without it a
+        // pricing that produced nothing would satisfy them for the wrong
+        // reason: the rule has to have been DECIDED about either way.
+        expect(out.considered).toBeGreaterThan(0);
         const units = await heldBy(u);
         expect(units).toBe(row.units);
         // The property, in the ceiling's own units and independent of the
@@ -3327,9 +3380,8 @@ describe.skipIf(!configured)("the village economy engine", () => {
       await atScale(3);
       await setRule(0.0015, 0.0015);
       const u = await makeMember("mx-return-row");
-      const out = await mintForConfirmedClaim(pool, {
-        id: "claim-mx-return", questId: "q-mx", userId: u, confirmedAt: new Date(),
-      });
+      const out = await payClaim(pool, { id: "claim-mx-return", questId: "q-mx", userId: u });
+      expect(out.priced).toContain(TOKEN); // denominator
       // The row holds one thousandth. The old return value said 0.0015, which
       // is a figure no row in this database holds, and a route logging it told
       // the member a number that was never posted.
@@ -3343,9 +3395,8 @@ describe.skipIf(!configured)("the village economy engine", () => {
       await atScale(0);
       await setRule(25, 0.5);
       const u = await makeMember("mx-ceil-unreachable");
-      const out = await mintForConfirmedClaim(pool, {
-        id: "claim-mx-unreachable", questId: "q-mx", userId: u, confirmedAt: new Date(),
-      });
+      const out = await payClaim(pool, { id: "claim-mx-unreachable", questId: "q-mx", userId: u });
+      expect(out.considered).toBeGreaterThan(0); // denominator; the row prices nothing on purpose
       expect(await heldBy(u)).toBe(0);
       const said = out.unpayable.find((x) => x.token === TOKEN);
       // A ceiling fact gets a ceiling's sentence. Reporting it as "the amount
@@ -3495,9 +3546,8 @@ describe.skipIf(!configured)("the village economy engine", () => {
       await setRule(25, 250);
       const u = await makeMember("mx-twenty");
       for (let i = 1; i <= 20; i += 1) {
-        await mintForConfirmedClaim(pool, {
-          id: `claim-mx-20-${i}`, questId: "q-mx-20", userId: u, confirmedAt: new Date(),
-        });
+        const out = await payClaim(pool, { id: `claim-mx-20-${i}`, questId: "q-mx-20", userId: u });
+        expect(out.priced).toContain(TOKEN); // denominator, on every pass
       }
       expect(await heldBy(u)).toBe(500);
       expect((await checkLedgerInvariants(pool)).problems).toEqual([]);
@@ -3507,9 +3557,10 @@ describe.skipIf(!configured)("the village economy engine", () => {
       await atScale(0);
       await setRule(25, 5);
       const u = await makeMember("mx-idem");
-      const claim = { id: "claim-mx-idem", questId: "q-mx", userId: u, confirmedAt: new Date() };
-      await mintForConfirmedClaim(pool, claim);
-      const again = await mintForConfirmedClaim(pool, claim);
+      const claim = { id: "claim-mx-idem", questId: "q-mx", userId: u };
+      const first = await payClaim(pool, claim);
+      expect(first.minted.find((m) => m.token === TOKEN)).toBeTruthy(); // denominator
+      const again = await payClaim(pool, claim);
       expect(again.minted.find((m) => m.token === TOKEN)).toBeUndefined();
       expect(await heldBy(u)).toBe(5);
     });
@@ -3531,11 +3582,17 @@ describe.skipIf(!configured)("the village economy engine", () => {
       const a = await makeMember("mx-race-a");
       const b = await makeMember("mx-race-b");
       const call = (id: string, userId: string) =>
-        mintForConfirmedClaim(pool, { id, questId: "q-mx-race", userId, confirmedAt: new Date() });
+        payClaim(pool, { id, questId: "q-mx-race", userId });
       const settled = await Promise.allSettled([
         call("claim-mx-race-a", a), call("claim-mx-race-a", a), call("claim-mx-race-a", a),
         call("claim-mx-race-b", b), call("claim-mx-race-b", b), call("claim-mx-race-b", b),
       ]);
+      // DENOMINATOR FIRST, allowing for lost races: at least one call must have
+      // PRICED the token. "At most one row each, at the ceiling" is satisfied by
+      // six calls that all priced nothing, which is the failure this catches.
+      expect(
+        settled.some((s) => s.status === "fulfilled" && s.value.priced.includes(TOKEN)),
+      ).toBe(true);
       for (const s of settled) {
         if (s.status === "rejected") {
           expect(lostConcurrencyRace(s.reason), `rejected with ${s.reason?.code}: ${s.reason?.message}`).toBe(true);

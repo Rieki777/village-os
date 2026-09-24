@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useIsAdmin } from "@/contexts/AuthContext";
+import { gameFetch } from "@/lib/gameApi";
 import {
   DEFAULT_WALK_LANG,
   WALK_GESTURES,
@@ -25,6 +27,11 @@ import {
  *
  * Self-contained like the other panels, mounted in one line, because
  * Admin.tsx is a large file other workstreams edit.
+ *
+ * Takes no password prop, and gates its FETCHES on `useIsAdmin` as well as its
+ * JSX, so it can be mounted on the map page without handing a member three
+ * console refusals on load. The reasoning in full is in MapSkinPanel.tsx,
+ * which moved for the same reason on the same day.
  */
 
 const BLANK = (n: number): WalkStep => ({
@@ -35,7 +42,8 @@ const BLANK = (n: number): WalkStep => ({
   gesture: "none",
 });
 
-export default function WalkEditorPanel({ password }: { password: string }) {
+export default function WalkEditorPanel() {
+  const mayAdminister = useIsAdmin();
   const [walk, setWalk] = useState<MapWalk>({});
   const [lang, setLang] = useState(DEFAULT_WALK_LANG);
   const [structures, setStructures] = useState<string[]>([]);
@@ -44,24 +52,24 @@ export default function WalkEditorPanel({ password }: { password: string }) {
   const [report, setReport] = useState<any>(null);
   const previewFrame = useRef<HTMLIFrameElement | null>(null);
 
-  const auth = { Authorization: `Bearer ${password}` };
   const steps = walk[lang] ?? [];
 
   const load = useCallback(async () => {
+    if (!mayAdminister) return;
     try {
       const [w, s] = await Promise.all([
-        fetch("/api/admin/map/walk", { headers: auth }).then((r) => (r.ok ? r.json() : null)),
-        fetch("/api/admin/map/structures", { headers: auth }).then((r) => (r.ok ? r.json() : null)),
+        gameFetch("/api/admin/map/walk").then((r) => (r.ok ? r.json() : null)),
+        gameFetch("/api/admin/map/structures").then((r) => (r.ok ? r.json() : null)),
       ]);
       setWalk(w?.walk ?? {});
       setStructures(s?.structures ?? []);
       // The report is a nice-to-have beside the editor, so it never blocks it.
-      fetch("/api/admin/map/walk-log", { headers: auth })
+      gameFetch("/api/admin/map/walk-log")
         .then((r) => (r.ok ? r.json() : null))
         .then(setReport)
         .catch(() => { /* no numbers this time */ });
     } catch { toast.error("Could not load the walk"); }
-  }, [password]);
+  }, [mayAdminister]);
   useEffect(() => { load(); }, [load]);
 
   const setSteps = (next: WalkStep[]) => setWalk({ ...walk, [lang]: next });
@@ -80,9 +88,8 @@ export default function WalkEditorPanel({ password }: { password: string }) {
   const save = async () => {
     setSaving(true);
     try {
-      const res = await fetch("/api/admin/map/walk", {
+      const res = await gameFetch("/api/admin/map/walk", {
         method: "PUT",
-        headers: { ...auth, "Content-Type": "application/json" },
         body: JSON.stringify({ walk }),
       });
       if (!res.ok) throw new Error();
@@ -134,6 +141,10 @@ export default function WalkEditorPanel({ password }: { password: string }) {
    * rewrite, so that is what leads.
    */
   const funnel = report && report.runs > 0 ? report : null;
+
+  // Nothing for a member, matching the fetch gate above: every control here
+  // writes, so a visible copy would only advertise a refusal.
+  if (!mayAdminister) return null;
 
   return (
     <div className="bg-white border border-gray-100 rounded-2xl p-6 mt-6">

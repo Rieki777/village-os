@@ -463,11 +463,18 @@ export interface TestDb {
  *
  * The half that was missing is the half that does not cancel itself out. A
  * value written through the driver and read back through the driver is correct
- * either way, which is most assertions and is why every suite passes today. A
- * value written by `NOW()` and read with `UNIX_TIMESTAMP`, or two instants
- * compared in SQL, comes back shifted by the database host's offset, and that
- * offset changes across a daylight-saving boundary. `server/db/sessionZone.ts`
- * holds the mechanism and the reasoning.
+ * either way, which is most assertions and is why every suite passes today.
+ * What is NOT correct is a value written by `NOW()` and read back through the
+ * driver, which parses the returned wall clock as UTC, and any comparison
+ * between such a value and a JS `Date` bound as a true instant. Measured at
+ * 25,201 seconds out on a host sitting at UTC-7.
+ *
+ * `UNIX_TIMESTAMP` of a `NOW()`-written column is the REMEDY rather than the
+ * harm, measured at 1 second out in the same run, because MySQL evaluates both
+ * ends in the session's own frame. An earlier version of this comment named
+ * that pairing as the defect and was wrong.
+ * `server/db/sessionZone.ts` holds the mechanism, the numbers and the third
+ * case, which is a literal rather than a stored value.
  *
  * Callers pass whatever else they need. `connectionLimit` has no default here
  * on purpose: the suites pick between 2 and 10 deliberately, and a default
