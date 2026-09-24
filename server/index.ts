@@ -10259,7 +10259,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       },
       viewer: {
         viewPeople,
-        canContact: false,
+        canContact: false, mayStyleMap: admin, mayEditWalk: admin, mayNameMapThings: admin, // the three map editors: admin today because their endpoints are, see power/types.ts
         mayArrange: admin, // the drag publishes an org draft: admin until the decide gate lands
         // Where this viewer may declare (P10): "village" and/or circle ids.
         // The pencil shows where this says; the server re-checks on write.
