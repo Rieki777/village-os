@@ -15,6 +15,8 @@
  * browser (this repo's client tests are logic; there is no jsdom).
  */
 
+import { clearChord } from "@shared/mapLayout";
+
 /** The smallest a name may render, in SCREEN pixels. */
 export const MIN_LABEL_PX = 12.5;
 
@@ -51,12 +53,27 @@ export function fitLabelToScreen(label: Wrappedish, radius: number, pxPerWorld: 
   const onScreen = label.fontSize * pxPerWorld;
   if (onScreen >= MIN_LABEL_PX) return asIs;
 
-  // How much bigger it needs to be, against how much bigger it MAY be. The
-  // widest line still has to sit inside the circle's clear chord: a rescued
-  // label that runs out over its neighbours is worse than a small one.
+  /*
+   * How much bigger it needs to be, against how much bigger it MAY be.
+   *
+   * THE CHORD IS THE CLEAR INTERIOR, INSIDE THE SEAT RING, and it used to be
+   * `radius * 1.7`, the whole disc. The layout sizes every circle to hold its
+   * name inside the ring (`radiusForLabel`) and `wrapLabel` wraps to that same
+   * interior, so growing against the full radius was this one step disagreeing
+   * with the two either side of it. Measured live at 1440x900: eleven names
+   * with a seat drawn through them, and two after this line changed.
+   *
+   * A name that cannot reach the floor inside the ring is promoted above the
+   * disc, where no chord constrains it and `labelPlacement` finds it a clear
+   * place. That path already existed; this is what sends the right names down
+   * it. Rye chose this over hiding a small circle's seats (which costs the
+   * reader the seat states) and over growing seated circles (measured: a
+   * bigger map, a camera pulled further back, more names promoted anyway, and
+   * a crossing gained on the phone).
+   */
   const want = MIN_LABEL_PX / onScreen;
   const widestChars = Math.max(1, ...label.lines.map((l) => l.length));
-  const chord = Math.max(1, radius * 1.7);
+  const chord = Math.max(1, clearChord(radius));
   const allowed = chord / (widestChars * label.fontSize * CHAR_W);
   const grown = label.fontSize * Math.max(1, Math.min(want, allowed));
 

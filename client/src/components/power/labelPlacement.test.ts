@@ -116,9 +116,17 @@ describe("a name pushed outside its circle", () => {
 /** The live shape, in miniature: a big holder, and small circles inside it. */
 function scene(over: Partial<PlanInput>[] = []): PlanInput[] {
   const base: PlanInput[] = [
-    { id: "general", x: 0, y: 0, r: 200, depth: 0, name: "General Coordinating Circle", shown: true, hasChildren: true, forming: false },
-    { id: "wisdom", x: 0, y: -150, r: 25, depth: 1, name: "Intergenerational Wisdom Council", shown: true, hasChildren: false, forming: false },
-    { id: "development", x: 0, y: 20, r: 120, depth: 1, name: "Development Circle", shown: true, hasChildren: true, forming: false },
+    /*
+     * The radii are chosen so this scene HOLDS THE MIX these tests need: two
+     * names with room inside their circles and one with none. They were tuned
+     * to a chord of `r * 1.7`, the whole disc, and had to be retuned when that
+     * became the clear interior inside the seat ring: at r=120 "Development
+     * Circle" stopped fitting and the scene lost one of its fixed names. The
+     * control below is what noticed, which is what it is for.
+     */
+    { id: "general", x: 0, y: 0, r: 220, depth: 0, name: "General Coordinating Circle", shown: true, hasChildren: true, forming: false },
+    { id: "wisdom", x: 0, y: -160, r: 25, depth: 1, name: "Intergenerational Wisdom Council", shown: true, hasChildren: false, forming: false },
+    { id: "development", x: 0, y: 30, r: 160, depth: 1, name: "Development Circle", shown: true, hasChildren: true, forming: false },
   ];
   return base.map((c, i) => ({ ...c, ...(over[i] ?? {}) }));
 }
@@ -162,7 +170,7 @@ describe("the whole picture, placed in one pass", () => {
   it("puts a holder's name inside its top edge and a leaf's across its middle", () => {
     const plan = buildLabelPlan(scene(), PX_PER_WORLD);
     const general = plan.get("general")!;
-    expect(general.top).toBe(containerTop({ y: 0, r: 200, lines: general.lines, fontSize: general.fontSize, lineHeight: general.lineHeight }));
+    expect(general.top).toBe(containerTop({ y: 0, r: 220, lines: general.lines, fontSize: general.fontSize, lineHeight: general.lineHeight }));
     const solo = buildLabelPlan(
       [{ id: "solo", x: 0, y: 40, r: 200, depth: 0, name: "Circle", shown: true, hasChildren: false, forming: false }],
       PX_PER_WORLD,
@@ -177,7 +185,7 @@ describe("the whole picture, placed in one pass", () => {
     const withoutHolder = buildLabelPlan(hidden, PX_PER_WORLD).get("wisdom")!;
     // The holder's name was the thing in its way, so hiding it frees above.
     expect(withHolder.top).not.toBe(withoutHolder.top);
-    const shape = { y: -150, r: 25, lines: withoutHolder.lines, fontSize: withoutHolder.fontSize, lineHeight: withoutHolder.lineHeight };
+    const shape = { y: -160, r: 25, lines: withoutHolder.lines, fontSize: withoutHolder.fontSize, lineHeight: withoutHolder.lineHeight };
     expect(withoutHolder.top).toBe(aboveTop(shape));
   });
 });
