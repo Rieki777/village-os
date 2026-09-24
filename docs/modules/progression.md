@@ -350,7 +350,15 @@ the power suits, and they do not hold it. Below the rung the class is named and 
 member. The capability gate never reads the map, and `shared/powerAffinity.test.ts` fails if
 `shared/capabilities.ts` ever reaches it, directly or through any file it imports. The proof that matters is
 behavioural: `server/powerAffinity.routes.e2e.test.ts` has the member the map suggests `story.tell` to try to
-edit the map, and she is refused. The Builder suits no power yet, by the same ruling.
+edit the map, and she is refused.
+
+**Every class suits something, The Builder since 2026-09-23.** It suited nothing under the 2026-09-09 ruling.
+The correction is that building is making in every form and not only making on the land: "in this context
+'building' is in all the forms (like developers for code are building the game, same builder archetype)". So
+`org.seatAgent` wires the software agents that hold seats and `dial.set` tunes the village's own dials, one
+wiring what runs and the other tuning it. `mechanics.propose` was the first choice and cannot live in this map:
+`STAGE_UNLOCKS` opens it at the member rung, so every member already holds it by climbing, and this map only
+ever names powers the village ENTRUSTS by appointment. A power the ladder opens needs nobody to suggest it.
 
 **A hand asks for a power, and it never grants one.** A member a power is `recommended` to can raise a hand for
 it (`server/routes/powerHands.ts`), and the hand is a `power-application` row in the same `submissions` inbox a

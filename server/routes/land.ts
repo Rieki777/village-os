@@ -64,6 +64,7 @@ import {
   PROVIDERS,
   configuredProvider,
   fetchAndCache,
+  pixelsFor,
 } from "../lib/satellite";
 import {
   clearParcelImagery,
@@ -81,8 +82,12 @@ type Deps = Pick<
 /** This deployment is one village; the column exists for the retrofit (0069). */
 const VILLAGE = "local";
 
-/** How many pixels wide to ask a provider for. */
-const IMAGE_PIXELS = 1024;
+/*
+ * How wide a picture to ask for is no longer one number here: it depends on
+ * what the chosen provider can actually resolve over the ground being framed.
+ * `pixelsFor` in server/lib/satellite.ts owns it, beside the resolutions it
+ * reads. See its header for why a bigger number is not always a better one.
+ */
 
 interface LandRow {
   /* The parcel's identity. Every row an older release wrote is 'home'. */
@@ -528,7 +533,8 @@ export function register(app: Express, deps: Deps): void {
       });
     }
 
-    const request = { centre: row.centre, spanM: row.spanM ?? DEFAULT_SPAN_M, pixels: IMAGE_PIXELS };
+    const spanM = row.spanM ?? DEFAULT_SPAN_M;
+    const request = { centre: row.centre, spanM, pixels: pixelsFor(status.provider, spanM) };
     try {
       const cached = await fetchAndCache(status, request, uploadsDir);
       await recordParcelImagery(pool, VILLAGE, slug, {

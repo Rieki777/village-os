@@ -74,10 +74,20 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   "council.vote": false,
 };
 
+export const BADGE_GRANTABLE: Record<Capability, boolean> = {
+  "garden.tend": true,
+  "garden.plan": false,
+  "council.vote": true,
+};
+
 export const BREAK_GLASS_SEAT: Capability = "garden.plan";
 
 export function isDeniable(cap: string): boolean {
   return DENIABLE[cap as Capability] === true;
+}
+
+export function isBadgeGrantable(cap: string): boolean {
+  return BADGE_GRANTABLE[cap as Capability] === true;
 }
 
 export function isVillageHeld(cap: Capability, held: readonly string[] | undefined): boolean {
@@ -118,7 +128,7 @@ export function capabilityDecision(cap: any, ctx: any): any {
   }
   if (ctx.roleCapabilities.includes(cap)) return decided(true, "role");
   if (carriedBy(ctx.roleCapabilities, cap)) return decided(true, "carried by a greater key");
-  if ((ctx.badgeCapabilities ?? []).includes(cap)) return decided(true, "badge");
+  if (isBadgeGrantable(cap) && (ctx.badgeCapabilities ?? []).includes(cap)) return decided(true, "badge");
   const unlockStage = ctx.stageUnlockOverrides?.[cap] ?? STAGE_UNLOCKS[cap];
   if (unlockStage && unlockStage !== "none") {
     const needed = ctx.stageIndexOf(unlockStage);
@@ -236,6 +246,25 @@ await check("a key with no line in TRANSFERABLE refuses", async () => {
     /TRANSFERABLE/,
     /garden\.tend/,
   );
+});
+
+await check("a key with no line in BADGE_GRANTABLE refuses", async () => {
+  await refuses(
+    { "capabilities.ts": CAPABILITIES.replace(`export const BADGE_GRANTABLE: Record<Capability, boolean> = {\n  "garden.tend": true,`, "export const BADGE_GRANTABLE: Record<Capability, boolean> = {") },
+    /BADGE_GRANTABLE/,
+    /garden\.tend/,
+  );
+});
+
+await check("the keys no badge may grant reach the document, named", async () => {
+  await withShared({}, async (root) => {
+    const text = await generate(root);
+    assert.ok(text.includes("## The keys no badge may grant"), "the section is missing");
+    assert.ok(
+      /1 of the 3 keys cannot be handed out by a badge: `garden\.plan`/.test(text),
+      "the fenced key has to be named, and counted, in the document",
+    );
+  });
 });
 
 await check("A STATEMENT SHAPE INSIDE THE GATE THAT THE READER CANNOT FOLLOW refuses", async () => {

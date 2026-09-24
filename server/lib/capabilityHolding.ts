@@ -182,6 +182,30 @@ export async function moveCapabilityToVillage(
 }
 
 /**
+ * THE SENTENCE AN ADMINISTRATOR MEETS AT THE HAND-BACK ROUTE (Rye, 2026-09-23).
+ *
+ * The ruling: handing a village-held power BACK to the admin panel needs a
+ * VILLAGE VOTE. He was offered "steward-founder only" and "leave it open" and
+ * chose neither, which matches his standing rule that power changes go to a
+ * constitutional vote.
+ *
+ * It names the ballot rather than only refusing, for the reason
+ * `STEWARD_SEAT_REFUSAL` gives: a refusal that says only "no" teaches nobody
+ * where the door is, and the door here was BUILT BEFORE THE RULING — the
+ * `power_return` subject type, its closer and
+ * `POST /api/governance/power-returns` have all existed since the R55 round.
+ * What was missing was the refusal on the other side of the same act.
+ *
+ * One exported constant so the route, the admin panel and the tests read the
+ * same words.
+ */
+export const RETURN_NEEDS_A_VOTE =
+  "Handing a power back to the admin panel is the village's decision, not an administrator's. " +
+  "Open a power_return ballot (POST /api/governance/power-returns) and let the whole roll vote on it; " +
+  "if it carries, the power comes back here through the same landing every other decision uses, " +
+  "inside the same veto window.";
+
+/**
  * Hand a power back to the scaffolding.
  *
  * This exists and it is not a hedge. The platform is the custodian of
@@ -189,6 +213,13 @@ export async function moveCapabilityToVillage(
  * transfer would mean a captured village has no way back and no redeploy it
  * can pull. Reversal is a visible act with a public record, like the
  * break-glass, which is the property that matters.
+ *
+ * TWO CALLERS, AND THEY ARRIVE BY DIFFERENT DOORS. The `power_return` closer
+ * calls this when the village's own vote carries. The admin route calls it
+ * only for a founder seated as a steward with the veto who has broken the
+ * glass, which is the one exception in Rye's 2026-09-23 ruling and the one
+ * case that already leaves the village a record it can read. Everybody else
+ * meets `RETURN_NEEDS_A_VOTE`.
  */
 export async function returnCapabilityToScaffolding(pool: Pool, capability: string): Promise<boolean> {
   const [r] = await pool.query<any>("DELETE FROM capability_holding WHERE capability = ?", [capability]);

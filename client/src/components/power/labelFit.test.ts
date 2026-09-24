@@ -181,11 +181,19 @@ describe("the component actually feeds the floor a measurement", () => {
    * instead of passing over nothing.
    */
   const stage = fs.readFileSync(path.resolve(__dirname, "mapStage.ts"), "utf8");
+  /*
+   * And the name itself moved to CircleLabel.tsx (2026-09-23), when every text
+   * on the canvas needed the same halo and PowerMap.tsx stood at 996 of its
+   * 1000 lines. Same rule as the hook above: the assertion follows the code,
+   * and this file carries its own positive control.
+   */
+  const label = fs.readFileSync(path.resolve(__dirname, "CircleLabel.tsx"), "utf8");
 
-  it("finds both files and the ref (the positive control)", () => {
+  it("finds all three files and the ref (the positive control)", () => {
     expect(src).toContain("useMeasuredBox");
     expect(src).toMatch(/ref=\{/);
     expect(stage).toContain("export function useMeasuredBox");
+    expect(label).toContain("export default function CircleLabel");
   });
 
   it("attaches the SVG through a STABLE ref, never an inline arrow", () => {
@@ -213,7 +221,7 @@ describe("the component actually feeds the floor a measurement", () => {
      * Same trap on the circle: `fillOpacity` changes on hover, so through
      * `style` the hover lift would have been dead on arrival.
      */
-    expect(src, "the label's size is an attribute").toMatch(/fontSize=\{label\.fontSize\}/);
+    expect(label, "the label's size is an attribute").toMatch(/fontSize=\{label\.fontSize\}/);
     expect(src, "the circle's fill is an attribute").toMatch(/fill=\{tone\}/);
     expect(src, "the circle's fill opacity is an attribute").toMatch(/fillOpacity=\{isFocus/);
 
@@ -230,17 +238,19 @@ describe("the component actually feeds the floor a measurement", () => {
      * ends and reported the plain elements as violations.
      */
     const motionTags: string[] = [];
-    for (let i = src.indexOf("<motion."); i !== -1; i = src.indexOf("<motion.", i + 1)) {
+    for (const file of [src, label]) {
+    for (let i = file.indexOf("<motion."); i !== -1; i = file.indexOf("<motion.", i + 1)) {
       let depth = 0;
-      for (let j = i; j < src.length; j++) {
-        const ch = src[j];
+      for (let j = i; j < file.length; j++) {
+        const ch = file[j];
         if (ch === "{") depth++;
         else if (ch === "}") depth--;
         else if (ch === ">" && depth === 0) {
-          motionTags.push(src.slice(i, j + 1));
+          motionTags.push(file.slice(i, j + 1));
           break;
         }
       }
+    }
     }
     expect(motionTags.length, "there are motion elements to check").toBeGreaterThan(0);
     for (const tag of motionTags) {
@@ -264,8 +274,8 @@ describe("the component actually feeds the floor a measurement", () => {
      * the first screenshot anybody took of this surface, which the plan for
      * this work misread as "names too long for their circles".
      */
-    expect(src, "tspans sit at the text's own origin").toMatch(/<tspan[^>]*\sx=\{0\}/);
-    expect(src, "no tspan re-applies the circle's absolute x").not.toMatch(/<tspan[^>]*\sx=\{pos\.x\}/);
+    expect(label, "tspans sit at the text's own origin").toMatch(/<tspan[^>]*\sx=\{0\}/);
+    expect(label, "no tspan re-applies the circle's absolute x").not.toMatch(/<tspan[^>]*\sx=\{(pos\.)?x\}/);
   });
 
   it("refuses a zero measurement instead of dividing by it", () => {

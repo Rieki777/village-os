@@ -43,6 +43,7 @@ import path from "node:path";
 import mysql from "mysql2/promise";
 import { applyPending, discoverMigrations, MIGRATIONS_DIR } from "./migrate";
 import { noteProvision } from "./provisioningReport";
+import { pinSessionZone } from "./sessionZone";
 
 const RUN_STAMP = `${Math.floor(Date.now() / 1000)}_${process.pid}`;
 let provisionSeq = 0;
@@ -444,10 +445,39 @@ async function sweepStaleTemplates(admin: mysql.Connection, keep: string): Promi
 }
 
 export interface TestDb {
-  /** Connection URL pointing at the scratch schema (timezone-Z discipline is the caller's job via connect()). */
+  /** Connection URL pointing at the scratch schema. Build pools onto it with `testPool`. */
   url: string;
   conn: mysql.Connection;
   drop(): Promise<void>;
+}
+
+/**
+ * A POOL ONTO A SCRATCH SCHEMA, CONFIGURED THE WAY THE APP'S POOL IS.
+ *
+ * This exists because the old instruction on `url` above, that the timezone
+ * discipline is the caller's job, was followed by 175 test files and followed
+ * HALF. Every one of them passes `timezone: "Z"` and none of them pins the
+ * MySQL session zone, which `server/db/pool.ts` has done on every connection
+ * since the timezone sweep. So the configuration under test was never the
+ * configuration that runs.
+ *
+ * The half that was missing is the half that does not cancel itself out. A
+ * value written through the driver and read back through the driver is correct
+ * either way, which is most assertions and is why every suite passes today. A
+ * value written by `NOW()` and read with `UNIX_TIMESTAMP`, or two instants
+ * compared in SQL, comes back shifted by the database host's offset, and that
+ * offset changes across a daylight-saving boundary. `server/db/sessionZone.ts`
+ * holds the mechanism and the reasoning.
+ *
+ * Callers pass whatever else they need. `connectionLimit` has no default here
+ * on purpose: the suites pick between 2 and 10 deliberately, and a default
+ * would quietly re-tune a hundred files.
+ */
+export function testPool(urlOrDb: string | TestDb, options: mysql.PoolOptions = {}): mysql.Pool {
+  const uri = typeof urlOrDb === "string" ? urlOrDb : urlOrDb.url;
+  const pool = mysql.createPool({ uri, timezone: "Z", ...options });
+  pinSessionZone(pool, "testPool");
+  return pool;
 }
 
 /**

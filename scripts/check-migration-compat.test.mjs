@@ -370,9 +370,76 @@ if (!DB_URL) {
       cleanup(repo);
     }
   }
+
+  // ── 10. A unique key swapped in TWO statements leaves a keyless moment ─────
+  //
+  // Phases 3 and 4 both look at a file from the outside and cannot see a state
+  // that exists only part way through it. This is that state. The key is
+  // re-added under its ORIGINAL NAME in every case here, so the schema before
+  // and after is identical and the contract has nothing to say: the only thing
+  // under test is the moment between the statements.
+  {
+    const repo = makeFixture();
+    try {
+      writeMigration(repo, "0001_a.sql", "CREATE TABLE t (id varchar(30) NOT NULL, k varchar(30) NOT NULL, PRIMARY KEY (id), UNIQUE KEY t_k (k));\n");
+      commitAll(repo, "base: 0001");
+      writeMigration(repo, "0002_swap.sql", "ALTER TABLE t DROP INDEX t_k;\nALTER TABLE t ADD UNIQUE KEY t_k (k);\n");
+      const r = runJson(repo, []);
+      checkTrue("a two-statement key swap fails", r.status === 1, `status ${r.status}: ${r.stderr}`);
+      checkTrue(
+        "the gap is named by file, statement and table",
+        (r.json?.gaps ?? []).some((g) => g.file === "0002_swap.sql" && g.table === "t" && g.statement === 1 && g.of === 2),
+        JSON.stringify(r.json?.gaps),
+      );
+      checkTrue(
+        "and the schema contract has nothing to say, so the gap is the only finding",
+        (r.json?.violations ?? []).length === 0,
+        JSON.stringify(r.json?.violations),
+      );
+    } finally {
+      cleanup(repo);
+    }
+  }
+
+  // ── 10a. The same swap in ONE statement is fine, which is the fix ──────────
+  {
+    const repo = makeFixture();
+    try {
+      writeMigration(repo, "0001_a.sql", "CREATE TABLE t (id varchar(30) NOT NULL, k varchar(30) NOT NULL, PRIMARY KEY (id), UNIQUE KEY t_k (k));\n");
+      commitAll(repo, "base: 0001");
+      writeMigration(repo, "0002_swap.sql", "ALTER TABLE t DROP INDEX t_k, ADD UNIQUE KEY t_k (k);\n");
+      const r = runJson(repo, []);
+      checkTrue("one ALTER carrying both clauses passes", r.status === 0, `status ${r.status}: ${r.stderr}`);
+      checkTrue("and reports no gap", (r.json?.gaps ?? []).length === 0, JSON.stringify(r.json?.gaps));
+    } finally {
+      cleanup(repo);
+    }
+  }
+
+  // ── 10b. compat-ok does NOT buy a keyless moment ───────────────────
+  //
+  // The file most likely to carry a waiver is the one swapping a key, so a
+  // waiver that covered this would retire the check exactly where it is
+  // needed. The guard draws the same line for phase 3: a boot failure is not
+  // a judgement about what a rollback survives.
+  {
+    const repo = makeFixture();
+    try {
+      writeMigration(repo, "0001_a.sql", "CREATE TABLE t (id varchar(30) NOT NULL, k varchar(30) NOT NULL, PRIMARY KEY (id), UNIQUE KEY t_k (k));\n");
+      commitAll(repo, "base: 0001");
+      writeMigration(repo, "0002_swap.sql", "-- compat-ok: a deliberate exception, which still may not buy a keyless moment\n" +
+          "ALTER TABLE t DROP INDEX t_k;\nALTER TABLE t ADD UNIQUE KEY t_k (k);\n");
+      const r = runJson(repo, []);
+      checkTrue("a waived file still fails on the gap", r.status === 1, `status ${r.status}: ${r.stderr}`);
+      checkTrue("the waiver is still recorded for the phases it does cover", r.stderr.includes("waived by compat-ok"), r.stderr.trim().slice(0, 200));
+      checkTrue("and the run says so in as many words", /compat-ok comment does NOT waive this/.test(r.stderr), r.stderr.trim().slice(-400));
+    } finally {
+      cleanup(repo);
+    }
+  }
 }
 
-// ── 10. The base ref comes from the scenario, never from the runner ─────────
+// ── 11. The base ref comes from the scenario, never from the runner ─────────
 {
   const repo = makeFixture();
   try {

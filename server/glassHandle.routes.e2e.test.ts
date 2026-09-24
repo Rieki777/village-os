@@ -360,8 +360,19 @@ describe.skipIf(!DB_CONFIGURED)("the record waits for the act, and says nothing 
     expect(String(rows[0]?.body)).toContain("Glass Founder");
   });
 
+  /*
+   * THE HAND-BACK CARRIES THE GLASS NOW (Rye, 2026-09-23). Taking a
+   * village-held power back to the panel is the village's own decision: the
+   * route names the `power_return` ballot to an administrator, and carries on
+   * only for a founder seated as a steward with the veto who says they mean
+   * to reach past the village. This suite's founder is seated in exactly that
+   * seat for the 2026-09-21 ruling, and this case is a teardown.
+   */
   it("hands it back so the rest of the suite starts clean", async () => {
-    expect((await call("DELETE", "/api/admin/capabilities/health.record/holding")).status).toBe(200);
+    const back = await call(
+      "DELETE", "/api/admin/capabilities/health.record/holding", undefined, founderToken, GLASS,
+    );
+    expect(back.status, back.text).toBe(200);
   });
 });
 
@@ -423,7 +434,8 @@ describe.skipIf(!DB_CONFIGURED)("the seven reads the 0103 sweep did not reach", 
 
   it("hands all three back, so the suite leaves the village where it found it", async () => {
     for (const cap of ["forum.moderate", "exchange.manage", "event.manage"]) {
-      expect((await call("DELETE", `/api/admin/capabilities/${cap}/holding`)).status, cap).toBe(200);
+      const back = await call("DELETE", `/api/admin/capabilities/${cap}/holding`, undefined, founderToken, GLASS);
+      expect(back.status, `${cap}: ${back.text}`).toBe(200);
     }
   });
 });

@@ -31,6 +31,7 @@ import {
   providerById,
   type Fetcher,
 } from "./satellite";
+import { pixelsFor, MAX_IMAGE_PIXELS, MIN_IMAGE_PIXELS } from "./satellite";
 
 const CR = { lat: 9.2345, lon: -83.8412 };
 const REQUEST = { centre: CR, spanM: 800, pixels: 512 };
@@ -327,5 +328,55 @@ describe("the keyless Esri entry is a decision, kept apart from the licence read
     if (!open) throw new Error("esri-open missing");
     const url = new URL(open.buildUrl!({ centre: { lat: 9.2, lon: -83.8 }, spanM: 800, pixels: 512 }, null));
     expect(url.searchParams.get("token")).toBeNull();
+  });
+});
+describe("how many pixels to ask a provider for", () => {
+  /* The seed plate's frame: 2592 m across, drawn 2400 px wide, so 1.08 m/px. */
+  const SEED_SPAN = 2592;
+  const res = (id: string) => providerById(id)!;
+
+  it("matches the baked plate's sharpness for a half-metre provider on that frame", () => {
+    const px = pixelsFor(res("esri-open"), SEED_SPAN);
+    expect(px).toBe(MAX_IMAGE_PIXELS);
+    expect(SEED_SPAN / px).toBeCloseTo(1.08, 2);
+  });
+
+  it("never asks Sentinel-2 for more detail than Copernicus has", () => {
+    // 10 m/px over 2592 m is 259 real pixels. Asking for 2400 would be an
+    // upscale: five times the bytes, and a picture that looks like it
+    // resolves a greenhouse and does not.
+    const px = pixelsFor(res("sentinel2"), SEED_SPAN);
+    expect(px).toBe(Math.round(SEED_SPAN / 10));
+    expect(px).toBeLessThan(MAX_IMAGE_PIXELS);
+  });
+
+  it("asks a small parcel's true size rather than the cap", () => {
+    // 800 m at 0.5 m/px is 1600, which is under the ceiling and is what exists.
+    expect(pixelsFor(res("esri-open"), 800)).toBe(1600);
+  });
+
+  it("caps a very large parcel instead of storing an enormous file", () => {
+    expect(pixelsFor(res("esri-open"), 20000)).toBe(MAX_IMAGE_PIXELS);
+  });
+
+  it("keeps a floor, so a tiny parcel still returns a picture worth looking at", () => {
+    expect(pixelsFor(res("sentinel2"), 50)).toBe(MIN_IMAGE_PIXELS);
+  });
+
+  it("answers sanely for a span that is missing or nonsense", () => {
+    for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const px = pixelsFor(res("esri-open"), bad as number);
+      expect(Number.isFinite(px)).toBe(true);
+      expect(px).toBeGreaterThanOrEqual(MIN_IMAGE_PIXELS);
+      expect(px).toBeLessThanOrEqual(MAX_IMAGE_PIXELS);
+    }
+  });
+
+  it("gives every provider a usable answer, so none can ask for zero", () => {
+    for (const p of PROVIDERS) {
+      const px = pixelsFor(p, SEED_SPAN);
+      expect(px).toBeGreaterThanOrEqual(MIN_IMAGE_PIXELS);
+      expect(px).toBeLessThanOrEqual(MAX_IMAGE_PIXELS);
+    }
   });
 });

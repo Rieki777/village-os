@@ -423,10 +423,15 @@ const STEP_MEANINGS = {
       "those carry in turn.",
   },
   badge: {
-    beats: "A badge the member earned or was granted. It beats the ladder, and it loses to a role and to a deny.",
+    beats:
+      "A badge the member earned or was granted, ON A KEY `BADGE_GRANTABLE` lets a badge reach. It beats the ladder, " +
+      "and it loses to a role and to a deny.",
     detail:
       "The grant half of the badge system. It is how a founder hands out a power that nobody should reach by climbing, " +
-      "the Cartographer badge over the village map being the worked example.",
+      "the Cartographer badge over the village map being the worked example. Rye ruled on 2026-09-23 that the " +
+      "steward's veto is not one of them: that seat is filled by a vote of the village, so that an admin cannot mint " +
+      "a badge and give themselves a veto. The map is consulted BEFORE the badge row, so there is no state of the " +
+      "badge table that makes this step answer yes for a key it fences.",
   },
   stage: {
     beats: "The ladder everyone climbs. It is the last thing consulted, so every path above it can open a door earlier.",
@@ -507,6 +512,7 @@ export async function collectFacts(root = ROOT) {
   const labels = requireExactMap(caps.CAPABILITY_LABELS, keys, "CAPABILITY_LABELS", capsWhere, "string");
   const deniable = requireExactMap(caps.DENIABLE, keys, "DENIABLE", capsWhere, "boolean");
   const transferable = requireExactMap(caps.TRANSFERABLE, keys, "TRANSFERABLE", capsWhere, "boolean");
+  const badgeGrantable = requireExactMap(caps.BADGE_GRANTABLE, keys, "BADGE_GRANTABLE", capsWhere, "boolean");
   const stageUnlocks = requireSubsetMap(caps.STAGE_UNLOCKS, keys, "STAGE_UNLOCKS", capsWhere, "string");
 
   /*
@@ -591,6 +597,7 @@ export async function collectFacts(root = ROOT) {
       label: labels[key],
       deniable: deniable[key],
       transferable: transferable[key],
+      badgeGrantable: badgeGrantable[key],
       stage: stageId,
       stageRung: stageId && stageId !== "none" ? ladderIds.indexOf(stageId) + 1 : null,
       modules: declaredBy[key],
@@ -614,6 +621,7 @@ export async function collectFacts(root = ROOT) {
       steps: steps.length,
       voices: rows.filter((r) => !r.deniable).length,
       villageHoldable: rows.filter((r) => r.transferable).length,
+      badgeUngrantable: rows.filter((r) => !r.badgeGrantable).length,
       climbable: rows.filter((r) => r.stage && r.stage !== "none").length,
       undeclared: rows.filter((r) => r.modules.length === 0).length,
     },
@@ -867,11 +875,14 @@ export function render(f) {
       `carries in its own name, in the order the list gives them: ${f.namespaces.map((n) => `\`${n}\``).join(", ")}.`,
   );
   p();
-  p("Three columns need a word before the tables:");
+  p("Four columns need a word before the tables:");
   p();
   p(
     "- **A warning badge may deny it.** `DENIABLE` in `shared/capabilities.ts`. A `no` marks a VOICE: a member's own " +
       "say in a decision the village makes, which nothing may take away.\n" +
+      "- **A badge may grant it.** `BADGE_GRANTABLE`. A `no` means the badge plane cannot hand this key to anybody: " +
+      "the gate ignores a badge naming it, the badge validator refuses to save one, and a migration cleared the rows " +
+      "already stored.\n" +
       "- **The village may hold it.** `TRANSFERABLE`. A `yes` means this key can leave the admin panel: once the " +
       "village records a holder, an admin stops passing the gate by being an admin, and only a founder seated as a " +
       "steward with the veto may reach past the village, in the open.\n" +
@@ -885,11 +896,12 @@ export function render(f) {
     p();
     p(
       table(
-        ["Key", "What it lets a member do", "A warning badge may deny it", "The village may hold it", "Stage that unlocks it", "Declared by"],
+        ["Key", "What it lets a member do", "A warning badge may deny it", "A badge may grant it", "The village may hold it", "Stage that unlocks it", "Declared by"],
         group.map((r) => [
           `\`${r.key}\``,
           r.label,
           yes(r.deniable),
+          yes(r.badgeGrantable),
           yes(r.transferable),
           r.stageRung ? `\`${r.stage}\` (rung ${r.stageRung} of ${f.ladder.length})` : r.stage === "none" ? "the stage path is closed" : "no rung",
           r.modules.length ? r.modules.map((m) => m.name).join(", ") : "no module",
@@ -915,6 +927,27 @@ export function render(f) {
   p(
     "The rule underneath: waning is not removal. A rule under which unused voice decays over time is legitimate. An " +
       "act by which one party strips another's earned voice is not, at any tier, held by anybody.",
+  );
+  p();
+
+  p("## The keys no badge may grant");
+  p();
+  const ungrantable = f.rows.filter((r) => !r.badgeGrantable);
+  p(
+    ungrantable.length
+      ? `${ungrantable.length} of the ${f.counts.keys} keys cannot be handed out by a badge: ` +
+          `${listWords(ungrantable.map((r) => `\`${r.key}\``))}. Rye ruled on 2026-09-23 that the steward's veto ` +
+          "comes from a seat the village votes somebody into and from nowhere else, so that an admin cannot mint a " +
+          "badge and give themselves a veto. Three locks again: the gate ignores a badge naming one of these, the " +
+          "badge validator refuses to save one and says where the seat is actually filled, and a migration cleared " +
+          "the rows already stored."
+      : "A badge may grant every key today; nothing is fenced off the badge plane.",
+  );
+  p();
+  p(
+    "The line this draws is narrow on purpose. A key stays grantable while an ordinary admin route can already put " +
+      "it on a role or a rung, because closing the badge door on those would be a new policy rather than a fix. The " +
+      "keys above are the ones with no admin route left to them at all.",
   );
   p();
 

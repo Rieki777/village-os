@@ -318,6 +318,47 @@ export const PROVIDERS: readonly SatelliteProvider[] = [
   ESRI,
 ];
 
+/**
+ * The widest picture this platform will ask any provider for, and keep.
+ *
+ * 2400 is not arbitrary: it is the width of the plate baked into the map
+ * artifact, which covers 2592 m, so a village framed like that one gets
+ * 1.08 m per pixel and a fetched picture is as sharp as the one the map
+ * already draws. Before this, every fetch asked for 1024 whatever the span,
+ * which for that frame is 2.53 m per pixel: a founder who fetched their own
+ * land got a picture visibly softer than the seed they were replacing.
+ */
+export const MAX_IMAGE_PIXELS = 2400;
+
+/**
+ * Small enough that a tiny parcel does not pay for pixels, large enough that
+ * an image is still worth looking at. Only a very coarse provider over a very
+ * small parcel can reach it.
+ */
+export const MIN_IMAGE_PIXELS = 256;
+
+/**
+ * How many pixels to ask this provider for, to cover `spanM` of ground.
+ *
+ * NEVER MORE THAN THE PROVIDER CAN RESOLVE. Asking Sentinel-2, at ten metres
+ * per pixel, for a 2400-wide image of a 2592 m village is asking for ten times
+ * the detail that exists: the answer is an upscale, five times the bytes, and
+ * a picture that LOOKS like it resolves a greenhouse and does not. This map
+ * may not present invented detail as real, and a resampled pixel is invented
+ * detail with a filename.
+ *
+ * So the ask is the ground divided by what the provider actually resolves,
+ * capped at what this platform will store. For a 0.5 m provider over 2592 m
+ * that is 5184, capped to 2400. For Sentinel-2 over the same ground it is
+ * 259, which is the honest size of what Copernicus has.
+ */
+export function pixelsFor(provider: SatelliteProvider, spanM: number): number {
+  const span = Number.isFinite(spanM) && spanM > 0 ? spanM : 0;
+  const res = provider.groundResolutionM > 0 ? provider.groundResolutionM : 1;
+  const native = Math.round(span / res);
+  return Math.max(MIN_IMAGE_PIXELS, Math.min(MAX_IMAGE_PIXELS, native));
+}
+
 export function providerById(id: string | null | undefined): SatelliteProvider | null {
   if (!id) return null;
   return PROVIDERS.find((p) => p.id === id) ?? null;
