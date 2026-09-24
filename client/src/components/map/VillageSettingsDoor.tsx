@@ -44,6 +44,55 @@ export function isVillageSettingsRoute(route: string): boolean {
   return new URLSearchParams(query ?? "").get("tab") === "setup";
 }
 
+/**
+ * TAKE THE DOOR, or say you did not and let the click travel.
+ *
+ * The shell's `siteNav` shim asks this of every route the artifact opens. It
+ * answers true only when the route is the settings door AND the viewer can
+ * act on it, because intercepting a member's click answered them with
+ * NOTHING: the panel renders null for them, so the artifact's card closed and
+ * no panel took its place. A dead click is worse than the navigation it
+ * replaced, which at least reached a page that explains itself. Caught in
+ * review by the admin lane, and invisible to the check beside it, since "no
+ * admin request was made" is true of a surface that did nothing at all.
+ *
+ * Closing the artifact's own card is part of taking the door: that card
+ * describes this same room, down to the field names. It is attempted and
+ * never required, so a card that will not close leaves a working panel.
+ */
+export function takeSettingsDoor(
+  route: string,
+  mayStyle: boolean,
+  land: { closeDoor?: () => void } | null | undefined,
+  open: () => void,
+): boolean {
+  if (!isVillageSettingsRoute(route) || !mayStyle) return false;
+  open();
+  try {
+    land?.closeDoor?.();
+  } catch {
+    /* The card stays open; the panel still works. */
+  }
+  return true;
+}
+
+/**
+ * MAY THIS VIEWER STYLE THE LAND, readable from a handler installed once.
+ *
+ * The shell installs its `siteNav` shim when the artifact loads, and that
+ * closure keeps whatever it captured. The session resolves later, so a flag
+ * captured at install time would answer "no" forever. A ref is read at CLICK
+ * time, which is the only moment the answer matters.
+ */
+export function useMayStyleLand() {
+  const may = useIsAdmin();
+  const ref = useRef(may);
+  useEffect(() => {
+    ref.current = may;
+  }, [may]);
+  return ref;
+}
+
 export default function VillageSettingsDoor({ open, onClose, onOpenFullPage }: {
   open: boolean;
   onClose: () => void;

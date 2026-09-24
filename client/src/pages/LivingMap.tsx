@@ -49,7 +49,7 @@ import { MAP_SKIN_SAVED_EVENT, MAP_SKIN_SAVED_KEY } from "@shared/mapSkin";
 import { isPromiseKind } from "@shared/mapPromise";
 import { isSceneVerb } from "@shared/mapScene";
 import { authToken, gameFetch } from "@/lib/gameApi";
-import VillageSettingsDoor, { isVillageSettingsRoute } from "@/components/map/VillageSettingsDoor";
+import VillageSettingsDoor, { takeSettingsDoor, useMayStyleLand } from "@/components/map/VillageSettingsDoor";
 
 /** Where the staged artifact is served from, and its presence probe. */
 const GROUNDS = "/grounds/index.html";
@@ -212,6 +212,7 @@ export default function LivingMap() {
    * VillageSettingsDoor: nothing is added to the map.
    */
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const mayStyleLand = useMayStyleLand();
 
   const resetZoom = useCallback(() => {
     const meta = document.querySelector('meta[name="viewport"]');
@@ -806,24 +807,8 @@ export default function LivingMap() {
           return original.call(win, ev, route);
         }
         ev?.preventDefault?.();
-        /*
-         * The one door answered in place. Every other route still travels.
-         *
-         * AND THE ARTIFACT'S OWN CARD CLOSES BEHIND IT. Measured: the card
-         * that describes Village Settings ("theme, accent, parchment, labels,
-         * icon style") stayed open under the panel that now carries those very
-         * dials, so a founder saw the same room described twice and edited it
-         * in one of them. `closeDoor` is the artifact's own global, the same
-         * one its "Back to the land" button calls.
-         */
-        if (isVillageSettingsRoute(route)) {
-          setSettingsOpen(true);
-          try {
-            win.closeDoor?.();
-          } catch {
-            /* The card stays open; the panel still works. */
-          }
-        } else navigate(route);
+        // One door is answered here; every other route travels. See takeSettingsDoor.
+        if (!takeSettingsDoor(route, mayStyleLand.current, win, () => setSettingsOpen(true))) navigate(route);
         return false;
       };
       shim.__shimmed = true;
