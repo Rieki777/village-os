@@ -18,7 +18,7 @@
 import fs from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
-import { layoutNestedMap, wrapLabel, type NestedInput } from "@shared/mapLayout";
+import { clearChord, layoutNestedMap, wrapLabel, type NestedInput } from "@shared/mapLayout";
 import { viewFor, viewBoxFor, type CameraView } from "./camera";
 import { fitLabelToScreen, captionSize, MIN_LABEL_PX } from "./labelFit";
 
@@ -127,16 +127,46 @@ describe("the label floor, at the sizes a reader actually gets", () => {
     expect(px).toBeGreaterThanOrEqual(MIN_LABEL_PX - 2);
   });
 
-  it("never grows a label wider than the circle can hold", () => {
-    // The cap that stops a rescued label running out over its neighbours.
+  it("never grows a label wider than the circle's CLEAR interior, inside the seat ring", () => {
+    /*
+     * The cap that stops a rescued label running out over its own seats.
+     *
+     * It used to be `pos.r * 1.75`, the whole disc, and that is the defect
+     * Rye chose to fix: measured live at 1440x900, eleven names had a seat
+     * drawn through them, every one a small circle's own centred name. The
+     * layout sizes each circle to hold its name inside the ring and
+     * `wrapLabel` wraps to that same interior, so this step was the only one
+     * of the three measuring something else.
+     *
+     * `clearChord` is now the one definition, and this asserts against it: a
+     * chord that went back to the full radius fails here by name.
+     */
     for (const pos of layout.circles) {
       const wrapped = wrapLabel("Regenerative Agriculture & Permaculture Circle", pos.r, pos.depth);
       const fit = fitLabelToScreen(wrapped, pos.r, pxPerWorld);
       if (fit.outside) continue; // moved out; the chord no longer applies
       const widest = Math.max(...wrapped.lines.map((l) => l.length));
       const drawnWidth = widest * fit.fontSize * 0.55;
-      expect(drawnWidth, `fits inside r=${pos.r.toFixed(0)}`).toBeLessThanOrEqual(pos.r * 1.75);
+      expect(drawnWidth, `fits the clear interior of r=${pos.r.toFixed(0)}`).toBeLessThanOrEqual(clearChord(pos.r));
     }
+  });
+
+  it("sends a name that cannot be legible inside the ring OUT, rather than over its seats", () => {
+    /*
+     * The two halves of the same rule, on one circle. A small disc at a
+     * zoomed-out camera cannot hold this name at the screen floor inside its
+     * ring, so it goes outside, where labelPlacement finds it a clear place.
+     * The control beside it is a circle with room to spare, which must stay in.
+     */
+    const tight = wrapLabel("Intergenerational Wisdom Council", 46, 1);
+    const out = fitLabelToScreen(tight, 46, 0.45);
+    expect(out.outside, "a name with no room inside the ring goes out").toBe(true);
+
+    const roomy = wrapLabel("Land", 220, 0);
+    const stays = fitLabelToScreen(roomy, 220, 0.45);
+    expect(stays.outside, "a name with room stays in").toBe(false);
+    const widest = Math.max(...roomy.lines.map((l) => l.length));
+    expect(widest * stays.fontSize * 0.55).toBeLessThanOrEqual(clearChord(220));
   });
 
   it("leaves an already-legible label exactly as the layout sized it", () => {
