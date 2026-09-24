@@ -170,13 +170,14 @@ export function liveHoldersOfCapability(
 /**
  * A role's list, or a greater key on it that carries the asked-for one.
  *
- * EXPORTED for the same reason `carriedBy` is exported from
- * shared/capabilities.ts. A caller asking "which roles could hold this power"
- * has to use the same test the counter above uses, or the two disagree: the
- * list would offer a role whose holders `liveHoldersOfCapability` does not
- * count, and a seat vote would be opened on a role that grants nothing.
+ * PRIVATE, and that is the point rather than an oversight. Both questions a
+ * caller can ask about this test are answered in this file, by
+ * `liveHoldersOfCapability` above and `rolesCarryingCapability` below, so the
+ * two cannot disagree. #336 briefly exported it for a caller in
+ * `server/index.ts`; that caller became `rolesCarryingCapability` and moved
+ * here, so the export went with it.
  */
-export function carriesCapability(list: readonly string[], capability: string): boolean {
+function carriesCapability(list: readonly string[], capability: string): boolean {
   if (list.includes(capability)) return true;
   return carriedBy(list, capability as Capability);
 }
