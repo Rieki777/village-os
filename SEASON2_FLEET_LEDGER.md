@@ -327,6 +327,22 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   `origin/wt/seat-terms` and on a second local branch `wt/seat-terms-ui`, and `0197` and `0198`
   were committed and pushed on `origin/wt/first-hour` with that lane's claim now on a ref. The
   ceiling was still **0199** on all four channels and nothing anywhere held `0200` or above.
+- **launch-powers lane (the founding stewards take all 19 powers, and only if they stood),
+  2026-09-24: holds 0218** for
+  `drizzle/0218_a_founder_stands_for_the_stewards_seat.sql` on `wt/launch-powers`: one column,
+  `ballot_votes.stands_for_steward TINYINT(1) NOT NULL DEFAULT 0`, no new object, no index, no
+  foreign key. Expand-only, and the rollback holds for the reason the `dbCollection` trap makes
+  worth checking rather than assuming: every writer of `ballot_votes` is RAW SQL naming its
+  columns explicitly (`castVote` in `server/lib/ballots.ts`, `upsertDelegatedRow` in
+  `server/lib/delegation.ts`), so the previous release omits the column and the DEFAULT really
+  does apply. There is no repo spec above this table to write an explicit NULL.
+  Measured four ways at 2026-09-24, after `git fetch origin`. The `--diff-filter=AR` scan over
+  every ref reaches **0217** (`drizzle/0217_a_proposal_says_what_it_serves.sql`); the `drizzle/`
+  directories on disk across every sibling worktree reach **0217**, the same file, in
+  `wt-gps-model`; the scratchpad worktrees reach **0199**; `origin/main` reaches **0215**. `0216`
+  is invisible on all four channels and is taken anyway per the brief that opened this lane, which
+  is exactly the untracked-claim case 27b describes, so it is left alone and never refilled.
+  Confirmed again at landing.
 - **membrane lane (invitations), 2026-09-14: holds 0209** for
   `drizzle/0209_a_member_arrives_by_invitation.sql` (one new table, `member_invites`). Measured three
   ways before the file was created: every remote and local ref and every worktree disk reached 0207
