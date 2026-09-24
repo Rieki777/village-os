@@ -42,6 +42,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ROLE_SEAT_TYPE } from "./roleSeatType";
+import { GPS_CHANGE_TYPE } from "./gpsChangeType";
 import { atLeast, changesPresent, pct, positive, required } from "./wizardValidators";
 
 /**
@@ -61,6 +62,7 @@ export const WIZARD_TYPES = [
   "power_grant",
   "power_return",
   "role_seat",
+  "gps_change",
 ] as const;
 export type WizardType = (typeof WIZARD_TYPES)[number];
 
@@ -361,6 +363,23 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
             required: true,
             problem: atLeast(40, "Your reasoning"),
           },
+          /*
+           * NO JUDGEMENT LINE FIELD HERE, AND ITS ABSENCE IS DELIBERATE
+           * (0219).
+           *
+           * A rule change IS one of the five subjects that carry one. What it
+           * is not is a type this wizard takes to a vote: it publishes a
+           * PROPOSAL, which gathers support and is taken to the ballot later
+           * through `POST /api/governance/mechanics/:id/open-ballot`. The
+           * line is frozen onto the BALLOT, so it is asked at that route and
+           * on the Game Mechanics page beside the button that opens the vote.
+           *
+           * A field here would be collected, dropped by the publish body, and
+           * asked again later, which is worse than not having one. Moving it
+           * onto `mechanics_proposals` so the proposer answers once, in the
+           * wizard, is a live question for Rye and it is a column and a field
+           * rather than a redesign.
+           */
         ],
       },
       terms: { skip: true },
@@ -595,6 +614,7 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
         capability: a.capability,
         roleId: a.roleId,
         reason: a.reason,
+        purposeAlignment: a.purposeAlignment,
       }),
     },
     steps: {
@@ -640,6 +660,19 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
             required: true,
             problem: atLeast(40, "The case for it"),
           },
+          // 0219: moving a power is one of the five subjects Rye scoped the
+          // judgement line to. OPTIONAL here and required by the route once
+          // the village has a statement, because a wizard step cannot know
+          // whether there is anything to judge against yet.
+          {
+            key: "purposeAlignment",
+            kind: "textarea",
+            rows: 3,
+            maxLength: 2000,
+            label: "How this serves the village's purpose",
+            help: "Required once this village has written its governing purpose statement. The whole roll reads it beside your proposal, and it stays on the record.",
+            tip: "One line saying what this changes and which part of the purpose it serves.",
+          },
         ],
       },
       terms: { skip: true },
@@ -674,6 +707,7 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
         capability: a.capability,
         roleId: a.roleId,
         reason: a.reason,
+        purposeAlignment: a.purposeAlignment,
       }),
     },
     steps: {
@@ -719,6 +753,19 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
             required: true,
             problem: atLeast(40, "The case for it"),
           },
+          // 0219: moving a power is one of the five subjects Rye scoped the
+          // judgement line to. OPTIONAL here and required by the route once
+          // the village has a statement, because a wizard step cannot know
+          // whether there is anything to judge against yet.
+          {
+            key: "purposeAlignment",
+            kind: "textarea",
+            rows: 3,
+            maxLength: 2000,
+            label: "How this serves the village's purpose",
+            help: "Required once this village has written its governing purpose statement. The whole roll reads it beside your proposal, and it stays on the record.",
+            tip: "One line saying what this changes and which part of the purpose it serves.",
+          },
         ],
       },
       terms: { skip: true },
@@ -757,6 +804,7 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
       body: (a) => ({
         capability: a.capability,
         reason: a.reason,
+        purposeAlignment: a.purposeAlignment,
       }),
     },
     steps: {
@@ -792,11 +840,25 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
             required: true,
             problem: atLeast(40, "The reason"),
           },
+          // 0219: moving a power is one of the five subjects Rye scoped the
+          // judgement line to. OPTIONAL here and required by the route once
+          // the village has a statement, because a wizard step cannot know
+          // whether there is anything to judge against yet.
+          {
+            key: "purposeAlignment",
+            kind: "textarea",
+            rows: 3,
+            maxLength: 2000,
+            label: "How this serves the village's purpose",
+            help: "Required once this village has written its governing purpose statement. The whole roll reads it beside your proposal, and it stays on the record.",
+            tip: "One line saying what this changes and which part of the purpose it serves.",
+          },
         ],
       },
       terms: { skip: true },
     },
   },
+  GPS_CHANGE_TYPE,
 ];
 
 /** By id, for the walker and the renderer. */
@@ -850,6 +912,11 @@ export const SUBJECT_NOUN: Record<string, string> = {
    */
   power_grant: "Power given to a role",
   power_return: "Power handed back",
+  /*
+   * A NOUN FOR THE THING. "GPS change" is what the table would call it;
+   * what happened is that a village changed what it is for.
+   */
+  gps_change: "Change of purpose",
   /*
    * NOT a wizard type, and here because `ballots.subject_type` carries it.
    * Without this entry an advisory vote fell through to "Decision", which is

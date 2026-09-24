@@ -86,6 +86,11 @@ export const SOURCES = [
   // Added with the settlement ballot: `shared/ballotSubjects.ts` imports the
   // subject constant from here, so the registry now reaches it transitively.
   "shared/moonSettlement.ts",
+  // Added with the governing purpose statement (0219), for exactly the reason
+  // the line above gives: `shared/ballotSubjects.ts` imports the `gps_change`
+  // subject constant from here, the same way it imports the settlement's, so
+  // the registry reaches this file transitively.
+  "shared/governingPurpose.ts",
 ];
 
 /** The one file the walk starts from. Everything else is discovered. */

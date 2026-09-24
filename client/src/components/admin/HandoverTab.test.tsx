@@ -401,3 +401,74 @@ describe("HandoverTab: bringing a power back (ask 7)", () => {
     await waitFor(() => expect(server.writes()).toHaveLength(1));
   });
 });
+
+/**
+ * THE LAST POWER, AND ONLY THE LAST ONE (0219).
+ *
+ * Crossing the final power completes the handover, and a completed handover
+ * moves the pen over the governing purpose statement from the founder to the
+ * village. That is a different consequence from the other eighteen crossings,
+ * so the founder meets it once, here, before pressing the button.
+ *
+ * WHY IT CANNOT BE A WARNING ON EVERY HANDOVER: a sentence that appears every
+ * time is a sentence people learn to click past, and by the time the one that
+ * mattered arrived they would already have learned to.
+ *
+ * NO VILLAGE HAS EVER BEEN ONE POWER SHORT. `capability_holding` is created
+ * empty and nothing seeds it, so both states below are fabricated here, and a
+ * green says what the dialog does when a village gets there.
+ */
+describe("HandoverTab: the last power moves the pen (0219)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  const withHandover = (remaining: string[]) =>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: any = {}) => {
+        if (String(init.method ?? "GET") !== "GET") return { ok: true, status: 200, json: async () => ({ success: true }) };
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ ...MOVABLE, handover: { complete: false, held: [], remaining, total: 19 } }),
+        };
+      }),
+    );
+
+  const openDialogue = async () => {
+    const user = userEvent.setup();
+    renderTab();
+    await user.selectOptions(await screen.findByRole("combobox"), "keepers");
+    await user.click(screen.getByRole("button", { name: "Hand it to the village" }));
+    return screen.findByRole("dialog");
+  };
+
+  it("warns when this power is the one power left", async () => {
+    withHandover(["membership.admit"]);
+    const dialog = await openDialogue();
+    expect(within(dialog).getByText(/This is the last of the 19 powers/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/becomes the/)).toBeInTheDocument();
+  });
+
+  it("says nothing while two remain", async () => {
+    withHandover(["membership.admit", "library.keep"]);
+    const dialog = await openDialogue();
+    expect(within(dialog).queryByText(/This is the last of/)).not.toBeInTheDocument();
+  });
+
+  it("says nothing when the one remaining power is a DIFFERENT one", async () => {
+    // The count alone is not the condition. A founder handing over power A
+    // while power B is the last one left must not be told this is the last.
+    withHandover(["library.keep"]);
+    const dialog = await openDialogue();
+    expect(within(dialog).queryByText(/This is the last of/)).not.toBeInTheDocument();
+  });
+
+  it("says nothing when the server sent no handover at all, because nothing is not one", async () => {
+    fakeServer();
+    const dialog = await openDialogue();
+    expect(within(dialog).queryByText(/This is the last of/)).not.toBeInTheDocument();
+  });
+});

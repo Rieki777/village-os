@@ -226,6 +226,30 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
     fixAt: "/admin?tab=tokens",
     fixLabel: "Open Tokens",
   },
+  {
+    id: "gps-written",
+    group: "brand",
+    title: "Write your governing purpose statement",
+    /*
+     * BLOCKING, BY RULING. Rye, 2026-09-23: a village runs and sets itself up
+     * normally without one and cannot launch. So this sits with the exit
+     * policy and the shared-password exit rather than with the recommended
+     * rows: the Birthing is the moment the village is asked, and asking a
+     * village to start before it has said what it is for is asking a question
+     * nobody can answer.
+     *
+     * A REAL CHECK AND NOT A `manual:` CONFIRMATION. "Is there a statement and
+     * is it long enough to be one" is machine-checkable, and a hand-confirmed
+     * row would let a founder tick a box over an empty document. The check is
+     * in server/lib/launch.ts and it runs the same validator the wizard and
+     * the change ballot run, so nothing can be launch-ready and unsavable.
+     */
+    why: "Every later change is judged against this sentence, so the village writes it before it starts. It says who this village serves, what they are up against, the move it is making, by what means, and what becomes true if it works.",
+    severity: "blocking",
+    checkKey: "gps-written",
+    fixAt: "/admin?tab=setup",
+    fixLabel: "Open Project Settings",
+  },
 
   // ── Integrations: keys, each honest about what stops without it ──────────
   {

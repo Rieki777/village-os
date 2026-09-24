@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 174 open and 41 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 175 open and 41 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 189 of them as soon as it is saved, and 26 of them at the next cycle close.
+Each dial also says WHEN a change lands. 190 of them as soon as it is saved, and 26 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-215 dials in 32 categories. 127 carry a minimum and a maximum. By type: 90 integer, 20 decimal, 18 percentage, 24 boolean, 29 choice, 33 text, 1 longtext.
+216 dials in 32 categories. 127 carry a minimum and a maximum. By type: 90 integer, 20 decimal, 18 percentage, 24 boolean, 29 choice, 34 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -46,7 +46,7 @@ Each dial also says WHEN a change lands. 189 of them as soon as it is saved, and
 | The Mint | 6 | 5 | 1 |
 | Progression | 28 | 28 | 0 |
 | Quests | 5 | 5 | 0 |
-| Governance | 43 | 39 | 4 |
+| Governance | 44 | 40 | 4 |
 | Tokens | 4 | 1 | 3 |
 | Hypha | 8 | 0 | 8 |
 | Tools | 2 | 2 | 0 |
@@ -173,6 +173,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | When moving a power to a role can go to the vote | `governance.window_power_transfer` | Governance | text | `always_open` | the whole village |
 | When granting a power can go to the vote | `governance.window_power_grant` | Governance | text | `always_open` | the whole village |
 | When handing a power back can go to the vote | `governance.window_power_return` | Governance | text | `always_open` | the whole village |
+| When changing the governing purpose can go to the vote | `governance.window_gps_change` | Governance | text | `always_open` | the whole village |
 | How long a proposal coming back may open outside its window | `governance.window_grace_days` | Governance | integer | `7` | the whole village |
 | How voting weight is assigned | `governance.weight_mode` | Governance | choice | `equal` | the founder or an admin |
 | The weight token | `governance.weight_token` | Governance | text | `gratitude` | the founder or an admin |
@@ -1572,7 +1573,7 @@ Consent normally needs a second person to witness the work: nobody may consent t
 
 ## Governance
 
-43 dials. 39 for the whole village, 4 for the founder or an admin.
+44 dials. 40 for the whole village, 4 for the founder or an admin.
 
 ### How sensing is weighted
 
@@ -1916,6 +1917,20 @@ The window a proposal that hands a power back to the admin panel opens in, in th
 | Fact | Value |
 | --- | --- |
 | Key | `governance.window_power_return` |
+| Type | text, free text, one line |
+| Default | `always_open` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
+
+### When changing the governing purpose can go to the vote
+
+The window a proposal that changes this village's governing purpose statement opens in, in the same words as the change set window above. This is the sentence every other change is judged against, so a village that wants it read together is the village most likely to window it.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.window_gps_change` |
 | Type | text, free text, one line |
 | Default | `always_open` |
 | Range | no bounds are set |
@@ -3865,6 +3880,7 @@ The generator reads these and fails loudly if any of them moves:
 - `shared/gameConfig.ts`
 - `shared/gameVariables.ts`
 - `shared/governanceEngine.ts`
+- `shared/governingPurpose.ts`
 - `shared/moonSettlement.ts`
 - `shared/needs.ts`
 - `shared/villageMoon.ts`
