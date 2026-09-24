@@ -190,12 +190,12 @@ export function splitStreams(records: readonly VendorRecord[]): StreamReading {
   }
 
   return {
-    structure: [...byKind.entries()]
+    structure: Array.from(byKind.entries())
       .map(([kind, recs]) => ({ kind, records: recs }))
       .sort((a, b) => a.kind.localeCompare(b.kind)),
     facts,
     held,
-    unmapped: [...unmapped].sort(),
+    unmapped: Array.from(unmapped).sort(),
     addressesSeen,
   };
 }
