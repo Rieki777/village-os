@@ -96,6 +96,17 @@ export default function PurposeStatementPanel({ password }: { password: string }
           {words} word{words === 1 ? "" : "s"}. It takes at least {PURPOSE_MIN_WORDS} to answer all
           five parts.
         </p>
+        {/* THE ORDINARY PATH READS AS ORDINARY. `capability_holding` is empty
+            at birth on every deployment, so a founder holding the pen is the
+            normal state of every village and not a village waiting for
+            something. This sentence says what happens next as a fact, with no
+            suggestion that anything here is unfinished. */}
+        {founderHoldsPen && (
+          <p className="text-xs text-gray-500 mt-1">
+            You write this. It becomes the village's to change by a vote on the day the
+            village holds every one of its powers.
+          </p>
+        )}
         {founderHoldsPen ? (
           <button
             type="button"

@@ -125,6 +125,35 @@ export async function writeGoverningPurpose(
  * is stated as a reading at the constant with the narrower alternative named
  * beside it.
  *
+ * ── IT READS `villageHandoverState().complete` AND NOTHING ELSE ────────────
+ *
+ * There is a second predicate near this seam that answers a different
+ * question, and it will sit close enough that unifying the two will look like
+ * removing a twin. `whoMayDecide` (landing as `whoMayPutHandToVillage`) takes
+ * ONE capability and answers who may act on it: the village holds it, so any
+ * member takes it to a ballot; a role holds it, so the live holders act;
+ * NOBODY holds it, so any member takes it to a ballot.
+ *
+ * Routing the pen through that predicate would contradict the ruling outright.
+ * `capability_holding` is created empty on every deployment, so "nobody holds
+ * it" is the birth state of every village, and the per-capability answer there
+ * is "put it to a ballot" while Rye's answer is "the founder keeps the pen".
+ *
+ * They do not conflict, and the reason is the whole distinction: the pen is a
+ * rule about a DOCUMENT keyed to the AGGREGATE handover, and that one is a
+ * rule about ONE CAPABILITY keyed to that capability's holding. The statement
+ * is not a capability, nobody holds a `gps.edit` key, and there is no holding
+ * for the other predicate to read. So this function must not call it and must
+ * not be refactored into a shared path with it. Two rules that both mention
+ * who holds power are not the same rule.
+ *
+ * ── THE INCOMPLETE HANDOVER IS THE ORDINARY PATH ───────────────────────────
+ *
+ * Not a fallback and not a degraded state. Every village alive is in it, the
+ * one about to launch included, so nothing a founder reads on this path should
+ * sound like waiting for something. The branch that has never been reached
+ * anywhere is `complete === true`.
+ *
  * Returns the refusal a founder reads, or null when the pen is still theirs.
  */
 export async function founderPenRefusal(pool: Pool): Promise<string | null> {
