@@ -208,3 +208,119 @@ describe("the frame, the undo, and saying which outcome a founder got", () => {
     await waitFor(() => expect(screen.getByText(/sets its own frame/i)).toBeTruthy());
   });
 });
+
+/*
+ * TAKING A PIECE OF LAND BACK OFF, and what stops a founder removing the
+ * wrong thing.
+ *
+ * The Add button writes a parcel from a text box, so the day it shipped it
+ * became possible to add one by mistake with no way back from the screen. Rye
+ * asked for the way back on 2026-09-24 after making one by accident.
+ */
+describe("removing a piece of land", () => {
+  /** Two parcels: the village's own ground, and one added after it. */
+  const TWO_PARCELS = {
+    parcels: [
+      { ...ONE_PARCEL.parcels[0] },
+      {
+        slug: "second-home",
+        label: "second home",
+        sortOrder: 1,
+        centre: { lat: 9.31, lon: -83.79 },
+        spanM: 2400,
+        visibility: "hidden",
+        sourceText: "9.31, -83.79",
+        imagery: { provider: null, url: null, attribution: "", fetchedAt: null, error: null },
+      },
+    ],
+    configured: ONE_PARCEL.configured,
+  };
+
+  it("offers no way to remove the first parcel, because the server refuses it", async () => {
+    stubFetch(TWO_PARCELS);
+    render(<LandTab password="pw" />);
+    /*
+     * The first row is published as the village's own ground, so removing it
+     * would move the map to whichever parcel sorted next. Drawing a button
+     * that only ever produces a refusal is worse than drawing none.
+     */
+    await waitFor(() => expect(screen.getByText("second home")).toBeTruthy());
+    expect(screen.queryByText(/Remove this piece of land/i)).toBeNull();
+  });
+
+  it("asks the server for the parcel the founder is looking at", async () => {
+    const calls = stubFetch(TWO_PARCELS);
+    const user = userEvent.setup();
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    render(<LandTab password="pw" />);
+
+    await user.click(await screen.findByText("second home"));
+    await user.click(await screen.findByText(/Remove this piece of land/i));
+
+    await waitFor(() => {
+      const del = calls.find((c) => (c.init.method ?? "GET") === "DELETE");
+      expect(del).toBeTruthy();
+      // The parcel by name, and the parcel route: never the picture route,
+      // which is a different button with a different consequence.
+      expect(del!.url).toContain("/admin/land/parcel");
+      expect(del!.url).toContain("slug=second-home");
+    });
+  });
+
+  it("does nothing at all when the founder says no to the question", async () => {
+    const calls = stubFetch(TWO_PARCELS);
+    const user = userEvent.setup();
+    vi.stubGlobal("confirm", vi.fn(() => false));
+    render(<LandTab password="pw" />);
+
+    await user.click(await screen.findByText("second home"));
+    await user.click(await screen.findByText(/Remove this piece of land/i));
+
+    expect(calls.filter((c) => (c.init.method ?? "GET") === "DELETE")).toHaveLength(0);
+  });
+});
+
+/*
+ * WHAT A WIDTH BUYS, said while it is being typed.
+ *
+ * The number in that box decides how much ground each pixel covers, and
+ * nothing on the page connected the two until this line. A founder picked a
+ * width for how much land it framed and met its cost after the fetch.
+ */
+describe("the width says what it costs", () => {
+  const WITH_ARITHMETIC = {
+    ...ONE_PARCEL,
+    configured: {
+      ...ONE_PARCEL.configured,
+      groundResolutionM: 0.5,
+      detailVariesByPlace: true,
+      maxPixels: 2400,
+      minPixels: 256,
+    },
+  };
+
+  it("works out the metres per pixel for the width in the box", async () => {
+    stubFetch(WITH_ARITHMETIC);
+    render(<LandTab password="pw" />);
+    // 800 m over a 0.5 m provider is 1600 px, which is 0.50 m per pixel.
+    await waitFor(() => expect(screen.getByText(/About 0.50 m per pixel/i)).toBeTruthy());
+  });
+
+  it("warns that a mosaic holds less detail over open country", async () => {
+    stubFetch(WITH_ARITHMETIC);
+    render(<LandTab password="pw" />);
+    await waitFor(() => expect(screen.getByText(/less detail over open country/i)).toBeTruthy());
+  });
+
+  it("says nothing at all when the server sent no figures to say it with", async () => {
+    /*
+     * A deployment serving an older payload has none of the three numbers.
+     * Absent has to read as silence: a guessed ceiling would be a confident
+     * wrong number beside the box a founder is trusting.
+     */
+    stubFetch(ONE_PARCEL);
+    render(<LandTab password="pw" />);
+    await waitFor(() => expect(screen.getByDisplayValue("9.2345, -83.8412")).toBeTruthy());
+    expect(screen.queryByText(/m per pixel/i)).toBeNull();
+  });
+});

@@ -119,11 +119,12 @@ const SAVED = {
   imagery_error: null,
 };
 
-describe("the five routes register", () => {
+describe("the six routes register", () => {
   it("registers exactly the routes the admin screen will call", () => {
     const { handlers } = mount(null);
     expect([...handlers.keys()].sort()).toEqual([
       "DELETE /api/admin/land/imagery",
+      "DELETE /api/admin/land/parcel",
       "GET /api/admin/land",
       "GET /api/land",
       "POST /api/admin/land/imagery",
