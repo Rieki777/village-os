@@ -567,7 +567,7 @@ import {
 } from "./lib/villageReaders";
 import {
   ASSISTANT_MODES, DEFAULT_ASSISTANT_MODEL, borrowingPlatformKey, callAssistant, parseJsonReply, sanitizeMessages,
-  wireAssistant, type AssistantResult,
+  assistantOwnKeyReadiness, wireAssistant, type AssistantResult,
 } from "./lib/assistant";
 import { recordAssistantUsage, type AssistantPath } from "./lib/assistantUsage";
 // LANE K1: which road an organize question takes, decided without a model.
@@ -12532,12 +12532,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
         : { state: "missing" as const, detail: "No Anthropic key. Every form still works, without the guide" }),
       // S76: borrowing is fine while a village is being built and wrong at
       // handoff. The key itself is never named here, only whose it is.
-      "assistant-own-key": () => (borrowingPlatformKey()
-        ? {
-            state: "missing" as const,
-            detail: "Running on the platform's key. Add your own before handoff so nobody else's rotation can switch the guide off",
-          }
-        : { state: "ok" as const, detail: "The guide runs on this village's own key" }),
+      // Three states, decided in server/lib/assistant.ts beside resolveKey: a
+      // deployment with NO key is not borrowing either, and used to read as ok.
+      "assistant-own-key": () => assistantOwnKeyReadiness(),
       "modules-decided": () => {
         const decided = decidedModuleIds();
         return decided.length > 0
