@@ -13,9 +13,18 @@
  * So this file provisions ONE scratch schema and opens ballots through pools
  * whose MySQL session sits four hours behind UTC and two hours ahead of it, in
  * the production `on("connection")` shape. That is the real mechanism and not
- * a stub of it. It matters that both are here: CI's MySQL runs UTC and this
- * machine's MariaDB runs America/New_York, so a test that leaned on either
- * would be green in exactly the place it needed to be red.
+ * a stub of it. It matters that both are here: CI's MySQL runs UTC and the
+ * developer machines here do not, so a test that leaned on either would be
+ * green in exactly the place it needed to be red.
+ *
+ * This sentence used to name the local zone as America/New_York. It was
+ * measured at UTC-7 on 2026-09-23, which is neither of that zone's offsets, so
+ * the name was either wrong or has gone stale. A zone named in a comment is a
+ * claim about one machine on one day, and nothing checks it. The point the
+ * sentence is making holds without it: the two environments are blind to
+ * opposite halves of this, and `@@session.time_zone` reports `SYSTEM` on both,
+ * so anything that needs the real answer MEASURES the offset with
+ * `TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), NOW())`.
  *
  * The assertions are about WHEN, never merely about difference. A one-day
  * ballot must close twenty-four hours from now as this process measures now,

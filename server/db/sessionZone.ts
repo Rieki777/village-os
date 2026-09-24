@@ -15,12 +15,29 @@
  * `CURRENT_TIMESTAMP` and `UNIX_TIMESTAMP()` are evaluated by MySQL in the
  * SESSION zone, which without this pin is the server's default.
  *
- * That gap cancels itself for a value written through the driver and read back
- * through the driver, which is most assertions, and is why every suite passes.
- * It does NOT cancel for a value written by `NOW()` and read as a number, or
- * for two instants compared in SQL. Those come back wrong by the host's offset,
- * and the offset moves across a daylight-saving boundary, so the same suite can
- * be wrong by different amounts on two dates.
+ * ── WHICH READING IS WRONG, MEASURED RATHER THAN REASONED ──────────────────
+ *
+ * The first version of this file named the wrong pairing, so here are the three
+ * readings with numbers, taken on an unpinned connection whose session sat at
+ * UTC-7 (`@@session.time_zone` reporting `SYSTEM`):
+ *
+ *   NOW() written, read back through the DRIVER     off by 25,201 s
+ *   NOW() written, read back with UNIX_TIMESTAMP    off by 1 s
+ *   UNIX_TIMESTAMP('2026-02-20 12:00:00')           off by 28,800 s
+ *
+ * So `UNIX_TIMESTAMP` of a `NOW()`-written column is the REMEDY, not the harm:
+ * MySQL evaluates both ends in the session's own frame, so they agree whatever
+ * that frame is. What does NOT cancel is a `NOW()`-written value read back
+ * through a `timezone: "Z"` driver, which parses the returned wall clock as
+ * UTC, and any comparison between such a value and a JS `Date` bound as a true
+ * instant. Those are wrong by the host's offset.
+ *
+ * `UNIX_TIMESTAMP` of a LITERAL is a third case and is session-dependent, since
+ * the string is interpreted in the session zone. Note that it read 28,800 in
+ * the same run where the live offset was 25,200: **the offset that applies is
+ * the one for the DATE BEING READ**, not the one in force today, because
+ * February sits the other side of a daylight-saving boundary. So a suite cannot
+ * correct for this by measuring the current offset either.
  *
  * ── THE NUMERIC OFFSET, NEVER THE NAME ─────────────────────────────────────
  *
