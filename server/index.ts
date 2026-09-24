@@ -154,12 +154,7 @@ import {
 } from "../shared/mapAddress";
 import { isPromiseKind, type PromiseReason, type PromiseResult } from "../shared/mapPromise";
 import { goingCountFor, missingReason, rowByMapKey } from "./lib/mapPromise";
-import {
-  CarriesLocationData,
-  sanitiseForVolume,
-  stampedName,
-  writeToVolume,
-} from "./lib/uploads";
+import { CarriesLocationData, isMemberOwnedUpload, sanitiseForVolume, stampedName, writeToVolume } from "./lib/uploads";
 import {
   classifyVolume,
   humanBytes,
@@ -18716,7 +18711,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
       // bytes behind a URL never change, and a UI tick that costs a
       // conditional request every time it fires is a tick nobody ships.
       if (type.startsWith("image/") || type.startsWith("font/") || type.startsWith("audio/")) {
-        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        // `private` for a member's own file, because erasure unlinks it and a shared cache would outlive that. Why it costs no page load: `isMemberOwnedUpload`.
+        res.setHeader("Cache-Control", `${isMemberOwnedUpload(safe) ? "private" : "public"}, max-age=31536000, immutable`);
       } else {
         // Investor documents and the like live behind a request-and-email gate.
         // The gate is weak (anyone with the URL can fetch), but `public` would

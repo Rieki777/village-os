@@ -77,9 +77,32 @@ describe("the display currency picker", () => {
     expect(codes).toContain("CHF");
   });
 
-  it("gives a village that declares no currency the platform's own CHF", async () => {
+  /*
+   * THIS TEST USED TO ASSERT THE DEFECT. It read "gives a village that
+   * declares no currency the platform's own CHF" and expected the label
+   * "CHF (this village's)", which is the platform guessing and the sentence
+   * saying the village said it. Found live on 2026-09-24 with
+   * `fiatCurrency: ""` on the deployed config.
+   */
+  it("names no currency for a village that has not declared one", async () => {
     const { onChange, villageOption } = await picker({ project: { name: "A village" } });
-    await waitFor(() => expect(villageOption()).toBe("CHF (this village's)"));
-    await waitFor(() => expect(onChange.mock.calls.map((c) => c[0])).toContain("CHF"));
+    await waitFor(() => expect(villageOption()).toBe("This village's own"));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(onChange.mock.calls.map((c) => c[0])).not.toContain("CHF");
+    // Still there to CHOOSE, as one currency among the others.
+    const codes = Array.from((screen.getByRole("combobox") as HTMLSelectElement).options).map((o) => o.value);
+    expect(codes).toContain("CHF");
+  });
+
+  it("reads the same to a member whether the village said nothing or the config could not answer", async () => {
+    // Two routes to one state: nobody has told us. They must not disagree.
+    const undeclared = await picker({ project: { name: "A village" } });
+    await waitFor(() => expect(undeclared.villageOption()).toBe("This village's own"));
+    const said = undeclared.villageOption();
+    // One at a time: two pickers on one screen make `getByRole` ambiguous,
+    // and the point here is that the two READINGS agree, not that they coexist.
+    cleanup();
+    const unreachable = await picker("fails");
+    await waitFor(() => expect(unreachable.villageOption()).toBe(said));
   });
 });

@@ -41,10 +41,8 @@ import { CIRCLE_STATUSES } from "@shared/draftKinds";
 import TypographyPanel from "@/components/TypographyPanel";
 import LookPanel from "@/components/LookPanel";
 import IdentityPackPanel from "@/components/IdentityPackPanel";
-import MapSkinPanel from "@/components/MapSkinPanel";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import LandTab from "@/components/admin/LandTab";
-import MapVocabularyPanel from "@/components/admin/MapVocabularyPanel";
 import ArchetypesPanel from "@/components/admin/ArchetypesPanel";
 import EventsAdminPanel from "@/components/EventsAdminPanel";
 import ResourcesAdminPanel from "@/components/power/ResourcesAdminPanel";
@@ -72,7 +70,6 @@ import VotingWeightsPanel from "@/components/admin/VotingWeightsPanel";
 import NeedsPanel, { NeedsSetupStep, useNeedsSetupObservation } from "@/components/admin/NeedsPanel";
 import RelationsEditor from "@/components/admin/RelationsEditor";
 import HousingAdminPanel from "@/components/HousingAdminPanel";
-import WalkEditorPanel from "@/components/WalkEditorPanel";
 import { ExampleChip, ExamplesBanner, forgetExamplesCache, RETIRES_WITH } from "@/components/ExamplesBanner";
 // visit-inquiry and membership-508 were missing, and they are the two highest-value
 // submissions on the site: a request to walk the land, and a signed 508(c)(1)(a)
@@ -9550,12 +9547,30 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
         <ArchetypesPanel password={password} />
       </SetupSection>
 
-      <SetupSection {...step} id="map" n={6} title="Map & styling" subtitle="How the Living Map draws your land. Blank keeps the map's own look.">
-        <MapSkinPanel />
-        <WalkEditorPanel />
-        {/* The vocabulary route has been live since the map shipped and its
-            only caller was a CLI importer. This is its first door. */}
-        <MapVocabularyPanel />
+      {/*
+        * THE EDITORS LEFT THIS PAGE ON 2026-09-23. A founder styling their
+        * land wants to watch it change while they decide, which a wizard step
+        * cannot do. All three now open from the map's own dock, under the
+        * Village Settings button the artifact already carried, and that button
+        * used to send a founder HERE: the trip was a round one.
+        *
+        * The panels moved without changing, which is what makes this a link
+        * and not a rewrite (map/VillageSettingsDoor.tsx mounts the same
+        * three). The step stays because a missing step six reads as one
+        * somebody forgot.
+        */}
+      <SetupSection {...step} id="map" n={6} title="Map & styling" subtitle="How the Living Map draws your land. The editors live on the map itself.">
+        <p className="text-sm text-gray-600 mb-4">
+          Your colours, the welcome walk and the village's own words for roads, water and zones are all
+          edited on the map. Open the land and use the Village Settings button on the map's dock: the map
+          repaints as you save, so you see every change where it lands.
+        </p>
+        <Link
+          href="/map"
+          className="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-deep"
+        >
+          Open the map
+        </Link>
       </SetupSection>
 
       <SetupSection {...step} id="technical" n={7} title="Go live" subtitle="One-time technical setup. Hand these to your developer or Claude Code.">
