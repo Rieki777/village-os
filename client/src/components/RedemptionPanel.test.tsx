@@ -123,18 +123,37 @@ describe("what the member is told about a process the village never wrote", () =
   });
 });
 
+/*
+ * ONE PAYLOAD FOR EVERY URL STOPPED BEING HONEST when the queue gained a
+ * second call. `RedemptionQueue` now asks the MEMBER route whether the viewer
+ * holds `redemption.confirm` and only then asks the admin route, so a stub
+ * that answered both with the same body was answering the first question with
+ * a queue - which carries no `mayConfirm`, so the component correctly stopped.
+ * The old stub was a fiction that happened to work; this one answers each
+ * route as the server does.
+ */
+const answeringRoutes = (byUrl: Record<string, unknown>) =>
+  vi.fn(async (url: unknown) => {
+    const hit = Object.entries(byUrl).find(([prefix]) => String(url).startsWith(prefix));
+    return { ok: Boolean(hit), json: async () => hit?.[1] ?? {} };
+  }) as unknown as typeof fetch;
+
 describe("RedemptionQueue prints the true amount a steward is about to destroy", () => {
   it("reads 12.5 as 12.5, never truncated to 12", async () => {
     vi.stubGlobal(
       "fetch",
-      answering({
+      answeringRoutes({
+        "/api/admin/redemptions": {
         redemptions: [
           {
             id: "rdm-1", userId: "usr-wren", memberName: "Wren", token: "credits", tokenName: "Village Credits",
             amount: 12.5, askedFor: "a bicycle", openedAt: "2026-09-01T00:00:00.000Z", expiresAt: null, warnings: [],
           },
         ],
-        holds: true,
+          holds: true,
+        },
+        // The hint that decides whether the admin route is asked at all.
+        "/api/redemptions": { mayConfirm: true },
       }),
     );
     render(<RedemptionQueue />);
