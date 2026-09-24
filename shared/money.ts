@@ -152,6 +152,31 @@ export function hasDailyRate(code: unknown): boolean {
 }
 
 /**
+ * NORMALISE THE CURRENCY ON AN INCOMING BRAND OVERLAY, IN PLACE, or say what
+ * is wrong with it.
+ *
+ * The caller is `PUT /api/admin/brand`, which merges the whole Make This Yours
+ * form in one body. The guard matters as much as the rule: a body that does
+ * NOT carry `fiatCurrency` must be left alone, because normalising an absent
+ * field would write blank over a currency the village had already answered,
+ * on every unrelated brand save.
+ *
+ * Returns null when there is nothing to refuse, so the route reads as two
+ * lines. It lives here rather than there for the same reason the reasoning
+ * does: `server/index.ts` sits at exactly its line baseline, and the rule is
+ * about currency rather than about routing.
+ */
+export function normaliseProjectCurrency(project: unknown): string | null {
+  if (!project || typeof project !== "object") return null;
+  const bag = project as Record<string, unknown>;
+  if (!("fiatCurrency" in bag)) return null;
+  const result = projectCurrencyToStore(bag.fiatCurrency);
+  if (!result.ok) return result.error;
+  bag.fiatCurrency = result.value;
+  return null;
+}
+
+/**
  * WHAT THE PROJECT'S OWN CURRENCY BECOMES ON ITS WAY INTO STORAGE.
  *
  * `PUT /api/admin/brand` merged whatever arrived, so a value of spaces stored
