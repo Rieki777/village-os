@@ -8951,9 +8951,7 @@ export function SeasonTab({ password }: { password: string }) {
             whichever season covers today. Queue the next one and it hands over by itself.
           </p>
         </div>
-        {/* Called through an arrow, not passed directly: `save` takes the
-            extra body fields now, and handing it straight to onClick would
-            spread a React click event into the request. */}
+        {/* Arrow, not `save` itself: it takes body fields now, and onClick would pass the event as one. */}
         <button onClick={() => save()} disabled={saving} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50 shrink-0">
           {saving ? "Saving..." : "Save"}
         </button>
@@ -10161,8 +10159,7 @@ export default function Admin() {
               filter, so the rail and the card ride one fetch. */}
           <AdminGoLive token={password} moduleId={TAB_MODULE[activeTab] ?? null}
             onLifecycles={(m) => setModuleLifecycles(m as Record<string, ModuleLifecycle>)} />
-          {/* The two facts only this village can state, asked until they are
-              (VillageAnswers.tsx says why it outlives the launch checklist). */}
+          {/* The two facts only this village can state. VillageAnswers.tsx says why it outlives the checklist. */}
           <VillageAnswers password={password} />
           {activeTab === "setup" && <SetupWizard password={password} onOpenTab={setActiveTab} />}
           {activeTab === "events-admin" && <EventsAdminPanel password={password} />}
