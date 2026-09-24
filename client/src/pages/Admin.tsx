@@ -53,6 +53,7 @@ import ModuleSettingsSection from "@/components/admin/ModuleSettingsSection";
 import { useModuleDeepLink } from "@/components/admin/moduleDeepLink";
 import SetupNeeded from "@/components/modules/SetupNeeded";
 import VillageAnswers from "@/components/admin/VillageAnswers";
+import CurrencyAnswerNote from "@/components/admin/CurrencyAnswerNote";
 import SeasonTimezoneField from "@/components/admin/SeasonTimezoneField";
 import { useSettingFocus } from "@/components/admin/settingFocus";
 import { CONTENT_SECTIONS, emptyContentFor } from "@/components/admin/contentSections";
@@ -9363,19 +9364,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
             site is quoted in, and what a member sees before choosing their own display currency.
           </p>
         )}
-        {/* NEEDS YOUR ANSWER, and deliberately naming no code: the platform's
-            own is shown beside the box already, and a code written into this
-            sentence would be a second copy to go stale. Blank means inherit,
-            which is a real state and not an error, so this asks and blocks
-            nothing. Typing a code IS the answer here; there is no confirm
-            button, because the box is empty until somebody types one. */}
-        {!code && (
-          <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
-            Needs your answer. Until somebody here types a code, prices follow the platform's own
-            currency, which is where it starts and not something this village chose. Type yours,
-            even if it is already the one shown.
-          </p>
-        )}
+        <CurrencyAnswerNote answered={!!code} />
       </div>
     );
   };
