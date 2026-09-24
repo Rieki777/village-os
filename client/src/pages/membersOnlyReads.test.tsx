@@ -117,6 +117,9 @@ const MEMBERS_ONLY = [
   // 401 would have been green here and wrong. These assert the REQUEST.
   "/api/game/progression",
   "/api/profile/prefs",
+  // Mounted on /profile when the redemption module is on, so it joins this
+  // list the moment that page gained a third members-only read.
+  "/api/redemptions",
 ];
 
 /**
@@ -139,6 +142,11 @@ function answer(url: string): Response {
   if (url.startsWith("/api/game/progression"))
     return json({ stage: null, stageIndex: 0, consentedQuests: 0, capabilities: [], capabilityCatalogue: [], roles: [], history: [], firsts: {}, signing: null });
   if (url.startsWith("/api/profile/prefs")) return json({ sawSections: {} });
+  // The whole `Payload` shape RedemptionPanel reads, so a field it uses
+  // unguarded fails here the way it would in a browser rather than as an
+  // unhandled error after the assertions have already passed.
+  if (url.startsWith("/api/redemptions"))
+    return json({ open: [], history: [], held: {}, holds: false, confirmedBy: "", votePathBuilt: false, perCycle: 0, openedThisCycle: 0, tokens: [] });
   return json({});
 }
 
@@ -281,6 +289,15 @@ describe("/profile", () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(asked.filter((u) => u.startsWith("/api/game/progression"))).toEqual([]);
     expect(asked.filter((u) => u.startsWith("/api/profile/prefs"))).toEqual([]);
+    // THIS ONE DOES NOT CURRENTLY DISCRIMINATE, and saying so is the point.
+    // The redemption panel sits in JSX that a signed-out visitor never reaches,
+    // because /profile renders a sign-in form for them, so this assertion holds
+    // with or without the `user &&` guard on the mount. I checked by removing
+    // the guard and watching all ten stay green. It is kept because the day
+    // that render path changes, this is the line that notices; it is not
+    // evidence that the guard works. The two above it ARE discriminating: each
+    // was proved by removing its own guard and watching this case fail.
+    expect(asked.filter((u) => u.startsWith("/api/redemptions"))).toEqual([]);
   });
 
   it("signed in, still asks for both", async () => {
@@ -291,5 +308,9 @@ describe("/profile", () => {
     inRouter(<Profile />);
     await waitFor(() => expect(asked).toContain("/api/game/progression"));
     await waitFor(() => expect(asked.some((u) => u.startsWith("/api/profile/prefs"))).toBe(true));
+    // The twin that matters most for the redemption panel: it was put on this
+    // page because /wallet is behind the exchange module, so a guard that
+    // stopped it asking for everybody would take the door away a second time.
+    await waitFor(() => expect(asked.some((u) => u.startsWith("/api/redemptions"))).toBe(true));
   });
 });
