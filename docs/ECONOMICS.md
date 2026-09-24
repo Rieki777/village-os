@@ -211,7 +211,7 @@ the wrong schema is a lane about to describe a full ledger as empty.
 | `users` | 5 (3 of them examples) | 2026-09-03 |
 | `quest_claims` | 1, status `claimed`, never confirmed | 2026-09-03 |
 | migrations applied | 114 | 2026-09-03 |
-| economy epoch | stamped `2026-09-01T09:33:03.797Z` | 2026-09-03 |
+| economy epoch | removed 2026-09-23; the row is inert where it exists | 2026-09-23 |
 | rows in `tokens` | 9, two of them examples | 2026-09-03 |
 
 Two of those are worth separating from the rest, because they are the two most
@@ -238,32 +238,34 @@ any part of this economy as proven in production. It is proven by tests, by
 deliberate exercise (section 9), and by one village that has not yet spent
 anything.
 
-The epoch matters because of what stamped it. For one release `economyEpoch` both
-read the epoch and created it, and its only caller was the mint, so the first
-confirmed quest in a village's life wrote the epoch and was then ruled out by it,
-losing its own payout by about twenty milliseconds. Fixed: `startEconomyEpoch` is
-now called at boot. Amora's epoch carries a boot timestamp and its ledger is
-empty, which proves it was stamped by the boot and not by a lost quest. **Amora
-never lost a payout, because Amora has never confirmed a quest.**
+**There is no economy epoch any more, and the story is worth keeping.** A
+village used to carry a stamp, written at boot, and the claim mint refused any
+work confirmed before it, so that switching the economy on did not turn every
+quest ever consented into a payable backlog. For one release the reading and the
+writing were the same call and its only caller was the mint, so the first
+confirmed quest in a village's life wrote the stamp and was then ruled out by it,
+losing its own payout by about twenty milliseconds. Amora never lost one, because
+Amora had never confirmed a quest.
 
-**The epoch now decides nothing, and this is the open question rather than a
-finished state.** Audited 2026-09-19 against `116d3bb`. The stamp is written at
-boot and read by exactly one function, `mintForConfirmedClaim`, and PRs #264 and
-#269 left that function with no production caller when the consent route moved
-onto `owedForClaim` and `postOwed`. Every live path that pays a quest claim now
-reaches the ledger without consulting the epoch. The header in
-`server/lib/economy.ts` used to claim that every source query filters on the
-epoch and that an admin backfill honours pre-epoch work on purpose: neither is
-true and neither has ever had a line of code, since `runSettlement` sweeps
-`role.cycle` seats and the voice waning and never reads a claim, and nothing
-writes `app_config.economy-state` except `startEconomyEpoch` itself. The guard
-also never refused anything in production before the split, because the old
-consent route measured the claim against the epoch using a `resolvedAt` that the
-same transaction had just stamped at `now`. What keeps a flag flip from paying
-years of backlog is structural rather than guarded: an obligation exists only
-because a consent created it, and a consent is always now. Whether this village
-wants a real epoch guard, and where it could live without stamping inside a
-transaction that may roll back, is an open decision for the economics lane.
+**Rye ruled on 2026-09-21: acknowledging contributions made before an economy
+launched is not merely allowed but encouraged.** So the guard was removed, along
+with the stamp, the process cache and the boot write behind it. An audit against
+`116d3bb` had already found it unreachable: PRs #264 and #269 left the claim mint
+with no production caller when the consent route moved onto `owedForClaim` and
+`postOwed`, esbuild dropped the whole function from the bundle, and even before
+that split the guard never fired, because the consent route measured the claim
+against the stamp using a `resolvedAt` the same transaction had just set to
+`now`. Two mechanisms the old code comment promised had never been built at all:
+no source query ever filtered on the epoch, and no admin backfill existed.
+
+**What keeps a flag flip from paying years of backlog is now structural, and
+anybody adding a sweep should read this first.** An obligation exists only
+because a consent created it, and a consent is always now. Nothing reads
+historical claims looking for work to pay. A query that walked old claims would
+reintroduce exactly the problem the epoch was invented for, and there would no
+longer be a guard underneath it. Existing `app_config.economy-state` rows are
+left alone rather than migrated away: an orphaned row is inert, and deleting rows
+would risk a fork nobody can see for no gain.
 
 ---
 
@@ -375,7 +377,7 @@ a member's balance read 25. That row needs nobody to type it. `queueRuleChange` 
 an amount above the ceiling and skips that check entirely when a change carries a
 ceiling and no amount, which is the exact shape a governance ballot on the field
 labelled "the most it can pay" produces, so a village that voted its ceiling down went
-on paying the old number. Both mint paths clamp now, `mintForConfirmedClaim` and
+on paying the old number. Both mint paths clamp now, the claim pricing and
 `runSettlement` together, because fixing the quest path alone would have left every
 seat in the village paid over the ceiling once a moon. A ceiling of 0 mints nothing
 and names itself: "this rule's ceiling is 0, so it can pay no Village Credits at all.
@@ -384,7 +386,7 @@ swap caps use, and it is what `mintRuleValueProblem` already promised a village 
 said a ceiling is zero or more and zero means zero.
 
 A rule the engine cannot honour is REPORTED rather than skipped. `ruleCannotPay`
-answers why, `reportUnpayable` logs it, and both `mintForConfirmedClaim` and
+answers why, `reportUnpayable` logs it, and both `owedForClaim` and
 `runSettlement` return the list. This exists because a village once enabled a
 credits rule, watched the Mint panel publish it, and was never paid by it: the
 faucet switch returned null for `credits` and both mint paths did `if (!faucet)
@@ -796,8 +798,8 @@ Fixed on `wt/econ`, re-measured 2026-09-04 at `1861f7d`.** Village Voice had 3
 decimals then (`0202` has since lowered it to 2, so each figure below is ten times
 what the same grant posts today), and the two ways it can be issued once disagreed:
 
-- a `quest.completed` rule of 10 goes through `mintForConfirmedClaim`, which calls
-  `toLedgerUnits`, and posts **10000** minor units, which is 10 voice;
+- a `quest.completed` rule of 10 went through the claim mint, which called
+  `toLedgerUnits`, and posted **10000** minor units, which is 10 voice;
 - the admin hand-mint route posted `amount: amt` with no conversion, so a steward
   granting 10 posted **10** minor units, which is 0.010 voice.
 
@@ -951,7 +953,7 @@ was delivered. That one is live at 0 decimals, not only after the flip.
 `sendGratitude` names `tokenType` rather than inheriting it, because the slug
 used for the conversion and the slug used for the post were two separate
 fallbacks in two files answering one question. The three wrappers on this path
-(`mint`, `mintForConfirmedClaim`, `runSettlement`) needed no behaviour change
+(`mint`, the claim mint, `runSettlement`) needed no behaviour change
 and now say so: `mint` is minor-only pass-through, and its two rule callers
 convert one frame up. `server/economy.test.ts` runs the whole path at 0 and at 4
 against a scratch schema each, and each case reads the ledger AND the allowance
