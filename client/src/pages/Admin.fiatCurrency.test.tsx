@@ -3,16 +3,31 @@
  * A founder can say what currency their village's money is in.
  *
  * WHY THIS FIELD DID NOT EXIST, AND WHAT IT COST. `shared/gameConfig.ts`
- * defaults `project.fiatCurrency` to "CRC" and, until this screen, no file
+ * defaulted `project.fiatCurrency` to "CRC" and, until this screen, no file
  * under client/src mentioned the key at all. So every fork of this platform
  * shipped declaring Costa Rican colones, and there was no screen anywhere
  * that let a founder disagree.
  *
- * It also held a guard open. `scripts/check-identity-keys.mjs` carries a
- * known-pending list that has been shrinking since 2026-08-31, and its last
- * remaining entry is this key, recorded with the exit condition that the
+ * It also held a guard open. `scripts/check-identity-keys.mjs` carried a
+ * known-pending list that had been shrinking since 2026-08-31, and its last
+ * remaining entry was this key, recorded with the exit condition that the
  * founder sets it in Admin. The guard was waiting on a screen nobody had
  * built.
+ *
+ * BOTH ARE CLOSED AS OF 2026-09-23, and the ordering is the point: the founder
+ * entered the village's own currency on THIS screen first, so the village held
+ * its own copy, and only then did the platform default go blank. Doing it the
+ * other way round is the 2026-08-31 outage. `defaultDisplayCurrency` answers
+ * CHF for a project that declares nothing, so blank reaches the ruling without
+ * writing one country's money into platform code. The pending list is now
+ * empty and its ceiling is zero.
+ *
+ * What made it wait was not what the pending entry claimed. That entry said
+ * prices render against the key, which is wrong: `formatMoney` returns the
+ * amount's OWN currency when there is no rate. The real reader is
+ * `redemptionCurrencies` (server/lib/redemption.ts), which falls back to the
+ * merged project currency, so the default decided what a village SETTLES a
+ * redemption in. Money leaving, not a label.
  *
  * WHAT THE ASSERTIONS READ. Money, not configuration. The last test runs the
  * saved document back through `defaultDisplayCurrency`, the same shared
@@ -43,9 +58,21 @@ const IMAGE_KEYS = [
   "masterPlanHero", "logo", "heartLogo", "favicon",
 ];
 
-/** The platform default, quoted from shared/gameConfig.ts, because a village
- *  shipping THIS is the whole problem. */
-const PLATFORM_DEFAULT = "CRC";
+/**
+ * A currency the daily rate table does NOT carry.
+ *
+ * This was named PLATFORM_DEFAULT and quoted `shared/gameConfig.ts`, because a
+ * village shipping it was the whole problem. That default went blank on
+ * 2026-09-23, so the old name described history and the tests below would have
+ * kept reading as though it were still live.
+ *
+ * The value stays CRC, and the two uses it has are both about the rate table
+ * rather than about any default: the ECB daily list does not carry it
+ * (measured 2026-08-21, server/lib/fxRates.ts), which is exactly what makes it
+ * the right code for the unconverted warning, and it is the first village's
+ * real currency, which is why the field cannot be a closed dropdown.
+ */
+const UNCOVERED_CODE = "CRC";
 
 const emptyProject = () => ({
   name: "", tagline: "", memberName: "", location: "", country: "",
@@ -75,7 +102,14 @@ const stub = () => {
         return {
           ok: true,
           status: 200,
-          json: async () => ({ brand: current, defaults: { project: { ...emptyProject(), fiatCurrency: PLATFORM_DEFAULT }, images: Object.fromEntries(IMAGE_KEYS.map((k) => [k, ""])) } }),
+          // `defaults` carries a BLANK currency, which is what the route now
+          // serves: the platform default went empty on 2026-09-23. It fed CRC
+          // here while that was the shipped default, and leaving it would have
+          // meant this stub described a version of the server that no longer
+          // exists. Nothing asserts against it (it reaches the placeholder and
+          // the "Platform default:" line only), so the accurate value costs
+          // nothing and stops the fixture teaching the wrong thing.
+          json: async () => ({ brand: current, defaults: { project: emptyProject(), images: Object.fromEntries(IMAGE_KEYS.map((k) => [k, ""])) } }),
         };
       }
       return { ok: true, status: 200, json: async () => ({}) };
@@ -110,7 +144,7 @@ describe("the founder can set the village's own currency", () => {
   it("says so when a chosen currency has no daily rate", async () => {
     const user = userEvent.setup();
     await open();
-    await user.type(field(), PLATFORM_DEFAULT);
+    await user.type(field(), UNCOVERED_CODE);
     await waitFor(() =>
       expect(screen.getByText(/no daily rate for CRC/i), "a founder was not told their currency shows unconverted").toBeTruthy(),
     );
@@ -147,6 +181,6 @@ describe("the founder can set the village's own currency", () => {
      * on earth.
      */
     expect(defaultDisplayCurrency(ctx.current.project)).toBe("CHF");
-    expect(defaultDisplayCurrency(ctx.current.project)).not.toBe(PLATFORM_DEFAULT);
+    expect(defaultDisplayCurrency(ctx.current.project)).not.toBe(UNCOVERED_CODE);
   });
 });

@@ -140,8 +140,13 @@ describe.skipIf(!configured)("the pool the suites run on", () => {
      * The failure this whole change exists for, reproduced without depending on
      * the host's own zone.
      *
-     * A `TIMESTAMP` read with `UNIX_TIMESTAMP` is interpreted in the SESSION
-     * zone. A host that observes daylight saving therefore reads the same
+     * A WALL-CLOCK STRING passed to `UNIX_TIMESTAMP` is interpreted in the
+     * SESSION zone, which is the case these cases drive. Read that precisely:
+     * `UNIX_TIMESTAMP` of a `NOW()`-written COLUMN is self-consistent and is
+     * the remedy, because both ends are evaluated in the same frame. It is the
+     * literal, and a value compared against a JS `Date`, that move.
+     *
+     * A host that observes daylight saving therefore reads the same
      * stored wall clock differently in February and in April, and a suite
      * written against one of those dates is wrong by an hour more or less than
      * a suite written against the other. Two hard-coded numeric offsets stand

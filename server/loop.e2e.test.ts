@@ -1473,8 +1473,13 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // epoch", which described the mechanism exactly and read as a policy. That
     // is what makes this shape expensive: the number was not wrong about the
     // engine, it was right about an engine that was wrong, so nothing in this
-    // file ever looked like it needed checking. Boot now starts the clock. See
-    // `startEconomyEpoch` and `server/lib/economyEpoch.test.ts`.
+    // file ever looked like it needed checking.
+    //
+    // The epoch is GONE now, so three is simply what three confirmed quests
+    // pay, with nothing to lose the first one to. Rye ruled on 2026-09-21 that
+    // acknowledging work done before an economy launched is encouraged, and
+    // the audit on `116d3bb` had already found the guard unreachable. See
+    // `server/lib/economyEpoch.test.ts`, which keeps the account of the defect.
     expect(credits.quest_consent).toBe(75 * credit);
     // And nothing else issued a credit: the total over the faucet equals the
     // two sources named, so a third channel appearing fails here.
@@ -1482,6 +1487,29 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       Object.values(credits).reduce((n, v) => n + v, 0),
     );
     expect(poolRow?.issuedToDate).toBe(1075 * credit);
+
+    /*
+     * AND A REAL BOOT WRITES NO ECONOMY EPOCH.
+     *
+     * This is the one assertion about the removal that a source guard cannot
+     * make, because it is about what the server DOES on the way up rather than
+     * about what the tree says. `server/index.ts` used to call
+     * `startEconomyEpoch(getPool())` before serving a request, which stamped
+     * `app_config.economy-state` on the first boot of every village. Nothing
+     * read that row for any decision, so writing it was a boot side effect
+     * with no reader, and removing the write is the behaviour change in this
+     * lane.
+     *
+     * The child process above is a real `dist/index.js` against a scratch
+     * schema, which is the only place this can be measured honestly. Existing
+     * rows in a deployed village are left alone on purpose: an orphaned row is
+     * inert, and a migration to delete rows would risk a fork nobody can see
+     * for no gain.
+     */
+    const [epochRows] = await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT `config_key` FROM `app_config` WHERE `config_key` = 'economy-state'",
+    );
+    expect(epochRows).toEqual([]);
   });
 
   it("S13: modules ship OFF, lifecycle guards hold, and preview never leaks", async () => {
@@ -4252,6 +4280,68 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // …while real-world acts wait for a named human.
     const backups = launch.json.items.find((i: any) => i.id === "backups-drilled");
     expect(backups.state).toBe("missing");
+
+    /*
+     * THE TWO FACTS ONLY A VILLAGE CAN STATE, wired end to end.
+     *
+     * A registry entry whose `checkKey` names no resolver does not disappear:
+     * `launchStatus` reports it as missing with "No check wired for ...",
+     * which reads like a question on the page and is a wiring bug. Nothing
+     * else in the build would catch a typo in these two keys, so this asks the
+     * live route.
+     *
+     * A fresh village has answered neither, and the detail is the sentence a
+     * founder acts on rather than a scolding.
+     */
+    for (const id of ["village-timezone", "village-currency"]) {
+      const item = launch.json.items.find((i: any) => i.id === id);
+      expect(item, `no launch item "${id}"`).toBeTruthy();
+      expect(item.detail).not.toContain("No check wired");
+      expect(item.state).toBe("missing");
+      // A warning warns. Neither of these may stop a village launching.
+      expect(item.severity).toBe("recommended");
+      // The address names the control, not the screen it lives on.
+      expect(item.fixAt).toContain("setting=");
+    }
+    // The timezone item names the zone the village is actually running on, so
+    // a founder reads what they are inheriting rather than an abstraction.
+    expect(launch.json.items.find((i: any) => i.id === "village-timezone").detail).toMatch(/[A-Za-z]+\/[A-Za-z_]+/);
+
+    // ANSWERING THE CURRENCY IS STORING ONE, and a village may answer with the
+    // platform's own code: the point is that somebody said it.
+    const saidCurrency = await api("PUT", "/api/admin/brand", { project: { fiatCurrency: "chf" } }, founderToken);
+    expect(saidCurrency.status).toBe(200);
+    const afterCurrency = (await api("GET", "/api/admin/launch", undefined, founderToken)).json;
+    expect(afterCurrency.items.find((i: any) => i.id === "village-currency").state).toBe("ok");
+    // Uppercased on the way in, so "chf" and "CHF" cannot become two villages'
+    // worth of stored value.
+    expect((await api("GET", "/api/admin/brand", undefined, founderToken)).json.brand.project.fiatCurrency).toBe("CHF");
+
+    // Whitespace is not an answer: it normalises to blank, which means
+    // inherit, and the question comes back rather than the save being refused.
+    const spaces = await api("PUT", "/api/admin/brand", { project: { fiatCurrency: "   " } }, founderToken);
+    expect(spaces.status).toBe(200);
+    expect((await api("GET", "/api/admin/brand", undefined, founderToken)).json.brand.project.fiatCurrency).toBe("");
+    const afterSpaces = (await api("GET", "/api/admin/launch", undefined, founderToken)).json;
+    expect(afterSpaces.items.find((i: any) => i.id === "village-currency").state).toBe("missing");
+
+    // A code that is not a code is refused whole, and stores nothing.
+    const bad = await api("PUT", "/api/admin/brand", { project: { name: "Kept", fiatCurrency: "EURO" } }, founderToken);
+    expect(bad.status).toBe(400);
+    expect((await api("GET", "/api/admin/brand", undefined, founderToken)).json.brand.project.name).not.toBe("Kept");
+
+    // CONFIRMING THE TIMEZONE IS THE ONLY WAY TO AGREE with an inherited one,
+    // and it must move no seat: every seat has a term by ruling.
+    const seasons = (await api("GET", "/api/admin/seasons", undefined, founderToken)).json;
+    const confirmZone = await api(
+      "PUT", "/api/admin/seasons",
+      { seasons: seasons.seasons, cadence: seasons.cadence, timezone: seasons.timezone, confirmTimezone: true },
+      founderToken,
+    );
+    expect(confirmZone.status).toBe(200);
+    expect(confirmZone.json.seatsMoved).toEqual({ permission: 0, org: 0 });
+    const afterZone = (await api("GET", "/api/admin/launch", undefined, founderToken)).json;
+    expect(afterZone.items.find((i: any) => i.id === "village-timezone").state).toBe("ok");
 
     // Confirm a manual item — attributed — and see it flip.
     const confirmed = await api("POST", "/api/admin/launch/confirm", { id: "backups-drilled", done: true }, founderToken);

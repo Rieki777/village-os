@@ -141,13 +141,25 @@ authorisation defect.
 
 ### What a stranded hold looks like, and who finds it
 
-Said plainly because the obvious answer is wrong: the failed-actions report does
-NOT show one. It keeps an attempt only while a landing is `not_applicable`,
-`pending`, `applying` or `stalled`, and a vetoed or written-off ballot is none of
-those. Two reads do show it: `unfinishedLandings`, and this module's own
-`holdReconciliation`, which compares `sys:redemption-hold` against the sum of open
-rows per token and is the one that names the money. Governance has filed widening
-the report separately.
+The failed-actions report shows one, down ONE path and not in general, so it is
+worth being exact about which. Governance's widening landed in #309: a redemption
+decision that was vetoed inside its window or written off, whose give-back itself
+then failed and recorded an error, appears on What's Failing with how it was
+stopped. That is `failedReleases`, and it is the one case where a stopped
+decision survives the report's usual rule of keeping only landings that are
+`not_applicable`, `pending`, `applying` or `stalled`.
+
+It deliberately leaves two neighbouring cases off, and the function's own
+docblock says why. A scheduled landing that kept failing until it was written off
+leaves an identical-looking row, an open attempt carrying an error on an
+`expired` decision, but no give-back failed there; the note's own words tell the
+two apart (`isReleaseFailure`), and it stays governance's record. An open attempt
+carrying no error records no failure at all, so it stays off too.
+
+So a hold can still be stranded with nothing on the tab. `unfinishedLandings`
+shows one the tab does not, and this module's own `holdReconciliation`, which
+compares `sys:redemption-hold` against the sum of open rows per token, is the one
+that names the money.
 
 ## Tests
 

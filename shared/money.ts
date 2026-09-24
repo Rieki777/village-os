@@ -109,6 +109,102 @@ export function defaultDisplayCurrency(project: { country?: string | null; fiatC
   return "CHF";
 }
 
+/**
+ * THE DAILY RATE LIST, HERE RATHER THAN BESIDE THE FETCHER.
+ *
+ * `server/lib/fxRates.ts` fetches the ECB's daily reference list and owns
+ * everything about HOW. What the list CONTAINS is a fact three surfaces need
+ * before any fetching happens: Make This Yours, the member's currency picker,
+ * and the redemption currencies dial. A copy in `shared/` would answer them
+ * and go stale the day a quote is added, so the list lives here and the
+ * fetcher imports it. One definition, and the question below is derived from
+ * it rather than hand-typed.
+ *
+ * CRC is deliberately absent, measured 2026-08-21: the ECB daily list does not
+ * carry it. That is why this is a question and not a rule.
+ */
+export const FX_BASE = "EUR";
+
+/** The quotes fetched daily. All present on the ECB list (verified). */
+export const FX_QUOTES = [
+  "USD", "CHF", "GBP", "JPY", "CAD", "AUD", "NZD",
+  "SEK", "NOK", "DKK", "MXN", "BRL", "PLN", "CZK",
+] as const;
+
+/**
+ * DOES THIS CURRENCY CONVERT BY ITSELF, every day, with nobody typing a rate?
+ *
+ * A QUESTION, AND NOT A REFUSAL. It answers what the rate source carries and
+ * stops there; whether a surface refuses an unquoted code, warns about it, or
+ * says nothing at all is a product decision and belongs to the surface. Rye's
+ * words on the currency picker, read literally, would refuse CRC, which is the
+ * first village's own currency, so no caller of this refuses anything until he
+ * has said which he meant.
+ *
+ * "No daily rate" is not "no rate": an admin can record a manual row, and the
+ * amounts still show, unconverted, to anyone viewing in another currency. So
+ * this is the narrow fact it claims to be.
+ */
+export function hasDailyRate(code: unknown): boolean {
+  const c = String(code ?? "").trim().toUpperCase();
+  if (!c) return false;
+  return c === FX_BASE || (FX_QUOTES as readonly string[]).includes(c);
+}
+
+/**
+ * NORMALISE THE CURRENCY ON AN INCOMING BRAND OVERLAY, IN PLACE, or say what
+ * is wrong with it.
+ *
+ * The caller is `PUT /api/admin/brand`, which merges the whole Make This Yours
+ * form in one body. The guard matters as much as the rule: a body that does
+ * NOT carry `fiatCurrency` must be left alone, because normalising an absent
+ * field would write blank over a currency the village had already answered,
+ * on every unrelated brand save.
+ *
+ * Returns null when there is nothing to refuse, so the route reads as two
+ * lines. It lives here rather than there for the same reason the reasoning
+ * does: `server/index.ts` sits at exactly its line baseline, and the rule is
+ * about currency rather than about routing.
+ */
+export function normaliseProjectCurrency(project: unknown): string | null {
+  if (!project || typeof project !== "object") return null;
+  const bag = project as Record<string, unknown>;
+  if (!("fiatCurrency" in bag)) return null;
+  const result = projectCurrencyToStore(bag.fiatCurrency);
+  if (!result.ok) return result.error;
+  bag.fiatCurrency = result.value;
+  return null;
+}
+
+/**
+ * WHAT THE PROJECT'S OWN CURRENCY BECOMES ON ITS WAY INTO STORAGE.
+ *
+ * `PUT /api/admin/brand` merged whatever arrived, so a value of spaces stored
+ * as spaces, and the three surfaces then told three different stories: the
+ * site fell back (every reader trims), the admin box showed empty with the
+ * platform's own code as its placeholder, and anything asking "has this
+ * village said?" saw a non-empty string and answered yes.
+ *
+ * TRIMMED AND UPPERCASED FIRST, THEN JUDGED. So whitespace alone becomes
+ * blank, and blank MEANS INHERIT: an overlay field left empty, exactly like
+ * every other field in `brand.project`, never an error. A code that is still
+ * wrong after trimming is refused by the sentence `displayCurrencyProblem`
+ * already gives a member setting their own display currency, because two
+ * sentences for one rule is how they drift.
+ *
+ * WHY WHITESPACE IS NORMALISED RATHER THAN REFUSED: the brand save carries
+ * the whole Make This Yours form in one request. Refusing it over characters
+ * the form never showed anybody would throw away the name, the tagline and
+ * the rest of a founder's afternoon.
+ */
+export function projectCurrencyToStore(
+  raw: unknown,
+): { ok: true; value: string } | { ok: false; error: string } {
+  const value = String(raw ?? "").trim().toUpperCase();
+  const problem = displayCurrencyProblem(value);
+  return problem ? { ok: false, error: problem } : { ok: true, value };
+}
+
 /** A display-currency preference is three letters, or nothing at all. */
 export function displayCurrencyProblem(v: unknown): string | null {
   if (v === null || v === undefined || v === "") return null;

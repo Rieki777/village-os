@@ -738,6 +738,29 @@ jobs:
         # Dependency-free, no database.
         run: node scripts/check-route-limits.mjs
 
+      - name: Boot path imports
+        # Nothing heavy may be STATICALLY imported from server/index.ts.
+        #
+        # server/lib/base-reads.ts imported viem and viem/chains at module top
+        # level, and index.ts imports that file, so every boot of the bundle
+        # evaluated viem's 1,202-module graph before the entry module's first
+        # statement ran — whether or not anything ever read the chain, and in
+        # total silence, because no server code had printed yet. Measured on
+        # the tree that added this guard: 74.3s to the first byte of log output
+        # on the first boot after a build, median 13.8s over five warm boots,
+        # against the 120s deadline 56 e2e suites spawn the bundle under. Two
+        # lanes in one day met "server did not start in 120s" with an empty log
+        # and stopped to disprove their own diffs.
+        #
+        # The budget rule is the durable half: any boot-reachable package over
+        # 3,000 installed files fails, so a dependency nobody has thought about
+        # is measured the day it arrives rather than the day a suite times out.
+        # The walk agrees with esbuild's own metafile at 341 files, and the
+        # count is printed on green as well as red.
+        #
+        # Before the build, with the other guards: it reads source files.
+        run: node scripts/check-boot-imports.mjs
+
       - name: Build
         id: build
         # Runs even behind a failed guard, for the same reason the suite does,

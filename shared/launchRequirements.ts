@@ -121,6 +121,58 @@ export function recognitionNameCheck(
   return { state: "ok", detail: `Recognition is called “${n}” here` };
 }
 
+/**
+ * HAS THIS VILLAGE SAID WHERE IT IS?
+ *
+ * Two facts the platform ships a default for and no screen ever asks about.
+ * The season timezone is `America/Costa_Rica` and the currency is whatever
+ * `GAME_CONFIG` carries, and both are inherited in silence by every fork: the
+ * season list derives dated seasons from the day it is asked, so the season
+ * item below it goes green without anybody opening the tab, and the currency
+ * box sits empty behind a placeholder that reads like an answer.
+ *
+ * ANSWERED, NOT MERELY DEFAULTED, and the two are different questions. For the
+ * currency a stored value IS the answer, because the box holds the village's
+ * own value and blank means inherit. For the timezone a stored value proves
+ * nothing at all: the Season tab is handed the normalised document, so every
+ * save writes the platform's zone back whether or not a human looked at it,
+ * which is why the season document carries `timezoneAnswer` and this reads
+ * that instead.
+ *
+ * RECOMMENDED, NEVER BLOCKING. A warning warns; a village that wants to launch
+ * on the defaults may. What it may not do is never be asked.
+ */
+export function timezoneAnswerCheck(
+  answered: boolean,
+  timezone: string,
+): { state: "ok" | "missing"; detail: string } {
+  return answered
+    ? { state: "ok", detail: `Days here run on ${timezone}, as somebody here confirmed` }
+    : {
+        state: "missing",
+        detail: `Days here run on ${timezone}, which is where the platform starts and not an answer anybody here gave`,
+      };
+}
+
+/**
+ * The village's own currency: the trimmed stored value, or nothing.
+ *
+ * Compared against emptiness rather than against the platform's default,
+ * unlike `recognitionNameCheck` above. A village may perfectly well count in
+ * the same currency the platform ships, and typing it is the answer.
+ */
+export function projectCurrencyCheck(
+  storedCurrency: string | null | undefined,
+): { state: "ok" | "missing"; detail: string } {
+  const code = String(storedCurrency ?? "").trim().toUpperCase();
+  return code
+    ? { state: "ok", detail: `Prices here are counted in ${code}` }
+    : {
+        state: "missing",
+        detail: "Prices follow the platform's own currency, which nobody here has confirmed",
+      };
+}
+
 /** The platform's own requirements. Listings add theirs below, from the registry. */
 const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
   // ── Identity: the shared-password exit is the platform's oldest debt ──────
@@ -283,6 +335,26 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
     checkKey: "modules-decided",
     fixAt: "/admin?tab=modules",
     fixLabel: "Open Modules",
+  },
+  {
+    id: "village-timezone",
+    group: "brand",
+    title: "Say which timezone the village keeps",
+    why: "A day here starts at midnight somewhere, and the platform ships Costa Rica's. Season turns, seat terms, the claims window, every time on the calendar and the weekly brief all read it, so a village that never says lives on somebody else's clock.",
+    severity: "recommended",
+    checkKey: "village:timezone",
+    fixAt: "/admin?tab=season&setting=season.timezone",
+    fixLabel: "Open Seasons",
+  },
+  {
+    id: "village-currency",
+    group: "brand",
+    title: "Say which currency your prices are in",
+    why: "Every price on the site is quoted in it, and it is what a member sees before choosing a display currency of their own. Left unanswered, a village shows amounts in the currency the platform happens to ship.",
+    severity: "recommended",
+    checkKey: "village:currency",
+    fixAt: "/admin?tab=setup&setting=project.fiatCurrency",
+    fixLabel: "Open Project Settings",
   },
   {
     id: "season-seeded",

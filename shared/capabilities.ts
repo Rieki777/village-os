@@ -485,34 +485,39 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
 };
 
 /**
- * WHICH POWERS MUST BE IN THE VILLAGE'S HANDS BEFORE THE HANDOVER COUNTS AS
- * DONE.
+ * THE POWERS THE FOUNDING STEWARDS HOLD AT LAUNCH, AND THE POWERS THAT HAVE
+ * TO REACH THE VILLAGE BEFORE THE HANDOVER COUNTS AS DONE.
  *
- * Rye, 2026-09-23, on who holds the pen over the governing purpose statement:
- * "Founder keeps the pen until they give over all steward powers to the
- * village."
+ * Rye, 2026-09-24: "The founders automatically become stewards and hold all
+ * powers at launch." Asked what "all powers" names, he said ALL NINETEEN
+ * ENTRUSTABLE POWERS and not a chosen subset. Rye, 2026-09-23, on who holds
+ * the pen over the governing purpose statement: "Founder keeps the pen until
+ * they give over all steward powers to the village." Both sentences are about
+ * the same set, at its two ends, so there is one constant for both.
  *
- * ── THIS IS A READING OF THOSE WORDS, AND THE ALTERNATIVE IS LIVE ──────────
+ * ── THIS IS A READING OF THOSE WORDS, AND IT HAS A PRODUCT CONSEQUENCE ─────
  *
- * "All steward powers" is read here as ALL TRANSFERABLE POWERS, which is 19
- * keys today. That reading is a judgement and it has a product consequence
- * worth stating: on Amora it puts the pen with the founder for as long as the
- * whole handover takes, and the handover stands at zero of nineteen. A
- * NARROWER NAMED SUBSET is the live alternative, and it would put the pen and
- * the Saberra warnings in the village's hands far sooner. That call is Rye's
- * and it has been put to him.
+ * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 19 keys
+ * today. The other 15 are not withheld from anybody: they are personal acts
+ * and deployment plumbing that were never anyone's to hold, and `TRANSFERABLE`
+ * carries the reasoning key by key.
  *
- * So this is ONE constant that one function reads, and narrowing it is an
- * edit to this one expression. Every caller and every test follows it, and
- * nothing else in the codebase has to be found. Whoever changes it is
- * answering a question that was left open, never breaking an invariant.
+ * Read this way, a launched village holds all 19 in the founding seat and has
+ * handed over none of them, which is the arc starting rather than finishing.
+ * `villageHandoverState` in server/lib/capabilityHolding.ts measures how far
+ * along it is, and it asks the narrow question on purpose: a power counts as
+ * handed over only once a role OTHER than the founding seat holds it.
+ *
+ * So this is ONE constant that the seating and the handover read, and
+ * narrowing it is an edit to this one expression. Every caller and every test
+ * follows it, and nothing else in the codebase has to be found.
  *
  * DERIVED, NEVER HAND-LISTED. `TRANSFERABLE` is a `Record` on purpose, so a
  * capability added to the union with no line there is a type error and a
  * decision somebody makes. A hand-kept list beside it would be a promise
  * nobody checks, and it would go stale in exactly the direction that matters:
- * a new transferable power missing from the set would make the handover read
- * complete while the village held nothing of it.
+ * a new transferable power missing from the set would be a power the founding
+ * stewards never received and the handover never had to move.
  */
 export const HANDOVER_SET: readonly Capability[] = ALL_CAPABILITIES.filter((c) => TRANSFERABLE[c]);
 

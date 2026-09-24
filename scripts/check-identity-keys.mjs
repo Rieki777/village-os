@@ -193,23 +193,46 @@ export const KNOWN_PENDING = [
   // is the ordering this guard exists to enforce, and it is the opposite
   // of country's reason above: those two DO render, so they had to wait
   // for the founder; country never rendered anywhere, so it did not.
-  {
-    key: "project.fiatCurrency",
-    since: "2026-08-31",
-    why: "prices render against it, so clearing it before the founder sets one changes displayed money",
-  },
+  // project.fiatCurrency was the last entry and GRADUATED on 2026-09-23, after
+  // the founder entered Amora's own currency on the live Admin screen and
+  // confirmed it. Its recorded reason was wrong and the right one is worse:
+  // the note said "prices render against it", but `formatMoney` returns the
+  // amount's own currency when there is no rate, so a relabel was never
+  // possible. `redemptionCurrencies` (server/lib/redemption.ts) falls back to
+  // the merged project currency, so the default decides what a village SETTLES
+  // A REDEMPTION IN. It waited on the founder because money moves, not pixels.
 ];
 
 /**
  * 2026-08-31: five. 2026-09-02: three, when project.country graduated.
- * THIS NUMBER ONLY EVER FALLS.
+ * 2026-09-03: two, when location and footerBlurb went. 2026-09-23: ZERO, when
+ * project.fiatCurrency went. THIS NUMBER ONLY EVER FALLS.
  *
  * It has to equal KNOWN_PENDING.length, so adding an entry means editing a
  * number a line under the sentence forbidding it. That is the point: the list
  * cannot grow by accident, only by a deliberate edit that shows up in a diff
  * next to this comment.
+ *
+ * ── THE LIST IS EMPTY AND THE MACHINERY STAYS, ON PURPOSE ──────────────────
+ *
+ * The header says that when the last entry goes you delete KNOWN_PENDING and
+ * PENDING_CEILING and leave the plain rule behind. That step is deliberately
+ * NOT taken here, and the reason is a key this guard cannot see yet rather
+ * than caution.
+ *
+ * `season.timezone` still ships "America/Costa_Rica" in shared/gameConfig.ts.
+ * It is not in IDENTITY_KEYS, so nothing checks it: `auditIdentity` walks a
+ * FIXED list, which catches a rename and can never catch an addition. Once
+ * that hole is closed, the timezone has to land in one list or the other, and
+ * nobody has confirmed the live village holds its own copy. That makes it a
+ * pending entry by the same rule fiatCurrency just graduated under.
+ *
+ * So deleting this machinery today means rebuilding it within weeks, and a
+ * ratchet rebuilt is a ratchet whose history was thrown away. Empty is the
+ * correct reading right now: zero keys are waiting on the founder. Delete both
+ * when the timezone question is settled and no key is left that needs them.
  */
-export const PENDING_CEILING = 1;
+export const PENDING_CEILING = 0;
 
 // ── Reading the config ──────────────────────────────────────────────────────
 

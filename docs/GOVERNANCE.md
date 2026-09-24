@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `66bfeda5c54c9b21`, which regenerating reproduces.
+It describes the sources at fingerprint `ed5de96b976bd501`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -165,7 +165,6 @@ The dials a village holds, with the ring that says who may move each one and the
 | `governance.window_power_transfer` | When moving a power to a role can go to the vote | `open` | `always_open` | text | when it is written |
 | `governance.window_power_grant` | When granting a power can go to the vote | `open` | `always_open` | text | when it is written |
 | `governance.window_power_return` | When handing a power back can go to the vote | `open` | `always_open` | text | when it is written |
-| `governance.window_gps_change` | When changing the governing purpose can go to the vote | `open` | `always_open` | text | when it is written |
 | `governance.window_grace_days` | How long a proposal coming back may open outside its window | `open` | `7` | 0 to 90 days | when it is written |
 | `governance.weight_mode` | How voting weight is assigned | `founder` | `equal` | `equal`, `token`, `custom` | when it is written |
 | `governance.weight_token` | The weight token | `founder` | `gratitude` | text | when it is written |
@@ -189,7 +188,7 @@ The dials a village holds, with the ring that says who may move each one and the
 <!-- written by a person: dialsStorage -->
 Only CHANGED values are stored. An absent row means the platform default in the table above, so a fresh village starts with every one of these and no rows at all.
 
-11 settings across the whole registry wait for a cycle close instead of applying when they are written: `cycle.mode`, `economy.voice_claim_threshold`, `economy.claims_week_days`, `economy.claims_week_starts`, `gratitude.base_budget`, `gratitude.pool_per_cycle`, `gratitude.pool_token`, `gratitude.full_sends_per_cycle`, `feed.heart_amount`, `feed.max_hearts_per_recipient_per_cycle`, `ledger.admin_mint_cycle_cap`. The per-stage sending multipliers carry the same timing through their own override, one for each rung of the ladder. None of the 44 settings above is one of them, so every governance dial takes effect the moment it is written.
+11 settings across the whole registry wait for a cycle close instead of applying when they are written: `cycle.mode`, `economy.voice_claim_threshold`, `economy.claims_week_days`, `economy.claims_week_starts`, `gratitude.base_budget`, `gratitude.pool_per_cycle`, `gratitude.pool_token`, `gratitude.full_sends_per_cycle`, `feed.heart_amount`, `feed.max_hearts_per_recipient_per_cycle`, `ledger.admin_mint_cycle_cap`. The per-stage sending multipliers carry the same timing through their own override, one for each rung of the ladder. None of the 43 settings above is one of them, so every governance dial takes effect the moment it is written.
 
 ## What each kind of decision asks
 
@@ -202,17 +201,15 @@ What each kind of decision asks. A subject declares MINIMUMS and the village's o
 | `mint_rule` | 0% | 50% | 0 | no | the village's own | yes |
 | `governance_mode` | 97% | 97% | 0 | no | `custom` | yes |
 | `cycle_settlement` | 0% | 0% | 0 | no | the village's own | yes |
-| `gps_change` | 0% | 50% | 0 | no | the village's own | yes |
 
 - `village_launch`: Starting the Game asks every member on the roll to vote yes. An abstention is not a yes, and a vote nobody cast is not a yes either.
 - `mint_rule`: This one changes what the village mints, so it asks for more than half the village's voting weight to take part. How much of that has to agree is the village's own setting.
 - `governance_mode`: This one changes how every vote in the village is counted, so it asks the constitutional bar: almost everybody present, and almost everybody in favour.
 - `cycle_settlement`: Settling a moon asks whatever this village asks of any decision. It happens every moon, so it is not priced above the village's own bar.
-- `gps_change`: This one changes the statement every later change is judged against, so it asks for more than half the village's voting weight to take part. How much of that has to agree is the village's own setting.
 
 Every other subject type keeps the village's own dials: `80% unity` and `20% quorum` on a fresh village, with no floor of its own.
 
-A member drafts through the wizard, which knows 10 types: `role_application`, `mechanics`, `agreement`, `badge_grant`, `quest_payout`, `power_transfer`, `power_grant`, `power_return`, `role_seat`, `gps_change`. 6 of them can be taken to a binding vote today (`mechanics`, `power_transfer`, `power_grant`, `power_return`, `role_seat`, `gps_change`); the other 4 open as practice votes (`role_application`, `agreement`, `badge_grant`, `quest_payout`).
+A member drafts through the wizard, which knows 9 types: `role_application`, `mechanics`, `agreement`, `badge_grant`, `quest_payout`, `power_transfer`, `power_grant`, `power_return`, `role_seat`. 5 of them can be taken to a binding vote today (`mechanics`, `power_transfer`, `power_grant`, `power_return`, `role_seat`); the other 4 open as practice votes (`role_application`, `agreement`, `badge_grant`, `quest_payout`).
 
 <!-- written by a person: practiceVotes -->
 The wizard offers types the executors have not reached. Those open as practice votes: the village holds a real decision, reads the real answer, and nothing moves. It is a ladder and never a scorecard.
@@ -234,7 +231,6 @@ What closing a decision DOES, per subject type, and the one place that question 
 | `power_transfer` | Moves a power from the admin panel to a role the village names. | its own entry in the close dispatcher |
 | `power_grant` | Gives a role a power it does not carry yet. | its own entry in the close dispatcher |
 | `power_return` | Hands a power the village was holding back to the admin panel. | its own entry in the close dispatcher |
-| `gps_change` | Rewrites the governing purpose statement, the sentence every proposal opened after it answers to. Nothing already decided is reopened. | its own entry in the close dispatcher |
 | `role_declare` | Writes a role into being: its name and what it is for. | its own entry in the close dispatcher |
 | `role_seat` | Puts a named member into a seat. | its own entry in the close dispatcher |
 | `role_unseat` | Takes a named member out of a seat. | its own entry in the close dispatcher |
@@ -242,7 +238,7 @@ What closing a decision DOES, per subject type, and the one place that question 
 | `governance_mode` | Changes how one vote is weighed, and which token carries the weight when it is a token. | its own entry in the close dispatcher |
 | `mint_rule` | Changes what the village mints and on what terms. It shares the dial executor and carries a higher quorum floor. | the same executor as `mechanics`, one executor and two subject types |
 
-13 subject types execute something. Whether a member's vote BINDS is derived from this same table, so the word on the decision page and the behaviour at the close cannot come apart.
+12 subject types execute something. Whether a member's vote BINDS is derived from this same table, so the word on the decision page and the behaviour at the close cannot come apart.
 
 ## Two kinds of decision, and when each one happens
 
@@ -338,7 +334,6 @@ A village may say WHEN a kind of proposal can be opened. Per proposal kind it ch
 | `governance.window_power_transfer` | When moving a power to a role can go to the vote | `always_open` |
 | `governance.window_power_grant` | When granting a power can go to the vote | `always_open` |
 | `governance.window_power_return` | When handing a power back can go to the vote | `always_open` |
-| `governance.window_gps_change` | When changing the governing purpose can go to the vote | `always_open` |
 
 `governance.window_grace_days` ships `7` days: how long anything coming back may open outside its window.
 
@@ -493,8 +488,6 @@ What a village publishes, read from the route registrations. The door on each ro
 | POST | `/api/governance/power-grants` | signed in | none |
 | POST | `/api/governance/power-returns` | signed in | none |
 | POST | `/api/governance/power-transfers` | signed in | none |
-| GET | `/api/governance/purpose` | signed in | none |
-| POST | `/api/governance/purpose-changes` | signed in | none |
 | POST | `/api/governance/role-declarations` | signed in | none |
 | POST | `/api/governance/role-seats` | signed in | none |
 | POST | `/api/governance/role-unseats` | signed in | none |
@@ -504,7 +497,7 @@ What a village publishes, read from the route registrations. The door on each ro
 | GET | `/api/governance/weights` | signed in | none |
 | GET | `/api/governance/wizard` | signed in | none |
 
-52 routes: 38 under the governance prefix and 14 under the mechanics prefix. 9 of them answer a stranger, 4 ask for a named power, and 0 could not be classified from the code by this reader.
+50 routes: 36 under the governance prefix and 14 under the mechanics prefix. 9 of them answer a stranger, 4 ask for a named power, and 0 could not be classified from the code by this reader.
 
 The routes that answer a stranger are the village's public record. At the module's `public` lifecycle they serve the ballot list, one decision in full and the objection lineage to anybody on the internet, which includes each voter's first name, their choice and their frozen weight. Ruling 22 changes that and is staged.
 
@@ -545,7 +538,7 @@ What is broken today, by name. A document that only described the parts that wor
 - **A stored reason on a no vote is shown to nobody.** The widget invites a member to say why and the reader that serves votes drops it.
 - **The module lifecycle is edited by hand**, so a village turns its own governance on through the admin panel and never through a vote.
 - **Four displays about the hub bridge are false.** The sync flag is never set true so the card always says pending, the space check idles on every delivery, an outcome's source is hardcoded, and the card credits a hub with issuing a secret it does not issue.
-- **Two schema comments have drifted.** The engine's own migration lists five subject types in the column comment where the dispatcher now executes 13, and a later migration's header names the number of the one before it. Neither is edited, because a shipped migration file is never edited; both are stated here instead.
+- **Two schema comments have drifted.** The engine's own migration lists five subject types in the column comment where the dispatcher now executes 12, and a later migration's header names the number of the one before it. Neither is edited, because a shipped migration file is never edited; both are stated here instead.
 
 ## What is staged
 
@@ -813,7 +806,7 @@ The case this answered: a proposal passes on the 20th of the moon, the steward i
 > Everything can be! But the more critical it is, the higher percentage of quorum you need (hard to get quorum) such that changing the most critical things would require a max high of 97% quorum where only 3% of the whole network would be able to not be informed and have 97% approval (max heights - we don't recommend more than those though they can exceed them (if they do we warn them) because the closer you get to 100% the chances of you getting a stalemate increase where the Game breaks even though a massive majority want to continue they can't because someone died suddenly or stopped playing the Game, etc.
 
 <!-- written by a person: ruling-21 -->
-Every setting carries a criticality tier now, defaulting to routine, and the tier sets both the quorum and the unity a change to it needs: routine asks nothing beyond the village's own dials, structural asks 80 unity and 50 quorum, and constitutional asks 97 and 97, which is the founder's own number. The tiers are themselves eight settings, and the 5 subject floors that used to live only in code are settings too. All ten are raise-only: the shipped number is a floor and a village may go above it and never below, because a village that can lower the bar for changing the bar has no bar. Any dial typed above 97 shows the stalemate warning in words while it is being typed, and the Birthing is the one subject exempt from it because it stays at 100 and 100 by rule. Still open: the founder's 2026-09-02 ruling that a threshold changes at its own current bar, which is a later lane.
+Every setting carries a criticality tier now, defaulting to routine, and the tier sets both the quorum and the unity a change to it needs: routine asks nothing beyond the village's own dials, structural asks 80 unity and 50 quorum, and constitutional asks 97 and 97, which is the founder's own number. The tiers are themselves eight settings, and the 4 subject floors that used to live only in code are settings too. All ten are raise-only: the shipped number is a floor and a village may go above it and never below, because a village that can lower the bar for changing the bar has no bar. Any dial typed above 97 shows the stalemate warning in words while it is being typed, and the Birthing is the one subject exempt from it because it stays at 100 and 100 by rule. Still open: the founder's 2026-09-02 ruling that a threshold changes at its own current bar, which is a later lane.
 
 ### 22. Who voted is visible, how they voted is hidden, and names appear after half
 
@@ -914,7 +907,7 @@ A seated steward voting no on a token-send ballot fails it at the close, with th
 > 72 hours from close and a countdown on it.
 
 <!-- written by a person: ruling-29 -->
-The override lands at `governance.highest_tier`, which is itself priced at the highest tier. The windows are 10 settings, one per proposal kind, and each holds one shape: always open, the last N days of every cycle of the active clock, the last N days of every season, or a shape the village writes. All of them ship always open. This supersedes the 2026-08-31 line that proposals are never gated by the calendar: a village may gate them now, and always open stays a choice. The countdown reads one instant through one helper, so no surface can show a deadline the engine does not enforce. Since 2026-09-14 that countdown is on the decision page itself, one clock for the village and the stewards together, and a carried decision reads as not yet in effect until it lands. A decision every seated steward voted yes on can no longer be stopped and waits only `governance.consent_notice_hours` after the close (a day by default, never longer than the steward window), while a village with no seated stewards keeps the whole window.
+The override lands at `governance.highest_tier`, which is itself priced at the highest tier. The windows are 9 settings, one per proposal kind, and each holds one shape: always open, the last N days of every cycle of the active clock, the last N days of every season, or a shape the village writes. All of them ship always open. This supersedes the 2026-08-31 line that proposals are never gated by the calendar: a village may gate them now, and always open stays a choice. The countdown reads one instant through one helper, so no surface can show a deadline the engine does not enforce. Since 2026-09-14 that countdown is on the decision page itself, one clock for the village and the stewards together, and a carried decision reads as not yet in effect until it lands. A decision every seated steward voted yes on can no longer be stopped and waits only `governance.consent_notice_hours` after the close (a day by default, never longer than the steward window), while a village with no seated stewards keeps the whole window.
 
 ### 30. Lunar months, quorum by weight, the bundle waits, and timing per proposal
 
@@ -1041,7 +1034,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "66bfeda5c54c9b21",
+  "commit": "ed5de96b976bd501",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -1154,19 +1147,6 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "minYesHeads": null,
       "executesAtClose": true,
       "why": "Settling a moon asks whatever this village asks of any decision. It happens every moon, so it is not priced above the village's own bar."
-    },
-    {
-      "subjectType": "gps_change",
-      "minUnityPct": 0,
-      "minQuorumPct": 50,
-      "minElectorate": 0,
-      "everySeatWeighs": false,
-      "method": null,
-      "criticality": null,
-      "abstainPolicy": null,
-      "minYesHeads": null,
-      "executesAtClose": true,
-      "why": "This one changes the statement every later change is judged against, so it asks for more than half the village's voting weight to take part. How much of that has to agree is the village's own setting."
     }
   ],
   "executingSubjectTypes": [
@@ -1176,7 +1156,6 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     "power_transfer",
     "power_grant",
     "power_return",
-    "gps_change",
     "role_declare",
     "role_seat",
     "role_unseat",
@@ -1453,17 +1432,6 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "applyTiming": "instant"
     },
     {
-      "key": "governance.window_gps_change",
-      "label": "When changing the governing purpose can go to the vote",
-      "ring": "open",
-      "type": "text",
-      "default": "always_open",
-      "min": null,
-      "max": null,
-      "choices": null,
-      "applyTiming": "instant"
-    },
-    {
       "key": "governance.window_grace_days",
       "label": "How long a proposal coming back may open outside its window",
       "ring": "open",
@@ -1716,16 +1684,14 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "power_transfer",
       "power_grant",
       "power_return",
-      "role_seat",
-      "gps_change"
+      "role_seat"
     ],
     "conductable": [
       "mechanics",
       "power_transfer",
       "power_grant",
       "power_return",
-      "role_seat",
-      "gps_change"
+      "role_seat"
     ],
     "advisory": [
       "role_application",
@@ -2093,20 +2059,6 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "file": "server/index.ts"
     },
     {
-      "method": "GET",
-      "path": "/api/governance/purpose",
-      "door": "signed in",
-      "capability": null,
-      "file": "server/routes/governingPurpose.ts"
-    },
-    {
-      "method": "POST",
-      "path": "/api/governance/purpose-changes",
-      "door": "signed in",
-      "capability": null,
-      "file": "server/routes/governingPurpose.ts"
-    },
-    {
       "method": "POST",
       "path": "/api/governance/role-declarations",
       "door": "signed in",
@@ -2262,11 +2214,6 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     {
       "key": "governance.window_power_return",
       "label": "When handing a power back can go to the vote",
-      "default": "always_open"
-    },
-    {
-      "key": "governance.window_gps_change",
-      "label": "When changing the governing purpose can go to the vote",
       "default": "always_open"
     }
   ],

@@ -299,6 +299,54 @@ export function stampedName(prefix: string, ext: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}${ext}`;
 }
 
+/**
+ * The prefixes that mean "this file is one member's own", as the minters
+ * above spell them.
+ *
+ * `portrait` is a member's face (`lib/characterPortraits.ts`,
+ * `routes/characterPortraits.ts`) and `proposal` is what they attached to a
+ * form, which on some forks is a CV or an ID scan. The village's own files
+ * carry `brand`, `sitepull` and `land-<provider>`, and those are the village's
+ * to serve to anybody.
+ *
+ * KEPT BESIDE `stampedName` ON PURPOSE. A new prefix is added a few lines up,
+ * and whoever adds one has to pass this sentence to do it.
+ *
+ * THE VAULT IS NOT HERE AND CANNOT BE. `vaultBase` in `server/index.ts` names
+ * an investor document from its ORIGINAL filename, so those files carry no
+ * prefix to read. A vault PDF is already served `private, no-cache` by type;
+ * a vault file that happens to be an image is not, and that is a separate
+ * question from this one.
+ */
+export const MEMBER_UPLOAD_PREFIXES = ["portrait", "proposal"] as const;
+
+/**
+ * Whether a stored file belongs to one member rather than to the village.
+ *
+ * WHAT IT DECIDES: whether `/api/uploads/:filename` answers `public` or
+ * `private`, and nothing else. It is not an access check. The route has no
+ * gate at all, by design, and the file IS the address.
+ *
+ * WHY IT EXISTS. Erasure unlinks a member's files, so the origin answers 404
+ * the moment they leave. The header said `public, max-age=31536000,
+ * immutable`, so every browser AND every shared cache that had fetched one
+ * went on serving it for up to a year without asking, which means a member's
+ * face could outlive their erasure in a proxy that will hand it to somebody
+ * else. `private` costs nothing: the person's own browser still caches it for
+ * a year, so no page gets slower on the 50 KB/s links the header was written
+ * for, and no shared cache keeps a copy at all.
+ *
+ * WHAT THIS DOES NOT FIX, said here because a defence described without its
+ * limit is the kind of sentence that misleads later: the viewer's OWN browser
+ * still holds the bytes for up to a year. Bounding that means a shorter
+ * max-age for member files, which buys a conditional request per image per
+ * window, and that trade belongs to whoever owns the page-load budget.
+ */
+export function isMemberOwnedUpload(fileName: string): boolean {
+  const name = path.basename(String(fileName ?? ""));
+  return MEMBER_UPLOAD_PREFIXES.some((prefix) => name.startsWith(`${prefix}-`));
+}
+
 export function writeToVolume(uploadsDir: string, filename: string, bytes: Buffer): void {
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
   fs.writeFileSync(path.join(uploadsDir, filename), bytes);

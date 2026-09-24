@@ -38,7 +38,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 
-import { gameFetch } from "@/lib/gameApi";
+import { authToken, gameFetch } from "@/lib/gameApi";
 
 /** Matches server/lib/sheetSeen.ts. A section settles after this many visits. */
 const MAX_SIGHTINGS = 3;
@@ -73,6 +73,14 @@ export function useSurfaced(openNow: readonly string[], ready: boolean): Surface
 
   useEffect(() => {
     let alive = true;
+    /*
+     * Signed out there are no preferences to read, the route answers 401, and
+     * the browser logs it on the page itself. GUARDING THE READ GUARDS ALL
+     * THREE WRITES BELOW WITH IT, which is why there is one check and not
+     * four: two of them sit inside this read's own `then`, and the third needs
+     * `candidate`, which stays null for as long as `seen` is null.
+     */
+    if (!authToken()) return;
     gameFetch("/api/profile/prefs")
       /*
        * A REFUSAL IS A FAILURE, not an empty answer. This used to map a non-ok

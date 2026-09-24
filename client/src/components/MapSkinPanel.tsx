@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useIsAdmin } from "@/contexts/AuthContext";
+import { gameFetch } from "@/lib/gameApi";
 import { writeStored } from "@/lib/safeStorage";
 import {
   DEFAULT_MAP_SKIN,
@@ -28,8 +30,35 @@ import {
  *
  * Self-contained like LookPanel and TypographyPanel, for the same reason:
  * Admin.tsx is a large file other workstreams edit, so the mount is one line.
+ *
+ * ── IT TAKES NO PASSWORD PROP, AND THAT IS WHAT LETS IT LEAVE ADMIN ─────────
+ *
+ * It used to take `password` and spell `Authorization: Bearer ${password}` by
+ * hand. That value was never a password: `AdminGate` (client/src/pages/Admin
+ * .tsx) hands down `authToken()`, the session token, and `isAdmin` on the
+ * server resolves it through `authedUser`. The prop name was wrong and
+ * Admin.tsx said so, calling the rename "deliberate later cleanup".
+ *
+ * Reading the token from the session instead is what makes the panel mountable
+ * anywhere. Rye asked for the map editors to live on the map, so this one has
+ * to work on a page that has no admin password to pass it. `gameFetch` is the
+ * one place that attaches the token (LivingMap.tsx:644 makes the same point
+ * about the same deployment), so it does the whole job.
+ *
+ * The other nineteen admin panels still use `authHeaders(password)` from
+ * components/admin/adminApi.ts. That call is EQUIVALENT, same header and same
+ * token, so this is not a fix they are waiting on; converting them is the
+ * cleanup Admin.tsx already named and it is not this change.
+ *
+ * ── AND IT ASKS FOR NOTHING WHEN THE VIEWER IS NOT AN ADMIN ─────────────────
+ *
+ * `load` is gated on `useIsAdmin`, not only the JSX. On a member-facing page a
+ * panel that fetches an admin route on mount gives every member a 401 in the
+ * console on a page they open daily, and a call that cannot succeed should
+ * never leave the browser.
  */
-export default function MapSkinPanel({ password }: { password: string }) {
+export default function MapSkinPanel() {
+  const mayAdminister = useIsAdmin();
   const [skin, setSkin] = useState<MapSkin | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -43,26 +72,33 @@ export default function MapSkinPanel({ password }: { password: string }) {
    * object either way (both are `getBrand().skin`).
    */
   const load = useCallback(async () => {
+    if (!mayAdminister) return;
     try {
       let stored: any = null;
-      const viaMap = await fetch("/api/map/skin");
+      const viaMap = await gameFetch("/api/map/skin");
       if (viaMap.ok) stored = (await viaMap.json())?.skin;
       if (!stored) {
-        const res = await fetch("/api/admin/brand", { headers: { Authorization: `Bearer ${password}` } });
+        const res = await gameFetch("/api/admin/brand");
         stored = (await res.json())?.brand?.skin;
       }
       setSkin({ ...DEFAULT_MAP_SKIN, ...(stored ?? {}) });
     } catch { toast.error("Could not load the map settings"); }
-  }, [password]);
+  }, [mayAdminister]);
   useEffect(() => { load(); }, [load]);
 
   const save = async () => {
     if (!skin) return;
     setSaving(true);
     try {
-      const res = await fetch("/api/admin/brand", {
+      /*
+       * `{ skin }` alone, and the server MERGES PER SECTION (server/index.ts,
+       * the PUT handler): `project: { ...current.project, ...(req.body.project
+       * ?? {}) }` and the same shape for currency, images, setup, theme and
+       * identityPack. An absent section spreads from what is stored, so a map
+       * style save cannot reach the village's name or its currency.
+       */
+      const res = await gameFetch("/api/admin/brand", {
         method: "PUT",
-        headers: { Authorization: `Bearer ${password}`, "Content-Type": "application/json" },
         body: JSON.stringify({ skin }),
       });
       if (!res.ok) throw new Error();
@@ -84,6 +120,9 @@ export default function MapSkinPanel({ password }: { password: string }) {
     setSaving(false);
   };
 
+  // Nothing for a member, not even a disabled shell: the controls here all
+  // write, so a visible-but-dead copy would only advertise a refusal.
+  if (!mayAdminister) return null;
   if (!skin) return null;
   const set = (patch: Partial<MapSkin>) => setSkin({ ...skin, ...patch });
 

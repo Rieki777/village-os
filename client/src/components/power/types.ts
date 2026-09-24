@@ -120,6 +120,40 @@ export interface PowerData {
     mayDeclare?: string[];
     /** Arrange mode: this reader may drag circles into each other (0208). */
     mayArrange?: boolean;
+    /*
+     * THE THREE MAP EDITORS, and why there are three of them reading one
+     * source. The reasoning lives here rather than beside the fields in
+     * server/index.ts because that file's ratchet may only ever turn down,
+     * comments included, and this is where the payload's shape is already
+     * written once for ten components to read.
+     *
+     * Styling the map, writing the newcomer's walk and naming its paths and
+     * waters move off the admin page onto /map. They are three flags and not
+     * one because they are three different claims: the day a village
+     * delegates any one of them, the payload already has somewhere to say so,
+     * with no re-plumbing.
+     *
+     * All three read `admin` on the server, and that is the point rather than
+     * a shortcut. Every endpoint behind them is gated by isAdmin and nothing
+     * else (PUT /api/admin/brand, and /api/admin/map/walk and
+     * /api/admin/map/vocabulary in server/routes/mapScene.ts), and
+     * shared/capabilities.ts holds no key about style, brand, look or
+     * identity. Gating them on the nearest existing key instead, because a
+     * panel leaving the admin page has to be gated by SOMETHING, would have
+     * handed styling to every holder of `map.edit` and the walk to every
+     * holder of `story.tell`. So these move WHERE the panels live and never
+     * WHO may use them; delegation is its own decision, per panel, later.
+     *
+     * Optional because a deployment serving an older payload has no opinion,
+     * and absent must read as "no", never as "yes". The server is the
+     * authority and re-checks on every write; these only decide whether the
+     * editing chrome is drawn at all, which is the rule the sibling surface
+     * already follows: a reader who may not edit sees no editor rather than a
+     * disabled one.
+     */
+    mayStyleMap?: boolean;
+    mayEditWalk?: boolean;
+    mayNameMapThings?: boolean;
   };
   vacantHighlight: boolean;
   conciergeEnabled: boolean;

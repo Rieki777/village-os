@@ -52,7 +52,7 @@
  *      (server/index.ts:21349), which is a human pressing a button. A village
  *      that never presses it never distributes a token, so the release is an
  *      assumption here and it says so out loud.
- *   3. `mintForConfirmedClaim` skips the recognition token and ignores the
+ *   3. the claim pricing skips the recognition token and ignores the
  *      rule's `recipient` column: it always pays the claimant. Both are
  *      modelled as written.
  *
@@ -931,7 +931,7 @@ function stepCycle(
 
   // ── 1. Confirmed quests fire the quest.completed rules ────────────────────
   //
-  // `mintForConfirmedClaim` (server/lib/economy.ts:1117), guard for guard and
+  // the claim pricing in server/lib/economy.ts, guard for guard and
   // in its order. It skips recognition (the consent route already minted it),
   // it refuses a from_source rule outright because a quest posts no amount in
   // any token but recognition, it stays quiet about a rule set to zero, it
@@ -973,7 +973,7 @@ function stepCycle(
         continue;
       }
       // THE CEILING BINDS HERE, per occurrence, exactly where
-      // `mintForConfirmedClaim` binds it (server/lib/economy.ts:1365). A
+      // the claim pricing binds it (server/lib/economy.ts). A
       // ceiling of zero refuses into the same `unpayable` list, and every
       // other ceiling clamps.
       const ruleDecimals = decimalsOf(tokens, rule.tokenSlug);

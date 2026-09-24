@@ -55,7 +55,14 @@ describe("saving the list the Season tab was shown (D2-9)", () => {
     const shown = shownTo("quarterly", "UTC");
     expect(shown.seasons.length).toBe(8);
     const saving = seasonDocumentToStore({ seasons: shown.seasons, cadence: "quarterly", timezone: "UTC" }, SAVED_AT);
-    expect(saving).toEqual({ ok: true, doc: { seasons: [], cadence: "quarterly", timezone: "UTC" } });
+    // `timezoneAnswer` is part of the document's shape now, and null here is
+    // the honest reading: this save changed no zone and confirmed none, so it
+    // is not an answer. Asserted whole rather than loosened, because the
+    // document a save stores is exactly what this describe block is about.
+    expect(saving).toEqual({
+      ok: true,
+      doc: { seasons: [], cadence: "quarterly", timezone: "UTC", timezoneAnswer: null },
+    });
   });
 
   it("stores an empty list when the list sent is empty", () => {
@@ -221,5 +228,134 @@ describe("no season running is a loud condition", () => {
     expect(ended).toContain("have ended");
     expect(gap).toContain("gap in the season dates");
     expect(ended).not.toBe(gap);
+  });
+});
+
+/**
+ * HAS THIS VILLAGE SAID WHICH CLOCK IT KEEPS?
+ *
+ * The platform ships `America/Costa_Rica`, and every fork inherits it in
+ * silence: seasons derive dated entries whatever the zone, so the launch
+ * checklist's season item goes green without anybody opening the tab, and the
+ * zone decides when a day, a season, the claims window and every time on the
+ * calendar turn.
+ *
+ * A STORED ZONE PROVES NOTHING, which is the whole reason for a separate
+ * field. `GET /api/admin/seasons` hands the tab the NORMALISED document, so a
+ * fresh village's form already holds Costa Rica's zone and any save writes it
+ * back. Renaming a season would otherwise count as confirming a clock.
+ */
+describe("the timezone answer", () => {
+  const AT = new Date("2026-09-23T10:00:00Z");
+  const standing = (over: Record<string, unknown> = {}) => ({
+    timezone: "America/Costa_Rica",
+    timezoneAnswer: null,
+    ...over,
+  });
+
+  it("is absent on a document nobody has answered, which is every old one", () => {
+    const cfg = normalizeSeasonConfig({ cadence: "solstice-equinox", timezone: "Europe/Lisbon" });
+    expect(cfg.timezoneAnswer ?? null).toBeNull();
+  });
+
+  it("is not written by an ordinary save that leaves the zone alone", () => {
+    // The tab sends back what it was given. This is the case that would
+    // otherwise have every village silently confirming Costa Rica.
+    const saved = seasonDocumentToStore(
+      { seasons: [], cadence: "solstice-equinox", timezone: "America/Costa_Rica" },
+      AT,
+      standing(),
+      "founder-1",
+    );
+    expect(saved.ok).toBe(true);
+    if (saved.ok) expect(saved.doc.timezoneAnswer ?? null).toBeNull();
+  });
+
+  it("is written when the zone genuinely changes, because choosing is answering", () => {
+    const saved = seasonDocumentToStore(
+      { seasons: [], cadence: "solstice-equinox", timezone: "Pacific/Auckland" },
+      AT,
+      standing(),
+      "founder-1",
+    );
+    expect(saved.ok).toBe(true);
+    if (saved.ok) expect(saved.doc.timezoneAnswer).toEqual({ at: AT.toISOString(), by: "founder-1" });
+  });
+
+  it("is written when somebody confirms the zone already showing", () => {
+    // The only way to agree with an inherited value, and the reason the
+    // button exists: a village really in Costa Rica has nothing to change.
+    const saved = seasonDocumentToStore(
+      { seasons: [], cadence: "solstice-equinox", timezone: "America/Costa_Rica", confirmTimezone: true },
+      AT,
+      standing(),
+      "founder-1",
+    );
+    expect(saved.ok).toBe(true);
+    if (saved.ok) expect(saved.doc.timezoneAnswer).toEqual({ at: AT.toISOString(), by: "founder-1" });
+  });
+
+  it("carries an existing answer through later saves", () => {
+    const answer = { at: "2026-09-01T00:00:00.000Z", by: "founder-1" };
+    const saved = seasonDocumentToStore(
+      { seasons: [], cadence: "lunar", timezone: "America/Costa_Rica" },
+      AT,
+      standing({ timezoneAnswer: answer }),
+      "founder-2",
+    );
+    expect(saved.ok).toBe(true);
+    if (saved.ok) expect(saved.doc.timezoneAnswer).toEqual(answer);
+  });
+
+  /**
+   * THE DROP-ON-READ TRAP, which this file has seen before.
+   *
+   * `normalizeSeasonConfig` rebuilds the document from a FIXED field list, on
+   * read as well as on write, in three branches. That is how `patternId` was
+   * silently discarded on every save AND every load (0050), leaving the whole
+   * season-pattern system resolving to "no pattern running". An answer lost
+   * the same way would ask a village the same question forever.
+   */
+  it("survives a read in every branch the normaliser rebuilds", () => {
+    const answer = { at: "2026-09-01T00:00:00.000Z", by: "founder-1" };
+    const withList = normalizeSeasonConfig({
+      seasons: [{ id: "s1", name: "First", startsOn: "2026-01-01", endsOn: "2026-04-01" }],
+      cadence: "custom",
+      timezone: "Europe/Lisbon",
+      timezoneAnswer: answer,
+    });
+    expect(withList.timezoneAnswer).toEqual(answer);
+
+    const derived = normalizeSeasonConfig({
+      seasons: [],
+      cadence: "solstice-equinox",
+      timezone: "Europe/Lisbon",
+      timezoneAnswer: answer,
+    });
+    expect(derived.timezoneAnswer).toEqual(answer);
+
+    // The legacy single-season document, lifted into a list.
+    const legacy = normalizeSeasonConfig({
+      name: "Founding", startsOn: "2026-01-01", endsOn: "", timezoneAnswer: answer,
+    });
+    expect(legacy.timezoneAnswer).toEqual(answer);
+  });
+
+  it("keeps only the shape it writes, so a hand-edited document cannot smuggle one in", () => {
+    expect(normalizeSeasonConfig({ seasons: [], timezoneAnswer: "yes" }).timezoneAnswer).toBeNull();
+    expect(normalizeSeasonConfig({ seasons: [], timezoneAnswer: { by: "x" } }).timezoneAnswer).toBeNull();
+    expect(
+      normalizeSeasonConfig({ seasons: [], timezoneAnswer: { at: "2026-09-01T00:00:00.000Z" } }).timezoneAnswer,
+    ).toEqual({ at: "2026-09-01T00:00:00.000Z", by: null });
+  });
+
+  it("still refuses a zone this runtime cannot format, answer or no answer", () => {
+    const bad = seasonDocumentToStore(
+      { seasons: [], timezone: "Bogus/Zone", confirmTimezone: true },
+      AT,
+      standing(),
+      "founder-1",
+    );
+    expect(bad.ok).toBe(false);
   });
 });

@@ -18,6 +18,7 @@ import {
   capabilityDecision,
   capabilityLabel,
   DENIABLE,
+  HANDOVER_SET,
   hasCapability,
   isBadgeGrantable,
   isDeniable,
@@ -358,6 +359,46 @@ describe("hasCapability truth table", () => {
       // error with a lockout attached.
       for (const personal of ["forum.post", "message.send", "event.rsvp", "exchange.buy"] as Capability[]) {
         expect(TRANSFERABLE[personal], personal).toBe(false);
+      }
+    });
+  });
+
+  /**
+   * THE SET THE FOUNDING STEWARDS TAKE AT LAUNCH (Rye, 2026-09-24).
+   *
+   * "The founders automatically become stewards and hold all powers at
+   * launch", and asked whether "all powers" named a chosen subset, all
+   * nineteen entrustable powers.
+   */
+  describe("the HANDOVER_SET", () => {
+    it("is every transferable power and nothing else", () => {
+      expect([...HANDOVER_SET].sort()).toEqual(ALL_CAPABILITIES.filter((c) => TRANSFERABLE[c]).sort());
+    });
+
+    it("is nineteen keys, which is the number the ruling was given in", () => {
+      /*
+       * A NUMBER AND NOT ONLY A DERIVATION, deliberately.
+       *
+       * The line above is true of any derivation of itself and would stay green
+       * if a power quietly changed sides, because both halves would move
+       * together. Rye was told nineteen and ruled on nineteen, so a change to
+       * the count is a change to what he agreed to. Whoever moves it is
+       * answering that question rather than breaking an invariant, and this is
+       * where they find out they are being asked.
+       */
+      expect(HANDOVER_SET).toHaveLength(19);
+    });
+
+    it("carries the steward's veto, which is what opens the break-glass", () => {
+      // The launch seating entrusts the whole set, so if this key were ever
+      // classified out of it a launched village would have no break-glass at
+      // all: `capabilityDecision` reads exactly this one.
+      expect(HANDOVER_SET).toContain(BREAK_GLASS_SEAT);
+    });
+
+    it("holds no personal act, so no launch can lock a member out of their own voice", () => {
+      for (const personal of ["forum.post", "message.send", "event.rsvp", "exchange.buy"] as Capability[]) {
+        expect(HANDOVER_SET, personal).not.toContain(personal);
       }
     });
   });

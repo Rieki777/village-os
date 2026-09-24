@@ -262,3 +262,18 @@ export default function SeatGlyph({
     </g>
   );
 }
+
+/**
+ * A SEAT'S TAP AREA: wider than the dot, and carrying no ink.
+ *
+ * `fill="transparent"` and never `fill="none"`. A shape filled with `none`
+ * takes no pointer events at all, and taking pointer events is the only thing
+ * this element exists to do. It renders nothing when the dot is already as big
+ * as the tap area, so a comfortable seat gains no element.
+ *
+ * How big is decided in seatTargets, against every other seat on the map.
+ */
+export function HitArea({ r, drawn }: { r: number; drawn: number }) {
+  if (!(r > drawn)) return null;
+  return <circle cx={0} cy={0} r={r} fill="transparent" />;
+}

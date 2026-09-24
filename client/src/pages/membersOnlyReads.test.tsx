@@ -29,16 +29,28 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
 
-const session = vi.hoisted(() => ({ token: null as string | null, user: null as null | { id: string } }));
+const session = vi.hoisted(() => ({ token: null as string | null, user: null as null | { id: string; name: string; handle: string; paths: string[]; role?: string } }));
 const gameFetchMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/components/Layout", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
+/*
+ * `useIsAdmin` is mocked BY ITS REAL RULE, never as a constant. `/map` mounts
+ * the village settings panel, which asks this module who is looking, and a
+ * mock that answered a fixed value would make these tests agree with
+ * themselves about a viewer the app would treat differently. The rule is the
+ * one in AuthContext: a member whose account role is admin or founder.
+ */
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: session.user, token: session.token, loading: false }),
+  useIsAdmin: () => session.user?.role === "admin" || session.user?.role === "founder",
 }));
-vi.mock("@/lib/gameApi", () => ({
+// Spread the real module and override only the two seams. `Profile` reads
+// `useGameConfig` and friends off it, and a hand-listed mock would have to grow
+// a line every time a page under test imports one more thing.
+vi.mock("@/lib/gameApi", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   authToken: () => session.token,
   gameFetch: (...args: unknown[]) => gameFetchMock(...args),
 }));
@@ -50,12 +62,41 @@ vi.mock("@/components/modules/ModuleGate", () => ({
   default: () => <p>module gate</p>,
   SignInToSee: ({ name }: { name: string }) => <p>Sign in to see {name}</p>,
 }));
+/*
+ * PROFILE'S CHILDREN, STUBBED. The page under test here is the page's own
+ * two effects, and its children each want a fully shaped payload: three of
+ * them read a field off `user` or `config` with no guard, so a fixture that
+ * satisfied them would be a second copy of the server's response drifting
+ * beside the real one. `useSurfaced` is deliberately NOT stubbed, because
+ * one of the two reads under test is its own.
+ */
+vi.mock("@/components/GameDashboard", () => ({ default: () => null }));
+vi.mock("@/components/ProfileJourney", () => ({ default: () => null }));
+vi.mock("@/components/NeedCard", () => ({ default: () => null }));
+vi.mock("@/components/NotifyPrefsPanel", () => ({ default: () => null }));
+vi.mock("@/components/YourAgentPanel", () => ({ default: () => null }));
+vi.mock("@/components/ProfileSheet", () => ({ default: () => null }));
+vi.mock("@/components/ProfileHero", () => ({ default: () => null }));
+vi.mock("@/components/OnchainCard", () => ({ default: () => null }));
+vi.mock("@/components/WalletCard", () => ({ default: () => null }));
+vi.mock("@/components/SendTokensCard", () => ({ default: () => null }));
+vi.mock("@/components/profile/MaturityLadder", () => ({ default: () => null }));
+vi.mock("@/components/profile/PowersMap", () => ({ default: () => null }));
+vi.mock("@/components/profile/PathsPanel", () => ({ default: () => null }));
+vi.mock("@/components/profile/StandingRow", () => ({ default: () => null }));
+vi.mock("@/components/profile/InvitePanel", () => ({ default: () => null }));
+vi.mock("@/components/profile/PathFacts", () => ({ default: () => null }));
+vi.mock("@/components/profile/SurfacedBanner", () => ({ default: () => null }));
+vi.mock("@/components/profile/TheVessel", () => ({ default: () => null }));
+vi.mock("@/components/profile/MoonDock", () => ({ default: () => null }));
+vi.mock("@/components/profile/NightMotes", () => ({ default: () => null }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 import Messages from "./Messages";
 import Review from "./Review";
 import Training from "./Training";
 import LivingMap from "./LivingMap";
+import Profile from "./Profile";
 
 /** Every URL the page asked for, through either `fetch` or `gameFetch`. */
 let asked: string[] = [];
@@ -70,6 +111,15 @@ const MEMBERS_ONLY = [
   "/api/admin/quest-claims",
   "/api/game/training/completed",
   "/api/me/characters",
+  // 2026-09-23. Two survivors of the same class on /profile, found by a live
+  // signed-out sweep and only ever on WebKit: chromium reported zero failing
+  // requests for the same page in the same state, so a test watching for a
+  // 401 would have been green here and wrong. These assert the REQUEST.
+  "/api/game/progression",
+  "/api/profile/prefs",
+  // Mounted on /profile when the redemption module is on, so it joins this
+  // list the moment that page gained a third members-only read.
+  "/api/redemptions",
 ];
 
 /**
@@ -87,12 +137,25 @@ function answer(url: string): Response {
   if (url.startsWith("/api/game/training/completed")) return json({ completed: ["m1"] });
   if (url.startsWith("/grounds/manifest.json")) return json({ present: true, url: "/grounds/grounds-abc.html" });
   if (url.startsWith("/api/me/characters")) return json({ party: [] });
+  // Every key the route actually serves, in its order, so a page reading one
+  // of them unguarded fails here the way it would in a browser.
+  if (url.startsWith("/api/game/progression"))
+    return json({ stage: null, stageIndex: 0, consentedQuests: 0, capabilities: [], capabilityCatalogue: [], roles: [], history: [], firsts: {}, signing: null });
+  if (url.startsWith("/api/profile/prefs")) return json({ sawSections: {} });
+  // The whole `Payload` shape RedemptionPanel reads, so a field it uses
+  // unguarded fails here the way it would in a browser rather than as an
+  // unhandled error after the assertions have already passed.
+  if (url.startsWith("/api/redemptions"))
+    return json({ open: [], history: [], held: {}, holds: false, confirmedBy: "", votePathBuilt: false, perCycle: 0, openedThisCycle: 0, tokens: [] });
   return json({});
 }
 
 function signIn() {
   session.token = "a-token";
-  session.user = { id: "u1" };
+  // `paths` because Profile reads `user.paths` unguarded at one of its two
+  // uses, while the other reads `user?.paths ?? []`. A signed-in member always
+  // has the field, so this is the realistic shape rather than a workaround.
+  session.user = { id: "u1", name: "A Member", handle: "a-member", paths: [] };
 }
 function signOut() {
   session.token = null;
@@ -195,5 +258,59 @@ describe("/map", () => {
     inRouter(<LivingMap />);
     await mapIsReady();
     expect(asked).toContain("/api/me/characters");
+  });
+});
+
+
+/**
+ * THE TWO SURVIVORS, and why they outlived the sweep that found the first four.
+ *
+ * A signed-out visitor to /profile fired two members-only reads. Neither came
+ * from the component a reader would suspect: `ProfileJourney` has asked
+ * through a token-checking `authedRead` since it was written, and its guard
+ * works. They came from the page's own mount effect and from `useSurfaced`,
+ * the hook the page mounts for its surfacing banner, which had no check at all.
+ *
+ * `/profile` has no route guard and no redirect, so the page mounts for
+ * anybody who types the URL. That is the reason it kept working and kept
+ * asking: every section renders its signed-out state correctly, and the only
+ * wrong thing was the two requests.
+ *
+ * WHY THE ASSERTIONS READ `asked` RATHER THAN THE STATUS. A live sweep saw
+ * these on WebKit and NOT on chromium, on the same page in the same state. A
+ * test that waited for a 401 would therefore pass under the engine this suite
+ * runs on whether or not the bug is present. The absence of the call is the
+ * claim; the response never enters into it.
+ */
+describe("/profile", () => {
+  it("signed out, asks for neither the progression nor the preferences", async () => {
+    signOut();
+    inRouter(<Profile />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(asked.filter((u) => u.startsWith("/api/game/progression"))).toEqual([]);
+    expect(asked.filter((u) => u.startsWith("/api/profile/prefs"))).toEqual([]);
+    // THIS ONE DOES NOT CURRENTLY DISCRIMINATE, and saying so is the point.
+    // The redemption panel sits in JSX that a signed-out visitor never reaches,
+    // because /profile renders a sign-in form for them, so this assertion holds
+    // with or without the `user &&` guard on the mount. I checked by removing
+    // the guard and watching all ten stay green. It is kept because the day
+    // that render path changes, this is the line that notices; it is not
+    // evidence that the guard works. The two above it ARE discriminating: each
+    // was proved by removing its own guard and watching this case fail.
+    expect(asked.filter((u) => u.startsWith("/api/redemptions"))).toEqual([]);
+  });
+
+  it("signed in, still asks for both", async () => {
+    // The half that matters: a guard that stopped asking for everybody would
+    // pass the case above and leave a member with no progression and no
+    // surfacing.
+    signIn();
+    inRouter(<Profile />);
+    await waitFor(() => expect(asked).toContain("/api/game/progression"));
+    await waitFor(() => expect(asked.some((u) => u.startsWith("/api/profile/prefs"))).toBe(true));
+    // The twin that matters most for the redemption panel: it was put on this
+    // page because /wallet is behind the exchange module, so a guard that
+    // stopped it asking for everybody would take the door away a second time.
+    await waitFor(() => expect(asked.some((u) => u.startsWith("/api/redemptions"))).toBe(true));
   });
 });

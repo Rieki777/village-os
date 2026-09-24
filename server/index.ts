@@ -15,6 +15,7 @@ import multer from "multer";
 import bcrypt from "bcrypt";
 import { claimPaths, GAME_CONFIG, getStage, stageIndex, withCommitmentName } from "../shared/gameConfig";
 import { recognitionNameCheck } from "../shared/launchRequirements";
+import { signingOf } from "../shared/membershipSigning";
 // `daysRemainingInCycle` is gone with the clock seam: every consumer reads
 // the active clock now, and it had no caller left here. `sceneStopsFor` and
 // `cleanCrewName` go with main's dead-import pass for the same reason,
@@ -61,6 +62,7 @@ import { memberJoined } from "./lib/arrival";
 import { climbLadder, freezeStandingAboveTheDoor, questsThatCarriedPastTheDoor, type LadderStage } from "./lib/admission";
 import { adminGateWasConsulted, markAdminGate } from "./lib/adminGate";
 import { type FaqPathway, register as registerFaqRoutes } from "./routes/faqs";
+import { register as registerBrandRoutes } from "./routes/brand";
 import { register as registerGratitudeVoiceRoutes } from "./routes/gratitudeVoices";
 import { register as registerLandRoutes } from "./routes/land";
 import { register as registerMilestonesRoutes } from "./routes/milestones";
@@ -159,12 +161,7 @@ import {
 } from "../shared/mapAddress";
 import { isPromiseKind, type PromiseReason, type PromiseResult } from "../shared/mapPromise";
 import { goingCountFor, missingReason, rowByMapKey } from "./lib/mapPromise";
-import {
-  CarriesLocationData,
-  sanitiseForVolume,
-  stampedName,
-  writeToVolume,
-} from "./lib/uploads";
+import { CarriesLocationData, isMemberOwnedUpload, sanitiseForVolume, stampedName, writeToVolume } from "./lib/uploads";
 import {
   classifyVolume,
   humanBytes,
@@ -356,7 +353,7 @@ import {
   spendSurfacesFor,
 } from "./lib/spending";
 import { seatChargeFor, seatEscrowDrift, seatPriceFor, settleFinishedSeats } from "./lib/eventSeats";
-import { allowanceFor, applyMintRuleChanges, canConfirm, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, runSettlement, startEconomyEpoch, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
+import { allowanceFor, applyMintRuleChanges, canConfirm, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, runSettlement, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
 import { addCharacter, avatarFor, listArchetypes, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
 import { loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
@@ -2764,7 +2761,7 @@ function mergedConfig() {
       // 0083 (P8): where the project lives and what it counts in. Display
       // only, like every overlay field; blank inherits the platform default.
       country: pick((brand.project as any).country, p.country),
-      fiatCurrency: pick((brand.project as any).fiatCurrency, p.fiatCurrency),
+      fiatCurrency: pick(String((brand.project as any).fiatCurrency ?? "").trim(), p.fiatCurrency), // trimmed: shared/money.ts
       adminPath: p.adminPath,
       // Blank INHERITS the platform default, like every overlay field. A fork
       // that wants NO outside links clears the gameConfig default too — the
@@ -3819,14 +3816,15 @@ function firstName(name: string): string {
  * to it, and the two are separate steps now because they were always two
  * different things.
  *
- * NOBODY IS DEMOTED BY THIS. The only surface that has ever posted
- * `membership-508` is the Love Letter page, which sends no `Authorization`
- * header and never has, in any commit. `authedUser` reads that header alone
- * with no cookie fallback, so a real signing has always stored `user_id` NULL
- * and has never once satisfied the rule this removes. Every row that could
- * satisfy it was a request somebody hand-built. Members who are actually here
- * hold `membershipGranted` (the 0058 freeze wrote it) or a `stageGranted`
- * rung, and this function and `computeStage` still answer for both.
+ * NOBODY WAS DEMOTED BY THIS, and read that in the past tense. Up to 29473e4
+ * the Love Letter sent no `Authorization` header, so every signing stored
+ * before 2026-08-29 carries `user_id` NULL and never once satisfied the rule
+ * this removes; members actually here hold `membershipGranted` (the 0058
+ * freeze wrote it) or a `stageGranted` rung. THE SAME COMMIT CHANGED THE PAGE,
+ * so a signing made since DOES carry `user_id`, which is what gives an
+ * accepted one a person to admit. This said "never has, in any commit" in the
+ * present tense until 2026-09-23, when a session believed it and reported the
+ * accept flow broken while it works.
  */
 function hasMembership(user: any): boolean {
   return !!user.membershipGranted;
@@ -5174,9 +5172,6 @@ async function startServer() {
   // village's own amounts are never restored to a default by a redeploy.
   await seedEconomy(getPool(), villageId());
   await loadTokenRegistry(getPool());
-  // At boot, so the first confirmed quest is never the thing that starts the
-  // clock it is then measured against. See `startEconomyEpoch`.
-  await startEconomyEpoch(getPool());
   // Suggested class tags on work that already exists, so a fresh village does
   // not meet five classes that appear to open nothing. Only rows where
   // `archetypes IS NULL` are touched, so a tag a human confirmed or cleared is
@@ -7973,17 +7968,12 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
      * to admit; the acceptance is still recorded and still means what it says.
      * Matching a typed email to an account is exactly the hole that was closed
      * before this one, and it stays closed.
+     *
+     * `admitted` tells the desk which of the two it was; the why is in `shared/membershipSigning.ts`.
      */
-    if (
-      status === "accepted" &&
-      !wasAccepted &&
-      submissions[idx].type === "membership-508" &&
-      submissions[idx].userId
-    ) {
-      await members.update(String(submissions[idx].userId), (m: any) => {
-        m.membershipGranted = true;
-      });
-    }
+    const signingAccepted = status === "accepted" && !wasAccepted && submissions[idx].type === "membership-508";
+    const admitted: boolean | null = signingAccepted ? !!submissions[idx].userId : null;
+    if (admitted) await members.update(String(submissions[idx].userId), (m: any) => { m.membershipGranted = true; });
     await submissionsRepo.replaceAll(submissions);
 
     /*
@@ -8027,7 +8017,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // sentence, the status moved and the recognition did not, and the desk has
     // to be told which: "accepted" with a silent unpaid mint is the shape this
     // guard exists to stop.
-    res.json({ success: true, rewarded, rewardRefused, notified });
+    res.json({ success: true, rewarded, rewardRefused, notified, admitted });
   });
 
   // Admin: Export Submissions as CSV
@@ -10266,7 +10256,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       },
       viewer: {
         viewPeople,
-        canContact: false,
+        canContact: false, mayStyleMap: admin, mayEditWalk: admin, mayNameMapThings: admin, // the three map editors: admin today because their endpoints are, see power/types.ts
         mayArrange: admin, // the drag publishes an org draft: admin until the decide gate lands
         // Where this viewer may declare (P10): "village" and/or circle ids.
         // The pencil shows where this says; the server re-checks on write.
@@ -18684,7 +18674,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
       // bytes behind a URL never change, and a UI tick that costs a
       // conditional request every time it fires is a tick nobody ships.
       if (type.startsWith("image/") || type.startsWith("font/") || type.startsWith("audio/")) {
-        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        // `private` for a member's own file, because erasure unlinks it and a shared cache would outlive that. Why it costs no page load: `isMemberOwnedUpload`.
+        res.setHeader("Cache-Control", `${isMemberOwnedUpload(safe) ? "private" : "public"}, max-age=31536000, immutable`);
       } else {
         // Investor documents and the like live behind a request-and-email gate.
         // The gate is weak (anyone with the URL can fetch), but `public` would
@@ -19259,38 +19250,7 @@ ${inner}
 
   registerSitePullRoutes(app, { isAdmin, adminActor, overLimit, clientIp, uploadsDir: UPLOADS_DIR });
   // Brand overlay: the Setup Wizard reads/writes this to white-label the site live.
-  app.get("/api/admin/brand", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    res.json({ brand: getBrand(), defaults: { project: GAME_CONFIG.project, currency: GAME_CONFIG.currency, images: GAME_CONFIG.images } });
-  });
-
-  app.put("/api/admin/brand", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    if (!req.body || typeof req.body !== "object") return res.status(400).json({ error: "Body required" });
-    const current = getBrand();
-    const next = {
-      project: { ...current.project, ...(req.body.project ?? {}) },
-      currency: { ...current.currency, ...(req.body.currency ?? {}) },
-      // Stripped on the way in as well as on the way out: a wizard tab opened
-      // before this change still holds `faviconAlt` in the object it posts
-      // back, and storing it again would put the orphan straight back.
-      images: withoutOrphanedAlt({ ...current.images, ...(req.body.images ?? {}) }),
-      setup: { ...current.setup, ...(req.body.setup ?? {}) },
-      // Theme fields are validated at EMISSION (server/lib/themeCss.ts), not
-      // here — storing a value the sanitiser later rejects yields an empty
-      // stylesheet, never an injected one. Rejecting at write time too would
-      // mean two sanitisers to keep in agreement forever.
-      theme: { ...(current as any).theme, ...(req.body.theme ?? {}) },
-      identityPack: { ...(current as any).identityPack, ...(req.body.identityPack ?? {}) },
-      // Sanitised on write (unlike theme) because this object is handed to the
-      // map artifact and two of its fields land in CSS custom properties. The
-      // artifact is a separate document doing its own thing with them, so the
-      // check belongs at the boundary where the value enters storage.
-      skin: sanitiseMapSkin({ ...(current as any).skin, ...(req.body.skin ?? {}) }),
-    };
-    await brandRepo.put(next);
-    res.json({ success: true, brand: next });
-  });
+  registerBrandRoutes(app, { isAdmin, brandRepo, getBrand, withoutOrphanedAlt });
 
   /**
    * The Living Map's skin, for the shell to hand its iframe.
@@ -20441,6 +20401,7 @@ ${inner}
     const consentedQuests = await claimsRepo.consentedCount(user.id);
     const stageId = computeStage(user, consentedQuests, await completionsFor(getPool(), user.id), await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()));
     const ctx = await capabilityCtx(user);
+    const inbox: any[] = submissionsRepo.all(); // once, for both answers below: `all()` copies every row.
     res.json({
       stage: servedStage(stageId),
       stageIndex: stageIndex(stageId),
@@ -20453,13 +20414,15 @@ ${inner}
       // The same keys with the closed ones included, and the rung that opens
       // each. `capabilities` above is exactly the rows here whose `held` is
       // true, by construction rather than by agreement.
-      capabilityCatalogue: await withPowerAffinity(capabilityCatalogue(ctx), { pool: getPool(), villageId: villageId(), userId: user.id, stageId, inbox: submissionsRepo.all() }),
+      capabilityCatalogue: await withPowerAffinity(capabilityCatalogue(ctx), { pool: getPool(), villageId: villageId(), userId: user.id, stageId, inbox }),
       roles: rolesFor(user.id),
       history: events
         .filter((e) => e.userId === user.id)
         .sort((a, b) => String(b.at).localeCompare(String(a.at)))
         .map((e) => ({ fromStage: e.fromStage, toStage: e.toStage, unlocked: e.unlocked, reason: e.reason, at: e.at })),
       firsts: await firstTimesFor(user.id),
+      // The signing this account carries, free off `inbox`. See `shared/membershipSigning.ts`.
+      signing: signingOf(inbox, user.id),
     });
   });
 
@@ -23979,16 +23942,15 @@ ${inner}
     if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to vote" });
     const voteGate = capabilityDecision("ballot.vote", await capabilityCtx(user));
     const result = await castVote(
-      getPool(),
-      req.params.id,
-      user.id,
+      getPool(), req.params.id, user.id,
       String(req.body?.choice ?? ""),
       req.body?.reason === undefined ? undefined : String(req.body.reason),
       { mayVoteNow: voteGate.allowed, deniedByWarning: voteGate.source === "denied by warning badge" },
+      req.body?.standsForSteward === true, // 0218: castVote honours it on the Birthing alone, and reports what it stored
     );
     if (!result.ok) return res.status(409).json({ error: result.error });
     const b = await ballotById(getPool(), req.params.id);
-    res.json({ success: true, choice: result.choice, ballot: b ? await serveBallot(b, user.id) : null });
+    res.json({ success: true, choice: result.choice, standsForSteward: result.standsForSteward, ballot: b ? await serveBallot(b, user.id) : null });
   });
 
   /** File an objection on a consent ballot without voting no. */

@@ -41,10 +41,8 @@ import { CIRCLE_STATUSES } from "@shared/draftKinds";
 import TypographyPanel from "@/components/TypographyPanel";
 import LookPanel from "@/components/LookPanel";
 import IdentityPackPanel from "@/components/IdentityPackPanel";
-import MapSkinPanel from "@/components/MapSkinPanel";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import LandTab from "@/components/admin/LandTab";
-import MapVocabularyPanel from "@/components/admin/MapVocabularyPanel";
 import ArchetypesPanel from "@/components/admin/ArchetypesPanel";
 import EventsAdminPanel from "@/components/EventsAdminPanel";
 import ResourcesAdminPanel from "@/components/power/ResourcesAdminPanel";
@@ -52,6 +50,9 @@ import { CrowdpoolAdminTab, ForumCategoriesEditor, ToolsCategoriesEditor } from 
 import ModuleSettingsSection from "@/components/admin/ModuleSettingsSection";
 import { useModuleDeepLink } from "@/components/admin/moduleDeepLink";
 import SetupNeeded from "@/components/modules/SetupNeeded";
+import VillageAnswers from "@/components/admin/VillageAnswers";
+import CurrencyAnswerNote from "@/components/admin/CurrencyAnswerNote";
+import SeasonTimezoneField from "@/components/admin/SeasonTimezoneField";
 import { CONTENT_SECTIONS, emptyContentFor } from "@/components/admin/contentSections";
 import { displayCurrencyProblem } from "@shared/money";
 import { formatTokenAmount } from "@/lib/tokenAmount";
@@ -73,7 +74,6 @@ import NeedsPanel, { NeedsSetupStep, useNeedsSetupObservation } from "@/componen
 import PurposeStatementPanel from "@/components/admin/PurposeStatementPanel";
 import RelationsEditor from "@/components/admin/RelationsEditor";
 import HousingAdminPanel from "@/components/HousingAdminPanel";
-import WalkEditorPanel from "@/components/WalkEditorPanel";
 import { ExampleChip, ExamplesBanner, forgetExamplesCache, RETIRES_WITH } from "@/components/ExamplesBanner";
 // visit-inquiry and membership-508 were missing, and they are the two highest-value
 // submissions on the site: a request to walk the land, and a signed 508(c)(1)(a)
@@ -904,6 +904,9 @@ export function SubmissionsTab({ password }: { password: string }) {
       const data = await res.json();
       if (!res.ok) throw new Error();
       if (data.rewarded) toast.success("Accepted. The member was welcomed into the game.");
+      else if (data.admitted) toast.success("Accepted. They hold membership now.");
+      // A stranger signed with no account, so the accept stands and admits nobody.
+      else if (data.admitted === false) toast.success("Accepted. This signing carries no account, so nobody was admitted. Invite them to join.");
       // Whether the person who sent this heard about the move. Members hear;
       // a public form filled in by a stranger has no account to reach, and a
       // founder who knows which is which can pick up the phone.
@@ -8893,7 +8896,7 @@ const CADENCES = [
   { value: "custom", label: "Custom / set by hand" },
 ];
 
-function SeasonTab({ password }: { password: string }) {
+export function SeasonTab({ password }: { password: string }) {
   const [cfg, setCfg] = useState<any>(null);
   const [saving, setSaving] = useState(false);
 
@@ -8906,13 +8909,13 @@ function SeasonTab({ password }: { password: string }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const save = async () => {
+  const save = async (extra: Record<string, unknown> = {}) => {
     setSaving(true);
     try {
       const res = await fetch(`${API_BASE}/admin/seasons`, {
         method: "PUT",
         headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ seasons: cfg.seasons, cadence: cfg.cadence, timezone: cfg.timezone }),
+        body: JSON.stringify({ seasons: cfg.seasons, cadence: cfg.cadence, timezone: cfg.timezone, ...extra }),
       });
       if (!res.ok) throw new Error();
       toast.success("Seasons saved");
@@ -8946,7 +8949,8 @@ function SeasonTab({ password }: { password: string }) {
             whichever season covers today. Queue the next one and it hands over by itself.
           </p>
         </div>
-        <button onClick={save} disabled={saving} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50 shrink-0">
+        {/* Arrow, not `save` itself: it takes body fields now, and onClick would pass the event as one. */}
+        <button onClick={() => save()} disabled={saving} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50 shrink-0">
           {saving ? "Saving..." : "Save"}
         </button>
       </div>
@@ -8970,17 +8974,13 @@ function SeasonTab({ password }: { password: string }) {
           </select>
           <p className="text-[11px] text-gray-400 mt-1">Used to suggest dates for the next season.</p>
         </div>
-        <div>
-          <label className="text-sm font-medium text-gray-700 block mb-1">Timezone</label>
-          <input
-            type="text"
-            value={cfg.timezone ?? ""}
-            onChange={(e) => setCfg({ ...cfg, timezone: e.target.value })}
-            placeholder="America/Costa_Rica"
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg"
-          />
-          <p className="text-[11px] text-gray-400 mt-1">A season turns at midnight where the village is.</p>
-        </div>
+        <SeasonTimezoneField
+          value={cfg.timezone ?? ""}
+          answered={!!cfg.timezoneAnswer}
+          saving={saving}
+          onChange={(timezone) => setCfg({ ...cfg, timezone })}
+          onConfirm={() => save({ confirmTimezone: true })}
+        />
       </div>
 
       <div className="space-y-4">
@@ -9352,6 +9352,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
             site is quoted in, and what a member sees before choosing their own display currency.
           </p>
         )}
+        <CurrencyAnswerNote answered={!!code} />
       </div>
     );
   };
@@ -9552,12 +9553,30 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
         <ArchetypesPanel password={password} />
       </SetupSection>
 
-      <SetupSection {...step} id="map" n={6} title="Map & styling" subtitle="How the Living Map draws your land. Blank keeps the map's own look.">
-        <MapSkinPanel password={password} />
-        <WalkEditorPanel password={password} />
-        {/* The vocabulary route has been live since the map shipped and its
-            only caller was a CLI importer. This is its first door. */}
-        <MapVocabularyPanel password={password} />
+      {/*
+        * THE EDITORS LEFT THIS PAGE ON 2026-09-23. A founder styling their
+        * land wants to watch it change while they decide, which a wizard step
+        * cannot do. All three now open from the map's own dock, under the
+        * Village Settings button the artifact already carried, and that button
+        * used to send a founder HERE: the trip was a round one.
+        *
+        * The panels moved without changing, which is what makes this a link
+        * and not a rewrite (map/VillageSettingsDoor.tsx mounts the same
+        * three). The step stays because a missing step six reads as one
+        * somebody forgot.
+        */}
+      <SetupSection {...step} id="map" n={6} title="Map & styling" subtitle="How the Living Map draws your land. The editors live on the map itself.">
+        <p className="text-sm text-gray-600 mb-4">
+          Your colours, the welcome walk and the village's own words for roads, water and zones are all
+          edited on the map. Open the land and use the Village Settings button on the map's dock: the map
+          repaints as you save, so you see every change where it lands.
+        </p>
+        <Link
+          href="/map"
+          className="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-deep"
+        >
+          Open the map
+        </Link>
       </SetupSection>
 
       <SetupSection {...step} id="technical" n={7} title="Go live" subtitle="One-time technical setup. Hand these to your developer or Claude Code.">
@@ -10160,6 +10179,8 @@ export default function Admin() {
               filter, so the rail and the card ride one fetch. */}
           <AdminGoLive token={password} moduleId={TAB_MODULE[activeTab] ?? null}
             onLifecycles={(m) => setModuleLifecycles(m as Record<string, ModuleLifecycle>)} />
+          {/* The two facts only this village can state. VillageAnswers.tsx says why it outlives the checklist. */}
+          <VillageAnswers password={password} />
           {activeTab === "setup" && <SetupWizard password={password} onOpenTab={setActiveTab} />}
           {activeTab === "events-admin" && <EventsAdminPanel password={password} />}
           {activeTab === "submissions" && <SubmissionsTab password={password} />}
