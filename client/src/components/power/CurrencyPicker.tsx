@@ -15,7 +15,6 @@
 import { useEffect, useState } from "react";
 import { authToken, useGameConfig } from "@/lib/gameApi";
 import { removeStored, storedText, writeStored } from "@/lib/safeStorage";
-import { defaultDisplayCurrency } from "@shared/money";
 
 const STORAGE_KEY = "power-display-currency";
 
@@ -53,7 +52,20 @@ export default function CurrencyPicker({
    * config comes through the app's one cached read, not a second request.
    */
   const config = useGameConfig();
-  const projectCurrency = config?.project ? defaultDisplayCurrency(config.project) : "";
+  /*
+   * AND ONLY WHAT THE VILLAGE ACTUALLY SAID. This read `defaultDisplayCurrency`,
+   * which answers CHF for a project that declares nothing, so a village that
+   * had simply not filled the field in was told its own currency was Swiss
+   * francs. Measured live on 2026-09-24: `/api/game/config` returned
+   * `fiatCurrency: ""` and the picker read "CHF (this village's)".
+   *
+   * A village that has not said and a config that could not answer are the
+   * same state from the reader's side, which is that nobody has told us, so
+   * both now say "this village's own" and name no code. The fallback in
+   * `defaultDisplayCurrency` stays where it belongs, on the server paths that
+   * have to convert an amount into something.
+   */
+  const projectCurrency = String(config?.project?.fiatCurrency ?? "").trim().toUpperCase();
   const [choice, setChoice] = useState<string>(() => storedDisplayCurrency());
 
   useEffect(() => {
