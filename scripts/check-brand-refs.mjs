@@ -40,6 +40,7 @@
 import fs from "fs";
 import path from "path";
 import { stripComments } from "./brand-strip.mjs";
+import { dropIgnored } from "./git-subjects.mjs";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, "$1"), "..");
 const BASELINE_PATH = path.join(ROOT, "scripts", "brand-refs-baseline.json");
@@ -163,7 +164,9 @@ function scanFile(file) {
   return { hits, waived, provenance };
 }
 
-const files = walk(ROOT).filter((f) => !isExempt(rel(f)));
+const walked = walk(ROOT);
+const { kept: tracked, skipped: ignoredCount, consulted: gitConsulted } = dropIgnored(walked, { cwd: ROOT, rel });
+const files = tracked.filter((f) => !isExempt(rel(f)));
 const counts = {};
 const details = {};
 let waivers = 0;
@@ -278,3 +281,19 @@ console.log(
   `${provenanceTotal} provenance mention(s) in comments; ${waivers} waiver(s) in force. ` +
   `SHOPFRONT (${SHOPFRONT.length} brochure page(s), never gated by design: a fork replaces them, it does not white-label them) carries ${shopfrontTotal} reference(s).`,
 );
+
+/*
+ * THE DENOMINATOR, PRINTED WHETHER OR NOT ANYTHING WAS SKIPPED.
+ *
+ * A guard that stopped scanning too much and a guard that stopped scanning at
+ * all report the same green, so the population is stated rather than implied.
+ * The second line only appears when git declined to answer, and it says the
+ * filter did NOT run rather than letting a full scan pass for a filtered one.
+ */
+console.log(
+  `  scanned ${files.length} of ${walked.length} file(s) on disk: ` +
+  `${ignoredCount} ignored by git, ${tracked.length - files.length} exempt by this guard.`,
+);
+if (!gitConsulted) {
+  console.log("  NOTE: git could not be consulted, so nothing was filtered and every walked file was scanned.");
+}
