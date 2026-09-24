@@ -48,7 +48,7 @@ import {
 // 0217: the governing purpose statement, its one writer, and its subject.
 import { writeGoverningPurpose } from "./lib/governingPurpose";
 import { GPS_CHANGE } from "../shared/governingPurpose";
-import { gpsChangeProposalFor } from "./repos/gpsChangeProposals";
+import { gpsChangeCloser } from "./lib/gpsChangeCloser";
 import {
   NOT_YET_WIRED,
   POWERS,
@@ -93,6 +93,7 @@ import { registerMoonSettlementRoutes } from "./routes/moonSettlement";
 import { applyDueGovernance, autoSettleExpired, digestComposerFor, itemKindsOf, markNotApplicable, overrideDials, routeOutcome, runVetoWatch, vetoWindowOn, type CloseRouting, type LandingDeps, type SubjectCloser } from "./lib/applyDue";
 import { register as registerGovernanceModeRoutes } from "./routes/governanceMode";
 import { register as registerGoverningPurposeRoutes } from "./routes/governingPurpose";
+import { register as registerCapabilityExplainerRoutes } from "./routes/capabilityExplainer";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
 import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
 import { landWeightMode } from "./lib/landingRefusal";
@@ -13542,53 +13543,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
 
   // ── LANE A ZONE END: the organize route ──────────────────────────────────
 
-  /**
-   * P8 (Wave 1): why can this person do that?
-   *
-   * The gate now answers from five sources (admin, badge denies, roles,
-   * badge grants, stage) and the honest failure mode is FOG: an admin
-   * cannot see which one decided. This runs the real `hasCapability` for
-   * every capability and reports the DECIDING source alongside the answer,
-   * so a surprising permission has a traceable cause instead of a shrug.
-   */
-  app.get("/api/admin/members/:id/capabilities", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const target = await members.byId(String(req.params.id));
-    if (!target) return res.status(404).json({ error: "No such member" });
-    const ctx = await capabilityCtx(target);
-    // 0098: the ladder is no longer re-implemented here. It used to be, under
-    // a comment admitting that "if that order ever changes, this explanation
-    // lies", and the gate's order changed in this very commit. `hasCapability`
-    // is now a projection of `capabilityDecision`, which reports the deciding
-    // step, so the explainer READS the decision instead of guessing at it and
-    // the two cannot drift.
-    const rows = ALL_CAPABILITIES.map((cap) => {
-      const decision = capabilityDecision(cap, ctx);
-      // The rung the GATE compared against, `capabilityDecision`'s own
-      // expression: a village that moved a rung was told the platform's.
-      const rung = ctx.stageUnlockOverrides?.[cap] ?? STAGE_UNLOCKS[cap];
-      const source =
-        decision.source === "stage" ? `stage (${rung ?? "?"})` : decision.source;
-      return {
-        capability: cap,
-        held: decision.allowed,
-        source,
-        // What the village holds, so an admin reading "not granted" on a key
-        // they used to pass can see WHY rather than filing a bug.
-        villageHolds: decision.villageHolds,
-        transferable: TRANSFERABLE[cap] === true,
-      };
-    });
-    res.json({
-      member: { id: target.id, name: target.name, role: target.role },
-      stage: await stageOf(target),
-      roles: ctx.roleCapabilities,
-      badgeGrants: ctx.badgeCapabilities,
-      badgeDenies: ctx.badgeDenies,
-      villageHeld: ctx.villageHeld,
-      capabilities: rows,
-    });
-  });
+  registerCapabilityExplainerRoutes(app, { isAdmin, members, capabilityCtx, stageOf });
 
   /**
    * ── WHAT THIS VILLAGE HOLDS, AND WHAT MOVING ONE COSTS (0098) ───────────
@@ -13602,9 +13557,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
     const holdings = await capabilityHoldings(getPool());
     const held = new Map(holdings.map((h) => [h.capability, h]));
     res.json({
-      // 0217: how far the handover has got, so the confirm dialog can warn on
-      // the LAST power and on no other. A warning on every crossing is a
-      // warning an admin learns to click past.
+      // 0217: so the confirm dialog warns on the LAST power and on no other.
       handover: await villageHandoverState(getPool()),
       powers: POWERS.map((p) => {
         const h = held.get(p.capability);
@@ -22632,86 +22585,12 @@ ${inner}
     }),
 
     /*
-     * ── THE VILLAGE CHANGES WHAT IT IS FOR (0217) ──────────────────────────
-     *
-     * `server/lib/mechanics.ts` moves Ring-2 game variables and cannot touch
-     * an `app_config` document, so the governing purpose statement needed a
-     * subject of its own rather than a dial. This is that subject's whole
-     * executor, and it writes one document through the one writer.
-     *
-     * IT CALLS THE SAME VALIDATOR THE FOUNDER'S WRITE CALLS. Both go through
-     * `writeGoverningPurpose`, which asks `purposeStatementProblem`. The two
-     * paths land years apart, so a second standard here would not surface
-     * until a village actually voted one through, and by then both answers
-     * would look deliberate.
-     *
-     * DORMANT ON EVERY VILLAGE ALIVE TODAY. The route that opens one refuses
-     * while the founder holds the pen, and no village has completed a
-     * handover.
+     * The village changes what it is for (0217). Dormant on every village
+     * alive today: the route that opens one refuses while the founder holds
+     * the pen. The whole executor, and why it is a file, is in
+     * server/lib/gpsChangeCloser.ts.
      */
-    [GPS_CHANGE]: twoPhase(async (b, outcome, outcomeNote, actorId) => {
-      const out: CloseRouting = { applied: [], held: null, proposerTold: null };
-      const asked = await gpsChangeProposalFor(getPool(), b.id);
-
-      if (outcome !== "passed") {
-        out.proposerTold = b.openedBy;
-        await notify({
-          userId: b.openedBy,
-          type: "governance",
-          title:
-            outcome === "no_quorum"
-              ? `Too few of the village voted: ${b.title}`
-              : `The village did not carry this one: ${b.title}`,
-          body:
-            outcome === "no_quorum"
-              ? "Nothing has changed. The ask can go to the village again whenever it is more gathered."
-              : `${outcomeNote}\n\nThe statement stands as it was.`,
-          link: ballotLink(b),
-          actorUserId: actorId,
-          dedupeKey: `bal:${b.id}:gps-not-carried`,
-        });
-        return out;
-      }
-
-      if (!asked) {
-        out.held = "the statement this vote would adopt was not recorded, so there is nothing to write";
-        await notifyAdmins("governance", `A carried purpose change could not land: ${b.title}`, `bal:${b.id}:gps-held`);
-        return out;
-      }
-
-      const written = await writeGoverningPurpose(getPool(), { statement: asked.statement, writtenBy: b.id });
-      if (!written.ok) {
-        out.held = written.error;
-        await notifyAdmins("governance", `A carried purpose change could not land: ${b.title}`, `bal:${b.id}:gps-held`);
-        return out;
-      }
-
-      out.applied = ["gps"];
-      out.proposerTold = b.openedBy;
-      await notify({
-        userId: b.openedBy,
-        type: "governance",
-        title: `The village carried this: ${b.title}`,
-        body: "The governing purpose statement reads the new way from today, and every proposal opened after this answers to it.",
-        link: ballotLink(b),
-        actorUserId: actorId,
-        dedupeKey: `bal:${b.id}:gps-carried`,
-      });
-      await addActivity("governance", "The village changed what it is for, by its own vote.", {
-        actorUserId: actorId,
-        entityType: "ballot",
-        entityRef: b.id,
-      });
-      void recordEvent(getPool(), {
-        kind: "audit",
-        text: `gps:changed-by-ballot:${b.id}`,
-        actorUserId: actorId,
-        entityType: "app_config",
-        entityRef: "gps",
-        audience: "admin",
-      });
-      return out;
-    }),
+    [GPS_CHANGE]: twoPhase(gpsChangeCloser({ getPool, notify, notifyAdmins, addActivity, ballotLink, recordAudit: (text: string, actorId: string) => void recordEvent(getPool(), { kind: "audit", text, actorUserId: actorId, entityType: "app_config", entityRef: "gps", audience: "admin" }) })),
 
     /*
      * ── THE VILLAGE DECLARES A ROLE (this lane, R90) ────────────────────────
@@ -23611,10 +23490,7 @@ ${inner}
       opensAt: b.opensAt,
       closesAt: b.closesAt,
       status: b.status,
-      // 0217: the proposer's one line on how this serves the governing
-      // purpose, beside the proposal at the moment of deciding. Null on every
-      // subject that carries none and on every ballot opened before the
-      // column existed.
+      // 0217: the judgement line, beside the proposal at the moment of deciding.
       purposeAlignment: b.purposeAlignment ?? null,
       outcomeNote: b.outcomeNote,
       closedBy: b.closedBy ? await nameOf(b.closedBy) : null,
@@ -23859,24 +23735,10 @@ ${inner}
       // decided on the ballot, so an edit after the vote opened cannot move the
       // instant the village was shown. Absent means next_moon.
       timing: timingOf((p as { timing?: unknown }).timing),
-      /*
-       * 0217: HOW THIS CHANGE SERVES THE GOVERNING PURPOSE, IN A LINE.
-       *
-       * Asked HERE and not in the wizard, and that is a decision with a cost
-       * worth naming. This route is where the proposer, or a proposal.open
-       * holder, takes a staged proposal to the village's vote, so the person
-       * answering is usually the proposer and the line is frozen onto the
-       * ballot the whole roll reads. What it is not is the moment the
-       * proposal was written, so a proposal.open holder taking somebody
-       * else's proposal to the vote writes the line for it. Whether the line
-       * should move onto `mechanics_proposals` and be asked in the wizard is
-       * a live question for Rye, and it would be a column and a wizard field
-       * rather than a redesign.
-       *
-       * `openBallot` decides whether this village has a statement to judge
-       * against at all, so nothing here changes for a village still setting
-       * itself up.
-       */
+      // 0217: the judgement line, asked HERE and not in the wizard, because
+      // this is where a proposer takes a staged proposal to the vote and the
+      // line freezes onto the ballot. See shared/governingPurpose.ts; whether
+      // it should move onto mechanics_proposals is a live question for Rye.
       purposeAlignment: req.body?.purposeAlignment,
       window: { elements: changeSetKinds(p.changeSet), comingBackFrom: await comingBackFrom(getPool(), p.id) }, // windows lane (19E): the strictest element decides, and anything coming back gets its grace
       onOpen: async (conn, ballotId) => {
@@ -24847,9 +24709,7 @@ ${inner}
       ),
       openedBy: user.id,
       electorate,
-      // 0217: the proposer says in a line how this serves the governing
-      // purpose. `openBallot` decides whether this subject needs one and
-      // whether this village has a statement to judge against.
+      // 0217: the judgement line; openBallot decides whether one is needed.
       purposeAlignment: req.body?.purposeAlignment,
     });
     if (!result.ok) return res.status(409).json({ error: result.error, ballotId: result.alreadyOpen?.id ?? null });
@@ -25099,9 +24959,7 @@ ${inner}
       ),
       openedBy: user.id,
       electorate,
-      // 0217: the proposer says in a line how this serves the governing
-      // purpose. `openBallot` decides whether this subject needs one and
-      // whether this village has a statement to judge against.
+      // 0217: the judgement line; openBallot decides whether one is needed.
       purposeAlignment: req.body?.purposeAlignment,
     });
     if (!result.ok) return res.status(409).json({ error: result.error, ballotId: result.alreadyOpen?.id ?? null });
@@ -25256,9 +25114,7 @@ ${inner}
       ),
       openedBy: user.id,
       electorate,
-      // 0217: the proposer says in a line how this serves the governing
-      // purpose. `openBallot` decides whether this subject needs one and
-      // whether this village has a statement to judge against.
+      // 0217: the judgement line; openBallot decides whether one is needed.
       purposeAlignment: req.body?.purposeAlignment,
     });
     if (!result.ok) return res.status(409).json({ error: result.error, ballotId: result.alreadyOpen?.id ?? null });

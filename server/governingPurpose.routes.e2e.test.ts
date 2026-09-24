@@ -260,9 +260,14 @@ describe.skipIf(!DB_CONFIGURED)("the governing purpose statement", () => {
   });
 
   it("the gps_change closer writes through that same writer", () => {
-    const source = fs.readFileSync(path.resolve(process.cwd(), "server/index.ts"), "utf8");
-    const closer = source.slice(source.indexOf("[GPS_CHANGE]: twoPhase("));
-    expect(closer.slice(0, 4000)).toContain("writeGoverningPurpose(getPool()");
+    // The chain, both links, because the executor lives in its own file and
+    // the subject table points at it. Either link breaking is a closer that
+    // no longer participates in the comparison the case above makes.
+    const dispatcher = fs.readFileSync(path.resolve(process.cwd(), "server/index.ts"), "utf8");
+    expect(dispatcher.slice(dispatcher.indexOf("[GPS_CHANGE]: twoPhase("), dispatcher.indexOf("[GPS_CHANGE]: twoPhase(") + 400))
+      .toContain("gpsChangeCloser(");
+    const closer = fs.readFileSync(path.resolve(process.cwd(), "server/lib/gpsChangeCloser.ts"), "utf8");
+    expect(closer).toContain("writeGoverningPurpose(deps.getPool()");
   });
 
   /*
