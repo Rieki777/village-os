@@ -379,6 +379,29 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   worktree reach **0221** (42,299 `.sql` files, so the channel is not empty); the scratchpad
   worktrees reach **0199** (1,827 files); `origin/main` (`8045c0d`) reaches **0220**.
   `check-migration-numbers.mjs --next` answers **0221**, wrong by one in the usual direction.
+- **canvas build integrator (`wt/canvas-build`), 2026-09-25: RESERVES 0223, 0224, 0225, 0226
+  and 0227 for the Governance Canvas build.** Holder: `wt/canvas-build`, the one held integration
+  branch (Rye, 2026-09-25: nothing lands on main until the whole plan is built and tested, then it
+  lands once). Planned uses: **0223** canvas proposals and decision-matrix rows; **0224**
+  resources, picks and documents; **0225** tensions; **0226** and **0227** spare. No file exists
+  yet for any of the five, so THIS BULLET IS THE ONLY RECORD of the block: a reserved number has
+  no file and no ref, and every sweep reads it as free. Measured on 2026-09-25 after
+  `git fetch origin --prune`, each channel with a known positive so an empty answer could not
+  pass for a clear one: (1) the TREE of every ref (`git ls-tree` over 414 remote refs plus the
+  local heads) reaches **0222** (`0222_a_village_reads_its_canvas.sql`, on `wt/canvas-baseline`
+  and this branch), and `git log --all --diff-filter=AR` agrees at **0222**; (2) the `drizzle/`
+  directories on disk across every sibling worktree reach **0222** (42,464 `.sql` files), and no
+  second-level directory holds one; (3) the scratchpad worktrees reach **0199** (1,827 files in
+  34 `drizzle/` directories); (4) `check-migration-numbers.mjs --next` answers **0223**. A fifth
+  channel, the ledger on every ref read ONE REF AT A TIME, holds no claim anywhere on 0223 to
+  0239 (control: the same loop finds `0222` on 9 lines). Read it one ref at a time: a single
+  `git grep` over all 414 refs printed nothing even for the control, and `\b` is not ERE, so the
+  first two forms of this scan were empty for reasons that had nothing to do with the numbers.
+  A canvas lane taking a number from this block appends its own holder bullet here naming the
+  file. **The block is measured against a main that stands at 0220.** If anything reaches main
+  above 0222 before this branch lands, re-scan and renumber at landing, which is safe only while
+  none of these files has run outside a scratch schema. The `0221` before `0222` landing-order row
+  in 27c still stands.
 - **membrane lane (invitations), 2026-09-14: holds 0209** for
   `drizzle/0209_a_member_arrives_by_invitation.sql` (one new table, `member_invites`). Measured three
   ways before the file was created: every remote and local ref and every worktree disk reached 0207
@@ -3330,6 +3353,7 @@ Both look like intentional work and neither is.
 | 2026-09-24 | honest-copy lane (L2) | follow-up to the row above: `docs/GOVERNANCE.md` and `docs/knowledge/governance-lineage.md` REGENERATED only (fingerprint line moves, no rule text), because `server/index.ts` and `shared/ballotSubjects.ts` are both in the generator's SOURCES; and one paragraph in `docs/ECONOMICS.md`, because `check-economics-narrative` puts `server/lib/exitPolicy.ts` on the economy surface. Measured on the branch with the repo's own scripts: `check-server-index-size` 27070 of 27089 lines and 390 of 390 routes, `check-file-lines` 14347 of 14358, both unchanged by this lane | `wt/honest-copy` | HELD. Whoever merges main into this branch regenerates the governance pair as the LAST commit, since any other lane touching a source moves the fingerprint. |
 | 2026-09-24 | canvas-baseline lane (L4) | migration **0222** (`drizzle/0222_a_village_reads_its_canvas.sql`, section 3 holds the four-way measurement; 0221 is taken by `wt/saberra-boundary-fix`); `server/index.ts`: ONE import of `./routes/canvas` and ONE register call, both exempt from the ratchet, no route added to the file; `shared/villageBrief.ts` (`BRIEF_SECTIONS` becomes `as const satisfies`, `BriefSectionId` exported, three code-only sections `stakeholders`, `learning`, `impact` at ADMIN audience); `client/src/pages/JourneyToLaunch.tsx` (one import and one view switch) | `wt/canvas-baseline`, off `8045c0d` | HELD. No capability key (the pen is `story.tell` through the one gate), no game variable, no baseline moved. The brief-audience lane (L3) owns `server/lib/villageBrain.ts`; the three new sections are ADMIN by default and never join its strangers' allowlist here. |
 | 2026-09-24 | canvas-baseline lane (L4), fix-and-ship step | **LANDING ORDER for migrations `0221` and `0222`.** Measured today: `0221_a_seat_carries_what_a_module_knows.sql` is held on `origin/wt/saberra-boundary-fix` at `d6906e9` (four commits past its merged PR #376, with no open PR) and on the `wt-holders` disk; `0222` is held only by `wt/canvas-baseline`. The numbers gate reads its ceiling from the BASE ref, so if `0222` reaches main first, `0221` falls below the ceiling and `check-migration-numbers.mjs` refuses it as a number that did not go forward. Land `0221` first, or renumber it at landing (safe only while it has never run outside a scratch schema). `0221` has no row in section 3, so this row is the only written record of the order. | `wt/canvas-baseline` | OPEN, for whoever composes the batch. |
+| 2026-09-25 | canvas build integrator | **`wt/canvas-build`, the ONE held integration branch for the Governance Canvas build**, and on it: migrations **0223-0227** (section 3 holds the four-way measurement and the planned uses), the governance pair (`docs/GOVERNANCE.md`, `docs/knowledge/governance-lineage.md`) and any other generated doc, which the integrator REGENERATES ONCE from the composed sources after each wave's merges rather than taking a side. Composed so far, merged `--no-ff` in this order off `origin/main` `8045c0d`: #385 `wt/brief-audience`, #386 `wt/intake-private`, #387 `wt/honest-copy`, #388 `wt/canvas-baseline`. The only conflicts were this ledger (27c rows UNIONED, and every row each branch added is proved present after normalising line endings) and the governance pair (regenerated) | `wt/canvas-build`, draft PR to main | HELD by Rye's instruction of 2026-09-25: nothing lands on main until the whole plan is built and tested, then it lands once. The four Wave 0 PRs stay open and are NOT merged on their own. **A later wave merges INTO this branch, never into main.** A lane that changes a governance source leaves the pair for the integrator to regenerate. |
 ### 27d — Verification: CI runs the full suite, lanes run what they touched
 
 **Measured, 2026-09-03/04.** A local full suite is 25 minutes on a quiet machine and 46.6 minutes
