@@ -74,7 +74,7 @@ describe("the rate a village redeems at", () => {
   });
 
   it("has no rate when the currency cannot be reached from the posted one", () => {
-    // The ECB list carries no CRC, which server/lib/fxRates.ts says in writing.
+    // A rates TABLE with no CRC row, whatever the source carries: this is
     expect(
       resolveRedemptionRate({
         currency: "CRC",

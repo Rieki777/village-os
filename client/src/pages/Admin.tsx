@@ -8719,7 +8719,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
    * not carry. A closed list would have made this village's own currency
    * unreachable from the screen built to set it.
    *
-   * The note is the honest half. `server/lib/fxRates.ts` fetches the ECB
+   * The note is the honest half. `server/lib/fxRates.ts` fetches the
    * daily list, which does not carry CRC (measured 2026-08-21), so a village
    * quoting in an uncovered currency shows amounts unconverted to anyone
    * viewing in another until an admin records a manual rate. That is a real
