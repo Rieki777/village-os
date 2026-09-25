@@ -26,6 +26,18 @@
 //      icon-plus-label button on the site went unmeasured. Any element with a non-empty DIRECT
 //      text node now qualifies.
 //
+//   6. THE COLOUR THE FONT PAINTS. An emoji glyph takes its colours from the emoji font;
+//      `color` does not move them. v6 measured `color` anyway and reported three FAILs on
+//      `/co-creators-guide` at 2.33:1 for "🌀", "✍️" and "🌱", each one the page's inherited
+//      near-black against a card the glyphs never took their ink from. Same shape as #2 and
+//      the sibling-image limit below: the arithmetic was right and the ground was wrong.
+//      An element whose own text is nothing but emoji is now NOT MEASURABLE.
+//
+//      Keycaps needed their own pattern. `1️⃣` is an ASCII digit plus U+FE0F plus U+20E3, so
+//      a pictographic character class alone leaves the digit behind and the element reads as
+//      ordinary text. A fixture case caught that before it shipped; the first predicate had
+//      the gap and the control is what found it.
+//
 // AND ONE IT STILL CANNOT SEE, stated because a known limit is worth more than a silent one:
 // an absolutely positioned photo is a SIBLING, not an ancestor. Text over a hero image will
 // read as white-on-white. Those are reported as NOT MEASURABLE, never as failures.
@@ -33,10 +45,51 @@
 // Usage:
 //   QA_BASE_URL=https://your-deployment.example node scripts/qa/contrast.mjs [routes...]
 //   QA_TOKEN=<token> ...                  to reach signed-in surfaces
+import { pathToFileURL } from "node:url";
 import { baseUrl, authToken, playwright, contextFor, PROFILES } from "./lib.mjs";
 import { routes } from "./routes.mjs";
 
-const PROBE = () => {
+/**
+ * True when node was pointed at THIS file rather than something importing it.
+ * Compared as URLs because `process.argv[1]` is a path, and on Windows a path
+ * comparison would fail on the separator alone.
+ */
+const isEntryPoint = (url) =>
+  !!process.argv[1] && url === pathToFileURL(process.argv[1]).href;
+
+/**
+ * WHICH CHARACTERS ARE PAINTED BY THE FONT RATHER THAN BY `color`.
+ *
+ * Exported as SOURCE STRINGS, not as RegExp objects, because `page.evaluate`
+ * serialises its callback and it cannot close over this module. The probe
+ * rebuilds them in the browser from these exact strings, so there is ONE
+ * definition rather than a copy on each side that could drift apart.
+ *
+ * `scripts/qa-contrast-emoji.test.mjs` drives `emojiOnly` below against the
+ * glyphs that actually produced false failures, and against the negatives that
+ * must stay measurable. That self-test is wired by the glob in
+ * `scripts/run-self-tests.mjs`, which is why it lives in `scripts/` and not
+ * beside this file: the glob reads that directory only, so a fixture in
+ * `scripts/qa/` would run nowhere at all.
+ */
+export const EMOJI_PATTERNS = {
+  // `1️⃣` is an ASCII digit plus U+FE0F plus U+20E3. The base is not
+  // pictographic, so this has to be stripped as a UNIT and before the class
+  // below, or the digit survives and the element reads as ordinary text.
+  keycap: "[0-9#*]\\uFE0F?\\u20E3",
+  // The emoji themselves, plus variation selector 16, the zero-width joiner
+  // and the five skin-tone modifiers that make up a sequence.
+  pictographic: "[\\p{Extended_Pictographic}\\u{FE0F}\\u{200D}\\u{1F3FB}-\\u{1F3FF}]",
+};
+
+/** True when `s` has no character that `color` would actually paint. */
+export const emojiOnly = (s) =>
+  !String(s)
+    .replace(new RegExp(EMOJI_PATTERNS.keycap, "gu"), "")
+    .replace(new RegExp(EMOJI_PATTERNS.pictographic, "gu"), "")
+    .trim();
+
+const PROBE = (patterns) => {
   const cv = document.createElement("canvas");
   cv.width = cv.height = 1;
   const g = cv.getContext("2d", { willReadFrequently: true });
@@ -152,6 +205,12 @@ const PROBE = () => {
     return t.trim();
   };
 
+  // Rebuilt from the source strings this probe was handed, so the rule the
+  // self-test drives and the rule that runs in the page are the same one.
+  const KEYCAP = new RegExp(patterns.keycap, "gu");
+  const PICTOGRAPHIC = new RegExp(patterns.pictographic, "gu");
+  const emojiOnly = (s) => !s.replace(KEYCAP, "").replace(PICTOGRAPHIC, "").trim();
+
   const fails = [], unmeasurable = [];
   let measured = 0;
   for (const el of document.querySelectorAll("*")) {
@@ -161,6 +220,24 @@ const PROBE = () => {
     if (b.width < 4 || b.height < 4) continue;
     const cs = getComputedStyle(el);
     if (cs.visibility === "hidden" || cs.display === "none" || +cs.opacity < 0.1) continue;
+
+    // A COLOUR-EMOJI GLYPH IS PAINTED BY THE FONT, NOT BY `color`. On an
+    // element whose own text is nothing but emoji, `cs.color` is the inherited
+    // ink that nothing uses: the glyph arrives with its own colours from the
+    // emoji font, and setting `color` does not move them. Measuring it answers
+    // a question about a value that is not on screen. `/co-creators-guide`
+    // reported three FAILs at 2.33:1 for "🌀", "✍️" and "🌱" on that basis,
+    // each one rgb(23,23,23) — the page's inherited near-black — against a
+    // card those emoji do not take their colour from.
+    //
+    // Same family as the gradient and sibling-image cases above: the number
+    // was computed correctly from the wrong ground. It is NOT MEASURABLE
+    // rather than skipped, because a silent skip is what this file exists to
+    // refuse.
+    if (emojiOnly(t)) {
+      unmeasurable.push(`"${t.slice(0, 30)}" — emoji only; the font paints the glyph, not \`color\``);
+      continue;
+    }
 
     const fgRaw = rgba(cs.color);
     if (!fgRaw) { unmeasurable.push(`"${t.slice(0, 30)}" — unparseable colour`); continue; }
@@ -190,6 +267,16 @@ const PROBE = () => {
   return { measured, fails: fails.sort((a, b) => a.ratio - b.ratio), unmeasurable };
 };
 
+// EVERYTHING BELOW RUNS ONLY WHEN THIS FILE IS THE COMMAND.
+//
+// `scripts/qa-contrast-emoji.test.mjs` imports `emojiOnly` and
+// `EMOJI_PATTERNS` from here so the rule it drives is the rule the page runs,
+// rather than a copy that could drift. Without this guard that import would
+// start a browser sweep — and, with no QA_BASE_URL set, exit the self-test
+// runner with the scanner's own usage message. It did exactly that once.
+if (isEntryPoint(import.meta.url)) await main();
+
+async function main() {
 const BASE = baseUrl();
 const TOKEN = authToken();
 const targets = process.argv.slice(2).filter((a) => !a.startsWith("--"));
@@ -209,7 +296,7 @@ for (const profile of PROFILES) {
       continue;
     }
     await page.waitForTimeout(3200);
-    const r = await page.evaluate(PROBE);
+    const r = await page.evaluate(PROBE, EMOJI_PATTERNS);
     totalFails += r.fails.length;
     console.log(`\n=== ${profile.name} ${route} ===  ${r.measured} measured · ${r.fails.length} FAIL · ${r.unmeasurable.length} NOT MEASURABLE`);
     for (const f of r.fails.slice(0, 10)) {
@@ -223,3 +310,4 @@ for (const profile of PROFILES) {
 }
 console.log(`\n  ${totalFails} contrast failure(s) across ${ROUTES.length} route(s) x ${PROFILES.length} viewport(s)`);
 process.exit(totalFails > 0 ? 1 : 0);
+}
