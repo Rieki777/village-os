@@ -93,13 +93,14 @@ export const POWERS: readonly PowerEntry[] = [
   {
     capability: "story.tell",
     title: "What the village says about itself",
-    surface: "Page content, the questions and answers, and the milestones",
+    surface: "Page content, the questions and answers, the milestones, and the governance canvas readings",
     routes: [
       "/api/admin/content/:section",
       "/api/admin/faqs/:pathway",
       "/api/admin/faqs/:pathway/:id",
       "/api/admin/milestones",
       "/api/admin/milestones/:id",
+      "/api/canvas/readings",
     ],
   },
   {

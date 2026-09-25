@@ -96,6 +96,7 @@ import { registerMoonSettlementRoutes } from "./routes/moonSettlement";
 import { applyDueGovernance, autoSettleExpired, digestComposerFor, itemKindsOf, markNotApplicable, overrideDials, routeOutcome, runVetoWatch, vetoWindowOn, type CloseRouting, type LandingDeps, type SubjectCloser } from "./lib/applyDue";
 import { register as registerGovernanceModeRoutes } from "./routes/governanceMode";
 import { register as registerGoverningPurposeRoutes } from "./routes/governingPurpose";
+import { register as registerCanvasRoutes } from "./routes/canvas";
 import { register as registerCapabilityExplainerRoutes } from "./routes/capabilityExplainer";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
 import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
@@ -141,6 +142,8 @@ import { register as registerCharacterPortraitRoutes } from "./routes/characterP
 import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
 import { register as registerPowerAffinityRoutes, powersForClass, withPowerAffinity } from "./routes/powerAffinity";
 import { deferredSeatVote, register as registerPowerHandRoutes, registerSeatVote } from "./routes/powerHands";
+import { register as registerRestorativeIntakeRoutes } from "./routes/restorativeIntake";
+import { intakeRoleNamed } from "./lib/restorativeIntake";
 import { resolveGoogleConfig } from "./lib/oauthGoogle";
 import { makeIdentityGate } from "./lib/identityConfirm";
 import {
@@ -391,7 +394,7 @@ import {
   blankTerms,
   exitLeverRefusal,
   normalizeExitPolicy,
-  platformDefaultTerms,
+  platformDefaultTerms, platformDefaultTermKeys,
   withPolicyDefaults,
 } from "./lib/exitPolicy";
 import {
@@ -562,7 +565,7 @@ import {
 import {
   brainEtag, briefAll, briefGet, briefIndexForPrompt, briefWrite, deriveDecisions, recordSummaries,
   renderIndexMarkdown, renderSectionMarkdown, slugify,
-  briefForPublicPrompt,
+  briefForPublicPrompt, briefAudienceFromBody, briefRowsForViewer,
 } from "./lib/villageBrain";
 import { proposalSystemPrompt } from "./lib/proposalPrompt";
 import {
@@ -13768,12 +13771,12 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
     const row = await briefWrite(getPool(), {
       section,
       body,
-      audience: req.body?.audience === "member" ? "member" : undefined,
+      audience: briefAudienceFromBody(req.body?.audience),
       source: "admin",
       confirmedBy: req.body?.confirm === false ? null : actor,
     });
     void recordEvent(getPool(), {
-      kind: "audit", text: `brain:write:${section}:r${row.revision}`, actorUserId: actor,
+      kind: "audit", text: `brain:write:${section}:r${row.revision}:${row.audience}`, actorUserId: actor,
       entityType: "brain", entityRef: section, audience: "admin",
     });
     res.json({ success: true, section: row });
@@ -13800,8 +13803,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
 
   /**
    * The brain as markdown, for a human, for the assistant, and for any other
-   * model pointed at it. Audience-filtered: `people` names members and `legal`
-   * names title holders, so neither renders to a member.
+   * model pointed at it. Audience-filtered: `people` and `legal` never render to
+   * a member, and an account not yet admitted reads only the strangers' allowlist.
    */
   app.get("/api/village/brain", async (req, res) => {
     const viewer = await authedUser(req);
@@ -13814,7 +13817,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
     if (req.headers["if-none-match"] === etag) return res.status(304).end();
 
     const wanted = String(req.query.section ?? "").trim();
-    const filled = await briefAll(getPool(), audience);
+    const filled = briefRowsForViewer(await briefAll(getPool(), audience), { admin: audience === "admin", member: hasMembership(viewer) });
     if (wanted && wanted !== "index") {
       const row = filled.find((r) => r.section === wanted);
       if (!row) return res.status(404).send(`# Not found\n\nNothing readable at ${wanted}.\n`);
@@ -14161,7 +14164,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (LIFECYCLE_RANK[effectiveLifecycle("governance")] < LIFECYCLE_RANK.members) {
       return res.status(409).json({
         error:
-          "This village decides on Hypha today, so there is no vote to open here. Turn the governance module on for members first, and the village can hold this vote itself.",
+          "This village has not turned governance on for its members, so there is no vote to open here. Turn the governance module on for members first, and the village can hold this vote itself.",
       });
     }
 
@@ -14674,8 +14677,10 @@ Send an empty drafts array when you are still listening. A role payload is {name
           decidingCircle: namedCircle(policy?.involuntary?.decidingDomainId),
           appealCircle: namedCircle(policy?.involuntary?.appealDomainId),
         },
+        // Named for the same reason: a member sees who an intake reaches before sending it.
+        restorative: { ...(policy?.restorative ?? {}), intakeRole: intakeRoleNamed(policy?.restorative?.intakeContactRole, rolesRepo.all()) },
       },
-      configured: exitPolicyRepo.exists(),
+      configured: exitPolicyRepo.exists(), platformWording: platformDefaultTermKeys(policy),
     });
   });
 
@@ -14892,39 +14897,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     res.json({ success: true });
   });
 
-  /**
-   * Restorative intake (F12's hard rule as code): the message reaches ONLY
-   * the intake role's holders, through the notification spine. No forum
-   * thread, no event row, no exits-row content — a person is never the
-   * subject of a consent decision in a general forum.
-   */
-  app.post("/api/exit/restorative-intake", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in first" });
-    if (await overLimit(`restorative:${user.id}`, 3, 24 * 60 * 60 * 1000)) {
-      return res.status(429).json({ error: "Three intakes a day. The stewards are already listening" });
-    }
-    const message = String(req.body?.message ?? "").trim();
-    if (!message) return res.status(400).json({ error: "Say what happened, in your own words" });
-    const policy: any = readExitPolicy();
-    const roleId = String(policy?.restorative?.intakeContactRole ?? "");
-    if (!roleId) return res.status(409).json({ error: "No intake contact role is configured yet. Write to the stewards directly" });
-    const holders = loadRoleHolders().filter((h: any) => h.roleId === roleId);
-    if (!holders.length) return res.status(409).json({ error: "The intake role has no holders right now. Write to the stewards directly" });
-    const intakeId = `ri-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    for (const h of holders as any[]) {
-      await notify({
-        userId: h.userId,
-        type: "restorative_intake",
-        title: `A private intake from ${user.name ?? "a member"}`,
-        body: message.slice(0, 2000),
-        link: "/admin",
-        actorUserId: user.id,
-        dedupeKey: `restorative:${intakeId}:${h.userId}`,
-      });
-    }
-    res.json({ success: true, reached: holders.length });
-  });
+  // Restorative intake (F12's hard rule as code): server/routes/restorativeIntake.ts.
+  registerRestorativeIntakeRoutes(app, { authedUser, notify, overLimit, readExitPolicy, roleHolders: loadRoleHolders });
 
   // â”€â”€ S49-S51: village health — the dashboard reads (collection lives in
   //    the cycle close; only DISPLAY is module-gated) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -18055,7 +18029,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
      * they want to bring, knew the village's NAME and its reciprocity options
      * and nothing else about what the village is for.
      *
-     * Member-audience, confirmed sections only, and fenced as data: everything
+     * Allowlisted (STRANGER_READABLE_SECTIONS), member-audience, confirmed sections only, and fenced as data: everything
      * a stranger types is untrusted, and so is anything the guide read out of a
      * table. A fork that has written nothing gets an empty string and the
      * prompt says nothing about what the village stands for, which is the
@@ -25419,6 +25393,7 @@ ${inner}
   registerGovernanceModeRoutes(app, { authedUser, getPool, capabilityCtx, firstName, weightModeNow, buildElectorate });
   registerStewardSlateRoutes(app, { authedUser, isAdmin, getPool, members, firstName });
   registerGoverningPurposeRoutes(app, { authedUser, isAdmin, adminActor, getPool, capabilityCtx, firstName, weightModeNow, buildElectorate, addActivity });
+  registerCanvasRoutes(app, { authedUser, guardCapability, capabilityCtx, getPool, firstName });
 
   /**
    * The subset of variables the CLIENT is allowed to know, so the UI can render

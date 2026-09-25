@@ -146,12 +146,19 @@ const text = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 const steps = (v: unknown): string[] =>
   Array.isArray(v) ? v.map((s) => text(s)).filter((s) => s.length > 0) : [];
 
-/** Whitespace and case are formatting, so they never count as new words. */
-const same = (a: string, b: string): boolean =>
-  a.replace(/\s+/g, " ").trim().toLowerCase() === b.replace(/\s+/g, " ").trim().toLowerCase();
+/**
+ * Whitespace and case are formatting, so they never count as new words.
+ *
+ * Type-checked before comparing because a STORED document reaches these too
+ * (the public `GET /api/exit-policy` asks `platformDefaultTermKeys`), and a
+ * stored field is whatever some release wrote. A null there is not the
+ * platform's words, and it must not turn the public page into a 500.
+ */
+const same = (a: unknown, b: string): boolean =>
+  typeof a === "string" && a.replace(/\s+/g, " ").trim().toLowerCase() === b.replace(/\s+/g, " ").trim().toLowerCase();
 
-const sameSteps = (a: string[], b: string[]): boolean =>
-  a.length === b.length && a.every((s, i) => same(s, b[i]));
+const sameSteps = (a: unknown, b: string[]): boolean =>
+  Array.isArray(a) && a.length === b.length && a.every((s, i) => same(s, b[i]));
 
 /**
  * Coerce an admin body into a whole policy document.
@@ -238,20 +245,34 @@ export function withPolicyDefaults(stored: any): ExitPolicy {
 }
 
 /**
+ * The KEYS of every rendered term whose text is still the platform's.
+ *
+ * Keys and not labels because other pages read this too. `/governance` and
+ * `/roles` print the village's restorative steps as its conflict process, and
+ * they must not print the platform's starting steps as though the village had
+ * written them. `GET /api/exit-policy` hands them this list as `platformWording`
+ * so they ask the same comparison the publish gate asks, rather than a copy of
+ * it that drifts.
+ */
+export function platformDefaultTermKeys(policy: ExitPolicy): ExitPolicyTermKey[] {
+  const d = DEFAULT_EXIT_POLICY;
+  const stale: ExitPolicyTermKey[] = [];
+  if (same(policy.voluntary.valuationMethod, d.voluntary.valuationMethod)) stale.push("valuationMethod");
+  if (sameSteps(policy.voluntary.unwindSteps, d.voluntary.unwindSteps)) stale.push("unwindSteps");
+  if (same(policy.involuntary.process, d.involuntary.process)) stale.push("involuntaryProcess");
+  if (sameSteps(policy.restorative.steps, d.restorative.steps)) stale.push("restorativeSteps");
+  return stale;
+}
+
+/**
  * The labels of every rendered term whose text is still the platform's.
  *
  * An empty array is the only state in which a village may record that its
  * community decided these terms.
  */
 export function platformDefaultTerms(policy: ExitPolicy): string[] {
-  const d = DEFAULT_EXIT_POLICY;
-  const stale: string[] = [];
   const label = (key: ExitPolicyTermKey) => EXIT_POLICY_TERMS.find((t) => t.key === key)!.label;
-  if (same(policy.voluntary.valuationMethod, d.voluntary.valuationMethod)) stale.push(label("valuationMethod"));
-  if (sameSteps(policy.voluntary.unwindSteps, d.voluntary.unwindSteps)) stale.push(label("unwindSteps"));
-  if (same(policy.involuntary.process, d.involuntary.process)) stale.push(label("involuntaryProcess"));
-  if (sameSteps(policy.restorative.steps, d.restorative.steps)) stale.push(label("restorativeSteps"));
-  return stale;
+  return platformDefaultTermKeys(policy).map(label);
 }
 
 /** The labels of every rendered term a founder emptied. A blank policy is not a policy. */

@@ -12,7 +12,8 @@
  * founder's own Setup Studio: the guide the public actually meets knew the
  * village's name and its reciprocity options and nothing about what the village
  * is for. `villageWords` is that gap closed. It arrives already filtered to
- * member-audience, confirmed sections (see `briefForPublicPrompt`) and is
+ * allowlisted (`STRANGER_READABLE_SECTIONS`), member-audience, confirmed
+ * sections (see `briefForPublicPrompt`) and is
  * FENCED here, because a table the guide read is untrusted input in exactly the
  * way a stranger's typing is.
  */
