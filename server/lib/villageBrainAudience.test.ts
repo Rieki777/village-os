@@ -95,17 +95,23 @@ describe.skipIf(!configured)("a brief section's audience is a stored choice (MyS
   });
 
   it("keeps a revision row for every change, the audience changes included", async () => {
-    // economy was written five times above: create, open, edit, propose, close.
-    const economy = await briefGet(pool, "economy", "admin");
-    expect(economy?.revision).toBe(5);
-    const history = await revisions(pool, "economy");
-    expect(history.map((h) => h.revision)).toEqual([1, 2, 3, 4]);
-    expect(history.map((h) => h.body)).toEqual([
-      "Dues are forty a month.",
-      "Dues are forty a month.",
-      "Dues are forty-five a month now.",
-      "Dues may rise to fifty.",
-    ]);
+    // Its own section, so a failure above cannot shift the count here.
+    const writes: Array<{ body: string; audience?: "admin" | "member" }> = [
+      { body: "Anyone who works a season may ask." },
+      { body: "Anyone who works a season may ask.", audience: "member" },
+      { body: "Anyone who works two seasons may ask." },
+      { body: "Anyone who works two seasons may ask.", audience: "admin" },
+    ];
+    for (const w of writes) await briefWrite(pool, { section: "membership", ...w, confirmedBy: "u-founder" });
+
+    const membership = await briefGet(pool, "membership", "admin");
+    expect(membership?.revision).toBe(4);
+    expect(membership?.audience).toBe("admin");
+    const history = await revisions(pool, "membership");
+    // The first write created the row; each later one kept what it replaced,
+    // including the two that changed only the audience.
+    expect(history.map((h) => h.revision)).toEqual([1, 2, 3]);
+    expect(history.map((h) => h.body)).toEqual(writes.slice(0, 3).map((w) => w.body));
   });
 });
 
