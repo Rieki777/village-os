@@ -3717,17 +3717,14 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(leaksIn(doerIntake.title), "the title, which is also the email subject, names no one").toEqual([]);
     expect(String(doerIntake.link ?? ""), "it opens a page a member who is not an admin can open").not.toMatch(/^\/admin/);
     // One row per person reached, and no copy anywhere else in the table.
-    const [[rows]] = await testDb.conn.query<any[]>(
-      "SELECT COUNT(*) AS n FROM notifications WHERE type = 'restorative_intake'",
-    );
-    expect(Number(rows.n)).toBe(intake.json.reached);
     // peer sent it and holds founders-circle too, and is never their own
     // recipient: doer's row above is what was reached, and peer has none.
-    const [[own]] = await testDb.conn.query<any[]>(
-      "SELECT COUNT(*) AS n FROM notifications WHERE type = 'restorative_intake' AND user_id = ?",
+    const [[rows]] = await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT COUNT(*) AS n, COALESCE(SUM(user_id = ?), 0) AS own FROM notifications WHERE type = 'restorative_intake'",
       [peerId],
     );
-    expect(Number(own.n), "the sender is not sent their own intake").toBe(0);
+    expect(Number(rows.n)).toBe(intake.json.reached);
+    expect(Number(rows.own), "the sender is not sent their own intake").toBe(0);
     const [[fAfter]] = await testDb.conn.query<any[]>("SELECT COUNT(*) AS n FROM forum_threads");
     expect(Number(fAfter.n)).toBe(Number(fBefore.n)); // no thread, ever
     // The CONTENT never lands anywhere but its recipients' notifications:
