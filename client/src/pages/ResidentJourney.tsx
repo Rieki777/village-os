@@ -665,8 +665,12 @@ export default function ResidentJourney() {
                 <h3 className="font-display text-xl font-semibold mb-2">
                   {level.level}
                 </h3>
+                {/* /60 measured 3.96:1 on the `bg-white/10` composite
+                    rgb(83,83,83), under AA at 12px. /80 is 5.67:1 there and
+                    keeps this label quieter than the heading above it, which
+                    is what the fade was for. */}
                 {level.years && (
-                  <p className="text-white/60 text-xs mb-3 uppercase tracking-wide">
+                  <p className="text-white/80 text-xs mb-3 uppercase tracking-wide">
                     {level.years}+
                   </p>
                 )}
