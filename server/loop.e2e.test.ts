@@ -3701,10 +3701,10 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(intakeMail.length, "the intake is emailed at once, so the provider was handed at least one email").toBeGreaterThan(0);
     for (const m of intakeMail) {
       expect(m.url).toBe("https://api.resend.com/emails");
-      expect(m.body.subject).toBe("A private intake is waiting for you");
-      expect(m.body.html, "the email still says an intake is waiting").toContain("A private intake is waiting for you");
       expect(leaksIn(m.body.subject), "the email subject names no one and quotes nothing").toEqual([]);
       expect(leaksIn(m.body.html), "the email body carries neither the sender's name nor their words").toEqual([]);
+      expect(m.body.subject).toBe("A private intake is waiting for you");
+      expect(m.body.html, "the email still says an intake is waiting").toContain("A private intake is waiting for you");
     }
 
     // The words and the name stay in the village, in the recipient's own row.
