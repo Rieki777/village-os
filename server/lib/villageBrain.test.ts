@@ -107,7 +107,9 @@ describe("what may ever reach a stranger", () => {
   });
 
   it("names only sections that exist, so a rename cannot quietly empty the public guide", () => {
-    const ids = new Set(BRIEF_SECTIONS.map((s) => s.id));
+    // Widened to string: the allowlist is a set of strings, and BRIEF_SECTIONS
+    // ids became literals (BriefSectionId) when the canvas sections joined them.
+    const ids = new Set<string>(BRIEF_SECTIONS.map((s) => s.id));
     for (const id of STRANGER_READABLE_SECTIONS) expect(ids.has(id), `${id} is not a brief section`).toBe(true);
   });
 
