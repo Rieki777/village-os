@@ -119,7 +119,7 @@ function LaunchGuide({ open, onClose }: { open: boolean; onClose: () => void }) 
           <p className="text-xs text-stone-500">
             The guide needs an Anthropic key. Set one in{" "}
             <Link href="/admin?tab=integrations" className="text-teal-deep underline">Integrations</Link>.
-            The checklist above works fine without her.
+            The checklist above works fine without the guide.
           </p>
         ) : (
           msgs.map((m, i) => (
