@@ -18,6 +18,7 @@
 import Layout from "@/components/Layout";
 import MicButton from "@/components/MicButton";
 import { EconomicsView } from "@/pages/ProjectHistory";
+import { CanvasBaseline, ViewTab } from "@/components/canvas/CanvasBaseline";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -631,7 +632,7 @@ export default function JourneyToLaunch() {
   const [status, setStatus] = useState<any>(null);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState("");
-  const [view, setView] = useState<"launch" | "economics">("launch");
+  const [view, setView] = useState<"launch" | "economics" | "canvas">("launch");
   /**
    * The founding members this proposal may name, and how many powers the seat
    * carries, both from the server (0220).
@@ -754,20 +755,24 @@ export default function JourneyToLaunch() {
           <div className="container">
             <div className="flex items-center gap-3 mb-2">
               <FlaskConical className="w-6 h-6 text-amber-on-band" />
-              <span className="text-amber-on-band font-medium text-sm tracking-widest uppercase">Test run</span>
+              <span className="text-amber-on-band font-medium text-sm tracking-widest uppercase">{view === "canvas" ? "Canvas" : "Test run"}</span>
             </div>
-            <h1 className="font-display text-3xl md:text-4xl font-bold mb-2">See what these settings would do</h1>
-            <p className="text-white text-sm max-w-2xl">
+            <h1 className="font-display text-3xl md:text-4xl font-bold mb-2">{view === "canvas" ? "How this village governs itself" : "See what these settings would do"}</h1>
+            <p className={`text-white text-sm max-w-2xl ${view === "canvas" ? "hidden" : ""}`}>
               Turn this village's moons over quickly and read what its rules would pay, who a
               settlement would thank, when Claims Week opens, and what you could give each moon.
               It writes nothing. The launch checklist and the ballot belong to the team running
               the village, so they are not on your copy of this page.
             </p>
+            <div className="flex flex-wrap gap-2 mt-5">
+              <ViewTab active={view !== "canvas"} onClick={() => setView("launch")}>Test run</ViewTab>
+              <ViewTab active={view === "canvas"} onClick={() => setView("canvas")}>Canvas</ViewTab>
+            </div>
           </div>
         </div>
         <div className="bg-stone-50 min-h-screen py-8">
           <div className="container max-w-3xl space-y-6">
-            <TestRun />
+            {view === "canvas" ? <CanvasBaseline /> : <TestRun />}
           </div>
         </div>
       </Layout>
@@ -800,7 +805,7 @@ export default function JourneyToLaunch() {
               : "Live status, not a to-do list someone forgot to update: every item below is either observed by the server right now, or confirmed by a named admin."}
           </p>
 
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className={`flex items-center gap-3 flex-wrap ${view === "canvas" ? "hidden" : ""}`}>
             <span className="text-white text-xs">Readiness</span>
             <div className="flex-1 max-w-xs bg-white/20 rounded-full h-2 min-w-24">
               <div className="bg-amber h-2 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
@@ -826,6 +831,7 @@ export default function JourneyToLaunch() {
             >
               Village economics
             </button>
+            <ViewTab active={view === "canvas"} onClick={() => setView("canvas")}>Canvas</ViewTab>
             <Link
               href="/project-history"
               className="inline-flex items-center gap-1.5 text-sm rounded-lg px-3 py-1.5 font-medium bg-white/10 text-white hover:bg-white/20"
@@ -846,7 +852,9 @@ export default function JourneyToLaunch() {
 
       <div className="bg-stone-50 min-h-screen py-8">
         <div className="container max-w-3xl space-y-6">
-          {view === "economics" ? (
+          {view === "canvas" ? (
+            <CanvasBaseline />
+          ) : view === "economics" ? (
             <EconomicsView headers={(extra) => ({ ...headers(), ...(extra ?? {}) })} />
           ) : failed ? (
             <p className="text-sm text-red-600 bg-red-50 rounded-lg px-4 py-3">
