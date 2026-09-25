@@ -46,9 +46,9 @@ import {
   ringTip,
 } from "./PoolPieces";
 
-const meter = (wanted: number, claimed: number, delivered: number) => {
+const meter = (wanted: number, claimed: number, delivered: number, unit?: string) => {
   const { container } = render(
-    <SlotMeter wanted={wanted} claimed={claimed} delivered={delivered} tint={capitalTint("material")} />,
+    <SlotMeter wanted={wanted} claimed={claimed} delivered={delivered} tint={capitalTint("material")} unit={unit} />,
   );
   const root = container.querySelector(".cp-slots")!;
   return {
@@ -234,5 +234,63 @@ describe("the three-slot meter, given counts that cannot all be true", () => {
     expect(isOverDelivered({ quantityWanted: 1, quantityDelivered: 2 })).toBe(true);
     expect(isOverDelivered({ quantityWanted: 1, quantityDelivered: 1 })).toBe(false);
     expect(isOverDelivered({ quantityWanted: 0, quantityDelivered: 3 })).toBe(false);
+  });
+});
+
+/*
+ * THE UNIT, AT HUB CONTRACT 3 (Rye, 2026-09-24: a role needs N hours a week,
+ * set by the steward, and people are accepted at a number of hours).
+ *
+ * Three bare numbers were unambiguous while every need counted PEOPLE. On a
+ * role counting hours they are the same glyphs meaning something else, beside
+ * needs where they still mean people. "40 wanted" reads as forty people to
+ * anyone who has just read the need above it.
+ *
+ * BOTH SURFACES ARE ASSERTED and the spoken one is the half that matters
+ * most: a sighted reader has the card around it to correct them, a
+ * screen-reader user gets these three numbers and nothing else.
+ *
+ * AND THE ABSENT VALUE IS TESTED, because every need predating the field and
+ * every hub older than contract 3 sends none. If a missing unit did not mean
+ * people, the whole back catalogue would change meaning the day the field
+ * arrived.
+ */
+describe("a need counted in hours a week says so, in the caption and to a screen reader", () => {
+  it("prints the unit in the caption", () => {
+    const m = meter(40, 15, 10, "hours_per_week");
+    expect(m.caption).toContain("10 hours a week arrived");
+    expect(m.caption).toContain("5 hours a week spoken for");
+    expect(m.caption).toContain("40 hours a week wanted");
+  });
+
+  it("puts the unit in the SPOKEN label, which has no card around it to explain", () => {
+    const m = meter(40, 15, 10, "hours_per_week");
+    expect(m.spoken).toBe("10 hours a week delivered, 15 hours a week claimed, 40 hours a week wanted");
+  });
+
+  it("counts PEOPLE when the unit is absent, so the back catalogue does not change meaning", () => {
+    const m = meter(40, 15, 10);
+    expect(m.caption).toContain("10 arrived");
+    expect(m.caption).not.toContain("hours");
+    expect(m.spoken).toBe("10 delivered, 15 claimed, 40 wanted");
+  });
+
+  it("counts people for an explicit 'count', and for any unit it does not know", () => {
+    for (const unit of ["count", "widgets", ""]) {
+      expect(meter(40, 15, 10, unit).spoken, unit).toBe("10 delivered, 15 claimed, 40 wanted");
+    }
+  });
+
+  it("does NOT blame the hub double-count on an hours need", () => {
+    /*
+     * The hub refuses an accept past quantityWanted on hours needs and
+     * recomputes from contribution rows, so this should not arise at all. It
+     * is guarded for a different reason: that sentence names a SPECIFIC hub
+     * defect, and printing it about a need where the defect does not exist
+     * would be a false accusation. Wrong for a better reason is still wrong.
+     */
+    expect(meter(40, 50, 50, "hours_per_week").over).toBeNull();
+    // And it still fires where it is true, on a need counting people.
+    expect(meter(40, 50, 50).over).toContain("More arrived than were wanted");
   });
 });
