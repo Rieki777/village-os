@@ -236,10 +236,10 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       // De-attribution is not enough: the TEXT restates the person. A
-      // restorative intake notification carries "A private intake from <their
-      // full name>" in the title and up to 2000 characters of their message in
-      // the body, and nulling the actor id leaves every word of that in the
-      // steward's inbox.
+      // restorative intake notification carries "<their full name> wrote:"
+      // and up to 2000 characters of their message in the body
+      // (server/lib/restorativeIntake.ts), and nulling the actor id leaves
+      // every word of that in the steward's inbox.
       name: "notifications",
       run: async () => {
         await pool.query("DELETE FROM notifications WHERE user_id = ?", [target.id]); // module-review-ok: notifications for a departed member are deleted outright; the erasure sweep reaches tables that have no repo, and one repo per table would still not give the single enumerable sweep the leaving-well promise depends on

@@ -32,6 +32,9 @@ export default function ExitPolicy() {
 
   const policy = data?.policy;
   const shownError = error || identity.returnError;
+  // The role an intake reaches, named by the published policy, so a member
+  // knows who will read their words before they send them.
+  const intakeRoleLabel = policy?.restorative?.intakeRole?.name ? `${policy.restorative.intakeRole.name} role` : "intake role";
 
   const requestExit = () => {
     setError(""); setMsg("");
@@ -57,7 +60,11 @@ export default function ExitPolicy() {
       .then(async (r) => {
         const d = await r.json();
         if (!r.ok) throw new Error(d.message ?? d.error ?? "Could not send");
-        setMsg(`Your message reached ${d.reached} steward(s), privately. Nothing was posted anywhere.`);
+        const reached = Number(d.reached ?? 0);
+        setMsg(
+          `Your message reached ${reached === 1 ? "1 person" : `${reached} people`} holding the ${intakeRoleLabel}. ` +
+            "They read it in their notifications here. Your words were not emailed.",
+        );
         setIntake("");
       })
       .catch((e) => setError(e.message));
@@ -146,8 +153,11 @@ export default function ExitPolicy() {
             {user && policy?.restorative?.intakeContactRole && (
               <div className="border-t border-border pt-3 space-y-2">
                 <p className="text-xs text-muted-foreground">
-                  Start a private intake. It goes directly to the stewards
-                  holding that role. It is never posted anywhere.
+                  Start a private intake. It reaches only the people holding
+                  the {intakeRoleLabel}, who read your name and your words in
+                  their notifications here. If they get an email, it says only
+                  that an intake is waiting: your words and your name are never
+                  emailed.
                 </p>
                 <textarea value={intake} onChange={(e) => setIntake(e.target.value)} rows={3}
                   placeholder="What happened, in your own words…"
