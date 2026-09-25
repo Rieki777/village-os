@@ -141,6 +141,8 @@ import { register as registerCharacterPortraitRoutes } from "./routes/characterP
 import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
 import { register as registerPowerAffinityRoutes, powersForClass, withPowerAffinity } from "./routes/powerAffinity";
 import { deferredSeatVote, register as registerPowerHandRoutes, registerSeatVote } from "./routes/powerHands";
+import { register as registerRestorativeIntakeRoutes } from "./routes/restorativeIntake";
+import { intakeRoleNamed } from "./lib/restorativeIntake";
 import { resolveGoogleConfig } from "./lib/oauthGoogle";
 import { makeIdentityGate } from "./lib/identityConfirm";
 import {
@@ -14674,6 +14676,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
           decidingCircle: namedCircle(policy?.involuntary?.decidingDomainId),
           appealCircle: namedCircle(policy?.involuntary?.appealDomainId),
         },
+        // Named for the same reason: a member sees who an intake reaches before sending it.
+        restorative: { ...(policy?.restorative ?? {}), intakeRole: intakeRoleNamed(policy?.restorative?.intakeContactRole, rolesRepo.all()) },
       },
       configured: exitPolicyRepo.exists(),
     });
@@ -14892,39 +14896,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     res.json({ success: true });
   });
 
-  /**
-   * Restorative intake (F12's hard rule as code): the message reaches ONLY
-   * the intake role's holders, through the notification spine. No forum
-   * thread, no event row, no exits-row content — a person is never the
-   * subject of a consent decision in a general forum.
-   */
-  app.post("/api/exit/restorative-intake", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in first" });
-    if (await overLimit(`restorative:${user.id}`, 3, 24 * 60 * 60 * 1000)) {
-      return res.status(429).json({ error: "Three intakes a day. The stewards are already listening" });
-    }
-    const message = String(req.body?.message ?? "").trim();
-    if (!message) return res.status(400).json({ error: "Say what happened, in your own words" });
-    const policy: any = readExitPolicy();
-    const roleId = String(policy?.restorative?.intakeContactRole ?? "");
-    if (!roleId) return res.status(409).json({ error: "No intake contact role is configured yet. Write to the stewards directly" });
-    const holders = loadRoleHolders().filter((h: any) => h.roleId === roleId);
-    if (!holders.length) return res.status(409).json({ error: "The intake role has no holders right now. Write to the stewards directly" });
-    const intakeId = `ri-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    for (const h of holders as any[]) {
-      await notify({
-        userId: h.userId,
-        type: "restorative_intake",
-        title: `A private intake from ${user.name ?? "a member"}`,
-        body: message.slice(0, 2000),
-        link: "/admin",
-        actorUserId: user.id,
-        dedupeKey: `restorative:${intakeId}:${h.userId}`,
-      });
-    }
-    res.json({ success: true, reached: holders.length });
-  });
+  // Restorative intake (F12's hard rule as code): server/routes/restorativeIntake.ts.
+  registerRestorativeIntakeRoutes(app, { authedUser, notify, overLimit, readExitPolicy, roleHolders: loadRoleHolders });
 
   // â”€â”€ S49-S51: village health — the dashboard reads (collection lives in
   //    the cycle close; only DISPLAY is module-gated) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
