@@ -57,7 +57,7 @@ interface CovenantContent {
 
 interface LegalContent {
   membership?: {
-    /** e.g. "Amora 508(c)(1)(a)". Blank falls back to the village name. */
+    /** e.g. "Amora 508(c)(1)(a)". Blank: the page names the village's community and says no legal entity is published yet. */
     entityLabel?: string;
     /** The full paragraph in the letter body. Omitted entirely when blank. */
     contributionParagraph?: string;
@@ -244,7 +244,7 @@ export default function LoveLetter() {
                 Welcome to the {villageName} Family
               </h1>
               <p className="text-xl text-muted-foreground leading-relaxed mb-8">
-                Your membership form has been received. You are now part of {memberOf}.
+                Your membership form has been received. Once the village accepts it, you are a member of {memberOf}.
               </p>
               <div className="bg-card border border-primary/20 rounded-2xl p-8 mb-8 text-left">
                 <h2 className="font-display text-2xl font-bold text-foreground mb-4">What happens next</h2>
@@ -360,7 +360,7 @@ export default function LoveLetter() {
               Sign Your Membership
             </h2>
             <p className="text-muted-foreground mb-8">
-              Fill in your details below to officially join the {villageName} Family and become a member of {memberOfOnRecord}.
+              Fill in your details below to ask to join the {villageName} Family and become a member of {memberOfOnRecord}.
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-6">
