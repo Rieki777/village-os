@@ -29,6 +29,7 @@ import { gameFetch } from "@/lib/gameApi";
 import { PeopleLockNote, type PeopleTier } from "@/components/PeopleLock";
 import SeatHistory from "@/components/power/SeatHistory";
 import SeatNeeds from "@/components/power/SeatNeeds";
+import VillageConflictSteps from "@/components/governance/VillageConflictSteps";
 import { useAuth } from "@/contexts/AuthContext";
 
 type RoleStatus = "filled" | "open" | "forming" | "partial";
@@ -392,7 +393,12 @@ export default function Roles() {
               </div>
             ))}
 
-            {/* How tensions work */}
+            {/* When a tension is between people: the village's own restorative
+                steps, the same ones /governance prints. This block used to be
+                a compiled process every fork published as its own, sending
+                tensions up to a "Leadership Circle" no fork is given and
+                promising a trial period and an evaluation that nothing in the
+                platform schedules. The reasoning is in VillageConflictSteps. */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -400,14 +406,9 @@ export default function Roles() {
               className="mt-4 bg-sage/5 p-8 rounded-2xl border border-sage/20"
             >
               <h2 className="font-display text-2xl font-bold text-foreground mb-4">
-                How Roles Evolve
+                When a Tension Is Between People
               </h2>
-              <p className="text-muted-foreground mb-4">
-                A "tension" in sociocracy language is any felt gap between how things are and how they could be. Any team member who feels a tension brings it to their circle meeting. The circle holds space and decides together whether to adjust a role, create a new one, retire one, or send it up to the Leadership Circle.
-              </p>
-              <p className="text-muted-foreground">
-                Decisions are made by consent. Consent means no one holds a reasoned objection based on their ability to do their work. It does not require unanimous agreement. The circle tries the change for an agreed period, then evaluates. Roles here are invitations to a specific way of serving the living purpose, not fixed job descriptions.
-              </p>
+              <VillageConflictSteps />
             </motion.div>
           </div>
 

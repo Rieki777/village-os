@@ -60,10 +60,10 @@ interface ResourceLink {
  * "collab" = both working on it together; "amora" = the village's own action.
  *
  * THE STORED VALUE STAYS `"amora"` DELIBERATELY. It is a persisted status,
- * written into `app_config['journey-state']` by every press of the dropdown,
- * so renaming the token would silently reclassify every saved row as the
- * default. What a founder READS is their own village's name, resolved at
- * render; what the server STORES is this id, forever.
+ * kept in THIS BROWSER's localStorage by every press of the dropdown (the
+ * server never sees it: `setItemStatus`), so renaming the token would silently
+ * reclassify every row a founder already set as the default. A founder READS
+ * their own village's name, resolved at render; the browser STORES this id.
  */
 type DeliveryStatus = "done" | "amora" | "collab" | "pending";
 
@@ -1448,7 +1448,7 @@ export default function ProjectHistory() {
                                     );
                                   })()}
 
-                                  {/* Inline status dropdown — sets the owner / bucket (saved to server) */}
+                                  {/* Inline status dropdown: sets the owner / bucket, kept in this browser only (setItemStatus) */}
                                   <select
                                     value={effStatus}
                                     onChange={(e) => setItemStatus(d.id, e.target.value as DeliveryStatus)}
@@ -1543,7 +1543,7 @@ export default function ProjectHistory() {
                   })()}
 
                   <p className="text-stone-400 text-xs text-center mt-4">
-                    The <strong>checkbox</strong> advances the stage: To do → In progress → Confirmed → back to To do. The <strong>dropdown</strong> sets who owns it (the build side, {villageName}, or both), which sorts it into the buckets above. Everything is shared and synced to the server.
+                    The <strong>checkbox</strong> advances the stage: To do → In progress → Confirmed → back to To do. The <strong>dropdown</strong> sets who owns it (the build side, {villageName}, or both), which sorts it into the buckets above. The stage is saved on the server, where every admin sees it. The owner stays in this browser only: nobody else sees it, and another device starts without it.
                   </p>
                 </div>
               )}
@@ -1884,9 +1884,9 @@ export default function ProjectHistory() {
               {activeView === "discussion" && (
                 <div className="max-w-3xl mx-auto">
                   <div className="mb-6">
-                    <h2 className="font-display text-2xl font-bold text-teal-deep">Team Discussion</h2>
+                    <h2 className="font-display text-2xl font-bold text-teal-deep">Your Discussion Topics</h2>
                     <p className="text-stone-500 text-sm mt-1">
-                      Surface topics for the team to align on. Saved locally in your browser. Share important threads in the Decision Log too.
+                      Topics you add here stay in this browser only: nobody else on the team sees them, and another device starts without them. Put anything the team needs to see in the Decision Log, which is saved on the server for every admin.
                     </p>
                   </div>
 

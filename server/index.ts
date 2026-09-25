@@ -391,7 +391,7 @@ import {
   blankTerms,
   exitLeverRefusal,
   normalizeExitPolicy,
-  platformDefaultTerms,
+  platformDefaultTerms, platformDefaultTermKeys,
   withPolicyDefaults,
 } from "./lib/exitPolicy";
 import {
@@ -14161,7 +14161,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (LIFECYCLE_RANK[effectiveLifecycle("governance")] < LIFECYCLE_RANK.members) {
       return res.status(409).json({
         error:
-          "This village decides on Hypha today, so there is no vote to open here. Turn the governance module on for members first, and the village can hold this vote itself.",
+          "This village has not turned governance on for its members, so there is no vote to open here. Turn the governance module on for members first, and the village can hold this vote itself.",
       });
     }
 
@@ -14675,7 +14675,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
           appealCircle: namedCircle(policy?.involuntary?.appealDomainId),
         },
       },
-      configured: exitPolicyRepo.exists(),
+      configured: exitPolicyRepo.exists(), platformWording: platformDefaultTermKeys(policy),
     });
   });
 
