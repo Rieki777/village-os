@@ -32,7 +32,13 @@
  *
  * `reached` counts the people whose row was actually written. A write that
  * failed reached nobody, and a sender told otherwise would wait for a reply
- * that is not coming.
+ * that is not coming. For the same reason a sender who holds the role is not
+ * sent their own intake, and a sender who is the role's only live holder is
+ * told so and pointed at the stewards.
+ *
+ * The recipient reads the words in the bell, which shows this kind's body
+ * whole and never batches it (`wordsInAppOnly` in shared/notificationKinds.ts),
+ * since the email leaves the words out.
  *
  * Everything else is as it was: the path, the three-a-day limit, and every
  * refusal sentence.
@@ -137,9 +143,18 @@ export async function sendRestorativeIntake(
   if (!roleId) {
     return { status: 409, body: { error: "No intake contact role is configured yet. Write to the stewards directly" } };
   }
-  const recipients = liveIntakeRecipients(deps.roleHolders(), roleId, deps.now?.() ?? new Date());
-  if (!recipients.length) {
+  const holders = liveIntakeRecipients(deps.roleHolders(), roleId, deps.now?.() ?? new Date());
+  if (!holders.length) {
     return { status: 409, body: { error: "The intake role has no holders right now. Write to the stewards directly" } };
+  }
+  // A sender who holds the role is never their own recipient. Counting them
+  // would tell a sole holder their words reached somebody when nobody else has them.
+  const recipients = holders.filter((id) => id !== String(sender.id));
+  if (!recipients.length) {
+    return {
+      status: 409,
+      body: { error: "You are the only person holding the intake role right now, so nobody else would read this. Write to the stewards directly" },
+    };
   }
   const intakeId = `ri-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   let reached = 0;

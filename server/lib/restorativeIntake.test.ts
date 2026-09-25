@@ -12,7 +12,7 @@
  * is the RESTORATIVE INTAKE block in server/loop.e2e.test.ts.
  */
 import { describe, expect, it } from "vitest";
-import { emailCarriesBody, insertNotification, type NotifyDeps, type NotifyInput } from "./notify";
+import { emailCarriesBody, insertNotification, READ_IN_THE_BELL, type NotifyDeps, type NotifyInput } from "./notify";
 import { liveHolderCount } from "./roleGrants";
 import {
   INTAKE_LINK,
@@ -156,6 +156,14 @@ describe("the email for this kind", () => {
     expect(leaks(sent[0].html)).toEqual([]);
   });
 
+  it("says where the words can be read, since it does not carry them", async () => {
+    const { deps, sent } = spine();
+    await insertNotification(deps, intakeNotice({ intakeId: "ri-10", recipientId: "u-care", sender: SENDER, message: MESSAGE }));
+    expect(sent).toHaveLength(1);
+    expect(sent[0].html).toContain(READ_IN_THE_BELL);
+    expect(leaks(READ_IN_THE_BELL)).toEqual([]);
+  });
+
   it("the rule is this kind's alone: another kind's email still carries its body", async () => {
     const { deps, sent } = spine();
     const other: NotifyInput = { userId: "u-care", type: "moderation", title: "A report is waiting", body: MESSAGE, dedupeKey: "m-1" };
@@ -208,6 +216,26 @@ describe("sending an intake", () => {
     const answer = await sendRestorativeIntake(deps, SENDER, MESSAGE);
     expect(answer.status).toBe(503);
     expect(String(answer.body.error)).toContain("nobody has it yet");
+  });
+
+  it("a sender who holds the role is not sent their own intake, and is not counted as reached", async () => {
+    const withSender: IntakeHolding[] = [...HOLDERS, { roleId: "care", userId: SENDER.id, termEndsAt: FUTURE }];
+    const { deps, notices } = intakeDeps({ roleHolders: () => withSender });
+    expect(await sendRestorativeIntake(deps, SENDER, MESSAGE)).toEqual({ status: 200, body: { success: true, reached: 2 } });
+    expect(notices.map((n) => n.userId)).toEqual(["u-live-open", "u-live-term"]);
+  });
+
+  it("a sender who is the role's only live holder is told nobody else would read it, and nothing is sent", async () => {
+    const soleHolder: IntakeHolding[] = [
+      { roleId: "care", userId: SENDER.id, termEndsAt: null },
+      { roleId: "care", userId: "u-lapsed", termEndsAt: PAST },
+    ];
+    const { deps, notices } = intakeDeps({ roleHolders: () => soleHolder });
+    expect(await sendRestorativeIntake(deps, SENDER, MESSAGE)).toEqual({
+      status: 409,
+      body: { error: "You are the only person holding the intake role right now, so nobody else would read this. Write to the stewards directly" },
+    });
+    expect(notices).toEqual([]);
   });
 
   it("a role whose every seat has lapsed keeps the existing refusal", async () => {

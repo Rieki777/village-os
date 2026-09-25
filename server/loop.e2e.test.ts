@@ -3705,6 +3705,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       expect(leaksIn(m.body.html), "the email body carries neither the sender's name nor their words").toEqual([]);
       expect(m.body.subject).toBe("A private intake is waiting for you");
       expect(m.body.html, "the email still says an intake is waiting").toContain("A private intake is waiting for you");
+      expect(m.body.html, "and says where the words can be read").toContain("open the bell at the top of any page");
     }
 
     // The words and the name stay in the village, in the recipient's own row.
@@ -3720,6 +3721,13 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       "SELECT COUNT(*) AS n FROM notifications WHERE type = 'restorative_intake'",
     );
     expect(Number(rows.n)).toBe(intake.json.reached);
+    // peer sent it and holds founders-circle too, and is never their own
+    // recipient: doer's row above is what was reached, and peer has none.
+    const [[own]] = await testDb.conn.query<any[]>(
+      "SELECT COUNT(*) AS n FROM notifications WHERE type = 'restorative_intake' AND user_id = ?",
+      [peerId],
+    );
+    expect(Number(own.n), "the sender is not sent their own intake").toBe(0);
     const [[fAfter]] = await testDb.conn.query<any[]>("SELECT COUNT(*) AS n FROM forum_threads");
     expect(Number(fAfter.n)).toBe(Number(fBefore.n)); // no thread, ever
     // The CONTENT never lands anywhere but its recipients' notifications:
