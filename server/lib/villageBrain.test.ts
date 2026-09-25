@@ -12,6 +12,7 @@ import { BRIEF_SECTIONS, MINIMUM_BRIEF } from "../../shared/villageBrief";
 import {
   STRANGER_READABLE_SECTIONS,
   briefAudienceFromBody,
+  briefRowsForViewer,
   capMarkdown,
   decisionOccurredAt,
   decisionToRecord,
@@ -126,6 +127,23 @@ describe("briefAudienceFromBody", () => {
     for (const v of [undefined, null, "", "public", "Member", "ADMIN", 1, true, {}, ["member"]]) {
       expect(briefAudienceFromBody(v), JSON.stringify(v)).toBeUndefined();
     }
+  });
+});
+
+describe("briefRowsForViewer", () => {
+  // Every section as a member-audience row: what the member query returns
+  // once the canvas has opened all of them.
+  const opened = BRIEF_SECTIONS.map((s) => brief({ id: `brief-${s.id}`, section: s.id, audience: "member" }));
+
+  it("hands a signed-in account the village has not admitted the allowlist and nothing else", () => {
+    const seen = briefRowsForViewer(opened, { admin: false, member: false }).map((r) => r.section).sort();
+    expect(seen, "an unadmitted account read a section a stranger may not").toEqual([...STRANGER_READABLE_SECTIONS].sort());
+    for (const id of ["economy", "decisions", "membership"]) expect(seen).not.toContain(id);
+  });
+
+  it("hands a member and an admin exactly the rows their audience query returned", () => {
+    expect(briefRowsForViewer(opened, { admin: false, member: true })).toEqual(opened);
+    expect(briefRowsForViewer(opened, { admin: true, member: false })).toEqual(opened);
   });
 });
 

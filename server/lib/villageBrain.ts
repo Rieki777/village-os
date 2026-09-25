@@ -431,6 +431,23 @@ export async function briefForPublicPrompt(pool: Pool, maxTokens = 700): Promise
   return capMarkdown(body, maxTokens);
 }
 
+/**
+ * The brief rows `GET /api/village/brain` may hand one signed-in viewer.
+ *
+ * The route picked "admin" or "member" and nothing else, so EVERY signed-in
+ * account read the member view: an invited account the village has not yet
+ * admitted, and anybody at all on a fork with `membership.invite_only` off.
+ * While an opened section closed itself on its next save that exposure was
+ * brief; with the audience sticky (2026-09-24) an opened `economy` stays open,
+ * so an account without membership reads what a stranger's guide may say (the
+ * allowlist above) and nothing more. It only narrows: an admin or a member
+ * gets exactly the rows their audience query returned.
+ */
+export function briefRowsForViewer(rows: BriefRow[], viewer: { admin: boolean; member: boolean }): BriefRow[] {
+  if (viewer.admin || viewer.member) return rows;
+  return rows.filter((r) => STRANGER_READABLE_SECTIONS.has(r.section));
+}
+
 // ── Writes ───────────────────────────────────────────────────────────────────
 
 /**

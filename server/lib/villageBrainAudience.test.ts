@@ -22,7 +22,9 @@ import {
   briefAll,
   briefForPublicPrompt,
   briefGet,
+  briefRowsForViewer,
   briefWrite,
+  renderSectionMarkdown,
 } from "./villageBrain";
 
 const configured = testDbConfigured();
@@ -159,6 +161,20 @@ describe.skipIf(!configured)("(c) the strangers' prompt carries only the allowli
     for (const id of STRANGER_READABLE_SECTIONS) {
       expect(words, `${id} is allowlisted and confirmed and should be there`).toContain(marker(id));
     }
+  });
+
+  it("GET /api/village/brain's rows: an unadmitted account reads the allowlist, a member reads what was opened", async () => {
+    // The route's own composition: the member query, then the viewer filter,
+    // then the section render it sends.
+    const read = async (member: boolean) =>
+      briefRowsForViewer(await briefAll(pool, "member"), { admin: false, member }).map(renderSectionMarkdown).join("\n");
+    const unadmitted = await read(false);
+    for (const s of BRIEF_SECTIONS) {
+      if (STRANGER_READABLE_SECTIONS.has(s.id)) expect(unadmitted, `${s.id} is allowlisted`).toContain(marker(s.id));
+      else expect(unadmitted, `${s.id} reached an account the village has not admitted`).not.toContain(marker(s.id));
+    }
+    const member = await read(true);
+    expect(member, "a member reads a section an admin opened").toContain(marker("economy"));
   });
 
   it("an allowlisted section an admin closes leaves the strangers' prompt too", async () => {
