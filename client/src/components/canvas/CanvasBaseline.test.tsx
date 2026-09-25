@@ -11,7 +11,8 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Router } from "wouter";
-import { CANVAS_BLOCK_IDS, CANVAS_CREDIT } from "@shared/governanceCanvas";
+import { CANVAS_BLOCK_IDS, CANVAS_CREDIT, CANVAS_ORDER } from "@shared/governanceCanvas";
+import { readingDate, weeksPhrase } from "@/lib/canvasCopy";
 
 vi.mock("@/lib/gameApi", () => ({ authToken: () => "a-token" }));
 
@@ -111,6 +112,34 @@ describe("what a member reads", () => {
     expect(text).not.toMatch(/\b\d+\s+of\s+\d+\b/);
     expect(text).not.toMatch(/\bof (twelve|12)\b/i);
     expect(container.querySelector("progress, [role='progressbar']")).toBeNull();
+  });
+
+  it("shows no digit but a block's number, a date or a season week, with every block read", async () => {
+    // A total comparator, not a list of banned shapes: "7 blocks have a
+    // reading" needs no percent sign and no "of". So the page is drawn with
+    // all twelve blocks read, and every digit left on it must be one of these.
+    answers.push({
+      status: 200,
+      body: {
+        mayRecord: false,
+        blocks: CANVAS_BLOCK_IDS.map((id) => ({ id, latest: reading(), history: [reading(), reading({ id: 6 })] })),
+      },
+    });
+    const { container } = draw();
+    await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
+    // What DID render: twelve newest readings and twelve earlier ones, each with its date.
+    expect(screen.getAllByText(/Recorded by Wren on/)).toHaveLength(24);
+    const date = readingDate(reading().recordedAt);
+    expect(container.textContent).toContain(date);
+
+    const allowed = [
+      date,
+      ...CANVAS_ORDER.map((b) => `Block ${b.number}`),
+      ...CANVAS_ORDER.map((b) => weeksPhrase(b.seasonWeeks)).filter(Boolean),
+    ].sort((a, b) => b.length - a.length); // "Block 12" goes before "Block 1"
+    let rest = container.textContent ?? "";
+    for (const s of allowed) rest = rest.split(s).join(" ");
+    expect(rest.match(/.{0,30}\d.{0,30}/g)).toBeNull();
   });
 
   it("says so in words when the canvas cannot be read", async () => {

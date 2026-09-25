@@ -73,7 +73,8 @@ describe("no number on the canvas but a block's level", () => {
   it("carries no N of M", () => {
     for (const f of SURFACE) {
       expect(f.body, f.name).not.toMatch(/\b\d+\s+of\s+\d+\b/);
-      expect(f.body, f.name).not.toMatch(/\}\s+of\s+\{/);
+      // `{read} of {n}` in markup and `${read} of ${n}` in a template.
+      expect(f.body, f.name).not.toMatch(/\}\s+of\s+\$?\{/);
       expect(f.body, f.name).not.toMatch(/\bof (twelve|12)\b/i);
     }
   });
@@ -91,7 +92,12 @@ describe("no number on the canvas but a block's level", () => {
       // The quiet version: "7 blocks read" needs no percent sign at all.
       expect(f.body, f.name).not.toMatch(/\.length\s*\}/);
       expect(f.body, f.name).not.toMatch(/\$\{[^}]*\.length[^}]*\}/);
-      expect(f.body, f.name).not.toMatch(/\.filter\([^)]*\)\.length/);
+      // Banned outright, as the Powers test bans `powers.filter`: sifting the
+      // blocks is how "7 blocks read" gets counted, and a narrower pattern
+      // (`.filter(b => b.latest).length`) missed `.filter((b) => b.latest).length`.
+      // The canvas walks every block in canvas order and never needs to sift.
+      expect(f.body, f.name).not.toMatch(/\.filter\(/);
+      expect(f.body, f.name).not.toMatch(/\.size\b/);
     }
   });
 
