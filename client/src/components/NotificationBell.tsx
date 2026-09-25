@@ -275,7 +275,14 @@ export default function NotificationBell() {
                             <span className={`block text-sm leading-snug text-foreground ${row.unread ? "font-semibold" : ""}`}>
                               {row.title}
                             </span>
-                            {row.detail && <span className="block text-xs text-muted-foreground mt-0.5 line-clamp-2">{row.detail}</span>}
+                            {/* A row read in the app alone shows its words whole: its email left them out (notificationFeed.ts, `whole`). */}
+                            {row.detail && (
+                              <span
+                                className={`block text-xs text-muted-foreground mt-0.5 ${row.whole ? "whitespace-pre-wrap break-words" : "line-clamp-2"}`}
+                              >
+                                {row.detail}
+                              </span>
+                            )}
                             <span className="block text-[10px] text-muted-foreground mt-1">{timeAgo(row.at)}</span>
                           </span>
                           {row.unread > 0 && <NewMark />}

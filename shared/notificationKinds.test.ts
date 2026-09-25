@@ -9,6 +9,7 @@ import {
   kindOf,
   manyLine,
   UNKNOWN_KIND,
+  wordsInAppOnly,
 } from "./notificationKinds";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -42,6 +43,28 @@ function splitTop(block: string): string[] {
   return parts;
 }
 
+/** The index of the brace that closes the one at `open`, skipping strings. */
+function closingBrace(src: string, open: number): number {
+  let depth = 0;
+  let str: string | null = null;
+  let j = open;
+  for (; j < src.length; j++) {
+    const c = src[j];
+    if (str) {
+      if (c === "\\") j++;
+      else if (c === str) str = null;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      str = c;
+      continue;
+    }
+    if (c === "{") depth++;
+    else if (c === "}" && --depth === 0) break;
+  }
+  return j;
+}
+
 /**
  * Every type string the server actually produces.
  *
@@ -60,6 +83,13 @@ function splitTop(block: string): string[] {
  * blurbs with no producer while the server was sending them every hour. When
  * the arm holds no literal and reads as an index into a local const, that
  * const's own string values are collected.
+ *
+ * A FIFTH SHAPE: a builder declared to return `NotifyInput`, whose literal a
+ * caller hands to `notify`. `intakeNotice` in server/lib/restorativeIntake.ts
+ * is one: when the intake route moved out of server/index.ts, a scanner that
+ * read only call sites reported the restorative intake as a blurb with no
+ * producer while the route was still sending it. Every `type: "<type>"` in
+ * such a builder's body is collected.
  */
 function producedTypes(): Set<string> {
   const files: string[] = [];
@@ -78,28 +108,18 @@ function producedTypes(): Set<string> {
     const src = fs.readFileSync(f, "utf8");
     // notifyAdmins("<type>", …)
     for (const m of src.matchAll(/\bnotifyAdmins\s*\(\s*"([a-z_]+)"/g)) found.add(m[1]);
+    // function someNotice(…): NotifyInput { … type: "<type>" … }
+    for (const m of src.matchAll(/\)\s*:\s*NotifyInput\s*\{/g)) {
+      const open = m.index + m[0].length - 1;
+      const body = src.slice(open, closingBrace(src, open) + 1);
+      for (const lit of body.matchAll(/\btype\s*:\s*"([a-z_]+)"/g)) found.add(lit[1]);
+    }
     // notify({ … type: "<type>" … }) — the object literal is brace-matched so
     // a `type:` on some unrelated neighbouring call cannot leak in.
     for (const m of src.matchAll(/\b(?:notify|notifyRoll|insertNotification)\s*\(/g)) {
       const open = src.indexOf("{", m.index + m[0].length - 1);
       if (open < 0 || open - m.index > 60) continue;
-      let depth = 0;
-      let str: string | null = null;
-      let j = open;
-      for (; j < src.length; j++) {
-        const c = src[j];
-        if (str) {
-          if (c === "\\") j++;
-          else if (c === str) str = null;
-          continue;
-        }
-        if (c === '"' || c === "'" || c === "`") {
-          str = c;
-          continue;
-        }
-        if (c === "{") depth++;
-        else if (c === "}" && --depth === 0) break;
-      }
+      const j = closingBrace(src, open);
       for (const part of splitTop(src.slice(open, j + 1))) {
         const kv = part.trim().match(/^type\s*:\s*([\s\S]*)$/);
         if (!kv) continue;
@@ -168,6 +188,13 @@ describe("the notification catalogue", () => {
 });
 
 describe("reading a kind", () => {
+  it("keeps one kind's words in the app alone: the restorative intake, and nothing unheard-of", () => {
+    // The email leaves such a body out and the bell shows it whole, so adding
+    // a kind here is a decision about both surfaces at once.
+    expect(Object.keys(NOTIFICATION_KINDS).filter(wordsInAppOnly)).toEqual(["restorative_intake"]);
+    expect(wordsInAppOnly("a_type_nobody_declared")).toBe(false);
+  });
+
   it("degrades an unheard-of type to something quiet and renderable", () => {
     expect(kindOf("not_a_real_type")).toBe(UNKNOWN_KIND);
     expect(celebrates("not_a_real_type")).toBe(false);
