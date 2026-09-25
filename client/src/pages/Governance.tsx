@@ -2,6 +2,7 @@ import Layout from "@/components/Layout";
 import { useVillageName } from "@/hooks/useVillageName";
 import { Link } from "wouter";
 import LiveDecisionsBand from "@/components/governance/LiveDecisionsBand";
+import VillageConflictSteps from "@/components/governance/VillageConflictSteps";
 import {
   Vote,
   Users,
@@ -172,7 +173,11 @@ export default function Governance() {
         </div>
       </section>
 
-      {/* Conflict resolution */}
+      {/* Conflict resolution: the village's own restorative steps, read from
+          its published exit policy. This used to be three compiled paragraphs
+          every fork published as its own practice, ending in a promise that
+          nobody is removed without a circle consent vote, while removal is an
+          admin act in the server. The reasoning is in VillageConflictSteps. */}
       <section className="bg-white py-20">
         <div className="container max-w-3xl mx-auto px-4">
           <div className="flex items-center gap-3 mb-4">
@@ -181,17 +186,7 @@ export default function Governance() {
               Conflict Resolution
             </h2>
           </div>
-          <div className="space-y-4 text-stone-700 leading-relaxed">
-            <p>
-              When tension shows up, it goes through three stages. First, the people involved have a direct conversation, supported by our shared practice of nonviolent communication. Most things resolve here.
-            </p>
-            <p>
-              If that doesn't land, a facilitated conversation is requested. A trained member from a different circle helps both sides be heard and find a path forward.
-            </p>
-            <p>
-              If the tension still won't resolve, the relevant circle holds a mediation. No one is removed from the community without a circle consent vote. We err on the side of repair and reintegration whenever possible.
-            </p>
-          </div>
+          <VillageConflictSteps />
         </div>
       </section>
 
