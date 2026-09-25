@@ -562,7 +562,7 @@ import {
 import {
   brainEtag, briefAll, briefGet, briefIndexForPrompt, briefWrite, deriveDecisions, recordSummaries,
   renderIndexMarkdown, renderSectionMarkdown, slugify,
-  briefForPublicPrompt,
+  briefForPublicPrompt, briefAudienceFromBody, briefRowsForViewer,
 } from "./lib/villageBrain";
 import { proposalSystemPrompt } from "./lib/proposalPrompt";
 import {
@@ -13768,12 +13768,12 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
     const row = await briefWrite(getPool(), {
       section,
       body,
-      audience: req.body?.audience === "member" ? "member" : undefined,
+      audience: briefAudienceFromBody(req.body?.audience),
       source: "admin",
       confirmedBy: req.body?.confirm === false ? null : actor,
     });
     void recordEvent(getPool(), {
-      kind: "audit", text: `brain:write:${section}:r${row.revision}`, actorUserId: actor,
+      kind: "audit", text: `brain:write:${section}:r${row.revision}:${row.audience}`, actorUserId: actor,
       entityType: "brain", entityRef: section, audience: "admin",
     });
     res.json({ success: true, section: row });
@@ -13800,8 +13800,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
 
   /**
    * The brain as markdown, for a human, for the assistant, and for any other
-   * model pointed at it. Audience-filtered: `people` names members and `legal`
-   * names title holders, so neither renders to a member.
+   * model pointed at it. Audience-filtered: `people` and `legal` never render to
+   * a member, and an account not yet admitted reads only the strangers' allowlist.
    */
   app.get("/api/village/brain", async (req, res) => {
     const viewer = await authedUser(req);
@@ -13814,7 +13814,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
     if (req.headers["if-none-match"] === etag) return res.status(304).end();
 
     const wanted = String(req.query.section ?? "").trim();
-    const filled = await briefAll(getPool(), audience);
+    const filled = briefRowsForViewer(await briefAll(getPool(), audience), { admin: audience === "admin", member: hasMembership(viewer) });
     if (wanted && wanted !== "index") {
       const row = filled.find((r) => r.section === wanted);
       if (!row) return res.status(404).send(`# Not found\n\nNothing readable at ${wanted}.\n`);
@@ -18055,7 +18055,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
      * they want to bring, knew the village's NAME and its reciprocity options
      * and nothing else about what the village is for.
      *
-     * Member-audience, confirmed sections only, and fenced as data: everything
+     * Allowlisted (STRANGER_READABLE_SECTIONS), member-audience, confirmed sections only, and fenced as data: everything
      * a stranger types is untrusted, and so is anything the guide read out of a
      * table. A fork that has written nothing gets an empty string and the
      * prompt says nothing about what the village stands for, which is the
