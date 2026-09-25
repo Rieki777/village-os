@@ -29,6 +29,13 @@ const CY = HEIGHT / 2;
 /** The radius of the outermost ring, level five. */
 const RADIUS = 130;
 const LABEL_GAP = 20;
+/**
+ * Label size in viewBox units. The chart scales to its box, so 13 read as
+ * about 9px on a 390px phone, measured in Chromium; 15 is about 10px there
+ * and still keeps "Stakeholders" and "Resourcing" inside the box at every
+ * width, which the same measurement checked.
+ */
+const LABEL_SIZE = 15;
 
 /** Degrees clockwise from twelve o'clock, one axis every thirty degrees. */
 function angleOf(index: number): number {
@@ -104,7 +111,7 @@ export function CanvasRadar({
             x={x}
             y={y + dy}
             textAnchor={anchor}
-            fontSize={13}
+            fontSize={LABEL_SIZE}
             fill="currentColor"
             className={unread ? "text-stone-500 italic" : "text-stone-800 font-medium"}
           >
