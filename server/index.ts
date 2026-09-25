@@ -562,7 +562,7 @@ import {
 import {
   brainEtag, briefAll, briefGet, briefIndexForPrompt, briefWrite, deriveDecisions, recordSummaries,
   renderIndexMarkdown, renderSectionMarkdown, slugify,
-  briefForPublicPrompt,
+  briefForPublicPrompt, briefAudienceFromBody,
 } from "./lib/villageBrain";
 import { proposalSystemPrompt } from "./lib/proposalPrompt";
 import {
@@ -13768,7 +13768,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
     const row = await briefWrite(getPool(), {
       section,
       body,
-      audience: req.body?.audience === "member" ? "member" : undefined,
+      audience: briefAudienceFromBody(req.body?.audience),
       source: "admin",
       confirmedBy: req.body?.confirm === false ? null : actor,
     });

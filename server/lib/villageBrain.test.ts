@@ -10,6 +10,8 @@ import path from "path";
 import { describe, expect, it } from "vitest";
 import { BRIEF_SECTIONS, MINIMUM_BRIEF } from "../../shared/villageBrief";
 import {
+  STRANGER_READABLE_SECTIONS,
+  briefAudienceFromBody,
   capMarkdown,
   decisionOccurredAt,
   decisionToRecord,
@@ -91,6 +93,39 @@ describe("the section registry", () => {
 
   it("has unique ids", () => {
     expect(new Set(BRIEF_SECTIONS.map((s) => s.id)).size).toBe(BRIEF_SECTIONS.length);
+  });
+});
+
+describe("what may ever reach a stranger", () => {
+  // Pinned as a literal on purpose. Widening this list is how a village's dues
+  // or its decision-makers reach the public guide, so it should take an edit
+  // here that a reviewer reads, and never happen as a side effect of adding a
+  // section to the registry.
+  it("is exactly the four sections a village says to anybody", () => {
+    expect([...STRANGER_READABLE_SECTIONS].sort()).toEqual(["aims", "language", "values", "vision"]);
+  });
+
+  it("names only sections that exist, so a rename cannot quietly empty the public guide", () => {
+    const ids = new Set(BRIEF_SECTIONS.map((s) => s.id));
+    for (const id of STRANGER_READABLE_SECTIONS) expect(ids.has(id), `${id} is not a brief section`).toBe(true);
+  });
+
+  it("names only sections that default to members, so the two lists cannot disagree on a fresh fork", () => {
+    const byId = Object.fromEntries(BRIEF_SECTIONS.map((s) => [s.id, s.audience]));
+    for (const id of STRANGER_READABLE_SECTIONS) expect(byId[id], id).toBe("member");
+  });
+});
+
+describe("briefAudienceFromBody", () => {
+  it("accepts both directions, so an admin can close what they opened", () => {
+    expect(briefAudienceFromBody("member")).toBe("member");
+    expect(briefAudienceFromBody("admin")).toBe("admin");
+  });
+
+  it("reads anything else as leave it alone, never as a widening", () => {
+    for (const v of [undefined, null, "", "public", "Member", "ADMIN", 1, true, {}, ["member"]]) {
+      expect(briefAudienceFromBody(v), JSON.stringify(v)).toBeUndefined();
+    }
   });
 });
 
