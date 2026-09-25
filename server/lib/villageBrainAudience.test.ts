@@ -29,8 +29,8 @@ const configured = testDbConfigured();
 
 /** The revision history for one section, oldest first. */
 async function revisions(pool: Pool, section: string): Promise<Array<{ revision: number; body: string }>> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT r.revision, r.body FROM village_brief_revisions r JOIN village_brief b ON b.id = r.brief_id " + // module-review-ok: a test reading the history table back to prove the write kept it
+  const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: a test reading the history table back to prove the write kept it; no repo reads revisions
+    "SELECT r.revision, r.body FROM village_brief_revisions r JOIN village_brief b ON b.id = r.brief_id " +
       "WHERE b.section = ? ORDER BY r.revision",
     [section],
   );
