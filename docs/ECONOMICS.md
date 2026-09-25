@@ -2852,6 +2852,14 @@ platform's words, naming every field that does. Adopting the platform's meaning 
 still available; adopting its wording while claiming the community decided it is
 not.
 
+The same comparison now reaches the public by KEY. `platformDefaultTermKeys` is the
+list `platformDefaultTerms` labels, and `GET /api/exit-policy` answers it as
+`platformWording`. `/governance` and `/roles` print the restorative steps as the
+village's conflict process only when `restorativeSteps` is absent from that list,
+and say the village has not written its steps otherwise. Nothing about value,
+settlement or any balance reads it: it decides which words a public page may call
+the village's own.
+
 So the state today is exact, **and the sentence that used to stand here is not,
 because the levers landed under it.** It read: no code pays them out, converts
 them, values them, or returns them. Three of those four are now things the code

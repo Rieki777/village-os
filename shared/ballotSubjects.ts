@@ -291,9 +291,9 @@ export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
      * This field itself is a hardcoded platform constant. `thresholdSettingsFrom`
      * raises unity and quorum from village settings and never reads
      * minElectorate, so no village can change how many founders it takes to
-     * launch. That may well be right, since launch happens once, and it is an
-     * open question with the founder rather than an oversight to fix in
-     * passing.
+     * launch. That is the rule, and it is settled: Rye ruled on 2026-09-14,
+     * "Launch takes 3 founders, fixed." Keep it a constant; turning it into a
+     * village setting would reverse that ruling.
      *
      * Until this comment existed the coupling was asserted in prose in three
      * files and enforced in none. It is now enforced in one and stated here,

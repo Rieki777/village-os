@@ -57,7 +57,7 @@ interface CovenantContent {
 
 interface LegalContent {
   membership?: {
-    /** e.g. "Amora 508(c)(1)(a)". Blank falls back to the village name. */
+    /** e.g. "Amora 508(c)(1)(a)". Blank: the page names the village's community and says no legal entity is published yet. */
     entityLabel?: string;
     /** The full paragraph in the letter body. Omitted entirely when blank. */
     contributionParagraph?: string;
@@ -95,12 +95,21 @@ export default function LoveLetter() {
   const tokenName = useTokenName("recognition");
   const commitments = buildCommitments(villageName);
   const membership = legal?.membership;
-  // The village's own name alone when no entity is published: a name, not a
-  // legal claim. Everywhere this file used to say "Amora 508(c)(1)(a)".
-  // S3 pages lane: the fallback was the literal "Amora", so a founder who
-  // had never published a legal entity signed their members into somebody
-  // else's church on the line that collects their money.
-  const entityName = membership?.entityLabel?.trim() || villageName;
+  // Everywhere this file used to say "Amora 508(c)(1)(a)". S3 pages lane: the
+  // fallback was the literal "Amora", so a founder who had never published a
+  // legal entity signed their members into somebody else's church on the line
+  // that collects their money.
+  //
+  // The fallback after that was the village's bare name, printed exactly where
+  // the entity goes: "your official membership in Willowbrook", "as a member of
+  // Willowbrook". That still reads as a legal body the signer is joining, and
+  // no such body was published. So with no entity the signer joins a community
+  // and the page says so: `memberOf` in running prose, `memberOfOnRecord` on
+  // the lines a signer is asked to put their name to, which carry the missing
+  // entity in the same breath.
+  const entityLabel = membership?.entityLabel?.trim() ?? "";
+  const memberOf = entityLabel || `the ${villageName} community`;
+  const memberOfOnRecord = entityLabel || `the ${villageName} community (no legal entity published yet)`;
   const contributionParagraph = membership?.contributionParagraph?.trim();
   const contributionShortNote = membership?.contributionShortNote?.trim();
   const footerNote =
@@ -235,7 +244,7 @@ export default function LoveLetter() {
                 Welcome to the {villageName} Family
               </h1>
               <p className="text-xl text-muted-foreground leading-relaxed mb-8">
-                Your membership form has been received. You are now part of the {entityName} community.
+                Your membership form has been received. Once the village accepts it, you are a member of {memberOf}.
               </p>
               <div className="bg-card border border-primary/20 rounded-2xl p-8 mb-8 text-left">
                 <h2 className="font-display text-2xl font-bold text-foreground mb-4">What happens next</h2>
@@ -289,7 +298,7 @@ export default function LoveLetter() {
               The {villageName} Love Letter
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Our founding covenant, and your official membership in {entityName}.
+              Our founding covenant, and your official membership in {memberOfOnRecord}.
               Read. Reflect. Sign.
             </p>
           </motion.div>
@@ -311,7 +320,7 @@ export default function LoveLetter() {
               regeneration, of the land, of community, of yourself.
             </p>
 
-            <p className="mb-4 text-foreground font-semibold">As a member of {entityName}, you commit to:</p>
+            <p className="mb-4 text-foreground font-semibold">As a member of {memberOf}, you commit to:</p>
 
             <ul className="space-y-3 mb-8">
               {commitments.map((commitment, i) => (
@@ -323,7 +332,7 @@ export default function LoveLetter() {
             </ul>
 
             <p className="mb-6 text-muted-foreground">
-              In return, you become a full member of {entityName}, gaining access
+              In return, you become a full member of {memberOf}, gaining access
               to community spaces, governance participation, {tokenName} economy, and the opportunity to
               deepen your involvement through roles, residency, or business creation.
             </p>
@@ -351,7 +360,7 @@ export default function LoveLetter() {
               Sign Your Membership
             </h2>
             <p className="text-muted-foreground mb-8">
-              Fill in your details below to officially join the {villageName} Family and become a member of {entityName}.
+              Fill in your details below to ask to join the {villageName} Family and become a member of {memberOfOnRecord}.
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -513,7 +522,7 @@ export default function LoveLetter() {
                     className="mt-1 h-4 w-4 flex-shrink-0 accent-teal-deep"
                   />
                   <span className="text-sm text-muted-foreground">
-                    I have read the Love Letter above and commit to the values and agreements of the {villageName} community as a member of {entityName}. <span className="text-destructive">*</span>
+                    I have read the Love Letter above and commit to the values and agreements of the {villageName} community{entityLabel ? ` as a member of ${entityLabel}` : " (no legal entity published yet)"}. <span className="text-destructive">*</span>
                   </span>
                 </label>
               </div>
