@@ -26,14 +26,20 @@ const WIDTH = 460;
 const HEIGHT = 400;
 const CX = WIDTH / 2;
 const CY = HEIGHT / 2;
-/** The radius of the outermost ring, level five. */
-const RADIUS = 130;
-const LABEL_GAP = 20;
 /**
- * Label size in viewBox units. The chart scales to its box, so 13 read as
- * about 9px on a 390px phone, measured in Chromium; 15 is about 10px there
- * and still keeps "Stakeholders" and "Resourcing" inside the box at every
- * width, which the same measurement checked.
+ * The radius of the outermost ring, level five, and the gap to the labels.
+ * The WIDTH is what binds: "Resourcing" sits end-anchored at nine o'clock and
+ * "Stakeholders" start-anchored at four, and an inline SVG clips whatever
+ * crosses its viewBox. Measured in Chromium with the built Montserrat woff2
+ * actually loaded (document.fonts said so), at 130 + 20 "Resourcing" began
+ * at -8 and read "esourcing"; a fallback font had measured it inside. At
+ * 116 + 14 every label keeps about 12 units of the box, medium and italic.
+ */
+const RADIUS = 116;
+const LABEL_GAP = 14;
+/**
+ * Label size in viewBox units. The chart scales to its box, so 15 is about
+ * 10px on a 390px phone, where the SVG renders about 316px wide.
  */
 const LABEL_SIZE = 15;
 
