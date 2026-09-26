@@ -17,6 +17,14 @@
  * every comment stripped first, so a header explaining the rule cannot trip
  * the rule and a rule broken inside the code cannot hide behind a comment.
  * The sentence helpers are pure and exercised directly below.
+ *
+ * THE PRINTABLE WORKBOOK IS SWEPT TOO (2026-09-25). /canvas/workbook puts a
+ * row of five levels under every block for a group to circle by hand, and its
+ * "Save as Markdown" file does the same with tick boxes. A circled level is a
+ * reading of ONE block, the same thing a point on the radar is, so the
+ * workbook's sheet, its page and its Markdown builder are held to every rule
+ * here: nothing averaged, summed or counted, no "so many of twelve", no
+ * percent. And the radar stays out of it.
  */
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
@@ -40,11 +48,16 @@ const CANVAS_FILES = fs
   .filter((f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f))
   .map((f) => ({ name: f, body: stripComments(fs.readFileSync(path.join(CANVAS_DIR, f), "utf8")) }));
 
-/** The components plus the copy module they speak through. */
-const SURFACE = [
-  ...CANVAS_FILES,
-  { name: "canvasCopy.ts", body: stripComments(fs.readFileSync(path.join(SRC, "lib", "canvasCopy.ts"), "utf8")) },
+const source = (...parts: string[]) => stripComments(fs.readFileSync(path.join(SRC, ...parts), "utf8"));
+
+/** The workbook's page and its Markdown builder, which live outside the canvas directory. */
+const WORKBOOK_FILES = [
+  { name: "pages/CanvasWorkbook.tsx", body: source("pages", "CanvasWorkbook.tsx") },
+  { name: "canvasWorkbook.ts", body: source("lib", "canvasWorkbook.ts") },
 ];
+
+/** The components plus the copy modules they speak through, and the workbook. */
+const SURFACE = [...CANVAS_FILES, { name: "canvasCopy.ts", body: source("lib", "canvasCopy.ts") }, ...WORKBOOK_FILES];
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -59,7 +72,7 @@ describe("the files this test reads", () => {
   it("are the whole canvas view, so a new file cannot slip past", () => {
     // Without this the sweep passes by checking nothing at all.
     expect(CANVAS_FILES.map((f) => f.name).sort()).toEqual(
-      ["CanvasBaseline.tsx", "CanvasBlockCard.tsx", "CanvasRadar.tsx", "RecordReadingForm.tsx"].sort(),
+      ["CanvasBaseline.tsx", "CanvasBlockCard.tsx", "CanvasRadar.tsx", "CanvasWorkbookSheet.tsx", "RecordReadingForm.tsx"].sort(),
     );
     for (const f of SURFACE) expect(f.body.length, f.name).toBeGreaterThan(200);
   });
@@ -135,6 +148,33 @@ describe("the credit", () => {
     const baseline = CANVAS_FILES.find((f) => f.name === "CanvasBaseline.tsx")!;
     expect(baseline.body).toContain("CANVAS_CREDIT.text");
     expect(baseline.body).toContain("CANVAS_CREDIT.url");
+  });
+
+  it("renders on the workbook, and travels in its Markdown file", () => {
+    const sheet = CANVAS_FILES.find((f) => f.name === "CanvasWorkbookSheet.tsx")!;
+    expect(sheet.body).toContain("CANVAS_CREDIT.text");
+    expect(sheet.body).toContain("CANVAS_CREDIT.url");
+    const markdown = WORKBOOK_FILES.find((f) => f.name === "canvasWorkbook.ts")!;
+    expect(markdown.body).toContain("CANVAS_CREDIT.text");
+    expect(markdown.body).toContain("CANVAS_CREDIT.url");
+  });
+});
+
+describe("the workbook's circled level, which is not a score", () => {
+  it("offers the five levels one block at a time, from the canvas's own scale", () => {
+    const sheet = CANVAS_FILES.find((f) => f.name === "CanvasWorkbookSheet.tsx")!;
+    // One row of levels inside each block, and the levels only ever beside their words.
+    expect(sheet.body).toMatch(/function BlockPage[\s\S]*<CircleOne\b/);
+    expect(sheet.body).toContain("CANVAS_SCALE_TEXT[level].word");
+  });
+
+  it("has no field a level could be typed into, and no radar", () => {
+    // No input takes a level: the workbook is filled in by hand, and a field
+    // would invite the page to add the answers up.
+    for (const f of [...WORKBOOK_FILES, CANVAS_FILES.find((c) => c.name === "CanvasWorkbookSheet.tsx")!]) {
+      expect(f.body, f.name).not.toMatch(/type="number"|<select\b|<textarea\b/);
+      expect(f.body, f.name).not.toMatch(/CanvasRadar/);
+    }
   });
 });
 

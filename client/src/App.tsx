@@ -84,6 +84,9 @@ function ScrollToTop() {
 const PAGE_TITLES: Record<string, string> = {
   "/": "", // the home page is the village itself; no prefix
   "/journey-to-launch": "Journey to launch",
+  // The printable Governance Canvas workbook, public: a project prints it
+  // before its own instance exists.
+  "/canvas/workbook": "Canvas workbook",
   "/project-history": "Command Centre",
   "/feedback": "Feedback",
   "/network": "Village network",
@@ -250,6 +253,7 @@ const ForgotPassword = lazyPage(() => import("./pages/ForgotPassword"));
 const GameMechanics = lazyPage(() => import("./pages/GameMechanics"));
 const GoodNeighbor = lazyPage(() => import("./pages/GoodNeighbor"));
 const JourneyToLaunch = lazyPage(() => import("./pages/JourneyToLaunch"));
+const CanvasWorkbook = lazyPage(() => import("./pages/CanvasWorkbook"));
 const ProjectHistory = lazyPage(() => import("./pages/ProjectHistory"));
 const Bootstrap = lazyPage(() => import("./pages/Bootstrap"));
 const Feedback = lazyPage(() => import("./pages/Feedback"));
@@ -318,6 +322,9 @@ function Router() {
     <Switch>
       <Route path="/" component={LandingRoute} />
       <Route path="/journey-to-launch" component={JourneyToLaunch} />
+      {/* The Governance Canvas on paper. Public and read-only: it shows the
+          village's name and nothing else the village holds. */}
+      <Route path="/canvas/workbook" component={CanvasWorkbook} />
       <Route path="/project-history" component={ProjectHistory} />
       <Route path="/claim" component={Bootstrap} />
       <Route path="/feedback" component={Feedback} />

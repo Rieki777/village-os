@@ -10,11 +10,17 @@
  * ── THE CANVAS IS SOMEBODY ELSE'S WORK, AND THIS FILE SAYS SO ──────────────
  *
  * The block structure comes from the Governance Canvas by the Bioregional
- * Weaving Labs Collective and Commonland. `CANVAS_CREDIT` below is shown on
- * every surface that renders a block. The licence for the canvas's own text
- * is NOT yet confirmed, so every question and prompt here is written in this
- * platform's own words. None of it is copied from the canvas, and none of it
- * should be replaced with canvas wording until the licence says it may.
+ * Weaving Labs Collective and Commonland. `CANVAS_CREDIT` is shown on every
+ * surface that renders a block.
+ *
+ * The questions and prompts in THIS file are written in this platform's own
+ * words, and they stay ours: the surfaces show them under "Our questions to
+ * talk through". The canvas's OWN text (its question and description for
+ * each block, the four foundations, the scale's meanings, the key moments,
+ * the Decision Matrix columns) lives in shared/governanceCanvasText.ts with
+ * the credit, because Rye ruled that the canvas's own wording is built and
+ * switched on, credited. Keep the two apart: never paste canvas wording into
+ * this file, so one file holds everything of theirs that ships.
  *
  * ── WHY A RADAR IS ALLOWED HERE AND NOWHERE ELSE ───────────────────────────
  *
@@ -303,15 +309,11 @@ export const MOMENT_LABELS: Record<CanvasMoment, string> = {
 export const CANVAS_SENTENCE_MAX = 500;
 
 /**
- * THE CREDIT, shown wherever a block is rendered. The four names are the
- * authors the canvas itself names; the link is where it was published.
+ * THE CREDIT, shown wherever a block is rendered. It lives beside the canvas's
+ * own words in shared/governanceCanvasText.ts and is re-exported here under
+ * the same name, so every importer of the registry still finds it.
  */
-export const CANVAS_CREDIT = {
-  text:
-    "Governance Canvas by the Bioregional Weaving Labs Collective and Commonland " +
-    "(Tijn Tjoelker, Ernestien Idenburg, Noa Lodeizen, Zlatina Tsvetkova)",
-  url: "https://tijntjoelker.substack.com/p/governance-canvas",
-} as const;
+export { CANVAS_CREDIT } from "./governanceCanvasText";
 
 export function isCanvasBlockId(value: unknown): value is CanvasBlockId {
   return typeof value === "string" && (CANVAS_BLOCK_IDS as readonly string[]).includes(value);

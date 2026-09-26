@@ -1,6 +1,14 @@
 /**
- * One canvas block: its question, its newest reading in words, who gave it and
- * when, the readings before it, and for the pen a way to add another.
+ * One canvas block: the canvas's own question, its newest reading in words,
+ * who gave it and when, the readings before it, and for the pen a way to add
+ * another.
+ *
+ * TWO VOICES ON ONE CARD, and each is labelled. The canvas's question leads,
+ * quoted with a `cite` back to where it was published, and its description
+ * opens on demand. Our own question and prompts (shared/governanceCanvas.ts)
+ * sit beneath under "Our questions to talk through", so a reader always knows
+ * whose words they are reading. The credit line renders once, on the view
+ * that holds the cards (CanvasBaseline), and not twelve times.
  *
  * The level shows as its WORD. The radar above already places it on a ring,
  * and a numeral here would invite adding the twelve up, which R55 forbids.
@@ -9,7 +17,8 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { ChevronRight } from "lucide-react";
-import { FOUNDATION_LABELS, type CanvasBlock, type CanvasReadingInput } from "@shared/governanceCanvas";
+import { type CanvasBlock, type CanvasReadingInput } from "@shared/governanceCanvas";
+import { CANVAS_BLOCK_TEXT, CANVAS_FOUNDATION_TEXT, CANVAS_SOURCE_URL } from "@shared/governanceCanvasText";
 import { recordedLine, weeksPhrase, type CanvasBlockView } from "@/lib/canvasCopy";
 import { RecordReadingForm } from "./RecordReadingForm";
 
@@ -27,6 +36,7 @@ export function CanvasBlockCard({
   const [writing, setWriting] = useState(false);
   const latest = view.latest;
   const earlier = view.history.slice(1);
+  const canvas = CANVAS_BLOCK_TEXT[block.id];
 
   return (
     <article data-testid={`canvas-block-${block.id}`} className="bg-white border border-stone-200 rounded-xl p-5">
@@ -46,7 +56,16 @@ export function CanvasBlockCard({
         )}
       </header>
 
-      <p className="text-sm text-stone-700 mt-2">{block.question}</p>
+      <p className="mt-2 text-xs font-medium text-stone-600">The canvas asks</p>
+      <blockquote cite={CANVAS_SOURCE_URL} className="text-sm font-medium text-stone-900" data-testid={`canvas-question-${block.id}`}>
+        {canvas.question}
+      </blockquote>
+      <details className="mt-1.5 text-sm">
+        <summary className="cursor-pointer font-medium text-teal-deep">What the canvas says about it</summary>
+        <blockquote cite={CANVAS_SOURCE_URL} className="mt-2 text-stone-700 border-l-2 border-stone-200 pl-3">
+          {canvas.description}
+        </blockquote>
+      </details>
 
       {latest && (
         <div className="mt-3">
@@ -56,14 +75,15 @@ export function CanvasBlockCard({
       )}
 
       <details className="mt-3 text-sm">
-        <summary className="cursor-pointer font-medium text-teal-deep">Questions to talk through</summary>
+        <summary className="cursor-pointer font-medium text-teal-deep">Our questions to talk through</summary>
+        <p className="mt-2 text-stone-900">{block.question}</p>
         <ul className="mt-2 space-y-1.5 list-disc pl-5 text-stone-700">
           {block.prompts.map((p) => (
             <li key={p}>{p}</li>
           ))}
         </ul>
         <p className="mt-2 text-xs text-stone-600">
-          {block.foundations.map((f) => FOUNDATION_LABELS[f]).join(" · ")}
+          {block.foundations.map((f) => CANVAS_FOUNDATION_TEXT[f].name).join(" · ")}
           {block.seasonWeeks.length > 0 && ` · Season Two, ${weeksPhrase(block.seasonWeeks)}`}
         </p>
       </details>
