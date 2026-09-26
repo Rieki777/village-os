@@ -328,6 +328,9 @@ try {
       restorativeStep: RESTORATIVE_STEPS[0],
       careRoleName: careRole.name,
       careHolderName: care.name,
+      // The NEWEST reading of the block read twice: it renders only from /api/canvas data, so a
+      // refused or empty canvas cannot show it, and showing the older one instead would miss it.
+      ...(canvasRecorded ? { canvasReading: READINGS.filter((r) => r.blockId === "purpose").at(-1).sentence } : {}),
     },
     // Which person the walk signs in as, per walk role.
     walkAs: { member: "member", founder: "founder" },

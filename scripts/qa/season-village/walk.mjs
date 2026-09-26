@@ -26,12 +26,24 @@
  * ── WHAT IT WRITES ─────────────────────────────────────────────────────────
  *
  * <QA_OUT_DIR>/runs/<stamp>/report.json, summary.md and shots/*.png. Never
- * inside the repository. Exit 0 when nothing failed, 1 when something did,
- * 2 when the walk could not run at all.
+ * inside the repository.
+ *
+ *   exit 0  nothing failed and every check was measured
+ *   exit 1  something failed
+ *   exit 3  nothing failed, and some check could NOT be measured (a role with
+ *           nobody seeded to sign in as, a $placeholder the seed did not
+ *           provide): a walk of visitors only is not a green.
+ *           --allow-unmeasured accepts that and exits 0.
+ *   exit 2  the walk could not run at all
+ *
+ * A request to /api/* that answers 4xx fails the page, unless surfaces.json
+ * lists it in `allowRequests` (at the top, on the surface, on a view, or under
+ * expect.<role>) as a pattern over "<status> <METHOD> <path>". A refusal is how
+ * a page quietly loses its data while still rendering its headings.
  *
  * Environment:
  *   QA_BASE_URL          a village to walk (default: the one boot.mjs is running)
- *   QA_OUT_DIR           where the run goes (default: the OS temp dir)
+ *   QA_OUT_DIR           where the run goes (default: this worktree's own dir under the OS temp dir)
  *   PLAYWRIGHT_PATH      the playwright package directory (it is not a dependency of this repo)
  *   NODE_PATH            searched for playwright when PLAYWRIGHT_PATH is unset
  *   PLAYWRIGHT_CHROMIUM  a chrome executable, when the one playwright expects is not installed
@@ -62,6 +74,7 @@ const VIEWPORTS_WANTED = list("--viewports");
  * this after changing the probes, the settle rule or the classification.
  */
 const SELF_CHECK = argv.includes("--self-check");
+const ALLOW_UNMEASURED = argv.includes("--allow-unmeasured");
 
 const SETTLE_EVERY_MS = 350;
 const SETTLE_MAX_MS = 15_000;
@@ -83,6 +96,9 @@ if (!h.ok) fail(`${BASE}/health did not answer ok (${h.status} ${h.error ?? ""})
 
 const seed = readJson(tokensFile());
 const booted = serverState();
+if (booted && !process.env.QA_BASE_URL && h.build !== booted.build) {
+  fail(`${BASE} answers with build ${h.build}, and boot.mjs started build ${booted.build}. Something else holds the port.`, 2);
+}
 const seedIsForThisVillage = !!seed && (!booted || seed.villageId === booted.villageId);
 if (seed && !seedIsForThisVillage) {
   console.log(`  tokens.json belongs to village ${seed.villageId} and this one is ${booted?.villageId}; the member and founder walks are skipped. Run seed.mjs.`);
@@ -111,6 +127,8 @@ const SELF_CHECK_SURFACES = [
     required: true,
     text: ["season-village self-check: text that is on no page"],
     forbidden: ["season-village self-check: words the page must not carry"],
+    // The injected refusal with this query is expected, so it must read as a warning; the bare one must fail.
+    allowRequests: ["^401 GET /api/admin/launch\\?season-village-self-check=allowed$"],
     expect: { visitor: { path: "/season-village-self-check-nowhere" } },
   },
   { id: "self-check-missing", path: "/season-village-self-check-missing", required: true },
@@ -125,7 +143,8 @@ const SELF_CHECK_EXPECTS = [
   // Built when it is read: the term comes from the brand guard, never from this file.
   ["the injected brand term", "fail", () => new RegExp(`^forbidden text present: brand term "${BRAND?.[0] ?? "(none)"}"`, "i")],
   ["the wrong end path", "fail", /^expected to end on \/season-village-self-check-nowhere/],
-  ["a refused request", "warn", /^request GET \/api\/admin\/launch answered 401/],
+  ["a refused API request", "fail", /^request GET \/api\/admin\/launch answered 401$/],
+  ["a refused API request surfaces.json allows", "warn", /^request GET \/api\/admin\/launch\?season-village-self-check=allowed answered 401 \(allowed by surfaces\.json\)$/],
   ["a page that never settles", "warn", /^did not settle/],
   ["a missing required surface", "fail", /^a REQUIRED surface is missing/],
 ];
@@ -349,12 +368,14 @@ function checkText(m, rules, role, where) {
   return { requiredMissing, forbiddenFound };
 }
 
+/** What one page view must show and must not, for one role. A view's own `expect.<role>` narrows it per role. */
 function rulesFor(surface, view, role) {
-  const exp = surface.expect?.[role] ?? {};
-  const base = view ? { text: view.text ?? [], forbidden: view.forbidden ?? [] } : { text: [...(surface.text ?? []), ...(exp.text ?? [])], forbidden: exp.forbidden ?? [] };
+  const own = view ?? surface;
+  const exp = own.expect?.[role] ?? {};
   return {
-    required: base.text,
-    forbidden: [...(spec.forbiddenEverywhere ?? []), ...(surface.forbidden ?? []), ...base.forbidden],
+    required: [...(own.text ?? []), ...(exp.text ?? [])],
+    forbidden: [...(spec.forbiddenEverywhere ?? []), ...(surface.forbidden ?? []), ...(view?.forbidden ?? []), ...(exp.forbidden ?? [])],
+    allowRequests: [...(spec.allowRequests ?? []), ...(surface.allowRequests ?? []), ...(view?.allowRequests ?? []), ...(exp.allowRequests ?? [])],
     path: view ? null : exp.path ?? null,
   };
 }
@@ -460,7 +481,15 @@ async function capture(page, ev, ctxInfo, surface, view, marks, status, shotsDir
   for (const t of text.requiredMissing) add("fail", `required text missing: "${t}"`);
   for (const t of text.forbiddenFound) add("fail", `forbidden text present: ${t}`);
   if (rules.path && !missing && atRest.pathname !== rules.path) add("fail", `expected to end on ${rules.path}, ended on ${atRest.pathname}`);
-  for (const f of failedRequests) add(f.status >= 500 ? "fail" : "warn", `request ${f.method} ${f.url} ${f.status ? `answered ${f.status}` : `failed (${f.error})`}`);
+  for (const f of failedRequests) {
+    // A refused /api request is a page that lost its data while its headings still render.
+    const allowed = rules.allowRequests.some((p) => new RegExp(p).test(`${f.status} ${f.method} ${f.url}`));
+    const refusedApi = f.status >= 400 && f.status < 500 && f.url.startsWith("/api/");
+    add(
+      f.status >= 500 || (refusedApi && !allowed) ? "fail" : "warn",
+      `request ${f.method} ${f.url} ${f.status ? `answered ${f.status}` : `failed (${f.error})`}${allowed ? " (allowed by surfaces.json)" : ""}`,
+    );
+  }
   if (!s1.settled || !s2.settled) {
     const s = !s1.settled ? s1 : s2;
     add("warn", `did not settle in ${SETTLE_MAX_MS / 1000}s (${s.inflight} request(s) in flight, ${s.spinners} spinner(s) visible); measured anyway`);
@@ -604,6 +633,7 @@ try {
             named.textContent = `self-check ${brand}. season-village self-check: words the page must not carry`;
             document.body.appendChild(named);
             fetch("/api/admin/launch").catch(() => undefined);
+            fetch("/api/admin/launch?season-village-self-check=allowed").catch(() => undefined);
             setTimeout(() => { throw new Error("season-village self-check: an injected page error"); }, 0);
           });
         }, [SELF_CHECK_PATH, BRAND?.[0] ?? ""]);
@@ -681,8 +711,14 @@ if (SELF_CHECK) {
   }
   console.log(unseen ? `\n  SELF-CHECK FAILED: ${unseen} injected defect(s) went unreported.` : "\n  self-check passed: every instrument reported what was put in front of it.");
   process.exitCode = unseen ? 1 : 0;
+} else if (totals.fail > 0) {
+  process.exitCode = 1;
+} else if (notMeasurable.length && !ALLOW_UNMEASURED) {
+  // Every skipped role and unresolved placeholder is already in notMeasurable.
+  console.log(`\n  EXIT 3: nothing failed, and ${notMeasurable.length} check(s) were not measured. That is not a pass; --allow-unmeasured accepts it.`);
+  process.exitCode = 3;
 } else {
-  process.exitCode = totals.fail > 0 ? 1 : 0;
+  process.exitCode = 0;
 }
 
 function summary(r) {

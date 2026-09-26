@@ -18,10 +18,13 @@ node scripts/qa/season-village/boot.mjs --fresh --run seed,check,walk
 
 `check` is `walk.mjs --self-check`: it poisons one page with a defect of every
 kind the walk looks for (a page error, a console error, a 3000px-wide element,
-a brand term, a refused request, a spinner that never stops) plus text and a
+a brand term, a refused API request, a spinner that never stops) plus text and a
 path that cannot match and a surface that does not exist, and passes only when
-each one is reported. Run it whenever the walk changes; a check nobody has seen
-fail is a check nobody knows works.
+each one is reported. It also makes one refused request that its surface lists
+in `allowRequests`, which must come back as a warning and not a failure. Run it
+whenever the walk changes; a check nobody has seen fail is a check nobody knows
+works. `--fresh --run walk` without `seed` before it is refused: a fresh village
+has nobody to sign in as.
 
 Or step by step, with the server left running between them:
 
@@ -40,7 +43,7 @@ node scripts/qa/season-village/boot.mjs --stop
 | `TEST_DATABASE_URL` | the database server the scratch schema lives on (read from `.env` when not set) | none: refused |
 | `QA_SCHEMA` | the scratch schema | `village_season_qa` |
 | `QA_PORT` | the port the server listens on | `38471` |
-| `QA_OUT_DIR` | state, tokens, logs, screenshots, reports | the OS temp dir; refused inside the repo |
+| `QA_OUT_DIR` | state, tokens, logs, screenshots, reports | `season-village-qa-<worktree>-<hash>` under the OS temp dir, one per worktree; refused inside the repo |
 | `QA_HEAVY_LOCK` | a directory used as a machine-wide lock around the build and the server's life | none |
 | `QA_LOCK_OWNER` | the name written inside that lock | `season-village` |
 | `QA_BOOT_DEADLINE_S` | how long a boot may take | `300` |
@@ -50,8 +53,12 @@ node scripts/qa/season-village/boot.mjs --stop
 | `QA_ADMIN_PASSWORD` | the bootstrap password of such a server | the one `boot.mjs` generated |
 
 On a machine shared by several lanes, set `QA_HEAVY_LOCK` to the lock every lane
-uses, and `QA_OUT_DIR` to a directory of your own: the OS temp dir is shared, and
-Windows Storage Sense empties it.
+uses. The default `QA_OUT_DIR` is already one per worktree, so a `--stop`,
+`seed.mjs --fresh` or walk from another worktree cannot reach your village; set
+it yourself only to keep the state somewhere Windows Storage Sense does not
+empty. The state dir holds the record of which schema this harness created, so
+a new state dir meets an existing `village_season_qa` as somebody else's and
+refuses it until you pass `--takeover` once (or pick another `QA_SCHEMA`).
 
 ## The three scripts
 
@@ -69,7 +76,10 @@ answers with this dist's build SHA, and `netstat` names the child it spawned.
 It stays in the foreground as a supervisor, holding the heavy lock for the whole
 life of the server, because on Windows a detached child dies with the job that
 started it. `--stop` and `seed.mjs --fresh` reach it through files in
-`QA_OUT_DIR/state/control`.
+`QA_OUT_DIR/state/control`. A supervisor killed outright runs no exit handler,
+so the lock it held is also recorded in `QA_OUT_DIR/state/lock.json`: the next
+boot and `--stop` (with no `QA_HEAVY_LOCK` needed) free that lock when the
+recorded pid is gone and the lock still names exactly that pid.
 
 **`seed.mjs`** builds a Season Two project around its first canvas reading, and
 writes nothing except through HTTP routes:
@@ -111,20 +121,45 @@ horizontal overflow with its widest in-flow culprit, required and forbidden
 text, whether the surface exists, and a full-page screenshot. It measures a page
 once two reads 350ms apart agree with nothing in flight and no spinner showing,
 at rest first and only then after pressing anything. It writes `report.json`,
-`summary.md` and `shots/` under `QA_OUT_DIR/runs/<stamp>/`, exits 1 when anything
-failed, and always prints how many checks it could not measure.
+`summary.md` and `shots/` under `QA_OUT_DIR/runs/<stamp>/` and always prints how
+many checks it could not measure. A request to `/api/*` that answers 4xx fails
+the page (a refusal is how a page loses its data while its headings still
+render), unless `surfaces.json` lists it in `allowRequests`. A 5xx always fails.
+
+| exit | meaning |
+|---|---|
+| 0 | nothing failed and every check was measured |
+| 1 | something failed |
+| 3 | nothing failed, and some check was NOT measured: a role with nobody seeded to sign in as, or a `$placeholder` the seed did not provide. A walk of visitors only is not a green. `--allow-unmeasured` turns this into 0. |
+| 2 | the walk could not run |
+
+It also refuses a server whose `/health` build is not the one `boot.mjs`
+started, as the seed does.
 
 ## Extending it
 
 A new surface is a new entry in `surfaces.json`: an `id`, a `path`, `required`
 (false until the surface is built, so a missing one is reported and does not
 fail the walk), `text` it must show, `forbidden` text, per-role `expect`, and
-`views` for buttons that swap what the page shows. Text is matched without case,
+`views` for buttons that swap what the page shows (a view takes its own
+per-role `expect` too: the Canvas view requires "Record a reading" of the founder
+who holds the pen and forbids it to a member). Text is matched without case,
 with whitespace collapsed, and `$villageName`, `$restorativeStep`,
-`$careRoleName`, `$careHolderName` and `$viewerName` come from the seed.
-`$brandTerms` is the BANNED list in `scripts/check-brand-refs.mjs`, matched as
-whole words everywhere, so a fresh village showing another village's name fails.
-A new seed fact goes in `seed.mjs`'s `facts`.
+`$careRoleName`, `$careHolderName`, `$canvasReading` and `$viewerName` come from
+the seed. `$brandTerms` is the BANNED list in `scripts/check-brand-refs.mjs`,
+matched as whole words everywhere, so a fresh village showing another village's
+name fails. A new seed fact goes in `seed.mjs`'s `facts`.
+
+Require text that only the page's own body renders, from the data it loads
+where there is any. The Layout header and footer carry the village's name on
+every page, and the Canvas view prints its heading and the credit line whether
+`/api/canvas` answered or not, so text like that passes on a page that lost
+its content. The Canvas view therefore requires the newest reading the seed
+wrote (`$canvasReading`) and "No reading yet" from an empty block.
+
+A refused request a page is SUPPOSED to make goes in `allowRequests` (top level,
+on a surface, on a view, or under `expect.<role>`), as regular expressions over
+`<status> <METHOD> <path>`, for example `"^401 GET /api/profile$"`.
 
 ## What it proves
 
@@ -134,8 +169,10 @@ A new seed fact goes in `seed.mjs`'s `facts`.
   invitation, appointment, vouching, a care seat, the exit policy, the module
   switch, the purpose statement and the canvas.
 - Each surface renders for each role at each width without a page error, a
-  console error, a 5xx, or a page wider than the screen, shows the text it must
-  and none it must not.
+  console error, a 5xx, a refused API request it was not expected to make, or a
+  page wider than the screen, shows the text it must and none it must not.
+- The canvas readings the founder wrote reach a member's screen, and the pen
+  shows for the founder and not for the member.
 
 ## What it cannot see
 

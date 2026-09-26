@@ -4,9 +4,12 @@
 //
 //   WHERE THE HARNESS WRITES. Everything it produces (server state, the tokens
 //   it minted, the data dir, logs, screenshots, reports) goes under one root,
-//   QA_OUT_DIR, which defaults to the OS temp dir and is REFUSED when it resolves
-//   inside the repository. A token file or a screenshot that lands in the tree
-//   is one `git add .` away from being published.
+//   QA_OUT_DIR, which defaults to a directory of THIS worktree's own under the OS
+//   temp dir and is REFUSED when it resolves inside the repository. A token file
+//   or a screenshot that lands in the tree is one `git add .` away from being
+//   published. The default is per worktree because the temp dir is shared by
+//   every lane on the machine: one shared state dir let one lane's --stop, seed
+//   --fresh or walk act on another lane's running village.
 //
 //   WHICH DATABASE IT MAY TOUCH. The schema is a scratch village on the
 //   TEST_DATABASE_URL server, never the app schema, never a Railway host.
@@ -14,6 +17,7 @@
 //   WHAT A SCRIPT SAYS WHEN IT STOPS. "REFUSED: <sentence>" and a non-zero exit,
 //   so a caller reading only the exit code and a caller reading only the last
 //   line reach the same answer.
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -85,10 +89,18 @@ export function isInside(child, parent) {
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
 
+/** The default out dir: one per worktree, named for it and keyed on its full path. */
+export function defaultOutDir() {
+  const key = process.platform === "win32" ? ROOT.toLowerCase() : ROOT;
+  const tag = crypto.createHash("sha256").update(key).digest("hex").slice(0, 8);
+  const name = path.basename(ROOT).replace(/[^A-Za-z0-9_-]+/g, "-").slice(0, 40);
+  return path.join(os.tmpdir(), `season-village-qa-${name}-${tag}`);
+}
+
 /** The one directory the harness writes into. Never inside the repository. */
 export function outRoot() {
   const raw = (process.env.QA_OUT_DIR ?? "").trim();
-  const dir = path.resolve(raw || path.join(os.tmpdir(), "season-village-qa"));
+  const dir = path.resolve(raw || defaultOutDir());
   if (isInside(dir, ROOT)) {
     fail(
       `QA_OUT_DIR resolves to ${dir}, which is inside the repository (${ROOT}). The harness writes session ` +

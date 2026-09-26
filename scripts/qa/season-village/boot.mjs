@@ -16,6 +16,11 @@
  * as a background job. A detached server that outlives its parent is not an
  * option on Windows: the process tree dies with the job that started it.
  *
+ * That ending skips every exit handler, so the lock is also recorded in the
+ * state dir (lock.json: the lock path and this pid). The next boot, and
+ * `--stop`, free a lock whose recorded supervisor is gone when the lock still
+ * names that pid exactly, and never a lock anybody else holds.
+ *
  * ── WHAT IT PROVES BEFORE ANYONE TRUSTS A RESPONSE ─────────────────────────
  *
  * Another lane's server on the same port answers every request happily, from
@@ -36,7 +41,8 @@
  * Environment:
  *   QA_PORT             port (default 38471)
  *   QA_SCHEMA           scratch schema on the TEST_DATABASE_URL server (default village_season_qa)
- *   QA_OUT_DIR          where state, logs and reports go (default: the OS temp dir; never the repo)
+ *   QA_OUT_DIR          where state, logs and reports go (default: a directory of this worktree's own
+ *                       under the OS temp dir, see defaultOutDir in shared.mjs; never the repo)
  *   QA_HEAVY_LOCK       a directory path used as a machine-wide lock around build and boot (optional)
  *   QA_LOCK_OWNER       the name written inside that lock (default season-village)
  *   QA_BOOT_DEADLINE_S  how long a boot may take (default 300: migrations plus a slow first import)
@@ -76,6 +82,10 @@ const NO_BUILD = argv.includes("--no-build");
 const runAt = argv.indexOf("--run");
 const RUN = runAt === -1 ? [] : String(argv[runAt + 1] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 for (const step of RUN) if (!["seed", "check", "walk"].includes(step)) fail(`--run takes seed, check and walk, comma separated. "${step}" is none of them.`);
+// A fresh village has no people until the seed runs, so a walk before it could sign in as nobody.
+if (FRESH && RUN.includes("walk") && !(RUN.includes("seed") && RUN.indexOf("seed") < RUN.indexOf("walk"))) {
+  fail("--fresh --run walk needs seed before walk: a fresh village has nobody to sign in as, so the walk would see visitors only. Use --run seed,walk.");
+}
 
 const PORT = Number((process.env.QA_PORT ?? "").trim() || DEFAULT_PORT);
 const BOOT_DEADLINE_MS = Number((process.env.QA_BOOT_DEADLINE_S ?? "").trim() || 300) * 1000;
@@ -85,6 +95,7 @@ const LOG = path.join(stateDir(), "server.log");
 const DATA_DIR = path.join(stateDir(), "data");
 const SECRETS = path.join(stateDir(), "secrets.json");
 const OWNER = path.join(stateDir(), "schema-owner.json");
+const LOCK_RECORD = path.join(stateDir(), "lock.json");
 
 /** Every key that could reach a service outside this machine, blanked. */
 const OUTSIDE_SERVICES = [
@@ -134,7 +145,7 @@ async function main() {
 
   const previous = readJson(serverStateFile());
   if (previous && isAlive(previous.supervisorPid)) {
-    fail(`A season village is already running (supervisor pid ${previous.supervisorPid}, ${previous.base}). Stop it with --stop first.`);
+    fail(`A season village is already running from this state dir (${stateDir()}): supervisor pid ${previous.supervisorPid}, ${previous.base}. Stop it with --stop first.`);
   }
   if (previous) {
     console.log(`  found state from a supervisor that is gone (pid ${previous.supervisorPid}); clearing it`);
@@ -144,6 +155,8 @@ async function main() {
     }
     fs.rmSync(serverStateFile(), { force: true });
   }
+  // Before waiting on the lock: a dead predecessor's lock would otherwise be waited on forever.
+  freeDeadLock();
 
   db = databaseTarget();
   mysql = createRequire(path.join(ROOT, "package.json"))("mysql2/promise");
@@ -183,7 +196,10 @@ async function acquireLock() {
   for (let retry = 1; ; retry++) {
     try {
       fs.mkdirSync(dir); // atomic: exactly one caller creates it
-      fs.writeFileSync(path.join(dir, "owner.txt"), `${owner}\npid ${process.pid}\nsince ${new Date().toISOString()}\n`);
+      const since = new Date().toISOString();
+      fs.writeFileSync(path.join(dir, "owner.txt"), `${owner}\npid ${process.pid}\nsince ${since}\n`);
+      // Recorded in the state dir too, so a boot or --stop can free it if this process is killed.
+      writeJson(LOCK_RECORD, { supervisorPid: process.pid, lock: dir, since });
       console.log(`  heavy lock: acquired ${dir} as ${owner}`);
       return dir;
     } catch (e) {
@@ -197,23 +213,54 @@ async function acquireLock() {
   }
 }
 
+/** The pid a lock's owner.txt names, as a number: a substring test reads pid 9999991 as pid 999999. */
+function lockOwnerPid(dir) {
+  try {
+    const m = /^pid (\d+)\s*$/m.exec(fs.readFileSync(path.join(dir, "owner.txt"), "utf8"));
+    return m ? Number(m[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
 function releaseLock() {
   if (!lock) return;
-  const ownerFile = path.join(lock, "owner.txt");
   try {
-    const text = fs.readFileSync(ownerFile, "utf8");
-    if (!text.includes(`pid ${process.pid}`)) {
+    if (lockOwnerPid(lock) !== process.pid) {
       console.error(`  heavy lock: ${lock} no longer names this process, so it is left alone`);
-      lock = null;
-      return;
+    } else {
+      fs.rmSync(path.join(lock, "owner.txt"), { force: true });
+      fs.rmdirSync(lock);
+      console.log(`  heavy lock: released ${lock}`);
     }
-    fs.rmSync(ownerFile, { force: true });
-    fs.rmdirSync(lock);
-    console.log(`  heavy lock: released ${lock}`);
+    if (readJson(LOCK_RECORD)?.supervisorPid === process.pid) fs.rmSync(LOCK_RECORD, { force: true });
   } catch (e) {
     console.error(`  heavy lock: could not release ${lock}: ${e.message}`);
   }
   lock = null;
+}
+
+/**
+ * A supervisor killed without its exit handler (TerminateProcess, a job kill)
+ * leaves the machine-wide lock behind, and every lane then waits on it. Its
+ * record in the state dir names the lock and the pid: when that pid is gone and
+ * the lock still names it exactly, the lock is freed. A lock anybody else now
+ * holds is never touched.
+ */
+function freeDeadLock() {
+  const rec = readJson(LOCK_RECORD);
+  if (!rec || isAlive(rec.supervisorPid)) return;
+  if (rec.lock && lockOwnerPid(rec.lock) === rec.supervisorPid) {
+    try {
+      fs.rmSync(path.join(rec.lock, "owner.txt"), { force: true });
+      fs.rmdirSync(rec.lock);
+      console.log(`  heavy lock: released ${rec.lock}, which a supervisor that is gone (pid ${rec.supervisorPid}) still held`);
+    } catch (e) {
+      console.error(`  heavy lock: could not release ${rec.lock} for the dead supervisor (pid ${rec.supervisorPid}): ${e.message}`);
+      return; // the record stays, so a later --stop can try again
+    }
+  }
+  fs.rmSync(LOCK_RECORD, { force: true });
 }
 
 // ── the build ──────────────────────────────────────────────────────────────
@@ -498,7 +545,8 @@ async function shutdown(code, why) {
 async function stopRunning() {
   const state = readJson(serverStateFile());
   if (!state) {
-    console.log("  no season village is running here");
+    freeDeadLock();
+    console.log(`  no season village is running here (${stateDir()})`);
     return 0;
   }
   if (isAlive(state.supervisorPid)) {
@@ -514,17 +562,7 @@ async function stopRunning() {
     console.log(`  the supervisor was gone; stopped its orphaned server, pid ${state.serverPid}`);
   }
   fs.rmSync(serverStateFile(), { force: true });
-  const lockDir = (process.env.QA_HEAVY_LOCK ?? "").trim();
-  if (lockDir) {
-    try {
-      const text = fs.readFileSync(path.join(lockDir, "owner.txt"), "utf8");
-      if (text.includes(`pid ${state.supervisorPid}`)) {
-        fs.rmSync(path.join(lockDir, "owner.txt"), { force: true });
-        fs.rmdirSync(lockDir);
-        console.log(`  released the heavy lock the dead supervisor held (${lockDir})`);
-      }
-    } catch { /* not held by it */ }
-  }
+  freeDeadLock();
   return 0;
 }
 
