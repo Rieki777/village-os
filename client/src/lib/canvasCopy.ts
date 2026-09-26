@@ -76,7 +76,7 @@ export function radarDescription(levels: Record<CanvasBlockId, CanvasLevel | nul
   }).join(" ");
 }
 
-/** The Season Two weeks a block comes up in, as a phrase: "week 3", "weeks 3, 6 and 11". */
+/** The weeks a loaded season names a block in, as a phrase: "week 3", "weeks 3, 6 and 11". */
 export function weeksPhrase(weeks: readonly number[]): string {
   if (weeks.length === 0) return "";
   const last = weeks[weeks.length - 1];

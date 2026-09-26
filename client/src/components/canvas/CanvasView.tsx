@@ -82,7 +82,7 @@ export function CanvasView() {
   return (
     <div className="space-y-6 wrap-anywhere" data-testid="canvas-view">
       <CanvasSeason payload={payload} failed={failed} now={now} onSave={save} onRemove={remove} />
-      <CanvasBaseline focus={focus} focusLabel={phase === "before" ? "First up" : "This week"} />
+      <CanvasBaseline focus={focus} focusLabel={phase === "before" ? "First up" : "This week"} season={season} />
     </div>
   );
 }

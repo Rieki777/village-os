@@ -28,6 +28,7 @@ export function CanvasBlockCard({
   mayRecord,
   onSave,
   focusLabel,
+  season,
 }: {
   block: CanvasBlock;
   view: CanvasBlockView;
@@ -35,6 +36,13 @@ export function CanvasBlockCard({
   onSave: (reading: CanvasReadingInput) => Promise<string | null>;
   /** Set when the season's week puts this block first: a tag, never a lock. */
   focusLabel?: string;
+  /**
+   * The loaded season's name and the weeks it names this block in. The card's
+   * week line reads these, so it says what the week map above it says. With
+   * no season loaded there is no week line: a village that runs no season has
+   * no weeks, and another programme's calendar is not this village's.
+   */
+  season?: { name: string; weeks: readonly number[] };
 }) {
   const [writing, setWriting] = useState(false);
   const latest = view.latest;
@@ -96,7 +104,7 @@ export function CanvasBlockCard({
         </ul>
         <p className="mt-2 text-xs text-stone-600">
           {block.foundations.map((f) => CANVAS_FOUNDATION_TEXT[f].name).join(" · ")}
-          {block.seasonWeeks.length > 0 && ` · Season Two, ${weeksPhrase(block.seasonWeeks)}`}
+          {season && season.weeks.length > 0 && ` · ${season.name}: ${weeksPhrase(season.weeks)}`}
         </p>
       </details>
 

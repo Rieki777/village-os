@@ -42,7 +42,7 @@ import {
   type CanvasBlockId,
   type CanvasReadingInput,
 } from "@shared/governanceCanvas";
-import { orderBlocks } from "@shared/canvasSeason";
+import { orderBlocks, seasonWeeksOf, type CanvasSeason } from "@shared/canvasSeason";
 import { CANVAS_SCALE_TEXT } from "@shared/governanceCanvasText";
 import { newestLevels, radarDescription, type CanvasBlockView, type CanvasPayload } from "@/lib/canvasCopy";
 import { CanvasRadar } from "./CanvasRadar";
@@ -80,9 +80,12 @@ const NO_FOCUS: readonly CanvasBlockId[] = [];
 export function CanvasBaseline({
   focus = NO_FOCUS,
   focusLabel = "This week",
+  season = null,
 }: {
   focus?: readonly CanvasBlockId[];
   focusLabel?: string;
+  /** The loaded season, when there is one: each card's week line is read from it. */
+  season?: Pick<CanvasSeason, "name" | "weeks"> | null;
 } = {}) {
   const [data, setData] = useState<CanvasPayload | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
@@ -194,6 +197,7 @@ export function CanvasBaseline({
               mayRecord={!!data.mayRecord}
               onSave={save}
               focusLabel={inFocus.has(block.id) ? focusLabel : undefined}
+              season={season ? { name: season.name, weeks: seasonWeeksOf(season, block.id) } : undefined}
             />
           ))}
         </div>

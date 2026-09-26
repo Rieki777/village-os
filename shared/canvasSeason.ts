@@ -428,6 +428,18 @@ export function seasonFocus(season: Pick<CanvasSeason, "weeks" | "timezone"> | n
 }
 
 /**
+ * The weeks a loaded season names one block in, lowest first and each once.
+ * A block's card says these ("A season: weeks 2, 3 and 6"), so the card and
+ * the week map above it always give the same answer. Empty when no week names
+ * the block; moons are not weeks and are not counted here.
+ */
+export function seasonWeeksOf(season: Pick<CanvasSeason, "weeks">, block: CanvasBlockId): number[] {
+  const out = new Set<number>();
+  for (const w of season.weeks) if (w.blocks.includes(block)) out.add(w.number);
+  return [...out].sort((a, b) => a - b);
+}
+
+/**
  * EVERY BLOCK, focus first. The focus blocks in the order given, then every
  * other block in canvas order. Always all twelve, each exactly once: an id the
  * canvas does not know is skipped, never added, and nothing the focus leaves

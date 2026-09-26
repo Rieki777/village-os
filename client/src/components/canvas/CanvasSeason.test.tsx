@@ -156,6 +156,26 @@ describe("the week map on the Canvas view", () => {
     expect(cardOrder()).toEqual([...CANVAS_BLOCK_IDS]);
     expect(screen.queryByText("This week")).toBeNull();
     expect(screen.queryByText(/Load a season file/)).toBeNull();
+    // No season, no weeks: no card borrows another programme's calendar.
+    for (const id of CANVAS_BLOCK_IDS) {
+      expect(screen.getByTestId(`canvas-block-${id}`).textContent, id).not.toMatch(/Season Two|weeks? \d/);
+    }
+  });
+
+  it("gives each card the loaded season's weeks for its block, so the card and the week map agree", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-13T18:00:00Z"));
+    answer("GET", "/api/canvas", 200, EMPTY_CANVAS(false));
+    answer("GET", "/api/canvas/season", 200, withSeason());
+    draw();
+    const text = (id: string) => screen.getByTestId(`canvas-block-${id}`).textContent ?? "";
+    await waitFor(() => expect(text("power")).toContain("A test season: week 2"));
+    expect(text("conflict")).toContain("A test season: week 2");
+    expect(text("resourcing")).toContain("A test season: week 3");
+    expect(text("purpose")).toContain("A test season: week 1");
+    // Named by a moon and by no week: no week line, and nothing from the registry's fixed list.
+    expect(text("legal")).not.toMatch(/A test season|weeks? \d/);
+    for (const id of CANVAS_BLOCK_IDS) expect(text(id), id).not.toContain("Season Two");
   });
 
   it("finds this week by date, marks it, links its blocks to their cards, and orders the cards by it", async () => {

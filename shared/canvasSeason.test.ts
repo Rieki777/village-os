@@ -23,6 +23,7 @@ import {
   seasonDateLabel,
   seasonFocus,
   seasonMoment,
+  seasonWeeksOf,
   todayIn,
   type CanvasSeason,
 } from "./canvasSeason";
@@ -292,6 +293,18 @@ describe("where a date falls in a season", () => {
     expect(seasonMoment(stranger, instant).week?.number).toBe(2);
     expect(seasonFocus(stranger, instant)).toEqual(["team", "roles", "meetings"]);
   });
+
+  it("names the weeks a block comes up in for its card, lowest first, and no week for a block only a moon names", () => {
+    // The card's week line reads this (integrator, 2026-09-26): before, the
+    // card read a fixed registry list while the week map read the file.
+    expect(seasonWeeksOf(s, "power")).toEqual([3]);
+    expect(seasonWeeksOf(s, "team")).toEqual([2]);
+    expect(seasonWeeksOf(s, "legal")).toEqual([]);
+    const twice = { weeks: [...s.weeks].reverse().concat(s.weeks[2]) };
+    expect(seasonWeeksOf(twice, "conflict")).toEqual([3]);
+    const moonOnly = { ...s, moons: [{ date: "2026-10-10", blocks: ["legal" as const], note: "" }] };
+    expect(seasonWeeksOf(moonOnly, "legal")).toEqual([]);
+  });
 });
 
 describe("the order it puts the blocks in: first, never only", () => {
@@ -381,6 +394,15 @@ describe("the Season Two template the platform ships", () => {
       const inFile = season.weeks.filter((w) => w.number !== 2 && w.blocks.includes(id)).map((w) => w.number);
       const inRegistry = CANVAS_BLOCKS[id].seasonWeeks.filter((n) => n !== 2);
       expect(inFile, id).toEqual([...inRegistry]);
+    }
+  });
+
+  it("gives each block's card the weeks the file names it in, the baseline week included", () => {
+    expect(seasonWeeksOf(season, "team")).toEqual([2, 3, 6, 11]);
+    expect(seasonWeeksOf(season, "purpose")).toEqual([1, 2]);
+    for (const id of CANVAS_BLOCK_IDS) {
+      const registry = CANVAS_BLOCKS[id].seasonWeeks.filter((n) => n !== 2);
+      expect(seasonWeeksOf(season, id), id).toEqual([2, ...registry].sort((a, b) => a - b));
     }
   });
 
