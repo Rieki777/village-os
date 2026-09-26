@@ -436,7 +436,7 @@ export function seasonFocus(season: Pick<CanvasSeason, "weeks" | "timezone"> | n
 export function seasonWeeksOf(season: Pick<CanvasSeason, "weeks">, block: CanvasBlockId): number[] {
   const out = new Set<number>();
   for (const w of season.weeks) if (w.blocks.includes(block)) out.add(w.number);
-  return [...out].sort((a, b) => a - b);
+  return Array.from(out).sort((a, b) => a - b);
 }
 
 /**
