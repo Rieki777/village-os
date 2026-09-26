@@ -115,7 +115,10 @@ describe("a season orders the canvas and never gates it", () => {
     for (const id of CANVAS_BLOCK_IDS) {
       const card = within(screen.getByTestId(`canvas-block-${id}`));
       expect(card.getByRole("button", { name: /record a reading/i }), id).toBeTruthy();
-      expect(card.getByText("Questions to talk through"), id).toBeTruthy();
+      // The canvas-text lane labels our own prompts as ours ("Our questions
+      // to talk through") under the canvas's quoted question; every card
+      // keeps that disclosure whether it is in focus or not.
+      expect(card.getByText("Our questions to talk through"), id).toBeTruthy();
       expect(screen.getByTestId(`canvas-block-${id}`).id, "each card is a link target").toBe(`canvas-block-${id}`);
     }
     // A block out of focus still takes a reading.
