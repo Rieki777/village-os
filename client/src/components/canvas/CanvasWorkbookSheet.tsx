@@ -140,6 +140,11 @@ function BlockPage({ block }: { block: CanvasBlock }) {
       <div>
         <p className="text-sm font-medium text-stone-800">What we say</p>
         <Lines count={7} />
+        {/* Paper has room the screen does not need: measured on A4 and US
+            Letter, a block used about two thirds of its page with seven lines. */}
+        <div className="hidden print:block">
+          <Lines count={4} />
+        </div>
       </div>
 
       <div>

@@ -149,14 +149,13 @@ export function CanvasBaseline() {
 
         <div className="text-xs text-stone-600 border-t border-stone-100 pt-3 space-y-2" data-testid="canvas-credit">
           <p>
+            {/* An INLINE link, never inline-flex: the credit wraps over three
+                lines on a phone, and a flex box would push the full stop after
+                it onto a line of its own. */}
             Each block's question and description, and the words for the five levels, are quoted from the{" "}
-            <a
-              href={CANVAS_CREDIT.url}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 font-medium text-stone-800 hover:underline"
-            >
-              {CANVAS_CREDIT.text} <ExternalLink className="w-3 h-3" />
+            <a href={CANVAS_CREDIT.url} target="_blank" rel="noreferrer" className="font-medium text-stone-800 hover:underline">
+              {CANVAS_CREDIT.text}
+              <ExternalLink className="inline w-3 h-3 ml-0.5 align-[-1px]" aria-hidden="true" />
             </a>
             . The questions under "Our questions to talk through" are this platform's own.
           </p>

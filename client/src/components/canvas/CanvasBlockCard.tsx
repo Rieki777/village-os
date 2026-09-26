@@ -62,7 +62,9 @@ export function CanvasBlockCard({
       </blockquote>
       <details className="mt-1.5 text-sm">
         <summary className="cursor-pointer font-medium text-teal-deep">What the canvas says about it</summary>
-        <blockquote cite={CANVAS_SOURCE_URL} className="mt-2 text-stone-700 border-l-2 border-stone-200 pl-3">
+        {/* Italic, so the canvas's words never read as a reading, which sits
+            just below with the same rule on its left. */}
+        <blockquote cite={CANVAS_SOURCE_URL} className="mt-2 italic text-stone-700 border-l-2 border-stone-200 pl-3">
           {canvas.description}
         </blockquote>
       </details>
