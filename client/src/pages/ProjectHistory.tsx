@@ -4,6 +4,7 @@ import { authToken, useCatalyst } from "@/lib/gameApi";
 import { readStoredJson, writeStoredJson } from "@/lib/safeStorage";
 import { useState, useEffect, FormEvent } from "react";
 import Layout from "@/components/Layout";
+import { Link } from "wouter";
 // The economics view lives with the Journey components now, because this page
 // is a shopfront page a fork replaces wholesale. Re-exported under its old
 // name so an import from this page keeps working.
