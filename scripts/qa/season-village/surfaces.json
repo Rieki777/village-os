@@ -1,0 +1,110 @@
+{
+  "$comment": [
+    "What walk.mjs visits and what it expects on each surface. Later waves EXTEND this file rather than the script.",
+    "Text matching is case-insensitive with whitespace collapsed, over the page's rendered text (innerText) plus its title.",
+    "Placeholders: $villageName, $restorativeStep, $careRoleName, $careHolderName come from the seed's facts; $viewerName is the signed-in person; $brandTerms expands to the BANNED list in scripts/check-brand-refs.mjs and matches whole words only.",
+    "A surface with required: false that does not exist yet is reported as missing and does not fail the walk. A required one that is missing fails it.",
+    "expect.<role>.path: the pathname the page must end on after it settles (for a redirect). views: a button to press, by its accessible name, from the resting page; roles limits who is shown that button."
+  ],
+  "version": 1,
+  "viewports": {
+    "desktop": { "width": 1360, "height": 900, "deviceScaleFactor": 1, "touch": false },
+    "phone": { "width": 390, "height": 844, "deviceScaleFactor": 2, "touch": true }
+  },
+  "roles": {
+    "visitor": "signed out",
+    "member": "a member with no seat and no admin reach",
+    "founder": "founder 1, who holds the canvas pen before the handover"
+  },
+  "missingMarkers": ["Off the trail"],
+  "forbiddenEverywhere": ["$brandTerms"],
+  "surfaces": [
+    {
+      "id": "home",
+      "path": "/",
+      "required": true,
+      "text": ["$villageName"]
+    },
+    {
+      "id": "governance",
+      "path": "/governance",
+      "required": true,
+      "text": ["Power Belongs to the Circle, Not the Person", "Conflict Resolution", "$restorativeStep"]
+    },
+    {
+      "id": "roles",
+      "path": "/roles",
+      "required": true,
+      "text": ["Roles and Circles", "$restorativeStep"]
+    },
+    {
+      "id": "journey",
+      "path": "/journey-to-launch",
+      "required": true,
+      "expect": {
+        "visitor": { "text": ["Sign in to see how far this village is from opening its doors"] },
+        "member": { "text": ["See what these settings would do"] },
+        "founder": { "text": ["Everything between here and open doors"] }
+      },
+      "views": [
+        {
+          "id": "canvas",
+          "click": "Canvas",
+          "roles": ["member", "founder"],
+          "text": ["The canvas baseline", "Governance Canvas by the Bioregional Weaving Labs Collective and Commonland"],
+          "forbidden": ["%", "of 12"]
+        },
+        {
+          "id": "readiness",
+          "click": "Launch readiness",
+          "roles": ["founder"],
+          "text": ["blocking"]
+        },
+        {
+          "id": "economics",
+          "click": "Village economics",
+          "roles": ["founder"]
+        }
+      ]
+    },
+    {
+      "id": "exit-policy",
+      "path": "/exit-policy",
+      "required": true,
+      "text": ["Leaving Well", "$restorativeStep"]
+    },
+    {
+      "id": "love-letter",
+      "path": "/love-letter",
+      "required": true,
+      "text": ["$villageName"]
+    },
+    {
+      "id": "profile",
+      "path": "/profile",
+      "required": true,
+      "expect": {
+        "visitor": { "path": "/login" },
+        "member": { "text": ["$viewerName"] },
+        "founder": { "text": ["$viewerName"] }
+      }
+    },
+    {
+      "id": "admin-brain",
+      "path": "/admin?tab=brain",
+      "required": true,
+      "expect": {
+        "visitor": { "text": ["$villageName Admin"] },
+        "member": { "text": ["Not an admin"] },
+        "founder": { "text": ["What this village is for"] }
+      }
+    },
+    {
+      "id": "canvas-workbook",
+      "path": "/canvas/workbook",
+      "required": false,
+      "text": ["Governance Canvas by the Bioregional Weaving Labs Collective and Commonland"],
+      "forbidden": ["%", "of 12"]
+    }
+  ]
+}

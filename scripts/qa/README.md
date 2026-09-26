@@ -28,6 +28,7 @@ report, and you would believe it.
 | `selftint.mjs` | an element that sets a tint and writes coloured text on itself | no |
 | `routes.mjs` | the route list, derived from `client/src/App.tsx` | no |
 | `ground-bridge.mjs` | the shell's ground push, and that a village never inherits the seed's coastline | yes |
+| `season-village/` | a whole local village: boots the built server on a scratch schema, seeds it through real routes, walks every listed surface as three people at two widths. Its own [README](season-village/README.md) | yes |
 
 ---
 
