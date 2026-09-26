@@ -338,18 +338,22 @@ export function CanvasSeason({
               {season.sessionTime ? `, sessions at ${season.sessionTime}` : ""}, {season.timezone} time.
             </p>
             {season.description && <p className="text-sm text-stone-700 mt-1 max-w-2xl">{season.description}</p>}
-            {payload?.savedBy && savedOn && (
+            {savedOn && (
               <p className="text-xs text-stone-600 mt-1">
-                Loaded by {payload.savedBy.name} on {savedOn}.
+                {payload?.savedBy ? `Loaded by ${payload.savedBy.name} on ${savedOn}.` : `Loaded on ${savedOn}.`}
               </p>
             )}
           </>
-        ) : (
+        ) : payload && !payload.problem ? (
           <p className="text-sm text-stone-700 mt-1 max-w-2xl">
             No season is loaded, so the blocks below are in canvas order. A season file names the blocks each week
             works on and puts them first. It never closes a block: every block stays open every week.
           </p>
-        )}
+        ) : !payload && !failed ? (
+          // Nothing is known yet, so nothing is claimed: "no season" would be
+          // false in every village that has one, for as long as the read takes.
+          <p className="text-sm text-stone-600 mt-1">Reading the season.</p>
+        ) : null}
       </header>
 
       {failed && (

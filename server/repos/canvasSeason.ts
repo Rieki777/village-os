@@ -21,8 +21,14 @@
  * ── WHO LOADED IT ──────────────────────────────────────────────────────────
  *
  * The document keeps the loader's account id and nothing else about them. The
- * name is looked up when the season is read, the way canvas readings name
- * their recorder, so an account that is erased stops being named here too.
+ * name is looked up when the season is read, so an account that is erased
+ * stops being named here too.
+ *
+ * ERASURE KEEPS THE ROW. It tombstones it (server/lib/erasure.ts, the
+ * `tombstone` step): the name becomes "A departed member" and the address
+ * `deleted-<id>@anonymized.invalid`. Reading that name through `firstName`
+ * gives "A", so a tombstone is read as NO name, by the platform's one test
+ * for it (`isTombstone`), exactly as a row that is gone altogether.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import {
@@ -31,6 +37,7 @@ import {
   type CanvasSeason,
   type StoredCanvasSeason,
 } from "../../shared/canvasSeason";
+import { isTombstone } from "../lib/oauthAccounts";
 import { deleteConfigDocument, readConfigDocument, writeConfigDocument } from "./appConfigDocs";
 
 export type CanvasSeasonRead =
@@ -40,7 +47,7 @@ export type CanvasSeasonRead =
       state: "stored";
       season: CanvasSeason;
       savedBy: string;
-      /** The loader's name as the users table holds it now, or null when the account is gone. */
+      /** The loader's name as the users table holds it now, or null when the account is erased or gone. */
       savedByName: string | null;
       savedAt: string | null;
     };
@@ -53,9 +60,11 @@ export async function readCanvasSeason(pool: Pool): Promise<CanvasSeasonRead> {
   const savedBy = typeof doc.savedBy === "string" ? doc.savedBy : "";
   let savedByName: string | null = null;
   if (savedBy) {
-    const [rows] = await pool.query<RowDataPacket[]>("SELECT name FROM users WHERE id = ?", [savedBy]);
-    const name = rows[0]?.name;
-    savedByName = name === null || name === undefined ? null : String(name);
+    const [rows] = await pool.query<RowDataPacket[]>("SELECT name, email FROM users WHERE id = ?", [savedBy]);
+    const row = rows[0];
+    const name = row?.name;
+    savedByName =
+      !row || isTombstone({ email: String(row.email ?? "") }) || name === null || name === undefined ? null : String(name);
   }
   return {
     state: "stored",

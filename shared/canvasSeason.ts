@@ -131,16 +131,34 @@ export function isSeasonDate(value: unknown): value is string {
   return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d;
 }
 
-/** A timezone this runtime can actually compute in. */
-export function isTimeZone(value: unknown): value is string {
-  if (typeof value !== "string" || !value.trim() || value.length > 64) return false;
+/**
+ * The timezone as this runtime names it (`america/los_angeles` becomes
+ * `America/Los_Angeles`), or null when it cannot compute in it or it is a bare
+ * offset. An offset such as `+05:30` computes, but it names no place and keeps
+ * no daylight saving, so a season in one would drift an hour from its village
+ * twice a year. What is stored is the canonical name, so every page shows the
+ * zone the same way.
+ */
+export function canonicalTimeZone(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const v = value.trim();
+  if (!v || v.length > 64) return null;
   try {
-    new Intl.DateTimeFormat("en-US", { timeZone: value });
-    return true;
+    const zone = new Intl.DateTimeFormat("en-US", { timeZone: v }).resolvedOptions().timeZone;
+    return /^[A-Za-z]/.test(zone) ? zone : null;
   } catch {
-    return false;
+    return null;
   }
 }
+
+/** A named timezone this runtime can actually compute in. */
+export function isTimeZone(value: unknown): value is string {
+  return canonicalTimeZone(value) !== null;
+}
+
+/** A value quoted back in a refusal: never a throw, whatever JSON handed over. */
+const quoted = (value: unknown): string =>
+  (typeof value === "string" ? value : (JSON.stringify(value) ?? typeof value)).slice(0, 40);
 
 /**
  * THE ONE VALIDATOR. Takes whatever was pasted, chosen or stored, and returns
@@ -211,7 +229,7 @@ export function parseCanvasSeason(input: unknown): SeasonParse {
     const out: CanvasBlockId[] = [];
     for (const b of value) {
       if (!isCanvasBlockId(b)) {
-        fail(`${where}: "${String(b).slice(0, 40)}" is not one of the twelve canvas blocks (${CANVAS_BLOCK_IDS.join(", ")}).`);
+        fail(`${where}: "${quoted(b)}" is not one of the twelve canvas blocks (${CANVAS_BLOCK_IDS.join(", ")}).`);
       } else if (!out.includes(b)) {
         out.push(b);
       }
@@ -228,7 +246,7 @@ export function parseCanvasSeason(input: unknown): SeasonParse {
     const out: CanvasFoundation[] = [];
     for (const f of value) {
       if (typeof f !== "string" || !(CANVAS_FOUNDATIONS as readonly string[]).includes(f)) {
-        fail(`${where}: "${String(f).slice(0, 40)}" is not a canvas foundation (${CANVAS_FOUNDATIONS.join(", ")}).`);
+        fail(`${where}: "${quoted(f)}" is not a canvas foundation (${CANVAS_FOUNDATIONS.join(", ")}).`);
       } else if (!out.includes(f as CanvasFoundation)) {
         out.push(f as CanvasFoundation);
       }
@@ -250,8 +268,8 @@ export function parseCanvasSeason(input: unknown): SeasonParse {
     fail(`The season's id must be lowercase letters, digits and hyphens, up to ${SEASON_LIMITS.idLength} characters.`);
   }
   const name = text(input.name, "The season's name", SEASON_LIMITS.name, true);
-  const timezone = typeof input.timezone === "string" ? input.timezone.trim() : "";
-  if (!isTimeZone(timezone)) {
+  const timezone = canonicalTimeZone(input.timezone) ?? "";
+  if (!timezone) {
     fail("The season's timezone must be a place name this platform knows, such as America/Los_Angeles or Europe/Amsterdam.");
   }
   let sessionTime: string | undefined;
@@ -293,6 +311,9 @@ export function parseCanvasSeason(input: unknown): SeasonParse {
       });
     });
     // The weeks run forward: each number and each date after the one before.
+    // A week whose number was refused is named by its place in the file, as
+    // its own refusal named it, never by the -1 it is held as here.
+    const called = (i: number) => (weeks[i].number >= 0 ? `week ${weeks[i].number}` : `week entry ${i + 1}`);
     for (let i = 1; i < weeks.length; i++) {
       const a = weeks[i - 1];
       const b = weeks[i];
@@ -300,7 +321,8 @@ export function parseCanvasSeason(input: unknown): SeasonParse {
         fail(`Week ${b.number} comes after week ${a.number} in the file, so its number must be higher.`);
       }
       if (a.date && b.date && b.date <= a.date) {
-        fail(`Week ${b.number}'s date (${b.date}) must be after week ${a.number}'s (${a.date}).`);
+        const later = called(i);
+        fail(`${later[0].toUpperCase()}${later.slice(1)}'s date (${b.date}) must be after ${called(i - 1)}'s (${a.date}).`);
       }
     }
   }
@@ -335,14 +357,25 @@ export function parseCanvasSeason(input: unknown): SeasonParse {
   return { ok: true, season, ignored };
 }
 
-/** Today's date, `YYYY-MM-DD`, in a timezone. */
+/**
+ * Today's date, `YYYY-MM-DD`, in a timezone.
+ *
+ * NEVER THROWS. The Canvas view calls this while it renders, and the zone was
+ * checked by the SERVER's runtime, which can know a zone a member's browser
+ * does not (a newly renamed one, such as Europe/Kyiv, on an older engine). A
+ * throw here would take the whole Journey page down with it. So a zone this
+ * runtime refuses reads as this device's own date instead, which is at most a
+ * day out, and the page stays up.
+ */
 export function todayIn(timezone: string, now: Date = new Date()): string {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(now);
+  const fields = { year: "numeric", month: "2-digit", day: "2-digit" } as const;
+  let format: Intl.DateTimeFormat;
+  try {
+    format = new Intl.DateTimeFormat("en-US", { timeZone: timezone, ...fields });
+  } catch {
+    format = new Intl.DateTimeFormat("en-US", fields);
+  }
+  const parts = format.formatToParts(now);
   const part = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
   return `${part("year")}-${part("month")}-${part("day")}`;
 }
@@ -449,7 +482,10 @@ export function seasonDateLabel(date: string, withYear = false): string {
 /** What `GET /api/canvas/season` answers a signed-in member. */
 export interface CanvasSeasonPayload {
   season: CanvasSeason | null;
-  /** Who loaded the season, by first name. Null with no season, or none recorded. */
+  /**
+   * Who loaded the season, by first name. Null with no season, none recorded,
+   * or an account that has been erased or is gone: the view then names nobody.
+   */
   savedBy: { id: string; name: string } | null;
   savedAt: string | null;
   /** Set when a stored season no longer passes the validator; the view then shows canvas order. */

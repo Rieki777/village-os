@@ -59,7 +59,8 @@ export function register(app: Express, deps: Deps): void {
       read.state === "stored"
         ? {
             season: read.season,
-            savedBy: read.savedBy ? { id: read.savedBy, name: firstName(read.savedByName ?? "") } : null,
+            // No name, no one: an erased or missing loader is not "Someone", and never "A".
+            savedBy: read.savedBy && read.savedByName ? { id: read.savedBy, name: firstName(read.savedByName) } : null,
             savedAt: read.savedAt,
             problem: null,
             mayEdit,

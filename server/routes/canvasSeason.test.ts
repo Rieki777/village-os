@@ -19,6 +19,7 @@
  */
 import fs from "node:fs";
 import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 import express from "express";
 import type { Pool } from "mysql2/promise";
@@ -27,6 +28,8 @@ import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/
 import { capabilityDecision, type Capability, type CapabilityCtx } from "../../shared/capabilities";
 import { CANVAS_SEASON_KEY } from "../../shared/canvasSeason";
 import { deleteConfigDocument, readConfigDocument, writeConfigDocument } from "../repos/appConfigDocs";
+import { anonymizeMember } from "../lib/erasure";
+import { usersRepo } from "../repos/users";
 import { SEASON_PEN_REFUSAL, register } from "./canvasSeason";
 
 const configured = testDbConfigured();
@@ -293,14 +296,43 @@ describe.skipIf(!configured)("the canvas season routes", () => {
       expect(r.body.problem).toMatch(/^The stored season could not be read: .*"retired-block" is not one of the twelve canvas blocks/);
     });
 
-    it("names nobody once the account that loaded it is gone", async () => {
+    it("names nobody once the member who loaded it is erased, through the real erasure", async () => {
       await pool.query( // module-review-ok: a fixture member on the scratch schema this suite provisioned
-        "INSERT INTO users (id, name, email, password_hash, role) VALUES ('season-gone','Tamsin Vale','season-gone@example.invalid','x','admin')",
+        "INSERT INTO users (id, name, email, password_hash, role) VALUES ('season-gone','Tamsin Vale','season-gone@example.test','x','admin')",
       );
       await writeConfigDocument(pool, CANVAS_SEASON_KEY, { season: season(), savedBy: "season-gone", savedAt: "2026-10-01T00:00:00.000Z" });
       expect((await call("GET", "/api/canvas/season", "member")).body.savedBy).toEqual({ id: "season-gone", name: "Tamsin" });
-      await pool.query("DELETE FROM users WHERE id = 'season-gone'"); // module-review-ok: removing the fixture account so the season outlives it
-      expect((await call("GET", "/api/canvas/season", "member")).body.savedBy).toEqual({ id: "season-gone", name: "Someone" });
+
+      // Erasure KEEPS the row and tombstones it; it never deletes it. So this
+      // runs the real sweep, and reads what it leaves, rather than modelling it.
+      const members = usersRepo(pool);
+      const uploadsDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-season-erasure-"));
+      try {
+        await anonymizeMember(pool, await members.byId("season-gone"), null, {
+          members: { byId: (id: string) => members.byId(id), update: (id: string, fn: any) => members.update(id, fn) },
+          submissionsRepo: { all: () => [], replaceAll: async () => undefined },
+          roleHoldersRepo: { remove: async () => undefined },
+          withRoleHolderLock: (fn) => fn(),
+          loadRoleHolders: () => [],
+          uploadsDir,
+        });
+      } finally {
+        fs.rmSync(uploadsDir, { recursive: true, force: true });
+      }
+      const [rows] = await pool.query<any[]>("SELECT name FROM users WHERE id = 'season-gone'"); // module-review-ok: reading the fixture row the sweep just tombstoned
+      expect(rows[0]?.name, "the row is still there, renamed").toBe("A departed member");
+
+      const erased = (await call("GET", "/api/canvas/season", "member")).body;
+      expect(erased.savedBy).toBeNull();
+      expect(erased.savedAt).toBe("2026-10-01T00:00:00.000Z");
+      expect(erased.season.id).toBe("test-season");
+    });
+
+    it("names nobody when the account that loaded it is not there at all", async () => {
+      await writeConfigDocument(pool, CANVAS_SEASON_KEY, { season: season(), savedBy: "season-never", savedAt: "2026-10-01T00:00:00.000Z" });
+      const body = (await call("GET", "/api/canvas/season", "member")).body;
+      expect(body.savedBy).toBeNull();
+      expect(body.season.id).toBe("test-season");
     });
   });
 });

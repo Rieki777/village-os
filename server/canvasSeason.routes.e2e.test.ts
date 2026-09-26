@@ -14,7 +14,9 @@
  *   3. the refusals are the route's words: 401 to a visitor, 403 and a
  *      sentence to a member without the pen, 400 and the validator's
  *      sentence to a bad file;
- *   4. the Season Two template the platform ships loads through all of it.
+ *   4. the Season Two template the platform ships loads through all of it;
+ *   5. and, for the same lane's Journey move, the command centre's
+ *      `hyphaSpace`, which the "Copy for Hypha" button is shown by.
  *
  * Boots the BUILT server: run `pnpm build` first. The cases run IN ORDER and
  * build on each other. Skips loudly without TEST_DATABASE_URL.
@@ -199,5 +201,34 @@ describe.skipIf(!DB_CONFIGURED)("the canvas season, through the real gate", () =
     expect((await call("DELETE", "/api/canvas/season")).status).toBe(409);
     expect((await call("GET", "/api/canvas/season")).json.mayEdit).toBe(false);
     expect((await call("DELETE", "/api/canvas/season", undefined, people.pen.token)).status).toBe(200);
+  });
+});
+
+/**
+ * The same lane moved EconomicsView out of the shopfront page and showed its
+ * "Copy for Hypha" button only when the village has a Hypha space. The button
+ * reads `hyphaSpace` off the command centre, and the client suite stubs that
+ * payload by hand, so only the built server can say the field is really there:
+ * absent a space, null; then `hypha.space_id`; then `economy.hypha_space`,
+ * which wins. Rename either side and this goes red, where the stubs stay green.
+ */
+describe.skipIf(!DB_CONFIGURED)("the command centre names the Hypha space the Copy for Hypha button reads", () => {
+  const hyphaSpace = async () => {
+    const r = await call("GET", "/api/admin/command-centre");
+    expect(r.status, r.text).toBe(200);
+    expect(r.json, "the command centre answers with the field present").toHaveProperty("hyphaSpace");
+    return r.json.hyphaSpace;
+  };
+  const setVariable = async (key: string, value: string) => {
+    const r = await call("PUT", `/api/admin/variables/${key}`, { value });
+    expect(r.status, `${key}: ${r.text}`).toBe(200);
+  };
+
+  it("is null until a space is set, then follows the on-chain id, then the village's own space", async () => {
+    expect(await hyphaSpace()).toBeNull();
+    await setVariable("hypha.space_id", "42");
+    expect(await hyphaSpace()).toBe("42");
+    await setVariable("economy.hypha_space", "a-village-dho");
+    expect(await hyphaSpace()).toBe("a-village-dho");
   });
 });

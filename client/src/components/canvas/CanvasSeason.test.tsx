@@ -18,6 +18,7 @@ import { CANVAS_BLOCK_IDS } from "@shared/governanceCanvas";
 vi.mock("@/lib/gameApi", () => ({ authToken: () => "a-token" }));
 
 import { CanvasBaseline } from "./CanvasBaseline";
+import { CanvasSeason } from "./CanvasSeason";
 import { CanvasView } from "./CanvasView";
 
 const EMPTY_CANVAS = (mayRecord: boolean) => ({
@@ -216,6 +217,42 @@ describe("the week map on the Canvas view", () => {
     answer("GET", "/api/canvas/season", 200, { ...NO_SEASON(false), problem: "The stored season could not be read: nope." });
     draw();
     await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/could not be read: nope\. The blocks below are in canvas order/));
+    // A season IS stored; it just does not read. "No season is loaded" would be false.
+    expect(screen.queryByText(/No season is loaded/)).toBeNull();
+  });
+
+  it("claims nothing about the season while it is being read, or when the read fails", () => {
+    const panel = (failed: string | null) => (
+      <CanvasSeason payload={null} failed={failed} now={new Date()} onSave={async () => null} onRemove={async () => null} />
+    );
+    const { rerender } = render(panel(null));
+    expect(screen.getByText("Reading the season.")).toBeTruthy();
+    expect(screen.queryByText(/No season is loaded/)).toBeNull();
+
+    rerender(panel("The season could not be read just now."));
+    expect(screen.getByRole("alert").textContent).toBe("The season could not be read just now.");
+    expect(screen.queryByText(/No season is loaded/)).toBeNull();
+    expect(screen.queryByText("Reading the season.")).toBeNull();
+  });
+
+  it("names nobody once the member who loaded it is erased, and still says when", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-13T18:00:00Z"));
+    answer("GET", "/api/canvas", 200, EMPTY_CANVAS(false));
+    answer("GET", "/api/canvas/season", 200, withSeason({ savedBy: null }));
+    draw();
+    await waitFor(() => expect(screen.getByText("Loaded on Thu 1 Oct 2026.")).toBeTruthy());
+    expect(screen.queryByText(/Loaded by/)).toBeNull();
+  });
+
+  it("lets a word too long for a phone's line break inside the view, instead of widening the page", async () => {
+    // jsdom lays nothing out, so this holds only the rule in place; the width
+    // itself is measured live on the built CSS at 375px (the lane's QA run).
+    answer("GET", "/api/canvas", 200, EMPTY_CANVAS(false));
+    answer("GET", "/api/canvas/season", 200, NO_SEASON(false));
+    draw();
+    expect(screen.getByTestId("canvas-view").className.split(/\s+/)).toContain("break-words");
+    await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
   });
 });
 

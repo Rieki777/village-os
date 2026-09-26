@@ -99,6 +99,13 @@ describe("a good season file", () => {
     expect("description" in r.season).toBe(false);
   });
 
+  it("stores the timezone as the runtime names it, whatever case it was typed in", () => {
+    for (const typed of ["america/los_angeles", "  AMERICA/LOS_ANGELES ", "America/Los_Angeles"]) {
+      const r = parseCanvasSeason(file({ timezone: typed }));
+      expect(r.ok && r.season.timezone, typed).toBe("America/Los_Angeles");
+    }
+  });
+
   it("keeps a block named twice once, in the order it was first named", () => {
     const r = parseCanvasSeason(file({ weeks: [week({ blocks: ["power", "purpose", "power"] })] }));
     expect(r.ok && r.season.weeks[0].blocks).toEqual(["power", "purpose"]);
@@ -204,6 +211,33 @@ describe("what a season file is refused for", () => {
     expect(refusals(file({ weeks: [week({ number: 1.5 })] }))[0]).toMatch(/whole week number from 0 to 99/);
   });
 
+  it("a week whose number was refused is named by its place in the file, never as week -1", () => {
+    // The -1 is only how the validator holds a refused number; no week in the file is called that.
+    const errors = refusals(file({ weeks: [week({ number: 1.5, date: "2026-10-03" }), week({ number: 1, date: "2026-10-01" })] }));
+    expect(errors).toEqual([
+      "Week entry 1 needs a whole week number from 0 to 99.",
+      "Week 1's date (2026-10-01) must be after week entry 1's (2026-10-03).",
+    ]);
+    const second = refusals(file({ weeks: [week({ number: 1, date: "2026-10-03" }), week({ number: "two", date: "2026-10-01" })] }));
+    expect(second).toContain("Week entry 2's date (2026-10-01) must be after week 1's (2026-10-03).");
+    expect(second.join(" ")).not.toMatch(/week -1/i);
+  });
+
+  it("a block or foundation id that is not text, quoted back in the refusal instead of throwing", () => {
+    // JSON can hand over an object whose toString is null; String() of it throws.
+    const block = refusals(file({ weeks: [week({ blocks: [{ toString: null }] })] }));
+    expect(block[0]).toBe(`Week 1's blocks: "{"toString":null}" is not one of the twelve canvas blocks (${CANVAS_BLOCK_IDS.join(", ")}).`);
+    const foundation = refusals(file({ weeks: [week({ foundations: [{ toString: null }] })] }));
+    expect(foundation[0]).toMatch(/^Week 1's foundations: "\{"toString":null\}" is not a canvas foundation/);
+    expect(refusals(file({ weeks: [week({ blocks: [7] })] }))[0]).toMatch(/^Week 1's blocks: "7" is not one of/);
+  });
+
+  it("a timezone that is a bare offset, which computes but names no place", () => {
+    for (const timezone of ["+05:30", "-08:00", "+0100"]) {
+      expect(refusals(file({ timezone }))[0], timezone).toMatch(/timezone must be a place name/);
+    }
+  });
+
   it("names every problem it finds, not only the first", () => {
     const errors = refusals(file({ name: "", timezone: "nowhere", weeks: [week({ blocks: ["x"], date: "soon" })] }));
     expect(errors.length).toBeGreaterThanOrEqual(4);
@@ -246,6 +280,17 @@ describe("where a date falls in a season", () => {
     expect(todayIn("America/Los_Angeles", instant)).toBe("2026-10-09");
     expect(todayIn("Europe/Amsterdam", instant)).toBe("2026-10-10");
     expect(seasonMoment(s, instant).week?.number).toBe(1);
+  });
+
+  it("reads this device's own date for a zone this runtime does not know, and never throws while the page renders", () => {
+    // The server checked the zone with ITS runtime; a member's older browser can lack it.
+    const instant = new Date("2026-10-12T12:00:00Z");
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const local = `${instant.getFullYear()}-${pad(instant.getMonth() + 1)}-${pad(instant.getDate())}`;
+    expect(todayIn("Nowhere/Unknown_Zone", instant)).toBe(local);
+    const stranger = { ...s, timezone: "Nowhere/Unknown_Zone" };
+    expect(seasonMoment(stranger, instant).week?.number).toBe(2);
+    expect(seasonFocus(stranger, instant)).toEqual(["team", "roles", "meetings"]);
   });
 });
 
