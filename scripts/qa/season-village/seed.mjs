@@ -25,7 +25,10 @@
  *   - governance switched on for members;
  *   - a governing purpose statement, when the route exists;
  *   - canvas readings, when the route exists: at least one block at each level
- *     from 1 to 5, one block read twice, and five blocks left empty.
+ *     from 1 to 5, one block read twice, and five blocks left empty;
+ *   - the season file, when the route exists: the template the platform ships
+ *     (docs/seasons/season-two-2026.json), loaded by the pen and read back as a
+ *     member.
  *
  * Tokens, the generated passwords and the facts the walk checks for are written
  * to <QA_OUT_DIR>/state/tokens.json, outside the repository. Seeding is
@@ -44,6 +47,7 @@ import {
   health,
   isAlive,
   readJson,
+  ROOT,
   serverState,
   sleep,
   stateDir,
@@ -105,6 +109,9 @@ const READINGS = [
   { blockId: "resourcing", level: 3, moment: "baseline", sentence: "Dues cover the land costs this year; nothing beyond that is planned." },
 ];
 const EMPTY_BLOCKS = ["stakeholders", "coordination", "learning", "legal", "impact"];
+
+/** The season template the platform ships (docs/FORK_RUNBOOK.md), loaded as a founder would load it. */
+const SEASON_TEMPLATE = "docs/seasons/season-two-2026.json";
 const LEVEL_WORD = { 1: "Absent", 2: "Forming", 3: "Emerging", 4: "Growing", 5: "Thriving" };
 
 // ── plumbing ───────────────────────────────────────────────────────────────
@@ -182,6 +189,8 @@ const byKey = Object.fromEntries(people.map((p) => [p.key, p]));
 const founder = byKey.founder;
 const skipped = [];
 let canvasRecorded = false;
+/** Set when the season file loads: { name, lastWeekTitle, weeks }. */
+let seasonLoaded = null;
 
 try {
   console.log(`\nseeding ${VILLAGE} on ${BASE} (build ${h.build})`);
@@ -305,7 +314,28 @@ try {
     log(`${READINGS.length} readings recorded; read back by a member: levels as written, purpose history ${history}, ${EMPTY_BLOCKS.length} blocks empty`);
   }
 
-  // 12. Every session works, and says who it is.
+  // 12. The season file, if this build has the route (Wave 1, 2026-09-26): the template the
+  // platform ships, loaded by the pen through the same PUT a founder's "Save this season" makes,
+  // then read back as a member. The walk requires its name and its last week's title on the
+  // Canvas view, which render only from /api/canvas/season data.
+  const seasonRead = await api(BASE, "GET", "/api/canvas/season", undefined, founder.token);
+  if (seasonRead.status === 404) {
+    skipped.push("season file: GET /api/canvas/season is 404 on this build");
+    log("SKIPPED season file: the route does not exist on this build");
+  } else {
+    const file = JSON.parse(fs.readFileSync(path.join(ROOT, SEASON_TEMPLATE), "utf8"));
+    await must("load the season", "PUT", "/api/canvas/season", file, founder.token);
+    const back = await must("re-read season", "GET", "/api/canvas/season", undefined, byKey.member.token);
+    const s = back.json?.season;
+    if (!s || s.name !== file.name || s.weeks?.length !== file.weeks.length) {
+      throw new Error(`the season reads back differently: ${JSON.stringify(back.json).slice(0, 300)}`);
+    }
+    if (back.json.mayEdit !== false) throw new Error("a member reads the season with mayEdit not false");
+    seasonLoaded = { name: s.name, lastWeekTitle: s.weeks[s.weeks.length - 1].title, weeks: s.weeks.length };
+    log(`season "${s.name}" loaded from ${SEASON_TEMPLATE} (${s.weeks.length} weeks); read back by a member, who may not edit it`);
+  }
+
+  // 13. Every session works, and says who it is.
   for (const p of people) {
     const r = await must(`profile of ${p.name}`, "GET", "/api/profile", undefined, p.token);
     p.role = r.json?.role ?? "member";
@@ -331,6 +361,9 @@ try {
       // The NEWEST reading of the block read twice: it renders only from /api/canvas data, so a
       // refused or empty canvas cannot show it, and showing the older one instead would miss it.
       ...(canvasRecorded ? { canvasReading: READINGS.filter((r) => r.blockId === "purpose").at(-1).sentence } : {}),
+      // The season's name and its LAST week's title: the week map lists every week whatever
+      // today's date is, so this holds all season long and after it.
+      ...(seasonLoaded ? { seasonName: seasonLoaded.name, seasonWeekTitle: seasonLoaded.lastWeekTitle } : {}),
     },
     // Which person the walk signs in as, per walk role.
     walkAs: { member: "member", founder: "founder" },
@@ -359,6 +392,7 @@ function printSummary(s) {
   for (const [id, r] of Object.entries(latest)) console.log(`    ${id.padEnd(13)} ${r.level} ${LEVEL_WORD[r.level]} (${r.moment})`);
   console.log(`    empty: ${s.emptyBlocks.join(", ")}`);
   console.log(`  care holder: ${s.facts.careHolderName} in ${s.facts.careRoleName}`);
+  if (s.facts.seasonName) console.log(`  season: ${s.facts.seasonName} (last week: ${s.facts.seasonWeekTitle})`);
   console.log(`  skipped: ${s.skipped.length ? s.skipped.join("; ") : "nothing"}`);
   console.log(`  tokens and passwords (test values, outside the repository): ${tokensFile()}`);
 }

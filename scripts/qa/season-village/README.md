@@ -105,7 +105,9 @@ writes nothing except through HTTP routes:
 - governance on for members; a governing purpose statement when
   `/api/admin/purpose` exists; canvas readings when `/api/canvas` exists (seven
   blocks read covering every level from 1 to 5, Purpose read twice, five empty),
-  read back afterwards as a member.
+  read back afterwards as a member; the season file when `/api/canvas/season`
+  exists (the template the platform ships, `docs/seasons/season-two-2026.json`,
+  loaded by the pen and read back as a member, who may not edit it).
 
 Tokens and the generated passwords go to `QA_OUT_DIR/state/tokens.json` with the
 facts the walk checks for. Run twice on the same village (a plain restart keeps
@@ -145,8 +147,8 @@ fail the walk), `text` it must show, `forbidden` text, per-role `expect`, and
 per-role `expect` too: the Canvas view requires "Record a reading" of the founder
 who holds the pen and forbids it to a member). Text is matched without case,
 with whitespace collapsed, and `$villageName`, `$restorativeStep`,
-`$careRoleName`, `$careHolderName`, `$canvasReading` and `$viewerName` come from
-the seed. `$brandTerms` is the BANNED list in `scripts/check-brand-refs.mjs`,
+`$careRoleName`, `$careHolderName`, `$canvasReading`, `$seasonName`,
+`$seasonWeekTitle` and `$viewerName` come from the seed. `$brandTerms` is the BANNED list in `scripts/check-brand-refs.mjs`,
 matched as whole words everywhere, so a fresh village showing another village's
 name fails. A new seed fact goes in `seed.mjs`'s `facts`.
 
@@ -155,7 +157,11 @@ where there is any. The Layout header and footer carry the village's name on
 every page, and the Canvas view prints its heading and the credit line whether
 `/api/canvas` answered or not, so text like that passes on a page that lost
 its content. The Canvas view therefore requires the newest reading the seed
-wrote (`$canvasReading`) and "No reading yet" from an empty block.
+wrote (`$canvasReading`) and "No reading yet" from an empty block, and the
+season panel's name and last week (`$seasonName`, `$seasonWeekTitle`), which
+render only from `/api/canvas/season`. The season's pen ("Load a different
+season file", "Take the season off") is required of the founder and forbidden
+to the member, like "Record a reading".
 
 A refused request a page is SUPPOSED to make goes in `allowRequests` (top level,
 on a surface, on a view, or under `expect.<role>`), as regular expressions over

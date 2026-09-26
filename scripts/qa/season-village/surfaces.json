@@ -2,7 +2,7 @@
   "$comment": [
     "What walk.mjs visits and what it expects on each surface. Later waves EXTEND this file rather than the script.",
     "Text matching is case-insensitive with whitespace collapsed, over the page's rendered text (innerText) plus its title.",
-    "Placeholders: $villageName, $restorativeStep, $careRoleName, $careHolderName, $canvasReading come from the seed's facts; $viewerName is the signed-in person; $brandTerms expands to the BANNED list in scripts/check-brand-refs.mjs and matches whole words only. A placeholder the seed did not provide is NOT MEASURABLE, and the walk exits 3.",
+    "Placeholders: $villageName, $restorativeStep, $careRoleName, $careHolderName, $canvasReading, $seasonName, $seasonWeekTitle come from the seed's facts; $viewerName is the signed-in person; $brandTerms expands to the BANNED list in scripts/check-brand-refs.mjs and matches whole words only. A placeholder the seed did not provide is NOT MEASURABLE, and the walk exits 3.",
     "Require text only the page's own body renders. The Layout header and footer carry the village name on every page, so a bare $villageName proves nothing about the page.",
     "A surface with required: false that does not exist yet is reported as missing and does not fail the walk. A required one that is missing fails it.",
     "expect.<role>.path: the pathname the page must end on after it settles (for a redirect). views: a button to press, by its accessible name, from the resting page; roles limits who is shown that button, and a view's own expect.<role> adds text and forbidden text for that role.",
@@ -53,11 +53,11 @@
           "id": "canvas",
           "click": "Canvas",
           "roles": ["member", "founder"],
-          "text": ["The canvas baseline", "Governance Canvas by the Bioregional Weaving Labs Collective and Commonland", "$canvasReading", "No reading yet"],
-          "forbidden": ["%", "of 12"],
+          "text": ["The canvas baseline", "Governance Canvas by the Bioregional Weaving Labs Collective and Commonland", "$canvasReading", "No reading yet", "$seasonName", "$seasonWeekTitle"],
+          "forbidden": ["%", "of 12", "No season is loaded"],
           "expect": {
-            "founder": { "text": ["Record a reading"] },
-            "member": { "forbidden": ["Record a reading"] }
+            "founder": { "text": ["Record a reading", "Load a different season file", "Take the season off"] },
+            "member": { "forbidden": ["Record a reading", "Load a different season file", "Load a season file", "Take the season off"] }
           }
         },
         {
@@ -109,8 +109,8 @@
     {
       "id": "canvas-workbook",
       "path": "/canvas/workbook",
-      "required": false,
-      "text": ["Governance Canvas by the Bioregional Weaving Labs Collective and Commonland"],
+      "required": true,
+      "text": ["Governance Canvas by the Bioregional Weaving Labs Collective and Commonland", "Print this workbook to fill in by hand", "Our questions to talk through"],
       "forbidden": ["%", "of 12"]
     }
   ]
