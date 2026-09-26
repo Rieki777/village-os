@@ -16,9 +16,11 @@
  * them is how the old page drifted into being neither.
  */
 import Layout from "@/components/Layout";
-import MicButton from "@/components/MicButton";
-import { EconomicsView } from "@/pages/ProjectHistory";
-import { CanvasBaseline, ViewTab } from "@/components/canvas/CanvasBaseline";
+import { EconomicsView } from "@/components/journey/EconomicsView";
+import { LaunchGuide } from "@/components/journey/LaunchGuide";
+import { TestRun } from "@/components/journey/TestRun";
+import { ViewTab } from "@/components/canvas/CanvasBaseline";
+import { CanvasView } from "@/components/canvas/CanvasView";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -30,140 +32,14 @@ import {
   ExternalLink,
   FlaskConical,
   History,
-  Loader2,
   Lock,
   MessageCircle,
   Rocket,
-  Send,
   TreePine,
   TriangleAlert,
 } from "lucide-react";
 import type { LaunchGroup } from "@shared/launchRequirements";
-import { villageMoonLabel, type VillageMoon } from "@shared/villageMoon";
 import StewardSlatePicker, { type StewardCandidate } from "@/components/governance/StewardSlatePicker";
-
-/**
- * S65: the launch guide. Same brain as the Work With Us guide, different
- * hat: she reads the SAME live checklist this page renders and walks an
- * admin through what remains, item by item. Paths she mentions become
- * links. Absent an Anthropic key she simply isn't here — the checklist
- * carries the whole story on its own.
- */
-function LaunchGuide({ open, onClose }: { open: boolean; onClose: () => void }) {
-  // Two hats, one panel. "launch" reads the live readiness checklist;
-  // "organize" (S70) reads the village's own second brain first, then the
-  // shipped practitioner corpus — and shows which shelves she consulted.
-  const [mode, setMode] = useState<"launch" | "organize">("launch");
-  const GREETINGS: Record<string, string> = {
-    launch: "I can see exactly where your launch stands. Want to start with what's blocking, or shall I walk the whole journey with you?",
-    organize: "Ask me about organizing: governance, conflict, membership, legal shells, internal economics. Your village's own calls outrank the books when they speak to it.",
-  };
-  const [threads, setThreads] = useState<Record<string, Array<{ role: "user" | "assistant"; content: string; consulted?: any }>>>({
-    launch: [{ role: "assistant", content: GREETINGS.launch }],
-    organize: [{ role: "assistant", content: GREETINGS.organize }],
-  });
-  const msgs = threads[mode];
-  const setMsgs = (fn: (m: typeof msgs) => typeof msgs) =>
-    setThreads((t) => ({ ...t, [mode]: fn(t[mode]) }));
-  const [draft, setDraft] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [gone, setGone] = useState(false);
-
-  const send = () => {
-    const content = draft.trim();
-    if (!content || busy) return;
-    const next = [...msgs, { role: "user" as const, content }];
-    setMsgs(() => next);
-    setDraft("");
-    setBusy(true);
-    fetch(mode === "launch" ? "/api/admin/assistant/launch" : "/api/admin/assistant/organize", {
-      method: "POST", headers: headers(), body: JSON.stringify({ messages: next.map(({ role, content }) => ({ role, content })) }),
-    })
-      .then(async (r) => {
-        const d = await r.json();
-        if (r.status === 503) { setGone(true); return; }
-        if (!r.ok) throw new Error(d.message ?? d.error ?? "failed");
-        setMsgs((m) => [...m, { role: "assistant", content: d.reply, consulted: d.consulted }]);
-      })
-      .catch(() => setMsgs((m) => [...m, { role: "assistant", content: "Something hiccuped. Ask me that again?" }]))
-      .finally(() => setBusy(false));
-  };
-
-  // Turn any /admin?tab=… or /route path she mentions into a real link.
-  const linkify = (text: string) =>
-    text.split(/(\/(?:admin\?tab=[a-z-]+|[a-z-]+(?:\/[a-z-]+)*))(?=[\s.,)]|$)/g).map((part, i) =>
-      part.startsWith("/") ? (
-        <Link key={i} href={part} className="text-teal-deep font-medium underline">{part}</Link>
-      ) : (
-        <span key={i}>{part}</span>
-      ),
-    );
-
-  if (!open) return null;
-  return (
-    <div className="fixed bottom-4 right-4 z-50 w-[min(24rem,calc(100vw-2rem))] bg-white border border-stone-200 rounded-2xl shadow-2xl flex flex-col max-h-[70vh]">
-      <header className="px-4 py-3 border-b border-stone-100 flex items-center justify-between gap-2">
-        <div className="flex gap-1">
-          <button onClick={() => setMode("launch")}
-            className={`text-xs font-semibold rounded-lg px-2.5 py-1.5 ${mode === "launch" ? "bg-teal-deep text-white" : "text-stone-500 hover:bg-stone-100"}`}>
-            Launch
-          </button>
-          <button onClick={() => setMode("organize")}
-            className={`text-xs font-semibold rounded-lg px-2.5 py-1.5 ${mode === "organize" ? "bg-teal-deep text-white" : "text-stone-500 hover:bg-stone-100"}`}>
-            Organizing
-          </button>
-        </div>
-        <button onClick={onClose} className="text-stone-400 hover:text-stone-600 text-sm">Close</button>
-      </header>
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-        {gone ? (
-          <p className="text-xs text-stone-500">
-            The guide needs an Anthropic key. Set one in{" "}
-            <Link href="/admin?tab=integrations" className="text-teal-deep underline">Integrations</Link>.
-            The checklist above works fine without the guide.
-          </p>
-        ) : (
-          msgs.map((m, i) => (
-            <div key={i} className={`text-sm rounded-xl px-3 py-2 max-w-[85%] ${
-              m.role === "user" ? "ml-auto bg-teal-deep text-white" : "bg-stone-100 text-stone-800"
-            }`}>
-              {m.role === "assistant" ? linkify(m.content) : m.content}
-              {m.consulted
-                && (m.consulted.ownRecord?.length > 0
-                  || m.consulted.references?.length > 0
-                  || m.consulted.readers?.length > 0) && (
-                <p className="text-[10px] text-stone-400 mt-1.5 border-t border-stone-200 pt-1">
-                  {m.consulted.ownRecord?.length > 0 && <>Your calls: {m.consulted.ownRecord.join("; ")}. </>}
-                  {/* Optional-chained on purpose: a reply cached before the
-                      readers shipped carries no `readers` key at all. */}
-                  {m.consulted.readers?.length > 0 && <>Read from the village record: {m.consulted.readers.join("; ")}. </>}
-                  {m.consulted.references?.length > 0 && <>References: {m.consulted.references.join("; ")}.</>}
-                </p>
-              )}
-            </div>
-          ))
-        )}
-        {busy && <Loader2 className="w-4 h-4 animate-spin text-stone-400" />}
-      </div>
-      {!gone && (
-        <div className="p-3 border-t border-stone-100 flex gap-2">
-          <MicButton onText={(t) => setDraft((v) => (v ? v.replace(/\s*$/, " ") : "") + t)} disabled={busy} className="!rounded-lg" />
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") send(); }}
-            placeholder="Ask about any step…"
-            className="flex-1 text-sm border border-stone-200 rounded-lg px-3 py-2"
-          />
-          <button onClick={send} disabled={busy || !draft.trim()}
-            className="bg-teal-deep text-white rounded-lg px-3 py-2 disabled:opacity-40">
-            <Send className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
 
 /**
  * THE SECTION EACH REQUIREMENT SITS IN.
@@ -381,251 +257,6 @@ function StartTheGame({
   );
 }
 
-/**
- * THE TEST RUN (R86), the button immediately before the launch ballot.
- *
- * Rye: "we also need a 'test the village' option where all the cycles can run
- * rapidly so we can test how they are all working ... so the 'journey to
- * launch' has this as the second to last button to run a quick test over all
- * settings to see if they would work in production or break in some way."
- *
- * The card after this one opens the vote that turns issuance on for good, so
- * this is the last moment anybody can find out that a setting breaks.
- *
- * R56 governs the copy: the panel says what the run will do AND what it will
- * not, before anybody presses it, and the sentences it shows afterwards are
- * the server's own words about what happened. Nothing here is a warning about
- * what a founder ought to want. R55 governs the framing: a village that has
- * not launched is young, and this is a tool a founder reaches for.
- *
- * THE REFUSALS COME FIRST on purpose. A run that only showed the successes
- * would have told the founder nothing they needed.
- *
- * R12 OPENED THE DOOR. "Any member as all members may suggest upgrades and
- * will need to run models and tests." The card is the same card for everybody
- * and it carries no admin affordance of its own: it posts to `/api/dry-run`,
- * which answers any signed-in member (`server/routes/dryRun.ts`), and it
- * renders whatever comes back. A member's report leaves out the rules that are
- * switched off and the changes an admin has queued, and the route's header says
- * why. Nothing on this card needs to know which of the two it is holding.
- */
-interface DryRunFinding { area: string; outcome: "issued" | "refused" | "idle"; sentence: string }
-// `cycleKey` is the stored id and stays the React key for the list. `moon` is
-// what the founder reads: a village running this report has usually not
-// launched, so it carries dates and no number, which is the truth.
-interface DryRunTurn { cycleNumber: number; cycleKey: string; startsAt: string; endsAt: string; moon: VillageMoon; findings: DryRunFinding[] }
-interface DryRunReport {
-  moons: number;
-  spanDays: number;
-  gameStarted: boolean;
-  isolation: string;
-  turns: DryRunTurn[];
-  runFindings: DryRunFinding[];
-  allowances: Array<{ stageId: string; stageName: string; allowance: number; shareCap: number; heartsSendable: boolean; note: string }>;
-  jobs: Array<{ name: string; cadence: string; runsInSpan: string; note: string }>;
-  refusals: DryRunFinding[];
-  covered: string[];
-  notCovered: string[];
-}
-
-/** The three outcomes, as a dot somebody can scan down a column. */
-function OutcomeDot({ outcome }: { outcome: string }) {
-  const tone =
-    outcome === "refused" ? "bg-red-400" : outcome === "issued" ? "bg-emerald-400" : "bg-stone-300";
-  return <span className={`shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full ${tone}`} />;
-}
-
-function TestRun() {
-  const [moons, setMoons] = useState(12);
-  const [report, setReport] = useState<DryRunReport | null>(null);
-  const [running, setRunning] = useState(false);
-  const [problem, setProblem] = useState("");
-  const [openMoons, setOpenMoons] = useState(false);
-
-  const run = () => {
-    setRunning(true);
-    setProblem("");
-    fetch("/api/dry-run", { method: "POST", headers: headers(), body: JSON.stringify({ moons }) })
-      .then(async (r) => {
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.message ?? d.error ?? "The run was refused");
-        setReport(d);
-      })
-      .catch((e) => { setReport(null); setProblem(String(e.message ?? e)); })
-      .finally(() => setRunning(false));
-  };
-
-  return (
-    <section className="rounded-xl border border-stone-200 bg-white p-5">
-      <div className="flex items-start gap-3 flex-wrap justify-between">
-        <div className="max-w-md">
-          <p className="font-semibold text-stone-900 flex items-center gap-2">
-            <FlaskConical className="w-4 h-4 text-teal-deep" /> Test run
-          </p>
-          <p className="text-xs text-stone-500 mt-1">
-            Turn your village's moons over quickly and read what your settings would do: who the
-            settlement thanks, what each rule pays, when Claims Week opens, and what a member can
-            give. A good thing to do before the vote below.
-          </p>
-          <p className="text-xs text-stone-500 mt-1.5">
-            This writes nothing. No balance moves, no recognition is recorded, and nothing is
-            issued. It reads your settings and works out what each moon would do.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-stone-500" htmlFor="dry-run-moons">Moons</label>
-          <select
-            id="dry-run-moons"
-            value={moons}
-            onChange={(e) => setMoons(Number(e.target.value))}
-            className="text-sm border border-stone-200 rounded-lg px-2 py-2 bg-white"
-          >
-            {[3, 6, 12, 24, 40].map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
-          <button
-            onClick={run}
-            disabled={running}
-            className="text-sm bg-teal-deep text-white rounded-lg px-5 py-2.5 font-semibold disabled:opacity-40"
-          >
-            {running ? "Running" : "Run the test"}
-          </button>
-        </div>
-      </div>
-
-      {problem && (
-        <p role="alert" className="mt-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{problem}</p>
-      )}
-
-      {report && (
-        <div className="mt-5 border-t border-stone-900/10 pt-4 space-y-5">
-          <p className="text-xs text-stone-500">
-            {report.moons} moons, about {report.spanDays} days. {report.isolation}
-          </p>
-
-          {/* The refusals. This is the part a founder came for. */}
-          <div>
-            <h3 className="text-sm font-semibold text-stone-900">
-              {report.refusals.length === 1
-                ? "One thing would not work as set"
-                : report.refusals.length > 1
-                  ? `${report.refusals.length} things would not work as set`
-                  : "Nothing refused across the whole run"}
-            </h3>
-            {report.refusals.length > 0 ? (
-              <ul className="mt-2 space-y-1.5">
-                {report.refusals.map((f, i) => (
-                  <li key={i} className="flex gap-2 text-xs text-stone-700">
-                    <OutcomeDot outcome="refused" />
-                    <span>{f.sentence}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-xs text-stone-500 mt-1">
-                Every rule this run reached would pay what it says it pays.
-              </p>
-            )}
-          </div>
-
-          {/* What holds across the whole run. */}
-          <div>
-            <h3 className="text-sm font-semibold text-stone-900">Across the whole run</h3>
-            <ul className="mt-2 space-y-1.5">
-              {report.runFindings.map((f, i) => (
-                <li key={i} className="flex gap-2 text-xs text-stone-700">
-                  <OutcomeDot outcome={f.outcome} />
-                  <span>{f.sentence}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* What a member can give, at each stage of the path. */}
-          <div>
-            <h3 className="text-sm font-semibold text-stone-900">What a member can give each moon</h3>
-            <ul className="mt-2 space-y-1.5">
-              {report.allowances.map((a) => (
-                <li key={a.stageId} className="flex gap-2 text-xs text-stone-700">
-                  <OutcomeDot outcome={a.allowance > 0 && a.heartsSendable ? "issued" : a.allowance > 0 ? "refused" : "idle"} />
-                  <span>{a.note}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Moon by moon, folded away until somebody wants it. */}
-          <div>
-            <button
-              onClick={() => setOpenMoons((v) => !v)}
-              className="text-sm font-semibold text-stone-900 inline-flex items-center gap-1.5"
-            >
-              Moon by moon
-              <ChevronRight className={`w-3.5 h-3.5 transition-transform ${openMoons ? "rotate-90" : ""}`} />
-            </button>
-            {openMoons && (
-              <ul className="mt-2 space-y-3">
-                {report.turns.map((t) => (
-                  <li key={t.cycleKey}>
-                    <p className="text-xs font-medium text-stone-900">
-                      {villageMoonLabel(t.moon)}
-                    </p>
-                    <ul className="mt-1 space-y-1">
-                      {t.findings.map((f, i) => (
-                        <li key={i} className="flex gap-2 text-xs text-stone-600">
-                          <OutcomeDot outcome={f.outcome} />
-                          <span>{f.sentence}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {/* The background jobs, counted and never run. */}
-          <div>
-            <h3 className="text-sm font-semibold text-stone-900">Background work over this span</h3>
-            <ul className="mt-2 grid gap-1 sm:grid-cols-2">
-              {report.jobs.map((j) => (
-                <li key={j.name} className="text-xs text-stone-600">
-                  <span className="font-medium text-stone-800">{j.name}</span>: {j.cadence},
-                  about {j.runsInSpan} times
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* What it looked at, then what it did not. Both, every time. */}
-          <div>
-            <h3 className="text-sm font-semibold text-stone-900">What this run looked at</h3>
-            <ul className="mt-2 space-y-1.5">
-              {report.covered.map((s, i) => (
-                <li key={i} className="flex gap-2 text-xs text-stone-600">
-                  <OutcomeDot outcome="issued" />
-                  <span>{s}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <h3 className="text-sm font-semibold text-stone-900">What this run did not test</h3>
-            <ul className="mt-2 space-y-1.5">
-              {report.notCovered.map((s, i) => (
-                <li key={i} className="flex gap-2 text-xs text-stone-600">
-                  <OutcomeDot outcome="idle" />
-                  <span>{s}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
 export default function JourneyToLaunch() {
   const { user, loading } = useAuth();
   const isAdmin = !!user && (user.role === "admin" || user.role === "founder");
@@ -772,7 +403,7 @@ export default function JourneyToLaunch() {
         </div>
         <div className="bg-stone-50 min-h-screen py-8">
           <div className="container max-w-3xl space-y-6">
-            {view === "canvas" ? <CanvasBaseline /> : <TestRun />}
+            {view === "canvas" ? <CanvasView /> : <TestRun />}
           </div>
         </div>
       </Layout>
@@ -853,7 +484,7 @@ export default function JourneyToLaunch() {
       <div className="bg-stone-50 min-h-screen py-8">
         <div className="container max-w-3xl space-y-6">
           {view === "canvas" ? (
-            <CanvasBaseline />
+            <CanvasView />
           ) : view === "economics" ? (
             <EconomicsView headers={(extra) => ({ ...headers(), ...(extra ?? {}) })} />
           ) : failed ? (

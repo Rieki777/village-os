@@ -18,21 +18,31 @@ export function CanvasBlockCard({
   view,
   mayRecord,
   onSave,
+  focusLabel,
 }: {
   block: CanvasBlock;
   view: CanvasBlockView;
   mayRecord: boolean;
   onSave: (reading: CanvasReadingInput) => Promise<string | null>;
+  /** Set when the season's week puts this block first: a tag, never a lock. */
+  focusLabel?: string;
 }) {
   const [writing, setWriting] = useState(false);
   const latest = view.latest;
   const earlier = view.history.slice(1);
 
   return (
-    <article data-testid={`canvas-block-${block.id}`} className="bg-white border border-stone-200 rounded-xl p-5">
+    <article
+      id={`canvas-block-${block.id}`}
+      data-testid={`canvas-block-${block.id}`}
+      className={`bg-white border rounded-xl p-5 scroll-mt-24 ${focusLabel ? "border-teal-deep" : "border-stone-200"}`}
+    >
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wide text-stone-500">Block {block.number}</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-stone-500">
+            Block {block.number}
+            {focusLabel && <span className="ml-2 normal-case tracking-normal font-semibold text-teal-deep">{focusLabel}</span>}
+          </p>
           <h3 className="font-semibold text-stone-900">{block.name}</h3>
         </div>
         {latest ? (

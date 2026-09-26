@@ -1772,3 +1772,42 @@ disabled, which is why it owns this.
 Both new tables carry `is_example`, the same standing-example flag
 `org_role_assignments` uses. An example row is display only and is never
 counted when a real member's position is worked out.
+
+## Loading a season file onto the governance canvas (no migration, 2026-09-26)
+
+A season file is a week map a village lays over its governance canvas: each
+week's date and title, the canvas blocks it works on, and its foundations,
+tools, showcase ask and actions, plus any canvas moons. The Canvas view on
+Journey to Launch (`/journey-to-launch`, the Canvas tab) puts the current
+week's blocks first. It only orders: every block stays on the page and open
+every week, and the Birthing gate never reads the file. A village with no
+season sees the blocks in canvas order and loses nothing.
+
+- **Nothing here needs a ReGen service, or any outside service.** The file is
+  loaded by hand and stored in your own database, as the `canvas-season`
+  document in `app_config`. A self-hosted village with no network access to
+  anyone uses it exactly the same way.
+- **Who can load one:** whoever holds the canvas pen, `story.tell` (before
+  the handover, any admin or founder). Open the Canvas tab, open "Load a
+  season file", paste the JSON or choose the `.json` file, press "Check the
+  file", read the preview, then "Save this season". "Take the season off"
+  goes back to canvas order. Every member can read the week map.
+- **A template ships with the platform:** `docs/seasons/season-two-2026.json`
+  (thirteen Saturdays from 26 September to 19 December 2026, 11:00
+  America/Los_Angeles). Copy it and change the dates, titles and blocks to
+  write your own season.
+- **The format** is `shared/canvasSeason.ts`, and its validator is the one the
+  page and the server both run: `id`, `name`, `timezone` (an IANA zone such
+  as `Europe/Amsterdam`), optional `sessionTime` (`HH:MM`) and `description`,
+  `weeks[]` of `{ number, date (YYYY-MM-DD, in the season's timezone), title,
+  blocks[], foundations[], tools[], showcaseAsk, actions[] }` and `moons[]` of
+  `{ date, blocks[], note }`. Block ids are the twelve in
+  `shared/governanceCanvas.ts`; foundation ids are `legal-framework`,
+  `internal-rules`, `culture` and `personal-leadership`. At most 60 weeks, and
+  the whole file under 128,000 characters. A field the format does not know
+  is left out and named in the preview, so a file written for a newer release
+  still loads on an older one.
+- **Over HTTP**, for a script: `PUT /api/canvas/season` with the file as the
+  JSON body and a pen holder's bearer token; `DELETE /api/canvas/season`
+  takes it off; `GET /api/canvas/season` reads it back for any signed-in
+  member.

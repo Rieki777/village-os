@@ -93,7 +93,7 @@ export const POWERS: readonly PowerEntry[] = [
   {
     capability: "story.tell",
     title: "What the village says about itself",
-    surface: "Page content, the questions and answers, the milestones, and the governance canvas readings",
+    surface: "Page content, the questions and answers, the milestones, the governance canvas readings, and the canvas season",
     routes: [
       "/api/admin/content/:section",
       "/api/admin/faqs/:pathway",
@@ -101,6 +101,7 @@ export const POWERS: readonly PowerEntry[] = [
       "/api/admin/milestones",
       "/api/admin/milestones/:id",
       "/api/canvas/readings",
+      "/api/canvas/season",
     ],
   },
   {
