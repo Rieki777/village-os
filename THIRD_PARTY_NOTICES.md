@@ -17,6 +17,6 @@ copies, forks or self-hosts this repository receives MIT rights over it.
   (Tijn Tjoelker, Ernestien Idenburg, Noa Lodeizen, Zlatina Tsvetkova),
   https://tijntjoelker.substack.com/p/governance-canvas
 - **On what terms:** quoted with that credit, which every surface showing the text shows
-  beside it. The authors' own licence terms for the text have been asked for and are not yet
-  recorded here. Until they are, a fork that keeps the text keeps the credit beside it, and a
-  fork that will not keep the credit removes the quotations.
+  beside it. The authors' own licence terms for the text are not yet recorded here. Until they
+  are, a fork that keeps the text keeps the credit beside it, and a fork that will not keep the
+  credit removes the quotations.

@@ -17,8 +17,8 @@
  * words. It does NOT cover this text, which is not ours to license, so nobody
  * who copies, forks or self-hosts this repository receives MIT rights over it.
  * It is quoted here with the credit above, shown beside it on every surface.
- * The authors' own licence terms for it have been asked for and are not yet
- * recorded. Until they are: a fork that keeps this text keeps the credit
+ * The authors' own licence terms for it are not yet recorded anywhere in this
+ * repository. Until they are: a fork that keeps this text keeps the credit
  * beside it, and a fork that will not keep the credit removes the quotations.
  * THIRD_PARTY_NOTICES.md at the repository root points here, and
  * shared/governanceCanvasText.test.ts holds the two together.
