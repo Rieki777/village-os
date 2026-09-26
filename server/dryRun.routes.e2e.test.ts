@@ -393,7 +393,7 @@ describe.skipIf(!DB_CONFIGURED)("the test run before launch", () => {
   /*
    * THE CARD READS THESE FIELDS BY NAME.
    *
-   * `TestRun` in `client/src/pages/JourneyToLaunch.tsx` types the payload
+   * `TestRun` in `client/src/components/journey/TestRun.tsx` types the payload
    * itself, so the compiler checks the card against the card's own idea of the
    * server. A field the server stopped sending would render as `undefined` and
    * crash on `.map`, with `pnpm check` green the whole way. This is the half of
