@@ -97,6 +97,7 @@ import { applyDueGovernance, autoSettleExpired, digestComposerFor, itemKindsOf, 
 import { register as registerGovernanceModeRoutes } from "./routes/governanceMode";
 import { register as registerGoverningPurposeRoutes } from "./routes/governingPurpose";
 import { register as registerCanvasRoutes } from "./routes/canvas";
+import { register as registerCanvasSeasonRoutes } from "./routes/canvasSeason";
 import { register as registerCapabilityExplainerRoutes } from "./routes/capabilityExplainer";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
 import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
@@ -17610,6 +17611,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       modules,
       pendingConsents,
       staleMilestones,
+      hyphaSpace: stringVar("economy.hypha_space").trim() || stringVar("hypha.space_id").trim() || null,
       reconciliation: {
         invariants,
         systemAccounts: systems.map((s) => ({
@@ -25394,6 +25396,7 @@ ${inner}
   registerStewardSlateRoutes(app, { authedUser, isAdmin, getPool, members, firstName });
   registerGoverningPurposeRoutes(app, { authedUser, isAdmin, adminActor, getPool, capabilityCtx, firstName, weightModeNow, buildElectorate, addActivity });
   registerCanvasRoutes(app, { authedUser, guardCapability, capabilityCtx, getPool, firstName });
+  registerCanvasSeasonRoutes(app, { authedUser, guardCapability, capabilityCtx, getPool, firstName });
 
   /**
    * The subset of variables the CLIENT is allowed to know, so the UI can render

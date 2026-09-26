@@ -33,10 +33,11 @@ import { ExternalLink, Loader2 } from "lucide-react";
 import { authToken } from "@/lib/gameApi";
 import {
   CANVAS_CREDIT,
-  CANVAS_ORDER,
   LEVEL_WORDS,
+  type CanvasBlockId,
   type CanvasReadingInput,
 } from "@shared/governanceCanvas";
+import { orderBlocks } from "@shared/canvasSeason";
 import { newestLevels, radarDescription, type CanvasBlockView, type CanvasPayload } from "@/lib/canvasCopy";
 import { CanvasRadar } from "./CanvasRadar";
 import { CanvasBlockCard } from "./CanvasBlockCard";
@@ -61,8 +62,22 @@ export function ViewTab({ active, onClick, children }: { active: boolean; onClic
 }
 
 const EMPTY: CanvasBlockView[] = [];
+const NO_FOCUS: readonly CanvasBlockId[] = [];
 
-export function CanvasBaseline() {
+/**
+ * `focus` is the season week's blocks (CanvasView reads them from the season
+ * file). They come FIRST and carry `focusLabel`; every other block follows in
+ * canvas order. It orders and never gates: `orderBlocks` returns all twelve
+ * whatever it is handed, and every card keeps its form. With no focus, the
+ * cards are in canvas order, as they always were.
+ */
+export function CanvasBaseline({
+  focus = NO_FOCUS,
+  focusLabel = "This week",
+}: {
+  focus?: readonly CanvasBlockId[];
+  focusLabel?: string;
+} = {}) {
   const [data, setData] = useState<CanvasPayload | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
 
@@ -99,6 +114,7 @@ export function CanvasBaseline() {
   const blocks = data?.blocks ?? EMPTY;
   const byId = new Map(blocks.map((b) => [b.id, b]));
   const levels = newestLevels(blocks);
+  const inFocus = new Set<CanvasBlockId>(focus);
 
   return (
     <div className="space-y-6" data-testid="canvas-baseline">
@@ -145,13 +161,14 @@ export function CanvasBaseline() {
 
       {data && (
         <div className="grid gap-4 md:grid-cols-2">
-          {CANVAS_ORDER.map((block) => (
+          {orderBlocks(focus).map((block) => (
             <CanvasBlockCard
               key={block.id}
               block={block}
               view={byId.get(block.id) ?? { id: block.id, latest: null, history: [] }}
               mayRecord={!!data.mayRecord}
               onSave={save}
+              focusLabel={inFocus.has(block.id) ? focusLabel : undefined}
             />
           ))}
         </div>

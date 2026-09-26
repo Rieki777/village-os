@@ -59,7 +59,17 @@ describe("the files this test reads", () => {
   it("are the whole canvas view, so a new file cannot slip past", () => {
     // Without this the sweep passes by checking nothing at all.
     expect(CANVAS_FILES.map((f) => f.name).sort()).toEqual(
-      ["CanvasBaseline.tsx", "CanvasBlockCard.tsx", "CanvasRadar.tsx", "RecordReadingForm.tsx"].sort(),
+      [
+        "CanvasBaseline.tsx",
+        "CanvasBlockCard.tsx",
+        "CanvasRadar.tsx",
+        "RecordReadingForm.tsx",
+        // The season's week map and the view that composes it with the
+        // baseline (2026-09-26). They show week numbers and dates, and they
+        // are held to every rule below like the rest of the canvas.
+        "CanvasSeason.tsx",
+        "CanvasView.tsx",
+      ].sort(),
     );
     for (const f of SURFACE) expect(f.body.length, f.name).toBeGreaterThan(200);
   });

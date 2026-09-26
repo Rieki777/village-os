@@ -37,7 +37,7 @@ vi.mock("@/components/Layout", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 vi.mock("@/components/MicButton", () => ({ default: () => null }));
-vi.mock("@/pages/ProjectHistory", () => ({ EconomicsView: () => null }));
+vi.mock("@/components/journey/EconomicsView", () => ({ EconomicsView: () => null }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => auth.current }));
 vi.mock("@/lib/gameApi", () => ({ authToken: () => "a-token" }));
 
@@ -237,16 +237,22 @@ describe("what the member's run does", () => {
  */
 describe("the canvas view", () => {
   const EMPTY_CANVAS = { mayRecord: false, blocks: [] };
+  /** No season loaded: the season panel says so and the cards stay in canvas order. */
+  const NO_SEASON = { season: null, savedBy: null, savedAt: null, problem: null, mayEdit: false };
 
-  it("is a tab a signed-in member can open, and it reads the members' door", async () => {
+  it("is a tab a signed-in member can open, and it reads the members' doors", async () => {
     auth.current = { user: { id: "u2", name: "Wren", role: "member" }, loading: false };
-    answer({ "/api/canvas": { status: 200, body: EMPTY_CANVAS } });
+    answer({
+      "/api/canvas": { status: 200, body: EMPTY_CANVAS },
+      "/api/canvas/season": { status: 200, body: NO_SEASON },
+    });
     draw();
     expect(calls, "nothing is asked until the tab is opened").toEqual([]);
     fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
     await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
-    expect(calls.map((c) => c.url)).toEqual(["/api/canvas"]);
-    expect(calls[0].init.headers.Authorization).toBe("Bearer a-token");
+    await waitFor(() => expect(screen.getByText(/No season is loaded/)).toBeTruthy());
+    expect(calls.map((c) => c.url).sort()).toEqual(["/api/canvas", "/api/canvas/season"]);
+    for (const c of calls) expect(c.init.headers.Authorization, c.url).toBe("Bearer a-token");
     expect(screen.getByText("How this village governs itself")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /run the test/i }), "the test run steps aside").toBeNull();
   });
@@ -257,6 +263,7 @@ describe("the canvas view", () => {
       "/api/admin/launch": { status: 200, body: STATUS },
       "/api/admin/launch/steward-candidates": { status: 200, body: { candidates: [], powerCount: 0 } },
       "/api/canvas": { status: 200, body: EMPTY_CANVAS },
+      "/api/canvas/season": { status: 200, body: NO_SEASON },
     });
     draw();
     await waitFor(() => expect(screen.getByText(/Take one backup/i)).toBeTruthy());

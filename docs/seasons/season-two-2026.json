@@ -1,0 +1,201 @@
+{
+  "id": "season-two-2026",
+  "name": "Season Two, 2026",
+  "timezone": "America/Los_Angeles",
+  "sessionTime": "11:00",
+  "description": "Thirteen Saturday sessions, 26 September to 19 December 2026, each at 11:00 Pacific time. Each week names the canvas blocks it works on, and the Canvas view puts those blocks first. Every block stays open every week.",
+  "weeks": [
+    {
+      "number": 1,
+      "date": "2026-09-26",
+      "title": "Selection Day",
+      "blocks": ["purpose"],
+      "foundations": [],
+      "tools": ["The Governance Canvas public notebook (a link, read before the session)"],
+      "showcaseAsk": "The pitch.",
+      "actions": [
+        "On paper, give each block one word for how it stands today.",
+        "Draft one line saying what the project is for.",
+        "Collect each founder's email, the village's slug and its timezone."
+      ]
+    },
+    {
+      "number": 2,
+      "date": "2026-10-03",
+      "title": "Incubator Overview",
+      "blocks": ["purpose", "team", "roles", "meetings", "stakeholders", "coordination", "power", "conflict", "learning", "resourcing", "legal", "impact"],
+      "foundations": ["personal-leadership"],
+      "tools": ["Canvas baseline (Journey to Launch, Canvas view)", "Canvas resources, on paper from the Governance Canvas sheet"],
+      "showcaseAsk": "The purpose draft, in words only. Is this honest?",
+      "actions": [
+        "Claim the instance, then set its timezone and currency.",
+        "Set the first season's dates. A season ending at the 20 March 2027 equinox keeps every seat and care term clear of the holiday week.",
+        "Write the purpose draft into the village brief (aims).",
+        "Take the first reading of all twelve blocks on the Canvas view: one word and one sentence for each.",
+        "Each founder says what they bring and what they will hand over."
+      ]
+    },
+    {
+      "number": 3,
+      "date": "2026-10-10",
+      "title": "Game and Organisation Co-Creation 1",
+      "blocks": ["team", "roles", "meetings"],
+      "foundations": ["culture"],
+      "tools": ["Role cards on the Roles page"],
+      "showcaseAsk": "The role map. Could a newcomer find where they fit without taking over?",
+      "actions": [
+        "Write the village's role cards on the Roles page.",
+        "Name the intake role and a cover role for it.",
+        "Write down the village's values and the words it uses for itself."
+      ]
+    },
+    {
+      "number": 4,
+      "date": "2026-10-17",
+      "title": "Game and Organisation Co-Creation 2",
+      "blocks": ["power", "conflict"],
+      "foundations": ["internal-rules"],
+      "tools": ["The Decision Matrix", "The conflict agreement, frames 1 to 5"],
+      "showcaseAsk": "Who decides what, how is it challenged, and what would a new member do on a bad day?",
+      "actions": [
+        "Switch governance on for members, then hold one practice vote.",
+        "Write the restorative steps in the village's own words, with a live intake holder and the cohort ombuds named.",
+        "Write how the village consults and informs in the decisions section of the brief."
+      ]
+    },
+    {
+      "number": 5,
+      "date": "2026-10-24",
+      "title": "Game Guides and Economic Systems",
+      "blocks": ["coordination", "resourcing"],
+      "foundations": [],
+      "tools": ["Tools Hub", "Test Run on Journey to Launch", "Database toolkits, on paper for now"],
+      "showcaseAsk": "Could another project run this play?",
+      "actions": [
+        "Switch the Tools Hub on.",
+        "Run the Test Run and read what the village's settings would do.",
+        "Draft one public line for each block."
+      ]
+    },
+    {
+      "number": 6,
+      "date": "2026-10-31",
+      "title": "Growing Your Village",
+      "blocks": ["team", "conflict", "learning"],
+      "foundations": ["culture"],
+      "tools": ["Canvas view", "The conflict agreement"],
+      "showcaseAsk": "What happens the first time two members fall out?",
+      "actions": [
+        "Walk through how someone joins the village and how someone leaves it well.",
+        "Role-play a made-up tension through the restorative steps.",
+        "Propose practice quests."
+      ]
+    },
+    {
+      "number": 7,
+      "date": "2026-11-07",
+      "title": "Ecosystem and the Fund",
+      "blocks": ["stakeholders", "coordination"],
+      "foundations": [],
+      "tools": ["Work With Us page", "The founders' own document notebook"],
+      "showcaseAsk": "Who has a stake who is not in the room?",
+      "actions": [
+        "Fill in Work With Us for the partners the village wants.",
+        "Name everyone with a stake in the village who is not in the room.",
+        "Offer resources back to the canvas library only once its contribution form keeps contributors' emails private."
+      ]
+    },
+    {
+      "number": 8,
+      "date": "2026-11-14",
+      "title": "Tokenomics 1",
+      "blocks": ["resourcing"],
+      "foundations": [],
+      "tools": ["Decision Matrix budget rows", "Test Run"],
+      "showcaseAsk": "Where does value come from, and where does it go?",
+      "actions": ["Run the Test Run again with this week's settings."]
+    },
+    {
+      "number": 9,
+      "date": "2026-11-21",
+      "title": "Tokenomics 2",
+      "blocks": ["resourcing", "impact"],
+      "foundations": [],
+      "tools": ["Health module, if the village chooses it"],
+      "showcaseAsk": "The investor's question.",
+      "actions": ["Decide the issuance cap on Journey to Launch, or decline it there."]
+    },
+    {
+      "number": 10,
+      "date": "2026-11-28",
+      "title": "Legal Structures 1",
+      "blocks": ["legal"],
+      "foundations": ["legal-framework"],
+      "tools": [],
+      "showcaseAsk": "What protects the purpose if the founders leave?",
+      "actions": [
+        "Name the jurisdiction first.",
+        "Name the entity, or write none yet with a plan and a date."
+      ]
+    },
+    {
+      "number": 11,
+      "date": "2026-12-05",
+      "title": "Legal Structures 2",
+      "blocks": ["legal", "team", "conflict"],
+      "foundations": ["internal-rules"],
+      "tools": ["The conflict agreement"],
+      "showcaseAsk": "Can someone leave well, and is our consequences ladder lawful here?",
+      "actions": [
+        "Read the land tenure against how the village runs.",
+        "Check the exit terms against the legal shape.",
+        "Adopt the conflict agreement, with a review date at least one moon after the last session."
+      ]
+    },
+    {
+      "number": 12,
+      "date": "2026-12-12",
+      "title": "Coordination and Minimum Viable Economies",
+      "blocks": ["coordination", "learning", "impact"],
+      "foundations": ["personal-leadership"],
+      "tools": ["Canvas view"],
+      "showcaseAsk": "What changed in how you work, in your own words?",
+      "actions": [
+        "Take the season reading of all twelve blocks. It stays in the village.",
+        "Re-seat: care and cover terms run at least one moon past the last session.",
+        "Rehearse member onboarding and the care path.",
+        "Each founder says what they will hand over."
+      ]
+    },
+    {
+      "number": 13,
+      "date": "2026-12-19",
+      "title": "Crowd Pooling and Resourcing",
+      "blocks": ["resourcing", "stakeholders"],
+      "foundations": [],
+      "tools": ["Decision Matrix funding rows", "Crowdpool"],
+      "showcaseAsk": "The graduation review.",
+      "actions": [
+        "Configure the crowdpool.",
+        "Welcome newcomers into the village."
+      ]
+    }
+  ],
+  "moons": [
+    {
+      "date": "2026-10-10",
+      "blocks": [],
+      "note": "The first canvas moon. Hold it inside the week 3 session, or on Sunday 11 October, and take a new reading of any block that has moved since the baseline."
+    },
+    {
+      "date": "2026-11-09",
+      "blocks": [],
+      "note": "The second canvas moon. Take a new reading of any block that has moved."
+    },
+    {
+      "date": "2026-12-08",
+      "blocks": ["power", "resourcing", "legal", "impact"],
+      "note": "Before you raise: read power, resourcing, legal and impact again before any funding ask."
+    }
+  ]
+}
