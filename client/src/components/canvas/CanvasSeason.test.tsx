@@ -248,10 +248,12 @@ describe("the week map on the Canvas view", () => {
   it("lets a word too long for a phone's line break inside the view, instead of widening the page", async () => {
     // jsdom lays nothing out, so this holds only the rule in place; the width
     // itself is measured live on the built CSS at 375px (the lane's QA run).
+    // `anywhere`, never `break-words`: break-word left the reading cards' grid
+    // as wide as the longest word, and the page 310px too wide.
     answer("GET", "/api/canvas", 200, EMPTY_CANVAS(false));
     answer("GET", "/api/canvas/season", 200, NO_SEASON(false));
     draw();
-    expect(screen.getByTestId("canvas-view").className.split(/\s+/)).toContain("break-words");
+    expect(screen.getByTestId("canvas-view").className.split(/\s+/)).toContain("wrap-anywhere");
     await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
   });
 });

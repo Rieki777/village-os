@@ -70,14 +70,17 @@ export function CanvasView() {
   const focus = seasonFocus(season, now);
   const phase = season ? seasonMoment(season, now).phase : null;
 
-  // `break-words` (overflow-wrap: break-word, inherited): the season file and
+  // `wrap-anywhere` (overflow-wrap: anywhere, inherited): the season file and
   // the readings are words people type, and a pasted Sheet or Drive id is one
   // 44-character word with nowhere to break. Without it that one word widened
-  // the whole page on a phone (537px on a 375px screen, measured on the built
-  // CSS), and every member scrolled sideways for as long as the season was
-  // loaded. It breaks only a word too long for its line, and leaves layout alone.
+  // the whole page on a phone, and every member scrolled sideways for as long
+  // as it stayed. `break-words` is NOT enough, measured live at 375px: it
+  // fixed the season panel and left the page 310px wide, because the reading
+  // cards sit in a grid, a grid item is as wide as its longest word, and
+  // break-word does not change that width; anywhere does. On ordinary text
+  // the two lay out identically (the lane's live QA compares every element).
   return (
-    <div className="space-y-6 break-words" data-testid="canvas-view">
+    <div className="space-y-6 wrap-anywhere" data-testid="canvas-view">
       <CanvasSeason payload={payload} failed={failed} now={now} onSave={save} onRemove={remove} />
       <CanvasBaseline focus={focus} focusLabel={phase === "before" ? "First up" : "This week"} />
     </div>
