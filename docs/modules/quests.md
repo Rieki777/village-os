@@ -469,20 +469,20 @@ permanently: nothing recomputes it afterwards.
 
 ## What arrives at boot
 
-**A village with an empty `quests` table is seeded with fourteen real quests.** The block in
+**A village with an empty `quests` table is seeded with thirteen real quests.** The block in
 `server/index.ts` guards on `existing.length === 0 && fs.existsSync(QUESTS_SEED_FILE)` and loops
 `questsRepo.add` over `server/seeds/quests-seed.json`. `QUEST_COLS` omits `is_example`, whose
-column default is 0, so all fourteen are **real** rows: claimable, consentable and payable from the
+column default is 0, so all thirteen are **real** rows: claimable, consentable and payable from the
 faucet. They advertise 40 to 300 recognition apiece (`50-100`, `40-80`, `100-200`, `80-200`,
-`100-300` and so on), one carries `minStage: "member"`, one carries
-`requiresRole: "practitioners"`, and one ships `status: "Seasonal"`. Reviewing those fourteen reward
+`100-300` and so on), one carries `minStage: "member"`, one (Healing Arts Practitioner) carries
+`requiresRole: "practitioners"`, and one ships `status: "Seasonal"`. Reviewing those thirteen reward
 labels is the first thing a fork operator does before go-live, because on the day the village opens
 they are the contract.
 
 Two things the code comment beside that block gets wrong, and a reader should not inherit. It says
 "INSERT IGNORE + the empty check", and `questsRepo.add` uses a plain `INSERT INTO`. It says "a
 village that deleted quests on purpose never has them resurrected", and the guard is
-table-emptiness: a village that deletes every quest gets all fourteen back on the next restart.
+table-emptiness: a village that deletes every quest gets all thirteen back on the next restart.
 
 Three more boot paths write `quests`:
 
@@ -693,8 +693,8 @@ consented.
 `status: "Open"`, `acceptQuestProposal` writes `"Open"` too, and the Admin edit form offers `Open`
 and `Closed`. The column default from 0001 is lowercase `open`, and the boot seeder spreads the
 seed row **after** its own default (`questsRepo.add({ ..., status: "open", ...q })`), so the seed
-file wins: `server/seeds/quests-seed.json` ships `"Open"` on thirteen of its fourteen quests and
-`"Seasonal"` on the fourteenth. Only `server/seeds/examples-seed.json` ships lowercase, and those
+file wins: `server/seeds/quests-seed.json` ships `"Open"` on twelve of its thirteen quests and
+`"Seasonal"` on the thirteenth. Only `server/seeds/examples-seed.json` ships lowercase, and those
 are the example rows the SQL readers exclude with `is_example = 0` anyway.
 
 JavaScript readers normalise (`statusIs`, and the related-quest filter in

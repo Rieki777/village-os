@@ -354,6 +354,44 @@ const SEEDED_ROUTES = [
  */
 const IDENTITY_ROUTES = [...SEEDED_ROUTES, "/api/game/config"];
 
+/*
+ * NAMED ALLOWANCES in the identity scan: a leak that is known, reported and
+ * owned by a later wave, cut out of ONE route's body before the scan. Each one
+ * names the exact text, so the same place under another key, on another route
+ * or in another spelling still fails.
+ *
+ * - The season timezone default in shared/gameConfig.ts is one village's zone.
+ *   A fresh boot serves it on /api/game/config (and on /api/season, which this
+ *   file does not read). Live Amora serves the same compiled default, and plan
+ *   W2 owns the change. Until the scan read `_` as a space this allowance was
+ *   not needed, because the scan could not see the leak at all: it matched
+ *   "costa rica" and the value is spelled `Costa_Rica`.
+ *
+ * NOT SCANNED, and reported rather than allowed: /grounds/index.html, the
+ * Living Map artifact (docs/prototypes/grounds-v0.html). It is compiled, not a
+ * seed. It answers any stranger with a 200 whatever the map module's state,
+ * and it carries another village's title, minimap caption and place names;
+ * its seedGeography() draws that geography under any village with no land
+ * core yet. The fix belongs to the map lane under the geography ruling, with
+ * live Amora's frame measured first so the village it belongs to keeps it.
+ */
+const IDENTITY_ALLOWANCES: ReadonlyArray<{ route: string; text: string; owner: string }> = [
+  { route: "/api/game/config", text: '"timezone":"America/Costa_Rica"', owner: "plan W2, the season timezone default" },
+];
+
+/**
+ * What the identity scan reads: lower case, with `_`, `-` and `/` read as a
+ * space, so `America/Costa_Rica` reads as "costa rica". The scan used to match
+ * the spaced spelling only, and passed over exactly that value.
+ */
+function identityText(route: string, body: string): string {
+  let text = body;
+  for (const a of IDENTITY_ALLOWANCES) {
+    if (a.route === route) text = text.split(a.text).join("");
+  }
+  return text.toLowerCase().replace(/[_\-/]+/g, " ");
+}
+
 /** Another village's name, place and legal entity. Matched case-insensitively. */
 const FOREIGN_IDENTITY = [
   "amora", // brand-ok: the regression list this file asserts the ABSENCE of
@@ -392,26 +430,31 @@ const FOREIGN_STRUCTURE = [
   "Prosperity Circle",
 ];
 
-async function seededBodies(routes: readonly string[] = SEEDED_ROUTES): Promise<Array<[string, string]>> {
-  const out: Array<[string, string]> = [];
+/** Each route with its body and its status, as a stranger receives them. */
+async function seededBodies(routes: readonly string[] = SEEDED_ROUTES): Promise<Array<[string, string, number]>> {
+  const out: Array<[string, string, number]> = [];
   for (const r of routes) {
     const res = await http(r);
-    out.push([r, await res.text()]);
+    out.push([r, await res.text(), res.status]);
   }
   // Every section the content listing names is readable by a stranger, so each
   // one is part of what the village publishes.
   const listing = JSON.parse(out.find(([r]) => r === "/api/content")?.[1] ?? "{}");
   for (const name of listing.sections ?? []) {
     const r = `/api/content/${encodeURIComponent(name)}`;
-    out.push([r, await http(r).then((x) => x.text())]);
+    const res = await http(r);
+    out.push([r, await res.text(), res.status]);
   }
   return out;
 }
 
 describe.skipIf(!DB_CONFIGURED)("the fresh fork is handed no other village's story", () => {
   it("answers every seeded route, so an absence below means something", async () => {
-    for (const [route, body] of await seededBodies()) {
-      expect(body.length, `${route} must answer a stranger`).toBeGreaterThan(1);
+    for (const [route, body, status] of await seededBodies(IDENTITY_ROUTES)) {
+      // A refusal has a body too (`{"error":"auth_required"}` is 25 bytes), and
+      // every absence below would pass on one, so the status is the control.
+      expect(status, `${route} must answer a stranger`).toBe(200);
+      expect(body.length, `${route} must say something`).toBeGreaterThan(1);
     }
     // The positive control for the lists below: the quest library is still
     // seeded, so a route that serves seed content is being read here.
@@ -421,9 +464,9 @@ describe.skipIf(!DB_CONFIGURED)("the fresh fork is handed no other village's sto
 
   it("names no other village, its place or its legal entity on any seeded route", async () => {
     for (const [route, body] of await seededBodies(IDENTITY_ROUTES)) {
-      const lower = body.toLowerCase();
+      const text = identityText(route, body);
       for (const word of FOREIGN_IDENTITY) {
-        expect(lower.includes(word), `${route} must not name ${word}`).toBe(false);
+        expect(text.includes(word), `${route} must not name ${word}`).toBe(false);
       }
     }
   });
@@ -443,9 +486,11 @@ describe.skipIf(!DB_CONFIGURED)("the fresh fork is handed no other village's sto
   });
 
   it("stands up no circle, FAQ or journey the village never wrote", async () => {
-    const org = (await call("GET", "/api/org", undefined, "")).json;
+    const orgRes = await call("GET", "/api/org", undefined, "");
+    expect(orgRes.status, "the org chart answers a stranger").toBe(200);
+    expect(Array.isArray(orgRes.json?.circles), "and it lists circles, even when there are none").toBe(true);
     expect(
-      (org?.circles ?? []).filter((c: any) => !c.isExample).map((c: any) => c.name),
+      orgRes.json.circles.filter((c: any) => !c.isExample).map((c: any) => c.name),
       "a village that has formed no circle publishes none",
     ).toEqual([]);
     for (const pathway of ["investor", "steward", "resident", "prosperity"]) {
@@ -459,13 +504,23 @@ describe.skipIf(!DB_CONFIGURED)("the fresh fork is handed no other village's sto
   });
 
   it("states no investment term the village never set", async () => {
-    const summary = (await call("GET", "/api/investor-summary", undefined, "")).json;
+    const res = await call("GET", "/api/investor-summary", undefined, "");
+    expect(res.status, "the investor summary answers a stranger").toBe(200);
+    const summary = res.json;
     expect(summary?.details?.length, "the summary still has its questions").toBeGreaterThan(0);
     for (const d of summary.details) {
       expect(d.value, `${d.label} is unstated until the village states it`).toBe("To be confirmed");
     }
-    const visit = (await call("GET", "/api/visit-config", undefined, "")).json;
-    for (const v of visit?.visit_types ?? []) {
+  });
+
+  // Its own test so it can fail on its own: sharing one with the investor
+  // terms, it was never reached while those failed first.
+  it("states no visit term the village never set", async () => {
+    const res = await call("GET", "/api/visit-config", undefined, "");
+    expect(res.status, "the visit page answers a stranger").toBe(200);
+    const types = res.json?.visit_types;
+    expect(Array.isArray(types) && types.length > 0, "the visit page still has its ways to visit").toBe(true);
+    for (const v of types) {
       for (const k of ["duration", "format", "cost"]) {
         expect(v[k], `${v.title}: ${k} is unstated until the village states it`).toBe("To be confirmed");
       }

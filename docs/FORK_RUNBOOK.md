@@ -123,9 +123,13 @@ above the size of a gathering, not to the size of one person's usage.
 ## Seeds & per-deployment data
 
 - `server/seeds/content-seed.json`, `quests-seed.json` — page copy + quest
-  library, written ONCE on first boot into an empty document or table (the
-  old `seedIfMissingOrEmpty` self-heal is retired). A running village is never
-  touched by a seed edit, because its document and tables are already full.
+  library (the old `seedIfMissingOrEmpty` self-heal is retired). The content
+  document is written once, on a boot that finds no content document. The
+  quests, like the roles, trainings, circles and milestones below, are written
+  on ANY boot that finds their table empty, and never into a table that holds
+  a row. So a seed edit leaves a running village's rows alone, with one known
+  edge: a village that deletes every starter quest, role or training gets the
+  seed's copy back on its next boot.
 - **What a fresh village is handed as its own (fresh-boot seed audit,
   2026-09-26): nothing it did not choose.** The roadmap (`milestones` in
   `site-content-seed.json`), the circles (`circles-seed.json`) and the four
