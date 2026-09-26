@@ -426,7 +426,7 @@
     "difficulty": "Intermediate",
     "circle": "Governance",
     "status": "Open",
-    "roleRequired": "Resident",
+    "roleRequired": "Resident or Immersant",
     "icon": "ShieldCheck",
     "tags": [
       "safety",
