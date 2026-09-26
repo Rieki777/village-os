@@ -15,7 +15,9 @@ import {
   ArrowRight,
   Scale,
   ShieldCheck,
+  Printer,
 } from "lucide-react";
+import { CANVAS_CREDIT } from "@shared/governanceCanvasText";
 
 const PRINCIPLES = [
   {
@@ -232,6 +234,38 @@ export default function Governance() {
           <p className="text-stone-700 leading-relaxed">
             The agreements we launch with are not permanent. Any member can propose a change through their circle. Rules that no longer serve the community get amended or removed. Governance is alive; it grows with us.
           </p>
+        </div>
+      </section>
+
+      {/* The Governance Canvas on paper: twelve questions a group can talk
+          through about how it governs itself, printable by anyone, signed in
+          or not. Credited wherever the canvas appears. */}
+      <section className="bg-white py-16">
+        <div className="container max-w-3xl mx-auto px-4">
+          <div className="flex items-center gap-3 mb-4">
+            <Printer className="w-6 h-6 text-teal-deep" />
+            <h2 className="font-display text-3xl md:text-4xl font-bold text-teal-deep">
+              The Governance Canvas, on Paper
+            </h2>
+          </div>
+          <p className="text-stone-700 leading-relaxed mb-3">
+            Twelve blocks, from purpose to impact, that a group can talk through together: who decides, how conflict is
+            held, how resources move. The workbook prints each block on its own page with room to write, and it can be
+            saved as a Markdown file too.
+          </p>
+          <p className="text-sm text-stone-600 mb-4">
+            The canvas is the{" "}
+            <a href={CANVAS_CREDIT.url} target="_blank" rel="noreferrer" className="underline hover:text-teal-deep">
+              {CANVAS_CREDIT.text}
+            </a>
+            .
+          </p>
+          <Link
+            href="/canvas/workbook"
+            className="inline-flex items-center gap-2 text-teal-deep font-semibold hover:text-teal transition-colors"
+          >
+            Open the canvas workbook <ArrowRight className="w-4 h-4" />
+          </Link>
         </div>
       </section>
 

@@ -11,7 +11,8 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Router } from "wouter";
-import { CANVAS_BLOCK_IDS, CANVAS_CREDIT, CANVAS_ORDER } from "@shared/governanceCanvas";
+import { CANVAS_BLOCK_IDS, CANVAS_CREDIT, CANVAS_LEVELS, CANVAS_ORDER } from "@shared/governanceCanvas";
+import { CANVAS_BLOCK_TEXT, CANVAS_SCALE_TEXT } from "@shared/governanceCanvasText";
 import { readingDate, weeksPhrase } from "@/lib/canvasCopy";
 
 vi.mock("@/lib/gameApi", () => ({ authToken: () => "a-token" }));
@@ -94,6 +95,48 @@ describe("what a member reads", () => {
 
     const credit = screen.getByRole("link", { name: new RegExp(CANVAS_CREDIT.text.slice(0, 40)) });
     expect(credit.getAttribute("href")).toBe(CANVAS_CREDIT.url);
+  });
+
+  it("leads every card with the canvas's own question, opens its description, and keeps our questions labelled as ours", async () => {
+    answers.push({ status: 200, body: payload(false) });
+    draw();
+    await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
+    for (const block of CANVAS_ORDER) {
+      const card = within(screen.getByTestId(`canvas-block-${block.id}`));
+      const question = card.getByTestId(`canvas-question-${block.id}`);
+      expect(question.textContent, block.id).toBe(CANVAS_BLOCK_TEXT[block.id].question);
+      expect(question.tagName, block.id).toBe("BLOCKQUOTE");
+      expect(question.getAttribute("cite"), block.id).toBe(CANVAS_CREDIT.url);
+      // The description sits inside a disclosure a reader opens.
+      const description = card.getByText(CANVAS_BLOCK_TEXT[block.id].description);
+      expect(description.closest("details")?.querySelector("summary")?.textContent).toBe("What the canvas says about it");
+      // Our own question and prompts stay on the card, under our own heading.
+      const ours = card.getByText(block.question).closest("details");
+      expect(ours?.querySelector("summary")?.textContent).toBe("Our questions to talk through");
+      for (const p of block.prompts) expect(within(ours as HTMLElement).getByText(p)).toBeTruthy();
+    }
+  });
+
+  it("reads the radar's rings in the canvas's scale words, centre to edge", async () => {
+    answers.push({ status: 200, body: payload(false) });
+    draw();
+    await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
+    const legend = within(screen.getByTestId("canvas-scale-legend"));
+    expect(legend.getAllByRole("listitem").map((li) => li.textContent)).toEqual(
+      CANVAS_LEVELS.map((l) => `${CANVAS_SCALE_TEXT[l].word}: ${CANVAS_SCALE_TEXT[l].meaning}`),
+    );
+    expect(screen.getByText(/The rings run from Absent at the centre to Thriving at the edge/)).toBeTruthy();
+  });
+
+  it("credits the canvas on the view, says which words are quoted, and offers the workbook", async () => {
+    answers.push({ status: 200, body: payload(false) });
+    draw();
+    await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
+    const credit = within(screen.getByTestId("canvas-credit"));
+    const link = credit.getByRole("link", { name: (name) => name.includes(CANVAS_CREDIT.text) });
+    expect(link.getAttribute("href")).toBe(CANVAS_CREDIT.url);
+    expect(screen.getByTestId("canvas-credit").textContent).toMatch(/question and description, and the words for the five levels, are quoted from the/);
+    expect(credit.getByRole("link", { name: /print the canvas workbook/i }).getAttribute("href")).toBe("/canvas/workbook");
   });
 
   it("offers no form to a member who does not hold the pen", async () => {
