@@ -123,7 +123,25 @@ above the size of a gathering, not to the size of one person's usage.
 ## Seeds & per-deployment data
 
 - `server/seeds/content-seed.json`, `quests-seed.json` — page copy + quest
-  library (self-heals via `seedIfMissingOrEmpty`).
+  library, written ONCE on first boot into an empty document or table (the
+  old `seedIfMissingOrEmpty` self-heal is retired). A running village is never
+  touched by a seed edit, because its document and tables are already full.
+- **What a fresh village is handed as its own (fresh-boot seed audit,
+  2026-09-26): nothing it did not choose.** The roadmap (`milestones` in
+  `site-content-seed.json`), the circles (`circles-seed.json`) and the four
+  journey ladders (`content-seed.json`) ship EMPTY; they used to hand every
+  fork one village's four build phases, eight active councils and its stages
+  and rites. The FAQs ship empty, and the investor summary and visit page ship
+  their questions with every term "To be confirmed". Those three are read-time
+  defaults behind `faqs`, `investor-summary` and `visit-config` in `app_config`,
+  so a village that has saved its own is unaffected, and one that has not now
+  shows no FAQ (the section hides) and unstated terms. Build yours in Admin,
+  Make it yours: FAQs, Build Progress (the roadmap), Visit Program and
+  Investor Summary; circles in Org Chart. What still arrives: the four capability
+  roles (`roles-seed.json`, see "The other appointments" below), 13 starter
+  quests and four starter trainings, whose descriptions say what the practice
+  is and never that this village already practises it.
+  `server/forkPublish.e2e.test.ts` holds this.
 - `server/seeds/examples-seed.json` — STANDING EXAMPLES: platform-authored
   worked content revealed when a module is first enabled, so a founder meets a
   working module instead of "No items yet." Inert (every mutation refused) and

@@ -1976,12 +1976,40 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
   it("S19-S23: the village map — circles, tiers, relay, concierge", async () => {
     // Off = the whole surface is the framework 404.
     expect((await api("GET", "/api/map")).status).toBe(404);
+
+    /*
+     * THE VILLAGE FORMS ITS OWN CIRCLES. This section used to find eight
+     * councils already standing, seeded from server/seeds/circles-seed.json on
+     * the empty table: one village's council structure, marked active, which
+     * every fork then served as its own organisation before it had formed a
+     * single circle (the never-build rule "seeding aspirational structure").
+     * The seed ships empty now, so the three this section leans on are made
+     * here, through the same admin door a founder uses, and BEFORE the module
+     * turns on, which is the state the old seed produced: real circles present,
+     * so the map's standing examples never layer over them.
+     */
+    const orgBefore = await api("GET", "/api/org");
+    expect(orgBefore.status).toBe(200);
+    expect(
+      (orgBefore.json.circles ?? []).filter((c: any) => !c.isExample),
+      "a village that has formed no circle serves none",
+    ).toEqual([]);
+    for (const own of [
+      { name: "Permaculture Council", aliases: ["Regenerative Agriculture", "Land Stewardship"] },
+      { name: "Education Council", aliases: ["Education"] },
+      { name: "Community Life Council", aliases: ["Community Development"] },
+    ]) {
+      const made = await api("POST", "/api/admin/circles", own, founderToken);
+      expect(made.status, JSON.stringify(made.json)).toBe(200);
+    }
     await api("PUT", "/api/admin/modules/map/lifecycle", { lifecycle: "public" }, founderToken);
 
-    // Circles seeded from the file on the empty table; aliases resolve quests.
+    // Aliases resolve quests.
     const circles = await api("GET", "/api/circles");
     expect(circles.status).toBe(200);
-    expect(circles.json.length).toBeGreaterThanOrEqual(8);
+    expect(circles.json.map((c: any) => c.id)).toEqual(
+      expect.arrayContaining(["permaculture-council", "education-council", "community-life-council"]),
+    );
     const perma = circles.json.find((c: any) => c.id === "permaculture-council");
     expect(perma.aliases).toContain("Regenerative Agriculture");
 
@@ -3456,24 +3484,37 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // Stale milestones: TIME makes a milestone stale (aged by SQL — no API
     // can backdate, by design); an EDIT through the API restamps and clears
     // it; completed milestones never nag, however old.
-    await testDb.conn.query("UPDATE milestones SET updated_at = (NOW() - INTERVAL 20 DAY) WHERE id = 'site-planning'");
-    // The completed fixture is MADE complete here rather than assumed. The
-    // seeded build board used to arrive with two rows already marked complete,
-    // stating that one specific property had been bought and appraised, which
-    // every fork then published as its own history. Nothing ships complete any
-    // more, so a test about "completed milestones never nag" has to complete
-    // one itself, which is also the honest shape for it.
+    //
+    // Both milestones are WRITTEN here, through the founder's own door. The
+    // board used to arrive seeded with eight rows in four phases, from buying
+    // the land to a finished village with a retreat centre and a health
+    // centre: one village's build plan, which every fork then published as its
+    // own roadmap. A fresh village's board is empty now (asserted in
+    // server/forkPublish.e2e.test.ts), so a test about how a board goes stale
+    // has to have a board first, which is also the honest shape for it.
+    const planning = await api("POST", "/api/admin/milestones", { phase: "Now", title: "Plan the site" }, founderToken);
+    expect(planning.status, JSON.stringify(planning.json)).toBe(200);
+    const landed = await api("POST", "/api/admin/milestones", { phase: "Now", title: "Walk the boundary" }, founderToken);
+    expect(landed.status, JSON.stringify(landed.json)).toBe(200);
+    const planningId = String(planning.json.id);
+    const landedId = String(landed.json.id);
+    await testDb.conn.query( // module-review-ok: no API can backdate a milestone, which is the point
+      "UPDATE milestones SET updated_at = (NOW() - INTERVAL 20 DAY) WHERE id = ?", [planningId],
+    );
+    // The completed fixture is MADE complete here rather than assumed:
+    // nothing ships complete, so a test about "completed milestones never nag"
+    // has to complete one itself.
     await testDb.conn.query( // module-review-ok: no API can backdate or pre-complete a milestone, which is the point
-      "UPDATE milestones SET status = 'complete', updated_at = (NOW() - INTERVAL 40 DAY) WHERE id = 'land-acquired'",
+      "UPDATE milestones SET status = 'complete', updated_at = (NOW() - INTERVAL 40 DAY) WHERE id = ?", [landedId],
     );
     const withStale = await api("GET", "/api/admin/command-centre", undefined, founderToken);
-    const stale = withStale.json.staleMilestones.find((m: any) => m.id === "site-planning");
+    const stale = withStale.json.staleMilestones.find((m: any) => m.id === planningId);
     expect(stale).toBeTruthy();
     expect(stale.daysStale).toBeGreaterThanOrEqual(19);
-    expect(withStale.json.staleMilestones.some((m: any) => m.id === "land-acquired")).toBe(false); // complete
-    const touch = await api("PUT", "/api/admin/milestones/site-planning", { updateNote: "Reviewed at the fireside" }, founderToken);
+    expect(withStale.json.staleMilestones.some((m: any) => m.id === landedId)).toBe(false); // complete
+    const touch = await api("PUT", `/api/admin/milestones/${planningId}`, { updateNote: "Reviewed at the fireside" }, founderToken);
     expect(touch.status).toBe(200);
-    expect((await api("GET", "/api/admin/command-centre", undefined, founderToken)).json.staleMilestones.some((m: any) => m.id === "site-planning")).toBe(false);
+    expect((await api("GET", "/api/admin/command-centre", undefined, founderToken)).json.staleMilestones.some((m: any) => m.id === planningId)).toBe(false);
 
     // The ledger's own invariants ride along, green, on the founder's desk.
     expect(cc.json.reconciliation.invariants.ok).toBe(true);

@@ -167,40 +167,6 @@
     "minStage": "member"
   },
   {
-    "id": "q-retreat-center-host",
-    "order": 6,
-    "title": "Retreat Center Host",
-    "subtitle": "Hold the space guests remember.",
-    "description": "Welcome and support guests at the retreat center. Coordinate check-ins, facilitate space, and create a smooth guest experience that embodies the village's values.",
-    "impact": "Every retreat guest is a potential community member-or ambassador.",
-    "story": "Retreat guests meet the village before the village meets them: the welcome, the room, the small kindnesses. Hosts carry that first impression. Do it well and a stranger leaves as an ambassador, already planning their return.",
-    "firstStep": "Shadow one guest check-in from arrival to settled, and write down every question the guest asked.",
-    "steps": [
-      "Take the arrival schedule for your retreat and prepare rooms and welcome notes.",
-      "Meet guests as they land: orientation, house rhythms, and who to find for what.",
-      "Stay reachable through the retreat and solve small problems before they grow.",
-      "Close out: gather feedback, reset the spaces, and hand your notes to the next host."
-    ],
-    "deliverable": "Your host notes: what guests asked, what ran smoothly, what needs fixing before the next retreat.",
-    "tips": [
-      "The first ten minutes decide the whole stay.",
-      "A handwritten welcome note costs two minutes and gets mentioned for years."
-    ],
-    "imageUrl": null,
-    "gratitude": "80-150",
-    "duration": "Per retreat",
-    "difficulty": "Intermediate",
-    "circle": "Tourism & Retreat",
-    "status": "Open",
-    "icon": "Home",
-    "tags": [
-      "hospitality",
-      "guests",
-      "tourism"
-    ],
-    "requiresRole": "practitioners"
-  },
-  {
     "id": "q-village-photographer-storyteller",
     "order": 7,
     "title": "Village Photographer & Storyteller",
@@ -305,7 +271,7 @@
     "order": 10,
     "title": "Healing Arts Practitioner",
     "subtitle": "Offer your practice.",
-    "description": "Offer wellness sessions to community members-yoga, meditation, somatic practices, plant medicine ceremonies, massage, or other healing modalities you're trained in.",
+    "description": "Offer wellness sessions to community members-yoga, meditation, somatic practices, massage, or other healing modalities you're trained in.",
     "impact": "Wellbeing is regenerative. When people are well, the village thrives.",
     "story": "A village that works hard needs places to be worked on. Sessions from trained hands, whether yoga, somatics, massage, or ceremony, keep the people well who keep everything else going. Offering your modality here turns your training into village wellbeing.",
     "firstStep": "Write a three sentence description of the session you want to offer: what it is, who it serves, what to bring.",
@@ -327,6 +293,7 @@
     "circle": "Wellness",
     "status": "Open",
     "roleRequired": "Trained practitioner",
+    "requiresRole": "practitioners",
     "icon": "Leaf",
     "tags": [
       "wellness",
@@ -459,7 +426,7 @@
     "difficulty": "Intermediate",
     "circle": "Governance",
     "status": "Open",
-    "roleRequired": "Resident or Immersant",
+    "roleRequired": "Resident",
     "icon": "ShieldCheck",
     "tags": [
       "safety",
