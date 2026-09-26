@@ -10,6 +10,19 @@
  *   Commonland (Tijn Tjoelker, Ernestien Idenburg, Noa Lodeizen, Zlatina
  *   Tsvetkova), https://tijntjoelker.substack.com/p/governance-canvas
  *
+ * ── LICENCE: THE TEXT IN THIS FILE IS NOT MIT ──────────────────────────────
+ *
+ * The quoted text in this file belongs to the authors named above. The MIT
+ * licence in the repository's LICENSE covers this platform's own code and
+ * words. It does NOT cover this text, which is not ours to license, so nobody
+ * who copies, forks or self-hosts this repository receives MIT rights over it.
+ * It is quoted here with the credit above, shown beside it on every surface.
+ * The authors' own licence terms for it have been asked for and are not yet
+ * recorded. Until they are: a fork that keeps this text keeps the credit
+ * beside it, and a fork that will not keep the credit removes the quotations.
+ * THIRD_PARTY_NOTICES.md at the repository root points here, and
+ * shared/governanceCanvasText.test.ts holds the two together.
+ *
  * Rye ruled that the Governance Canvas pieces, its own wording and the credit
  * among them, are built AND switched on. So this text renders today, on the
  * Canvas view of Journey to Launch and in the printable workbook at
