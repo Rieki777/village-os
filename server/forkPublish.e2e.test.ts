@@ -298,6 +298,250 @@ describe.skipIf(!DB_CONFIGURED)("the fresh fork publishes nobody else's numbers"
   });
 });
 
+/**
+ * WHAT A FRESH VILLAGE IS HANDED AS ITS OWN, before anybody has typed a word.
+ *
+ * The seed files in server/seeds land in a fresh village's database on first
+ * boot, or stand behind its documents until a founder saves one, and the
+ * village then serves them as its own. Measured on a fresh boot on 2026-09-26,
+ * they handed every fork one village's development plan as its public roadmap
+ * (eight milestones in four phases, from buying the land to a retreat centre
+ * and a full village), eight councils marked active, four journey ladders with
+ * that village's stages and rites, an investor summary stating a debt
+ * structure and exit terms, FAQs promising land share agreements, a fifteen
+ * year financial model and bilingual schools twenty minutes away, and training
+ * that told members their village already talks in NVC and decides by
+ * consent. Nothing a stranger reads on a fork that has chosen nothing yet may
+ * say the village chose it (docs/COORDINATION_SUBSTRATE.md section 7, "seeding
+ * aspirational structure").
+ *
+ * This block runs BEFORE the founder writes anything below, so it reads the
+ * state every fork boots in. The standing examples stay: they are labelled
+ * (`isExample`), inert, and retire on the first real item, and none of the
+ * routes here serves one on a fresh boot.
+ *
+ * Three kinds of check, for the reason the header gives: the structural
+ * invariant (the roadmap is EMPTY; every investment term is unstated), and two
+ * regression lists of strings the seed really served, because a structural
+ * check alone goes hollow when the shape changes.
+ */
+const SEEDED_ROUTES = [
+  "/api/milestones",
+  "/api/faqs/investor",
+  "/api/faqs/steward",
+  "/api/faqs/resident",
+  "/api/faqs/prosperity",
+  "/api/visit-config",
+  "/api/investor-summary",
+  "/api/content",
+  "/api/org",
+  "/api/roles",
+  "/api/quests",
+  "/api/training-modules",
+  "/api/settings",
+  "/api/work-with-us-config",
+];
+
+/*
+ * The identity scan also reads the compiled config, which carries the name,
+ * tagline, footer and the stage ladder. The structure scan below does NOT,
+ * and the reason is a finding rather than a convenience: the stage ladder in
+ * shared/gameConfig.ts is still one village's Path of Growth ("Immersant",
+ * "Walking the Co-Creator Right of Passage", "Consented by the Co-Creators
+ * circle"), and it is compiled code that live Amora serves unchanged from the
+ * same default, so rewriting it here would change a running village. It is
+ * reported for a ruling, not fixed by a seed lane.
+ */
+const IDENTITY_ROUTES = [...SEEDED_ROUTES, "/api/game/config"];
+
+/*
+ * NAMED ALLOWANCES in the identity scan: a leak that is known, reported and
+ * owned by a later wave, cut out of ONE route's body before the scan. Each one
+ * names the exact text, so the same place under another key, on another route
+ * or in another spelling still fails.
+ *
+ * - The season timezone default in shared/gameConfig.ts is one village's zone.
+ *   A fresh boot serves it on /api/game/config (and on /api/season, which this
+ *   file does not read). Live Amora serves the same compiled default, and plan
+ *   W2 owns the change. Until the scan read `_` as a space this allowance was
+ *   not needed, because the scan could not see the leak at all: it matched
+ *   "costa rica" and the value is spelled `Costa_Rica`.
+ *
+ * NOT SCANNED, and reported rather than allowed: /grounds/index.html, the
+ * Living Map artifact (docs/prototypes/grounds-v0.html). It is compiled, not a
+ * seed. It answers any stranger with a 200 whatever the map module's state,
+ * and it carries another village's title, minimap caption and place names;
+ * its seedGeography() draws that geography under any village with no land
+ * core yet. The fix belongs to the map lane under the geography ruling, with
+ * live Amora's frame measured first so the village it belongs to keeps it.
+ */
+const IDENTITY_ALLOWANCES: ReadonlyArray<{ route: string; text: string; owner: string }> = [
+  { route: "/api/game/config", text: '"timezone":"America/Costa_Rica"', owner: "plan W2, the season timezone default" },
+];
+
+/**
+ * What the identity scan reads: lower case, with `_`, `-` and `/` read as a
+ * space, so `America/Costa_Rica` reads as "costa rica". The scan used to match
+ * the spaced spelling only, and passed over exactly that value.
+ */
+function identityText(route: string, body: string): string {
+  let text = body;
+  for (const a of IDENTITY_ALLOWANCES) {
+    if (a.route === route) text = text.split(a.text).join("");
+  }
+  return text.toLowerCase().replace(/[_\-/]+/g, " ");
+}
+
+/** Another village's name, place and legal entity. Matched case-insensitively. */
+const FOREIGN_IDENTITY = [
+  "amora", // brand-ok: the regression list this file asserts the ABSENCE of
+  "dominicalito", // brand-ok: same
+  "costa rica",
+  "amorian",
+  "508(c)",
+];
+
+/**
+ * What the seeds actually served, word for word where it was one village's own
+ * programme or plan. Matched case-sensitively, as written.
+ */
+const FOREIGN_STRUCTURE = [
+  // The roadmap's phases and the build it described.
+  "Phase 0",
+  "Phase 1",
+  "Phase 2",
+  "Phase 3",
+  "Phase 4",
+  "Land Secured",
+  "Retreat Center",
+  "Health + Wellness Center",
+  "Full Village",
+  // The visit page's programme and the investor terms.
+  "Village Weaving",
+  "Debt (secured notes)",
+  "structured buyback",
+  // The FAQs.
+  "Land Share Agreement",
+  "15-year financial model",
+  "bilingual schools",
+  "Prosperity Packet",
+  // The journey ladders' rites.
+  "Right of Passage",
+  "Prosperity Circle",
+];
+
+/** Each route with its body and its status, as a stranger receives them. */
+async function seededBodies(routes: readonly string[] = SEEDED_ROUTES): Promise<Array<[string, string, number]>> {
+  const out: Array<[string, string, number]> = [];
+  for (const r of routes) {
+    const res = await http(r);
+    out.push([r, await res.text(), res.status]);
+  }
+  // Every section the content listing names is readable by a stranger, so each
+  // one is part of what the village publishes.
+  const listing = JSON.parse(out.find(([r]) => r === "/api/content")?.[1] ?? "{}");
+  for (const name of listing.sections ?? []) {
+    const r = `/api/content/${encodeURIComponent(name)}`;
+    const res = await http(r);
+    out.push([r, await res.text(), res.status]);
+  }
+  return out;
+}
+
+describe.skipIf(!DB_CONFIGURED)("the fresh fork is handed no other village's story", () => {
+  it("answers every seeded route, so an absence below means something", async () => {
+    for (const [route, body, status] of await seededBodies(IDENTITY_ROUTES)) {
+      // A refusal has a body too (`{"error":"auth_required"}` is 25 bytes), and
+      // every absence below would pass on one, so the status is the control.
+      expect(status, `${route} must answer a stranger`).toBe(200);
+      expect(body.length, `${route} must say something`).toBeGreaterThan(1);
+    }
+    // The positive control for the lists below: the quest library is still
+    // seeded, so a route that serves seed content is being read here.
+    const quests = (await call("GET", "/api/quests", undefined, "")).json;
+    expect(Array.isArray(quests) && quests.length > 0, "the starter quests still arrive").toBe(true);
+  });
+
+  it("names no other village, its place or its legal entity on any seeded route", async () => {
+    for (const [route, body] of await seededBodies(IDENTITY_ROUTES)) {
+      const text = identityText(route, body);
+      for (const word of FOREIGN_IDENTITY) {
+        expect(text.includes(word), `${route} must not name ${word}`).toBe(false);
+      }
+    }
+  });
+
+  it("publishes no roadmap phase the village never planned", async () => {
+    const res = await call("GET", "/api/milestones", undefined, "");
+    expect(res.status).toBe(200);
+    expect(res.json, "a village that has planned nothing publishes no milestone").toEqual([]);
+  });
+
+  it("serves none of another village's programmes, plans or rites", async () => {
+    for (const [route, body] of await seededBodies()) {
+      for (const phrase of FOREIGN_STRUCTURE) {
+        expect(body.includes(phrase), `${route} must not serve "${phrase}"`).toBe(false);
+      }
+    }
+  });
+
+  it("stands up no circle, FAQ or journey the village never wrote", async () => {
+    const orgRes = await call("GET", "/api/org", undefined, "");
+    expect(orgRes.status, "the org chart answers a stranger").toBe(200);
+    expect(Array.isArray(orgRes.json?.circles), "and it lists circles, even when there are none").toBe(true);
+    expect(
+      orgRes.json.circles.filter((c: any) => !c.isExample).map((c: any) => c.name),
+      "a village that has formed no circle publishes none",
+    ).toEqual([]);
+    for (const pathway of ["investor", "steward", "resident", "prosperity"]) {
+      const faqs = (await call("GET", `/api/faqs/${pathway}`, undefined, "")).json;
+      expect(faqs, `the ${pathway} FAQ starts empty`).toEqual([]);
+    }
+    const listing = (await call("GET", "/api/content", undefined, "")).json;
+    for (const journey of ["investor", "steward", "resident", "prosperity"]) {
+      expect(listing.sections, `no ${journey} journey is written for the village`).not.toContain(journey);
+    }
+  });
+
+  it("states no investment term the village never set", async () => {
+    const res = await call("GET", "/api/investor-summary", undefined, "");
+    expect(res.status, "the investor summary answers a stranger").toBe(200);
+    const summary = res.json;
+    expect(summary?.details?.length, "the summary still has its questions").toBeGreaterThan(0);
+    for (const d of summary.details) {
+      expect(d.value, `${d.label} is unstated until the village states it`).toBe("To be confirmed");
+    }
+  });
+
+  // Its own test so it can fail on its own: sharing one with the investor
+  // terms, it was never reached while those failed first.
+  it("states no visit term the village never set", async () => {
+    const res = await call("GET", "/api/visit-config", undefined, "");
+    expect(res.status, "the visit page answers a stranger").toBe(200);
+    const types = res.json?.visit_types;
+    expect(Array.isArray(types) && types.length > 0, "the visit page still has its ways to visit").toBe(true);
+    for (const v of types) {
+      for (const k of ["duration", "format", "cost"]) {
+        expect(v[k], `${v.title}: ${k} is unstated until the village states it`).toBe("To be confirmed");
+      }
+    }
+  });
+
+  it("tells members no practice is already their village's own", async () => {
+    const name = String((await call("GET", "/api/game/config", undefined, "")).json?.project?.name ?? "");
+    expect(name, "the village has a name to look for").toBeTruthy();
+    const training = (await call("GET", "/api/training-modules", undefined, "")).json;
+    expect(Array.isArray(training) && training.length > 0, "the starter training still arrives").toBe(true);
+    for (const t of training) {
+      expect(String(t.description), `${t.title} must describe the practice, not claim it for ${name}`).not.toContain(name);
+    }
+    const roles = (await call("GET", "/api/roles", undefined, "")).json;
+    for (const r of roles ?? []) {
+      expect(String(r.description), `${r.name} must not presume a Hypha space the village never opened`).not.toMatch(/hypha/i);
+    }
+  });
+});
+
 describe.skipIf(!DB_CONFIGURED)("a village with its own people still publishes them", () => {
   it("seats a documented holder and serves their first name to a stranger", async () => {
     const boot = await call(
@@ -463,5 +707,41 @@ describe.skipIf(!DB_CONFIGURED)("the content listing agrees with the section rea
     expect(after.sections, "a written section is listed at once").toContain("covenant");
     const read = await http("/api/content/covenant").then((r) => r.json());
     expect(read.opening).toBe("Dear neighbours,");
+  });
+});
+
+/**
+ * THE OTHER HALF OF "HANDED NOTHING": what the village writes, it publishes.
+ *
+ * Emptying the roadmap and the circles is only correct if a village that plans
+ * its own gets it back, through the same doors, to a stranger, unchanged. The
+ * roadmap card and the circles page render nothing at all for an empty list
+ * (client/src/components/BuildProgress.tsx, /circles), so an empty seed is a
+ * blank section rather than a broken one, and this is the proof it fills.
+ */
+describe.skipIf(!DB_CONFIGURED)("a village that plans its own roadmap and circles still publishes them", () => {
+  it("publishes the milestone a founder writes", async () => {
+    expect(founderToken, "the founder session from the suites above").toBeTruthy();
+    const made = await call("POST", "/api/admin/milestones", {
+      phase: "This season",
+      title: "Dig the first swale",
+      status: "in-progress",
+    });
+    expect(made.status, JSON.stringify(made.json)).toBe(200);
+    const anon = (await call("GET", "/api/milestones", undefined, "")).json;
+    expect(
+      (anon ?? []).map((m: any) => `${m.phase}: ${m.title}`),
+      "a village's own roadmap reaches a stranger",
+    ).toEqual(["This season: Dig the first swale"]);
+  });
+
+  it("publishes the circle a founder forms", async () => {
+    const made = await call("POST", "/api/admin/circles", { name: "Springs Circle", purpose: "The water." });
+    expect(made.status, JSON.stringify(made.json)).toBe(200);
+    const org = (await call("GET", "/api/org", undefined, "")).json;
+    expect(
+      (org?.circles ?? []).filter((c: any) => !c.isExample).map((c: any) => c.name),
+      "a village's own circle reaches a stranger",
+    ).toEqual(["Springs Circle"]);
   });
 });
