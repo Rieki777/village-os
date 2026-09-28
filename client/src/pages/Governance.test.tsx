@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 /**
- * The Governance page's conflict section prints THE VILLAGE'S OWN steps.
+ * "HOW WE WORK TOGETHER" (/governance), renamed on 2026-09-28, and what a
+ * visitor and a member each read there: every block's public line under the
+ * canvas's question, the words kept for members (members only), the Decision
+ * Matrix from its PUBLIC door, and never a reading or the radar. Those cases
+ * are in the describe named for the page, at the end.
+ *
+ * The page's conflict section prints THE VILLAGE'S OWN steps.
  *
  * It used to print three compiled paragraphs every fork published as its own
  * practice, ending "No one is removed from the community without a circle
@@ -9,15 +15,21 @@
  * `GET /api/exit-policy`, and the server says in `platformWording` whether
  * those steps are still the platform's starting words.
  *
+ * Once the village saves a conflict agreement, the section prints the
+ * agreement's public view instead (ConflictAgreementPublic, roles only), and
+ * it falls back to the exit policy's steps while there is none or when the
+ * agreement cannot be read. Those cases are in the describe named for it.
+ *
  * Every case asserts what DID render as well as what did not, because a page
  * that renders nothing at all would pass an absence check on its own.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
 
 let adminViewer = false;
+let viewer: { id: string; name: string; role: string } | null = null;
 
 vi.mock("@/components/Layout", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -27,11 +39,14 @@ vi.mock("@/components/governance/LiveDecisionsBand", () => ({ default: () => nul
 vi.mock("@/hooks/useVillageName", () => ({ useVillageName: () => "Willowbrook" }));
 vi.mock("@/contexts/AuthContext", async () => {
   const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>("@/contexts/AuthContext");
-  return { ...actual, useIsAdmin: () => adminViewer, useAuth: () => ({ user: null }) };
+  return { ...actual, useIsAdmin: () => adminViewer, useAuth: () => ({ user: viewer }) };
 });
 
 import Governance from "./Governance";
 import { readConflictSteps, WRITE_STEPS_HREF } from "@/components/governance/VillageConflictSteps";
+import { CANVAS_BLOCK_IDS } from "@shared/governanceCanvas";
+import { CANVAS_BLOCK_TEXT, CANVAS_CREDIT } from "@shared/governanceCanvasText";
+import { CANVAS_PUBLIC_MATRIX_PATH, CANVAS_PUBLIC_PATH } from "@shared/canvasPublicLines";
 
 /** The platform's starting restorative steps, as `DEFAULT_EXIT_POLICY` ships them. */
 const PLATFORM_STEPS = [
@@ -58,17 +73,39 @@ const COMPILED = [
 const fetchMock = vi.fn();
 
 /**
- * The page asks for the village's conflict agreement first, and prints the
- * exit policy's steps while there is none, which is every case in this file
- * but the last describe. `agreement` is what the public agreement read answers.
+ * What the server answers, by "METHOD path". Anything the page asks for that
+ * is not here throws, so a new request the page makes is a failing test and
+ * never a silent pass.
  */
-function answerWith(body: unknown, ok = true, agreement: unknown = { stored: false, agreement: null }) {
-  fetchMock.mockImplementation(async (url: string) => {
-    if (url === "/api/conflict-agreement/public") return { ok: true, status: 200, json: async () => agreement };
-    if (url !== "/api/exit-policy") throw new Error(`unexpected fetch ${url}`);
-    return { ok, status: ok ? 200 : 500, json: async () => body };
+type Answer = { status?: number; body: unknown };
+let routes: Record<string, (init?: RequestInit) => Answer> = {};
+
+function serve() {
+  fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+    const key = `${init?.method ?? "GET"} ${url}`;
+    const handler = routes[key];
+    if (!handler) throw new Error(`unexpected fetch ${key}`);
+    const { status = 200, body } = handler(init);
+    return { ok: status < 400, status, json: async () => body };
   });
 }
+
+/** Twelve blocks with no public line, as a fresh village answers. */
+const noLines = () => ({ blocks: CANVAS_BLOCK_IDS.map((id) => ({ id, line: null, withheld: false })) });
+
+/**
+ * The conflict section asks for the village's conflict agreement first, and
+ * prints the exit policy's steps while there is none, which is every case in
+ * this file but the describe named for the agreement. `agreement` is what the
+ * public agreement read answers.
+ */
+function answerWith(body: unknown, ok = true, agreement: unknown = { stored: false, agreement: null }) {
+  routes["GET /api/exit-policy"] = () => ({ status: ok ? 200 : 500, body });
+  routes["GET /api/conflict-agreement/public"] = () => ({ body: agreement });
+}
+
+const fetched = (key: string) =>
+  fetchMock.mock.calls.some(([url, init]) => `${(init as RequestInit | undefined)?.method ?? "GET"} ${url}` === key);
 
 function policy(steps: string[], opts: { placeholder?: boolean; platformWording?: unknown } = {}) {
   return {
@@ -91,7 +128,11 @@ const noCompiledCopy = () => {
 
 beforeEach(() => {
   adminViewer = false;
+  viewer = null;
   fetchMock.mockReset();
+  routes = { [`GET ${CANVAS_PUBLIC_PATH}`]: () => ({ body: noLines() }) };
+  answerWith(policy(VILLAGE_STEPS));
+  serve();
   vi.stubGlobal("fetch", fetchMock);
 });
 
@@ -173,6 +214,198 @@ describe("readConflictSteps, the rule under the section", () => {
   });
 });
 
+/** A signed-in member's answer from GET /api/canvas: words for members, and a reading the page must never show. */
+function memberCanvas(mayRecord: boolean) {
+  return {
+    mayRecord,
+    blocks: CANVAS_BLOCK_IDS.map((id) => ({
+      id,
+      latest:
+        id === "power"
+          ? {
+              id: 1,
+              level: 2,
+              word: "Forming",
+              sentence: "A reading the public page must never print.",
+              moment: "baseline",
+              momentLabel: "Baseline",
+              recordedBy: { id: "u-wren", name: "Wren" },
+              recordedAt: "2026-09-20T10:00:00.000Z",
+            }
+          : null,
+      history: [],
+      memberAnswers:
+        id === "power" ? [{ section: "decisions", title: "How we decide", body: "The circle decides by consent." }] : [],
+    })),
+  };
+}
+
+describe("How we work together", () => {
+  it("is the page's heading, on the same route", async () => {
+    renderPage();
+    expect(screen.getByRole("heading", { level: 1, name: "How we work together" })).toBeTruthy();
+    // The old heading is gone.
+    expect(screen.queryByText("Power Belongs to the Circle, Not the Person")).toBeNull();
+    await screen.findByTestId("public-line-purpose");
+  });
+
+  it("shows a visitor every block in canvas order, each under the canvas's own question, with the credit", async () => {
+    routes[`GET ${CANVAS_PUBLIC_PATH}`] = () => ({
+      body: {
+        blocks: CANVAS_BLOCK_IDS.map((id) => ({
+          id,
+          line: id === "conflict" ? "Our care holder answers within two days." : null,
+          withheld: id === "roles",
+        })),
+      },
+    });
+    renderPage();
+
+    await screen.findByText("Our care holder answers within two days.");
+    const list = screen.getByTestId("canvas-public-lines").querySelector("ol")!;
+    expect(Array.from(list.children).map((c) => c.getAttribute("data-testid"))).toEqual(
+      CANVAS_BLOCK_IDS.map((id) => `public-line-${id}`),
+    );
+    for (const id of CANVAS_BLOCK_IDS) {
+      expect(within(screen.getByTestId(`public-line-${id}`)).getByText(CANVAS_BLOCK_TEXT[id].question)).toBeTruthy();
+    }
+    expect(within(screen.getByTestId("public-line-purpose")).getByText("Not written yet.")).toBeTruthy();
+    // A held-back line says so, and never how or why, to a visitor.
+    expect(within(screen.getByTestId("public-line-roles")).getByText(/hidden for now/)).toBeTruthy();
+    expect(screen.queryByTestId("public-line-withheld-roles")).toBeNull();
+    const credit = screen.getByTestId("canvas-public-credit");
+    const link = within(credit).getByRole("link");
+    expect(link.getAttribute("href")).toBe(CANVAS_CREDIT.url);
+    expect(link.textContent).toContain(CANVAS_CREDIT.text);
+  });
+
+  it("never asks the members' door for a visitor, so no reading, no member words and no radar can reach the page", async () => {
+    renderPage();
+    await screen.findByTestId("public-line-power");
+    expect(fetched(`GET ${CANVAS_PUBLIC_PATH}`)).toBe(true);
+    expect(fetched("GET /api/canvas")).toBe(false);
+    expect(document.querySelector('[data-testid="canvas-radar"]')).toBeNull();
+    expect(screen.queryByTestId("member-answers-power")).toBeNull();
+    expect(screen.queryByTestId("canvas-member-note")).toBeNull();
+    expect(screen.queryByRole("button", { name: /public line/ })).toBeNull();
+  });
+
+  it("shows a signed-in member the words kept for members, and still no reading and no radar", async () => {
+    viewer = { id: "u-ash", name: "Ash Brook", role: "member" };
+    routes["GET /api/canvas"] = () => ({ body: memberCanvas(false) });
+    renderPage();
+
+    const answers = await screen.findByTestId("member-answers-power");
+    expect(within(answers).getByText("The circle decides by consent.")).toBeTruthy();
+    expect(within(answers).getByText("How we decide")).toBeTruthy();
+    expect(screen.getByTestId("canvas-member-note")).toBeTruthy();
+    // The same answer carried a reading; this page prints none of it.
+    expect(screen.queryByText("A reading the public page must never print.")).toBeNull();
+    expect(screen.queryByText("Forming")).toBeNull();
+    expect(document.querySelector('[data-testid="canvas-radar"]')).toBeNull();
+    // A member without the pen is offered no way to write.
+    expect(screen.queryByRole("button", { name: /public line/ })).toBeNull();
+    // Blocks with nothing for members open nothing.
+    expect(screen.queryByTestId("member-answers-purpose")).toBeNull();
+  });
+
+  it("shows a signed-in account the members' door refuses the public lines only", async () => {
+    viewer = { id: "u-rook", name: "Rook Talbot", role: "member" };
+    routes["GET /api/canvas"] = () => ({ status: 403, body: { error: "for members" } });
+    renderPage();
+    await screen.findByTestId("public-line-power");
+    await waitFor(() => expect(fetched("GET /api/canvas")).toBe(true));
+    expect(screen.queryByTestId("member-answers-power")).toBeNull();
+    expect(screen.queryByTestId("canvas-member-note")).toBeNull();
+  });
+
+  it("lets the pen write a line, shows the server's refusal in its words, and shows the saved line", async () => {
+    viewer = { id: "u-wren", name: "Wren Halloway", role: "member" };
+    routes["GET /api/canvas"] = () => ({ body: memberCanvas(true) });
+    const sent: unknown[] = [];
+    let refuse = true;
+    routes[`PUT ${CANVAS_PUBLIC_PATH}/conflict`] = (init) => {
+      sent.push(JSON.parse(String(init?.body)));
+      return refuse
+        ? { status: 400, body: { error: '"Ash" is the name of someone in this village, and a public line names nobody.' } }
+        : { body: { block: { id: "conflict", line: "Our care holder answers within two days.", withheld: false } } };
+    };
+    renderPage();
+
+    expect(await screen.findByTestId("canvas-pen-note")).toBeTruthy();
+    const card = screen.getByTestId("public-line-conflict");
+    fireEvent.click(await within(card).findByRole("button", { name: "Write the public line" }));
+    const input = within(card).getByLabelText("The public line for Conflict");
+    expect(within(card).getByText(/Anyone can read this line, signed in or not/)).toBeTruthy();
+
+    fireEvent.change(input, { target: { value: "Ash answers within two days." } });
+    fireEvent.click(within(card).getByRole("button", { name: "Save the line" }));
+    expect((await within(card).findByRole("alert")).textContent).toContain('"Ash" is the name of someone in this village');
+    expect(within(card).queryByTestId("public-line-text-conflict")).toBeNull();
+
+    refuse = false;
+    fireEvent.change(input, { target: { value: "  Our care holder answers within two days. " } });
+    fireEvent.click(within(card).getByRole("button", { name: "Save the line" }));
+    expect((await within(card).findByTestId("public-line-text-conflict")).textContent).toBe(
+      "Our care holder answers within two days.",
+    );
+    expect(sent).toEqual([{ line: "Ash answers within two days." }, { line: "Our care holder answers within two days." }]);
+  });
+
+  it("tells the pen why a line is hidden, and the visitor nothing more", async () => {
+    viewer = { id: "u-wren", name: "Wren Halloway", role: "member" };
+    routes["GET /api/canvas"] = () => ({ body: memberCanvas(true) });
+    routes[`GET ${CANVAS_PUBLIC_PATH}`] = () => ({
+      body: { blocks: CANVAS_BLOCK_IDS.map((id) => ({ id, line: null, withheld: id === "roles" })) },
+    });
+    renderPage();
+    expect((await screen.findByTestId("public-line-withheld-roles")).textContent).toMatch(/holds the name of someone/);
+    expect(within(screen.getByTestId("public-line-roles")).getByRole("button", { name: "Change the public line" })).toBeTruthy();
+  });
+
+  it("reads the Decision Matrix from its PUBLIC door, and only when a reader opens it", async () => {
+    routes[`GET ${CANVAS_PUBLIC_MATRIX_PATH}`] = () => ({
+      body: {
+        groups: [
+          {
+            id: "votes",
+            title: "Votes the village holds",
+            intro: "Each is a ballot.",
+            rows: [
+              {
+                key: "vote:x",
+                decision: "Changing a dial",
+                detail: null,
+                riskTags: [],
+                approval: { who: "roll", text: "The members on the roll" },
+                consultation: [],
+                information: ["Every member"],
+                method: { lines: ["Consent"] },
+              },
+            ],
+          },
+        ],
+        notes: [],
+        vetoOverrideAvailable: false,
+      },
+    });
+    renderPage();
+    expect(screen.getByRole("heading", { level: 2, name: "Who Decides What" })).toBeTruthy();
+    expect(fetched(`GET ${CANVAS_PUBLIC_MATRIX_PATH}`)).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Show who decides what" }));
+    expect(await screen.findByText("Changing a dial")).toBeTruthy();
+    expect(fetched(`GET ${CANVAS_PUBLIC_MATRIX_PATH}`)).toBe(true);
+    expect(fetched("GET /api/canvas/decision-matrix")).toBe(false);
+  });
+
+  it("mounts the conflict agreement's public view in the conflict section, holding the village's steps while there is none", async () => {
+    renderPage();
+    const slot = screen.getByTestId("conflict-agreement-slot");
+    expect(await within(slot).findByText(VILLAGE_STEPS[0])).toBeTruthy();
+    expect(fetched("GET /api/conflict-agreement/public")).toBe(true);
+  });
+});
+
 describe("the Governance page once the village has a conflict agreement", () => {
   const AGREEMENT = {
     steps: [
@@ -198,6 +431,8 @@ describe("the Governance page once the village has a conflict agreement", () => 
     renderPage();
 
     expect(await screen.findByText("Talk it through over tea within the week")).toBeTruthy();
+    // Printed where the page mounts it, in the conflict section.
+    expect(within(screen.getByTestId("conflict-agreement-slot")).getByText(/Hearth Keeper/)).toBeTruthy();
     expect(screen.getByText(/In the room: the two of us/)).toBeTruthy();
     expect(screen.getByText(/Hearth Keeper/)).toBeTruthy();
     expect(screen.getByText(/hears back within 48 hours/)).toBeTruthy();
@@ -210,10 +445,7 @@ describe("the Governance page once the village has a conflict agreement", () => 
   });
 
   it("falls back to the exit policy's steps when the agreement cannot be read", async () => {
-    fetchMock.mockImplementation(async (url: string) => {
-      if (url === "/api/conflict-agreement/public") return { ok: false, status: 500, json: async () => ({}) };
-      return { ok: true, status: 200, json: async () => policy(VILLAGE_STEPS) };
-    });
+    routes["GET /api/conflict-agreement/public"] = () => ({ status: 500, body: {} });
     renderPage();
     expect(await screen.findByText(VILLAGE_STEPS[0])).toBeTruthy();
   });

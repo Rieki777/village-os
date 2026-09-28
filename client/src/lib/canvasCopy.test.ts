@@ -93,6 +93,10 @@ describe("the files this test reads", () => {
         // number either shows. Held to every rule below.
         "ConflictAgreementEditor.tsx",
         "ConflictAgreementPublic.tsx",
+        // The canvas in public on "How we work together" (2026-09-28): each
+        // block's public line, and for a member the words kept for members.
+        // It shows no reading and no radar, and nothing counted across blocks.
+        "CanvasPublicLines.tsx",
       ].sort(),
     );
     for (const f of SURFACE) expect(f.body.length, f.name).toBeGreaterThan(200);
@@ -185,6 +189,16 @@ describe("the credit", () => {
     const markdown = WORKBOOK_FILES.find((f) => f.name === "canvasWorkbook.ts")!;
     expect(markdown.body).toContain("CANVAS_CREDIT.text");
     expect(markdown.body).toContain("CANVAS_CREDIT.url");
+  });
+});
+
+describe("the canvas in public, which a visitor reads", () => {
+  it("renders no reading, no level and no radar, whoever is looking, and carries the credit", () => {
+    const pub = CANVAS_FILES.find((f) => f.name === "CanvasPublicLines.tsx")!;
+    // GET /api/canvas hands a member the readings too; this file reads only the words kept for members.
+    expect(pub.body).not.toMatch(/CanvasRadar|\.latest\b|\.history\b|\.level\b|LEVEL_WORDS|recordedLine|\.sentence\b/);
+    expect(pub.body).toContain("CANVAS_CREDIT.text");
+    expect(pub.body).toContain("CANVAS_CREDIT.url");
   });
 });
 

@@ -104,6 +104,7 @@ import { register as registerCanvasSeasonRoutes } from "./routes/canvasSeason";
 import { register as registerDecisionMatrixRoutes } from "./routes/decisionMatrix";
 import { register as registerCanvasFrameRoutes } from "./routes/canvasFrames";
 import { register as registerConflictAgreementRoutes } from "./routes/conflictAgreement";
+import { CANVAS_PUBLIC_SECTION, CANVAS_SECTION_DOOR, register as registerCanvasPublicRoutes } from "./routes/canvasPublic";
 import { register as registerCapabilityExplainerRoutes } from "./routes/capabilityExplainer";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
 import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
@@ -8079,14 +8080,16 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
    * pages asking blind for `legal`, `money` and `covenant` loaded red on every
    * visit. The pages ask this first now (client/src/hooks/useVillageContent.ts)
    * and request only what is here. Names only: a stranger learns nothing the
-   * route below would not answer for any name they guessed.
+   * route below would not answer for any name they guessed. `canvas` is left
+   * off: the route below refuses it, and /api/canvas/public serves its lines.
    */
   app.get("/api/content", (_req, res) => {
     const content = contentRepo.get() ?? {};
-    res.json({ sections: Object.keys(content).filter((key) => content[key] !== undefined) });
+    res.json({ sections: Object.keys(content).filter((key) => content[key] !== undefined && key !== CANVAS_PUBLIC_SECTION) });
   });
 
   app.get("/api/content/:section", async (req, res) => {
+    if (req.params.section === CANVAS_PUBLIC_SECTION) return res.status(404).json({ error: CANVAS_SECTION_DOOR });
     const content = contentRepo.get();
     const section = content[req.params.section];
     if (section === undefined) {
@@ -8120,6 +8123,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // 0098: `story.tell`. What a village says about itself in public is the
     // clearest case in the set of a power that belongs to the village.
     if (!(await guardCapability(req, res, "story.tell"))) return;
+    if (req.params.section === CANVAS_PUBLIC_SECTION) return res.status(400).json({ error: CANVAS_SECTION_DOOR });
     const content = contentRepo.get();
     content[req.params.section] = req.body;
     await contentRepo.put(content);
@@ -24937,6 +24941,7 @@ ${inner}
   registerDecisionMatrixRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying });
   registerCanvasFrameRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName, loadRoles, roleHolders: loadRoleHolders, exitPolicy: { isAdmin, loadRoles, circlesRepo, exitPolicyRepo, readExitPolicy, agreementStored: () => conflictAgreementRepo.exists() }, dialWrite: dialWriteDeps, mechanicsPropose: mechanicsProposeDeps, sharedPasswordPosture: sharedPasswordPostureNow, addActivity, tools: () => toolsRepo.all() as any[], submissions: () => submissionsRepo.all() as any[], legalEntityLabel: () => String((contentRepo.get() as any)?.legal?.membership?.entityLabel ?? ""), seasonNow: () => { const c: any = seasonState().current; return c ? { name: String(c.name ?? ""), endsOn: c.endsOn ?? null } : null; } });
   registerConflictAgreementRoutes(app, { authedUser, isAdmin, adminActor, hasMembership, getPool, capabilityCtx, firstName, members, loadRoles, notify, overLimit, weightModeNow, agreement: conflictAgreementRepo, readExitPolicy, roleHolders: loadRoleHolders, buildElectorate, addActivity });
+  registerCanvasPublicRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying, guardCapability, members, contentRepo });
 
   /**
    * The subset of variables the CLIENT is allowed to know, so the UI can render

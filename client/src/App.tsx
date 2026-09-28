@@ -87,6 +87,8 @@ const PAGE_TITLES: Record<string, string> = {
   // The printable Governance Canvas workbook, public: a project prints it
   // before its own instance exists.
   "/canvas/workbook": "Canvas workbook",
+  // The village's canvas in public, one line per block; the route kept its old name.
+  "/governance": "How we work together",
   "/project-history": "Command Centre",
   "/feedback": "Feedback",
   "/network": "Village network",

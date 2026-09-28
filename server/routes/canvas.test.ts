@@ -26,6 +26,7 @@ import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/
 import { capabilityDecision, type Capability, type CapabilityCtx } from "../../shared/capabilities";
 import { CANVAS_BLOCK_IDS, CANVAS_SENTENCE_MAX } from "../../shared/governanceCanvas";
 import { allCanvasReadings } from "../repos/canvasReadings";
+import { briefWrite } from "../lib/villageBrain";
 import { CANVAS_MEMBERS_ONLY, CANVAS_PEN_REFUSAL, register } from "./canvas";
 
 const configured = testDbConfigured();
@@ -38,11 +39,14 @@ if (!configured) console.warn("[canvas.routes] TEST_DATABASE_URL not set - DB-ba
  * stranger is signed in and never admitted: an invited account before
  * admission, or anybody registering on a fork with invite-only off.
  */
-const PEOPLE: Record<string, { id: string; name: string; role: string; roleCapabilities: string[]; membershipGranted: boolean }> = {
+const PEOPLE: Record<string, { id: string; name: string; role: string; roleCapabilities: string[]; membershipGranted: boolean; stageGranted?: string }> = {
   pen: { id: "canvas-pen", name: "Wren Halloway", role: "member", roleCapabilities: ["story.tell"], membershipGranted: true },
   member: { id: "canvas-member", name: "Ash Brook", role: "member", roleCapabilities: [], membershipGranted: true },
   admin: { id: "canvas-admin", name: "Moss Fielding", role: "admin", roleCapabilities: [], membershipGranted: false },
   stranger: { id: "canvas-stranger", name: "Rook Talbot", role: "member", roleCapabilities: [], membershipGranted: false },
+  // Placed by an admin (PUT /api/admin/players/:id/stage), which writes only `stageGranted`: at Member, admitted; below it, not.
+  granted: { id: "canvas-granted", name: "Juniper Vale", role: "member", roleCapabilities: [], membershipGranted: false, stageGranted: "member" },
+  belowDoor: { id: "canvas-below", name: "Linden Rowe", role: "member", roleCapabilities: [], membershipGranted: false, stageGranted: "immersant" },
 };
 
 let db: TestDb;
@@ -170,6 +174,15 @@ describe.skipIf(!configured)("the canvas routes", () => {
       }
     });
 
+    it("lets a member an admin placed at Member by hand read, and refuses one granted a rung below it", async () => {
+      const granted = await call("GET", "/api/canvas", "granted");
+      expect(granted.status, "a stage grant at Member is an admission").toBe(200);
+      expect(granted.body.blocks.map((b: any) => b.id)).toEqual([...CANVAS_BLOCK_IDS]);
+      const below = await call("GET", "/api/canvas", "belowDoor");
+      expect(below.status).toBe(403);
+      expect(below.body).toEqual({ error: CANVAS_MEMBERS_ONLY });
+    });
+
     it("tells the pen and a pre-handover admin they may record, and a plain member they may not", async () => {
       expect((await call("GET", "/api/canvas", "pen")).body.mayRecord).toBe(true);
       expect((await call("GET", "/api/canvas", "admin")).body.mayRecord).toBe(true);
@@ -181,7 +194,8 @@ describe.skipIf(!configured)("the canvas routes", () => {
       await call("POST", "/api/canvas/readings", "pen", reading({ blockId: "team", level: 2 }));
       const r = await call("GET", "/api/canvas", "member");
       expect(Object.keys(r.body).sort()).toEqual(["blocks", "mayRecord"]);
-      for (const b of r.body.blocks) expect(Object.keys(b).sort()).toEqual(["history", "id", "latest"]);
+      // `memberAnswers` is words (2026-09-28), and the case below holds it to that.
+      for (const b of r.body.blocks) expect(Object.keys(b).sort()).toEqual(["history", "id", "latest", "memberAnswers"]);
     });
   });
 
@@ -223,6 +237,54 @@ describe.skipIf(!configured)("the canvas routes", () => {
       expect((await call("POST", "/api/canvas/readings", "admin", reading())).status).toBe(409);
       expect((await call("GET", "/api/canvas", "admin")).body.mayRecord).toBe(false);
       expect((await call("POST", "/api/canvas/readings", "pen", reading())).status).toBe(201);
+    });
+  });
+
+  /*
+   * WHAT MEMBERS READ BESIDE THE READINGS (2026-09-28): the village's own
+   * words from the brief sections a block draws on, which "How we work
+   * together" shows a signed-in member under each public line.
+   */
+  describe("the words each block keeps for members", () => {
+    beforeEach(async () => {
+      await pool.query("DELETE FROM village_brief_revisions"); // module-review-ok: each case starts from an empty brief on the scratch schema this suite provisioned
+      await pool.query("DELETE FROM village_brief"); // module-review-ok: each case starts from an empty brief on the scratch schema this suite provisioned
+    });
+
+    const answersOf = (body: any, id: string) => body.blocks.find((b: any) => b.id === id).memberAnswers;
+
+    it("carries confirmed member-audience words under the blocks that draw on them, and nothing else", async () => {
+      // Member audience by default, confirmed: Purpose draws on aims.
+      await briefWrite(pool, { section: "aims", body: "Restore the watershed.", confirmedBy: "canvas-admin" });
+      // Admin audience by default: stays with the admins.
+      await briefWrite(pool, { section: "economy", body: "Dues are forty a month.", confirmedBy: "canvas-admin" });
+      // Opened to members and confirmed: Power draws on decisions.
+      await briefWrite(pool, { section: "decisions", body: "The circle decides by consent.", audience: "member", confirmedBy: "canvas-admin" });
+      // Opened to members, but legal and constraints stay with the admins whatever the row says.
+      await briefWrite(pool, { section: "legal", body: "The title is held by one founder.", audience: "member", confirmedBy: "canvas-admin" });
+      await briefWrite(pool, { section: "constraints", body: "The loan runs out in March.", audience: "member", confirmedBy: "canvas-admin" });
+      // A guess nobody confirmed is not the village's words.
+      await briefWrite(pool, { section: "vision", body: "A valley where the river runs clear." });
+
+      const r = await call("GET", "/api/canvas", "member");
+      expect(r.status).toBe(200);
+      expect(answersOf(r.body, "purpose")).toEqual([
+        { section: "aims", title: expect.any(String), body: "Restore the watershed." },
+      ]);
+      expect(answersOf(r.body, "power")).toEqual([
+        { section: "decisions", title: expect.any(String), body: "The circle decides by consent." },
+      ]);
+      expect(answersOf(r.body, "resourcing")).toEqual([]);
+      expect(answersOf(r.body, "legal")).toEqual([]);
+      const all = JSON.stringify(r.body);
+      for (const secret of ["forty a month", "title is held", "runs out in March", "river runs clear"]) expect(all).not.toContain(secret);
+    });
+
+    it("carries none of it to an account the village has not admitted", async () => {
+      await briefWrite(pool, { section: "aims", body: "Restore the watershed.", confirmedBy: "canvas-admin" });
+      const r = await call("GET", "/api/canvas", "stranger");
+      expect(r.status).toBe(403);
+      expect(JSON.stringify(r.body)).not.toContain("watershed");
     });
   });
 
