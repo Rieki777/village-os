@@ -377,7 +377,11 @@ describe.skipIf(!DB_CONFIGURED)("your agent over HTTP", () => {
     expect(stubBodies[0].headers["x-api-key"]).toBe(MEMBER_LLM_KEY);
     // The framing, verbatim, in the member-mode prompt.
     expect(String(stubBodies[0].body.system)).toContain("Names, events and labels about a person come word for word from a tool result or from the member's own note. If it is not there, say: I don't see that anywhere.");
-    const [[usage]] = await pool.query<any[]>("SELECT key_source, user_id, mode, path FROM assistant_usage WHERE user_id = ? AND mode = 'member' ORDER BY created_at DESC LIMIT 1", [ana.id]);
+    // Selected by path and never by recency: the answer from the record just
+    // above wrote Ana a zero-token row too, and `created_at` has second
+    // precision, so two rows inside one second let ORDER BY pick either (CI
+    // did, on 731a180).
+    const [[usage]] = await pool.query<any[]>("SELECT key_source, user_id, mode, path FROM assistant_usage WHERE user_id = ? AND mode = 'member' AND path <> 'deterministic' ORDER BY created_at DESC LIMIT 1", [ana.id]);
     expect(usage.key_source).toBe("member");
     expect(usage.user_id).toBe(ana.id);
     const after = await pool.query<any[]>("SELECT COUNT(*) n FROM rate_hits WHERE bucket LIKE 'assistant-day:member%'");
