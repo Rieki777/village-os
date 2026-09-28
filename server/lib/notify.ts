@@ -283,6 +283,15 @@ export function emailCadenceFor(type: string, p: NotifyPrefs): "immediate" | "da
       return "daily";
     case "restorative_intake":
       return "immediate"; // a human reached out about a rupture — same day matters
+    // One of the canvas's four key moments (shared/canvasRevisit.ts). The
+    // DIGEST ONLY, fixed, whatever the member's other preferences say: the plan
+    // (section 4.2) rules it out of any immediate channel, because a notice
+    // that lands the minute an exit opens or an objection is ruled tells its
+    // reader when something happened, which is a fact about a person. The
+    // digest lists the title alone, and the title names a block and nothing
+    // else. The global `emailsOff` above still turns it off.
+    case "canvas_revisit":
+      return "daily";
     // Moderation: a report waiting for a steward, and the reply to the member
     // who filed it. Same reasoning as restorative_intake — somebody flagged
     // harassment and the clock on the first look starts now. It rides the

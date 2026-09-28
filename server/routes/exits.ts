@@ -102,6 +102,7 @@ import { readGameStart } from "../lib/gameStart";
 import { mayReadCanvas } from "./canvas";
 import type { DbDocument } from "../repos/store-db";
 import { cancelOpenExit, markExitResolved, markExitSettling } from "../repos/exits";
+import { raiseCanvasRevisit } from "../lib/canvasRevisit";
 
 export type ExitDeps = Pick<
   AppDeps,
@@ -353,6 +354,8 @@ export function register(app: Express, deps: ExitDeps): void {
       kind: "audit", text: "exit:opened:voluntary", actorUserId: user.id,
       entityType: "user", entityRef: user.id, audience: "admin",
     });
+    // An exit opened is a key moment for the care holder alone (plan 4.2): no name, no count. Fire and forget.
+    raiseCanvasRevisit("exit-opened");
     res.json({ success: true, exit: r.exit });
   });
 
@@ -383,6 +386,7 @@ export function register(app: Express, deps: ExitDeps): void {
       body: "The published exit policy describes each step. The stewards will walk it with you.",
       link: "/exit-policy", dedupeKey: `exit:${r.exit.id}:member`,
     });
+    raiseCanvasRevisit("exit-opened");
     res.json({ success: true, exit: r.exit });
   });
 

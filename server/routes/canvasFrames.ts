@@ -153,6 +153,7 @@ import {
 import { withNamedLock } from "../repos/namedLock";
 import { CANVAS_MEMBERS_ONLY, mayReadCanvas } from "./canvas";
 import { saveExitPolicy, type ExitPolicySaveDeps } from "./exits";
+import { raiseCanvasRevisitForLifecycle } from "../lib/canvasRevisit";
 
 export interface CanvasFrameDeps
   extends Pick<
@@ -830,6 +831,8 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
           const { status, ...body } = result as { ok: false; status: number } & Record<string, unknown>;
           return { ok: false, status, body };
         }
+        // Governance reaching members is a funding moment (plan 4.2). Fire and forget.
+        raiseCanvasRevisitForLifecycle(deps.getPool(), String(door.moduleId));
         return {
           ok: true,
           outcome: { wrote: "module-lifecycle", module: door.moduleId, lifecycle: result.lifecycle },

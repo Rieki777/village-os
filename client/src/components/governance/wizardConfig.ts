@@ -392,7 +392,9 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
     title: "Write an agreement",
     description: "Put a shared understanding into words the village can adopt, review and amend.",
     consequence:
-      "Publishing enters this into sensing. Adopted by consent, it becomes an active agreement with its own review date.",
+      "Publishing puts this to the village's vote. If it carries, it becomes an active agreement, exactly as written, with its own review date.",
+    // The route opens the vote itself (server/routes/governanceAgreements.ts), so there is no sensing step to describe.
+    opensVote: true,
     publish: {
       path: "/api/governance/agreements",
       body: (a) => ({

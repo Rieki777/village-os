@@ -86,6 +86,8 @@ import { openingRefusal } from "./governanceWindows";
 import { normaliseAlignment } from "../../shared/governingPurpose";
 import { purposeAlignmentRefusal } from "./governingPurpose";
 import type { WeightMode } from "./governanceWeights";
+// Wave 4: a ruled objection raises the canvas's conflict moment (plan 4.2).
+import { raiseCanvasRevisit } from "./canvasRevisit";
 // The objections table's one enumerable home. Every statement against
 // `ballot_objections` lives there; the POLICY around them (which rulings
 // exist, that a ruling carries a note, who may file one) stays here beside the
@@ -757,6 +759,9 @@ export async function ruleObjection(
   if (reached === 0) {
     return { ok: false, error: "That objection is already ruled, or does not exist" };
   }
+  // A ruled objection is the conflict pathway at work: a key moment for the
+  // care holder alone, with nothing about the objection in it (plan 4.2).
+  raiseCanvasRevisit("objection-ruled");
   return { ok: true };
 }
 

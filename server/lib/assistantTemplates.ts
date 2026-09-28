@@ -27,6 +27,7 @@
  */
 
 import { villageTimezone } from "./villageReaders";
+import { canvasMoonLine } from "../../shared/canvasRevisit";
 
 /** The organize route's response shape, so the client renders it unchanged. */
 export interface Rendered {
@@ -238,6 +239,17 @@ export function renderWeeklyBrief(input: unknown): RenderedBrief | null {
         return day ? `${title}, ${day}.` : "";
       }),
     );
+  } catch { /* dropped */ }
+
+  // The canvas moon (plan 4.4): one line in the week a new moon falls in,
+  // block titles only, in the same words the moon digest uses.
+  try {
+    const m = d.canvasMoon;
+    if (m && typeof m === "object" && typeof m.date === "string" && Array.isArray(m.blocks)) {
+      const line = canvasMoonLine(m.blocks.filter((b: unknown) => typeof b === "string"));
+      const day = briefDay(m.date);
+      if (line && day) push("The canvas moon", [`New moon, ${day}. ${line}`]);
+    }
   } catch { /* dropped */ }
 
   try {

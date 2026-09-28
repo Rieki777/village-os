@@ -60,6 +60,49 @@ export interface EventRow {
   at: string;
 }
 
+/**
+ * SOMETHING THAT WANTS TO KNOW AN EVENT WAS RECORDED.
+ *
+ * The canvas's key moments (server/lib/canvasRevisit.ts) are the first: a
+ * founder claiming the instance, a peer village added, a circle accepted from
+ * a draft and the Birthing opened each already record an audit event here, so
+ * the moment hangs off the event rather than adding a line to the route that
+ * recorded it. That is what keeps `server/index.ts`, where those routes live,
+ * from growing.
+ *
+ * THE RULES, and each one protects the caller of `recordEvent`:
+ *
+ *  - An observer is told only after the row is written. A failed insert is
+ *    not an event, so nothing downstream of it fires.
+ *  - An observer is SYNCHRONOUS and must return at once. One that has work to
+ *    do starts it and returns, and the work may never be awaited by the
+ *    request that recorded the event.
+ *  - An observer that throws is logged and skipped. The event stands, the
+ *    other observers still run, and the mutation that recorded it is never
+ *    told: an event is a trace, and so is anything hanging off it.
+ */
+export type EventObserver = (e: Readonly<EventInput>) => void;
+
+const observers = new Set<EventObserver>();
+
+/** Start telling `fn` about every event recorded from now on. Returns the way to stop. */
+export function observeEvents(fn: EventObserver): () => void {
+  observers.add(fn);
+  return () => {
+    observers.delete(fn);
+  };
+}
+
+function tellObservers(e: EventInput): void {
+  for (const fn of Array.from(observers)) {
+    try {
+      fn(e);
+    } catch (err) {
+      console.error("[events] an observer threw (the event stands)", err);
+    }
+  }
+}
+
 export async function recordEvent(pool: Pool, e: EventInput): Promise<void> {
   try {
     await pool.query(
@@ -79,7 +122,9 @@ export async function recordEvent(pool: Pool, e: EventInput): Promise<void> {
     );
   } catch (err) {
     console.error("[events] recordEvent failed (mutation unaffected)", err);
+    return;
   }
+  tellObservers(e);
 }
 
 function rowToEvent(r: RowDataPacket): EventRow {

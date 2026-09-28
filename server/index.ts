@@ -52,6 +52,8 @@ import { GPS_CHANGE } from "../shared/governingPurpose";
 import { gpsChangeCloser } from "./lib/gpsChangeCloser";
 import { CONFLICT_AGREEMENT, CONFLICT_AGREEMENT_KEY } from "../shared/conflictAgreement";
 import { conflictAgreementCloser } from "./lib/conflictAgreementCloser";
+import { raiseCanvasRevisitForLifecycle, raiseCanvasRevisitForSubmission } from "./lib/canvasRevisit";
+import { agreementCloser } from "./lib/agreementCloser";
 import { withConflictAgreement } from "./lib/conflictAgreement";
 import {
   NOT_YET_WIRED,
@@ -104,6 +106,8 @@ import { register as registerCanvasSeasonRoutes } from "./routes/canvasSeason";
 import { register as registerDecisionMatrixRoutes } from "./routes/decisionMatrix";
 import { register as registerCanvasFrameRoutes } from "./routes/canvasFrames";
 import { register as registerConflictAgreementRoutes } from "./routes/conflictAgreement";
+import { register as registerCanvasRevisitRoutes } from "./routes/canvasRevisit";
+import { register as registerGovernanceAgreementRoutes } from "./routes/governanceAgreements";
 import { CANVAS_PUBLIC_SECTION, CANVAS_SECTION_DOOR, register as registerCanvasPublicRoutes } from "./routes/canvasPublic";
 import { register as registerCapabilityExplainerRoutes } from "./routes/capabilityExplainer";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
@@ -7940,6 +7944,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     const admitted: boolean | null = signingAccepted ? !!submissions[idx].userId : null;
     if (admitted) await members.update(String(submissions[idx].userId), (m: any) => { m.membershipGranted = true; });
     await submissionsRepo.replaceAll(submissions);
+    if (status === "accepted" && !wasAccepted) raiseCanvasRevisitForSubmission(String(submissions[idx].type ?? ""), admitted === true);
 
     /*
      * SWEEP (the incomplete loop). This route moves an application, an offer
@@ -9034,6 +9039,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       const { status, ...body } = result as any;
       return res.status(status).json(body);
     }
+    raiseCanvasRevisitForLifecycle(getPool(), req.params.id); // governance reaching members, or the crowdpool switched on, is a canvas moment
     // Turning a module on for the first time reveals its standing examples, so
     // the founder meets a worked module rather than "No items yet." A no-op if
     // the module has ever been seeded, has ever been retired, or already holds
@@ -22050,6 +22056,7 @@ ${inner}
     // A carried change to the conflict agreement: server/lib/conflictAgreementCloser.ts.
     [CONFLICT_AGREEMENT]: twoPhase(conflictAgreementCloser({ getPool, agreement: conflictAgreementRepo, loadRoles, notify, notifyAdmins, addActivity, ballotLink, recordAudit: (text: string, actorId: string) => void recordEvent(getPool(), { kind: "audit", text, actorUserId: actorId, entityType: "app_config", entityRef: "conflict-agreement", audience: "admin" }) })),
     [GPS_CHANGE]: twoPhase(gpsChangeCloser({ getPool, notify, notifyAdmins, addActivity, ballotLink, recordAudit: (text: string, actorId: string) => void recordEvent(getPool(), { kind: "audit", text, actorUserId: actorId, entityType: "app_config", entityRef: "gps", audience: "admin" }) })),
+    agreement: agreementCloser({ getPool, notify, notifyAdmins, addActivity, ballotLink }), // a village agreement: server/lib/agreementCloser.ts
 
     /*
      * ── THE VILLAGE DECLARES A ROLE (this lane, R90) ────────────────────────
@@ -24936,12 +24943,14 @@ ${inner}
   registerGovernanceModeRoutes(app, { authedUser, getPool, capabilityCtx, firstName, weightModeNow, buildElectorate });
   registerStewardSlateRoutes(app, { authedUser, isAdmin, getPool, members, firstName });
   registerGoverningPurposeRoutes(app, { authedUser, isAdmin, adminActor, getPool, capabilityCtx, firstName, weightModeNow, buildElectorate, addActivity });
+  registerGovernanceAgreementRoutes(app, { authedUser, isAdmin, hasMembership, getPool, capabilityCtx, firstName, weightModeNow, circlesRepo, notify, buildElectorate, addActivity, villageTimezone });
   registerCanvasRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
   registerCanvasSeasonRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
   registerDecisionMatrixRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying });
   registerCanvasFrameRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName, loadRoles, notify, roleHolders: loadRoleHolders, exitPolicy: { isAdmin, getPool, loadRoles, circlesRepo, exitPolicyRepo, readExitPolicy, agreementStored: () => conflictAgreementRepo.exists() }, dialWrite: dialWriteDeps, mechanicsPropose: mechanicsProposeDeps, sharedPasswordPosture: sharedPasswordPostureNow, addActivity, tools: () => toolsRepo.all() as any[], submissions: () => submissionsRepo.all() as any[], legalEntityLabel: () => String((contentRepo.get() as any)?.legal?.membership?.entityLabel ?? ""), seasonNow: () => { const c: any = seasonState().current; return c ? { name: String(c.name ?? ""), endsOn: c.endsOn ?? null } : null; } });
   registerConflictAgreementRoutes(app, { authedUser, isAdmin, adminActor, hasMembership, getPool, capabilityCtx, firstName, members, loadRoles, notify, overLimit, weightModeNow, agreement: conflictAgreementRepo, readExitPolicy, roleHolders: loadRoleHolders, buildElectorate, addActivity });
   registerCanvasPublicRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying, guardCapability, members, contentRepo });
+  registerCanvasRevisitRoutes(app, { authedUser, isAdmin, hasMembership, getPool, guardCapability, capabilityCtx, members, isPresent: notifyDeps.isPresent, notify, liveHoldersOf, readExitPolicy, roleHolders: loadRoleHolders, villageTimezone });
 
   /**
    * The subset of variables the CLIENT is allowed to know, so the UI can render
