@@ -497,6 +497,7 @@ function served(id: string, req: Request, res: Response, next: NextFunction): vo
  */
 const READINESS_HINTS: Record<string, string> = {
   map: "Draw one circle first",
+  saberra: "Give it this village's own address at the service first",
   tools: "Add one tool card first",
   badges: "Create a badge and award it once first",
   health: "Record one measurement of the land first",
@@ -538,6 +539,7 @@ const READINESS_TARGETS: Record<string, SetupTarget> = {
   commerce: { kind: "tab", tab: "products", label: "Payments & Donations" },
   resources: { kind: "tab", tab: "resources-admin", label: "How Resources Flow" },
   crowdpool: { kind: "config", module: "crowdpool", label: "Crowdpool" },
+  saberra: { kind: "config", module: "saberra", label: "Organisational Memory" },
   redemption: settingTarget("redemption.process_text"),
   events: settingTarget("calendar.hemisphere"),
   // Hypha's address moves as its two halves are answered, so its reader picks
@@ -582,6 +584,23 @@ export function attachModuleReadiness(getPool: () => Pool): void {
     if (!def.setup || def.setup === "none") continue;
     const hint = READINESS_HINTS[def.id] ?? "Add the first real item before going live";
     const target = READINESS_TARGETS[def.id];
+    if (def.id === "saberra") {
+      /*
+       * READY MEANS THIS VILLAGE HAS ITS OWN ADDRESS AT THE SERVICE.
+       *
+       * No pool: the answer is in the module settings cache, so this costs
+       * nothing on the admin payload. The credential is deliberately NOT part
+       * of the question, because it has its own launch requirement
+       * (`listing-credential-saberra`) and asking twice would put the same
+       * fact on a founder's screen in two places with two different wordings.
+       */
+      def.readiness = async () => {
+        const cfg = (moduleConfig(def.id) as Record<string, unknown> | null) ?? {};
+        const url = typeof cfg.apiUrl === "string" ? cfg.apiUrl.trim() : "";
+        return { ready: url !== "", hint, target };
+      };
+      continue;
+    }
     if (def.id === "events") {
       /*
        * THE FIFTH READER, and the only one that asks whether a question was
