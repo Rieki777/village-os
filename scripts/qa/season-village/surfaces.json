@@ -7,7 +7,8 @@
     "A surface with required: false that does not exist yet is reported as missing and does not fail the walk. A required one that is missing fails it.",
     "expect.<role>.path: the pathname the page must end on after it settles (for a redirect). views: a button to press, by its accessible name, from the resting page; roles limits who is shown that button, and a view's own expect.<role> adds text and forbidden text for that role.",
     "A request to /api/* answering 4xx fails the page unless allowRequests lists it (top level, surface, view or expect.<role>): regular expressions over \"<status> <METHOD> <path>\".",
-    "Wave 2 (2026-09-28): $conflictReplyTime and $outsideContactName come from the seed's conflict door; decision-matrix opens the canvas view from its address (?view=canvas) and presses the matrix button once."
+    "Wave 2 (2026-09-28): $conflictReplyTime and $outsideContactName come from the seed's conflict door; decision-matrix opens the canvas view from its address (?view=canvas) and presses the matrix button once.",
+    "Wave 3a public-lines (2026-09-28): /governance is \"How we work together\"; a visitor reads the public lines and the public matrix only, a member also the note that blocks open members' words, the founder the pen's controls; the seed's canvas reading ($canvasReading) must never render there."
   ],
   "version": 1,
   "viewports": {
@@ -32,7 +33,25 @@
       "id": "governance",
       "path": "/governance",
       "required": true,
-      "text": ["Power Belongs to the Circle, Not the Person", "Conflict Resolution", "$restorativeStep"]
+      "text": [
+        "How we work together", "Our Canvas, Block by Block", "What is our shared mission and vision?",
+        "Governance Canvas by the Bioregional Weaving Labs Collective and Commonland",
+        "Who Decides What", "Conflict Resolution", "$restorativeStep"
+      ],
+      "forbidden": ["Power Belongs to the Circle, Not the Person", "$canvasReading", "%", "of 12"],
+      "expect": {
+        "visitor": { "forbidden": ["You are signed in", "Write the public line", "What the village says to its members"] },
+        "member": { "text": ["You are signed in, so a block can also open"], "forbidden": ["Write the public line", "You hold the village's story"] },
+        "founder": { "text": ["Write the public line", "You hold the village's story"] }
+      },
+      "views": [
+        {
+          "id": "public-matrix",
+          "click": "Show who decides what",
+          "text": ["For each kind of decision the canvas asks who approves it", "Subject / Decision"],
+          "forbidden": ["could not be read", "Sign in to read the matrix"]
+        }
+      ]
     },
     {
       "id": "roles",

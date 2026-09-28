@@ -14,6 +14,7 @@ import {
   type CanvasLevel,
   type CanvasMoment,
 } from "@shared/governanceCanvas";
+import type { CanvasMemberAnswer } from "@shared/canvasPublicLines";
 
 export interface CanvasReadingView {
   id: number;
@@ -30,6 +31,11 @@ export interface CanvasBlockView {
   id: CanvasBlockId;
   latest: CanvasReadingView | null;
   history: CanvasReadingView[];
+  /**
+   * The village's words on this block that every member reads (GET /api/canvas,
+   * `memberAnswersFrom`). Optional because the Journey view does not show them.
+   */
+  memberAnswers?: CanvasMemberAnswer[];
 }
 
 export interface CanvasPayload {

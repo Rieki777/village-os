@@ -120,7 +120,13 @@ function MatrixRow({ row }: { row: DecisionMatrixRow }) {
 /** The groups shown open when the matrix first opens: the votes, which most readers come for. */
 const FIRST_OPEN: Readonly<Record<string, boolean>> = { votes: true };
 
-export default function DecisionMatrix({ onOpenChange }: { onOpenChange?: (open: boolean) => void } = {}) {
+/** The members' door. "How we work together" passes the public one, which serves the generated rows only. */
+const MEMBERS_MATRIX_SRC = "/api/canvas/decision-matrix";
+
+export default function DecisionMatrix({
+  onOpenChange,
+  src = MEMBERS_MATRIX_SRC,
+}: { onOpenChange?: (open: boolean) => void; src?: string } = {}) {
   const [open, setOpen] = useState(false);
   /** Which groups are showing their rows. Each is a heading that opens and closes its own rows. */
   const [shown, setShown] = useState<Readonly<Record<string, boolean>>>(FIRST_OPEN);
@@ -129,14 +135,14 @@ export default function DecisionMatrix({ onOpenChange }: { onOpenChange?: (open:
 
   const load = useCallback(() => {
     setFailed(null);
-    fetch("/api/canvas/decision-matrix", { headers: headers() })
+    fetch(src, { headers: headers() })
       .then(async (r) => {
         const d = await r.json().catch(() => ({}));
         if (!r.ok) return setFailed(readFailure(r.status, d?.error));
         setMatrix(d as Matrix);
       })
       .catch(() => setFailed(readFailure(null, null)));
-  }, []);
+  }, [src]);
 
   const toggle = () => {
     const next = !open;

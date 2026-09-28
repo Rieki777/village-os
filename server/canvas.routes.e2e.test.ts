@@ -35,6 +35,8 @@ import { provisionTestDb, testDbConfigured, testPool, type TestDb, waitForPortFr
 import { waitForHealth } from "./db/e2eBoot";
 import { CANVAS_BLOCK_IDS } from "../shared/governanceCanvas";
 import { CANVAS_MEMBERS_ONLY, CANVAS_PEN_REFUSAL } from "./routes/canvas";
+import { CANVAS_SECTION_DOOR, PUBLIC_LINE_PEN_REFUSAL } from "./routes/canvasPublic";
+import { nameRefusal } from "./lib/canvasNames";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -263,5 +265,90 @@ describe.skipIf(!DB_CONFIGURED)("the canvas, through the real gate", () => {
     expect(row("vote:village_launch").approval.who).toBe("not-yet");
     expect(r.json.vetoOverrideAvailable).toBe(false);
     for (const person of ["Wren", "Ash", "Canvas Founder", people.pen.id]) expect(r.text).not.toContain(person);
+  });
+
+  /*
+   * THE CANVAS IN PUBLIC (2026-09-28), through the real gate, the real roster
+   * and the real generic content doors. The cases above left `story.tell`
+   * held by the village, with Wren seated in the role that carries it.
+   * server/routes/canvasPublic.test.ts proves the rest with a modelled gate.
+   */
+  it("serves every block's public line to a visitor, and gives the write to the pen alone", async () => {
+    const r = await call("GET", "/api/canvas/public", undefined, "");
+    expect(r.status, r.text).toBe(200);
+    expect(r.json.blocks.map((b: any) => b.id)).toEqual([...CANVAS_BLOCK_IDS]);
+    const line = { line: "Our storytellers keep the calendar." };
+    expect((await call("PUT", "/api/canvas/public/meetings", line, "")).status).toBe(401);
+    const member = await call("PUT", "/api/canvas/public/meetings", line, people.member.token);
+    expect(member.status, member.text).toBe(403);
+    expect(member.json).toEqual({ error: PUBLIC_LINE_PEN_REFUSAL });
+    // The village holds the pen now, so the founder meets the gate's own hatch.
+    expect((await call("PUT", "/api/canvas/public/meetings", line)).status).toBe(409);
+    const pen = await call("PUT", "/api/canvas/public/meetings", line, people.pen.token);
+    expect(pen.status, pen.text).toBe(200);
+    const read = await call("GET", "/api/canvas/public", undefined, "");
+    expect(read.json.blocks.find((b: any) => b.id === "meetings")).toEqual({
+      id: "meetings", line: "Our storytellers keep the calendar.", withheld: false,
+    });
+  });
+
+  it("refuses the pen a line naming a member or the founder, in any case, and stores none of them", async () => {
+    for (const [text, quoted] of [
+      ["ASH keeps the seed store.", "ASH"],
+      ["Ask Canvas Founder about the budget.", "Canvas Founder"],
+      ["wren opens every gathering.", "wren"],
+    ]) {
+      const r = await call("PUT", "/api/canvas/public/roles", { line: text }, people.pen.token);
+      expect(r.status, text).toBe(400);
+      expect(r.json).toEqual({ error: nameRefusal(quoted) });
+    }
+    const read = await call("GET", "/api/canvas/public", undefined, "");
+    expect(read.json.blocks.find((b: any) => b.id === "roles").line).toBeNull();
+    for (const leaked of ["ASH", "Canvas Founder", "wren opens"]) expect(read.text).not.toContain(leaked);
+  });
+
+  it("closes the generic content doors to the canvas key, and only to it", async () => {
+    // Wren holds story.tell, so the generic door's own gate lets Wren through; the key is what it refuses.
+    const sneak = await call("PUT", "/api/admin/content/canvas", { roles: "Ash keeps the seed store." }, people.pen.token);
+    expect(sneak.status, sneak.text).toBe(400);
+    expect(sneak.json).toEqual({ error: CANVAS_SECTION_DOOR });
+    // Control: the same holder, the same door, another key.
+    const other = await call("PUT", "/api/admin/content/legal", { jurisdictionOverview: "" }, people.pen.token);
+    expect(other.status, other.text).toBe(200);
+    // Nothing the refused write carried reached the lines, and the one written through the proper door stands.
+    const read = await call("GET", "/api/canvas/public", undefined, "");
+    expect(read.text).not.toContain("Ash keeps");
+    expect(read.json.blocks.find((b: any) => b.id === "meetings").line).toBe("Our storytellers keep the calendar.");
+    // The raw section is not served by the generic read either, to anybody.
+    for (const token of ["", founderToken]) {
+      const raw = await call("GET", "/api/content/canvas", undefined, token);
+      expect(raw.status).toBe(404);
+      expect(raw.json).toEqual({ error: CANVAS_SECTION_DOOR });
+    }
+  });
+
+  it("holds a stored line back from the public once the village admits somebody it names", async () => {
+    const written = await call("PUT", "/api/canvas/public/impact", { line: "Juniper trees now shade the upper field." }, people.pen.token);
+    expect(written.status, written.text).toBe(200);
+    const newcomer = await register("Juniper Vale", "canvas-juniper");
+    // Registered and not yet admitted: not one of the village's own, so the line still shows.
+    const before = await call("GET", "/api/canvas/public", undefined, "");
+    expect(before.json.blocks.find((b: any) => b.id === "impact").line).toBe("Juniper trees now shade the upper field.");
+
+    const admitted = await call("POST", `/api/members/${newcomer.id}/super-vouch`, {});
+    expect(admitted.status, admitted.text).toBe(200);
+    const after = await call("GET", "/api/canvas/public", undefined, "");
+    expect(after.json.blocks.find((b: any) => b.id === "impact")).toEqual({ id: "impact", line: null, withheld: true });
+    expect(after.text).not.toContain("Juniper");
+    // The other lines are untouched.
+    expect(after.json.blocks.find((b: any) => b.id === "meetings").line).toBe("Our storytellers keep the calendar.");
+  });
+
+  it("serves the generated Decision Matrix rows to a visitor, from the live holdings, naming roles and never people", async () => {
+    const r = await call("GET", "/api/canvas/public/decision-matrix", undefined, "");
+    expect(r.status, r.text).toBe(200);
+    const row = (key: string) => r.json.groups.flatMap((g: any) => g.rows).find((x: any) => x.key === key);
+    expect(row("power:story.tell").approval.text).toContain("with Storytellers");
+    for (const person of ["Wren", "Ash", "Canvas Founder", "Juniper", people.pen.id]) expect(r.text).not.toContain(person);
   });
 });

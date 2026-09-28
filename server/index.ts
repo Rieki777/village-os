@@ -99,6 +99,7 @@ import { register as registerGoverningPurposeRoutes } from "./routes/governingPu
 import { register as registerCanvasRoutes } from "./routes/canvas";
 import { register as registerCanvasSeasonRoutes } from "./routes/canvasSeason";
 import { register as registerDecisionMatrixRoutes } from "./routes/decisionMatrix";
+import { CANVAS_PUBLIC_SECTION, CANVAS_SECTION_DOOR, register as registerCanvasPublicRoutes } from "./routes/canvasPublic";
 import { register as registerCapabilityExplainerRoutes } from "./routes/capabilityExplainer";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
 import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
@@ -8080,6 +8081,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
   });
 
   app.get("/api/content/:section", async (req, res) => {
+    if (req.params.section === CANVAS_PUBLIC_SECTION) return res.status(404).json({ error: CANVAS_SECTION_DOOR });
     const content = contentRepo.get();
     const section = content[req.params.section];
     if (section === undefined) {
@@ -8113,6 +8115,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // 0098: `story.tell`. What a village says about itself in public is the
     // clearest case in the set of a power that belongs to the village.
     if (!(await guardCapability(req, res, "story.tell"))) return;
+    if (req.params.section === CANVAS_PUBLIC_SECTION) return res.status(400).json({ error: CANVAS_SECTION_DOOR });
     const content = contentRepo.get();
     content[req.params.section] = req.body;
     await contentRepo.put(content);
@@ -25101,6 +25104,7 @@ ${inner}
   registerCanvasRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
   registerCanvasSeasonRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
   registerDecisionMatrixRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying });
+  registerCanvasPublicRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying, guardCapability, members, contentRepo });
 
   /**
    * The subset of variables the CLIENT is allowed to know, so the UI can render

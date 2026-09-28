@@ -44,6 +44,16 @@
  * order. It only decides whether the page offers a form; the write is still
  * refused by the gate if the page is wrong.
  *
+ * ── WHAT MEMBERS READ BESIDE THE READINGS ──────────────────────────────────
+ *
+ * Each block also carries `memberAnswers`: the village's own words from the
+ * brief sections the block draws on, at the MEMBER audience, confirmed rows
+ * only, and never `people`, `legal`, `land` or `constraints`, which stay with
+ * the admins whatever their audience says (`memberAnswersFrom`,
+ * shared/canvasPublicLines.ts). An admin reads the member view here too; the
+ * admin-audience rows have their own editor. "How we work together"
+ * (/governance) shows these to a signed-in member beside the public lines.
+ *
  * ── NO NUMBER BUT THE LEVEL ────────────────────────────────────────────────
  *
  * The payload carries each block's level and nothing computed across blocks:
@@ -55,6 +65,8 @@ import type { AppDeps } from "../lib/appDeps";
 import { capabilityDecision } from "../../shared/capabilities";
 import { LEVEL_WORDS, MOMENT_LABELS, parseCanvasReading } from "../../shared/governanceCanvas";
 import { allCanvasReadings, readingsByBlock, recordCanvasReading, type CanvasReadingRow } from "../repos/canvasReadings";
+import { memberAnswersFrom } from "../../shared/canvasPublicLines";
+import { briefAll } from "../lib/villageBrain";
 
 type Deps = Pick<
   AppDeps,
@@ -105,12 +117,14 @@ export function register(app: Express, deps: Deps): void {
     if (!user) return res.status(401).json({ error: "auth_required" });
     if (!(await mayReadCanvas(deps, req, user))) return res.status(403).json({ error: CANVAS_MEMBERS_ONLY });
     const rows = await allCanvasReadings(getPool());
+    const answers = memberAnswersFrom(await briefAll(getPool(), "member"));
     const mayRecord = capabilityDecision("story.tell", await capabilityCtx(user)).allowed;
     res.json({
       blocks: readingsByBlock(rows).map(({ blockId, readings }) => ({
         id: blockId,
         latest: readings[0] ? shape(readings[0]) : null,
         history: readings.map(shape),
+        memberAnswers: answers[blockId],
       })),
       mayRecord,
     });
