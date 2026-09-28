@@ -17,7 +17,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { authToken } from "@/lib/gameApi";
 import { seasonFocus, seasonMoment, type CanvasSeason as Season, type CanvasSeasonPayload } from "@shared/canvasSeason";
+import type { CanvasMoonPayload } from "@shared/canvasRevisit";
 import { CanvasBaseline } from "./CanvasBaseline";
+import { CanvasMoon, type MoonOfferAnswer } from "./CanvasMoon";
 import { CanvasSeason } from "./CanvasSeason";
 
 const headers = (): Record<string, string> => {
@@ -52,6 +54,33 @@ export function CanvasView() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // The canvas moon (plan 4.4). A read that fails leaves the card off the
+  // page and the rest of the view as it was: the moon is a courtesy.
+  const [moon, setMoon] = useState<CanvasMoonPayload | null>(null);
+  const loadMoon = useCallback(() => {
+    fetch("/api/canvas/moon", { headers: headers() })
+      .then(async (r) => {
+        if (!r.ok) return;
+        setMoon((await r.json().catch(() => null)) as CanvasMoonPayload | null);
+      })
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    loadMoon();
+  }, [loadMoon]);
+
+  const offerMoon = async (): Promise<MoonOfferAnswer> => {
+    try {
+      const r = await fetch("/api/canvas/moon/gathering", { method: "POST", headers: headers() });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return { ok: false, error: String(d?.error ?? "The gathering was not offered.") };
+      loadMoon();
+      return { ok: true, message: String(d?.message ?? "The canvas moon is on the calendar's list as a draft.") };
+    } catch {
+      return { ok: false, error: "That did not reach the server." };
+    }
+  };
 
   const save = async (season: Season): Promise<string | null> => {
     try {
@@ -101,6 +130,7 @@ export function CanvasView() {
         onSave={save}
         onRemove={remove}
       />
+      <CanvasMoon payload={moon} onOffer={offerMoon} />
       <CanvasBaseline focus={focus} focusLabel={phase === "before" ? "First up" : "This week"} season={season} />
     </div>
   );

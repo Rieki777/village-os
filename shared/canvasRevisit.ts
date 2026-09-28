@@ -188,6 +188,25 @@ export function revisitDedupeKey(moment: KeyMoment, block: CanvasBlockId, moon: 
 
 /* ── The canvas moon (plan 4.4) ─────────────────────────────────────────── */
 
+/** What `GET /api/canvas/moon` answers a member (server/routes/canvasRevisit.ts). */
+export interface CanvasMoonPayload {
+  /** The next new moon's question, or null when the sky table has no next new moon. */
+  next: {
+    newMoonAt: string;
+    /** When the offered gathering would start: the new moon's date at the session time. */
+    startsAt: string;
+    moon: number;
+    blocks: Array<{ id: CanvasBlockId; name: string }>;
+    source: { chosen: CanvasBlockId[]; flagged: CanvasBlockId[]; rotated: CanvasBlockId | null };
+  } | null;
+  /** The gathering offered for it, while it is still on the calendar. */
+  gathering: { id: string; status: string } | null;
+  /** The calendar module is on, so there is somewhere to offer a gathering. */
+  calendarOn: boolean;
+  /** This member may offer it now: they manage events, the calendar is on, and none is offered yet. */
+  mayOffer: boolean;
+}
+
 /** The title a gathering offered for the canvas moon carries. */
 export const CANVAS_MOON_TITLE = "Canvas moon";
 

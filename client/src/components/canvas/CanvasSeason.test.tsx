@@ -69,6 +69,9 @@ function answer(method: string, url: string, status: number, body: unknown) {
 beforeEach(() => {
   calls = [];
   routes = {};
+  // The Canvas view also reads the canvas moon (CanvasMoon.tsx, Wave 4). No
+  // next new moon keeps its card off the page, so these cases read the season alone.
+  answer("GET", "/api/canvas/moon", 200, { next: null, gathering: null, calendarOn: false, mayOffer: false });
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init: any) => {
