@@ -1293,8 +1293,11 @@ export const MODULES: ModuleDef[] = [
     description:
       "An outside service reads your meetings and records, and suggests changes to your circles and roles. Every suggestion is reviewed before anything changes.",
     requires: [],
-    // The suggestions land in the review queue, which the org chart owns.
-    recommends: ["org"],
+    // Empty on purpose. The suggestions land in the review queue, which the org
+    // chart owns, and the org chart is CORE rather than a module: there is no
+    // `org` id to name. This said `["org"]` for a day and named a module that
+    // does not exist, which the generated-docs test caught and nothing else did.
+    recommends: [],
     capabilities: [],
     variableKeys: [],
     apiPrefixes: ["/api/saberra"],
@@ -1320,15 +1323,27 @@ export const MODULES: ModuleDef[] = [
       // cost, so an empty list is the goal rather than an omission.
       setupSteps: [],
     },
-    defaultConfig: { dashboardUrl: "" },
+    /**
+     * A village holds its own connection: its own subdomain at the service and
+     * its own token. `apiUrl` is what the sync CALLS and `dashboardUrl` is what
+     * the big button opens; they are different addresses and both belong here
+     * rather than in a request, because a sync sends the village's sealed
+     * credential to whatever address it is given.
+     */
+    defaultConfig: { apiUrl: "", dashboardUrl: "" },
     validateConfig: (config: unknown): string | null => {
       const c = config && typeof config === "object" ? (config as Record<string, unknown>) : {};
       const url = typeof c.dashboardUrl === "string" ? c.dashboardUrl.trim() : "";
       // Empty is fine: the village has not been given its dashboard yet, and a
       // module that refuses to save until every optional field is filled is a
       // module nobody finishes setting up.
-      if (url === "") return null;
-      if (!/^https:\/\/[^\s]+$/.test(url)) return "The dashboard address has to be an https link.";
+      const api = typeof c.apiUrl === "string" ? c.apiUrl.trim() : "";
+      // Both are checked the same way, and the api address is the one that
+      // matters: a sync posts this village's key to it.
+      for (const [label, value] of [["dashboard", url], ["service", api]] as const) {
+        if (value === "") continue;
+        if (!/^https:\/\/[^\s]+$/.test(value)) return `The ${label} address has to be an https link.`;
+      }
       return null;
     },
   },

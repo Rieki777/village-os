@@ -59,20 +59,30 @@ function headers(token: string, sessionId?: string): Record<string, string> {
  * body, which is easy to miss and is why this is its own step.
  */
 export async function openSession(o: ClientOptions): Promise<string | null> {
-  const res = await o.fetchImpl(o.baseUrl, {
-    method: "POST",
-    headers: headers(o.token),
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "initialize",
-      params: {
-        protocolVersion: "2025-06-18",
-        capabilities: {},
-        clientInfo: { name: "village-os", version: "1.0.0" },
-      },
-    }),
-  });
+  // try/catch and a status check, for the reason `callTool` has both: a DNS
+  // failure or a refused connection here used to reject into the express
+  // default handler as an unnamed 500, against this module's own promise that
+  // every refusal is named. An audit found it before a vendor did.
+  let res: Response;
+  try {
+    res = await o.fetchImpl(o.baseUrl, {
+      method: "POST",
+      headers: headers(o.token),
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-06-18",
+          capabilities: {},
+          clientInfo: { name: "village-os", version: "1.0.0" },
+        },
+      }),
+    });
+  } catch {
+    return null;
+  }
+  if (!res.ok) return null;
   const id = res.headers?.get?.("mcp-session-id") ?? null;
   return id && id.trim() !== "" ? id : null;
 }

@@ -30,6 +30,11 @@ const state = vi.hoisted(() => ({
   landed: 0,
   facts: 0,
   factsRead: 0,
+  apiUrl: "https://example.test/" as string,
+  written: [] as Record<string, unknown>[],
+  landedPayloads: [] as Record<string, unknown>[],
+  batchIds: [] as string[],
+  pages: 0,
 }));
 
 vi.mock("../lib/secrets", () => ({
@@ -54,16 +59,27 @@ vi.mock("../lib/saberraClient", () => ({
 
 vi.mock("../lib/identity", () => ({ instanceIdentity: () => ({ instanceId: "village-1", bornAt: "" }) }));
 
+// The address comes from the STORE now, never from the caller.
+vi.mock("../lib/modules", () => ({ moduleConfig: () => ({ apiUrl: state.apiUrl }) }));
+
+// One live seat, so a fact can be attached to it by name.
+vi.mock("../lib/orgChart", () => ({
+  listOrgRoles: async () => [{ id: "role-77", name: "Water Steward" }],
+}));
+
 vi.mock("../lib/externalProposals", () => ({
-  landProposal: async () => {
+  landProposal: async (_p: unknown, input: Record<string, unknown>) => {
     state.landed += 1;
+    state.landedPayloads.push(input);
+    state.batchIds.push(String(input.batchId));
     return { ok: true, id: `p-${state.landed}`, outcome: "stored" };
   },
 }));
 
 vi.mock("../repos/moduleFacts", () => ({
-  upsertFacts: async (_p: unknown, _v: unknown, _m: unknown, f: unknown[]) => {
+  upsertFacts: async (_p: unknown, _v: unknown, _m: unknown, f: Record<string, unknown>[]) => {
     state.facts += f.length;
+    state.written.push(...f);
     return f.length;
   },
   moduleFactCount: async () => 7,
@@ -81,11 +97,11 @@ let may = true;
 let signedIn = true;
 
 async function get(path: string) {
-  const res = await fetch(`${base}${path}`);
+  const res = await fetch(`${base}${path}`); // module-review-ok: this suite's own loopback server, not an outbound call
   return { status: res.status, body: await res.json().catch(() => null) };
 }
 async function post(path: string, body: unknown = {}) {
-  const res = await fetch(`${base}${path}`, {
+  const res = await fetch(`${base}${path}`, { // module-review-ok: this suite's own loopback server, not an outbound call
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -126,6 +142,11 @@ beforeEach(() => {
   state.landed = 0;
   state.facts = 0;
   state.factsRead = 0;
+  state.apiUrl = "https://example.test/";
+  state.written = [];
+  state.landedPayloads = [];
+  state.batchIds = [];
+  state.pages = 0;
 });
 
 describe("who may cause a sync", () => {
@@ -181,21 +202,45 @@ describe("the ways a sync comes back with nothing", () => {
   });
 
   it("says there is no address, instead of calling an empty one", async () => {
-    const r = await post("/api/saberra/sync", { config: {} });
+    state.apiUrl = "";
+    const r = await post("/api/saberra/sync");
     expect(r.status).toBe(409);
-    expect(String(r.body.error)).toContain("no address");
+    expect(String(r.body.error)).toContain("no https address");
+  });
+
+  it("REFUSES AN ADDRESS THAT IS NOT HTTPS, before a single byte of the key goes out", async () => {
+    // This route sends the village's sealed credential to whatever address it
+    // is given. An earlier version took that address from the request body,
+    // which made anybody holding the queue's key able to name a host and be
+    // sent the secret. It reads the store now, and the scheme is checked.
+    state.apiUrl = "http://attacker.invalid/";
+    const r = await post("/api/saberra/sync");
+    expect(r.status).toBe(409);
+    expect(state.landed).toBe(0);
+  });
+
+  it("refuses an address that is not a url at all", async () => {
+    state.apiUrl = "not a url";
+    expect((await post("/api/saberra/sync")).status).toBe(409);
+  });
+
+  it("IGNORES AN ADDRESS IN THE REQUEST BODY, which is the defect this replaced", async () => {
+    state.apiUrl = "";
+    const r = await post("/api/saberra/sync", { config: { apiUrl: "https://attacker.invalid/" } });
+    expect(r.status).toBe(409);
+    expect(state.landed).toBe(0);
   });
 
   it("says the session never opened, instead of reporting an empty village", async () => {
     state.session = null;
-    const r = await post("/api/saberra/sync", { config: { apiUrl: "https://example.test/" } });
+    const r = await post("/api/saberra/sync");
     expect(r.status).toBe(502);
     expect(String(r.body.error)).toContain("did not open a session");
   });
 
   it("NAMES A VENDOR REFUSAL PER KIND instead of landing nothing in silence", async () => {
     state.call = { ok: false, why: "vendor-error", detail: "scope does not permit this tool" };
-    const r = await post("/api/saberra/sync", { config: { apiUrl: "https://example.test/" } });
+    const r = await post("/api/saberra/sync");
     expect(r.status).toBe(200);
     expect(r.body.landed).toBe(0);
     // One entry per kind asked for, each carrying the vendor's own words.
@@ -205,7 +250,7 @@ describe("the ways a sync comes back with nothing", () => {
 
   it("tells a genuinely empty service apart from a broken one", async () => {
     state.call = { ok: true, records: [], cursor: null };
-    const r = await post("/api/saberra/sync", { config: { apiUrl: "https://example.test/" } });
+    const r = await post("/api/saberra/sync");
     expect(r.status).toBe(200);
     expect(r.body.landed).toBe(0);
     expect(r.body.failures).toEqual([]);
@@ -219,7 +264,7 @@ describe("a sync that works", () => {
       cursor: null,
       records: [{ id: "r-1", fields: { "Role Name": "Water Steward", Circle: "Land & Ecology" } }],
     };
-    const r = await post("/api/saberra/sync", { config: { apiUrl: "https://example.test/" } });
+    const r = await post("/api/saberra/sync");
     expect(r.status).toBe(200);
     expect(r.body.landed).toBeGreaterThan(0);
     expect(state.facts).toBeGreaterThan(0);
@@ -233,9 +278,63 @@ describe("a sync that works", () => {
       cursor: null,
       records: [{ id: "c-1", fields: { "Circle Name": "Land & Ecology", Status: "Active" } }],
     };
-    const r = await post("/api/saberra/sync", { config: { apiUrl: "https://example.test/" } });
+    const r = await post("/api/saberra/sync");
     const held = r.body.held as { reason: string }[];
     expect(held.some((h) => h.reason === "no-create-circle-op")).toBe(true);
+  });
+
+  it("ATTACHES A FACT TO THE SEAT THIS VILLAGE ALREADY HAS, which is what makes the panel work", async () => {
+    // An earlier version stored every fact with a null entity id while the
+    // panel asked by seat id, so it was empty for every seat forever and each
+    // half was correct on its own.
+    state.call = {
+      ok: true,
+      cursor: null,
+      records: [{ id: "r-1", fields: { "Role Name": "Water Steward" } }],
+    };
+    const r = await post("/api/saberra/sync");
+    const written = state.written.find((w) => w.vendorKind === "role");
+    expect(written?.entityId).toBe("role-77");
+    expect(r.body.attached).toBe(1);
+  });
+
+  it("leaves a fact unattached when this village has no such seat, instead of guessing", async () => {
+    state.call = {
+      ok: true,
+      cursor: null,
+      records: [{ id: "r-2", fields: { "Role Name": "A Seat We Do Not Have" } }],
+    };
+    await post("/api/saberra/sync");
+    expect(state.written.find((w) => w.vendorKind === "role")?.entityId).toBeNull();
+  });
+
+  it("LANDS ONE STRUCTURE PROPOSAL WITH SEAT KEYS A STEWARD CAN READ", async () => {
+    // The translator maps "Role Name" to `name`. An earlier version landed the
+    // vendor's raw keys, which `readProposedSeats` cannot read, so every
+    // proposal arrived nameless and could not be accepted.
+    state.call = {
+      ok: true,
+      cursor: null,
+      records: [
+        { id: "r-1", fields: { "Role Name": "Water Steward", Circle: "Land & Ecology" } },
+        { id: "r-2", fields: { "Role Name": "Finance Steward" } },
+      ],
+    };
+    await post("/api/saberra/sync");
+    const org = state.landedPayloads.find((p) => p.kind === "org.proposed");
+    expect(org).toBeDefined();
+    const payload = org!.payload as { seats: Record<string, unknown>[]; title: string };
+    expect(payload.seats).toHaveLength(2);
+    expect(payload.seats[0].name).toBe("Water Steward");
+    expect(payload.seats[0].circleName).toBe("Land & Ecology");
+    expect(payload.title).toContain("suggested by");
+  });
+
+  it("clips the batch id, because the spine refuses one over its limit", async () => {
+    state.session = "s".repeat(200);
+    state.call = { ok: true, cursor: null, records: [{ id: "r-1", fields: { "Role Name": "Water Steward" } }] };
+    await post("/api/saberra/sync");
+    for (const b of state.batchIds) expect(b.length).toBeLessThanOrEqual(64);
   });
 
   it("carries what it could not map upward, so a steward is never given less in silence", async () => {
@@ -244,7 +343,7 @@ describe("a sync that works", () => {
       cursor: null,
       records: [{ id: "r-1", fields: { "Role Name": "Water Steward", "Some New Field": "x" } }],
     };
-    const r = await post("/api/saberra/sync", { config: { apiUrl: "https://example.test/" } });
+    const r = await post("/api/saberra/sync");
     expect(r.body.unmapped).toContain("Some New Field");
   });
 });

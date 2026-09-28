@@ -50,6 +50,18 @@ describe("talking to the outside service", () => {
     expect(await openSession(opts(s.fetchImpl))).toBeNull();
   });
 
+  it("answers null when the service refuses the handshake, instead of throwing into the route", async () => {
+    const s = spy(() => reply("", { status: 401, sessionId: "sess-x" }));
+    expect(await openSession(opts(s.fetchImpl))).toBeNull();
+  });
+
+  it("answers null when the network throws, for the same reason callTool does", async () => {
+    const fetchImpl: FetchLike = async () => {
+      throw new Error("getaddrinfo ENOTFOUND");
+    };
+    expect(await openSession(opts(fetchImpl))).toBeNull();
+  });
+
   it("sends the session id on every call after it", async () => {
     const s = spy(() => reply(framed({ result: { records: [] } })));
     await callTool(opts(s.fetchImpl), "sess-3", "list_records", { kind: "role" });
