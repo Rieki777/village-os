@@ -19,9 +19,18 @@ import type { Pool } from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { HANDOVER_SET } from "../../shared/capabilities";
-import { VETO_OVERRIDE_NOTE, type DecisionMatrix } from "../../shared/decisionMatrix";
+import {
+  applySwitchNote,
+  MINT_EDITOR_DOOR,
+  MOON_CLOSE_DOOR,
+  VETO_OVERRIDE_NOTE,
+  type DecisionMatrix,
+} from "../../shared/decisionMatrix";
 import { moveCapabilityToVillage } from "../lib/capabilityHolding";
+import { recordGameStart } from "../lib/gameStart";
 import { loadModuleSettings } from "../lib/modules";
+import { recordVeto, stewardVetoStands } from "../lib/stewardship";
+import { setVariable } from "../lib/variables";
 import { CANVAS_MEMBERS_ONLY } from "./canvas";
 import { MATRIX_UNREADABLE, register } from "./decisionMatrix";
 
@@ -74,7 +83,8 @@ const rowOf = (m: DecisionMatrix, key: string) => m.groups.flatMap((g) => g.rows
 
 describe.skipIf(!configured)("GET /api/canvas/decision-matrix", () => {
   beforeAll(async () => {
-    db = await provisionTestDb();
+    // A village before its Birthing, the state every Season Two village is in, so the last case can start it.
+    db = await provisionTestDb({ gameStarted: false });
     pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
     for (const p of Object.values(PEOPLE)) {
       await pool.query( // module-review-ok: seeding the scratch schema this suite provisioned
@@ -150,10 +160,12 @@ describe.skipIf(!configured)("GET /api/canvas/decision-matrix", () => {
   });
 
   describe("read from the village as it stands", () => {
-    it("a fresh village holds nothing, so every power is the admin panel's, with the roles that carry it named", async () => {
+    it("a fresh village holds nothing, so every power but the veto is the admin panel's, with the roles that carry it named", async () => {
       carrying["dial.set"] = [{ id: "dm-keepers", name: "The Dial Keepers" }];
       const m = (await call("member")).body as DecisionMatrix;
-      for (const cap of HANDOVER_SET) expect(rowOf(m, `power:${cap}`)?.approval.who, cap).toBe("admin-panel");
+      for (const cap of HANDOVER_SET) {
+        expect(rowOf(m, `power:${cap}`)?.approval.who, cap).toBe(cap === "steward.veto" ? "nobody" : "admin-panel");
+      }
       expect(rowOf(m, "power:dial.set")?.approval.text).toContain("So does anyone seated in The Dial Keepers.");
       // The Powers page's own heading rides along.
       expect(rowOf(m, "power:dial.set")?.detail).toBeTruthy();
@@ -196,6 +208,68 @@ describe.skipIf(!configured)("GET /api/canvas/decision-matrix", () => {
       const r = await call("member");
       expect(r.status).toBe(503);
       expect(r.body).toEqual({ error: MATRIX_UNREADABLE });
+    });
+
+    /*
+     * THE STEWARD'S VETO ROW, pinned to the engine it describes. The row says
+     * an administrator's objection stops nothing; `stewardVetoStands` is what
+     * decides that, so it is asked here, on real rows, with the seated
+     * steward as the control that shows the same act can stand.
+     */
+    it("an administrator's veto stops nothing, which is why the veto's row names no admin panel", async () => {
+      const m = (await call("member")).body as DecisionMatrix;
+      expect(rowOf(m, "power:steward.veto")?.approval.text).toContain(
+        "An administrator who has never sat there can record an objection, and it stops nothing.",
+      );
+
+      const byAdmin = await recordVeto(pool, { ballotId: "dm-ballot-admin", decidedBy: "dm-admin", reason: "An administrator objects to this." });
+      expect(byAdmin.ok).toBe(true);
+      expect((await stewardVetoStands(pool, "dm-ballot-admin")).stands).toBe(false);
+
+      await pool.query( // module-review-ok: a steward seat on the scratch schema this suite provisioned, read back through stewardsSeated
+        "INSERT INTO roles (id, name, capabilities) VALUES ('dm-stewards','Stewards',?)", // module-review-ok: fixture on the scratch schema this suite provisioned
+        [JSON.stringify(["steward.veto"])],
+      );
+      await pool.query( // module-review-ok: a seated steward on the scratch schema this suite provisioned
+        "INSERT INTO role_holders (id, role_id, user_id) VALUES ('dm-rh-steward','dm-stewards','dm-member')", // module-review-ok: fixture on the scratch schema this suite provisioned
+      );
+      try {
+        const bySteward = await recordVeto(pool, { ballotId: "dm-ballot-seated", decidedBy: "dm-member", reason: "A seated steward objects to this." });
+        expect(bySteward.ok).toBe(true);
+        expect((await stewardVetoStands(pool, "dm-ballot-seated")).stands).toBe(true);
+      } finally {
+        await pool.query("DELETE FROM role_holders WHERE id = 'dm-rh-steward'"); // module-review-ok: removing this case's own fixture from the scratch schema
+        await pool.query("DELETE FROM roles WHERE id = 'dm-stewards'"); // module-review-ok: removing this case's own fixture from the scratch schema
+      }
+    });
+
+    it("reads how moons settle and whether landing is switched on from the village's own settings", async () => {
+      await governanceAt("members");
+      const voted = (await call("member")).body as DecisionMatrix;
+      expect(rowOf(voted, "vote:cycle_settlement")?.approval.who).toBe("roll");
+      expect(rowOf(voted, "vote:cycle_settlement")?.approval.text).toContain(MOON_CLOSE_DOOR);
+      expect(voted.notes).toContain(applySwitchNote(true));
+
+      expect((await setVariable(pool, "cycle.settlement_mode", "manual")).ok).toBe(true);
+      expect((await setVariable(pool, "governance.auto_apply_enabled", "false")).ok).toBe(true);
+      try {
+        const byHand = (await call("member")).body as DecisionMatrix;
+        expect(rowOf(byHand, "vote:cycle_settlement")?.approval.who).toBe("admin-panel");
+        expect(rowOf(byHand, "vote:cycle_settlement")?.approval.text).toContain("This village settles its moons by hand");
+        expect(byHand.notes).toContain(applySwitchNote(false));
+      } finally {
+        expect((await setVariable(pool, "cycle.settlement_mode", "proposal")).ok).toBe(true);
+        expect((await setVariable(pool, "governance.auto_apply_enabled", "true")).ok).toBe(true);
+      }
+    });
+
+    // LAST, because nothing un-starts a Game (server/lib/gameStart.ts).
+    it("names the admin panel's minting-rule editor until the Game starts, and never after", async () => {
+      const before = (await call("member")).body as DecisionMatrix;
+      expect(rowOf(before, "vote:mint_rule")?.approval.text).toContain(MINT_EDITOR_DOOR);
+      await recordGameStart(pool, { ballotId: "dm-launch", startedBy: "dm-admin", note: "Started for the matrix suite." });
+      const after = (await call("member")).body as DecisionMatrix;
+      expect(rowOf(after, "vote:mint_rule")?.approval.text).not.toContain(MINT_EDITOR_DOOR);
     });
   });
 });

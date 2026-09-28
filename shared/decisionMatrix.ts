@@ -49,6 +49,26 @@
  *  4. RISK TAGS ARE INFORMATION, NEVER LAW. A row may carry them, and no tag
  *     changes an approval, a consultation or a method.
  *
+ * ── A VOTE IS NOT ALWAYS THE ONLY DOOR (review of 2026-09-27) ──────────────
+ *
+ * Some decisions the village votes on can also be made from the admin panel
+ * with no vote, and a matrix that named only the vote would say the village
+ * decides alone where it does not. Each such door is named in the Approval
+ * column beside the vote, from the route that opens it:
+ *
+ *   a moon's settlement   POST /api/admin/cycles/close settles every moon that
+ *                         has ended, one the village voted down included, and
+ *                         on cycle.settlement_mode "manual" it is the only way
+ *   a minting rule        PATCH /api/admin/economy/rules/:id, until the Game
+ *                         starts (`readGameStart`)
+ *   giving a role a power PUT /api/admin/roles/:id/capabilities, any time,
+ *                         every power but the steward's veto
+ *   seating, unseating    POST /api/admin/roles/:id/holders, for whoever acts
+ *                         on `proposal.decide`, outside the steward's seat
+ *
+ * `approval.who` names who decides the vote itself; `approval.text` names the
+ * vote and then every door beside it.
+ *
  * ── NO PERSON'S NAME, NO SCORE ─────────────────────────────────────────────
  *
  * The inputs carry role names and head counts, never a member's name, so no
@@ -80,8 +100,9 @@ import {
   kindOfSubject,
   vetoHoursFrom,
 } from "./governanceKinds";
+import { ringOf, VARIABLES, VARIABLES_BY_KEY } from "./gameVariables";
 import { GPS_CHANGE } from "./governingPurpose";
-import { CYCLE_SETTLEMENT } from "./moonSettlement";
+import { CYCLE_SETTLEMENT, type SettlementMode } from "./moonSettlement";
 
 // ── The shape ──────────────────────────────────────────────────────────────
 
@@ -101,9 +122,13 @@ export type RiskTag = (typeof RISK_TAGS)[number];
  *   holder       whoever is seated in a role that carries the power
  *   admin-panel  admins and founders, before the village takes the power on
  *   founder      the founder, who keeps the purpose statement's pen
- *   not-yet      nobody can, because the vote cannot be held yet
+ *   not-yet      no vote, because the vote cannot be held yet
+ *   nobody       nobody can act on it today (the steward's veto with no steward seated)
+ *
+ * It names who decides the vote or holds the power. A door beside the vote,
+ * such as the admin panel's, is named in the approval's text.
  */
-export type ApprovalWho = "roll" | "hypha" | "holder" | "admin-panel" | "founder" | "not-yet";
+export type ApprovalWho = "roll" | "hypha" | "holder" | "admin-panel" | "founder" | "not-yet" | "nobody";
 
 /** How a decision is made: a ballot method, a Hypha vote, or a power someone holds. */
 export type MethodKind = BallotMethod | "hypha" | "held";
@@ -148,7 +173,11 @@ export interface DecisionMatrixRow {
   information: string[];
   method: {
     kind: MethodKind;
-    /** The bar a vote freezes, or null where no vote is held on this platform. */
+    /**
+     * The bar a vote freezes, or null where no vote is held on this platform.
+     * Unity is also null under majority, consensus and consent, which decide
+     * agreement by their own rule and never read the number.
+     */
     unityPct: number | null;
     quorumPct: number | null;
     tierFloor: TierFloor | null;
@@ -226,6 +255,12 @@ export interface DecisionMatrixInputs {
   /** Every transferable power has left the founding seat (`villageHandoverState`). */
   handoverComplete: boolean;
   powers: readonly PowerHolding[];
+  /** cycle.settlement_mode, through `settlementModeFrom`: whether a moon's end opens a vote at all. */
+  settlementMode: SettlementMode;
+  /** The Game has started (`readGameStart`). Until it does, the admin panel edits minting rules directly. */
+  gameStarted: boolean;
+  /** governance.auto_apply_enabled: the founder-held switch that lands carried decisions. */
+  autoApplyEnabled: boolean;
   /** Risk tags by row key. Information only; see rule 4. */
   riskTags?: Readonly<Record<string, readonly string[]>>;
 }
@@ -313,6 +348,62 @@ export function sensingNote(days: number, supportThreshold: number): string {
   return `The sensing window (${days} ${days === 1 ? "day" : "days"}) is shown on proposals and enforced nowhere. ${gate}`;
 }
 
+/**
+ * THE DOORS BESIDE A VOTE, as the page says them. Each names a route that
+ * makes the same decision with no vote; the header above lists them.
+ */
+export const MOON_CLOSE_DOOR =
+  "An administrator can also settle every moon that has ended from the Cycles desk, with no vote: one whose vote is still open, one the village voted down and one a steward stopped included. When a moon the village refused is paid this way, the admin trail records it.";
+export const MINT_EDITOR_DOOR =
+  "Until the Game starts, an administrator can also change a minting rule directly from the admin panel, with no vote. The admin trail records each change.";
+export const GRANT_DOOR =
+  "An administrator can also give a role a power directly from the admin panel, with no vote, and the village's pulse says so. The steward's veto, and the role that carries it, are the only ones that door cannot touch.";
+
+/** The power that seats people from the admin panel's holders route, in the label the Powers page uses. */
+const DECIDE: Capability = "proposal.decide";
+const decidePower = (): string => {
+  const label = CAPABILITY_LABELS[DECIDE];
+  return `the power to ${label.charAt(0).toLowerCase()}${label.slice(1)}`;
+};
+
+/**
+ * Who can seat or unseat with no vote, as POST /api/admin/roles/:id/holders
+ * answers: whoever acts on `proposal.decide` (the admin panel until the village
+ * takes that on), outside the steward's seat. A person who is not an
+ * administrator may not seat themselves, may not seat somebody above their own
+ * powers, and may not unseat anybody.
+ */
+export function seatDoor(subject: "role_seat" | "role_unseat", decideHeldByVillage: boolean): string {
+  const power = decidePower();
+  if (subject === "role_seat") {
+    return decideHeldByVillage
+      ? `Whoever holds ${power} can also seat somebody in any role but the steward's, with no vote: never themselves, and only in a role whose powers they hold, unless they are also an administrator.`
+      : `An administrator can also seat anybody in any role but the steward's, with no vote, themselves included. So can anyone else who holds ${power}: never themselves, and only in a role whose powers they hold.`;
+  }
+  return decideHeldByVillage
+    ? `An administrator who also holds ${power} can take somebody out of any seat but the steward's, with no vote.`
+    : "An administrator can also take somebody out of any seat but the steward's, with no vote.";
+}
+
+/**
+ * Votes whose opener sends the roll no notice when it opens
+ * (server/routes/governanceMode.ts and server/routes/governingPurpose.ts call
+ * no `notifyRoll`). A test reads both files, so the day either starts sending
+ * one, this list has to lose it.
+ */
+export const OPENED_WITHOUT_NOTICE: Readonly<Record<string, string>> = {
+  [GOVERNANCE_MODE]: "Nobody is sent a notice when it opens.",
+  [GPS_CHANGE]: "Nobody is sent a notice when it opens. The village's pulse says that it has.",
+};
+
+/** The founder-held switch that lands carried decisions, by the name the settings page gives it. */
+export function applySwitchNote(on: boolean): string {
+  const name = VARIABLES_BY_KEY["governance.auto_apply_enabled"]?.label ?? "Apply verified proposals automatically";
+  return on
+    ? `The founder-held setting "${name}" is on. While it is off, every carried decision that waits for its window is held, and each window opens again when it comes back on.`
+    : `The founder-held setting "${name}" is off, so every carried decision that waits for its window is held until it is switched back on.`;
+}
+
 function supporters(n: number): string {
   return `${n} ${n === 1 ? "supporter" : "supporters"}`;
 }
@@ -321,25 +412,54 @@ function quorumWords(q: number): string {
   return q > 0 ? `quorum ${q}` : "no quorum";
 }
 
-/** The bar a ballot of this method freezes, in one sentence. Mirrors `evaluateBallot`. */
-function barLine(method: BallotMethod, d: MethodDials): string {
+function sameDials(a: MethodDials, b: MethodDials): boolean {
+  return a.unityPct === b.unityPct && a.quorumPct === b.quorumPct;
+}
+
+/**
+ * The bar a ballot of this method freezes, in one sentence. Mirrors
+ * `evaluateBallot`. "The village's own dials" is said only when the numbers
+ * ARE the village's governance.unity_pct and governance.quorum_pct; a bar a
+ * floor raised is called what it is, the numbers the vote freezes.
+ */
+function barLine(method: BallotMethod, bar: MethodDials, village: MethodDials): string {
   switch (method) {
     case "consent":
-      return `Consent, with ${quorumWords(d.quorumPct)}: it carries while no objection is standing.`;
+      return `Consent, with ${quorumWords(bar.quorumPct)}: it carries while no objection is standing.`;
     case "majority":
-      return `Majority, with ${quorumWords(d.quorumPct)}: more than half of the votes cast say yes.`;
+      return `Majority, with ${quorumWords(bar.quorumPct)}: more than half of the votes cast say yes.`;
     case "consensus":
-      return `Consensus, with ${quorumWords(d.quorumPct)}: nobody votes no, and somebody votes yes.`;
+      return `Consensus, with ${quorumWords(bar.quorumPct)}: nobody votes no, and somebody votes yes.`;
     default:
-      return `The village's own dials: ${quorumWords(d.quorumPct)} and unity ${d.unityPct}.`;
+      return sameDials(bar, village)
+        ? `The village's own dials: ${quorumWords(bar.quorumPct)} and unity ${bar.unityPct}.`
+        : `Counted on the numbers this vote freezes: ${quorumWords(bar.quorumPct)} and unity ${bar.unityPct}.`;
   }
 }
 
-function floorLine(floor: TierFloor): string {
-  if (floor === "none") return "No tier floor: the village's own dials set the bar.";
-  if (floor === "subject") return "This decision carries a floor of its own. The village can raise it and never lower it.";
-  if (floor === "routine") return "The routine tier asks nothing above the village's own dials.";
-  return `The ${floor} tier's floor applies. The village can raise it and never lower it.`;
+/**
+ * What the floor did to this bar. `evaluateBallot` reads the unity number only
+ * under the village's own dials (`custom`); majority, consensus and consent
+ * decide agreement by their own rule, so under them a floor can raise the
+ * quorum and nothing else.
+ */
+function floorLine(floor: TierFloor, method: BallotMethod, bar: MethodDials, village: MethodDials): string {
+  const custom = method === "custom";
+  if (floor === "none") {
+    return custom
+      ? "No tier floor: the village's own dials set the bar."
+      : "No tier floor: the village's own quorum applies, and the method decides agreement.";
+  }
+  const what = floor === "subject" ? "This decision's own floor" : `The ${floor} tier's floor`;
+  if (!custom) {
+    const quorum =
+      bar.quorumPct > village.quorumPct
+        ? `${what} raises the quorum above the village's own ${village.quorumPct}.`
+        : `${what} asks no more quorum than the village's own.`;
+    return `${quorum} Under this method it sets no unity number, because the method decides agreement.`;
+  }
+  if (sameDials(bar, village)) return `${what} asks nothing above the village's own dials.`;
+  return `${what} raises it above the village's own dials, which are ${quorumWords(village.quorumPct)} and unity ${village.unityPct}. The village cannot lower that floor.`;
 }
 
 function listWords(items: readonly string[]): string {
@@ -406,7 +526,7 @@ function stewardStopOf(
   if (!inp.steward.subjectInReach(subject)) {
     return {
       stop: "out-of-reach",
-      lines: ["This village has not put this kind of decision in a steward's reach, so nobody can stop it once it carries."],
+      lines: ["This village has not put this kind of decision in a steward's reach, so no steward can stop it once it carries."],
     };
   }
   if (!inp.steward.tiersInReach.has(reachTier)) {
@@ -417,7 +537,7 @@ function stewardStopOf(
     const covers = reach.length
       ? `A steward's reach covers ${listWords(reach)} decisions.`
       : "This village lets no steward stop anything.";
-    return { stop: "out-of-reach", lines: [`${covers} ${why} Nobody can stop it once it carries.`] };
+    return { stop: "out-of-reach", lines: [`${covers} ${why} No steward can stop it once it carries.`] };
   }
   const council = inp.steward.council ? " With the council switch on, a stop takes a majority of the seated stewards." : "";
   if (inp.steward.seated === 0) {
@@ -439,7 +559,59 @@ function riskTagsFor(key: string, inp: DecisionMatrixInputs): RiskTag[] {
   return RISK_TAGS.filter((t) => given.includes(t));
 }
 
+/** The routes that make this decision with no vote, in the words the page uses. */
+function doorsBeside(subject: string, inp: DecisionMatrixInputs): string[] {
+  if (subject === CYCLE_SETTLEMENT) return [MOON_CLOSE_DOOR];
+  if (subject === MINT_RULE && !inp.gameStarted) return [MINT_EDITOR_DOOR];
+  if (subject === "power_grant") return [GRANT_DOOR];
+  if (subject === "role_seat" || subject === "role_unseat") {
+    return [seatDoor(subject, inp.powers.some((p) => p.capability === DECIDE && p.villageHolds))];
+  }
+  return [];
+}
+
+const withDoors = (text: string, doors: readonly string[]): string => [text, ...doors].join(" ");
+
 // ── The rows ───────────────────────────────────────────────────────────────
+
+/** What a member who received recognition is told when a moon settles (server/lib/cycleSettlement.ts). */
+export const MOON_SETTLED_NOTICE = "Each member who received recognition that moon is told when it settles.";
+
+/**
+ * A moon no vote decides: the village settles by hand, or the governance
+ * module is not on for members, so the Cycles desk's Close is the one way
+ * (`settlementProposalDecision` in shared/moonSettlement.ts opens no ballot on
+ * "manual" and none with governance off).
+ */
+function handSettledRow(
+  key: string,
+  decision: string,
+  detail: string | null,
+  inp: DecisionMatrixInputs,
+): DecisionMatrixRow {
+  const why =
+    inp.settlementMode !== "proposal"
+      ? "This village settles its moons by hand, so no vote is opened."
+      : "The governance module is not on for members, so no member votes on a moon.";
+  return {
+    key,
+    group: "votes",
+    decision,
+    detail,
+    approval: { who: "admin-panel", text: `The admin panel: an administrator settles each moon that has ended from the Cycles desk. ${why}` },
+    consultation: ["Nobody has to be asked first."],
+    information: [MOON_SETTLED_NOTICE],
+    method: {
+      kind: "held",
+      unityPct: null,
+      quorumPct: null,
+      tierFloor: null,
+      lines: ["No vote: an administrator presses Close on the Cycles desk."],
+    },
+    stewardStop: "not-applicable",
+    riskTags: riskTagsFor(key, inp),
+  };
+}
 
 /** One vote the platform conducts, or sends to Hypha. */
 function voteRow(
@@ -451,6 +623,10 @@ function voteRow(
   inp: DecisionMatrixInputs,
   tier?: Criticality,
 ): DecisionMatrixRow {
+  if (subject === CYCLE_SETTLEMENT && (inp.settlementMode !== "proposal" || !inp.governanceOnForMembers)) {
+    return handSettledRow(key, decision, detail, inp);
+  }
+  const doors = doorsBeside(subject, inp);
   const changeSet = carriesChangeSet(subject);
   const consultation: string[] = [];
   if (changeSet) {
@@ -476,7 +652,7 @@ function voteRow(
       group,
       decision,
       detail,
-      approval: { who: "hypha", text: `The vote in the village's Hypha space. ${why}` },
+      approval: { who: "hypha", text: withDoors(`The vote in the village's Hypha space. ${why}`, doors) },
       consultation,
       information: ["Once it passes there and is applied here, each change is written on the village's public amendment ledger."],
       method: { kind: "hypha", unityPct: null, quorumPct: null, tierFloor: null, lines: ["Hypha's own vote, off this platform."] },
@@ -500,11 +676,11 @@ function voteRow(
   consultation.push(...stop.lines);
   if (changeSet && tier) consultation.push("A change to a steward's own limits can never be stopped by a steward.");
 
-  const methodLines = [barLine(conducts, bar), floorLine(floor)];
+  const methodLines = [barLine(conducts, bar, inp.village), floorLine(floor, conducts, bar, inp.village)];
   if (bar.method) methodLines.push("It always runs on these numbers, whatever method the village uses for its other votes.");
   if (changeSet && tier) methodLines.push("A change that moves a voting bar also costs at least the bar it moves.");
   if (villageMethod === "hypha" && !bar.method) {
-    methodLines.push("This village takes its rule changes to Hypha. This one has no Hypha leg, so it is decided here on the village's own dials.");
+    methodLines.push("This village takes its rule changes to Hypha. This one has no Hypha leg, so it is decided here, on the numbers above.");
   }
   if (bar.warning) methodLines.push(bar.warning);
 
@@ -515,16 +691,24 @@ function voteRow(
       text: "The founder, who writes the statement until every transferable power has left the founding seat. Until then this vote cannot be opened.",
     };
   } else if (!inp.governanceOnForMembers) {
-    approval = { who: "not-yet", text: "Nobody yet. The governance module is not on for members, so this vote cannot be held." };
+    approval = {
+      who: "not-yet",
+      text: withDoors("No vote can be held yet: the governance module is not on for members.", doors),
+    };
   } else {
-    approval = { who: "roll", text: rollText(subject) };
+    approval = { who: "roll", text: withDoors(rollText(subject), doors) };
   }
 
   const information: string[] = [];
   if (approval.who !== "roll") {
     information.push("Nothing is announced until the vote can be held.");
   } else {
-    information.push("Everyone on the roll is told when it opens, when it is closing with their vote still owed, and how it closed.");
+    const unannounced = OPENED_WITHOUT_NOTICE[subject];
+    information.push(
+      unannounced
+        ? `Everyone on the roll is told when it is closing with their vote still owed, and how it closed. ${unannounced}`
+        : "Everyone on the roll is told when it opens, when it is closing with their vote still owed, and how it closed.",
+    );
     if (stop.stop !== "no-window" && stop.stop !== "while-open") {
       information.push(
         inp.steward.seated > 0
@@ -548,7 +732,14 @@ function voteRow(
     approval,
     consultation,
     information,
-    method: { kind: conducts, unityPct: bar.unityPct, quorumPct: bar.quorumPct, tierFloor: floor, lines: methodLines },
+    method: {
+      kind: conducts,
+      // Only the village's own dials read a unity number (`evaluateBallot`); under any other method it decides nothing.
+      unityPct: conducts === "custom" ? bar.unityPct : null,
+      quorumPct: bar.quorumPct,
+      tierFloor: floor,
+      lines: methodLines,
+    },
     stewardStop: stop.stop,
     riskTags: riskTagsFor(key, inp),
   };
@@ -566,6 +757,47 @@ function rollText(subject: string): string {
   return extra.length ? `${base}, with ${listWords(extra)}.` : `${base}.`;
 }
 
+const STEWARD_VETO_CAP: Capability = "steward.veto";
+
+/**
+ * WHO CAN STOP A CARRIED DECISION: the seated stewards, and nobody else.
+ *
+ * The gate lets an administrator record a veto while the village has not
+ * taken this power on, and `stewardVetoStands` (server/lib/stewardship.ts)
+ * counts only vetoes from people who have sat in a seat carrying it. So an
+ * administrator's objection is written down and stops nothing, and with no
+ * steward seated nothing can be stopped at all. The admin-panel sentence every
+ * other power gets would say the opposite.
+ */
+function stewardVetoApproval(h: PowerHolding, role: string, governanceOnForMembers: boolean): DecisionMatrixRow["approval"] {
+  const held = h.villageHolds ? `The village holds it, with ${role}. ` : "";
+  const admin = h.villageHolds
+    ? "An administrator who is not seated there cannot use it."
+    : "An administrator who has never sat there can record an objection, and it stops nothing.";
+  if (h.liveHolders > 0) {
+    const where = h.rolesCarrying.length ? listWords(h.rolesCarrying) : "a role that carries it";
+    return { who: "holder", text: `${held}The stewards: whoever is seated in ${where} acts on it. ${admin}` };
+  }
+  const seat = governanceOnForMembers
+    ? "The village seats one by vote."
+    : "A vote seats one, once the governance module is on for members.";
+  return {
+    who: "nobody",
+    text: `${held}Nobody today: no steward is seated, so no carried decision can be stopped. ${seat} ${admin}`,
+  };
+}
+
+/**
+ * The dial proposal sentence, read off the registry the proposal path reads.
+ * `validateChangeSet` (server/lib/mechanics.ts) refuses every dial whose ring
+ * is not "open", so while any such dial exists, "any dial" would be untrue.
+ */
+export function dialProposalLine(): string {
+  return VARIABLES.some((v) => ringOf(v) !== "open")
+    ? "Any member can propose a change to a dial the village governs, whoever holds this. A dial marked founder-held cannot be moved by a proposal."
+    : "Any member can propose a change to any dial, whoever holds this.";
+}
+
 /** One transferable power, as the gate answers for it today. */
 function powerRow(cap: Capability, p: PowerHolding | undefined, inp: DecisionMatrixInputs): DecisionMatrixRow {
   const key = `power:${cap}`;
@@ -573,7 +805,9 @@ function powerRow(cap: Capability, p: PowerHolding | undefined, inp: DecisionMat
   const role = holding.holderRoleName ? holding.holderRoleName : "a role that no longer exists";
 
   let approval: DecisionMatrixRow["approval"];
-  if (!holding.villageHolds) {
+  if (cap === STEWARD_VETO_CAP) {
+    approval = stewardVetoApproval(holding, role, inp.governanceOnForMembers);
+  } else if (!holding.villageHolds) {
     const alsoRoles = holding.rolesCarrying.length ? ` So does anyone seated in ${listWords(holding.rolesCarrying)}.` : "";
     approval = {
       who: "admin-panel",
@@ -592,7 +826,7 @@ function powerRow(cap: Capability, p: PowerHolding | undefined, inp: DecisionMat
   }
 
   const consultation = ["Nobody has to be asked first. Whoever holds it acts on their own judgement."];
-  if (cap === "dial.set") consultation.push("Any member can propose a change to any dial, whoever holds this.");
+  if (cap === "dial.set") consultation.push(dialProposalLine());
   if (cap === "redemption.confirm" && holding.liveHolders === 0) {
     consultation.push("With nobody holding it, each redemption goes to a village vote.");
   }
@@ -606,7 +840,11 @@ function powerRow(cap: Capability, p: PowerHolding | undefined, inp: DecisionMat
     "Held: whoever holds it acts, with no vote.",
     "Moving it is a village vote, to a role or back to the admin panel, on the village's own dials with no tier floor.",
   ];
-  if (cap === "steward.veto") lines.push("The steward's seat is filled and emptied only by a village vote. No admin route moves it.");
+  if (cap === STEWARD_VETO_CAP) {
+    lines.push("The steward's seat is filled only by a village vote, and it empties by a vote or when its term ends. No admin route moves it.");
+  } else {
+    lines.push("An administrator can also give it to another role directly from the admin panel, with no vote, and the village's pulse says so.");
+  }
 
   return {
     key,
@@ -660,7 +898,13 @@ export function generateDecisionMatrix(inp: DecisionMatrixInputs): DecisionMatri
     { id: "powers", ...GROUP_WORDS.powers, rows: powers },
   ];
 
-  const notes = [GENERATED_NOTE, DIALS_NOTE, sensingNote(inp.sensingDays, inp.supportThreshold), VETO_OVERRIDE_NOTE];
+  const notes = [
+    GENERATED_NOTE,
+    DIALS_NOTE,
+    sensingNote(inp.sensingDays, inp.supportThreshold),
+    VETO_OVERRIDE_NOTE,
+    applySwitchNote(inp.autoApplyEnabled),
+  ];
   if (groups.some((g) => g.rows.some((r) => r.riskTags.length > 0))) notes.push(RISK_TAG_NOTE);
 
   return {

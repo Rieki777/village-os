@@ -50,6 +50,9 @@ const matrix = (): Matrix =>
     },
     handoverComplete: false,
     powers: [{ capability: "dial.set", villageHolds: true, holderRoleName: "The Dial Keepers", liveHolders: 2, rolesCarrying: [] }],
+    settlementMode: "proposal",
+    gameStarted: false,
+    autoApplyEnabled: shipped("governance.auto_apply_enabled") === "true",
     riskTags: { "vote:mint_rule": ["budget"] },
   });
 

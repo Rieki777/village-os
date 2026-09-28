@@ -29,6 +29,10 @@
  *   the roles carrying it `rolesCarrying`, the same test as the counter
  *   the steward's reach   `mayVeto` and `stewardVetoTiersFrom`, the parsers the
  *                         landing loop and the veto route use
+ *   how a moon settles    `settlementModeFrom` over cycle.settlement_mode, the
+ *                         moon proposer's own reading
+ *   whether it started    `readGameStart`, the fact the minting-rule editor asks
+ *   the landing switch    governance.auto_apply_enabled, as the landing job reads it
  *
  * The two holder readers are passed in from server/index.ts, where their
  * caches live, the way server/routes/powerHands.ts takes them.
@@ -39,8 +43,10 @@ import { thresholdSettingsFrom } from "../../shared/ballotSubjects";
 import { HANDOVER_SET, type Capability } from "../../shared/capabilities";
 import { generateDecisionMatrix, type DecisionMatrixInputs, type PowerHolding } from "../../shared/decisionMatrix";
 import { LIFECYCLE_RANK } from "../../shared/modules";
+import { settlementModeFrom } from "../../shared/moonSettlement";
 import { capabilityHoldings, villageHandoverState } from "../lib/capabilityHolding";
 import { POWERS } from "../lib/capabilityRegistry";
+import { readGameStart } from "../lib/gameStart";
 import { effectiveLifecycle } from "../lib/modules";
 import {
   mayVeto,
@@ -67,7 +73,11 @@ export const MATRIX_UNREADABLE = "Who holds the village's powers could not be re
 /** Everything the generator needs, read from this village as it stands. */
 export async function readMatrixInputs(deps: DecisionMatrixDeps): Promise<DecisionMatrixInputs> {
   const pool = deps.getPool();
-  const [holdings, handover] = await Promise.all([capabilityHoldings(pool), villageHandoverState(pool)]);
+  const [holdings, handover, start] = await Promise.all([
+    capabilityHoldings(pool),
+    villageHandoverState(pool),
+    readGameStart(pool),
+  ]);
   const held = new Map(holdings.map((h) => [h.capability, h]));
   const titles = new Map(POWERS.map((p) => [p.capability, p.title]));
   const counted = await Promise.all(HANDOVER_SET.map((cap) => deps.liveHoldersOf(cap)));
@@ -107,6 +117,9 @@ export async function readMatrixInputs(deps: DecisionMatrixDeps): Promise<Decisi
     },
     handoverComplete: handover.complete,
     powers,
+    settlementMode: settlementModeFrom(stringVar("cycle.settlement_mode")),
+    gameStarted: start.started,
+    autoApplyEnabled: boolVar("governance.auto_apply_enabled"),
   };
 }
 

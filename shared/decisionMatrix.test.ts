@@ -23,10 +23,17 @@ import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  applySwitchNote,
+  dialProposalLine,
   generateDecisionMatrix,
+  GRANT_DOOR,
+  MINT_EDITOR_DOOR,
+  MOON_CLOSE_DOOR,
   MOVING_DECISIONS,
+  OPENED_WITHOUT_NOTICE,
   RISK_TAG_NOTE,
   RISK_TAGS,
+  seatDoor,
   sensingNote,
   stewardReachTierOf,
   SUBJECT_DECISIONS,
@@ -38,14 +45,14 @@ import {
   type StewardReach,
 } from "./decisionMatrix";
 import { GOVERNANCE_MODE, MINT_RULE, SUBJECT_THRESHOLDS, thresholdSettingsFrom, VILLAGE_LAUNCH } from "./ballotSubjects";
-import { HANDOVER_SET } from "./capabilities";
-import { dialsForMethod, TIER_FLOORS, type Criticality, type MethodDials } from "./governanceEngine";
+import { CAPABILITY_LABELS, HANDOVER_SET } from "./capabilities";
+import { dialsForMethod, evaluateBallot, TIER_FLOORS, type Criticality, type MethodDials } from "./governanceEngine";
 import { SEAT_SUBJECTS } from "./governanceKinds";
 import { GPS_CHANGE } from "./governingPurpose";
-import { CYCLE_SETTLEMENT } from "./moonSettlement";
-import { VARIABLES_BY_KEY } from "./gameVariables";
+import { CYCLE_SETTLEMENT, settlementModeFrom, settlementProposalDecision } from "./moonSettlement";
+import { ringOf, VARIABLES, VARIABLES_BY_KEY } from "./gameVariables";
 import { mayVeto, stewardVetoTiersFrom } from "../server/lib/stewardship";
-import { pricingOf } from "../server/lib/mechanics";
+import { pricingOf, validateChangeSet } from "../server/lib/mechanics";
 import { changeSetOf } from "../server/lib/applyDue";
 
 const shipped = (key: string): string => {
@@ -72,7 +79,7 @@ function steward(over: Partial<StewardReach> & { subjectsRaw?: string; tiersRaw?
   };
 }
 
-/** A fresh village on the shipped settings, governance on for members, holding nothing. */
+/** A fresh village on the shipped settings, governance on for members, holding nothing, its Game not started. */
 function inputs(over: Partial<DecisionMatrixInputs> = {}): DecisionMatrixInputs {
   return {
     defaultMethod: shipped("governance.default_method"),
@@ -83,6 +90,9 @@ function inputs(over: Partial<DecisionMatrixInputs> = {}): DecisionMatrixInputs 
     steward: steward(),
     handoverComplete: false,
     powers: [],
+    settlementMode: settlementModeFrom(shipped("cycle.settlement_mode")),
+    gameStarted: false,
+    autoApplyEnabled: shipped("governance.auto_apply_enabled") === "true",
     ...over,
   };
 }
@@ -317,7 +327,8 @@ describe("who decides a power", () => {
   it("every transferable power has one row, in the platform's order, even when the caller names none", () => {
     const powers = generateDecisionMatrix(inputs()).groups.find((g) => g.id === "powers")!.rows;
     expect(powers.map((r) => r.key)).toEqual(HANDOVER_SET.map((c) => `power:${c}`));
-    for (const r of powers) expect(r.approval.who, r.key).toBe("admin-panel");
+    // The steward's veto is the one exception: an administrator's veto stops nothing (see below).
+    for (const r of powers) expect(r.approval.who, r.key).toBe(r.key === "power:steward.veto" ? "nobody" : "admin-panel");
   });
 
   it("before the handover: the admin panel, and the roles that carry it by name", () => {
@@ -340,7 +351,7 @@ describe("who decides a power", () => {
     );
     expect(row(m, "power:dial.set").approval).toMatchObject({ who: "holder" });
     expect(row(m, "power:dial.set").approval.text).toContain("with Steward");
-    expect(row(m, "power:dial.set").consultation.join(" ")).toContain("Any member can propose a change to any dial");
+    expect(row(m, "power:dial.set").consultation).toContain(dialProposalLine());
     expect(row(m, "power:forum.moderate").approval).toMatchObject({ who: "roll" });
     expect(row(m, "power:forum.moderate").approval.text).toContain("nobody is seated there today");
   });
@@ -410,7 +421,8 @@ describe("where a vote is held", () => {
     const m = generateDecisionMatrix(inputs({ governanceOnForMembers: false }));
     expect(row(m, "vote:mechanics:routine").approval.who).toBe("hypha");
     expect(row(m, `vote:${MINT_RULE}`).approval.who).toBe("hypha");
-    for (const key of [`vote:${VILLAGE_LAUNCH}`, `vote:${CYCLE_SETTLEMENT}`, "move:power_transfer", "move:role_seat"]) {
+    // A moon is the exception: with no vote, the Cycles desk settles it ("a vote is not always the only door" below).
+    for (const key of [`vote:${VILLAGE_LAUNCH}`, "move:power_transfer", "move:role_seat"]) {
       expect(row(m, key).approval.who, key).toBe("not-yet");
       expect(row(m, key).information, key).toEqual(["Nothing is announced until the vote can be held."]);
     }
@@ -444,11 +456,277 @@ describe("coverage and copy", () => {
   });
 
   it("carries no percent sign, no dash a member reads as a pause, and no count of anything handed over", () => {
-    for (const over of [{}, { defaultMethod: "consent" }, { governanceOnForMembers: false }, { handoverComplete: true }]) {
+    for (const over of [
+      {},
+      { defaultMethod: "consent" },
+      { governanceOnForMembers: false },
+      { handoverComplete: true },
+      { settlementMode: "manual" as const, autoApplyEnabled: false, gameStarted: true },
+    ]) {
       const text = JSON.stringify(generateDecisionMatrix(inputs(over)));
       expect(text).not.toContain("%");
       expect(text).not.toMatch(/[–—]/);
       expect(text).not.toMatch(/\b\d+ of \d+\b/);
     }
+  });
+});
+
+// ── THE REVIEW OF 2026-09-27: EACH SENTENCE HELD TO WHAT THE CODE DOES ──────
+
+const allLines = (r: DecisionMatrixRow): string => [r.approval.text, ...r.consultation, ...r.information, ...r.method.lines].join("\n");
+
+/** A village whose routine tier setting was raised to unity 70 and quorum 40, over its own 60 and 20. */
+const RAISED_ROUTINE: Partial<DecisionMatrixInputs> = {
+  village: { unityPct: 60, quorumPct: 20 },
+  settings: thresholdSettingsFrom(
+    (k) => ({ "governance.tier_routine_unity_pct": 70, "governance.tier_routine_quorum_pct": 40 })[k] ?? 0,
+  ),
+};
+
+describe("the Method column names what set the bar", () => {
+  const OWN = /The village's own dials: (?:quorum (\d+)|no quorum) and unity (\d+)/;
+  const variations: Array<[string, Partial<DecisionMatrixInputs>]> = [
+    ["shipped settings", {}],
+    ["a village whose own dials sit above every floor but the Birthing's", { village: { unityPct: 99, quorumPct: 99 } }],
+    ["a village that raised its routine tier", RAISED_ROUTINE],
+  ];
+  for (const [name, over] of variations) {
+    it(`on ${name}: "the village's own dials" is only ever followed by the village's own numbers`, () => {
+      const inp = inputs(over);
+      let named = 0;
+      for (const r of rows(generateDecisionMatrix(inp))) {
+        for (const line of r.method.lines) {
+          const m = line.match(OWN);
+          if (!m) continue;
+          named += 1;
+          expect({ unityPct: Number(m[2]), quorumPct: Number(m[1] ?? 0) }, `${r.key}: ${line}`).toEqual(inp.village);
+        }
+      }
+      // The denominator: a check that found no such line would pass on nothing.
+      expect(named, name).toBeGreaterThan(0);
+    });
+  }
+
+  it("a floored vote on shipped settings is counted on the numbers it freezes, and the village's own are named as its own", () => {
+    const m = generateDecisionMatrix(inputs());
+    const structural = row(m, "vote:mechanics:structural");
+    const q = Math.max(VILLAGE.quorumPct, TIER_FLOORS.structural.quorumPct);
+    const u = Math.max(VILLAGE.unityPct, TIER_FLOORS.structural.unityPct);
+    // The floor really does raise it on shipped settings, or this case would test nothing.
+    expect(q).not.toBe(VILLAGE.quorumPct);
+    expect(structural.method.lines[0]).toBe(`Counted on the numbers this vote freezes: quorum ${q} and unity ${u}.`);
+    expect(structural.method.lines[1]).toBe(
+      `The structural tier's floor raises it above the village's own dials, which are quorum ${VILLAGE.quorumPct} and unity ${VILLAGE.unityPct}. The village cannot lower that floor.`,
+    );
+    for (const key of ["vote:mechanics:constitutional", `vote:${GOVERNANCE_MODE}`, `vote:${VILLAGE_LAUNCH}`, `vote:${MINT_RULE}`]) {
+      expect(row(m, key).method.lines[0], key).toMatch(/^Counted on the numbers this vote freezes/);
+    }
+  });
+
+  it("a raised routine tier is shown raising the routine bar, and the shipped routine tier as asking nothing more", () => {
+    const raised = row(generateDecisionMatrix(inputs(RAISED_ROUTINE)), "vote:mechanics:routine");
+    expect(raised.method).toMatchObject({ unityPct: 70, quorumPct: 40 });
+    expect(raised.method.lines).toContain(
+      "The routine tier's floor raises it above the village's own dials, which are quorum 20 and unity 60. The village cannot lower that floor.",
+    );
+    expect(raised.method.lines.join(" ")).not.toContain("asks nothing above");
+    expect(row(generateDecisionMatrix(inputs()), "vote:mechanics:routine").method.lines.slice(0, 2)).toEqual([
+      `The village's own dials: quorum ${VILLAGE.quorumPct} and unity ${VILLAGE.unityPct}.`,
+      "The routine tier's floor asks nothing above the village's own dials.",
+    ]);
+  });
+
+  it("under majority, consensus and consent a floor raises the quorum and names no unity number, because none is read", () => {
+    // The engine's own reading: a majority ballot frozen at unity 80 carries at 60 of 100 saying yes.
+    const tallies = { yesW: 60, noW: 40, abstainW: 0 };
+    expect(evaluateBallot({ method: "majority", unityPct: 80, quorumPct: 50, totalWeight: 100, tallies })).toBe("passed");
+    expect(evaluateBallot({ method: "custom", unityPct: 80, quorumPct: 50, totalWeight: 100, tallies })).toBe("failed");
+    for (const method of ["majority", "consensus", "consent"]) {
+      const r = row(generateDecisionMatrix(inputs({ defaultMethod: method })), "vote:mechanics:structural");
+      expect(r.method.kind, method).toBe(method);
+      expect(r.method.unityPct, method).toBeNull();
+      expect(r.method.quorumPct, method).toBe(Math.max(VILLAGE.quorumPct, TIER_FLOORS.structural.quorumPct));
+      expect(r.method.lines.join(" "), method).not.toMatch(/unity \d/);
+      expect(r.method.lines[1], method).toBe(
+        `The structural tier's floor raises the quorum above the village's own ${VILLAGE.quorumPct}. Under this method it sets no unity number, because the method decides agreement.`,
+      );
+    }
+  });
+});
+
+describe("the steward's veto names who can really stop a carried decision", () => {
+  it("before the village takes it on, with nobody seated: nobody, and an administrator's objection stops nothing", () => {
+    const r = row(generateDecisionMatrix(inputs({ steward: steward({ seated: 0 }) })), "power:steward.veto");
+    expect(r.approval.who).toBe("nobody");
+    expect(r.approval.text).toContain("Nobody today: no steward is seated, so no carried decision can be stopped.");
+    expect(r.approval.text).toContain("An administrator who has never sat there can record an objection, and it stops nothing.");
+    expect(r.approval.text).not.toContain("admins and founders act on it");
+    // Every other power a fresh village holds nothing of is still the admin panel's.
+    expect(row(generateDecisionMatrix(inputs()), "power:dial.set").approval.who).toBe("admin-panel");
+  });
+
+  it("with a steward seated: the stewards, by the roles that carry it", () => {
+    const m = generateDecisionMatrix(
+      inputs({ powers: [holding({ capability: "steward.veto", liveHolders: 1, rolesCarrying: ["Stewards"] })] }),
+    );
+    const r = row(m, "power:steward.veto");
+    expect(r.approval.who).toBe("holder");
+    expect(r.approval.text).toContain("The stewards: whoever is seated in Stewards acts on it.");
+    expect(r.approval.text).toContain("it stops nothing");
+  });
+
+  it("once the village holds it, an administrator who is not seated cannot use it at all", () => {
+    const r = row(
+      generateDecisionMatrix(
+        inputs({ powers: [holding({ capability: "steward.veto", villageHolds: true, holderRoleName: "Stewards", liveHolders: 0 })] }),
+      ),
+      "power:steward.veto",
+    );
+    expect(r.approval.who).toBe("nobody");
+    expect(r.approval.text).toContain("The village holds it, with Stewards.");
+    expect(r.approval.text).toContain("An administrator who is not seated there cannot use it.");
+  });
+
+  it("its seat empties at the end of its term as well as by a vote, and no other power's row says so", () => {
+    const m = generateDecisionMatrix(inputs());
+    expect(row(m, "power:steward.veto").method.lines).toContain(
+      "The steward's seat is filled only by a village vote, and it empties by a vote or when its term ends. No admin route moves it.",
+    );
+    expect(row(m, "power:dial.set").method.lines.join(" ")).not.toContain("steward's seat");
+  });
+});
+
+describe("a vote is not always the only door", () => {
+  const DUE = [{ id: "c-7", cycleNumber: 7 }];
+
+  it("a moon: the roll votes, and an administrator can settle it from the Cycles desk anyway", () => {
+    const r = row(generateDecisionMatrix(inputs()), `vote:${CYCLE_SETTLEMENT}`);
+    expect(r.approval.who).toBe("roll");
+    expect(r.approval.text).toContain(MOON_CLOSE_DOOR);
+  });
+
+  it("a village that settles by hand, or has governance off for members, gets no moon vote, and the Cycles desk decides", () => {
+    // The engine's own answer, which the rows below follow.
+    expect(settlementProposalDecision({ mode: "proposal", governanceOn: true, due: DUE, asks: [] }).post).toBe(true);
+    expect(settlementProposalDecision({ mode: "manual", governanceOn: true, due: DUE, asks: [] }).post).toBe(false);
+    expect(settlementProposalDecision({ mode: "proposal", governanceOn: false, due: DUE, asks: [] }).post).toBe(false);
+    const cases: Array<[Partial<DecisionMatrixInputs>, string]> = [
+      [{ settlementMode: "manual" }, "This village settles its moons by hand, so no vote is opened."],
+      [{ governanceOnForMembers: false }, "The governance module is not on for members, so no member votes on a moon."],
+    ];
+    for (const [over, why] of cases) {
+      const r = row(generateDecisionMatrix(inputs(over)), `vote:${CYCLE_SETTLEMENT}`);
+      expect(r.approval.who, why).toBe("admin-panel");
+      expect(r.approval.text, why).toContain(why);
+      expect(r.approval.text, why).not.toContain("The roll");
+      expect(r.method, why).toMatchObject({ kind: "held", unityPct: null, quorumPct: null, tierFloor: null });
+      expect(r.stewardStop, why).toBe("not-applicable");
+    }
+  });
+
+  it("a minting rule: the admin panel's editor is named until the Game starts, and never after", () => {
+    for (const governanceOnForMembers of [true, false]) {
+      const before = row(generateDecisionMatrix(inputs({ governanceOnForMembers })), `vote:${MINT_RULE}`);
+      expect(before.approval.text, String(governanceOnForMembers)).toContain(MINT_EDITOR_DOOR);
+      const after = row(generateDecisionMatrix(inputs({ governanceOnForMembers, gameStarted: true })), `vote:${MINT_RULE}`);
+      expect(after.approval.text, String(governanceOnForMembers)).not.toContain(MINT_EDITOR_DOOR);
+    }
+  });
+
+  it("giving a role a power: the admin panel's door is on the vote and on every power's row but the steward's veto", () => {
+    const m = generateDecisionMatrix(inputs());
+    expect(row(m, "move:power_grant").approval.text).toContain(GRANT_DOOR);
+    const door = "An administrator can also give it to another role directly from the admin panel, with no vote, and the village's pulse says so.";
+    for (const cap of HANDOVER_SET) {
+      if (cap === "steward.veto") expect(row(m, `power:${cap}`).method.lines).not.toContain(door);
+      else expect(row(m, `power:${cap}`).method.lines, cap).toContain(door);
+    }
+  });
+
+  it("seating and unseating: the holders route's door follows who holds the power to record a decision's outcome", () => {
+    const power = `the power to ${CAPABILITY_LABELS["proposal.decide"].toLowerCase()}`;
+    const panel = generateDecisionMatrix(inputs());
+    expect(row(panel, "move:role_seat").approval.text).toContain(seatDoor("role_seat", false));
+    expect(row(panel, "move:role_unseat").approval.text).toContain(seatDoor("role_unseat", false));
+    expect(seatDoor("role_seat", false)).toContain("themselves included");
+
+    const held = generateDecisionMatrix(
+      inputs({ powers: [holding({ capability: "proposal.decide", villageHolds: true, holderRoleName: "Recorders", liveHolders: 1 })] }),
+    );
+    expect(row(held, "move:role_seat").approval.text).toContain(seatDoor("role_seat", true));
+    expect(row(held, "move:role_unseat").approval.text).toContain(seatDoor("role_unseat", true));
+    expect(seatDoor("role_seat", true)).toContain(power);
+    expect(seatDoor("role_unseat", true)).toContain(power);
+    expect(seatDoor("role_seat", true)).not.toBe(seatDoor("role_seat", false));
+  });
+
+  it("the votes with no door beside them name none", () => {
+    const m = generateDecisionMatrix(inputs({ gameStarted: true, handoverComplete: true }));
+    for (const key of [
+      "vote:mechanics:routine",
+      "vote:mechanics:constitutional",
+      `vote:${VILLAGE_LAUNCH}`,
+      `vote:${GOVERNANCE_MODE}`,
+      `vote:${MINT_RULE}`,
+      `vote:${GPS_CHANGE}`,
+      "move:power_transfer",
+      "move:power_return",
+    ]) {
+      expect(row(m, key).approval.text, key).not.toContain("with no vote");
+    }
+  });
+});
+
+describe("dial proposals, as the proposal path answers them", () => {
+  it("a founder-held dial is refused by the proposal path, and the dial.set row says so", async () => {
+    const founderHeld = VARIABLES.find((v) => ringOf(v) !== "open" && v.key !== "governance.weight_mode");
+    expect(founderHeld, "the registry holds a founder-held dial").toBeTruthy();
+    const pool = { query: async () => [[]] } as never;
+    const value = String(founderHeld!.default);
+    const { problems } = await validateChangeSet(pool, [{ key: founderHeld!.key, to: value }], () => value, 0);
+    expect(problems.map((p) => p.problem)).toContain("This dial is founder-held and cannot be moved by proposal");
+
+    const r = row(generateDecisionMatrix(inputs()), "power:dial.set");
+    expect(r.consultation).toContain(dialProposalLine());
+    expect(dialProposalLine()).toContain("A dial marked founder-held cannot be moved by a proposal.");
+    expect(r.consultation.join(" ")).not.toContain("any dial,");
+  });
+});
+
+describe("who is told when a vote opens", () => {
+  it("the two openers that send no notice say so, and every other vote on the roll promises one", () => {
+    const m = generateDecisionMatrix(inputs({ handoverComplete: true }));
+    for (const s of [GOVERNANCE_MODE, GPS_CHANGE]) {
+      const info = row(m, `vote:${s}`).information.join(" ");
+      expect(info, s).not.toContain("told when it opens");
+      expect(info, s).toContain(OPENED_WITHOUT_NOTICE[s]);
+    }
+    for (const key of [`vote:${VILLAGE_LAUNCH}`, `vote:${MINT_RULE}`, `vote:${CYCLE_SETTLEMENT}`, "vote:mechanics:routine", "move:role_seat"]) {
+      expect(row(m, key).information[0], key).toContain("told when it opens");
+    }
+  });
+
+  it("rests on a fact about the codebase: those two openers send the roll no ballot_opened notice", () => {
+    const sends = (f: string) => /ballot_opened|notifyRoll\(/.test(fs.readFileSync(path.join(SRC_ROOT, f), "utf8"));
+    // A known positive first, so an empty search cannot pass on a pattern that finds nothing anywhere.
+    expect(sends("server/routes/powerHands.ts")).toBe(true);
+    // The day either of these sends one, OPENED_WITHOUT_NOTICE has to lose it.
+    expect(sends("server/routes/governanceMode.ts")).toBe(false);
+    expect(sends("server/routes/governingPurpose.ts")).toBe(false);
+    expect(Object.keys(OPENED_WITHOUT_NOTICE).sort()).toEqual([GOVERNANCE_MODE, GPS_CHANGE].sort());
+  });
+});
+
+describe("the landing switch", () => {
+  it("no row says nobody can stop a carried decision, and the notes name the switch that can hold every one", () => {
+    for (const autoApplyEnabled of [true, false]) {
+      for (const over of [{}, { steward: steward({ subjectsRaw: "none" }) }]) {
+        const m = generateDecisionMatrix(inputs({ autoApplyEnabled, ...over }));
+        for (const r of rows(m)) expect(allLines(r), r.key).not.toMatch(/nobody can stop it once it carries/i);
+        expect(m.notes).toContain(applySwitchNote(autoApplyEnabled));
+      }
+    }
+    expect(applySwitchNote(false)).toContain("is off, so every carried decision that waits for its window is held");
+    expect(applySwitchNote(true)).toContain(`"${VARIABLES_BY_KEY["governance.auto_apply_enabled"].label}" is on`);
   });
 });
