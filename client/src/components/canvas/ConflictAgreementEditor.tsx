@@ -27,6 +27,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { authToken } from "@/lib/gameApi";
+import { ideasNotYetAdded, namedContacts, removeAt, rolesOtherThan, withRungWords } from "@/lib/agreementDraft";
 import {
   AGREEMENT_FRAMES,
   APPEAL_NOT_ENFORCED,
@@ -276,7 +277,7 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
                       </button>
                     )}
                     {draft.steps.length > 1 && (
-                      <button type="button" className={smallButton} onClick={() => set({ steps: draft.steps.filter((_, j) => j !== i) })}>
+                      <button type="button" className={smallButton} onClick={() => set({ steps: removeAt(draft.steps, i) })}>
                         Remove this step
                       </button>
                     )}
@@ -316,7 +317,7 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
                 The cover role: who hears it when the care role cannot
                 <select className={input} value={draft.coverRole} disabled={!draft.careRole} onChange={(e) => set({ coverRole: e.target.value })}>
                   <option value="">No cover</option>
-                  {payload.roles.filter((r) => r.id !== draft.careRole).map((r) => (
+                  {rolesOtherThan(payload.roles, draft.careRole).map((r) => (
                     <option key={r.id} value={r.id}>
                       {roleLabel(r)}
                     </option>
@@ -344,7 +345,7 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
                     className={smallButton}
                     onClick={() =>
                       set({
-                        outsideContacts: draft.outsideContacts.filter((_, j) => j !== i),
+                        outsideContacts: removeAt(draft.outsideContacts, i),
                         whenPowerInvolved:
                           draft.whenPowerInvolved.outsideContactId === c.id ? { ...draft.whenPowerInvolved, outsideContactId: "" } : draft.whenPowerInvolved,
                       })
@@ -399,12 +400,12 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
                   }}
                 >
                   <option value="">Not named yet</option>
-                  {payload.roles.filter((r) => r.id !== draft.careRole).map((r) => (
+                  {rolesOtherThan(payload.roles, draft.careRole).map((r) => (
                     <option key={r.id} value={`role:${r.id}`}>
                       {roleLabel(r)}
                     </option>
                   ))}
-                  {draft.outsideContacts.filter((c) => c.name.trim()).map((c) => (
+                  {namedContacts(draft.outsideContacts).map((c) => (
                     <option key={c.id} value={`contact:${c.id}`}>
                       {c.name}, outside the village
                     </option>
@@ -435,7 +436,7 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
                       />
                     </label>
                   ))}
-                  <button type="button" className={smallButton} onClick={() => set({ safetyContacts: draft.safetyContacts.filter((_, j) => j !== i) })}>
+                  <button type="button" className={smallButton} onClick={() => set({ safetyContacts: removeAt(draft.safetyContacts, i) })}>
                     Remove this contact
                   </button>
                 </div>
@@ -453,8 +454,7 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
               {([1, 2, 3, 4] as LadderRungNumber[]).map((rung) => {
                 const mine = draft.consequencesLadder.rungs.find((r) => r.rung === rung);
                 const setWords = (words: string) => {
-                  const others = draft.consequencesLadder.rungs.filter((r) => r.rung !== rung);
-                  set({ consequencesLadder: { ...draft.consequencesLadder, rungs: [...others, { rung, words }].sort((x, y) => x.rung - y.rung) } });
+                  set({ consequencesLadder: { ...draft.consequencesLadder, rungs: withRungWords(draft.consequencesLadder.rungs, rung, words) } });
                 };
                 return (
                   <label key={rung} className={label}>
@@ -488,7 +488,7 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
                     When
                     <input className={input} value={p.when} onChange={(e) => set({ practices: draft.practices.map((x, j) => (j === i ? { ...x, when: e.target.value } : x)) })} />
                   </label>
-                  <button type="button" className={smallButton} onClick={() => set({ practices: draft.practices.filter((_, j) => j !== i) })}>
+                  <button type="button" className={smallButton} onClick={() => set({ practices: removeAt(draft.practices, i) })}>
                     Remove this practice
                   </button>
                 </div>
@@ -500,7 +500,7 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
                   </button>
                   <p className="text-xs text-stone-600">Ideas other villages keep, added only if you tap one:</p>
                   <div className="flex flex-wrap gap-2">
-                    {PRACTICE_IDEAS.filter((idea) => !draft.practices.some((p) => p.name === idea.name)).map((idea) => (
+                    {ideasNotYetAdded(PRACTICE_IDEAS, draft.practices).map((idea) => (
                       <button key={idea.name} type="button" className={smallButton} onClick={() => set({ practices: [...draft.practices, { ...idea }] })}>
                         {idea.name}
                       </button>

@@ -64,7 +64,7 @@ const hours = (n: number) => (n === 1 ? "1 hour" : `${n} hours`);
 const day = (iso: string) => new Date(iso.length === 10 ? `${iso}T12:00:00Z` : iso).toLocaleDateString();
 
 export function AgreementBody({ a }: { a: PublicAgreement }) {
-  const outside = a.outsideContacts.filter((c) => c.label !== "");
+  const outside = a.outsideContacts;
   return (
     <div className="space-y-5 text-stone-700 leading-relaxed">
       <p className="text-sm text-stone-600">
@@ -149,7 +149,7 @@ function OmbudsDoor({ contact, onAsked }: { contact: { id: string; name: string;
   const [answer, setAnswer] = useState<{ name: string; howToReach: string; organisation: string; role: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const label = [contact.role, contact.organisation].filter(Boolean).join(", ");
+  const label = contact.role && contact.organisation ? `${contact.role}, ${contact.organisation}` : contact.role || contact.organisation;
 
   const ask = async () => {
     setBusy(true);
