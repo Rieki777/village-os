@@ -419,18 +419,43 @@ export function StarLantern({ daysRemaining, endsAt }: { daysRemaining: number |
  * need the hub gives no wanted count for falls back to the largest count it
  * does give, which is the only case where the old denominator was right.
  */
+/**
+ * A need's progress, in whatever the need is counted in.
+ *
+ * THE UNIT IS NOT DECORATION. Until hub contract 3 every need counted PEOPLE,
+ * so three bare numbers beside a role were unambiguous. At contract 3 a role
+ * may count HOURS A WEEK instead (Rye, 2026-09-24: a role needs N hours a
+ * week, set by the steward, and people are accepted at a number of hours), and
+ * the same three glyphs then mean something else entirely on one need and not
+ * its neighbours. "10 arrived, 5 spoken for, 40 wanted" beside a role reads as
+ * forty PEOPLE to anyone who has just read the need above it.
+ *
+ * THE SPOKEN LABEL IS THE HALF THAT MATTERS MOST. A sighted reader has the
+ * surrounding card to correct them; a screen-reader user gets these three
+ * numbers and nothing else, so the unit has to be IN the sentence rather than
+ * implied by what is next to it.
+ *
+ * A MISSING UNIT MEANS PEOPLE, deliberately. Every need that predates contract
+ * 3 has no `capacityUnit`, and every hub older than that sends none, so the
+ * absent value has to keep its old meaning or the whole back catalogue changes
+ * unit on the day a field arrives.
+ */
 export function SlotMeter({
-  wanted, claimed, delivered, tint,
+  wanted, claimed, delivered, tint, unit = "count",
 }: {
   wanted: number; claimed: number; delivered: number; tint: string;
+  /** 'hours_per_week' only at hub contract 3 or later; anything else counts people. */
+  unit?: string;
 }) {
+  const hours = unit === "hours_per_week";
+  const noun = (n: number) => (hours ? `${n} hours a week` : String(n));
   const track = wanted > 0 ? wanted : Math.max(claimed, delivered, 1);
   const dPct = Math.min(100, Math.max(0, (delivered / track) * 100));
   const cPct = Math.min(100, Math.max(0, (Math.max(claimed, delivered) / track) * 100));
   const over = isOverDelivered({ quantityWanted: wanted, quantityDelivered: delivered });
   const spoken = over
-    ? `${delivered} delivered, ${claimed} claimed, ${wanted} wanted, which is more delivered than wanted`
-    : `${delivered} delivered, ${claimed} claimed, ${wanted} wanted`;
+    ? `${noun(delivered)} delivered, ${noun(claimed)} claimed, ${noun(wanted)} wanted, which is more delivered than wanted`
+    : `${noun(delivered)} delivered, ${noun(claimed)} claimed, ${noun(wanted)} wanted`;
   return (
     <div className="cp-slots" role="img" aria-label={spoken}>
       <div className="cp-slots-track">
@@ -438,11 +463,19 @@ export function SlotMeter({
         <div className="cp-slots-delivered" style={{ width: `${dPct}%`, background: tint }} />
       </div>
       <div className="cp-slots-caption">
-        <span>{delivered} arrived</span>
-        <span>{Math.max(0, claimed - delivered)} spoken for</span>
-        <span>{wanted} wanted</span>
+        <span>{hours ? `${delivered} hours a week` : delivered} arrived</span>
+        <span>{hours ? `${Math.max(0, claimed - delivered)} hours a week` : Math.max(0, claimed - delivered)} spoken for</span>
+        <span>{hours ? `${wanted} hours a week` : wanted} wanted</span>
       </div>
-      {over && (
+      {/*
+        * NOT ON AN HOURS NEED, and for a sharper reason than "it cannot
+        * happen". The hub refuses an accept past `quantityWanted` on hours
+        * needs and recomputes the counters from contribution rows, so it
+        * should not arise. But this sentence names a SPECIFIC hub defect, and
+        * printing it about a need where that defect does not exist would be a
+        * false accusation. Wrong for a better reason is still wrong.
+        */}
+      {over && !hours && (
         <p className="cp-slots-over">
           More arrived than were wanted. The hub counts a delivery twice when two stewards confirm
           it at once, and it is fixing that. Nothing here changes what the hub recorded.
