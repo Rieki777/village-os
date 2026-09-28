@@ -18,13 +18,16 @@ describe("splitting a vendor read into two streams", () => {
     expect(r.held).toEqual([]);
   });
 
-  it("HOLDS A CIRCLE, because accepting one today would create a seat named after it", () => {
-    // `circle.proposed` is an accepted kind, the review queue runs it through
-    // the SEAT reader, and there is no create_circle operation. Emitting one
-    // would ship that bug. It is held, named, and still produces detail.
+  it("PROPOSES A CIRCLE AS A CIRCLE, now that the operation to make one exists", () => {
+    // This case used to assert the opposite, and the reason it flipped is the
+    // point: `circle.proposed` was an accepted kind whose accept path ran it
+    // through the SEAT reader, so accepting one made a seat named after the
+    // circle. `create_circle` and the branch in the accept path landed together
+    // with this line.
     const r = splitStreams([rec("c-1", "circle", { "Circle Name": "Land & Ecology", Status: "Active" })]);
-    expect(r.structure).toEqual([]);
-    expect(r.held).toEqual([{ id: "c-1", kind: "circle", reason: "no-create-circle-op" }]);
+    expect(r.structure).toEqual([{ kind: "circle.proposed", records: [expect.objectContaining({ id: "c-1" })] }]);
+    expect(r.held).toEqual([]);
+    // It still produces detail, which is what the panel reads.
     expect(r.facts).toHaveLength(1);
     expect(r.facts[0].attachesTo).toBe("Land & Ecology");
   });
@@ -59,19 +62,22 @@ describe("splitting a vendor read into two streams", () => {
   });
 
   it("KEEPS DETAIL FOR A RECORD IT CANNOT PROPOSE, which is the point of the store", () => {
-    // A circle we cannot propose still has detail worth showing beside the
-    // circle we already have.
+    // A role assignment proposes nothing: what survives the boundary is state
+    // about a seat, and this village decides its own seatings. The detail is
+    // still worth showing beside the seat, which is why a fact exists for a
+    // record that produces no proposal at all.
     const r = splitStreams([
-      rec("c-1", "circle", {
-        "Circle Name": "Governance & Coordination",
-        Sector: "Sector 3 - Culture & Spirit",
+      rec("a-1", "roleAssignment", {
+        Role: "Finance Steward",
+        "Energization Level": "Partial",
         "Next Review Date": "2026-12-01",
       }),
     ]);
     expect(r.structure).toEqual([]);
+    expect(r.held).toEqual([{ id: "a-1", kind: "roleAssignment", reason: "kind-not-allowed" }]);
     expect(r.facts[0].fields).toEqual({
-      "Circle Name": "Governance & Coordination",
-      Sector: "Sector 3 - Culture & Spirit",
+      Role: "Finance Steward",
+      "Energization Level": "Partial",
       "Next Review Date": "2026-12-01",
     });
   });

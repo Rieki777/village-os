@@ -48,11 +48,7 @@ import type { VendorRecord } from "./saberraProposals";
 export type Stream = "structure" | "people";
 
 /** Why a record produced no proposal, so a steward is never silently given less. */
-export type HeldReason =
-  | "no-create-circle-op"
-  | "kind-not-allowed"
-  | "everything-was-dropped"
-  | "no-name";
+export type HeldReason = "kind-not-allowed" | "everything-was-dropped" | "no-name";
 
 export interface HeldRecord {
   id: string;
@@ -77,15 +73,20 @@ export interface VendorFact {
 /**
  * Which proposal kind each vendor record becomes.
  *
- * `circle` is deliberately absent and that is not an oversight. `circle.proposed`
- * IS an accepted kind, and the review queue runs it through the SEAT reader
- * (`server/routes/review.ts`, `ORG_KINDS`), while `DraftOp` has no
- * `create_circle`. So a circle proposal accepted today becomes a seat named
- * after the circle. Emitting one would be shipping that bug rather than
- * finding it. Circles ride as facts until the operation exists, and every held
- * circle is named in `held` so the gap is visible instead of silent.
+ * `circle` was absent here for a while and the reason is worth keeping, because
+ * it is the shape of a bug that hides: `circle.proposed` has been an accepted
+ * kind since 0140, and the review queue ran every one of them through the SEAT
+ * reader, while `DraftOp` had no way to make a circle. Accepting one produced a
+ * seat named after the circle, silently, with no test anywhere near it.
+ *
+ * `create_circle` exists now and the accept path branches on the kind, so a
+ * circle proposal makes a circle. The `no-create-circle-op` reason went with it:
+ * a union member nothing can produce is dead weight, and keeping it "for older
+ * releases" would have been nonsense, since a type is compile-time and an older
+ * release carries its own copy.
  */
 const KIND_FOR: Readonly<Partial<Record<SaberraRecordKind, string>>> = {
+  circle: "circle.proposed",
   role: "org.proposed",
   tension: "tension.observed",
   risk: "risk.observed",
@@ -177,11 +178,7 @@ export function splitStreams(records: readonly VendorRecord[]): StreamReading {
 
     const kind = KIND_FOR[rec.kind];
     if (!kind) {
-      held.push({
-        id: rec.id,
-        kind: rec.kind,
-        reason: rec.kind === "circle" ? "no-create-circle-op" : "kind-not-allowed",
-      });
+      held.push({ id: rec.id, kind: rec.kind, reason: "kind-not-allowed" });
       continue;
     }
     const list = byKind.get(kind) ?? [];

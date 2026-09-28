@@ -270,17 +270,32 @@ describe("a sync that works", () => {
     expect(state.facts).toBeGreaterThan(0);
   });
 
-  it("REPORTS THE HELD CIRCLES rather than pretending they landed", async () => {
-    // A circle cannot be proposed until `create_circle` exists. The sync says
-    // so per record instead of quietly returning a smaller number.
+  it("LANDS A CIRCLE AS A CIRCLE, now that the operation to make one exists", async () => {
+    // This asserted the opposite until `create_circle` landed: a circle was
+    // held because accepting one would have made a seat named after it.
     state.call = {
       ok: true,
       cursor: null,
       records: [{ id: "c-1", fields: { "Circle Name": "Land & Ecology", Status: "Active" } }],
     };
     const r = await post("/api/saberra/sync");
+    // The stub answers the same record for every kind asked for, so other
+    // kinds legitimately hold it. The claim is about the CIRCLE read.
+    const held = r.body.held as { kind: string }[];
+    expect(held.some((h) => h.kind === "circle")).toBe(false);
+    expect(state.landedPayloads.some((p) => p.kind === "circle.proposed")).toBe(true);
+  });
+
+  it("still reports a record it holds, so a smaller number is never returned in silence", async () => {
+    // A role assignment proposes nothing and says so per record.
+    state.call = {
+      ok: true,
+      cursor: null,
+      records: [{ id: "a-1", fields: { Role: "Finance Steward", "Energization Level": "Partial" } }],
+    };
+    const r = await post("/api/saberra/sync");
     const held = r.body.held as { reason: string }[];
-    expect(held.some((h) => h.reason === "no-create-circle-op")).toBe(true);
+    expect(held.some((h) => h.reason === "kind-not-allowed")).toBe(true);
   });
 
   it("ATTACHES A FACT TO THE SEAT THIS VILLAGE ALREADY HAS, which is what makes the panel work", async () => {

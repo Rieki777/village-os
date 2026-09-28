@@ -1,0 +1,38 @@
+-- 0224: a draft can make a circle.
+--
+-- WHAT WAS WRONG.
+-- `circle.proposed` has been an accepted proposal kind since 0140, and the
+-- review queue ran every one of them through the SEAT reader, because `DraftOp`
+-- had no way to make a circle. Accepting a proposed circle therefore produced a
+-- SEAT NAMED AFTER THE CIRCLE. Silently, with no test anywhere near it.
+--
+-- WHAT THIS CHANGES.
+-- One enum value. `create_circle` joins the ops a draft change may carry, and
+-- `server/lib/orgDrafts.ts` gains its preview, apply and revert paths in the
+-- same change.
+--
+-- WHY A SEAT CAN THEN NAME A CIRCLE THAT DOES NOT EXIST YET.
+-- Because a structure arrives as circles AND the seats inside them, in one
+-- batch. The preview tracks circles a draft creates the same way it already
+-- tracks seats, so a seat three lines below the circle it sits in previews
+-- clean. Without that, a whole structure could only land in two passes with a
+-- human making circles by hand in between, which is the thing this is for.
+--
+-- WHY REVERT DOES NOT DELETE.
+-- It sets `status = 'dormant'`, mirroring what reverting a created seat does
+-- with `active = 0`. Seats created in the same draft carry the circle's id and
+-- a child circle may name it as a parent, so removing the row would leave those
+-- pointing at nothing.
+--
+-- EXPAND ONLY, AND THE ROLLBACK HOLDS.
+-- Adding a value to an enum is expand-only: the previous release reads and
+-- writes every value it already knew, and it never writes this one. A row
+-- carrying `create_circle` is one the previous release cannot apply, which is
+-- correct rather than unsafe, because that release also cannot create the
+-- proposals that produce one.
+--
+-- Same shape as 0208, which added `move_circle` to this column for the same
+-- reason.
+
+ALTER TABLE `org_draft_changes`
+  MODIFY COLUMN `op` enum('create_seat','create_circle','update_seat','rest_seat','seat_holder','end_holding','move_circle') NOT NULL;
