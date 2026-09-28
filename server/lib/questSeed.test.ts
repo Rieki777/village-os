@@ -18,9 +18,9 @@
  */
 import path from "node:path";
 import fs from "node:fs";
-import mysql from "mysql2/promise";
+import type mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { questsRepo, type QuestRecord, type QuestsRepo } from "../repos/quests";
 import { fillQuestStoriesFromSeed, seedEmptyQuestBoard } from "./questSeed";
 
@@ -183,7 +183,7 @@ describe.skipIf(!configured)("the seed on a real board (MySQL)", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisions and drops
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisions and drops
     repo = questsRepo(pool);
   }, 240_000);
 
