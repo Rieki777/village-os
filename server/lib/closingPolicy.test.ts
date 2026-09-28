@@ -75,10 +75,33 @@ describe("closingWrite", () => {
     expect(changed.ok && changed.section).toMatchObject({ policyId: "own-words", adoptedBy: "user-b", adoptedAt: NOW.toISOString() });
   });
 
-  it("a save without adopt turns an adopted section back into a draft", () => {
+  it("a save without adopt NEVER replaces adopted words: it is refused, and the promise stands", () => {
+    // Review of 2026-09-27: this used to store a draft over the adoption, which
+    // withdrew the village's promise and erased the adopted words.
     const stored = { ...DEFAULT_CHOICE, adoptedBy: "user-a", adoptedAt: EARLIER };
-    const r = closingWrite(DEFAULT_CHOICE, stored, "user-a", NOW);
-    expect(r.ok && r.section.adoptedAt).toBeNull();
+    for (const body of [DEFAULT_CHOICE, { policyId: "own-words", statement: OWN_WORDS }, { ...DEFAULT_CHOICE, adopt: false }]) {
+      const r = closingWrite(body, stored, "user-a", NOW);
+      expect(r.ok, JSON.stringify(body)).toBe(false);
+      if (!r.ok) {
+        expect(r.status).toBe(409);
+        expect(r.error).toBe("closing_policy_adopted");
+        expect(r.message).toMatch(/Adopt the new words to replace them/);
+      }
+    }
+  });
+
+  it("before anything is adopted, a save without adopt replaces a draft with a draft", () => {
+    const stored = { ...DEFAULT_CHOICE, adoptedBy: null, adoptedAt: null };
+    const r = closingWrite({ policyId: "own-words", statement: OWN_WORDS }, stored, "user-a", NOW);
+    expect(r).toEqual({ ok: true, section: { policyId: "own-words", statement: OWN_WORDS, adoptedBy: null, adoptedAt: null } });
+  });
+
+  it("refuses to file other words under the default's name, adopted or drafted", () => {
+    for (const adopt of [true, false]) {
+      const r = closingWrite({ policyId: "proportional-closing-balance", statement: OWN_WORDS, adopt }, undefined, "user-a", NOW);
+      expect(r.ok, String(adopt)).toBe(false);
+      if (!r.ok) expect(r.message).toMatch(/keep the sentence that choice stands for/);
+    }
   });
 });
 
@@ -107,6 +130,13 @@ describe("closingCheckOf: the launch row", () => {
     const odd = closingCheckOf({ policyId: "equal-shares", statement: OWN_WORDS, adoptedBy: "u", adoptedAt: EARLIER });
     expect(odd.state).toBe("missing");
     expect(odd.detail).toMatch(/cannot be adopted as it stands/);
+  });
+
+  it("never reads OK for the default's name over words that dropped its sentence", () => {
+    const r = closingCheckOf({ policyId: "proportional-closing-balance", statement: OWN_WORDS, adoptedBy: "u", adoptedAt: EARLIER });
+    expect(r.state).toBe("missing");
+    expect(r.detail).not.toMatch(/Named and adopted/);
+    expect(r.detail).toMatch(/keep the sentence that choice stands for/);
   });
 
   it("reads OK once adopted, naming the policy", () => {

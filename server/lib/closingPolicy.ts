@@ -35,10 +35,19 @@
  *
  * Re-adopting the same words keeps the first adoption's stamp, so saving an
  * unchanged section twice does not move the date the village made its
- * promise. Changed words are a new promise and get a new stamp. A save
- * without `adopt` turns the section back into a draft, deliberately: the
- * checkbox is how a founder says "not agreed yet", and the launch row reads
- * that honestly.
+ * promise. Changed words are a new promise and get a new stamp.
+ *
+ * ── A DRAFT NEVER REPLACES AN ADOPTED PROMISE ────────────────────────────
+ *
+ * The section has one slot. A save without `adopt` over ADOPTED words is
+ * refused (409), because storing it would withdraw the village's promise the
+ * moment somebody fixed a typo: every member's /exit-policy would read "not
+ * yet named", the redemption notice would vanish, the adopted words would be
+ * gone from the record, and a launch vote already open would carry on over a
+ * village that no longer names what closing means (review of 2026-09-27).
+ * Changing adopted words is therefore adopting new ones. Before anything is
+ * adopted, a save without `adopt` is a draft, and the launch row reads that
+ * honestly.
  */
 import type { Pool } from "mysql2/promise";
 import { readConfigDocument } from "../repos/appConfigDocs";
@@ -58,7 +67,7 @@ const EXIT_POLICY_KEY = "exit-policy";
 
 export type ClosingWrite =
   | { ok: true; section: ClosingSection }
-  | { ok: false; status: 400 | 401; error: string; message: string };
+  | { ok: false; status: 400 | 401 | 409; error: string; message: string };
 
 const sameWords = (a: unknown, b: unknown): boolean =>
   String(a ?? "").replace(/\s+/g, " ").trim().toLowerCase() ===
@@ -82,7 +91,17 @@ export function closingWrite(body: unknown, stored: unknown, by: string | null, 
   const problem = closingStatementProblem(policyId, statement);
   if (problem) return { ok: false, status: 400, error: "closing_policy_invalid", message: problem };
 
+  const prior = closingNamed(stored) ? (stored as ClosingSection) : null;
   if (b.adopt !== true) {
+    if (prior) {
+      return {
+        ok: false,
+        status: 409,
+        error: "closing_policy_adopted",
+        message:
+          "The village has adopted what closing means, and members read those words. Adopt the new words to replace them: saving them as a draft would withdraw the promise",
+      };
+    }
     return { ok: true, section: { policyId, statement, adoptedBy: null, adoptedAt: null } };
   }
   if (!by) {
@@ -93,7 +112,6 @@ export function closingWrite(body: unknown, stored: unknown, by: string | null, 
       message: "Adopting what closing means needs a named admin, so the record can say who",
     };
   }
-  const prior = closingNamed(stored) ? (stored as ClosingSection) : null;
   if (prior && prior.policyId === policyId && sameWords(prior.statement, statement)) {
     return { ok: true, section: { policyId, statement, adoptedBy: prior.adoptedBy ?? by, adoptedAt: prior.adoptedAt } };
   }

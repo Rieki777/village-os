@@ -33,6 +33,18 @@
  * it, and `readsClosingDayBalances` says whether redeeming gives up a share
  * under it. Nothing anywhere branches on the id of the first one.
  *
+ * ── A POLICY'S NAME FOLLOWS ITS WORDS ─────────────────────────────────────
+ *
+ * The statement stays editable under every policy, and the name, the launch
+ * row and the redemption notice all read the policy id. So a named policy
+ * carries `keepsSentence`: the sentence its words must still contain for its
+ * name to be true of them. Under the default, "Land is sold first." added to
+ * its words is still the default; words saying the land goes to a trust and
+ * the cash is shared equally are another method, and filing them under the
+ * default is refused, because the member page would then print "Shared by
+ * closing-day balances" above them and the redemption screen would tell a
+ * member a formula the village never adopted (review of 2026-09-27).
+ *
  * ── WHAT THIS DELIBERATELY DOES NOT DO ────────────────────────────────────
  *
  * It computes nothing and moves nothing. There is no distribution engine and
@@ -68,6 +80,13 @@ export interface ClosingPolicyDef {
    */
   defaultStatement: string;
   /**
+   * The sentence the statement must keep for this policy's NAME to stay true
+   * of it, or "" when the words are wholly the village's. Whitespace and case
+   * are formatting, and the sentence may run on ("... on closing day, after
+   * the debts are paid"). Anything may be added around it.
+   */
+  keepsSentence: string;
+  /**
    * Whether what is left is shared by the contribution-token balances people
    * hold on closing day. When true, a member who redeems tokens gives up the
    * share those tokens would carry, and the redemption surface says so before
@@ -76,10 +95,14 @@ export interface ClosingPolicyDef {
   readsClosingDayBalances: boolean;
 }
 
+/** The default's first sentence, which IS the default: the words filed under it keep this. */
+export const PROPORTIONAL_CLOSING_RULE =
+  "On closing, the treasury and assets are shared among contribution-token holders in proportion to " +
+  "the balances they hold on closing day.";
+
 /** The ruling's words, kept exact: closing-day balance, and redemption already paid. */
 export const PROPORTIONAL_CLOSING_STATEMENT =
-  "On closing, the treasury and assets are shared among contribution-token holders in proportion to " +
-  "the balances they hold on closing day. A member who already redeemed receives nothing more, " +
+  `${PROPORTIONAL_CLOSING_RULE} A member who already redeemed receives nothing more, ` +
   "because redemption already paid them.";
 
 export const CLOSING_POLICIES: Record<ClosingPolicyId, ClosingPolicyDef> = {
@@ -89,6 +112,7 @@ export const CLOSING_POLICIES: Record<ClosingPolicyId, ClosingPolicyDef> = {
     summary:
       "The platform's suggested default. What is left is shared in proportion to the contribution tokens each person holds on the day the village closes.",
     defaultStatement: PROPORTIONAL_CLOSING_STATEMENT,
+    keepsSentence: PROPORTIONAL_CLOSING_RULE,
     readsClosingDayBalances: true,
   },
   "own-words": {
@@ -97,6 +121,7 @@ export const CLOSING_POLICIES: Record<ClosingPolicyId, ClosingPolicyDef> = {
     summary:
       "The village names another way, in its own words. The platform keeps the statement and works nothing out from it.",
     defaultStatement: "",
+    keepsSentence: "",
     readsClosingDayBalances: false,
   },
 };
@@ -139,13 +164,28 @@ export const CLOSING_MIN_WORDS = 8;
 export const CLOSING_MAX_CHARS = 5000;
 
 /** Whitespace and case are formatting, never new words. */
-const sameWords = (a: unknown, b: unknown): boolean =>
-  String(a ?? "").replace(/\s+/g, " ").trim().toLowerCase() ===
-  String(b ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+const plain = (v: unknown): string => String(v ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+const sameWords = (a: unknown, b: unknown): boolean => plain(a) === plain(b);
+
+/**
+ * Whether the words still say what the chosen policy's name says, which is
+ * whether they contain its `keepsSentence`. True for a policy with no such
+ * sentence and for an id the registry does not know (that refusal is
+ * `closingStatementProblem`'s first). The sentence's closing full stop is
+ * dropped before the search, so the village may run the sentence on.
+ */
+export function closingWordsKeepTheirPolicy(policyId: unknown, statement: unknown): boolean {
+  const keep = closingPolicyDef(policyId)?.keepsSentence ?? "";
+  return !keep || plain(statement).includes(plain(keep).replace(/\.$/, ""));
+}
 
 /**
  * What is wrong with a proposed section, as the sentence a founder reads, or
  * null when it may be saved.
+ *
+ * Words filed under a named policy must keep the sentence that policy stands
+ * for (`closingWordsKeepTheirPolicy`), or its name, the launch row and the
+ * redemption notice would each claim something the words do not say.
  *
  * `own-words` holding the default's words, word for word, is refused. The
  * default is one choice away, and choosing it is what tells a member about to
@@ -164,6 +204,9 @@ export function closingStatementProblem(policyId: unknown, statement: unknown): 
   const words = countWords(text);
   if (words < CLOSING_MIN_WORDS) {
     return `Say it in at least ${CLOSING_MIN_WORDS} words: who receives what is left, and how it is worked out.`;
+  }
+  if (!closingWordsKeepTheirPolicy(def.id, text)) {
+    return `Words saved as "${def.name}" keep the sentence that choice stands for: "${def.keepsSentence}" Add to it as you like. To name another way, choose to write your own.`;
   }
   if (def.id === "own-words" && sameWords(text, PROPORTIONAL_CLOSING_STATEMENT)) {
     return "These are the default's words. Choose the default itself, so a member about to redeem is told what it means for them.";
@@ -216,7 +259,9 @@ export function closingForReaders(section: unknown): ClosingSectionForReaders | 
  * when it does not apply.
  *
  * It applies exactly when the village has NAMED a policy that shares by
- * closing-day balances. A draft does not count, because a draft is not what
+ * closing-day balances, and named means its adopted words still carry that
+ * policy's sentence (`closingNamed` asks `closingStatementProblem`), so the
+ * notice can never claim a formula the words dropped. A draft does not count, because a draft is not what
  * the village promised; a policy in the village's own words does not count,
  * because the platform cannot know what it means for a redeemed token, and a
  * sentence claiming to would be the platform presuming a formula.

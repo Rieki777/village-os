@@ -17,8 +17,20 @@
  * the same rule on its side (server/lib/closingPolicy.ts), so reaching the
  * route some other way gets the same answer.
  *
+ * ONCE ADOPTED, A CHANGE IS SAVED BY ADOPTING IT. The server refuses a draft
+ * over adopted words, because storing one would withdraw the promise members
+ * read; so Save waits for the tick, and the words members read stay in force
+ * until new ones are adopted.
+ *
+ * THE WORDS KEEP THEIR POLICY'S SENTENCE. Choosing the default over words a
+ * founder wrote keeps their words and shows why they cannot be saved under
+ * that name, with a button that puts the default's words back. The rule is
+ * `closingWordsKeepTheirPolicy` in the shared file.
+ *
  * ITS OWN CARD AND ITS OWN SAVE, because it has its own route: the published
  * policy's "Publish policy" never writes this section and never erases it.
+ * And a save here hands back only the section it wrote (`onSaved`), so the
+ * tab refreshes that and leaves unsaved typing in the exit terms above alone.
  *
  * Mounted from the Departures tab in client/src/pages/Admin.tsx, which sits at
  * its line ratchet, so everything lives here and that file carries one line.
@@ -31,7 +43,9 @@ import {
   CLOSING_POLICIES,
   CLOSING_POLICY_IDS,
   closingNamed,
+  closingPolicyDef,
   closingStatementProblem,
+  closingWordsKeepTheirPolicy,
   type ClosingPolicyId,
   type ClosingSectionForReaders,
 } from "@shared/closingPolicies";
@@ -54,7 +68,8 @@ export default function ClosingPolicyEditor({
   password: string;
   /** The section as `GET /api/admin/exits` serves it, or absent when nothing is saved. */
   closing: ClosingSectionForReaders | null | undefined;
-  onSaved: () => void;
+  /** Handed the section as the server now holds it, so the tab can refresh that alone. */
+  onSaved: (closing: ClosingSectionForReaders | undefined) => void;
 }) {
   const stored = closing ?? null;
   const [policyId, setPolicyId] = useState<string>(stored?.policyId ?? "");
@@ -87,6 +102,12 @@ export default function ClosingPolicyEditor({
 
   const problem = policyId || statement.trim() ? closingStatementProblem(policyId, statement) : null;
   const canAdopt = !!policyId && closingStatementProblem(policyId, statement) === null;
+  const storedNamed = closingNamed(stored);
+  /** The chosen policy's own words, offered back when the box has lost its sentence. */
+  const putBack =
+    statement.trim() && !closingWordsKeepTheirPolicy(policyId, statement)
+      ? closingPolicyDef(policyId)?.defaultStatement ?? ""
+      : "";
 
   const save = async () => {
     setSaving(true);
@@ -103,7 +124,7 @@ export default function ClosingPolicyEditor({
           ? "Adopted. Members read it on the exit policy page, and the launch checklist counts it."
           : "Saved as a draft. It counts once the village adopts it.",
       );
-      onSaved();
+      onSaved(d?.closing);
     } catch (e: any) {
       toast.error(e?.message || "What closing means was not saved");
     } finally {
@@ -160,10 +181,22 @@ export default function ClosingPolicyEditor({
         className={`${inputCls} w-full`}
       />
       <p id="closing-policy-hint" className="text-[11px] text-gray-500 mt-1 mb-3">
-        Always the village's to edit. Choosing the default fills this with its words, and you may
-        change them.
+        Always the village's to edit. Choosing the default fills this with its words: keep its
+        first sentence, which is the default itself, and change or add anything else.
       </p>
       {problem && <p className="text-[11px] text-amber-900 mb-3">{problem}</p>}
+      {putBack && (
+        <button
+          type="button"
+          onClick={() => {
+            setStatement(putBack);
+            setAdopt(false);
+          }}
+          className="text-xs text-teal-deep underline mb-3 min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-deep rounded"
+        >
+          Start again from this choice's words
+        </button>
+      )}
 
       <div className={`rounded-lg border p-3 mb-3 ${canAdopt ? "border-gray-200" : "border-amber-200 bg-amber-50"}`}>
         <label className="text-xs text-gray-700 flex items-start gap-2">
@@ -177,8 +210,8 @@ export default function ClosingPolicyEditor({
           <span>The village adopts these words as what closing means here.</span>
         </label>
         <p className="text-[11px] text-gray-500 mt-2 pl-7">
-          {closingNamed(stored) && stored?.adoptedAt
-            ? `Adopted on ${day(stored.adoptedAt)}. Changing the choice or the words needs adopting again.`
+          {storedNamed && stored?.adoptedAt
+            ? `Adopted on ${day(stored.adoptedAt)}. Members read these words until new ones are adopted, so a change is saved by adopting it.`
             : stored
               ? "Saved as a draft and not adopted yet, so the launch checklist and /exit-policy both read it as not named."
               : "Nothing saved yet. Until words are adopted, the launch checklist and /exit-policy both read it as not named."}
@@ -188,7 +221,7 @@ export default function ClosingPolicyEditor({
       <button
         type="button"
         onClick={save}
-        disabled={saving || !policyId}
+        disabled={saving || !policyId || (storedNamed && !(adopt && canAdopt))}
         className="text-sm bg-teal-deep text-white rounded-lg px-4 py-2 min-h-[44px] font-medium disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-teal-deep"
       >
         {saving ? "Saving..." : "Save what closing means"}

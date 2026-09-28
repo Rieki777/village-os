@@ -18,6 +18,18 @@
  * THE CASES RUN IN ORDER on one village, from "no" to "yes". Run the whole
  * file, never a `-t` slice.
  *
+ * IT ASSERTS WHAT NAMING CLOSING CHANGES, never the whole journey. Every
+ * blocking row that existed when this file was written is cleared by
+ * `beforeAll` (`ROWS_THIS_FILE_CLEARS`, and the first case holds it to that),
+ * so on this branch closing is the only row open and the vote answers 200.
+ * A blocking row added later by another change (the launch-gate lane's
+ * governance rows, say) is that change's to clear: this file measures which
+ * such rows are open at the start and asserts that adopting closing closes
+ * its own row and moves no other, and that the vote's answer names exactly
+ * what is left. Composed with such a lane it stays true without an edit; it
+ * asserted the whole open set until the review of 2026-09-27 found that a
+ * composition would turn it red with no conflict marker anywhere.
+ *
  * Boots the BUILT `dist/index.js` against a throwaway schema, so run
  * `pnpm build` first or you are testing stale code. Skips loudly without
  * TEST_DATABASE_URL.
@@ -45,6 +57,30 @@ const BASE = `http://localhost:${PORT}`;
 const ADMIN = "closing-admin";
 const PASSWORD = "ClosingTest123!";
 const ROW = "Name what closing this village means";
+const ROW_ID = "closing-policy-named";
+
+/**
+ * The blocking rows on the journey when this file was written, every one of
+ * which `beforeAll` clears (or the server clears on its own). A row open at
+ * the start that is NOT here was added by a later change.
+ */
+const ROWS_THIS_FILE_CLEARS = [
+  "admin-identities",
+  "founder-appointed",
+  "brand-basics",
+  "gps-written",
+  "stripe-webhook",
+  "modules-decided",
+  "pool-token-spendable",
+  "issuance-cap",
+  "session-secret",
+  "exit-policy-terms",
+  "backups-drilled",
+];
+
+/** The other blocking rows open at the start, measured by the first case: none on this branch. */
+let othersOpen: { id: string; title: string }[] = [];
+const sorted = (xs: unknown): string[] => (Array.isArray(xs) ? xs.map(String).sort() : []);
 
 const OWN_WORDS =
   "If this village closes, the land passes to the parish land trust and the cash is shared among the members still living here.";
@@ -107,15 +143,25 @@ const launchBallotCount = async (): Promise<number> => {
   return Number(rows[0]?.n ?? 0);
 };
 
-/** The closing row off the live checklist, and the ids of every blocking row still open. */
-async function closingRow(): Promise<{ item: any; openBlocking: string[] }> {
+/** The closing row off the live checklist, and every OTHER blocking row still open. */
+async function closingRow(): Promise<{ item: any; others: { id: string; title: string }[] }> {
   const r = await call("GET", "/api/admin/launch");
   expect(r.status, "the launch checklist must answer").toBe(200);
   const items: any[] = r.json?.items ?? [];
-  const item = items.find((i) => i.id === "closing-policy-named");
+  const item = items.find((i) => i.id === ROW_ID);
   expect(item, "the checklist must carry the closing-policy-named row").toBeTruthy();
-  return { item, openBlocking: items.filter((i) => i.severity === "blocking" && i.state !== "ok").map((i) => i.id) };
+  const others = items
+    .filter((i) => i.severity === "blocking" && i.state !== "ok" && i.id !== ROW_ID)
+    .map((i) => ({ id: String(i.id), title: String(i.title) }));
+  return { item, others };
 }
+
+/** What a member about to redeem is told, off the live redemption surface. */
+const notice = async (): Promise<string | null> => {
+  const r = await call("GET", "/api/redemptions", { token: wrenToken });
+  expect(r.status, r.text).toBe(200);
+  return r.json?.closingNotice ?? null;
+};
 
 const TERMS = {
   placeholder: false,
@@ -219,17 +265,21 @@ afterAll(async () => {
 
 describe.skipIf(!DB_CONFIGURED)("silence cannot launch", () => {
   it("a village that has not named closing is told no by the launch vote, and the no names the row", async () => {
-    const { item, openBlocking } = await closingRow();
+    const { item, others } = await closingRow();
     expect(item.severity).toBe("blocking");
     expect(item.state).toBe("missing");
     expect(item.detail).toMatch(/Nothing is named yet/);
-    expect(openBlocking, "the rest of the journey is cleared, so closing is the one row left").toEqual([
-      "closing-policy-named",
-    ]);
+    expect(
+      others.filter((o) => ROWS_THIS_FILE_CLEARS.includes(o.id)).map((o) => o.id),
+      "every row this file clears is clear, so any other open row belongs to a later change",
+    ).toEqual([]);
+    othersOpen = others;
 
     const no = await call("POST", "/api/admin/launch/propose", { body: { slate: [founderId] } });
     expect(no.status, no.text).toBe(409);
-    expect(no.json?.open).toEqual([ROW]);
+    expect(sorted(no.json?.open), "the no names closing and exactly the rows already open").toEqual(
+      sorted([ROW, ...othersOpen.map((o) => o.title)]),
+    );
     expect(await launchBallotCount()).toBe(0);
   });
 
@@ -253,6 +303,15 @@ describe.skipIf(!DB_CONFIGURED)("silence cannot launch", () => {
     });
     expect(disguised.status).toBe(400);
     expect(String(disguised.json?.message)).toMatch(/Choose the default itself/);
+
+    // The other way round: the village's own method filed under the default's
+    // name, which would print "Shared by closing-day balances" above it and put
+    // the closing-day notice on the redemption screen (review of 2026-09-27).
+    const misnamed = await call("PUT", "/api/admin/exit-policy/closing", {
+      body: { policyId: "proportional-closing-balance", statement: OWN_WORDS, adopt: true },
+    });
+    expect(misnamed.status, misnamed.text).toBe(400);
+    expect(String(misnamed.json?.message)).toMatch(/keep the sentence that choice stands for/);
     expect((await storedPolicy())?.closing).toBeUndefined();
   });
 });
@@ -272,7 +331,11 @@ describe.skipIf(!DB_CONFIGURED)("the default is a suggestion until the village a
     expect(item.detail).toMatch(/not adopted yet/);
     const no = await call("POST", "/api/admin/launch/propose", { body: { slate: [founderId] } });
     expect(no.status).toBe(409);
-    expect(no.json?.open).toEqual([ROW]);
+    expect(sorted(no.json?.open)).toEqual(sorted([ROW, ...othersOpen.map((o) => o.title)]));
+
+    // A drafted default promises nothing yet, so a member about to redeem is told nothing.
+    expect((await call("PUT", "/api/admin/modules/redemption/lifecycle", { body: { lifecycle: "members" } })).status).toBe(200);
+    expect(await notice()).toBeNull();
   });
 
   it("adopting names it, stamped with the admin who did it", async () => {
@@ -311,27 +374,25 @@ describe.skipIf(!DB_CONFIGURED)("the default is a suggestion until the village a
 });
 
 describe.skipIf(!DB_CONFIGURED)("named, the village may be asked", () => {
-  it("the row passes and the launch vote opens", async () => {
-    const { item, openBlocking } = await closingRow();
+  it("the row passes, no other row moved, and the launch vote no longer names it", async () => {
+    const { item, others } = await closingRow();
     expect(item.state).toBe("ok");
     expect(item.detail).toBe("Named and adopted: Shared by closing-day balances");
-    expect(openBlocking).toEqual([]);
+    expect(others, "naming closing closed its own row and nothing else").toEqual(othersOpen);
 
-    const yes = await call("POST", "/api/admin/launch/propose", { body: { slate: [founderId] } });
-    expect(yes.status, yes.text).toBe(200);
-    expect(await launchBallotCount()).toBe(1);
+    // On this branch nothing else is open, so this is the real "yes". Composed
+    // with a change whose rows this file does not clear, it is the "no" naming
+    // exactly those rows, and never this one.
+    const yes = othersOpen.length === 0;
+    const answer = await call("POST", "/api/admin/launch/propose", { body: { slate: [founderId] } });
+    expect(answer.status, answer.text).toBe(yes ? 200 : 409);
+    expect(yes ? [] : sorted(answer.json?.open)).toEqual(sorted(othersOpen.map((o) => o.title)));
+    expect(await launchBallotCount()).toBe(yes ? 1 : 0);
   });
 });
 
 describe.skipIf(!DB_CONFIGURED)("the redemption screen says what redeeming gives up, exactly when it is true", () => {
-  const notice = async () => {
-    const r = await call("GET", "/api/redemptions", { token: wrenToken });
-    expect(r.status, r.text).toBe(200);
-    return r.json?.closingNotice ?? null;
-  };
-
   it("with the closing-day-balance policy adopted, a member is told before asking", async () => {
-    expect((await call("PUT", "/api/admin/modules/redemption/lifecycle", { body: { lifecycle: "members" } })).status).toBe(200);
     expect(await notice()).toBe(CLOSING_REDEMPTION_NOTICE);
   });
 
@@ -342,10 +403,18 @@ describe.skipIf(!DB_CONFIGURED)("the redemption screen says what redeeming gives
     expect(await notice()).toBeNull();
   });
 
-  it("with the default only drafted, nothing is promised yet, so nothing is said", async () => {
-    expect((await call("PUT", "/api/admin/exit-policy/closing", {
+  it("a draft saved over the adopted words is refused, and the village's promise stands", async () => {
+    // Review of 2026-09-27: this used to store the draft, which un-named the
+    // village for every member and erased the adopted words.
+    const before = (await storedPolicy())?.closing;
+    expect(before?.adoptedAt).toBeTruthy();
+    const draft = await call("PUT", "/api/admin/exit-policy/closing", {
       body: { policyId: "proportional-closing-balance", statement: PROPORTIONAL_CLOSING_STATEMENT },
-    })).status).toBe(200);
-    expect(await notice()).toBeNull();
+    });
+    expect(draft.status, draft.text).toBe(409);
+    expect(draft.json?.error).toBe("closing_policy_adopted");
+    expect((await storedPolicy())?.closing).toEqual(before);
+    expect((await closingRow()).item.state).toBe("ok");
+    expect(await notice(), "still the village's own words, so still nothing claimed").toBeNull();
   });
 });

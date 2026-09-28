@@ -6891,7 +6891,7 @@ function HealthAdminTab({ password }: { password: string }) {
  * named domains until clean), and the policy editor.
  */
 
-function ExitsAdminTab({ password }: { password: string }) {
+export function ExitsAdminTab({ password }: { password: string }) {
   const [data, setData] = useState<any>(null);
   const [players, setPlayers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -7226,7 +7226,7 @@ function ExitsAdminTab({ password }: { password: string }) {
         </div>
         );
       })()}
-      {data && <ClosingPolicyEditor password={password} closing={data.policy?.closing} onSaved={load} />}
+      {data && <ClosingPolicyEditor password={password} closing={data.policy?.closing} onSaved={(closing) => setData((d: any) => (d ? { ...d, policy: { ...d.policy, closing } } : d))} />}
     </div>
   );
 }

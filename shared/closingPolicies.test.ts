@@ -17,11 +17,13 @@ import {
   CLOSING_POLICIES,
   CLOSING_POLICY_IDS,
   CLOSING_REDEMPTION_NOTICE,
+  PROPORTIONAL_CLOSING_RULE,
   PROPORTIONAL_CLOSING_STATEMENT,
   closingForReaders,
   closingNamed,
   closingPolicyDef,
   closingStatementProblem,
+  closingWordsKeepTheirPolicy,
   redemptionClosingNotice,
 } from "./closingPolicies";
 
@@ -82,6 +84,34 @@ describe("closingStatementProblem", () => {
     expect(closingStatementProblem("own-words", OWN_WORDS)).toBeNull();
     // A village may edit the default's words and keep the default.
     expect(closingStatementProblem("proportional-closing-balance", `${PROPORTIONAL_CLOSING_STATEMENT} Land is sold first.`)).toBeNull();
+  });
+
+  it("refuses other words filed under the default's name: the name follows the words", () => {
+    // Review of 2026-09-27: these were adopted under the default, and the member
+    // page, the launch row and the redemption screen then asserted a formula the
+    // village's words did not state.
+    expect(closingStatementProblem("proportional-closing-balance", OWN_WORDS)).toMatch(
+      /keep the sentence that choice stands for/,
+    );
+    expect(closingWordsKeepTheirPolicy("proportional-closing-balance", OWN_WORDS)).toBe(false);
+    // Dropping the first sentence drops the default, even with the second kept.
+    const secondOnly = PROPORTIONAL_CLOSING_STATEMENT.slice(PROPORTIONAL_CLOSING_RULE.length).trim();
+    expect(closingStatementProblem("proportional-closing-balance", `${secondOnly} The land goes to a trust.`)).toMatch(
+      /keep the sentence/,
+    );
+  });
+
+  it("keeps the default for its first sentence in any spacing or case, run on or added to", () => {
+    expect(PROPORTIONAL_CLOSING_STATEMENT.startsWith(PROPORTIONAL_CLOSING_RULE)).toBe(true);
+    expect(CLOSING_POLICIES["proportional-closing-balance"].keepsSentence).toBe(PROPORTIONAL_CLOSING_RULE);
+    expect(closingStatementProblem("proportional-closing-balance", PROPORTIONAL_CLOSING_RULE)).toBeNull();
+    const shouted = `  ${PROPORTIONAL_CLOSING_RULE.toUpperCase().replace(/ /g, "\n  ")}  `;
+    expect(closingStatementProblem("proportional-closing-balance", shouted)).toBeNull();
+    const runOn = `${PROPORTIONAL_CLOSING_RULE.replace(/\.$/, "")}, once every debt is paid.`;
+    expect(closingStatementProblem("proportional-closing-balance", runOn)).toBeNull();
+    expect(closingStatementProblem("proportional-closing-balance", `The barn is sold first. ${PROPORTIONAL_CLOSING_RULE}`)).toBeNull();
+    // A policy with no sentence of its own is never held to one.
+    expect(closingWordsKeepTheirPolicy("own-words", OWN_WORDS)).toBe(true);
   });
 
   it("refuses the default's words filed as the village's own, whatever the spacing or case", () => {
@@ -146,5 +176,11 @@ describe("redemptionClosingNotice: only when it applies", () => {
     expect(redemptionClosingNotice(draft("proportional-closing-balance", PROPORTIONAL_CLOSING_STATEMENT))).toBeNull();
     expect(redemptionClosingNotice(adopted("own-words", OWN_WORDS))).toBeNull();
     expect(redemptionClosingNotice(undefined)).toBeNull();
+  });
+
+  it("stays silent on the default's id carrying other words, which are not a named policy at all", () => {
+    const disguised = adopted("proportional-closing-balance", OWN_WORDS);
+    expect(closingNamed(disguised)).toBe(false);
+    expect(redemptionClosingNotice(disguised)).toBeNull();
   });
 });
