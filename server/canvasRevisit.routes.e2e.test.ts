@@ -195,6 +195,27 @@ beforeAll(async () => {
     );
   }
   await bootServer();
+
+  // THE CLAIM, which is the first key moment (instance claimed). The case that
+  // reads its rows is the first one below.
+  const boot = await call("POST", "/api/admin/bootstrap", {
+    password: ADMIN, email: `founder-${PORT}@example.test`, name: "Revisit Founder",
+  }, "");
+  expect(boot.status, boot.text).toBe(200);
+  founderId = String(boot.json?.userId ?? "");
+  const claim = decodeURIComponent(String(boot.json?.claimUrl ?? "").match(/token=([^&]+)/)?.[1] ?? "");
+  const setPw = await call("POST", "/api/auth/set-password", { token: claim, password: PASSWORD }, "");
+  founderToken = String(setPw.json?.token ?? "");
+  expect(founderToken, "the founder must hold a session").toBeTruthy();
+
+  people.care = await register("Wren Halloway", "revisit-wren");
+  people.pen = await register("Ash Brook", "revisit-ash");
+  people.leaver = await register("Fern Oakley", "revisit-fern");
+  people.stranger = await register("Rook Talbot", "revisit-rook");
+  for (const who of [people.care, people.pen, people.leaver]) {
+    const staged = await call("PUT", `/api/admin/players/${who.id}/stage`, { stageId: "member" });
+    expect(staged.status, staged.text).toBe(200);
+  }
 }, 300_000);
 
 afterAll(async () => {
@@ -206,11 +227,8 @@ afterAll(async () => {
 
 describe.skipIf(!DB_CONFIGURED)("the four key moments, each from its real event", () => {
   it("a founder claiming the instance asks the admins about all twelve blocks, and nobody else", async () => {
-    const boot = await call("POST", "/api/admin/bootstrap", {
-      password: ADMIN, email: `founder-${PORT}@example.test`, name: "Revisit Founder",
-    }, "");
-    expect(boot.status, boot.text).toBe(200);
-    founderId = String(boot.json?.userId ?? "");
+    // The claim itself happened in beforeAll, so a broken moment fails this
+    // case alone and never takes the session every later case needs with it.
     const rows = await settled(founderId, 12);
     expect(rows.map((r) => r.title).sort()).toEqual(titlesFor("collaboration"));
     for (const r of rows) {
@@ -221,19 +239,6 @@ describe.skipIf(!DB_CONFIGURED)("the four key moments, each from its real event"
       expect(`${r.title} ${r.body}`).not.toContain("Revisit Founder");
     }
 
-    const claim = decodeURIComponent(String(boot.json?.claimUrl ?? "").match(/token=([^&]+)/)?.[1] ?? "");
-    const setPw = await call("POST", "/api/auth/set-password", { token: claim, password: PASSWORD }, "");
-    founderToken = String(setPw.json?.token ?? "");
-    expect(founderToken, "the founder must hold a session").toBeTruthy();
-
-    people.care = await register("Wren Halloway", "revisit-wren");
-    people.pen = await register("Ash Brook", "revisit-ash");
-    people.leaver = await register("Fern Oakley", "revisit-fern");
-    people.stranger = await register("Rook Talbot", "revisit-rook");
-    for (const who of [people.care, people.pen, people.leaver]) {
-      const staged = await call("PUT", `/api/admin/players/${who.id}/stage`, { stageId: "member" });
-      expect(staged.status, staged.text).toBe(200);
-    }
     for (const who of Object.values(people)) expect(await revisitRows(who.id)).toEqual([]);
   });
 
