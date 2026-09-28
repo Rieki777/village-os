@@ -188,7 +188,9 @@ function ProposalCard({
       {acts && (
         <div className="space-y-2 border-t border-stone-100 pt-2">
           <label className="block text-sm">
-            <span className="font-medium text-stone-900">{declines ? "Your note (needed to decline)" : "Your note (optional)"}</span>
+            <span className="font-medium text-stone-900">
+              {declines ? (mayAdopt ? "Your note (optional to adopt, needed to decline)" : "Your note (needed to decline)") : "Your note (optional)"}
+            </span>
             <span className="block text-xs text-stone-600">{payload.notesArePublic}</span>
             <textarea
               value={note}

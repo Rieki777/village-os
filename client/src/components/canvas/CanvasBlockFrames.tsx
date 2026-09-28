@@ -106,14 +106,16 @@ export default function CanvasBlockFrames({
 
   return (
     <div className="mt-4 border-t border-stone-100 pt-4 space-y-3" data-testid={`canvas-frames-${block.id}`}>
-      <div role="group" aria-label={`The five frames of ${block.name}`} className="flex flex-wrap gap-2">
+      {/* Five buttons on one line at 390px: the card leaves about 318px, and
+          px-3 with gap-2 came to 320 and pushed Adopt onto a line of its own. */}
+      <div role="group" aria-label={`The five frames of ${block.name}`} className="flex flex-wrap gap-1.5">
         {FRAME_IDS.map((id) => (
           <button
             key={id}
             type="button"
             aria-pressed={frame === id}
             onClick={() => go(id)}
-            className={`min-h-[44px] rounded-lg px-3 text-sm font-medium border ${
+            className={`min-h-[44px] rounded-lg px-2.5 text-sm font-medium border ${
               frame === id ? "bg-teal-deep text-white border-teal-deep" : "bg-white text-stone-800 border-stone-300 hover:bg-stone-50"
             }`}
           >
@@ -268,7 +270,7 @@ function SeeFrame({ payload }: { payload: BlockFramesPayload }) {
             {payload.doors.map((d) => (
               <li key={d.label} className="text-stone-800">
                 <span className="font-medium text-stone-900">{d.label}.</span>{" "}
-                {d.wired ? "A suggestion adopted on this block can change it." : d.why}{" "}
+                {d.wired ? "Anybody in the village can suggest a change to it under Say." : d.why}{" "}
                 <Link href={d.href} className="font-medium text-teal-deep hover:underline">
                   Where it is set
                 </Link>

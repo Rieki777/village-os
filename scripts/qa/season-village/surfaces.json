@@ -171,8 +171,8 @@
           ],
           "forbidden": ["%", "of 12", "could not be read", "No suggestions are open on Power"],
           "expect": {
-            "founder": { "text": ["Adopt these words", "Decline", "Your note (needed to decline)", "Everyone in the village can read what you write here"] },
-            "member": { "forbidden": ["Adopt these words", "Withdraw my suggestion", "Your note (needed to decline)", "Your note (optional)"] }
+            "founder": { "text": ["Adopt these words", "Decline", "Your note (optional to adopt, needed to decline)", "Everyone in the village can read what you write here"] },
+            "member": { "forbidden": ["Adopt these words", "Withdraw my suggestion", "Your note (optional to adopt", "Your note (needed to decline)", "Your note (optional)"] }
           }
         },
         {

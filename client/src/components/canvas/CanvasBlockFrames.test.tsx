@@ -398,7 +398,7 @@ describe("Adopt", () => {
     answer("GET", "/api/canvas/blocks/power", 200, powerBlock({ pen: true, proposals: [suggestion({ pen: penView({ youMayAdopt: true }) })] }));
     const frames = await openPower("Adopt");
     const card = within(await frames.findByTestId("canvas-proposal-41"));
-    const note = card.getByLabelText(/Your note \(needed to decline\)/);
+    const note = card.getByLabelText(/Your note \(optional to adopt, needed to decline\)/);
     expect(note.closest("label")?.textContent).toContain(NOTE_IS_PUBLIC);
 
     fireEvent.click(card.getByRole("button", { name: "Decline" }));
