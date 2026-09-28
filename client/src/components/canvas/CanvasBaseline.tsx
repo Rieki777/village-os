@@ -199,11 +199,13 @@ export function CanvasBaseline({
       </section>
 
       {data && (
-        // Dense, so a card that takes both columns (an open block, with its
-        // five frames) leaves no empty cell behind it. With every card one
-        // column wide, dense changes nothing. The Power block's Decision
-        // Matrix lives in its Say frame (Wave 3b).
-        <div className="grid gap-4 md:grid-cols-2 md:grid-flow-row-dense">
+        // NOT dense. An open block takes both columns. With dense packing, a
+        // right-hand card that opened dropped a row and the next block slid up
+        // into its cell, under the pointer that had just pressed "Open this
+        // block", and the cards left canvas order (audit of Wave 3b,
+        // 2026-09-28). Without it the cards keep their order and an open
+        // right-hand card leaves one empty cell beside the card before it.
+        <div className="grid gap-4 md:grid-cols-2">
           {orderBlocks(focus).map((block) => (
             <CanvasBlockCard
               key={block.id}

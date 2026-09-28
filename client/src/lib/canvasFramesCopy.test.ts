@@ -12,8 +12,10 @@ import {
   adoptEffect,
   adoptIntro,
   adoptLabel,
+  ADMIN_PAGES_LINE,
   changeLines,
   EMPTY_FIELDS,
+  followableHref,
   gapFacts,
   KEEP,
   mayAdopt,
@@ -26,6 +28,7 @@ import {
   refusalText,
   suggestedLine,
   suggestionBody,
+  suggestionFate,
   suggestionOptions,
   type BlockFramesPayload,
   type PenView,
@@ -118,7 +121,13 @@ describe("what adopting does, before the Birthing and after it", () => {
 
   it("opens the frame on the moment the village is in", () => {
     expect(adoptIntro(false)).toContain("The Game has not started, so adopting a suggestion that names a setting writes the setting");
-    expect(adoptIntro(true)).toContain("The Game has started, so adopting a suggestion that names a setting files a proposal");
+    // After the Birthing no one sentence is true of every setting (a dial is
+    // filed, the governance module switches straight away, the care door goes
+    // through the agreement), so the line sends the reader to each card.
+    expect(adoptIntro(true)).toBe(
+      "The Game has started, so what adopting does now depends on the suggestion. Each one below says what adopting it would do, and who decides.",
+    );
+    expect(adoptIntro(true)).not.toMatch(/files a proposal/);
   });
 });
 
@@ -187,7 +196,7 @@ describe("the See frame's gaps between the words and the settings", () => {
     { id: "exit:terms", label: "How somebody leaves", href: "/exit-policy", kind: "exit-policy", wired: true },
   ];
 
-  it("says where the words are missing while the settings already apply", () => {
+  it("says where the words are missing while the settings already work", () => {
     const gaps = gapFacts({
       block: block("team", ["membership", "people"]),
       answer: {
@@ -200,8 +209,26 @@ describe("the See frame's gaps between the words and the settings", () => {
       proposals: [],
     });
     expect(gaps.map((g) => g.text)).toEqual([
-      "Nothing is written yet under Membership, while the settings behind this block already apply: how many vouches admit a new member and how somebody leaves.",
+      "Nothing is written yet under Membership, while the settings behind this block, listed below, already work as they are set today.",
     ]);
+  });
+
+  it("never names a door as a state that applies: governance is off by default, and its door is called \"switched on\"", () => {
+    // The Power block on a fresh village: Decisions is blank and governance is
+    // off, which the server's own fact says. The gap line may not say otherwise.
+    const gaps = gapFacts({
+      block: block("power", ["decisions"]),
+      answer: { sections: [{ id: "decisions", title: "Decisions", readable: true, status: "blank" }] },
+      doors: [
+        { id: "dial:governance.default_method", label: "How village-wide ballots decide", href: "/game-mechanics", kind: "dial", wired: true },
+        { id: "module:governance", label: "Governance switched on for members", href: "/admin?tab=modules&module=governance", kind: "module", wired: true },
+      ],
+      proposals: [],
+    });
+    const text = gaps.map((g) => g.text).join(" ");
+    expect(text).toContain("Nothing is written yet under Decisions");
+    expect(text).not.toMatch(/switched on/i);
+    expect(text).not.toMatch(/how village-wide ballots decide/i);
   });
 
   it("names a draft, words kept from members, an open setting suggestion and a setting the canvas cannot reach", () => {
@@ -224,7 +251,7 @@ describe("the See frame's gaps between the words and the settings", () => {
       proposals: [proposal({ blockId: "team", target: "setting", sectionId: null, door: "dial:membership.vouches_required", change: { value: "3" } })],
     });
     expect(withDraft.map((g) => g.text)).toEqual([
-      "The words under Membership are a draft nobody has adopted yet, while the settings behind this block already apply.",
+      "The words under Membership are a draft nobody has adopted yet, while the settings behind this block, listed below, already work as they are set today.",
       "Sage suggested a change to how many vouches admit a new member. Until it is decided, the setting stays as it is.",
     ]);
   });
@@ -346,5 +373,52 @@ describe("the suggestion box", () => {
     })[0];
     expect(suggestionBody("conflict", care, { ...EMPTY_FIELDS, body: "x", replyHours: "48" }, false).change).toEqual({ replyHours: 48 });
     expect(suggestionBody("conflict", care, { ...EMPTY_FIELDS, body: "x", intakeContactRole: "", coverRole: KEEP }, false).change).toEqual({ intakeContactRole: "" });
+  });
+});
+
+describe("links a member can follow from See", () => {
+  it("keeps every link for an administrator and drops only the administrators' pages for anybody else", () => {
+    expect(followableHref("/admin?tab=modules&module=governance", true)).toBe("/admin?tab=modules&module=governance");
+    expect(followableHref("/admin?tab=modules&module=governance", false)).toBeNull();
+    expect(followableHref("/admin", false)).toBeNull();
+    expect(followableHref("/admin/secrets", false)).toBeNull();
+    expect(followableHref("/administer-land", false)).toBe("/administer-land");
+    expect(followableHref("/game-mechanics", false)).toBe("/game-mechanics");
+    expect(followableHref(undefined, true)).toBeNull();
+    expect(ADMIN_PAGES_LINE).toBe("Set on the administrators' pages.");
+  });
+});
+
+describe("what the suggestion box says will become of a suggestion", () => {
+  const consequence = (birthed: boolean) =>
+    pen({ pen: "consequence", how: birthed ? "ballot" : "act", who: birthed ? "any-member" : "admins", ballotBuilt: !birthed });
+
+  it("adds nothing where the pen's own sentence is the whole truth", () => {
+    expect(suggestionFate({ target: "words" }, pen())).toBeNull();
+    expect(suggestionFate({ target: "setting", door: "exit:terms" }, consequence(false))).toBeNull();
+    expect(suggestionFate({ target: "setting", door: "exit:restorative" }, consequence(false))).toBeNull();
+    expect(suggestionFate({ target: "purpose" }, pen({ pen: "purpose", who: "admins" }))).toBeNull();
+    // A dial after the Birthing: its vote is built, and the pen's sentence says the author files it.
+    expect(suggestionFate({ target: "setting", door: "dial:governance.default_method" }, pen({ pen: "dial", how: "ballot", who: "any-member" }))).toBeNull();
+    expect(suggestionFate({ target: "words" }, undefined)).toBeNull();
+  });
+
+  it("after the Birthing says the exit terms' and the matrix's vote is not built", () => {
+    const line = "That vote is not built yet, so a suggestion here stays open until it is.";
+    expect(suggestionFate({ target: "setting", door: "exit:terms" }, consequence(true))?.text).toBe(line);
+    expect(suggestionFate({ target: "matrix" }, consequence(true))?.text).toBe(line);
+  });
+
+  it("after the Birthing sends the care door to the agreement's own vote, and never calls that vote unbuilt", () => {
+    const fate = suggestionFate({ target: "setting", door: "exit:restorative" }, consequence(true));
+    expect(fate?.text).toMatch(/^The Game has started, so the care door changes only by a vote on the whole conflict agreement/);
+    expect(fate?.text).toContain("cannot be adopted from the canvas");
+    expect(fate?.text).not.toMatch(/not built/);
+  });
+
+  it("after the handover sends the purpose statement to Start a proposal", () => {
+    const fate = suggestionFate({ target: "purpose" }, pen({ pen: "purpose", how: "ballot", who: "any-member", youMayAdopt: true }));
+    expect(fate).toMatchObject({ href: "/propose", label: "Start a proposal" });
+    expect(fate?.text).toContain("cannot be adopted from the canvas");
   });
 });

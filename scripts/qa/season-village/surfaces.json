@@ -116,11 +116,15 @@
             "Governance is on for members, so the village can vote here",
             "The Game has not started yet",
             "Where the words and the settings part",
-            "Nothing is written yet under Who decides what, while the settings behind this block already apply",
+            "Nothing is written yet under Who decides what, while the settings behind this block, listed below, already work as they are set today",
             "The settings behind this block",
             "How village-wide ballots decide"
           ],
-          "forbidden": ["%", "of 12", "could not be read", "Reading Power"]
+          "forbidden": ["%", "of 12", "could not be read", "Reading Power", "already apply"],
+          "expect": {
+            "member": { "text": ["Set on the administrators' pages."] },
+            "founder": { "forbidden": ["Set on the administrators' pages."] }
+          }
         },
         {
           "id": "canvas-power-learn",

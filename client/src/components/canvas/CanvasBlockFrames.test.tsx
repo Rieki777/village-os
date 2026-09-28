@@ -22,6 +22,12 @@ import { Router } from "wouter";
 import { CANVAS_BLOCK_IDS } from "@shared/governanceCanvas";
 
 vi.mock("@/lib/gameApi", () => ({ authToken: () => "a-token" }));
+/** Whether the viewer is an administrator, for the See frame's links. Partial: the rest of the module is real. */
+const auth = vi.hoisted(() => ({ admin: false }));
+vi.mock("@/contexts/AuthContext", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/contexts/AuthContext")>()),
+  useIsAdmin: () => auth.admin,
+}));
 vi.mock("./ConflictAgreementEditor", () => ({
   default: () => <div data-testid="agreement-editor">The conflict agreement editor</div>,
 }));
@@ -161,6 +167,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  auth.admin = false;
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -246,14 +253,29 @@ describe("See", () => {
 
     const gaps = frames.getByTestId("canvas-see-gaps").textContent ?? "";
     expect(gaps).toContain(
-      "Nothing is written yet under Decisions, while the settings behind this block already apply: how village-wide ballots decide and governance switched on for members.",
+      "Nothing is written yet under Decisions, while the settings behind this block, listed below, already work as they are set today.",
     );
+    // A door's name is never read out as a state: governance is off by default.
+    expect(gaps).not.toMatch(/switched on/);
     const doors = within(frames.getByTestId("canvas-see-doors"));
     expect(doors.getByText(/How village-wide ballots decide\./)).toBeTruthy();
+    // A member is not sent to an administrators' page, whose only button signs them out.
+    expect(doors.getAllByRole("link", { name: "Where it is set" }).map((a) => a.getAttribute("href"))).toEqual(["/game-mechanics"]);
+    expect(doors.getByText("Set on the administrators' pages.")).toBeTruthy();
+    expect(frames.queryAllByRole("link").map((a) => a.getAttribute("href") ?? "").filter((h) => h.startsWith("/admin"))).toEqual([]);
+  });
+
+  it("gives an administrator the link to the administrators' page as well", async () => {
+    auth.admin = true;
+    answer("GET", "/api/canvas", 200, canvas(true));
+    answer("GET", "/api/canvas/blocks/power", 200, powerBlock({ pen: true }));
+    const frames = await openPower("See");
+    const doors = within(await frames.findByTestId("canvas-see-doors"));
     expect(doors.getAllByRole("link", { name: "Where it is set" }).map((a) => a.getAttribute("href"))).toEqual([
       "/game-mechanics",
       "/admin?tab=modules&module=governance",
     ]);
+    expect(doors.queryByText("Set on the administrators' pages.")).toBeNull();
   });
 });
 
@@ -414,6 +436,8 @@ describe("Adopt", () => {
     answer("GET", "/api/canvas/blocks/power", 200, powerBlock({ pen: true, proposals: [] }));
     fireEvent.click(card.getByRole("button", { name: "Adopt these words" }));
     await waitFor(() => expect(frames.getByRole("status").textContent).toBe("Adopted. Decisions now reads as suggested."));
+    // The decided card leaves the list, so the result takes the focus and is brought into view.
+    expect(document.activeElement).toBe(frames.getByRole("status"));
     const sent = asked("POST /api/canvas/proposals/41/adopt")[0];
     expect(JSON.parse(sent.init.body)).toEqual({ note: "Agreed at the circle on Saturday." });
     expect(sent.init.headers.Authorization).toBe("Bearer a-token");
@@ -457,7 +481,9 @@ describe("before the Birthing and after it", () => {
     answer("GET", "/api/canvas", 200, canvas(true));
     answer("GET", "/api/canvas/blocks/power", 200, powerBlock({ pen: true, birthed: true, proposals: [dial(true)] }));
     const frames = await openPower("Adopt");
-    expect((await frames.findByTestId("canvas-adopt-moment")).textContent).toMatch(/^The Game has started, so adopting a suggestion that names a setting files a proposal/);
+    expect((await frames.findByTestId("canvas-adopt-moment")).textContent).toBe(
+      "The Game has started, so what adopting does now depends on the suggestion. Each one below says what adopting it would do, and who decides.",
+    );
     expect(frames.getByTestId("canvas-proposal-effect-41").textContent).toBe(
       "The Game has started, so adopting files this as a proposal to change the Game's rules, in Sage's name, and the village votes on it. Only the member who suggested it can file it.",
     );
@@ -551,5 +577,103 @@ describe("the blocks that host an editor", () => {
     // The care roles are read only once the care door is on screen, and offered by name.
     await waitFor(() => expect(asked("GET /api/roles")).toHaveLength(1));
     expect(await form.findAllByRole("option", { name: "Trained Practitioners" })).toHaveLength(2);
+  });
+});
+
+describe("what somebody typed stays while they look at another frame", () => {
+  it("a member's half-written suggestion under Say survives a look at See", async () => {
+    answer("GET", "/api/canvas", 200, canvas(false));
+    answer("GET", "/api/canvas/blocks/power", 200, powerBlock({ proposals: [] }));
+    answer("GET", "/api/canvas/decision-matrix/rows", 200, rows(false));
+    const frames = await openPower("Say");
+    const words = "We decide by consent at the circle, and anybody may ask for a second round.";
+    fireEvent.change(await frames.findByLabelText("The words you suggest for Decisions"), { target: { value: words } });
+    fireEvent.click(frames.getByRole("button", { name: "See" }));
+    expect(await frames.findByTestId("canvas-see-facts")).toBeTruthy();
+    expect(frames.queryByRole("form", { name: "Suggest a change to Power" })).toBeNull();
+    fireEvent.click(frames.getByRole("button", { name: "Say" }));
+    const box = frames.getByLabelText("The words you suggest for Decisions") as HTMLTextAreaElement;
+    expect(box.value).toBe(words);
+    // The block was read once, and the frame was not built again.
+    expect(asked("GET /api/canvas/blocks/power")).toHaveLength(1);
+  });
+
+  it("the pen's half-recorded reading under Sense survives a look at See", async () => {
+    answer("GET", "/api/canvas", 200, canvas(true));
+    answer("GET", "/api/canvas/blocks/legal", 200, {
+      block: { id: "legal", number: 3, name: "Legal", briefSections: [] },
+      answer: { sections: [] },
+      reading: null,
+      observed: [],
+      proposals: [],
+      doors: [],
+      pens: {},
+      birthed: false,
+      servesPurpose: { scoped: false, matrixScoped: false, requiredToday: false },
+      notesArePublic: NOTE_IS_PUBLIC,
+    });
+    draw();
+    const legal = within(await screen.findByTestId("canvas-block-legal"));
+    fireEvent.click(legal.getByRole("button", { name: /record a reading/i }));
+    const sentence = await legal.findByLabelText("Why, in one sentence");
+    fireEvent.change(sentence, { target: { value: "We have a draft of our articles and no lawyer has read it." } });
+    const frames = within(screen.getByTestId("canvas-frames-legal"));
+    fireEvent.click(frames.getByRole("button", { name: "See" }));
+    expect(await frames.findByText("Nothing the village runs speaks to Legal yet.")).toBeTruthy();
+    fireEvent.click(frames.getByRole("button", { name: "Sense" }));
+    expect((frames.getByLabelText("Why, in one sentence") as HTMLTextAreaElement).value).toBe(
+      "We have a draft of our articles and no lawyer has read it.",
+    );
+    expect(frames.getByRole("button", { name: /save this reading/i })).toBeTruthy();
+  });
+
+  it("the village's rows are read again after the pen adopts a row under Adopt", async () => {
+    const row = suggestion({
+      target: "matrix", sectionId: null,
+      change: { subject: "Who speaks to the press", approval: "The circle", consultation: "The steward", information: "Everyone", method: "", riskTags: [] },
+      pen: penView({ pen: "consequence", who: "admins", sentence: "The founders adopt this before the Game starts.", youMayAdopt: true }),
+    });
+    answer("GET", "/api/canvas", 200, canvas(true));
+    answer("GET", "/api/canvas/blocks/power", 200, powerBlock({ pen: true, proposals: [row] }));
+    answer("GET", "/api/canvas/decision-matrix/rows", 200, rows(true));
+    const frames = await openPower("Say");
+    expect(await frames.findByText("Spending under a hundred")).toBeTruthy();
+    await waitFor(() => expect(asked("GET /api/canvas/decision-matrix/rows")).toHaveLength(1));
+    fireEvent.click(frames.getByRole("button", { name: "Adopt" }));
+    answer("POST", "/api/canvas/proposals/41/adopt", 200, { proposal: { ...row, status: "adopted" }, message: "Adopted. The row is in the Decision Matrix." });
+    answer("GET", "/api/canvas/blocks/power", 200, powerBlock({ pen: true, proposals: [] }));
+    fireEvent.click(within(await frames.findByTestId("canvas-proposal-41")).getByRole("button", { name: "Adopt this row" }));
+    await waitFor(() => expect(asked("GET /api/canvas/decision-matrix/rows")).toHaveLength(2));
+  });
+});
+
+describe("the suggestion box says, before anybody writes, where a suggestion cannot be carried", () => {
+  it("after the Birthing, a matrix row's vote is not built", async () => {
+    answer("GET", "/api/canvas", 200, canvas(false));
+    answer("GET", "/api/canvas/blocks/power", 200, powerBlock({ birthed: true, proposals: [] }));
+    answer("GET", "/api/canvas/decision-matrix/rows", 200, rows(false, true));
+    const frames = await openPower("Say");
+    const form = within(await frames.findByRole("form", { name: "Suggest a change to Power" }));
+    expect(form.queryByTestId("canvas-suggestion-fate")).toBeNull();
+    fireEvent.click(form.getByLabelText("A row of the Decision Matrix"));
+    expect(form.getByTestId("canvas-suggestion-fate").textContent).toBe("That vote is not built yet, so a suggestion here stays open until it is.");
+  });
+
+  it("after the Birthing, the care door goes to the conflict agreement's own vote", async () => {
+    answer("GET", "/api/canvas", 200, canvas(false));
+    answer("GET", "/api/canvas/blocks/conflict", 200, {
+      ...conflictBlock(),
+      birthed: true,
+      pens: { consequence: penView({ pen: "consequence", how: "ballot", who: "any-member", sentence: "The Game has started, so adopting this goes to a vote of the whole village.", ballotBuilt: false }) },
+    });
+    answer("GET", "/api/roles", 200, []);
+    draw();
+    fireEvent.click(within(await screen.findByTestId("canvas-block-conflict")).getByRole("button", { name: "Open this block: Conflict" }));
+    const frames = within(await screen.findByTestId("canvas-frames-conflict"));
+    fireEvent.click(frames.getByRole("button", { name: "Say" }));
+    const form = within(await frames.findByRole("form", { name: "Suggest a change to Conflict" }));
+    const fate = form.getByTestId("canvas-suggestion-fate").textContent ?? "";
+    expect(fate).toMatch(/^The Game has started, so the care door changes only by a vote on the whole conflict agreement/);
+    expect(fate).toContain("cannot be adopted from the canvas");
   });
 });

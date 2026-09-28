@@ -363,10 +363,17 @@ export function mayDecline(p: Pick<ProposalView, "pen" | "youProposedIt">): bool
   return !p.youProposedIt && p.pen.how === "act" && p.pen.youMayAdopt;
 }
 
-/** The Adopt frame's opening line, which changes at the Birthing. */
+/**
+ * The Adopt frame's opening line, which changes at the Birthing. After it no
+ * one sentence is true of every setting: a dial is filed as a proposal, the
+ * governance module stays with the administrators and switches straight away,
+ * the care door goes through the conflict agreement's own vote, and the exit
+ * terms wait for a vote not built yet. So the line sends the reader to each
+ * card, whose `adoptEffect` says which (audit of Wave 3b, 2026-09-28).
+ */
 export function adoptIntro(birthed: boolean): string {
   return birthed
-    ? "The Game has started, so adopting a suggestion that names a setting files a proposal, and the village decides it. Where that vote is not built yet, the suggestion says so and stays open. Words are still adopted by whoever holds the pen."
+    ? "The Game has started, so what adopting does now depends on the suggestion. Each one below says what adopting it would do, and who decides."
     : "The Game has not started, so adopting a suggestion that names a setting writes the setting straight away, through that setting's own checks.";
 }
 
@@ -413,13 +420,17 @@ export function gapFacts(payload: Pick<BlockFramesPayload, "block" | "answer" | 
   const out: GapFact[] = [];
   const wired = payload.doors.filter((d) => d.wired);
   const readable = payload.answer.sections.filter((s) => s.readable);
+  // The doors are NOT named here. A door's label is the setting's name, and
+  // one of them ("Governance switched on for members") reads as a state:
+  // listed after "already apply", it told a member governance was on while
+  // the fact above said it was off, which is the default (audit of Wave 3b,
+  // 2026-09-28). The doors are listed by name below the gaps.
   if (wired.length > 0) {
-    const settings = wired.map((d) => lowerFirst(d.label));
     for (const s of readable) {
       if (s.status === "blank") {
-        out.push({ id: `blank-${s.id}`, text: `Nothing is written yet under ${s.title}, while the settings behind this block already apply: ${listed(settings)}.` });
+        out.push({ id: `blank-${s.id}`, text: `Nothing is written yet under ${s.title}, while the settings behind this block, listed below, already work as they are set today.` });
       } else if (s.status === "proposed") {
-        out.push({ id: `draft-${s.id}`, text: `The words under ${s.title} are a draft nobody has adopted yet, while the settings behind this block already apply.` });
+        out.push({ id: `draft-${s.id}`, text: `The words under ${s.title} are a draft nobody has adopted yet, while the settings behind this block, listed below, already work as they are set today.` });
       }
     }
   }
@@ -452,6 +463,22 @@ export function gapFacts(payload: Pick<BlockFramesPayload, "block" | "answer" | 
   return out;
 }
 
+/**
+ * The link a See fact or door may carry for this viewer, or null. Some
+ * controls live on the administrators' pages, and a member who follows one
+ * lands on "Not an admin", whose only button signs them out (audit of Wave 3b,
+ * 2026-09-28). The fact itself stays readable to everyone (the ruling of
+ * 2026-09-25: every dial is visible); only the dead link goes, and the page
+ * says where the setting lives instead (`ADMIN_PAGES_LINE`).
+ */
+export function followableHref(href: string | undefined, admin: boolean): string | null {
+  if (!href) return null;
+  return !admin && /^\/admin(?:[/?#]|$)/.test(href) ? null : href;
+}
+
+/** Said in place of a link a member cannot follow. */
+export const ADMIN_PAGES_LINE = "Set on the administrators' pages.";
+
 // ── Say: the suggestion box ─────────────────────────────────────────────────
 
 /** One thing a suggestion on this block can aim at. `key` is unique within the block. */
@@ -476,6 +503,31 @@ export function suggestionOptions(payload: Pick<BlockFramesPayload, "block" | "a
   }
   if (payload.block.id === "power") out.push({ key: "matrix", target: "matrix", label: "A row of the Decision Matrix" });
   return out;
+}
+
+/**
+ * What becomes of a suggestion once it is sent, where the pen's own sentence
+ * would promise a vote that cannot take it; null where that sentence is the
+ * whole truth. Said in the box BEFORE anybody writes, so a member does not
+ * learn it from the Adopt card after filing (audit of Wave 3b, 2026-09-28).
+ * The same three cases the adopt route refuses with 409 after the Birthing.
+ */
+export function suggestionFate(option: Pick<SuggestionOption, "target" | "door">, pen: PenView | undefined): { text: string; href?: string; label?: string } | null {
+  if (!pen || pen.how !== "ballot") return null;
+  if (option.target === "setting" && option.door === "exit:restorative") {
+    return {
+      text: "The Game has started, so the care door changes only by a vote on the whole conflict agreement, opened from the agreement itself. A suggestion here stays open as a note to the village, and it cannot be adopted from the canvas.",
+    };
+  }
+  if (option.target === "purpose") {
+    return {
+      text: "That vote is opened from Start a proposal, with a line on how it serves the purpose. A suggestion here stays open as a note to the village, and it cannot be adopted from the canvas.",
+      href: "/propose",
+      label: "Start a proposal",
+    };
+  }
+  if (!pen.ballotBuilt) return { text: "That vote is not built yet, so a suggestion here stays open until it is." };
+  return null;
 }
 
 export function sectionTitlesOf(sections: readonly AnswerSection[]): Record<string, string> {

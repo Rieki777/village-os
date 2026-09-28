@@ -1,7 +1,8 @@
 /**
  * ONE CANVAS BLOCK, WALKED IN FIVE FRAMES (plan 2.3, "Five frames"; Wave 3b,
- * 2026-09-28): Sense, See, Learn, Say and Adopt, one at a time, under the
- * block's own card on the Canvas view.
+ * 2026-09-28): Sense, See, Learn, Say and Adopt, one shown at a time, under
+ * the block's own card on the Canvas view. A frame once opened stays mounted
+ * and hidden, so nothing typed in it is lost to a look at another frame.
  *
  *   Sense  the block's earlier readings, and for the pen the reading form,
  *          moved in from the card. It needs nothing but what GET /api/canvas
@@ -31,9 +32,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { ExternalLink, Loader2, Printer } from "lucide-react";
+import { useIsAdmin } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
 import { recordedLine, type CanvasBlockView } from "@/lib/canvasCopy";
-import { FRAME_IDS, FRAMES, gapFacts, readFailure, type BlockFramesPayload, type FrameId } from "@/lib/canvasFramesCopy";
+import {
+  ADMIN_PAGES_LINE,
+  FRAME_IDS,
+  FRAMES,
+  followableHref,
+  gapFacts,
+  readFailure,
+  type BlockFramesPayload,
+  type FrameId,
+} from "@/lib/canvasFramesCopy";
 import { type CanvasBlock, type CanvasReadingInput } from "@shared/governanceCanvas";
 import { CANVAS_SOURCE_URL } from "@shared/governanceCanvasText";
 import { RecordReadingForm } from "./RecordReadingForm";
@@ -70,9 +81,21 @@ export default function CanvasBlockFrames({
   startRecording = false,
 }: CanvasBlockFramesProps) {
   const [frame, setFrame] = useState<FrameId>(initialFrame);
+  /**
+   * The frames opened so far. Each stays mounted once opened, hidden while
+   * another shows, so a suggestion half written under Say or a reading half
+   * recorded under Sense survives a look at See. They used to unmount on every
+   * switch and drop what was typed without a word (audit of Wave 3b,
+   * 2026-09-28). A frame never opened is never mounted, so Sense and Learn
+   * still ask the server for nothing.
+   */
+  const [opened, setOpened] = useState<readonly FrameId[]>([initialFrame]);
   const [payload, setPayload] = useState<BlockFramesPayload | null>(null);
   const [failed, setFailed] = useState<{ message: string; retry: boolean } | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  /** What the last write did. `n` tells two identical sentences apart, so each one is brought into view. */
+  const [notice, setNotice] = useState<{ text: string; n: number } | null>(null);
+  const noticeRef = useRef<HTMLParagraphElement>(null);
+  const noticeCount = useRef(0);
   const asked = useRef(false);
 
   const load = useCallback(() => {
@@ -93,16 +116,34 @@ export default function CanvasBlockFrames({
     if (frame !== "sense" && frame !== "learn" && !asked.current) load();
   }, [frame, load]);
 
+  /**
+   * The result sentence sits at the top of the frames, and the card that was
+   * decided leaves the list when the block is read again, so the page shrinks
+   * under the reader's finger. Focus moves to the sentence and it is scrolled
+   * into view, or a sighted pen on a phone sees the suggestion vanish and the
+   * next block's buttons slide under the thumb (audit of Wave 3b, 2026-09-28).
+   */
+  useEffect(() => {
+    const el = noticeRef.current;
+    if (!notice || !el) return;
+    el.focus({ preventScroll: true });
+    el.scrollIntoView?.({ block: "nearest" });
+  }, [notice]);
+
   /** After a suggestion, an adoption or a decline: say what happened and read the block again. */
   const changed = (message?: string) => {
-    setNotice(message ?? null);
+    noticeCount.current += 1;
+    setNotice(message ? { text: message, n: noticeCount.current } : null);
     load();
   };
 
   const go = (next: FrameId) => {
     setNotice(null);
     setFrame(next);
+    setOpened((was) => (was.includes(next) ? was : [...was, next]));
   };
+
+  const needsBlock = frame === "see" || frame === "say" || frame === "adopt";
 
   return (
     <div className="mt-4 border-t border-stone-100 pt-4 space-y-3" data-testid={`canvas-frames-${block.id}`}>
@@ -126,16 +167,18 @@ export default function CanvasBlockFrames({
       <p className="text-xs text-stone-600">{FRAMES[frame].intro}</p>
 
       {notice && (
-        <p role="status" className="text-sm rounded-lg bg-teal-deep/10 text-stone-900 px-3 py-2">
-          {notice}
+        <p
+          key={notice.n}
+          ref={noticeRef}
+          tabIndex={-1}
+          role="status"
+          className="scroll-mt-24 text-sm rounded-lg bg-teal-deep/10 text-stone-900 px-3 py-2"
+        >
+          {notice.text}
         </p>
       )}
 
-      {frame === "sense" ? (
-        <SenseFrame block={block} view={view} mayRecord={mayRecord} onSave={onSaveReading} startRecording={startRecording} />
-      ) : frame === "learn" ? (
-        <LearnFrame block={block} />
-      ) : failed ? (
+      {needsBlock && failed ? (
         <div role="alert" className="text-sm text-red-700 bg-red-50 rounded-lg px-4 py-3 space-y-2">
           <p>{failed.message}</p>
           {failed.retry && (
@@ -144,18 +187,41 @@ export default function CanvasBlockFrames({
             </button>
           )}
         </div>
-      ) : !payload ? (
+      ) : needsBlock && !payload ? (
         <p className="text-sm text-stone-600 py-4 text-center">
           <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
           Reading {block.name}
         </p>
-      ) : frame === "see" ? (
-        <SeeFrame payload={payload} />
-      ) : frame === "say" ? (
-        <CanvasFrameSay payload={payload} onChanged={changed} onGoTo={go} />
-      ) : (
-        <CanvasFrameAdopt payload={payload} onChanged={changed} onGoTo={go} />
-      )}
+      ) : null}
+
+      {/* Every frame opened so far stays mounted; only the chosen one shows. */}
+      <div>
+        {opened.includes("sense") && (
+          <div hidden={frame !== "sense"}>
+            <SenseFrame block={block} view={view} mayRecord={mayRecord} onSave={onSaveReading} startRecording={startRecording} />
+          </div>
+        )}
+        {opened.includes("learn") && (
+          <div hidden={frame !== "learn"}>
+            <LearnFrame block={block} />
+          </div>
+        )}
+        {payload && opened.includes("see") && (
+          <div hidden={frame !== "see"}>
+            <SeeFrame payload={payload} />
+          </div>
+        )}
+        {payload && opened.includes("say") && (
+          <div hidden={frame !== "say"}>
+            <CanvasFrameSay payload={payload} onChanged={changed} onGoTo={go} />
+          </div>
+        )}
+        {payload && opened.includes("adopt") && (
+          <div hidden={frame !== "adopt"}>
+            <CanvasFrameAdopt payload={payload} onChanged={changed} onGoTo={go} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -222,6 +288,20 @@ function SenseFrame({
 function SeeFrame({ payload }: { payload: BlockFramesPayload }) {
   const gaps = gapFacts(payload);
   const name = payload.block.name;
+  // Only a link this viewer can follow is printed: an administrators' page is
+  // no door for a member (`followableHref`). The fact stays readable to all.
+  const admin = useIsAdmin();
+  const door = (href: string | undefined, label: string) => {
+    const to = followableHref(href, admin);
+    if (to) {
+      return (
+        <Link href={to} className="font-medium text-teal-deep hover:underline">
+          {label}
+        </Link>
+      );
+    }
+    return href ? <span className="text-stone-600">{ADMIN_PAGES_LINE}</span> : null;
+  };
   return (
     <section aria-label={`See: what the village shows about ${name}`} className="space-y-4 text-sm">
       <div>
@@ -230,10 +310,7 @@ function SeeFrame({ payload }: { payload: BlockFramesPayload }) {
           <ul className="mt-2 space-y-2" data-testid="canvas-see-facts">
             {payload.observed.map((f) => (
               <li key={f.id} className="text-stone-800">
-                {f.text}{" "}
-                <Link href={f.href} className="font-medium text-teal-deep hover:underline">
-                  {f.label}
-                </Link>
+                {f.text} {door(f.href, f.label)}
               </li>
             ))}
           </ul>
@@ -249,14 +326,7 @@ function SeeFrame({ payload }: { payload: BlockFramesPayload }) {
             {gaps.map((g) => (
               <li key={g.id} className="text-stone-800">
                 {g.text}
-                {g.href && (
-                  <>
-                    {" "}
-                    <Link href={g.href} className="font-medium text-teal-deep hover:underline">
-                      {g.label}
-                    </Link>
-                  </>
-                )}
+                {g.href && <> {door(g.href, g.label ?? "Where it is set")}</>}
               </li>
             ))}
           </ul>
@@ -270,10 +340,7 @@ function SeeFrame({ payload }: { payload: BlockFramesPayload }) {
             {payload.doors.map((d) => (
               <li key={d.label} className="text-stone-800">
                 <span className="font-medium text-stone-900">{d.label}.</span>{" "}
-                {d.wired ? "Anybody in the village can suggest a change to it under Say." : d.why}{" "}
-                <Link href={d.href} className="font-medium text-teal-deep hover:underline">
-                  Where it is set
-                </Link>
+                {d.wired ? "Anybody in the village can suggest a change to it under Say." : d.why} {door(d.href, "Where it is set")}
               </li>
             ))}
           </ul>

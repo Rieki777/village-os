@@ -56,7 +56,14 @@ const COLUMNS: Array<[keyof RowDraft, string]> = [
   ["riskTags", "Risk tags, separated by commas (optional)"],
 ];
 
-export function DecisionMatrixRows({ notesArePublic }: { notesArePublic: string }) {
+export function DecisionMatrixRows({
+  notesArePublic,
+  reloadOn,
+}: {
+  notesArePublic: string;
+  /** The rows are read again whenever this changes (the Say frame passes the block it read). */
+  reloadOn?: unknown;
+}) {
   const [data, setData] = useState<MatrixRowsPayload | null>(null);
   const [failed, setFailed] = useState<{ message: string; retry: boolean } | null>(null);
   /** The row being written: "new", a row id, or null. */
@@ -75,7 +82,7 @@ export function DecisionMatrixRows({ notesArePublic }: { notesArePublic: string 
   }, []);
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, reloadOn]);
 
   const writes = !!data && data.pen.how === "act" && data.pen.youMayAdopt;
 

@@ -104,7 +104,9 @@ export function CanvasFrameSay({
           <Suspense fallback={waiting}>
             <DecisionMatrix />
           </Suspense>
-          <DecisionMatrixRows notesArePublic={payload.notesArePublic} />
+          {/* Read again whenever the block is: this frame stays mounted while
+              the pen adopts a row under Adopt, and the new row belongs here. */}
+          <DecisionMatrixRows notesArePublic={payload.notesArePublic} reloadOn={payload} />
         </div>
       )}
 

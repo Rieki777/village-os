@@ -18,8 +18,15 @@
  * read (the ruling of 2026-09-25: every dial is visible).
  *
  * NOTES ARE PUBLIC, and the box says so above its first field.
+ *
+ * WHERE A SUGGESTION CANNOT BE CARRIED, the box says so before anybody writes
+ * (`suggestionFate`): after the Birthing the exit terms and the matrix wait for
+ * a vote not built yet, the care door changes only by the conflict agreement's
+ * own vote, and after the handover the purpose statement's vote is opened from
+ * Start a proposal. Suggesting stays free in every case.
  */
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "wouter";
 import { authToken } from "@/lib/gameApi";
 import {
   bodyLabel,
@@ -33,6 +40,7 @@ import {
   refusalText,
   sectionTitlesOf,
   suggestionBody,
+  suggestionFate,
   suggestionOptions,
   type BlockFramesPayload,
   type DialFacts,
@@ -98,6 +106,7 @@ export function CanvasSuggestionForm({ payload, onSent }: { payload: BlockFrames
 
   const scoped = servesPurposeScoped(payload.block.id, option.target);
   const pen = payload.pens[penKeyFor(option)];
+  const fate = suggestionFate(option, pen);
   const dial = door?.kind === "dial" && option.door && dials ? dialFor(option.door, dials) : null;
   const set = (patch: Partial<SuggestionFields>) => {
     setF({ ...f, ...patch });
@@ -171,6 +180,19 @@ export function CanvasSuggestionForm({ payload, onSent }: { payload: BlockFrames
         </p>
       )}
       {pen && <p className="text-xs text-stone-600">Who decides: {pen.sentence}</p>}
+      {fate && (
+        <p className="text-xs text-stone-800" data-testid="canvas-suggestion-fate">
+          {fate.text}
+          {fate.href && (
+            <>
+              {" "}
+              <Link href={fate.href} className="font-medium text-teal-deep hover:underline">
+                {fate.label}
+              </Link>
+            </>
+          )}
+        </p>
+      )}
 
       {door?.kind === "dial" && (
         <label className="block">
