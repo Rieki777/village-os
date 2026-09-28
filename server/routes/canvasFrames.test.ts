@@ -561,7 +561,12 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
         change: { documentId: theirs, title: "Founder's private notes" }, body: "Share it.",
         source: "member", proposedBy: "cf-member", servesPurpose: null,
       });
-      expect((await adopt("teller", forged)).status).toBe(409);
+      // Refused by the route's own ownership check, in its words. The UPDATE's
+      // WHERE is a second lock behind it; this pins the first.
+      expect(await adopt("teller", forged)).toEqual({
+        status: 409,
+        body: { error: "That document is no longer in its owner's notebook, so there is nothing to share. Decline this with a note." },
+      });
       expect(await sharedFlag(theirs)).toBe(0);
     });
   });

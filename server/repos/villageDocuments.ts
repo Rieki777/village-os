@@ -270,6 +270,37 @@ export async function notebookRowsRemaining(pool: Pool, userId: string): Promise
   };
 }
 
+/**
+ * A member's notebook as `GET /api/profile/export` carries it: every
+ * document they added, private or shared, with its text where it has text,
+ * and their own list of picks. A stored PDF or Word file is listed by name
+ * and size; the file itself is saved from the notebook, because a data export
+ * that inlined eight-megabyte files a hundred times over would be one nobody
+ * could open.
+ */
+export async function notebookForExport(pool: Pool, userId: string): Promise<{
+  documents: Array<{ id: number; title: string; kind: DocumentKind; text: string | null; fileName: string | null; fileBytes: number | null; shared: boolean; sharedAt: string | null; createdAt: string }>;
+  resourcePicks: string[];
+  note: string;
+}> {
+  const [r] = await pool.query<RowDataPacket[]>(`SELECT ${BODY_COLUMNS} ${FROM} WHERE d.owner_user_id = ? ORDER BY d.created_at, d.id`, [userId]);
+  return {
+    documents: rows(r, true).map((d) => ({
+      id: d.id,
+      title: d.title,
+      kind: d.kind,
+      text: d.body,
+      fileName: d.fileName,
+      fileBytes: d.body === null ? d.size : null,
+      shared: d.shared,
+      sharedAt: d.sharedAt,
+      createdAt: d.createdAt,
+    })),
+    resourcePicks: await resourcePicksFor(pool, userId),
+    note: "A PDF or Word file is listed by name and size. Save the file itself from your notebook, under the canvas.",
+  };
+}
+
 /* ── Resource picks ─────────────────────────────────────────────────────── */
 
 /** The village's own pick is keyed by the empty string. */

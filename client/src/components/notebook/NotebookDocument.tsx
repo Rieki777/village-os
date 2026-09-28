@@ -111,7 +111,8 @@ function DraftView({ id, open }: { id: number; open: OpenDocument }) {
       { blocks, draftId: answer.draftId ?? undefined, servesPurpose: lines },
     );
     setBusy(false);
-    const data = got.ok ? got.data : got.data;
+    // A refusal still carries the lists: every chosen block is either filed or refused with a reason.
+    const data = got.data;
     const filed = (data?.filed ?? []).map((f: { blockId: string }) => CANVAS_BLOCKS[f.blockId as CanvasBlockId]?.name ?? f.blockId);
     const refused = (data?.refused ?? []).map((r: { blockId: string; error: string }) => `${CANVAS_BLOCKS[r.blockId as CanvasBlockId]?.name ?? r.blockId}: ${r.error}`);
     if (!got.ok && !refused.length) return setSaid({ ok: false, text: got.error });

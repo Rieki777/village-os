@@ -118,6 +118,13 @@ import { decideCanvasProposal, insertCanvasProposal, openDocumentShares, openPro
 import { CANVAS_MEMBERS_ONLY, mayReadCanvas } from "./canvas";
 import { OPEN_PROPOSALS_PER_MEMBER } from "./canvasFrames";
 
+/**
+ * The notebook's part of `GET /api/profile/export`, handed to server/index.ts
+ * through this module's own import line, so the export gains one field and no
+ * import of its own.
+ */
+export { notebookForExport } from "../repos/villageDocuments";
+
 export interface DocumentRouteDeps
   extends Pick<
     AppDeps,
@@ -267,7 +274,15 @@ export function register(app: Express, deps: DocumentRouteDeps): void {
     if (await overLimit(`documents-add:${me}`, 60, 60 * 60 * 1000)) {
       return res.status(429).json({ error: "That is a lot of documents in an hour. Try again in a little while." });
     }
-    upload.single("file")(req, res, async (err: any) => {
+    // Multer calls back outside Express's own error handling, so a failure
+    // after this point is caught here and answered, never left unhandled.
+    upload.single("file")(req, res, (err: any) => {
+      void storeUpload(err).catch((e) => {
+        console.error("[documents] could not store an uploaded document", e);
+        if (!res.headersSent) res.status(500).json({ error: "The document could not be saved. Nothing was stored." });
+      });
+    });
+    async function storeUpload(err: any) {
       if (err) {
         const tooBig = err?.code === "LIMIT_FILE_SIZE";
         return res.status(tooBig ? 413 : 400).json({ error: tooBig ? DOCUMENT_WORDS.fileTooBig : "That file could not be read." });
@@ -297,7 +312,7 @@ export function register(app: Express, deps: DocumentRouteDeps): void {
         bytes: file.buffer,
       });
       return created(res, me, id);
-    });
+    }
   });
 
   // ── GET /api/documents/search ───────────────────────────────────────────

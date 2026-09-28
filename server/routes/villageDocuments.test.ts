@@ -32,7 +32,7 @@ import { briefWrite } from "../lib/villageBrain";
 import { CANVAS_DATABASE_CSV } from "../lib/notebookExport";
 import { recordCanvasReading } from "../repos/canvasReadings";
 import { canvasProposalById } from "../repos/canvasProposals";
-import { markDocumentShared } from "../repos/villageDocuments";
+import { markDocumentShared, notebookForExport } from "../repos/villageDocuments";
 import { CANVAS_MEMBERS_ONLY } from "./canvas";
 import { MODEL_OWNER_ONLY, NO_MODEL, VILLAGE_PICK_REFUSAL, register } from "./villageDocuments";
 
@@ -361,6 +361,19 @@ describe.skipIf(!configured)("a member's notebook, the picks and the export", ()
       expect(MODEL_CALLS.length).toBe(before);
       // The splitter sends nothing anywhere, so any reader may use it.
       expect((await call("POST", `/api/documents/${docId}/draft`, "other", { mode: "words" })).status).toBe(200);
+    });
+  });
+
+  describe("the member's own data export (GET /api/profile/export)", () => {
+    it("carries every document the member added, with its text, and never another member's", async () => {
+      const mine = await notebookForExport(pool, PEOPLE.owner.id);
+      const titles = mine.documents.map((d) => d.title);
+      expect(titles).toEqual(expect.arrayContaining(["Our well rota", "How we decide", "Statutes 2026"]));
+      expect(mine.documents.find((d) => d.title === "Our well rota")?.text).toContain("WELLROTA-PRIVATE");
+      expect(mine.documents.find((d) => d.title === "Statutes 2026")).toMatchObject({ kind: "pdf", text: null, fileName: "Statutes-2026.pdf" });
+      expect(mine.documents.every((d) => d.id > 0)).toBe(true);
+      const theirs = await notebookForExport(pool, PEOPLE.other.id);
+      expect(JSON.stringify(theirs)).not.toContain("WELLROTA-PRIVATE");
     });
   });
 
