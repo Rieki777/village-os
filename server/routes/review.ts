@@ -161,12 +161,22 @@ interface IgnoredKeys {
  * the proposal, which is always a valid slug by construction.
  */
 function seatIdFor(vendorId: unknown, fallback: string): string {
-  const slug = String(vendorId ?? "")
+  /*
+   * THE SAME SHAPE CODEQL FLAGGED ON THE CIRCLE SLUG BELOW, and this one is
+   * older, which is why it was never called new and never fixed.
+   *
+   * `/^-+|-+$/` on an UNBOUNDED vendor string is a polynomial ReDoS: the
+   * trailing half rescans from every position and a name of many dashes costs
+   * nothing to send. Bounding first and trimming in two linear passes removes
+   * the backtracking rather than hiding it. The final `-+$` is kept below
+   * because by then the string is at most 64 characters.
+   */
+  let slug = String(vendorId ?? "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64)
-    .replace(/-+$/, "");
+    .slice(0, 64);
+  while (slug.startsWith("-")) slug = slug.slice(1);
+  while (slug.endsWith("-")) slug = slug.slice(0, -1);
   return /^[a-z0-9][a-z0-9-]{0,63}$/.test(slug) ? slug : fallback;
 }
 
@@ -485,11 +495,19 @@ export function register(app: Express, deps: Deps): void {
         // A slug, because that is what this table's ids are: the migration's own
         // example is `permaculture-council`. Falling back to the proposal id
         // keeps a nameless proposal previewable, where it blocks with a reason.
-        const slug = rawName
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-+|-+$/g, "")
-          .slice(0, 56);
+        /*
+         * TRIMMED WITHOUT A REGEX, and bounded BEFORE the trim.
+         *
+         * The first version ended `.replace(/^-+|-+$/g, "")`, which CodeQL
+         * flagged as a polynomial ReDoS at high severity and was right to: the
+         * `-+$` half has to scan from every position, the input is a name an
+         * outside service supplied, and a name of many dashes is cheap to send.
+         * Slicing first bounds the work whatever arrives, and two loops trim in
+         * one pass each with nothing to backtrack over.
+         */
+        let slug = rawName.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 56);
+        while (slug.startsWith("-")) slug = slug.slice(1);
+        while (slug.endsWith("-")) slug = slug.slice(0, -1);
         const circleId = slug !== "" ? slug : `circle-${p.id.toLowerCase()}`;
         const r = await addChange(getPool(), made.id, {
           op: "create_circle",
