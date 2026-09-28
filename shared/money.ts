@@ -120,15 +120,51 @@ export function defaultDisplayCurrency(project: { country?: string | null; fiatC
  * fetcher imports it. One definition, and the question below is derived from
  * it rather than hand-typed.
  *
- * CRC is deliberately absent, measured 2026-08-21: the ECB daily list does not
- * carry it. That is why this is a question and not a rule.
+ * CRC WAS DELIBERATELY ABSENT UNTIL 2026-09-25, and the reason is worth
+ * keeping because it shaped everything around it. The ECB daily reference list
+ * does not carry colones and never will, and the free providers built on that
+ * list inherit the same hole (frankfurter, measured the same day: 29 quotes,
+ * no CRC). So the first village this platform serves could not get a daily
+ * rate for its own currency, and `hasDailyRate` had to be a question rather
+ * than a rule.
+ *
+ * The source now carries it, and 164 others, with no key. That does NOT make
+ * this a rule: a village may still name a currency nobody quotes, and the
+ * hand-recorded row is still the answer when it does.
  */
 export const FX_BASE = "EUR";
 
-/** The quotes fetched daily. All present on the ECB list (verified). */
+/**
+ * Every quote the daily source publishes against EUR, pinned as literals.
+ *
+ * LITERALS, NOT WHATEVER THE RESPONSE HAPPENS TO CARRY. The URL contains no
+ * currency codes at all now, so nothing stored can steer the fetch; this list
+ * is the second half of that property, deciding which of the answer is kept.
+ * A source that quietly began returning a code we do not recognise would be
+ * ignored rather than stored.
+ *
+ * Captured 2026-09-25 from the live answer: 166 codes, of which EUR is the base
+ * and the other 165 are here. Every one of the fourteen ECB quotes this list
+ * used to hold is present, so the swap took nothing away.
+ */
 export const FX_QUOTES = [
-  "USD", "CHF", "GBP", "JPY", "CAD", "AUD", "NZD",
-  "SEK", "NOK", "DKK", "MXN", "BRL", "PLN", "CZK",
+  "AED", "AFN", "ALL", "AMD", "ANG", "AOA", "ARS", "AUD", "AWG", "AZN",
+  "BAM", "BBD", "BDT", "BGN", "BHD", "BIF", "BMD", "BND", "BOB", "BRL",
+  "BSD", "BTN", "BWP", "BYN", "BZD", "CAD", "CDF", "CHF", "CLF", "CLP",
+  "CNH", "CNY", "COP", "CRC", "CUP", "CVE", "CZK", "DJF", "DKK", "DOP",
+  "DZD", "EGP", "ERN", "ETB", "FJD", "FKP", "FOK", "GBP", "GEL", "GGP",
+  "GHS", "GIP", "GMD", "GNF", "GTQ", "GYD", "HKD", "HNL", "HRK", "HTG",
+  "HUF", "IDR", "ILS", "IMP", "INR", "IQD", "IRR", "ISK", "JEP", "JMD",
+  "JOD", "JPY", "KES", "KGS", "KHR", "KID", "KMF", "KRW", "KWD", "KYD",
+  "KZT", "LAK", "LBP", "LKR", "LRD", "LSL", "LYD", "MAD", "MDL", "MGA",
+  "MKD", "MMK", "MNT", "MOP", "MRU", "MUR", "MVR", "MWK", "MXN", "MYR",
+  "MZN", "NAD", "NGN", "NIO", "NOK", "NPR", "NZD", "OMR", "PAB", "PEN",
+  "PGK", "PHP", "PKR", "PLN", "PYG", "QAR", "RON", "RSD", "RUB", "RWF",
+  "SAR", "SBD", "SCR", "SDG", "SEK", "SGD", "SHP", "SLE", "SLL", "SOS",
+  "SRD", "SSP", "STN", "SYP", "SZL", "THB", "TJS", "TMT", "TND", "TOP",
+  "TRY", "TTD", "TVD", "TWD", "TZS", "UAH", "UGX", "USD", "UYU", "UZS",
+  "VES", "VND", "VUV", "WST", "XAF", "XCD", "XCG", "XDR", "XOF", "XPF",
+  "YER", "ZAR", "ZMW", "ZWG", "ZWL",
 ] as const;
 
 /**
