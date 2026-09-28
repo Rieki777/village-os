@@ -473,8 +473,11 @@ export default function StewardJourney() {
             <h2 className="font-display text-3xl md:text-4xl font-semibold mb-4">
               The Path of Growth
             </h2>
-            <p className="text-white/70 max-w-2xl mx-auto">
-              Each new season requires successful role proposals to continue. 
+            {/* /70 measured 3.83:1 against this section's own green on the
+                deployed build, under AA's 4.5:1 at 16px. Full white is 5.95:1
+                on the same ground. */}
+            <p className="text-white max-w-2xl mx-auto">
+              Each new season requires successful role proposals to continue.
               As you grow, so does your voice and responsibility.
             </p>
           </motion.div>
@@ -500,10 +503,19 @@ export default function StewardJourney() {
                 <h3 className="font-display text-xl font-semibold mb-2">
                   {level.level}
                 </h3>
-                <p className="text-white/70 text-sm mb-3">
+                {/* Full white, not /70 and /90. These sit on `bg-white/10`
+                    over the section's green, and that tint composites LIGHTER
+                    than the section itself, so the fade that reads fine
+                    elsewhere loses here. Measured on the deployed build,
+                    all six viewports: /70 gave 3.21:1 and /90 gave 4.19:1,
+                    both under AA's 4.5:1 for text this size. Full white is
+                    4.73:1 on that composite. The hierarchy between the two
+                    lines is carried by `font-medium`, which already
+                    distinguished them. */}
+                <p className="text-white text-sm mb-3">
                   {level.requirement}
                 </p>
-                <p className="text-white/90 text-sm font-medium">
+                <p className="text-white text-sm font-medium">
                   {level.benefits}
                 </p>
               </motion.div>
