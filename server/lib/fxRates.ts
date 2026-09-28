@@ -30,12 +30,23 @@ import { guardedFetchJson } from "./toolcheck";
 export { FX_BASE, FX_QUOTES } from "../../shared/money";
 import { FX_BASE, FX_QUOTES } from "../../shared/money";
 
-export function ecbDailyUrl(quotes: readonly string[] = FX_QUOTES): string {
-  return (
-    "https://data-api.ecb.europa.eu/service/data/EXR/" +
-    `D.${quotes.join("+")}.${FX_BASE}.SP00.A` +
-    "?lastNObservations=1&format=jsondata"
-  );
+/**
+ * THE DAILY URL. No currency codes in it at all, which is stronger than the
+ * property this file used to claim.
+ *
+ * The ECB endpoint built its path from `FX_QUOTES`, so the guarantee had to be
+ * "those are literals, so nothing stored can steer the fetch". This one names
+ * only the base, so there is nothing in the URL a stored string could steer
+ * even if the literals rule were broken. Which quotes are KEPT is decided
+ * afterwards, against `FX_QUOTES`, from data rather than from a path.
+ *
+ * Keyless on purpose (Rye, 2026-09-25: "find a keyless version ... without me
+ * having to pay"). Measured the same day: this source answers 166 codes
+ * including CRC; frankfurter and anything else derived from the ECB reference
+ * list answers 29 and never CRC, because the ECB does not publish colones.
+ */
+export function dailyRatesUrl(): string {
+  return `https://open.er-api.com/v6/latest/${FX_BASE}`;
 }
 
 export interface FxRow {
@@ -45,32 +56,52 @@ export interface FxRow {
 }
 
 /**
- * Read the SDMX JSON the ECB data portal answers with. Pure, tested on a
- * captured response. Series are keyed `0:i:0:0:0` where `i` indexes the
- * CURRENCY dimension; observations are keyed by the TIME_PERIOD index. A
- * quote the list does not carry simply has no series, which is how the CRC
- * absence arrives: silently, so the caller must not infer from silence.
+ * Read the daily answer. Pure, tested on a captured response.
+ *
+ * THE ENVELOPE IS CHECKED BEFORE THE RATES. This source answers HTTP 200 with
+ * `result: "error"` for a bad request, so a caller that read `rates` first
+ * would treat a refusal as an empty day and store nothing, silently, for as
+ * long as the refusal lasted. `refreshDailyRates` already reports "no series"
+ * on an empty parse, and that sentence would have been true and useless.
+ *
+ * THE BASE IS CHECKED TOO. Every rate here means "how many of this per one
+ * FX_BASE", and `latestRates` hands the table to readers under that meaning.
+ * A source answering a different base would invert nothing and break
+ * everything, quietly, at whatever ratio the two bases happen to sit.
+ *
+ * Only quotes in `FX_QUOTES` are kept: the response is data, not a permission.
  */
-export function parseEcbSeries(doc: any): FxRow[] {
+export function parseDailyRates(doc: any): FxRow[] {
+  if (doc?.result !== "success") return [];
+  if (String(doc?.base_code ?? "").toUpperCase() !== FX_BASE) return [];
+  const asOf = ymdFromUpdate(doc?.time_last_update_unix);
+  if (!asOf) return [];
+  const rates: Record<string, unknown> = doc?.rates ?? {};
+  const wanted = new Set<string>(FX_QUOTES as readonly string[]);
   const out: FxRow[] = [];
-  const seriesDims: any[] = doc?.structure?.dimensions?.series ?? [];
-  const currencyDim = seriesDims.find((d) => d?.id === "CURRENCY");
-  const currencyIdx = seriesDims.findIndex((d) => d?.id === "CURRENCY");
-  const timeValues: any[] = doc?.structure?.dimensions?.observation?.[0]?.values ?? [];
-  const series: Record<string, any> = doc?.dataSets?.[0]?.series ?? {};
-  if (!currencyDim || currencyIdx < 0) return out;
-  for (const [key, s] of Object.entries(series)) {
-    const parts = key.split(":");
-    const quote = currencyDim.values?.[Number(parts[currencyIdx])]?.id;
-    if (!quote || typeof quote !== "string") continue;
-    for (const [obsKey, obs] of Object.entries((s as any)?.observations ?? {})) {
-      const asOf = timeValues[Number(obsKey)]?.id;
-      const rate = Array.isArray(obs) ? Number(obs[0]) : NaN;
-      if (!asOf || !Number.isFinite(rate) || rate <= 0) continue;
-      out.push({ quote: quote.toUpperCase(), rate, asOf: String(asOf) });
-    }
+  for (const [code, value] of Object.entries(rates)) {
+    const quote = String(code).toUpperCase();
+    if (!wanted.has(quote)) continue;
+    const rate = Number(value);
+    if (!Number.isFinite(rate) || rate <= 0) continue;
+    out.push({ quote, rate, asOf });
   }
-  return out.sort((a, b) => a.quote.localeCompare(b.quote) || a.asOf.localeCompare(b.asOf));
+  return out.sort((a, b) => a.quote.localeCompare(b.quote));
+}
+
+/**
+ * The day the source stamped, never this machine's.
+ *
+ * `time_last_update_unix` is when the rates were published. Taking our own
+ * date instead would write today's row from yesterday's numbers whenever the
+ * job runs before the source updates, and `latestRates` takes MAX(as_of), so
+ * that row would outrank the real one when it arrived.
+ */
+function ymdFromUpdate(unix: unknown): string | null {
+  const n = Number(unix);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const d = new Date(n * 1000);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
 }
 
 /** Upsert fetched rows. One row per (quote, day); re-runs are idempotent. */
@@ -89,9 +120,9 @@ export async function storeRates(pool: Pool, rows: FxRow[], source = "ecb"): Pro
 
 /** The daily job's whole body: fetch through the guard, store, say what happened. */
 export async function refreshDailyRates(pool: Pool): Promise<string> {
-  const doc = await guardedFetchJson(ecbDailyUrl(), 15_000);
-  const rows = parseEcbSeries(doc);
-  if (!rows.length) return "ECB answered with no series";
+  const doc = await guardedFetchJson(dailyRatesUrl(), 15_000);
+  const rows = parseDailyRates(doc);
+  if (!rows.length) return "the rate source answered with nothing usable";
   const stored = await storeRates(pool, rows);
   return `${stored} rate(s) for ${rows[rows.length - 1]?.asOf}`;
 }
