@@ -39,11 +39,14 @@ if (!configured) console.warn("[canvas.routes] TEST_DATABASE_URL not set - DB-ba
  * stranger is signed in and never admitted: an invited account before
  * admission, or anybody registering on a fork with invite-only off.
  */
-const PEOPLE: Record<string, { id: string; name: string; role: string; roleCapabilities: string[]; membershipGranted: boolean }> = {
+const PEOPLE: Record<string, { id: string; name: string; role: string; roleCapabilities: string[]; membershipGranted: boolean; stageGranted?: string }> = {
   pen: { id: "canvas-pen", name: "Wren Halloway", role: "member", roleCapabilities: ["story.tell"], membershipGranted: true },
   member: { id: "canvas-member", name: "Ash Brook", role: "member", roleCapabilities: [], membershipGranted: true },
   admin: { id: "canvas-admin", name: "Moss Fielding", role: "admin", roleCapabilities: [], membershipGranted: false },
   stranger: { id: "canvas-stranger", name: "Rook Talbot", role: "member", roleCapabilities: [], membershipGranted: false },
+  // Placed by an admin (PUT /api/admin/players/:id/stage), which writes only `stageGranted`: at Member, admitted; below it, not.
+  granted: { id: "canvas-granted", name: "Juniper Vale", role: "member", roleCapabilities: [], membershipGranted: false, stageGranted: "member" },
+  belowDoor: { id: "canvas-below", name: "Linden Rowe", role: "member", roleCapabilities: [], membershipGranted: false, stageGranted: "immersant" },
 };
 
 let db: TestDb;
@@ -169,6 +172,15 @@ describe.skipIf(!configured)("the canvas routes", () => {
         expect(read.status, as).toBe(200);
         expect(read.body.blocks.find((b: any) => b.id === "purpose").latest.recordedBy.name, as).toBe("Wren");
       }
+    });
+
+    it("lets a member an admin placed at Member by hand read, and refuses one granted a rung below it", async () => {
+      const granted = await call("GET", "/api/canvas", "granted");
+      expect(granted.status, "a stage grant at Member is an admission").toBe(200);
+      expect(granted.body.blocks.map((b: any) => b.id)).toEqual([...CANVAS_BLOCK_IDS]);
+      const below = await call("GET", "/api/canvas", "belowDoor");
+      expect(below.status).toBe(403);
+      expect(below.body).toEqual({ error: CANVAS_MEMBERS_ONLY });
     });
 
     it("tells the pen and a pre-handover admin they may record, and a plain member they may not", async () => {

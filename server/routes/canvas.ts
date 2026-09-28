@@ -13,7 +13,8 @@
  *
  * ── WHO MAY READ: THE VILLAGE'S MEMBERS, AND ITS ADMINS ────────────────────
  *
- * A member the village has admitted (`hasMembership`), or an admin. The
+ * A member the village has admitted (`isAdmitted`, server/lib/admission.ts:
+ * `membershipGranted` or a stage grant at Member or above), or an admin. The
  * canvas is the village's own account of how it governs itself, and each
  * reading names its recorder, so it is members-only and never public (BUILD_PLAN
  * Q2). Being signed in is NOT enough, for the reason the brain lane drew the
@@ -67,6 +68,8 @@ import { LEVEL_WORDS, MOMENT_LABELS, parseCanvasReading } from "../../shared/gov
 import { allCanvasReadings, readingsByBlock, recordCanvasReading, type CanvasReadingRow } from "../repos/canvasReadings";
 import { memberAnswersFrom } from "../../shared/canvasPublicLines";
 import { briefAll } from "../lib/villageBrain";
+import { isAdmitted } from "../lib/admission";
+import { GAME_CONFIG } from "../../shared/gameConfig";
 
 type Deps = Pick<
   AppDeps,
@@ -94,7 +97,8 @@ export async function mayReadCanvas(
   req: Parameters<AppDeps["isAdmin"]>[0],
   user: Parameters<AppDeps["hasMembership"]>[0],
 ): Promise<boolean> {
-  return deps.hasMembership(user) || (await deps.isAdmin(req));
+  // A stage grant at Member is an admission too: PUT /api/admin/players/:id/stage writes only `stageGranted`.
+  return deps.hasMembership(user) || isAdmitted({ membershipGranted: user.membershipGranted, stageGranted: user.stageGranted }, GAME_CONFIG.stages) || (await deps.isAdmin(req));
 }
 
 export function register(app: Express, deps: Deps): void {

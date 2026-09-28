@@ -83,10 +83,10 @@ export const CANVAS_SECTION_DOOR =
 export { CANVAS_PUBLIC_SECTION };
 
 export function register(app: Express, deps: CanvasPublicDeps): void {
-  const { authedUser, guardCapability, members, hasMembership, contentRepo, getPool } = deps;
+  const { authedUser, guardCapability, members, contentRepo, getPool } = deps;
 
   /** The names no public line may hold, read now. Throws when the roster cannot be read. */
-  const protectedNames = async () => namesToProtect(await members.all(), hasMembership);
+  const protectedNames = async () => namesToProtect(await members.all());
 
   app.get("/api/canvas/public", async (_req, res) => {
     let names: string[];

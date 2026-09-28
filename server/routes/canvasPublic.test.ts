@@ -42,6 +42,8 @@ interface Person {
   role: string;
   roleCapabilities: string[];
   membershipGranted: boolean;
+  /** A rung an admin granted by hand (PUT /api/admin/players/:id/stage), which writes nothing else. */
+  stageGranted?: string;
 }
 
 /** The people behind the bearer tokens. The admin is deliberately NOT admitted as a member. */
@@ -237,17 +239,39 @@ describe.skipIf(!configured)("the canvas in public", () => {
   });
 
   describe("the name check on the write", () => {
-    it("refuses a line holding a member's first name, in any case, and stores nothing", async () => {
+    it("refuses a line holding a member's first name written as a name, or their whole name in any case, and stores nothing", async () => {
       for (const [line, quoted] of [
         ["Ash keeps the keys to the seed store.", "Ash"],
         ["the keys stay with ASH BROOK until spring", "ASH BROOK"],
-        ["Ask wren first.", "wren"],
+        ["Ask Wren first.", "Wren"],
+        ["ask wren halloway first.", "wren halloway"],
       ]) {
         const r = await put("roles", line);
         expect(r.status, line).toBe(400);
         expect(r.body).toEqual({ error: nameRefusal(quoted) });
       }
       expect((await storedContent()).canvas).toBeUndefined();
+    });
+
+    it("refuses the name of a member an admin placed at Member by hand, and not one granted a rung below it", async () => {
+      roster.push({ id: "cp-granted", name: "Juniper Vale", email: "juniper@example.test", role: "member", roleCapabilities: [], membershipGranted: false, stageGranted: "member" });
+      roster.push({ id: "cp-below", name: "Linden Rowe", email: "linden@example.test", role: "member", roleCapabilities: [], membershipGranted: false, stageGranted: "immersant" });
+      const r = await put("roles", "Juniper keeps the keys to the seed store.");
+      expect(r.status, r.text).toBe(400);
+      expect(r.body).toEqual({ error: nameRefusal("Juniper") });
+      // Control: a rung below Member is not an admission, so Linden is nobody the village has let in yet.
+      expect((await put("roles", "Linden keeps the keys to the seed store.")).status).toBe(200);
+    });
+
+    it("keeps a line where a first name is an ordinary word in lower case, and a title a founder was stored under (controls)", async () => {
+      roster.push({ id: "cp-will", name: "Will Harper", email: "will@example.test", role: "member", roleCapabilities: [], membershipGranted: true });
+      roster.push({ id: "cp-default", name: "Founder", email: "founder@example.test", role: "founder", roleCapabilities: [], membershipGranted: false });
+      const line = "Until the handover, the founder keeps the pen, and the stewards will review every change.";
+      const r = await put("power", line);
+      expect(r.status, r.text).toBe(200);
+      expect((await call("GET", CANVAS_PUBLIC_PATH, null)).body.blocks.find((b: any) => b.id === "power")).toEqual({ id: "power", line, withheld: false });
+      // The same person written as a name is still refused.
+      expect((await put("power", "Will reviews every change.")).body).toEqual({ error: nameRefusal("Will") });
     });
 
     it("refuses an admin's name though the admin was never admitted as a member", async () => {
@@ -298,11 +322,27 @@ describe.skipIf(!configured)("the canvas in public", () => {
     });
 
     it("holds back a line when a member changes their display name to one it holds", async () => {
-      expect((await put("impact", "A heron nests by the river each spring, and we count its young.")).status).toBe(200);
+      expect((await put("impact", "Heron and the river circle count the young each spring.")).status).toBe(200);
+      // Control: the same word in lower case is the bird, and stays served after the rename.
+      expect((await put("meetings", "A heron nests by the river, and we meet beside it.")).status).toBe(200);
       roster.find((p) => p.id === "cp-member")!.name = "Heron Brook";
       const r = await call("GET", CANVAS_PUBLIC_PATH, null);
       expect(r.body.blocks[11]).toEqual({ id: "impact", line: null, withheld: true });
-      expect(r.text).not.toContain("nests by the river");
+      expect(r.text).not.toContain("river circle");
+      expect(r.body.blocks.find((b: any) => b.id === "meetings")).toEqual({
+        id: "meetings", line: "A heron nests by the river, and we meet beside it.", withheld: false,
+      });
+    });
+
+    it("holds back a line once an admin places somebody it names at Member by hand", async () => {
+      roster.push({ id: "cp-late", name: "Juniper Vale", email: "juniper@example.test", role: "member", roleCapabilities: [], membershipGranted: false });
+      expect((await put("purpose", "Juniper walks the boundary each moon.")).status).toBe(200);
+      // Control: not yet admitted, so served.
+      expect((await call("GET", CANVAS_PUBLIC_PATH, null)).body.blocks[0].withheld).toBe(false);
+      roster.find((p) => p.id === "cp-late")!.stageGranted = "member";
+      const held = await call("GET", CANVAS_PUBLIC_PATH, null);
+      expect(held.body.blocks[0]).toEqual({ id: "purpose", line: null, withheld: true });
+      expect(held.text).not.toContain("Juniper");
     });
   });
 

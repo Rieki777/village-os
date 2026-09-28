@@ -292,11 +292,12 @@ describe.skipIf(!DB_CONFIGURED)("the canvas, through the real gate", () => {
     });
   });
 
-  it("refuses the pen a line naming a member or the founder, in any case, and stores none of them", async () => {
+  it("refuses the pen a line naming a member or the founder, a whole name in any case, and stores none of them", async () => {
     for (const [text, quoted] of [
       ["ASH keeps the seed store.", "ASH"],
       ["Ask Canvas Founder about the budget.", "Canvas Founder"],
-      ["wren opens every gathering.", "wren"],
+      ["Wren opens every gathering.", "Wren"],
+      ["ask wren halloway first.", "wren halloway"],
     ]) {
       const r = await call("PUT", "/api/canvas/public/roles", { line: text }, people.pen.token);
       expect(r.status, text).toBe(400);
@@ -304,7 +305,7 @@ describe.skipIf(!DB_CONFIGURED)("the canvas, through the real gate", () => {
     }
     const read = await call("GET", "/api/canvas/public", undefined, "");
     expect(read.json.blocks.find((b: any) => b.id === "roles").line).toBeNull();
-    for (const leaked of ["ASH", "Canvas Founder", "wren opens"]) expect(read.text).not.toContain(leaked);
+    for (const leaked of ["ASH", "Canvas Founder", "Wren opens", "wren halloway"]) expect(read.text).not.toContain(leaked);
   });
 
   it("closes the generic content doors to the canvas key, and only to it", async () => {
@@ -348,11 +349,33 @@ describe.skipIf(!DB_CONFIGURED)("the canvas, through the real gate", () => {
     expect(after.json.blocks.find((b: any) => b.id === "meetings").line).toBe("Our storytellers keep the calendar.");
   });
 
+  it("counts somebody an admin placed at Member by hand: the canvas opens to them, and a line naming them is held back and refused", async () => {
+    const written = await call("PUT", "/api/canvas/public/stakeholders", { line: "Linden walks the boundary with our neighbours." }, people.pen.token);
+    expect(written.status, written.text).toBe(200);
+    const placed = await register("Linden Rowe", "canvas-linden");
+    // Registered and not admitted: the canvas is closed to them, and the line still shows.
+    expect((await call("GET", "/api/canvas", undefined, placed.token)).status).toBe(403);
+    const before = await call("GET", "/api/canvas/public", undefined, "");
+    expect(before.json.blocks.find((b: any) => b.id === "stakeholders").line).toBe("Linden walks the boundary with our neighbours.");
+
+    // The admin's own door, which writes the stage grant and nothing else.
+    const granted = await call("PUT", `/api/admin/players/${placed.id}/stage`, { stageId: "member" });
+    expect(granted.status, granted.text).toBe(200);
+    const reads = await call("GET", "/api/canvas", undefined, placed.token);
+    expect(reads.status, `a stage grant at Member is an admission: ${reads.text}`).toBe(200);
+    const after = await call("GET", "/api/canvas/public", undefined, "");
+    expect(after.json.blocks.find((b: any) => b.id === "stakeholders")).toEqual({ id: "stakeholders", line: null, withheld: true });
+    expect(after.text).not.toContain("Linden");
+    const refused = await call("PUT", "/api/canvas/public/roles", { line: "Linden keeps the seed store." }, people.pen.token);
+    expect(refused.status, refused.text).toBe(400);
+    expect(refused.json).toEqual({ error: nameRefusal("Linden") });
+  });
+
   it("serves the generated Decision Matrix rows to a visitor, from the live holdings, naming roles and never people", async () => {
     const r = await call("GET", "/api/canvas/public/decision-matrix", undefined, "");
     expect(r.status, r.text).toBe(200);
     const row = (key: string) => r.json.groups.flatMap((g: any) => g.rows).find((x: any) => x.key === key);
     expect(row("power:story.tell").approval.text).toContain("with Storytellers");
-    for (const person of ["Wren", "Ash", "Canvas Founder", "Juniper", people.pen.id]) expect(r.text).not.toContain(person);
+    for (const person of ["Wren", "Ash", "Canvas Founder", "Juniper", "Linden", people.pen.id]) expect(r.text).not.toContain(person);
   });
 });
