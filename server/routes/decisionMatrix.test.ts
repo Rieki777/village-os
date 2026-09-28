@@ -62,8 +62,8 @@ async function call(as: keyof typeof PEOPLE | null) {
 async function governanceAt(lifecycle: "members" | null) {
   await pool.query("DELETE FROM module_settings WHERE module_id = 'governance'"); // module-review-ok: fixture SQL against the scratch schema this suite provisioned
   if (lifecycle) {
-    await pool.query( // module-review-ok: fixture SQL against the scratch schema this suite provisioned
-      "INSERT INTO module_settings (module_id, lifecycle, config) VALUES ('governance', ?, NULL)",
+    await pool.query(
+      "INSERT INTO module_settings (module_id, lifecycle, config) VALUES ('governance', ?, NULL)", // module-review-ok: fixture SQL against the scratch schema this suite provisioned, read back through loadModuleSettings the way boot reads it
       [lifecycle],
     );
   }
