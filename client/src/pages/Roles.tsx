@@ -29,6 +29,8 @@ import { gameFetch } from "@/lib/gameApi";
 import { PeopleLockNote, type PeopleTier } from "@/components/PeopleLock";
 import SeatHistory from "@/components/power/SeatHistory";
 import SeatNeeds from "@/components/power/SeatNeeds";
+import SeatVendorFacts from "@/components/power/SeatVendorFacts";
+import { useModule } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
 
 type RoleStatus = "filled" | "open" | "forming" | "partial";
@@ -91,6 +93,10 @@ interface RoleCardProps {
 }
 
 function RoleCard({ role, expanded, onToggle, index, canSeePeople, canTagNeeds }: RoleCardProps) {
+  // Whose words the vendor panel shows. Taken from the listing rather than
+  // written here, because another fork's connector is a different service
+  // and a literal would be this platform naming one of them.
+  const vendorName = useModule("saberra")?.name ?? "the connected service";
   const Icon = ICONS[role.icon ?? ""] ?? CircleDot;
   // Admin-editable colour, resolved together with the ink that stays legible
   // on it. See client/src/lib/swatch.ts.
@@ -207,6 +213,16 @@ function RoleCard({ role, expanded, onToggle, index, canSeePeople, canTagNeeds }
               {!role.isExample && (
                 <div className="pt-4 border-t border-border">
                   <SeatNeeds roleId={role.id} canEdit={canTagNeeds} />
+                </div>
+              )}
+              {/* What a connected service holds about this seat, in that
+                  service's own words. Open to every member on purpose: the
+                  question it answers is whether to put your hand up for this
+                  seat, and that is not a steward's question. Renders nothing
+                  at all when no such module is on. */}
+              {!role.isExample && (
+                <div className="pt-4 border-t border-border empty:hidden empty:pt-0 empty:border-t-0">
+                  <SeatVendorFacts entityKind="org_role" entityId={role.id} serviceName={vendorName} />
                 </div>
               )}
             </div>
