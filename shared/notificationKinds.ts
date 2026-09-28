@@ -21,6 +21,9 @@
  *                burst of the same kind reads as ONE line;
  *  - `celebrate` whether this kind is rare enough to earn a moment. FOUR are.
  *
+ * And one kind declares a fifth, `wordsInAppOnly`: its body is a member's own
+ * words, which never leave by email, so the bell shows them whole.
+ *
  * THE CELEBRATION RATION IS THE POINT OF THIS FILE. A stage crossed, a ballot
  * carried, a cycle settled, a quest consented. Everything else gets a quiet
  * line. The natural kit's contract says the same in its own words
@@ -69,6 +72,15 @@ export interface NotificationKind {
   many: string;
   /** Rare enough to earn a celebration. Four kinds are; the rest are quiet. */
   celebrate: boolean;
+  /**
+   * The body is a member's own words, and they are read in the app alone.
+   * The email for such a kind carries the title and never the body
+   * (`emailCarriesBody` in server/lib/notify.ts), so the bell is the one place
+   * its recipient can read them: the bell never batches such a row, since a
+   * batched row shows titles only, and never cuts its body short. One kind
+   * is: a restorative intake.
+   */
+  wordsInAppOnly?: true;
 }
 
 export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
@@ -480,6 +492,7 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     blurb: "Somebody reached out privately about a rupture. Same day matters for these.",
     many: "{n} private intakes are waiting.",
     celebrate: false,
+    wordsInAppOnly: true,
   },
   exit_opened: {
     group: "village",
@@ -517,6 +530,15 @@ export const UNKNOWN_KIND: NotificationKind = {
 
 export function kindOf(type: string): NotificationKind {
   return NOTIFICATION_KINDS[type] ?? UNKNOWN_KIND;
+}
+
+/**
+ * True for a kind whose body is read in the app alone: its email is the title
+ * and nothing more, and the bell shows each such row whole and on its own.
+ * Read through `kindOf`, so an unknown type emails its body as before.
+ */
+export function wordsInAppOnly(type: string): boolean {
+  return kindOf(type).wordsInAppOnly === true;
 }
 
 /** The batched line for `n` rows of one kind. `{n}` carries the count. */

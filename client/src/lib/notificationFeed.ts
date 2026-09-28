@@ -30,7 +30,7 @@
  * be a small lie told four times. It opens instead, and the rows inside it are
  * the links.
  */
-import { NOTIFICATION_GROUPS, kindOf, manyLine, type NotificationGroupId } from "@shared/notificationKinds";
+import { NOTIFICATION_GROUPS, kindOf, manyLine, wordsInAppOnly, type NotificationGroupId } from "@shared/notificationKinds";
 
 export interface FeedItem {
   id: string;
@@ -52,6 +52,12 @@ export interface FeedRow {
   title: string;
   /** The row's own second line, or the kind's blurb when it carries none. */
   detail: string | null;
+  /**
+   * Show the second line whole, never cut to two lines. True for a kind whose
+   * words are read in the app alone (a restorative intake): its email leaves
+   * the words out, so this row is the one place its recipient reads them.
+   */
+  whole: boolean;
   /** Null on a batched row: it opens instead of navigating. */
   link: string | null;
   unread: number;
@@ -90,13 +96,17 @@ export function batchRows(items: FeedItem[]): FeedRow[] {
   const rows: FeedRow[] = [];
   for (const [key, list] of Array.from(buckets.entries())) {
     list.sort(newestFirst);
-    if (list.length >= BATCH_AT) {
+    // A kind read in the app alone never batches: a batched row shows titles
+    // only, every restorative intake carries the same title, and the words
+    // are nowhere else (shared/notificationKinds.ts, `wordsInAppOnly`).
+    if (list.length >= BATCH_AT && !wordsInAppOnly(list[0].type)) {
       rows.push({
         key,
         items: list,
         type: list[0].type,
         title: manyLine(list[0].type, list.length),
         detail: kindOf(list[0].type).blurb,
+        whole: false,
         link: null,
         unread: list.filter((i) => !i.isRead).length,
         at: list[0].at,
@@ -113,6 +123,7 @@ export function batchRows(items: FeedItem[]): FeedRow[] {
         // The kind's blurb fills in only where the row carries no body, which
         // is where a reader most needs to be told why the line matters.
         detail: it.body ? String(it.body) : kindOf(it.type).blurb,
+        whole: wordsInAppOnly(it.type),
         link: it.link ?? null,
         unread: it.isRead ? 0 : 1,
         at: it.at,

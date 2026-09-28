@@ -27,6 +27,7 @@ import { spawn, type ChildProcess } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { pathToFileURL } from "url";
 import { provisionTestDb, testDbConfigured, type TestDb, E2E_BOOT_DEADLINE_MS, waitForPortFree } from "./db/testDb";
 import { verifyDocument } from "./lib/villageExport";
 import { villageMoonLabel } from "../shared/villageMoon";
@@ -72,6 +73,43 @@ let testDb: TestDb;
 
 /** Absolute path to the built server, which the test requires to exist. */
 const DIST = path.resolve(process.cwd(), "dist", "index.js");
+
+/*
+ * THE MAIL THIS SERVER SENDS, CAPTURED WHERE IT LEAVES.
+ *
+ * `sendResendEmail` in server/index.ts posts to a hardcoded
+ * `https://api.resend.com/emails` and has no test seam, and with no key it
+ * returns before building a request at all, so until now nothing in this suite
+ * could see an email's subject or body. The child is started with the preload
+ * below (`node --import`), which wraps the global `fetch` and turns any request
+ * to api.resend.com into one JSON line in `mailLog` plus a 200. Every other
+ * request passes straight through. The production code is unchanged: the
+ * outbound request is the exact payload a real provider would have received.
+ *
+ * It is inert until a Resend key is set, which the suite does only around the
+ * one send it wants to read (the restorative intake), and a key set anywhere
+ * else can no longer reach the real provider from a test run.
+ */
+let mailLog = "";
+const MAIL_CAPTURE_PRELOAD = `
+import { appendFileSync } from "node:fs";
+const out = process.env.LOOP_MAIL_CAPTURE;
+const realFetch = globalThis.fetch;
+globalThis.fetch = async (input, init) => {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.href : String(input?.url ?? "");
+  if (out && url.startsWith("https://api.resend.com/")) {
+    appendFileSync(out, JSON.stringify({ url, body: JSON.parse(String(init?.body ?? "{}")) }) + "\\n");
+    return new Response(JSON.stringify({ id: "captured-by-the-loop" }), { status: 200, headers: { "content-type": "application/json" } });
+  }
+  return realFetch(input, init);
+};
+`;
+
+/** Every email the child has handed to the provider so far, oldest first. */
+function capturedMail(): Array<{ url: string; body: { to: string[]; subject: string; html: string } }> {
+  if (!mailLog || !fs.existsSync(mailLog)) return [];
+  return fs.readFileSync(mailLog, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+}
 
 async function api(
   method: string,
@@ -184,12 +222,22 @@ beforeAll(async () => {
   // 200 on this port, so without this an orphan answers it and the whole
   // scenario runs against the wrong server. See waitForPortFree in ./db/testDb.
   await waitForPortFree(PORT);
-  child = spawn(process.execPath, [DIST], {
+  // Beside the data dir, never inside it, so the server's own sweeps of DATA_DIR never meet it.
+  const harnessDir = fs.mkdtempSync(path.join(os.tmpdir(), "loop-mail-capture-"));
+  const preload = path.join(harnessDir, "capture-mail.mjs");
+  fs.writeFileSync(preload, MAIL_CAPTURE_PRELOAD);
+  mailLog = path.join(harnessDir, "mail.jsonl");
+  child = spawn(process.execPath, ["--import", pathToFileURL(preload).href, DIST], {
     env: {
       ...process.env,
       NODE_ENV: "production",
       PORT: String(PORT),
       DATA_DIR: dataDir,
+      // Read by the preload above. A sender address is set so a send with a
+      // key reaches the provider request instead of stopping at "no sender";
+      // with no key (the rest of the run) neither of these does anything.
+      LOOP_MAIL_CAPTURE: mailLog,
+      EMAIL_FROM: "loop@example.test",
       // The child runs its own boot migrations against the scratch schema —
       // the same self-migrating path production takes on deploy.
       DATABASE_URL: testDb.url,
@@ -283,6 +331,7 @@ afterAll(async () => {
   if (dataDir && fs.existsSync(dataDir)) {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
+  if (mailLog) fs.rmSync(path.dirname(mailLog), { recursive: true, force: true });
   await testDb?.drop();
 });
 
@@ -3625,11 +3674,57 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       restorative: { ...pol.json.policy.restorative, intakeContactRole: "founders-circle" },
     }, founderToken);
     const [[fBefore]] = await testDb.conn.query<any[]>("SELECT COUNT(*) AS n FROM forum_threads");
-    const intake = await api("POST", "/api/exit/restorative-intake", { message: "I need help repairing something, privately." }, peerToken);
+    /*
+     * THE EMAIL IS WHERE THE WORDS USED TO LEAVE. The intake is emailed at
+     * once, and the notification email rendered the title ("A private intake
+     * from <the sender's name>") and the body (their words), so both went to
+     * outside mailboxes. A Resend key is set around this one send so the mail
+     * reaches the provider request the capture preload records (see
+     * MAIL_CAPTURE_PRELOAD), and cleared straight after.
+     *
+     * The message names another member, as a real one usually does, and its
+     * words are distinctive so a leak cannot hide behind a common one.
+     */
+    const intakeWords = "Zephyrine and I need help repairing something, privately, after the orchard meeting.";
+    const leaksIn = (text: string) =>
+      [peer.name, ...peer.name.split(" "), ...intakeWords.split(/[\s,.]+/).filter((w) => w.length >= 5)].filter((needle) =>
+        text.toLowerCase().includes(needle.toLowerCase()),
+      );
+    const mailBefore = capturedMail().length;
+    expect((await api("PUT", "/api/admin/integrations/resend_api_key", { value: "re_LOOPCAPTURE_0000" }, founderToken)).status).toBe(200);
+    const intake = await api("POST", "/api/exit/restorative-intake", { message: intakeWords }, peerToken);
+    expect((await api("PUT", "/api/admin/integrations/resend_api_key", { value: "" }, founderToken)).status).toBe(200);
     expect(intake.status).toBe(200);
     expect(intake.json.reached).toBeGreaterThan(0);
+
+    const intakeMail = capturedMail().slice(mailBefore);
+    expect(intakeMail.length, "the intake is emailed at once, so the provider was handed at least one email").toBeGreaterThan(0);
+    for (const m of intakeMail) {
+      expect(m.url).toBe("https://api.resend.com/emails");
+      expect(leaksIn(m.body.subject), "the email subject names no one and quotes nothing").toEqual([]);
+      expect(leaksIn(m.body.html), "the email body carries neither the sender's name nor their words").toEqual([]);
+      expect(m.body.subject).toBe("A private intake is waiting for you");
+      expect(m.body.html, "the email still says an intake is waiting").toContain("A private intake is waiting for you");
+      expect(m.body.html, "and says where the words can be read").toContain("open the bell at the top of any page");
+    }
+
+    // The words and the name stay in the village, in the recipient's own row.
     const doerBell = await api("GET", "/api/notifications", undefined, doerToken);
-    expect(doerBell.json.notifications.some((n: any) => n.type === "restorative_intake")).toBe(true); // doer holds founders-circle
+    const doerIntake = doerBell.json.notifications.find((n: any) => n.type === "restorative_intake"); // doer holds founders-circle
+    expect(doerIntake, "the recipient's bell carries the intake").toBeTruthy();
+    expect(doerIntake.body, "the in-app row keeps every word").toContain(intakeWords);
+    expect(doerIntake.body, "and who wrote them").toContain(peer.name);
+    expect(leaksIn(doerIntake.title), "the title, which is also the email subject, names no one").toEqual([]);
+    expect(String(doerIntake.link ?? ""), "it opens a page a member who is not an admin can open").not.toMatch(/^\/admin/);
+    // One row per person reached, and no copy anywhere else in the table.
+    // peer sent it and holds founders-circle too, and is never their own
+    // recipient: doer's row above is what was reached, and peer has none.
+    const [[rows]] = await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT COUNT(*) AS n, COALESCE(SUM(user_id = ?), 0) AS own FROM notifications WHERE type = 'restorative_intake'",
+      [peerId],
+    );
+    expect(Number(rows.n)).toBe(intake.json.reached);
+    expect(Number(rows.own), "the sender is not sent their own intake").toBe(0);
     const [[fAfter]] = await testDb.conn.query<any[]>("SELECT COUNT(*) AS n FROM forum_threads");
     expect(Number(fAfter.n)).toBe(Number(fBefore.n)); // no thread, ever
     // The CONTENT never lands anywhere but its recipients' notifications:
