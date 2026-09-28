@@ -8,12 +8,13 @@
  * `exitById`, the same reader the routes answer from.
  *
  * Runs against the S5 harness: a scratch schema with every real migration
- * applied. No TEST_DATABASE_URL → skips loudly.
+ * applied, through `testPool`, so `NOW()` runs in the session zone the app's
+ * own pool pins. No TEST_DATABASE_URL → skips loudly.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import mysql from "mysql2/promise";
+import type mysql from "mysql2/promise";
 
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { createExit, exitById } from "../lib/exit";
 import { cancelOpenExit, markExitResolved, markExitSettling } from "./exits";
 
@@ -32,7 +33,7 @@ async function openExit(note: string | null = null): Promise<string> {
 describe.skipIf(!configured)("exits status writes on a real database", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = testPool(db, { connectionLimit: 4 });
   });
 
   afterAll(async () => {
