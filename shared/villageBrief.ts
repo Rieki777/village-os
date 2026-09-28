@@ -35,7 +35,25 @@ export interface BriefSection {
   minimum?: boolean;
 }
 
-export const BRIEF_SECTIONS: BriefSection[] = [
+/**
+ * `as const satisfies`, so every id below is a literal the compiler knows.
+ *
+ * The governance canvas (shared/governanceCanvas.ts) maps each of its twelve
+ * blocks to the brief sections that feed it, and that mapping is typed by
+ * `BriefSectionId`. A typo there, or a section renamed here, is a compile
+ * error in the canvas registry instead of a block that quietly points at
+ * nothing. `satisfies` still checks every entry against `BriefSection`, so an
+ * entry missing its `ask` fails exactly as it did when this was annotated.
+ *
+ * The literal list is `SECTIONS`, and `BRIEF_SECTIONS` below is the same
+ * array seen through a wider type. That second name exists because `as const`
+ * switches off the normalising TypeScript does for an array of object
+ * literals: `s.minimum` on the union of eleven entries that omit it and three
+ * that carry it becomes a compile error at every consumer. Intersecting each
+ * literal with `BriefSection` puts the optional field back and leaves every
+ * `id` a literal.
+ */
+const SECTIONS = [
   {
     id: "work",
     title: "What has to happen here",
@@ -137,9 +155,50 @@ export const BRIEF_SECTIONS: BriefSection[] = [
     feeds: "The tools hub, integrations, and what the game should leave alone.",
     ask: "What do you coordinate with today, and what do you want to keep? The chat, the documents, the spreadsheets.",
   },
-];
+  /*
+   * THREE SECTIONS THE GOVERNANCE CANVAS NEEDED AND THE BRIEF DID NOT HAVE.
+   *
+   * The canvas has a block each for stakeholders, learning and impact, and no
+   * section here held any of the three. Code-only: `village_brief.section` is
+   * a varchar(64), so a new id needs no migration, and a village that has
+   * never written one reads it as blank like any other.
+   *
+   * ADMIN by default, the same as every section that can name people or
+   * money. Who lives next door and who funds the project are both in the
+   * first of these. A founder can still open one to members from the editor,
+   * which writes the audience on the row.
+   */
+  {
+    id: "stakeholders",
+    title: "Who else this touches",
+    audience: "admin",
+    feeds: "The stakeholders block of the governance canvas, and who the village keeps informed.",
+    ask: "Who lives near, works with, funds or depends on this place, and how do they hear about what the village decides?",
+  },
+  {
+    id: "learning",
+    title: "How you learn as a group",
+    audience: "admin",
+    feeds: "The learning block of the governance canvas, and when the village pauses to look back.",
+    ask: "How do you notice what is working and what is not, and when did the group last change course because of it?",
+  },
+  {
+    id: "impact",
+    title: "The difference this makes",
+    audience: "admin",
+    feeds: "The impact block of the governance canvas, and what the village tells people outside it.",
+    ask: "What has changed on the land and among the people since this started, and how would you know if it stopped?",
+  },
+] as const satisfies readonly BriefSection[];
 
-export const BRIEF_SECTION_IDS = BRIEF_SECTIONS.map((s) => s.id);
+type SectionLiteral = (typeof SECTIONS)[number];
+
+/** Every brief section id, as a union the compiler holds other registries to. */
+export type BriefSectionId = SectionLiteral["id"];
+
+export const BRIEF_SECTIONS: readonly (BriefSection & SectionLiteral)[] = SECTIONS;
+
+export const BRIEF_SECTION_IDS: BriefSectionId[] = BRIEF_SECTIONS.map((s) => s.id);
 
 export const BRIEF_BY_ID: Record<string, BriefSection> = Object.fromEntries(
   BRIEF_SECTIONS.map((s) => [s.id, s]),

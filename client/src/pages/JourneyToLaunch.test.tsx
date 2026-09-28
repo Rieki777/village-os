@@ -229,3 +229,41 @@ describe("what the member's run does", () => {
     expect(screen.queryByRole("alert"), "an empty result is not an error").toBeNull();
   });
 });
+
+/*
+ * THE CANVAS VIEW (0222). Members read the canvas as well as admins, so the
+ * tab has to be on the member's copy of this page too, and it must not ask
+ * the server for anything until somebody opens it.
+ */
+describe("the canvas view", () => {
+  const EMPTY_CANVAS = { mayRecord: false, blocks: [] };
+
+  it("is a tab a signed-in member can open, and it reads the members' door", async () => {
+    auth.current = { user: { id: "u2", name: "Wren", role: "member" }, loading: false };
+    answer({ "/api/canvas": { status: 200, body: EMPTY_CANVAS } });
+    draw();
+    expect(calls, "nothing is asked until the tab is opened").toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
+    expect(calls.map((c) => c.url)).toEqual(["/api/canvas"]);
+    expect(calls[0].init.headers.Authorization).toBe("Bearer a-token");
+    expect(screen.getByText("How this village governs itself")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /run the test/i }), "the test run steps aside").toBeNull();
+  });
+
+  it("sits beside the admin's other views and takes the readiness figure off the screen", async () => {
+    auth.current = { user: { id: "u1", name: "Rye", role: "admin" }, loading: false };
+    answer({
+      "/api/admin/launch": { status: 200, body: STATUS },
+      "/api/admin/launch/steward-candidates": { status: 200, body: { candidates: [], powerCount: 0 } },
+      "/api/canvas": { status: 200, body: EMPTY_CANVAS },
+    });
+    draw();
+    await waitFor(() => expect(screen.getByText(/Take one backup/i)).toBeTruthy());
+    expect(screen.getByText("Readiness").parentElement?.className).not.toContain("hidden");
+    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
+    expect(screen.getByText("Readiness").parentElement?.className).toContain("hidden");
+    expect(screen.queryByText(/Take one backup/i)).toBeNull();
+  });
+});
