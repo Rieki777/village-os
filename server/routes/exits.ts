@@ -100,6 +100,68 @@ export type ExitDeps = Pick<
   erasureDeps: ErasureDeps;
 };
 
+/** What the exit-policy save needs, and nothing it does not. */
+export type ExitPolicySaveDeps = Pick<ExitDeps, "isAdmin" | "loadRoles" | "circlesRepo" | "exitPolicyRepo" | "readExitPolicy">;
+
+/**
+ * THE EXIT-POLICY SAVE, as one callable function (canvas-frames-server lane,
+ * 2026-09-28). `PUT /api/admin/exit-policy` calls it, and so does the canvas
+ * adopt door (server/routes/canvasFrames.ts) for the Team and Conflict doors
+ * before the Birthing, so a canvas answer meets this guard and every refusal
+ * below exactly as the Departures editor does. The body is the handler that
+ * was here, moved whole; it answers a status and a body instead of writing to
+ * the response, because the canvas door reads the answer before it records
+ * the adoption.
+ */
+export async function saveExitPolicy(
+  deps: ExitPolicySaveDeps,
+  req: Parameters<AppDeps["isAdmin"]>[0],
+  rawBody: unknown,
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  if (!(await deps.isAdmin(req))) return { status: 401, body: { error: "auth_required" } };
+  const body: any = rawBody ?? {};
+  if (typeof body !== "object" || !body.voluntary || !body.involuntary || !body.restorative) {
+    return { status: 400, body: {
+      error: "incomplete_policy",
+      message: "The policy needs voluntary, involuntary and restorative sections",
+    } };
+  }
+  // The intake and cover roles, the reply time and the outside contact: server/lib/exitPolicy.ts.
+  const door = restorativeDoorProblem(body.restorative, deps.loadRoles().map((r: any) => String(r.id)));
+  if (door) return { status: 400, body: door as unknown as Record<string, unknown> };
+  for (const [field, label] of [["decidingDomainId", "deciding circle"], ["appealDomainId", "appeal circle"]] as const) {
+    const id = String(body.involuntary?.[field] ?? "");
+    if (id && !deps.circlesRepo.all().some((c: any) => c.id === id)) {
+      return { status: 400, body: { error: "unknown_circle", message: `Unknown ${label} "${id}"` } };
+    }
+  }
+  // The RAW stored document, never readExitPolicy(): the closing section is
+  // carried as stored, adoptedBy included (server/lib/exitPolicy.ts).
+  const next = normalizeExitPolicy(body, deps.exitPolicyRepo.get());
+  const blank = blankTerms(next);
+  if (blank.length) {
+    return { status: 400, body: {
+      error: "blank_terms",
+      message: `A published policy cannot leave a term empty. Still blank: ${blank.join(", ")}.`,
+    } };
+  }
+  if (!next.placeholder) {
+    const stale = platformDefaultTerms(next);
+    if (stale.length) {
+      return { status: 409, body: {
+        error: "terms_still_platform_default",
+        fields: stale,
+        message:
+          `These terms are still word for word the platform's: ${stale.join(", ")}. ` +
+          "Recording that the community decided them would publish the platform's boilerplate under the village's name. " +
+          "Write each one in the community's own words, then clear the draft banner.",
+      } };
+    }
+  }
+  await deps.exitPolicyRepo.put(next);
+  return { status: 200, body: { success: true, policy: deps.readExitPolicy() } };
+}
+
 export function register(app: Express, deps: ExitDeps): void {
   /**
    * The published policy — F12's "publish the exit policy on the site".
@@ -151,48 +213,8 @@ export function register(app: Express, deps: ExitDeps): void {
    * never accepted into a void.
    */
   app.put("/api/admin/exit-policy", async (req, res) => {
-    if (!(await deps.isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const body = req.body ?? {};
-    if (typeof body !== "object" || !body.voluntary || !body.involuntary || !body.restorative) {
-      return res.status(400).json({
-        error: "incomplete_policy",
-        message: "The policy needs voluntary, involuntary and restorative sections",
-      });
-    }
-    // The intake and cover roles, the reply time and the outside contact: server/lib/exitPolicy.ts.
-    const door = restorativeDoorProblem(body.restorative, deps.loadRoles().map((r: any) => String(r.id)));
-    if (door) return res.status(400).json(door);
-    for (const [field, label] of [["decidingDomainId", "deciding circle"], ["appealDomainId", "appeal circle"]] as const) {
-      const id = String(body.involuntary?.[field] ?? "");
-      if (id && !deps.circlesRepo.all().some((c: any) => c.id === id)) {
-        return res.status(400).json({ error: "unknown_circle", message: `Unknown ${label} "${id}"` });
-      }
-    }
-    // The RAW stored document, never readExitPolicy(): the closing section is
-    // carried as stored, adoptedBy included (server/lib/exitPolicy.ts).
-    const next = normalizeExitPolicy(body, deps.exitPolicyRepo.get());
-    const blank = blankTerms(next);
-    if (blank.length) {
-      return res.status(400).json({
-        error: "blank_terms",
-        message: `A published policy cannot leave a term empty. Still blank: ${blank.join(", ")}.`,
-      });
-    }
-    if (!next.placeholder) {
-      const stale = platformDefaultTerms(next);
-      if (stale.length) {
-        return res.status(409).json({
-          error: "terms_still_platform_default",
-          fields: stale,
-          message:
-            `These terms are still word for word the platform's: ${stale.join(", ")}. ` +
-            "Recording that the community decided them would publish the platform's boilerplate under the village's name. " +
-            "Write each one in the community's own words, then clear the draft banner.",
-        });
-      }
-    }
-    await deps.exitPolicyRepo.put(next);
-    res.json({ success: true, policy: deps.readExitPolicy() });
+    const answer = await saveExitPolicy(deps, req, req.body);
+    res.status(answer.status).json(answer.body);
   });
 
   /** The per-member open-state enumeration, on the admin's desk. */

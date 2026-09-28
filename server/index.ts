@@ -99,6 +99,7 @@ import { register as registerGoverningPurposeRoutes } from "./routes/governingPu
 import { register as registerCanvasRoutes } from "./routes/canvas";
 import { register as registerCanvasSeasonRoutes } from "./routes/canvasSeason";
 import { register as registerDecisionMatrixRoutes } from "./routes/decisionMatrix";
+import { register as registerCanvasFrameRoutes } from "./routes/canvasFrames";
 import { register as registerCapabilityExplainerRoutes } from "./routes/capabilityExplainer";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
 import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
@@ -260,7 +261,6 @@ import {
   parseHyphaProposalId,
   proposalById,
   proposalMarkdown,
-  proposalsOpenedSince,
   proposerStanding,
   currentMintRuleValue,
   mintRuleLabel,
@@ -329,8 +329,8 @@ import {
 } from "../shared/ballotSubjects";
 import { timingOf } from "../shared/governanceKinds";
 import { CURRENCY_DECIMALS, WHOLE_UNITS } from "../shared/tokenScale";
-/** The two dials a started Game answers for itself, through a governance_mode ballot. */
-const WEIGHT_KEYS_AFTER_START = new Set(["governance.weight_mode", "governance.weight_token"]);
+import { writeDial, type DialWriteDeps } from "./lib/dialWrite";
+import { openMechanicsProposal, type MechanicsProposeDeps } from "./lib/mechanicsPropose";
 import { isMintRuleKey, parseMintRuleKey } from "../shared/mintRuleKeys";
 import {
   allTokens,
@@ -9001,6 +9001,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
   }
   // ── End Lane C zone ────────────────────────────────────────────────────────
 
+  /** No per-admin identity with a real credential exists yet. The lifecycle route and the canvas module door both ask this. */
+  const sharedPasswordPostureNow = async (): Promise<boolean> =>
+    (await members.all()).filter((u: any) => (u.role === "admin" || u.role === "founder") && isPresentMember(u, AUTH_TOKEN_SECRET)).length === 0;
   app.put("/api/admin/modules/:id/lifecycle", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     // `examples: false` skips the seed-on-enable below for THIS request only
@@ -9009,14 +9012,12 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     const { lifecycle, examples } = req.body ?? {};
     // Funds-bearing modules refuse to enable while no per-admin identity with
     // a real credential exists (invariants #11-#12).
-    const adminsWithPasswords = (await members.all()).filter(
-      (u: any) => (u.role === "admin" || u.role === "founder") && isPresentMember(u, AUTH_TOKEN_SECRET),
-    );
+    const sharedOnly = await sharedPasswordPostureNow();
     const result = await setModuleLifecycle(
       req.params.id,
       String(lifecycle) as ModuleLifecycle,
       adminActor(req)?.id ?? null,
-      { sharedPasswordPosture: () => adminsWithPasswords.length === 0 },
+      { sharedPasswordPosture: () => sharedOnly },
     );
     if (!result.ok) {
       const { status, ...body } = result as any;
@@ -20557,148 +20558,12 @@ ${inner}
     res.json({ success: true, message: "Answered. The delivery stays on the record with your note beside it." });
   });
 
-  const FOUNDER_RING_HELD =
-    "This dial is not one the village governs, and the village holds the power to turn dials, " +
-    "so nobody can change this one here while it does. An override does not reach it.";
+  // The dial write moved to server/lib/dialWrite.ts whole, so the canvas adopt
+  // door (server/routes/canvasFrames.ts) calls the same guard this route does.
+  const dialWriteDeps: DialWriteDeps = { mayAct, overrideRefusal, authedUser, adminActor, getPool, recordMechanicsChange, addActivity, checkVoiceSecret };
   app.put("/api/admin/variables/:key", async (req, res) => {
-    /*
-     * 0098: `dial.set`, and THE RING BECOMES A FLOOR AS WELL AS A CEILING.
-     *
-     * `ringOf(def)` says who may govern a dial. The proposal path has always
-     * enforced it (server/lib/mechanics.ts, and the mechanics route's "This
-     * dial is no longer community-governable"), and this route enforced it
-     * nowhere. So the ring was a ceiling on the VILLAGE and never a floor
-     * under it: the village could not propose a founder-ring change, and
-     * anybody who reached this route could make one silently. That asymmetry
-     * is the handover problem written in one function.
-     *
-     * Now: an actor whose path here is the capability, and not the admin
-     * short-circuit, is refused a founder-ring key exactly the way the
-     * proposal path refuses it. An admin acting AS an admin keeps the
-     * founder ring, because a fork's operator has to be able to set an RPC
-     * url and a session length. Once the village holds `dial.set`, an admin
-     * falls through and is judged as anybody else, and a founder-ring key is
-     * refused to every path here, the break-glass included (measured
-     * 2026-09-21); handing `dial.set` back to the panel is what reopens it.
-     */
-    const verdict = await mayAct(req, "dial.set");
-    const def = VARIABLES_BY_KEY[req.params.key];
-    if (!verdict.ok) {
-      // 0103: through `overrideRefusal`, so this route and the eleven the
-      // same commit converted write ONE 409 body between them. It used to
-      // build its own off `message !== "auth_required"`, which is a copy edit
-      // away from being a different permission answer.
-      const hatch = overrideRefusal("dial.set", verdict);
-      // The ring check below refuses a founder-ring dial to an override too,
-      // so no question is offered that would refuse after it was answered.
-      if (hatch && def && ringOf(def) !== "open") {
-        return res.status(409).json({ ...hatch, overrideAvailable: false, error: FOUNDER_RING_HELD });
-      }
-      if (hatch) return res.status(409).json(hatch);
-      return res.status(401).json({ error: "auth_required" });
-    }
-    if (verdict.source !== "admin") {
-      if (def && ringOf(def) !== "open") {
-        return res.status(403).json({
-          error:
-            "This dial is not one the village governs. It belongs to whoever runs the deployment, " +
-            "and it stays with them.",
-        });
-      }
-    }
-    const raw = req.body?.value;
-    if (raw === undefined || raw === null) return res.status(400).json({ error: "A value is required" });
-    // After the Birthing, what a vote MEANS is the village's, and the one door
-    // to it is a governance_mode ballot. This route is how a village is set up,
-    // not how it is governed (dispatcher lane).
-    if (WEIGHT_KEYS_AFTER_START.has(req.params.key) && (await readGameStart(getPool())).started) {
-      return res.status(409).json({ error: "The village started its Game, so how a vote is weighed is the village's to decide. Raise it as a proposal." });
-    }
-    /*
-     * A KNOB THAT CANNOT ACT MUST NOT ACCEPT A VALUE.
-     *
-     * Two stays variables are shipped policy with no enforcement behind them
-     * (V2_PLAN ranks 66, S1+S2) and both are deliberately legal-blocked: the
-     * plan says in terms not to write the expiry sweep before Gate F blesses
-     * it, because "the default of 0 is what keeps the platform out of
-     * escheatment, and building the mechanism creates pressure to use it".
-     *
-     * That reasoning holds. What does not hold is the form silently accepting
-     * "365 days" and leaving an admin believing credits expire when nothing
-     * will ever sweep them — a belief they might pass on to members. Until
-     * the mechanism exists, the honest answer is to refuse the change and say
-     * why, rather than to store a number nobody reads.
-     */
-    const unenforced: Record<string, string> = {
-      "stay.credit_expiry_days":
-        "Credits cannot expire yet. Nothing sweeps them, so any value here would be a promise the platform does not keep. " +
-        "Expiring member-held value is a legal question (gift-certificate and escheatment rules) that has to be answered before the sweep is written, not after. Leave it at 0.",
-      "stay.credits_transferable":
-        "Credit transfers between members are not built, and turning this on would not enable them. " +
-        "Freely transferable credits also drift toward regulated e-money, which is a decision to take with counsel before the surface exists.",
-    };
-    const blocked = unenforced[req.params.key];
-    if (blocked) {
-      const v = String(raw).trim().toLowerCase();
-      const isOff = v === "0" || v === "false" || v === "";
-      if (!isOff) return res.status(409).json({ error: blocked });
-    }
-
-    /*
-     * NAMING A HYPHA SPACE IS A PRECONDITION CHECK, NOT JUST A VALUE.
-     *
-     * `economy.hypha_space` lives in the database and the secret that guards its
-     * receiver lives in the process environment, so this one field is the only
-     * place where an admin edit can put the deployment into a state its own boot
-     * check refuses. Before this branch existed, typing a slug here with a
-     * short or borrowed secret meant the next restart threw and kept throwing,
-     * with the panel that could undo it served by the process that would not
-     * start. The refusal belongs in front of the person who can act on it.
-     *
-     * An EMPTY secret is not refused here and is not fatal at boot: the receiver
-     * answers 503 without one, so the village is unreachable rather than
-     * exposed, and a founder should be able to save the slug the moment they
-     * have it. The panel says what is still missing.
-     */
-    if (req.params.key === "economy.hypha_space" && String(raw).trim()) {
-      const verdict = checkVoiceSecret();
-      if (!verdict.ok && verdict.fatal) {
-        return res.status(409).json({ error: `${verdict.error} Fix the secret on the deployment before naming a space, or the server will refuse to start.` });
-      }
-      const slug = String(raw).trim();
-      // varchar(120) in `voice_claims`.`hypha_space` (0072). The registry's text
-      // validator allows 255, so without this a slug between the two saves
-      // cleanly here and then fails the claim INSERT under strict mode, which
-      // is a refusal the member meets and the admin never sees.
-      if (slug.length > 120) return res.status(400).json({ error: "A Hypha space slug cannot be longer than 120 characters." });
-    }
-
-    const result = await setVariable(getPool(), req.params.key, String(raw));
-    if (!result.ok) return res.status(400).json({ error: result.error });
-    if (result.previous !== result.value) {
-      const actor = (await authedUser(req))?.id ?? adminActor(req)?.id ?? null;
-      await recordMechanicsChange(req.params.key, result, actor, "admin");
-      /*
-       * THE VALUE DOES NOT GO IN THE PUBLIC LINE. This used to read
-       * `${key} is now ${result.value}`, and `/api/game/pulse` is
-       * UNAUTHENTICATED and renders on the home page, so every game variable's
-       * value was narrated to visitors. QA found the homepage publishing
-       *
-       *     tokens.base_rpc_url is now https://base-mainnet.g.alchemy.com/v2/<key>
-       *
-       * to signed-out readers. A variable's value is admin state; a variable
-       * CHANGING is village news. Those are different audiences and this line
-       * only ever needed the second.
-       *
-       * Nothing is lost from the record: recordMechanicsChange above keeps the
-       * before and after for the audit trail, behind auth, which is where a
-       * value belongs. Redacting by pattern was the other option and it is the
-       * weaker one, because it needs a list of what looks secret and a URL with
-       * a key in the path defeats most such lists.
-       */
-      await addActivity("settings", `A game rule changed: ${req.params.key}`, { actorUserId: actor, entityType: "variable", entityRef: req.params.key });
-    }
-    res.json(result);
+    const answer = await writeDial(dialWriteDeps, req, String(req.params.key), req.body?.value);
+    res.status(answer.status).json(answer.body);
   });
 
   /**
@@ -21061,54 +20926,14 @@ ${inner}
   const readMintRulesForChangeSet = async (ruleIds: string[]): Promise<Map<string, MintRuleValues>> =>
     (await mintRulesByIds(getPool(), ruleIds)) as Map<string, MintRuleValues>;
 
+  // The body moved to server/lib/mechanicsPropose.ts, so the canvas adopt door
+  // files a dial change through the same checks after the Birthing.
+  const mechanicsProposeDeps: MechanicsProposeDeps = { getPool, standingFor: mechanicsStandingFor, readMintRules: readMintRulesForChangeSet, addActivity, firstName };
   app.post("/api/game/mechanics/proposals", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to propose a change to the game" });
-    const standing = await mechanicsStandingFor(user);
-    if (standing.denied) {
-      return res.status(403).json({ error: "A standing warning currently suspends your proposal rights. Talk to a steward" });
-    }
-    // Rate limit rides the CYCLE, like the economy it governs.
-    const cycleStart = new Date(currentCycle().startsAt);
-    const opened = await proposalsOpenedSince(getPool(), user.id, cycleStart);
-    const cap = Math.max(1, numberVar("governance.proposals_per_member_per_cycle"));
-    if (opened >= cap) {
-      return res.status(429).json({ error: `You have opened ${opened} proposal(s) this cycle. The village's ceiling is ${cap}. Supporting others' proposals is never limited.` });
-    }
-    const title = String(req.body?.title ?? "").trim().slice(0, 200);
-    const rationale = String(req.body?.rationale ?? "").trim().slice(0, 8000);
-    if (!title) return res.status(400).json({ error: "Give the proposal a title" });
-    if (!rationale) return res.status(400).json({ error: "Say why. The village votes on reasons, not numbers" });
-    const cooldown = Math.max(0, numberVar("governance.change_cooldown_days"));
-    const { problems, normalized } = await validateChangeSet(
-      getPool(),
-      Array.isArray(req.body?.changes) ? req.body.changes : [],
-      rawValue,
-      cooldown,
-      readMintRulesForChangeSet,
-    );
-    if (problems.length) return res.status(400).json({ error: "The change-set has problems", problems });
-    const id = `gmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const status = standing.qualified ? "open" : "draft";
-    // The proposer's timing (0172), frozen onto the ballot at open. Absent
-    // means next_moon, the founder's default.
-    await getPool().query(
-      "INSERT INTO mechanics_proposals (id, title, rationale, change_set, proposer_user_id, status, timing, supersedes_proposal_id) VALUES (?,?,?,?,?,?,?,?)",
-      [id, title, rationale, JSON.stringify(normalized), user.id, status, timingOf(req.body?.timing), String(req.body?.supersedesProposalId ?? "").trim().slice(0, 64) || null],
-    );
-    if (status === "open") {
-      await addActivity("governance", `${firstName(user.name)} proposed a change to the game's rules: ${title}`, {
-        actorUserId: user.id, entityType: "mechanics_proposal", entityRef: id,
-      });
-    }
-    res.json({
-      id,
-      status,
-      message:
-        status === "open"
-          ? "Your proposal is open. The village can now weigh in."
-          : "Saved as a draft: you are below the proposer bar, so it opens as soon as a qualified member sponsors it.",
-    });
+    const answer = await openMechanicsProposal(mechanicsProposeDeps, user, req.body);
+    res.status(answer.status).json(answer.body);
   });
 
   app.post("/api/game/mechanics/proposals/:id/support", async (req, res) => {
@@ -25101,6 +24926,7 @@ ${inner}
   registerCanvasRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
   registerCanvasSeasonRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
   registerDecisionMatrixRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying });
+  registerCanvasFrameRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName, loadRoles, roleHolders: loadRoleHolders, exitPolicy: { isAdmin, loadRoles, circlesRepo, exitPolicyRepo, readExitPolicy }, dialWrite: dialWriteDeps, mechanicsPropose: mechanicsProposeDeps, sharedPasswordPosture: sharedPasswordPostureNow, addActivity, tools: () => toolsRepo.all() as any[], submissions: () => submissionsRepo.all() as any[], legalEntityLabel: () => String((contentRepo.get() as any)?.legal?.membership?.entityLabel ?? ""), seasonNow: () => { const c: any = seasonState().current; return c ? { name: String(c.name ?? ""), endsOn: c.endsOn ?? null } : null; } });
 
   /**
    * The subset of variables the CLIENT is allowed to know, so the UI can render
