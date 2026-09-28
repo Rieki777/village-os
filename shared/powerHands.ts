@@ -212,18 +212,31 @@ function namesOf(names: readonly string[]): string {
  * carries, open to any member on a power nobody holds.
  */
 
-/** Which of the three states a power is in, in this rule's own vocabulary. */
+/** Which of the states a power is in, in this rule's own vocabulary. */
 export type HandOpenerReason =
   /** The village holds it (`capability_holding`). Option 2, in Rye's words. */
   | "village-holds-it"
   /** A role holds it and somebody is live in the chair. Option 1. */
   | "a-role-holds-it"
   /** Nobody holds it live and the village does not hold it. The org.decide reading. */
-  | "nobody-holds-it";
+  | "nobody-holds-it"
+  /**
+   * Nobody holds it live, the village does not hold it yet, and a ruling names
+   * who carries it until the village does. Only ever answered when the caller
+   * names that carrier (`scaffolding` below); the hand door never does.
+   */
+  | "the-scaffolding-holds-it";
+
+/**
+ * Who carries a power while the village does not hold it and nobody sits in a
+ * chair that does. `admins` and `founders` are account roles; `the-gate` means
+ * the one capability gate decides, which before a handover is its admin step.
+ */
+export type Scaffolding = "admins" | "founders" | "the-gate";
 
 /** Who may put a hand for one power to the village, and which reading said so. */
 export interface HandOpenerRule {
-  who: "any-member" | "live-holders";
+  who: "any-member" | "live-holders" | Scaffolding;
   because: HandOpenerReason;
   /** Who holds it live. Empty when nobody does, and never the deciding fact on its own. */
   holders: readonly string[];
@@ -232,15 +245,126 @@ export interface HandOpenerRule {
 /**
  * Ruling 1 as one expression. Pure, so both readings above are provable
  * without a database.
+ *
+ * `scaffolding` is the one extension (canvas build, Wave 3a, 2026-09-28), and
+ * it changes only the NEITHER branch. Without it, a power nobody holds goes to
+ * a ballot, which is the org.decide reading above and still the hand door's
+ * answer. With it, that branch answers with whoever the caller's own ruling
+ * says carries the power until the village takes it: the canvas pens below are
+ * the reason it exists, and each one names its ruling. The other two branches
+ * are untouched, so a village that holds the power, or a role with somebody in
+ * the chair, answers the same whoever asks.
  */
 export function whoMayPutHandToVillage(
   villageHolds: boolean,
   liveHolders: readonly string[],
+  scaffolding?: Scaffolding,
 ): HandOpenerRule {
   const holders = liveHolders.filter((h) => h !== "");
   if (villageHolds) return { who: "any-member", because: "village-holds-it", holders };
   if (holders.length > 0) return { who: "live-holders", because: "a-role-holds-it", holders };
+  if (scaffolding) return { who: scaffolding, because: "the-scaffolding-holds-it", holders: [] };
   return { who: "any-member", because: "nobody-holds-it", holders: [] };
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ *
+ * RULING 3 (plan 2.3 "Three pens"; BUILD_PLAN Q3 and Q5; the GPS rulings of
+ * 2026-09-23; "propose freely, adopt by power", 2026-09-24): WHO ADOPTS A
+ * CANVAS ANSWER.
+ *
+ * Anybody in the village may suggest how it answers a canvas block. Adopting
+ * the suggestion is the act that needs a power, and which power depends on
+ * what the suggestion would change. Plan 2.3 names three pens and asks that
+ * all of them resolve through ONE predicate, this file's, rather than a
+ * second one. So every pen below is `whoMayPutHandToVillage` asked a question
+ * shaped for it, and the only new thing is `scaffolding`:
+ *
+ *   purpose      the governing purpose statement. The founder keeps the pen
+ *                until every transferable power is handed over (GPS ruling 3),
+ *                so the village holds it exactly when the handover is
+ *                complete, and until then the founders carry it. After, a
+ *                change is a ballot (`POST /api/governance/purpose-changes`).
+ *   prose        the canvas's words in a brief section. `story.tell`, asked
+ *                of the ONE gate, before the handover and after it: the gate
+ *                already follows the village's holding of that key (an admin
+ *                passes until the village holds it, the holder after), and
+ *                `server/routes/canvas.ts` records readings through the same
+ *                question. There is no ballot for prose, so this pen never
+ *                reports the village as holding it.
+ *   consequence  the conflict door's settings, the exit terms and the
+ *                Decision Matrix's human columns. The founders (admins) before
+ *                the Birthing; after it, a ballot at the structural tier,
+ *                because no transferable power covers the exit policy today.
+ *   dial         a dial the block maps to. Before the Birthing, `dial.set`
+ *                asked of the gate, inside the dial write's own route; after,
+ *                a mechanics proposal, which any member may file and the
+ *                village decides.
+ *   admin        `people`, `legal`, `land` and `constraints`. Plan 2.3 keeps
+ *                these with administrators for reading and writing, before
+ *                the Birthing and after it.
+ *
+ * Why `purposeHolds` is the AGGREGATE handover and not a capability: the
+ * statement is not a capability, nobody holds a `gps.edit` key, and
+ * `server/lib/governingPurpose.ts` says at length why reading the per-power
+ * answer there would contradict the ruling. The scaffolding branch is what
+ * makes this call agree with it: without it, the birth state ("nobody holds
+ * it") would answer "a ballot", where Rye's answer is "the founder".
+ */
+export type CanvasPen = "purpose" | "prose" | "consequence" | "dial" | "admin";
+
+export interface CanvasPenFacts {
+  /** The village's Game has started (`readGameStart`). The Birthing. */
+  birthed: boolean;
+  /** Every transferable power is with the village (`villageHandoverState().complete`). */
+  handoverComplete: boolean;
+}
+
+export interface CanvasAdoptionRule {
+  pen: CanvasPen;
+  /** `act`: whoever `who` names writes the answer now. `ballot`: adopting files the village's decision. */
+  how: "act" | "ballot";
+  who: HandOpenerRule["who"];
+  because: HandOpenerReason;
+  /** The capability the gate is asked, when `who` is `the-gate`. */
+  capability?: "story.tell" | "dial.set";
+}
+
+/** Which power a canvas answer's adoption needs, as one rule. Pure. */
+export function whoAdoptsCanvasAnswer(pen: CanvasPen, facts: CanvasPenFacts): CanvasAdoptionRule {
+  const asked: Record<CanvasPen, () => HandOpenerRule> = {
+    purpose: () => whoMayPutHandToVillage(facts.handoverComplete, [], "founders"),
+    prose: () => whoMayPutHandToVillage(false, [], "the-gate"),
+    consequence: () => whoMayPutHandToVillage(facts.birthed, [], "admins"),
+    dial: () => whoMayPutHandToVillage(facts.birthed, [], "the-gate"),
+    admin: () => whoMayPutHandToVillage(false, [], "admins"),
+  };
+  const rule = asked[pen]();
+  const capability = rule.who !== "the-gate" ? undefined : pen === "dial" ? ("dial.set" as const) : ("story.tell" as const);
+  return {
+    pen,
+    how: rule.who === "any-member" ? "ballot" : "act",
+    who: rule.who,
+    because: rule.because,
+    ...(capability ? { capability } : {}),
+  };
+}
+
+/**
+ * Who adopts, said from the member's side of the screen. One sentence per
+ * answer, so the page and a refusal never word the same pen two ways.
+ */
+export function canvasPenSentence(rule: CanvasAdoptionRule): string {
+  if (rule.how === "ballot") {
+    if (rule.pen === "purpose") return "Every power is with the village now, so a new statement goes to a vote of the whole village.";
+    if (rule.pen === "dial") return "The Game has started, so adopting this files a proposal and the village votes on it.";
+    return "The Game has started, so adopting this goes to a vote of the whole village.";
+  }
+  if (rule.pen === "purpose") return "The founders keep the purpose statement until every power is handed to the village.";
+  if (rule.pen === "prose") return "Whoever holds the village's story adopts these words.";
+  if (rule.pen === "dial") return "Whoever may turn the village's dials adopts this before the Game starts.";
+  if (rule.pen === "admin") return "This section stays with the administrators, for reading and for writing.";
+  return "The founders adopt this before the Game starts.";
 }
 
 /**
