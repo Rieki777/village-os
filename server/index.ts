@@ -50,6 +50,9 @@ import {
 import { writeGoverningPurpose } from "./lib/governingPurpose";
 import { GPS_CHANGE } from "../shared/governingPurpose";
 import { gpsChangeCloser } from "./lib/gpsChangeCloser";
+import { CONFLICT_AGREEMENT, CONFLICT_AGREEMENT_KEY } from "../shared/conflictAgreement";
+import { conflictAgreementCloser } from "./lib/conflictAgreementCloser";
+import { withConflictAgreement } from "./lib/conflictAgreement";
 import {
   NOT_YET_WIRED,
   POWERS,
@@ -100,6 +103,7 @@ import { register as registerCanvasRoutes } from "./routes/canvas";
 import { register as registerCanvasSeasonRoutes } from "./routes/canvasSeason";
 import { register as registerDecisionMatrixRoutes } from "./routes/decisionMatrix";
 import { register as registerCanvasFrameRoutes } from "./routes/canvasFrames";
+import { register as registerConflictAgreementRoutes } from "./routes/conflictAgreement";
 import { register as registerCapabilityExplainerRoutes } from "./routes/capabilityExplainer";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
 import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
@@ -1374,7 +1378,9 @@ const exitPolicyRepo = dbDocument(getPool(), "exit-policy", DEFAULT_EXIT_POLICY 
  * because the next field added has the same problem and will not come with a
  * reminder.
  */
-const readExitPolicy = (): any => withPolicyDefaults(exitPolicyRepo.get());
+// The conflict agreement (block 8) answers the restorative block once saved: server/lib/conflictAgreement.ts.
+const conflictAgreementRepo = dbDocument(getPool(), CONFLICT_AGREEMENT_KEY, null as any);
+const readExitPolicy = (): any => withConflictAgreement(withPolicyDefaults(exitPolicyRepo.get()), conflictAgreementRepo.get());
 // The runOnce ledger (one-shot data fixups) — formerly data/migrations.json.
 const dataMigrations = dbDocument(getPool(), "data-migrations", { applied: [] as string[] });
 // S19: circles — the village's organizational shape, as data.
@@ -1496,6 +1502,7 @@ async function initStores(): Promise<void> {
     investorSummaryRepo.load(),
     seasonRepo.load(),
     exitPolicyRepo.load(),
+    conflictAgreementRepo.load(),
     dataMigrations.load(),
     loadVariables(getPool()),
     crowdpoolSnapshotsRepo.load(),
@@ -14599,7 +14606,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   });
 
   // Member exit (S52, F12): the published policy and a departure's steps, in server/routes/exits.ts.
-  registerExitRoutes(app, { isAdmin, authedUser, adminActor, getPool, members, circlesRepo, loadRoles, roleIdsFor, notify, notifyAdmins, readExitPolicy, exitPolicyRepo, roleHolders: loadRoleHolders, confirmIdentity, departureStrandingRefusal, erasureDeps });
+  registerExitRoutes(app, { isAdmin, authedUser, adminActor, getPool, members, circlesRepo, loadRoles, roleIdsFor, notify, notifyAdmins, hasMembership, agreementStored: () => conflictAgreementRepo.exists(), readExitPolicy, exitPolicyRepo, roleHolders: loadRoleHolders, confirmIdentity, departureStrandingRefusal, erasureDeps });
 
   // Restorative intake (F12's hard rule as code): server/routes/restorativeIntake.ts.
   registerRestorativeIntakeRoutes(app, { authedUser, notify, overLimit, readExitPolicy, roleHolders: loadRoleHolders });
@@ -22036,6 +22043,8 @@ ${inner}
      * the pen. The whole executor, and why it is a file, is in
      * server/lib/gpsChangeCloser.ts.
      */
+    // A carried change to the conflict agreement: server/lib/conflictAgreementCloser.ts.
+    [CONFLICT_AGREEMENT]: twoPhase(conflictAgreementCloser({ getPool, agreement: conflictAgreementRepo, loadRoles, notify, notifyAdmins, addActivity, ballotLink, recordAudit: (text: string, actorId: string) => void recordEvent(getPool(), { kind: "audit", text, actorUserId: actorId, entityType: "app_config", entityRef: "conflict-agreement", audience: "admin" }) })),
     [GPS_CHANGE]: twoPhase(gpsChangeCloser({ getPool, notify, notifyAdmins, addActivity, ballotLink, recordAudit: (text: string, actorId: string) => void recordEvent(getPool(), { kind: "audit", text, actorUserId: actorId, entityType: "app_config", entityRef: "gps", audience: "admin" }) })),
 
     /*
@@ -24926,7 +24935,8 @@ ${inner}
   registerCanvasRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
   registerCanvasSeasonRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
   registerDecisionMatrixRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying });
-  registerCanvasFrameRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName, loadRoles, roleHolders: loadRoleHolders, exitPolicy: { isAdmin, loadRoles, circlesRepo, exitPolicyRepo, readExitPolicy }, dialWrite: dialWriteDeps, mechanicsPropose: mechanicsProposeDeps, sharedPasswordPosture: sharedPasswordPostureNow, addActivity, tools: () => toolsRepo.all() as any[], submissions: () => submissionsRepo.all() as any[], legalEntityLabel: () => String((contentRepo.get() as any)?.legal?.membership?.entityLabel ?? ""), seasonNow: () => { const c: any = seasonState().current; return c ? { name: String(c.name ?? ""), endsOn: c.endsOn ?? null } : null; } });
+  registerCanvasFrameRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName, loadRoles, roleHolders: loadRoleHolders, exitPolicy: { isAdmin, loadRoles, circlesRepo, exitPolicyRepo, readExitPolicy, agreementStored: () => conflictAgreementRepo.exists() }, dialWrite: dialWriteDeps, mechanicsPropose: mechanicsProposeDeps, sharedPasswordPosture: sharedPasswordPostureNow, addActivity, tools: () => toolsRepo.all() as any[], submissions: () => submissionsRepo.all() as any[], legalEntityLabel: () => String((contentRepo.get() as any)?.legal?.membership?.entityLabel ?? ""), seasonNow: () => { const c: any = seasonState().current; return c ? { name: String(c.name ?? ""), endsOn: c.endsOn ?? null } : null; } });
+  registerConflictAgreementRoutes(app, { authedUser, isAdmin, adminActor, hasMembership, getPool, capabilityCtx, firstName, members, loadRoles, notify, overLimit, weightModeNow, agreement: conflictAgreementRepo, readExitPolicy, roleHolders: loadRoleHolders, buildElectorate, addActivity });
 
   /**
    * The subset of variables the CLIENT is allowed to know, so the UI can render

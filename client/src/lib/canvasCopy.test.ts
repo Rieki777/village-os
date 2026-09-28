@@ -87,6 +87,12 @@ describe("the files this test reads", () => {
         // (2026-09-27). It shows a vote's quorum and unity, which the server
         // writes as plain numbers, and it is held to every rule below.
         "DecisionMatrix.tsx",
+        // Block 8's conflict agreement (2026-09-28): the editor its Say frame
+        // mounts, and the card /governance prints. Their row edits live in
+        // client/src/lib/agreementDraft.ts, and the reply time is the only
+        // number either shows. Held to every rule below.
+        "ConflictAgreementEditor.tsx",
+        "ConflictAgreementPublic.tsx",
       ].sort(),
     );
     for (const f of SURFACE) expect(f.body.length, f.name).toBeGreaterThan(200);

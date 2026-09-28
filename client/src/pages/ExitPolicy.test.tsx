@@ -147,3 +147,26 @@ describe("ExitPolicy, an intake role nobody holds today", () => {
     expect(screen.getByRole("button", { name: "Send privately" })).toBeInTheDocument();
   });
 });
+
+describe("ExitPolicy, read by somebody who is not a member", () => {
+  // The server serves the outside contact to a non-member by organisation
+  // alone (server/lib/conflictAgreement.ts, restorativeForPublic): no name and
+  // no way to reach them.
+  const PUBLIC_CONTACT = { name: "", organisation: "Cohort Care", howToReach: "" };
+
+  it("says an outside contact exists, at its organisation, and sends a reader to membership for the rest", async () => {
+    serve({ intakeContactRole: "care", intakeRole: HELD, replyHours: 48, outsideContact: PUBLIC_CONTACT });
+    render(<ExitPolicy />);
+    const text = await card();
+    expect(text).toContain("You can also bring it to somebody outside the village, at Cohort Care. Members see who they are and how to reach them.");
+    expect(text).not.toContain("Jo Bell");
+  });
+
+  it("with no intake role, never says also", async () => {
+    serve({ intakeContactRole: "", replyHours: 48, outsideContact: PUBLIC_CONTACT });
+    render(<ExitPolicy />);
+    const text = await card();
+    expect(text).toContain("Bring it to somebody outside the village, at Cohort Care.");
+    expect(text).not.toContain("also");
+  });
+});

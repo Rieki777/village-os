@@ -917,6 +917,8 @@ export const SUBJECT_NOUN: Record<string, string> = {
    * what happened is that a village changed what it is for.
    */
   gps_change: "Change of purpose",
+  // Opened from the conflict agreement itself once the Game has started, never from the wizard.
+  conflict_agreement: "Change to the conflict agreement",
   /*
    * NOT a wizard type, and here because `ballots.subject_type` carries it.
    * Without this entry an advisory vote fell through to "Decision", which is

@@ -33,6 +33,24 @@
  * (`server/routes/restorativeIntake.ts`), because Express matches in
  * registration order. None of these paths sits under a module mount: exit is
  * core, so no `requireModule` stands in front of any of them.
+ *
+ * ── THE RESTORATIVE BLOCK CAN BELONG TO THE CONFLICT AGREEMENT ─────────────
+ *
+ * Once a village saves a conflict agreement (server/lib/conflictAgreement.ts),
+ * `readExitPolicy()` answers the restorative block from it. Two things here
+ * follow (2026-09-28):
+ *
+ *   1. The public read serves that block to anybody who is not a member with
+ *      the agreement's public rule: a step naming a member is withheld, and
+ *      the outside contact is its organisation, with no name and no way to
+ *      reach them. Members read it whole.
+ *   2. The policy's own save leaves the block alone while the agreement holds
+ *      it, and refuses a body that tries to change it, naming where it lives.
+ *      Storing it would be a change no reader ever sees. For the same reason
+ *      the save judges its terms (blank, or still the platform's words) as
+ *      readers are served them: a village whose stored block still holds the
+ *      platform's starting steps can clear its draft banner once the agreement
+ *      answers them.
  */
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
@@ -59,6 +77,7 @@ import {
 } from "../lib/exitPolicy";
 import type { makeIdentityGate } from "../lib/identityConfirm";
 import { intakeRoleForReaders, type IntakeHolding } from "../lib/restorativeIntake";
+import { RESTORATIVE_IN_AGREEMENT, memberNameMatcher, restorativeForPublic, sameRestorative } from "../lib/conflictAgreement";
 import type { DbDocument } from "../repos/store-db";
 import { cancelOpenExit, markExitResolved, markExitSettling } from "../repos/exits";
 
@@ -74,7 +93,10 @@ export type ExitDeps = Pick<
   | "roleIdsFor"
   | "notify"
   | "notifyAdmins"
+  | "hasMembership"
 > & {
+  /** Whether the village has saved a conflict agreement, which then answers the restorative block. */
+  agreementStored(): boolean;
   /**
    * The policy with the platform defaults read through: the copy every READER
    * is served, so every response here builds on it and never on
@@ -101,7 +123,7 @@ export type ExitDeps = Pick<
 };
 
 /** What the exit-policy save needs, and nothing it does not. */
-export type ExitPolicySaveDeps = Pick<ExitDeps, "isAdmin" | "loadRoles" | "circlesRepo" | "exitPolicyRepo" | "readExitPolicy">;
+export type ExitPolicySaveDeps = Pick<ExitDeps, "isAdmin" | "loadRoles" | "circlesRepo" | "exitPolicyRepo" | "readExitPolicy" | "agreementStored">;
 
 /**
  * THE EXIT-POLICY SAVE, as one callable function (canvas-frames-server lane,
@@ -126,9 +148,19 @@ export async function saveExitPolicy(
       message: "The policy needs voluntary, involuntary and restorative sections",
     } };
   }
-  // The intake and cover roles, the reply time and the outside contact: server/lib/exitPolicy.ts.
-  const door = restorativeDoorProblem(body.restorative, deps.loadRoles().map((r: any) => String(r.id)));
-  if (door) return { status: 400, body: door as unknown as Record<string, unknown> };
+  // While the conflict agreement holds the restorative block, this save
+  // carries the stored block forward and refuses a body that changes it.
+  let body2 = body;
+  if (deps.agreementStored()) {
+    if (!sameRestorative(body.restorative, deps.readExitPolicy()?.restorative)) {
+      return { status: 409, body: { error: "restorative_in_agreement", message: RESTORATIVE_IN_AGREEMENT } };
+    }
+    body2 = { ...body, restorative: deps.exitPolicyRepo.get()?.restorative ?? {} };
+  } else {
+    // The intake and cover roles, the reply time and the outside contact: server/lib/exitPolicy.ts.
+    const door = restorativeDoorProblem(body.restorative, deps.loadRoles().map((r: any) => String(r.id)));
+    if (door) return { status: 400, body: door as unknown as Record<string, unknown> };
+  }
   for (const [field, label] of [["decidingDomainId", "deciding circle"], ["appealDomainId", "appeal circle"]] as const) {
     const id = String(body.involuntary?.[field] ?? "");
     if (id && !deps.circlesRepo.all().some((c: any) => c.id === id)) {
@@ -137,8 +169,15 @@ export async function saveExitPolicy(
   }
   // The RAW stored document, never readExitPolicy(): the closing section is
   // carried as stored, adoptedBy included (server/lib/exitPolicy.ts).
-  const next = normalizeExitPolicy(body, deps.exitPolicyRepo.get());
-  const blank = blankTerms(next);
+  const next = normalizeExitPolicy(body2, deps.exitPolicyRepo.get());
+  // The terms are judged as readers will be served them. While the agreement
+  // holds the restorative block, that is the agreement's path: the stored
+  // block it answers is printed nowhere, so its words cannot be what keeps
+  // the draft banner up.
+  const served = deps.agreementStored()
+    ? { ...next, restorative: { ...next.restorative, ...(deps.readExitPolicy()?.restorative ?? {}) } }
+    : next;
+  const blank = blankTerms(served);
   if (blank.length) {
     return { status: 400, body: {
       error: "blank_terms",
@@ -146,7 +185,7 @@ export async function saveExitPolicy(
     } };
   }
   if (!next.placeholder) {
-    const stale = platformDefaultTerms(next);
+    const stale = platformDefaultTerms(served);
     if (stale.length) {
       return { status: 409, body: {
         error: "terms_still_platform_default",
@@ -171,8 +210,14 @@ export function register(app: Express, deps: ExitDeps): void {
    * publishes nothing: who decides an involuntary exit and who hears an appeal
    * are the two facts a member most needs from this page.
    */
-  app.get("/api/exit-policy", async (_req, res) => {
+  app.get("/api/exit-policy", async (req, res) => {
     const policy: any = deps.readExitPolicy();
+    // Signed in or not, both are fine here; only a member reads the block whole.
+    const viewer = await deps.authedUser(req);
+    const member = !!viewer && (deps.hasMembership(viewer) || (await deps.isAdmin(req)));
+    const restorative = member
+      ? policy?.restorative ?? {}
+      : restorativeForPublic(policy?.restorative ?? {}, memberNameMatcher((await deps.members.all()).map((m: any) => m?.name)));
     const namedCircle = (id: unknown) => {
       const wanted = String(id ?? "");
       if (!wanted) return null;
@@ -191,7 +236,7 @@ export function register(app: Express, deps: ExitDeps): void {
         // sending it. `heldToday` says whether anybody would: the page promises a
         // reply and offers the form only then (server/lib/restorativeIntake.ts).
         restorative: {
-          ...(policy?.restorative ?? {}),
+          ...restorative,
           intakeRole: intakeRoleForReaders(policy?.restorative?.intakeContactRole, deps.loadRoles(), deps.roleHolders()),
         },
       },
@@ -246,6 +291,7 @@ export function register(app: Express, deps: ExitDeps): void {
       defaults: DEFAULT_EXIT_POLICY,
       terms: EXIT_POLICY_TERMS,
       circles: deps.circlesRepo.all().map((c: any) => ({ id: c.id, name: c.name })),
+      conflictAgreementStored: deps.agreementStored(),
     });
   });
 

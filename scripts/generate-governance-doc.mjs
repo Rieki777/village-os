@@ -1790,6 +1790,9 @@ const SUBJECT_WORDS = {
   // the village holds every transferable power: until then the founder writes
   // it directly and this subject cannot be opened at all.
   gps_change: "Rewrites the governing purpose statement, the sentence every proposal opened after it answers to. Nothing already decided is reopened.",
+  // Opened only once the Game has started: before the Birthing the founders
+  // write the conflict agreement directly (server/routes/conflictAgreement.ts).
+  conflict_agreement: "Adopts a new version of the conflict agreement, which the exit policy's restorative path then reads through. Nothing already under way is reopened.",
 };
 
 /**

@@ -2,7 +2,7 @@ import Layout from "@/components/Layout";
 import { useVillageName } from "@/hooks/useVillageName";
 import { Link } from "wouter";
 import LiveDecisionsBand from "@/components/governance/LiveDecisionsBand";
-import VillageConflictSteps from "@/components/governance/VillageConflictSteps";
+import ConflictAgreementPublic from "@/components/canvas/ConflictAgreementPublic";
 import {
   Vote,
   Users,
@@ -175,11 +175,13 @@ export default function Governance() {
         </div>
       </section>
 
-      {/* Conflict resolution: the village's own restorative steps, read from
-          its published exit policy. This used to be three compiled paragraphs
+      {/* Conflict resolution: the village's conflict agreement, public with
+          roles only, and before there is one the restorative steps of its
+          published exit policy. This used to be three compiled paragraphs
           every fork published as its own practice, ending in a promise that
           nobody is removed without a circle consent vote, while removal is an
-          admin act in the server. The reasoning is in VillageConflictSteps. */}
+          admin act in the server. The reasoning is in VillageConflictSteps and
+          ConflictAgreementPublic. */}
       <section className="bg-white py-20">
         <div className="container max-w-3xl mx-auto px-4">
           <div className="flex items-center gap-3 mb-4">
@@ -188,7 +190,7 @@ export default function Governance() {
               Conflict Resolution
             </h2>
           </div>
-          <VillageConflictSteps />
+          <ConflictAgreementPublic />
         </div>
       </section>
 

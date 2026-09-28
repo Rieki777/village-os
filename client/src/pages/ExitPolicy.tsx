@@ -28,7 +28,10 @@ export default function ExitPolicy() {
   const identity = useIdentityConfirm("request-exit");
 
   useEffect(() => {
-    fetch("/api/exit-policy").then((r) => r.json()).then(setData).catch(() => {});
+    // With the token when there is one: the server gives a member the outside
+    // contact and every step whole, and anybody else the public reading.
+    const token = authToken();
+    (token ? fetch("/api/exit-policy", { headers: headers() }) : fetch("/api/exit-policy")).then((r) => r.json()).then(setData).catch(() => {});
   }, []);
 
   const policy = data?.policy;
@@ -179,6 +182,11 @@ export default function ExitPolicy() {
             {intakeUnheld && (
               <p className="text-sm text-muted-foreground mb-2">
                 Nobody holds the {intakeRoleLabel} today, so a private intake would reach nobody.
+              </p>
+            )}
+            {!outsideNamed && !!outside?.organisation && (
+              <p className="text-sm text-muted-foreground mb-3">
+                {hasIntake ? "You can also bring it to somebody outside the village" : "Bring it to somebody outside the village"}, at {outside.organisation}. Members see who they are and how to reach them.
               </p>
             )}
             {outsideNamed && (

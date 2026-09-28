@@ -51,6 +51,7 @@ import { roleCapabilityRow } from "../repos/stewardRoles";
 import { nonFounderAdmissionRecords } from "../repos/users";
 import { outsideContactNamed, outsideContactOf, replyHoursOf, withPolicyDefaults } from "./exitPolicy";
 import { isAdmitted } from "./admission";
+import { CONFLICT_AGREEMENT_KEY, withConflictAgreement } from "./conflictAgreement";
 import { holdingHasLapsed } from "./stewardship";
 
 /** The check keys shared/launchRequirements.ts names, spelled once so the two cannot drift. */
@@ -188,11 +189,14 @@ export function governanceOnCheck(lifecycle: string): GovernanceCheck {
  *
  * The exit policy is read from its stored document through
  * `withPolicyDefaults`, the same reader every route uses, so a policy saved
- * before the three conflict-door fields existed reads with them blank.
+ * before the three conflict-door fields existed reads with them blank. Its
+ * restorative block then reads through the village's conflict agreement when
+ * one is saved, as `readExitPolicy()` does in server/index.ts, so the row and
+ * the pages judge the same door.
  */
 export async function conflictDoorFacts(pool: Pool, now: Date = new Date()): Promise<ConflictDoorFacts> {
   const stored = await readConfigDocument(pool, "exit-policy");
-  const policy = withPolicyDefaults(stored ?? undefined);
+  const policy = withConflictAgreement(withPolicyDefaults(stored ?? undefined), await readConfigDocument(pool, CONFLICT_AGREEMENT_KEY));
   const r: any = policy.restorative ?? {};
   const intakeRoleId = String(r.intakeContactRole ?? "").trim();
   let intakeRoleName: string | null = null;

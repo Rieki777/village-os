@@ -179,6 +179,8 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
         circlesRepo: { all: () => [] } as any,
         exitPolicyRepo: exitPolicyRepo() as any,
         readExitPolicy: () => withPolicyDefaults(exitPolicyRepo().get()),
+        // No conflict agreement in this village: the save judges the exit policy's own restorative block.
+        agreementStored: () => false,
       },
       dialWrite: {
         mayAct: async (req, cap: Capability) => {
