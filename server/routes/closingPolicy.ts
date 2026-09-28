@@ -33,9 +33,13 @@
  * audit, 2026-09-28). One admin can replace where the treasury and assets go
  * on closing, and the only trace was a changed "Adopted on" date. Each save
  * now writes an admin audit row naming the policy before and after, and each
- * NEW adoption writes a line on the village pulse, which members read. Both go
- * through `recordEvent`, the one door into `health_events`, and are awaited so
- * the answer is sent after the record exists (`recordEvent` never throws).
+ * NEW adoption writes a line on the village pulse, which members read. The
+ * pulse line names the policy and says an admin did it, never which one:
+ * the exit policy page keeps who adopted the words out of every public read
+ * (`closingForReaders`), the pulse is public too, and the audit row carries
+ * the account. Both go through `recordEvent`, the one door into
+ * `health_events`, and are awaited so the answer is sent after the record
+ * exists (`recordEvent` never throws).
  * Re-adopting the same words keeps the old stamp in `closingWrite` and is not
  * news. The consequence pen's second half, a ballot once the Game has started
  * (plan section 3), is Wave 3 work and is not built here.
@@ -76,7 +80,7 @@ export function register(app: Express, deps: Deps): void {
     if (adoptedNow) {
       await recordEvent(deps.getPool(), {
         kind: "governance",
-        text: `${actor?.name || "An admin"} adopted what closing this village means: ${closingPolicyDef(section.policyId)?.name ?? section.policyId}. The words are on the exit policy page.`,
+        text: `An admin adopted what closing this village means: ${closingPolicyDef(section.policyId)?.name ?? section.policyId}. The words are on the exit policy page.`,
         actorUserId: actor?.id ?? null,
         entityType: "exit_policy", entityRef: "closing", audience: "public",
       });

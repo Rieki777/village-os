@@ -394,7 +394,7 @@ describe.skipIf(!DB_CONFIGURED)("the default is a suggestion until the village a
     );
     expect(await closingEvents("public")).toEqual([
       {
-        text: "Closing Founder adopted what closing this village means: Shared by closing-day balances. The words are on the exit policy page.",
+        text: "An admin adopted what closing this village means: Shared by closing-day balances. The words are on the exit policy page.",
         actor: founderId,
       },
     ]);
