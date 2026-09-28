@@ -8073,11 +8073,12 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
    * pages asking blind for `legal`, `money` and `covenant` loaded red on every
    * visit. The pages ask this first now (client/src/hooks/useVillageContent.ts)
    * and request only what is here. Names only: a stranger learns nothing the
-   * route below would not answer for any name they guessed.
+   * route below would not answer for any name they guessed. `canvas` is left
+   * off: the route below refuses it, and /api/canvas/public serves its lines.
    */
   app.get("/api/content", (_req, res) => {
     const content = contentRepo.get() ?? {};
-    res.json({ sections: Object.keys(content).filter((key) => content[key] !== undefined) });
+    res.json({ sections: Object.keys(content).filter((key) => content[key] !== undefined && key !== CANVAS_PUBLIC_SECTION) });
   });
 
   app.get("/api/content/:section", async (req, res) => {

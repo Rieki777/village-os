@@ -325,6 +325,10 @@ describe.skipIf(!DB_CONFIGURED)("the canvas, through the real gate", () => {
       expect(raw.status).toBe(404);
       expect(raw.json).toEqual({ error: CANVAS_SECTION_DOOR });
     }
+    // Nor named in the public list of sections, which still names the one the control wrote.
+    const names = await call("GET", "/api/content", undefined, "");
+    expect(names.json.sections).toContain("legal");
+    expect(names.json.sections).not.toContain("canvas");
   });
 
   it("holds a stored line back from the public once the village admits somebody it names", async () => {
