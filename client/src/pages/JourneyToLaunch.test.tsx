@@ -177,6 +177,50 @@ describe("who reaches the test run", () => {
     expect(screen.getByRole("button", { name: /run the test/i })).toBeTruthy();
     expect(calls[0].url).toBe("/api/admin/launch");
   });
+
+  /*
+   * DEFECT 10 (Wave 4): the guide's only door hid once the village launched,
+   * so the organizing counsel a live village needs most was unreachable, and
+   * the Brain tab's promise about it was a promise about a closed door.
+   */
+  it("keeps the guide after launch, and opens it on organizing with no launch tab", async () => {
+    auth.current = { user: { id: "u1", name: "Rye", role: "admin" }, loading: false };
+    answer({
+      "/api/admin/launch": { status: 200, body: { ...STATUS, launchedAt: "2026-10-31T12:00:00.000Z" } },
+      "/api/admin/launch/steward-candidates": { status: 200, body: { candidates: [], powerCount: 0 } },
+      "/api/admin/assistant/organize": {
+        status: 200,
+        body: { reply: "Start with the decisions section.", consulted: { ownRecord: [], references: [], readers: [], brief: ["decisions"] }, path: "loop" },
+      },
+    });
+    draw();
+    await waitFor(() => expect(screen.getByText("This village is live")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /ask the guide/i }));
+    expect(screen.getByRole("button", { name: "Organizing" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Launch" })).toBeNull();
+    // And a question goes to the organizing door, which reads the brief, and
+    // the answer names the brief section it read.
+    fireEvent.change(screen.getByPlaceholderText(/Ask about any step/), { target: { value: "where do we start" } });
+    fireEvent.keyDown(screen.getByPlaceholderText(/Ask about any step/), { key: "Enter" });
+    await waitFor(() => expect(screen.getByText("Start with the decisions section.")).toBeTruthy());
+    expect(calls.map((c) => c.url)).toContain("/api/admin/assistant/organize");
+    expect(calls.map((c) => c.url)).not.toContain("/api/admin/assistant/launch");
+    expect(screen.getByText(/Your brief: decisions\./)).toBeTruthy();
+  });
+
+  it("keeps both tabs before launch, opening on the launch", async () => {
+    auth.current = { user: { id: "u1", name: "Rye", role: "admin" }, loading: false };
+    answer({
+      "/api/admin/launch": { status: 200, body: STATUS },
+      "/api/admin/launch/steward-candidates": { status: 200, body: { candidates: [], powerCount: 0 } },
+    });
+    draw();
+    await waitFor(() => expect(screen.getByText(/Take one backup/i)).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /ask the guide/i }));
+    expect(screen.getByRole("button", { name: "Launch" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Organizing" })).toBeTruthy();
+    expect(screen.getByText(/I can see exactly where your launch stands/)).toBeTruthy();
+  });
 });
 
 describe("what the member's run does", () => {

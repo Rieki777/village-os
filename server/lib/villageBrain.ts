@@ -17,6 +17,7 @@
 import { randomUUID } from "crypto";
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { BRIEF_BY_ID, BRIEF_SECTIONS, type BriefAudience, type RecordSource } from "../../shared/villageBrief";
+import { indexDoc, rank } from "./knowledge";
 
 export interface BriefRow {
   id: string;
@@ -382,6 +383,41 @@ export async function briefIndexForPrompt(
 ): Promise<string> {
   const [filled, records] = await Promise.all([briefAll(pool, audience), recordSummaries(pool)]);
   return capMarkdown(renderIndexMarkdown(filled, records, audience), maxTokens);
+}
+
+/**
+ * THE BRIEF AS THE STEWARDS' GUIDE READS IT (Wave 4, defect 10).
+ *
+ * The Brain tab tells an admin the guide reads this before it suggests
+ * anything, and until 2026-09-28 the organize mode never did. This is what it
+ * reads: every CONFIRMED section, the ones that bear on the question first
+ * (BM25 over the section's title and words, the same `rank` the shelves use),
+ * then the rest in the order they came, each cut to `perRow` characters,
+ * until `total` is spent. A proposed section is the guide's own guess at what
+ * the village would say, so it is left out, as it is on the public prompt.
+ * Pure: the caller reads the rows at the admin audience and passes them in.
+ */
+export function briefForCounsel(
+  rows: readonly BriefRow[],
+  query: string,
+  budget: { perRow: number; total: number } = { perRow: 1200, total: 6000 },
+): Array<{ section: string; title: string; body: string }> {
+  const confirmed = rows.filter((r) => r.status === "confirmed" && r.body.trim());
+  const matched = rank(
+    confirmed.map((r) => indexDoc(r, `${r.title}\n${r.body}`, `${r.section} ${r.title}`)),
+    query,
+    confirmed.length,
+  );
+  const ordered = [...matched, ...confirmed.filter((r) => !matched.includes(r))];
+  const out: Array<{ section: string; title: string; body: string }> = [];
+  let spent = 0;
+  for (const r of ordered) {
+    const body = r.body.trim().slice(0, budget.perRow);
+    if (spent + body.length > budget.total) continue;
+    out.push({ section: r.section, title: r.title, body });
+    spent += body.length;
+  }
+  return out;
 }
 
 /**

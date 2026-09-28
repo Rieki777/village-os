@@ -50,6 +50,7 @@ import { CANVAS_SOURCE_URL } from "@shared/governanceCanvasText";
 import { RecordReadingForm } from "./RecordReadingForm";
 import { CanvasFrameSay } from "./CanvasFrameSay";
 import { CanvasFrameAdopt } from "./CanvasFrameAdopt";
+import { AskButton } from "@/components/companion/Companion";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -352,16 +353,16 @@ function SeeFrame({ payload }: { payload: BlockFramesPayload }) {
 
 /**
  * Learn: the slot the resources lane fills (plan 5). Nothing here pretends to
- * be built: the readings picked per block and "Ask about this" do not exist
- * yet, and the page says so. The knowledge shelf has no page a member can
- * open today, so there is no link to it. What exists is linked.
+ * be built: the readings picked per block do not exist yet, and the page says
+ * so. Asking about the block does (Wave 4, the companion), and the question
+ * goes to the companion with this block named. The knowledge shelf has no page
+ * a member can open today, so there is no link to it. What exists is linked.
  */
 function LearnFrame({ block }: { block: CanvasBlock }) {
   return (
     <section aria-label={`Learn about ${block.name}`} className="space-y-3 text-sm text-stone-800">
-      <p data-testid="canvas-learn-not-built">
-        Readings and tools picked for {block.name}, and a way to ask a question about it, are not built yet.
-      </p>
+      <p data-testid="canvas-learn-not-built">Readings and tools picked for {block.name} are not built yet.</p>
+      <AskButton block={block.id} label={`Ask a question about ${block.name}`} />
       <ul className="space-y-2">
         <li>
           <a href={CANVAS_SOURCE_URL} target="_blank" rel="noreferrer" className="font-medium text-teal-deep hover:underline">

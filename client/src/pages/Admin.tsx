@@ -4353,13 +4353,13 @@ function VillageBrainTab({ password }: { password: string }) {
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <h3 className="font-semibold text-gray-900">What this village is for</h3>
         <p className="text-sm text-gray-600 mt-1">
-          Your guide reads this before she suggests anything. She ranks it above the shipped
-          literature and below what is live in the game, and she names which section she drew on.
-          None of it leaves this village.
+          The guide reads this before it suggests anything. It ranks it above the shipped
+          literature and below what is live in the game, and it names which section it drew on.
+          When the guide answers in its own words, what it reads here goes to its model provider with the question.
         </p>
         {blanks.length > 0 && (
           <p className="text-sm text-gray-600 mt-2">
-            Still blank: {blanks.map((s) => s.id).join(", ")}. She will ask about these when a
+            Still blank: {blanks.map((s) => s.id).join(", ")}. The guide will ask about these when a
             conversation touches them, one at a time.
           </p>
         )}

@@ -17,6 +17,9 @@
  * whose words they are reading. The credit line renders once, on the view
  * that holds the cards (CanvasBaseline), and not twelve times.
  *
+ * "Ask" (Wave 4) opens the companion on this block, when the card sits inside
+ * the Canvas view's companion; anywhere else the button is not drawn.
+ *
  * The level shows as its WORD. The radar above already places it on a ring,
  * and a numeral here would invite adding the twelve up, which R55 forbids.
  * The earlier readings (in Sense) are listed without a count for the same
@@ -28,6 +31,7 @@ import { ChevronRight } from "lucide-react";
 import { type CanvasBlock, type CanvasReadingInput } from "@shared/governanceCanvas";
 import { CANVAS_BLOCK_TEXT, CANVAS_FOUNDATION_TEXT, CANVAS_SOURCE_URL } from "@shared/governanceCanvasText";
 import { recordedLine, weeksPhrase, type CanvasBlockView } from "@/lib/canvasCopy";
+import { AskButton } from "@/components/companion/Companion";
 
 /** The five frames: their own chunk, fetched the first time any block is opened. */
 const CanvasBlockFrames = lazy(() => import("./CanvasBlockFrames"));
@@ -149,6 +153,7 @@ export function CanvasBlockCard({
         >
           {open ? "Close this block" : "Open this block"}
         </button>
+        <AskButton block={block.id} label="Ask" name={`Ask about ${block.name}`} />
       </div>
 
       <div id={`canvas-frames-region-${block.id}`}>

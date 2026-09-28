@@ -357,6 +357,19 @@ describe.skipIf(!DB_CONFIGURED)("your agent over HTTP", () => {
 
     const before = await pool.query<any[]>("SELECT COUNT(*) n FROM rate_hits WHERE bucket LIKE 'assistant-day:member%'");
     stubBodies = [];
+    // Wave 4, the companion: before a member's words first go to a model,
+    // they read one line naming the provider and whoever holds the key, and
+    // say yes. Until then the record answers and nothing goes upstream, even
+    // on the member's own key.
+    const unasked = await call("POST", "/api/agent/ask", { messages: [{ role: "user", content: "should I go to the kitchen crew gathering?" }] }, ana.token);
+    expect(unasked.status, JSON.stringify(unasked.json)).toBe(200);
+    expect(unasked.json.fromRecord).toBe("no-consent");
+    expect(unasked.json.consent).toMatchObject({ required: true, provider: "Anthropic", operator: "you", source: "member" });
+    expect(stubBodies, "nothing went upstream before the yes").toHaveLength(0);
+    const yes = await call("POST", "/api/agent/companion/consent", {
+      provider: unasked.json.consent.provider, operator: unasked.json.consent.operator, source: unasked.json.consent.source,
+    }, ana.token);
+    expect(yes.status, JSON.stringify(yes.json)).toBe(200);
     const ask = await call("POST", "/api/agent/ask", { messages: [{ role: "user", content: "should I go to the kitchen crew gathering?" }] }, ana.token);
     expect(ask.status, JSON.stringify(ask.json)).toBe(200);
     expect(ask.json.keySource).toBe("member");

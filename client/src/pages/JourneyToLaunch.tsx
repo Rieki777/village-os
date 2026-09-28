@@ -542,14 +542,13 @@ export default function JourneyToLaunch() {
             >
               <History className="w-3.5 h-3.5" /> Command Centre
             </Link>
-            {!launched && (
-              <button
-                onClick={() => setGuideOpen(true)}
-                className="inline-flex items-center gap-1.5 text-sm rounded-lg px-3 py-1.5 font-medium bg-white/10 text-white hover:bg-white/20"
-              >
-                <MessageCircle className="w-3.5 h-3.5" /> Ask the guide
-              </button>
-            )}
+            {/* Stays after launch (Wave 4, defect 10): the organizing counsel is for running a village, and it opens on that. */}
+            <button
+              onClick={() => setGuideOpen(true)}
+              className="inline-flex items-center gap-1.5 text-sm rounded-lg px-3 py-1.5 font-medium bg-white/10 text-white hover:bg-white/20"
+            >
+              <MessageCircle className="w-3.5 h-3.5" /> Ask the guide
+            </button>
           </div>
         </div>
       </div>
@@ -689,7 +688,7 @@ export default function JourneyToLaunch() {
           )}
         </div>
       </div>
-      <LaunchGuide open={guideOpen} onClose={() => setGuideOpen(false)} />
+      <LaunchGuide open={guideOpen} onClose={() => setGuideOpen(false)} launched={launched} />
     </Layout>
   );
 }

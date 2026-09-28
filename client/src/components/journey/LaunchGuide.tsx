@@ -1,8 +1,14 @@
 /**
  * THE LAUNCH GUIDE, moved out of client/src/pages/JourneyToLaunch.tsx whole
- * (2026-09-26) so that page has room for the canvas. Nothing in it changed.
+ * (2026-09-26) so that page has room for the canvas.
+ *
+ * AFTER LAUNCH (Wave 4, defect 10): the page keeps its "Ask the guide" button
+ * once the village is live, and the guide opens on organizing, with no launch
+ * tab, because the launch is done and running the village is not. Organizing
+ * now reads the village's brief first (server/routes/organize.ts), and the
+ * sections it read are named under each answer.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { Loader2, Send } from "lucide-react";
 import MicButton from "@/components/MicButton";
@@ -20,14 +26,19 @@ const headers = (): Record<string, string> => {
  * links. Absent an Anthropic key she simply isn't here — the checklist
  * carries the whole story on its own.
  */
-export function LaunchGuide({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function LaunchGuide({ open, onClose, launched = false }: { open: boolean; onClose: () => void; launched?: boolean }) {
   // Two hats, one panel. "launch" reads the live readiness checklist;
   // "organize" (S70) reads the village's own second brain first, then the
   // shipped practitioner corpus — and shows which shelves she consulted.
-  const [mode, setMode] = useState<"launch" | "organize">("launch");
+  const [mode, setMode] = useState<"launch" | "organize">(launched ? "organize" : "launch");
+  // The status arrives after the first render, so a village found to be live
+  // moves the guide onto organizing then, and the launch tab is gone.
+  useEffect(() => {
+    if (launched) setMode("organize");
+  }, [launched]);
   const GREETINGS: Record<string, string> = {
     launch: "I can see exactly where your launch stands. Want to start with what's blocking, or shall I walk the whole journey with you?",
-    organize: "Ask me about organizing: governance, conflict, membership, legal shells, internal economics. Your village's own calls outrank the books when they speak to it.",
+    organize: "Ask me about organizing: governance, conflict, membership, legal shells, internal economics. I read your village's brief first, then its own calls, and they outrank the books when they speak to it.",
   };
   const [threads, setThreads] = useState<Record<string, Array<{ role: "user" | "assistant"; content: string; consulted?: any }>>>({
     launch: [{ role: "assistant", content: GREETINGS.launch }],
@@ -75,10 +86,12 @@ export function LaunchGuide({ open, onClose }: { open: boolean; onClose: () => v
     <div className="fixed bottom-4 right-4 z-50 w-[min(24rem,calc(100vw-2rem))] bg-white border border-stone-200 rounded-2xl shadow-2xl flex flex-col max-h-[70vh]">
       <header className="px-4 py-3 border-b border-stone-100 flex items-center justify-between gap-2">
         <div className="flex gap-1">
-          <button onClick={() => setMode("launch")}
-            className={`text-xs font-semibold rounded-lg px-2.5 py-1.5 ${mode === "launch" ? "bg-teal-deep text-white" : "text-stone-500 hover:bg-stone-100"}`}>
-            Launch
-          </button>
+          {!launched && (
+            <button onClick={() => setMode("launch")}
+              className={`text-xs font-semibold rounded-lg px-2.5 py-1.5 ${mode === "launch" ? "bg-teal-deep text-white" : "text-stone-500 hover:bg-stone-100"}`}>
+              Launch
+            </button>
+          )}
           <button onClick={() => setMode("organize")}
             className={`text-xs font-semibold rounded-lg px-2.5 py-1.5 ${mode === "organize" ? "bg-teal-deep text-white" : "text-stone-500 hover:bg-stone-100"}`}>
             Organizing
@@ -101,9 +114,11 @@ export function LaunchGuide({ open, onClose }: { open: boolean; onClose: () => v
               {m.role === "assistant" ? linkify(m.content) : m.content}
               {m.consulted
                 && (m.consulted.ownRecord?.length > 0
+                  || m.consulted.brief?.length > 0
                   || m.consulted.references?.length > 0
                   || m.consulted.readers?.length > 0) && (
                 <p className="text-[10px] text-stone-400 mt-1.5 border-t border-stone-200 pt-1">
+                  {m.consulted.brief?.length > 0 && <>Your brief: {m.consulted.brief.join("; ")}. </>}
                   {m.consulted.ownRecord?.length > 0 && <>Your calls: {m.consulted.ownRecord.join("; ")}. </>}
                   {/* Optional-chained on purpose: a reply cached before the
                       readers shipped carries no `readers` key at all. */}

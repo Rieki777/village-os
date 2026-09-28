@@ -298,9 +298,11 @@ describe("Learn", () => {
   it("says plainly what is not built, offers no button that would do nothing, and links only to what exists", async () => {
     answer("GET", "/api/canvas", 200, canvas(false));
     const frames = await openPower("Learn");
-    expect(frames.getByTestId("canvas-learn-not-built").textContent).toBe(
-      "Readings and tools picked for Power, and a way to ask a question about it, are not built yet.",
-    );
+    expect(frames.getByTestId("canvas-learn-not-built").textContent).toBe("Readings and tools picked for Power are not built yet.");
+    // Asking is built (Wave 4), and its door opens only where the companion
+    // lives: the Canvas view's provider. Rendered bare, as here, there is no
+    // panel to open, so there is no button (companion/Companion.test.tsx
+    // opens it from inside the provider).
     expect(frames.queryByRole("button", { name: /ask/i })).toBeNull();
     expect(frames.getByRole("link", { name: /Print the canvas workbook/ }).getAttribute("href")).toBe("/canvas/workbook");
     // Learn needs nothing from the server.
