@@ -688,9 +688,8 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
     });
   });
 
-  const writeRow = async (req: Request, res: Response, rowId?: number) => {
-    const user = await refuseMatrixWriter(req, res);
-    if (!user) return;
+  /** The write itself, once the handler has asked the consequence pen. */
+  const writeRow = async (req: Request, res: Response, user: any, rowId?: number) => {
     const parsed = parseMatrixRow({ ...(req.body ?? {}), rowId });
     if (!parsed.ok) return res.status(400).json({ error: parsed.error });
     const pool = getPool();
@@ -704,12 +703,18 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
     res.status(rowId ? 200 : 201).json({ row: saved ? matrixRowView(saved, firstName) : null });
   };
 
-  app.post("/api/canvas/decision-matrix/rows", async (req, res) => writeRow(req, res));
+  app.post("/api/canvas/decision-matrix/rows", async (req, res) => {
+    const user = await refuseMatrixWriter(req, res);
+    if (!user) return;
+    return writeRow(req, res, user);
+  });
 
   app.put("/api/canvas/decision-matrix/rows/:id", async (req, res) => {
     const id = Number(req.params.id);
+    const user = await refuseMatrixWriter(req, res);
+    if (!user) return;
     if (!Number.isInteger(id) || id <= 0) return res.status(404).json({ error: "There is no matrix row by that number." });
-    return writeRow(req, res, id);
+    return writeRow(req, res, user, id);
   });
 
   app.delete("/api/canvas/decision-matrix/rows/:id", async (req, res) => {
