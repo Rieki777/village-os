@@ -1815,6 +1815,13 @@ season sees the blocks in canvas order and loses nothing.
   file", read the preview, then "Save this season". "Take the season off"
   goes back to canvas order; "Download this season file" hands the pen a
   copy first, since taking a season off deletes it.
+- **Who can read it, and the canvas:** a member the village has ADMITTED
+  (`membershipGranted`), and any admin. Being signed in is not enough: an
+  invited account the village has not admitted yet, and anybody who registers
+  on a fork with `membership.invite_only` off, get 403 and one sentence from
+  both `GET /api/canvas` and `GET /api/canvas/season`, and the Canvas tab is
+  not offered to them. The readings name who recorded them, so the canvas is
+  members-only, never public.
 - **A template ships with the platform:** `docs/seasons/season-two-2026.json`
   (thirteen Saturdays from 26 September to 19 December 2026, 11:00
   America/Los_Angeles). Copy it and change the dates, titles and blocks to

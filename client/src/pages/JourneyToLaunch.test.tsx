@@ -32,6 +32,8 @@ import type { ReactNode } from "react";
 const auth = vi.hoisted(() => ({
   current: { user: null as any, loading: false },
 }));
+/** What /api/game/me says about the signed-in member: admitted by default, as a member of the village is. */
+const me = vi.hoisted(() => ({ current: { membership: true } as { membership: boolean } | null, asked: 0 }));
 
 vi.mock("@/components/Layout", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -39,7 +41,13 @@ vi.mock("@/components/Layout", () => ({
 vi.mock("@/components/MicButton", () => ({ default: () => null }));
 vi.mock("@/components/journey/EconomicsView", () => ({ EconomicsView: () => null }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => auth.current }));
-vi.mock("@/lib/gameApi", () => ({ authToken: () => "a-token" }));
+vi.mock("@/lib/gameApi", () => ({
+  authToken: () => "a-token",
+  fetchGameMe: async () => {
+    me.asked += 1;
+    return me.current;
+  },
+}));
 
 import JourneyToLaunch from "./JourneyToLaunch";
 
@@ -126,6 +134,8 @@ const draw = () =>
 
 beforeEach(() => {
   auth.current = { user: null, loading: false };
+  me.current = { membership: true };
+  me.asked = 0;
   answer({});
 });
 
@@ -255,6 +265,26 @@ describe("the canvas view", () => {
     for (const c of calls) expect(c.init.headers.Authorization, c.url).toBe("Bearer a-token");
     expect(screen.getByText("How this village governs itself")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /run the test/i }), "the test run steps aside").toBeNull();
+  });
+
+  it("is not offered to a signed-in account the village has not admitted, which gets the test run alone", async () => {
+    auth.current = { user: { id: "u3", name: "Rook", role: "member" }, loading: false };
+    me.current = { membership: false };
+    draw();
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Canvas" })).toBeNull());
+    expect(screen.queryByRole("button", { name: "Test run" }), "no tab row with one tab in it").toBeNull();
+    expect(screen.getByText("See what these settings would do")).toBeTruthy();
+    expect(calls.map((c) => c.url), "the canvas is never asked for").not.toContain("/api/canvas");
+  });
+
+  it("stays offered when the profile cannot be read, since the server still decides", async () => {
+    auth.current = { user: { id: "u2", name: "Wren", role: "member" }, loading: false };
+    me.current = null;
+    draw();
+    await waitFor(() => expect(me.asked).toBe(1));
+    // Let the answer land before reading the page, so this reads the state AFTER it.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.getByRole("button", { name: "Canvas" })).toBeTruthy();
   });
 
   it("sits beside the admin's other views and takes the readiness figure off the screen", async () => {

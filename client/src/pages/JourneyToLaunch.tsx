@@ -24,7 +24,7 @@ import { CanvasView } from "@/components/canvas/CanvasView";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
-import { authToken } from "@/lib/gameApi";
+import { authToken, fetchGameMe } from "@/lib/gameApi";
 import {
   Check,
   ChevronRight,
@@ -265,6 +265,27 @@ export default function JourneyToLaunch() {
   const [busy, setBusy] = useState("");
   const [view, setView] = useState<"launch" | "economics" | "canvas">("launch");
   /**
+   * Has the village admitted this signed-in member? The canvas is for members
+   * (server/routes/canvas.ts answers an account it has not admitted with 403),
+   * so such an account is not offered the Canvas tab. Asked once, of the
+   * profile the server already serves (`membership` on /api/game/me). Until the
+   * answer arrives, or if it cannot be read, the tab stays: the server still
+   * refuses in its own words, and a member is never shown the page without it.
+   */
+  const [admitted, setAdmitted] = useState<boolean | null>(null);
+  const userId = user?.id ?? null;
+  useEffect(() => {
+    if (!userId || isAdmin) return;
+    let live = true;
+    void fetchGameMe().then((me) => {
+      if (live) setAdmitted(me ? me.membership : null);
+    });
+    return () => {
+      live = false;
+    };
+  }, [userId, isAdmin]);
+  const memberCanvas = admitted !== false;
+  /**
    * The founding members this proposal may name, and how many powers the seat
    * carries, both from the server (0220).
    *
@@ -380,30 +401,34 @@ export default function JourneyToLaunch() {
     );
   }
   if (!isAdmin) {
+    // An account the village has not admitted has no Canvas tab, and never lands on the view.
+    const onCanvas = view === "canvas" && memberCanvas;
     return (
       <Layout>
         <div className="bg-teal-band text-white py-8">
           <div className="container">
             <div className="flex items-center gap-3 mb-2">
               <FlaskConical className="w-6 h-6 text-amber-on-band" />
-              <span className="text-amber-on-band font-medium text-sm tracking-widest uppercase">{view === "canvas" ? "Canvas" : "Test run"}</span>
+              <span className="text-amber-on-band font-medium text-sm tracking-widest uppercase">{onCanvas ? "Canvas" : "Test run"}</span>
             </div>
-            <h1 className="font-display text-3xl md:text-4xl font-bold mb-2">{view === "canvas" ? "How this village governs itself" : "See what these settings would do"}</h1>
-            <p className={`text-white text-sm max-w-2xl ${view === "canvas" ? "hidden" : ""}`}>
+            <h1 className="font-display text-3xl md:text-4xl font-bold mb-2">{onCanvas ? "How this village governs itself" : "See what these settings would do"}</h1>
+            <p className={`text-white text-sm max-w-2xl ${onCanvas ? "hidden" : ""}`}>
               Turn this village's moons over quickly and read what its rules would pay, who a
               settlement would thank, when Claims Week opens, and what you could give each moon.
               It writes nothing. The launch checklist and the ballot belong to the team running
               the village, so they are not on your copy of this page.
             </p>
-            <div className="flex flex-wrap gap-2 mt-5">
-              <ViewTab active={view !== "canvas"} onClick={() => setView("launch")}>Test run</ViewTab>
-              <ViewTab active={view === "canvas"} onClick={() => setView("canvas")}>Canvas</ViewTab>
-            </div>
+            {memberCanvas && (
+              <div className="flex flex-wrap gap-2 mt-5">
+                <ViewTab active={!onCanvas} onClick={() => setView("launch")}>Test run</ViewTab>
+                <ViewTab active={onCanvas} onClick={() => setView("canvas")}>Canvas</ViewTab>
+              </div>
+            )}
           </div>
         </div>
         <div className="bg-stone-50 min-h-screen py-8">
           <div className="container max-w-3xl space-y-6">
-            {view === "canvas" ? <CanvasView /> : <TestRun />}
+            {onCanvas ? <CanvasView /> : <TestRun />}
           </div>
         </div>
       </Layout>
