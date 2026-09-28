@@ -158,6 +158,13 @@ describe.skipIf(!DB_CONFIGURED)("an admin write reaches the page that renders it
     expect(circle.status, JSON.stringify(circle.json)).toBe(200);
     const circleId = String(circle.json.id);
 
+    // Before the village writes anything, the route says the restorative
+    // steps are still the platform's words, which is what stops /governance
+    // and /roles printing them as this village's conflict process.
+    const before = await asStranger("/api/exit-policy");
+    expect(before.status).toBe(200);
+    expect(before.json.platformWording).toContain("restorativeSteps");
+
     const terms = {
       placeholder: true,
       voluntary: {
@@ -189,6 +196,8 @@ describe.skipIf(!DB_CONFIGURED)("an admin write reaches the page that renders it
     // The two ids that were stored, read by nobody, and editable by nobody.
     expect(p.involuntary.decidingCircle?.name).toBe("Care Circle");
     expect(p.involuntary.appealCircle?.name).toBe("Care Circle");
+    // Every printed term is now in the village's own words, draft or not.
+    expect(page.json.platformWording).toEqual([]);
   });
 
   it("the acknowledgement refuses while any printed term is still the platform's", async () => {

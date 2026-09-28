@@ -10,6 +10,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_EXIT_POLICY,
+  EXIT_POLICY_TERMS,
   blankTerms,
   exitElementRefusal,
   exitLeverFindings,
@@ -17,6 +18,7 @@ import {
   exitLeverRefusal,
   exitSetRefusals,
   normalizeExitPolicy,
+  platformDefaultTermKeys,
   platformDefaultTerms,
   withPolicyDefaults,
   type ExitLeverReading,
@@ -83,6 +85,54 @@ describe("the acknowledgement cannot be ticked over the platform's words", () =>
   it("the notice period is deliberately not a term: 30 days can be a real decision", () => {
     const sameNotice = { ...own(), voluntary: { ...own().voluntary, noticePeriodDays: 30 } };
     expect(platformDefaultTerms(normalizeExitPolicy(sameNotice))).toEqual([]);
+  });
+});
+
+/*
+ * The KEYS behind those labels, which `GET /api/exit-policy` hands the public
+ * pages as `platformWording`. /governance and /roles print the restorative
+ * steps as the village's conflict process only when "restorativeSteps" is
+ * absent here, so this is the line between the village's words and the
+ * platform's on two public pages.
+ */
+describe("platformDefaultTermKeys, what the public pages read", () => {
+  it("names the key of every term still at the platform default, in the labels' order", () => {
+    expect(platformDefaultTermKeys(normalizeExitPolicy(DEFAULT_EXIT_POLICY))).toEqual([
+      "valuationMethod",
+      "unwindSteps",
+      "involuntaryProcess",
+      "restorativeSteps",
+    ]);
+    expect(platformDefaultTerms(normalizeExitPolicy(DEFAULT_EXIT_POLICY))).toEqual(
+      platformDefaultTermKeys(normalizeExitPolicy(DEFAULT_EXIT_POLICY)).map(
+        (k) => EXIT_POLICY_TERMS.find((t) => t.key === k)!.label,
+      ),
+    );
+  });
+
+  it("names restorativeSteps alone when only the restorative path is the platform's", () => {
+    const half = { ...own(), restorative: { intakeContactRole: "", steps: [...DEFAULT_EXIT_POLICY.restorative.steps] } };
+    expect(platformDefaultTermKeys(normalizeExitPolicy(half))).toEqual(["restorativeSteps"]);
+    expect(platformDefaultTermKeys(normalizeExitPolicy(own()))).toEqual([]);
+  });
+
+  it("reads a never-saved village as all platform words, which is what the public route serves it", () => {
+    // `readExitPolicy()` is `withPolicyDefaults(stored)`, and a village that
+    // never saved has no stored document at all.
+    expect(platformDefaultTermKeys(withPolicyDefaults(undefined))).toContain("restorativeSteps");
+  });
+
+  it("does not throw on a stored document whose fields are the wrong type, and counts them as not the platform's", () => {
+    // The public page calls this on whatever some release stored. A throw here
+    // would take /exit-policy, /governance and /roles down with a 500.
+    const odd = withPolicyDefaults({
+      placeholder: true,
+      voluntary: { valuationMethod: null, unwindSteps: "one line" },
+      involuntary: { process: 7 },
+      restorative: { steps: null },
+    });
+    expect(() => platformDefaultTermKeys(odd)).not.toThrow();
+    expect(platformDefaultTermKeys(odd)).toEqual([]);
   });
 });
 
