@@ -124,7 +124,8 @@ describe("a season orders the canvas and never gates it", () => {
     // A block out of focus still takes a reading.
     const legal = within(screen.getByTestId("canvas-block-legal"));
     fireEvent.click(legal.getByRole("button", { name: /record a reading/i }));
-    expect(legal.getByRole("button", { name: /save this reading/i })).toBeTruthy();
+    // The form lives in the block's Sense frame, its own lazy chunk (Wave 3b).
+    expect(await legal.findByRole("button", { name: /save this reading/i })).toBeTruthy();
   });
 
   it("ignores a focus naming a block the canvas does not have, and still draws all twelve", async () => {

@@ -10,7 +10,8 @@
     "Wave 2 (2026-09-28): $conflictReplyTime and $outsideContactName come from the seed's conflict door; decision-matrix opens the canvas view from its address (?view=canvas) and presses the matrix button once.",
     "Wave 3a (2026-09-28), the conflict agreement: /exit-policy names the outside contact to anybody who is not a member by organisation alone ($outsideContactOrganisation), and by name only to members. /governance gives a member the ombuds door and the agreement's frames to read, and the founder the editor.",
     "Wave 3a public-lines (2026-09-28): /governance is \"How we work together\"; a visitor reads the public lines and the public matrix only, a member also the note that blocks open members' words, the founder the pen's controls; the seed's canvas reading ($canvasReading) must never render there.",
-    "Wave 3a audit fix (2026-09-28): Departures tells the founder the truth about the outside contact, whose name and way of reaching them show to members only, and no longer says every field is public."
+    "Wave 3a audit fix (2026-09-28): Departures tells the founder the truth about the outside contact, whose name and way of reaching them show to members only, and no longer says every field is public.",
+    "Wave 3b canvas-frames-client (2026-09-28): each canvas block opens its five frames behind \"Open this block: <name>\". Views on the same page run in order and do not reset, so journey's canvas-power-* views open Power, then press each frame's button (Sense, See, Learn, Say, the matrix, Adopt). The Decision Matrix moved from the closed Power card into Power's Say frame, so decision-matrix opens Power and presses Say before the matrix button. $canvasSuggestion and $canvasSuggester are the seed's member suggestion on Power, made by a member the walk does not sign in as: the walk's member reads it with nothing to press, the founder with the pen's Adopt and Decline."
   ],
   "version": 1,
   "viewports": {
@@ -94,6 +95,84 @@
           "expect": {
             "founder": { "text": ["Record a reading", "Load a different season file", "Take the season off", "Download this season file"] },
             "member": { "forbidden": ["Record a reading", "Load a different season file", "Load a season file", "Take the season off", "Download this season file"] }
+          }
+        },
+        {
+          "id": "canvas-power-sense",
+          "click": "Open this block: Power",
+          "roles": ["member", "founder"],
+          "text": ["How this block stands today", "The reading above is the first one of Power", "Close this block"],
+          "forbidden": ["%", "of 12", "could not be read"],
+          "expect": {
+            "member": { "forbidden": ["Record a reading", "Save this reading"] }
+          }
+        },
+        {
+          "id": "canvas-power-see",
+          "click": "See",
+          "roles": ["member", "founder"],
+          "text": [
+            "What the village's settings and records show",
+            "Governance is on for members, so the village can vote here",
+            "The Game has not started yet",
+            "Where the words and the settings part",
+            "Nothing is written yet under Who decides what, while the settings behind this block already apply",
+            "The settings behind this block",
+            "How village-wide ballots decide"
+          ],
+          "forbidden": ["%", "of 12", "could not be read", "Reading Power"]
+        },
+        {
+          "id": "canvas-power-learn",
+          "click": "Learn",
+          "roles": ["member", "founder"],
+          "text": ["a way to ask a question about it, are not built yet", "The canvas's own article", "Print the canvas workbook"],
+          "forbidden": ["%", "could not be read"]
+        },
+        {
+          "id": "canvas-power-say",
+          "click": "Say",
+          "roles": ["member", "founder"],
+          "text": [
+            "Who decides what", "Nothing written yet",
+            "Show who decides what",
+            "The village's own rows", "The village has not written any rows of its own yet", "Risk tags are information",
+            "Suggest a change", "Everyone in the village can read what you write here", "What would it change?",
+            "How it serves the governing purpose", "Send this suggestion"
+          ],
+          "forbidden": ["%", "of 12", "could not be read", "Reading the village's rows"],
+          "expect": {
+            "founder": { "text": ["Add a row"] },
+            "member": { "text": ["To add or change a row, suggest it below"], "forbidden": ["Add a row"] }
+          }
+        },
+        {
+          "id": "canvas-power-matrix",
+          "click": "Show who decides what",
+          "roles": ["member", "founder"],
+          "text": [
+            "For each kind of decision the canvas asks who approves it",
+            "What the village decides by vote", "Moving a power or a seat",
+            "The five columns are the Decision Matrix of the",
+            "Hide who decides what"
+          ],
+          "forbidden": ["The matrix could not be read", "Sign in to read the matrix", "Reading the matrix"]
+        },
+        {
+          "id": "canvas-power-adopt",
+          "click": "Adopt",
+          "roles": ["member", "founder"],
+          "text": [
+            "The Game has not started, so adopting a suggestion that names a setting writes the setting straight away",
+            "Who adopts on this block",
+            "Words for Who decides what", "Suggested by $canvasSuggester on", "$canvasSuggestion",
+            "How it serves the purpose:",
+            "Adopting writes these words into Who decides what as the village's adopted answer"
+          ],
+          "forbidden": ["%", "of 12", "could not be read", "No suggestions are open on Power"],
+          "expect": {
+            "founder": { "text": ["Adopt these words", "Decline", "Your note (needed to decline)", "Everyone in the village can read what you write here"] },
+            "member": { "forbidden": ["Adopt these words", "Withdraw my suggestion", "Your note (needed to decline)", "Your note (optional)"] }
           }
         },
         {
@@ -214,10 +293,23 @@
       "required": true,
       "expect": {
         "visitor": { "text": ["Sign in to see how far this village is from opening its doors"] },
-        "member": { "text": ["The canvas baseline", "Show who decides what"] },
-        "founder": { "text": ["The canvas baseline", "Show who decides what"] }
+        "member": { "text": ["The canvas baseline", "Open this block"] },
+        "founder": { "text": ["The canvas baseline", "Open this block"] }
       },
       "views": [
+        {
+          "id": "open-power",
+          "click": "Open this block: Power",
+          "roles": ["member", "founder"],
+          "text": ["How this block stands today", "Close this block"]
+        },
+        {
+          "id": "power-say",
+          "click": "Say",
+          "roles": ["member", "founder"],
+          "text": ["Show who decides what", "The village's own rows"],
+          "forbidden": ["could not be read"]
+        },
         {
           "id": "matrix",
           "click": "Show who decides what",

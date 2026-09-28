@@ -110,7 +110,11 @@ writes nothing except through HTTP routes:
   blocks read covering every level from 1 to 5, Purpose read twice, five empty),
   read back afterwards as a member; the season file when `/api/canvas/season`
   exists (the template the platform ships, `docs/seasons/season-two-2026.json`,
-  loaded by the pen and read back as a member, who may not edit it).
+  loaded by the pen and read back as a member, who may not edit it); one open
+  canvas suggestion when `/api/canvas/blocks/power` exists (a member the walk
+  does not sign in as suggests words for the Power block, with a purpose line,
+  through `POST /api/canvas/proposals`, and the walk's member reads it back
+  holding no pen for it).
 
 Tokens and the generated passwords go to `QA_OUT_DIR/state/tokens.json` with the
 facts the walk checks for. Run twice on the same village (a plain restart keeps
@@ -151,9 +155,16 @@ per-role `expect` too: the Canvas view requires "Record a reading" of the founde
 who holds the pen and forbids it to a member). Text is matched without case,
 with whitespace collapsed, and `$villageName`, `$restorativeStep`,
 `$careRoleName`, `$careHolderName`, `$canvasReading`, `$seasonName`,
-`$seasonWeekTitle`, `$conflictReplyTime`, `$outsideContactName` and `$viewerName` come from the seed. `$brandTerms` is the BANNED list in `scripts/check-brand-refs.mjs`,
+`$seasonWeekTitle`, `$conflictReplyTime`, `$outsideContactName`, `$canvasSuggestion`,
+`$canvasSuggester` and `$viewerName` come from the seed. `$brandTerms` is the BANNED list in `scripts/check-brand-refs.mjs`,
 matched as whole words everywhere, so a fresh village showing another village's
 name fails. A new seed fact goes in `seed.mjs`'s `facts`.
+
+Views on one surface run IN ORDER on the same page, which is never reloaded
+between them, so a state two presses deep is reached by two views: journey's
+`canvas-power-*` views press "Open this block: Power" and then each of the five
+frames' buttons in turn, and each view checks the text its own press revealed.
+Give every button such a chain presses a name no other button on the page has.
 
 Require text that only the page's own body renders, from the data it loads
 where there is any. The Layout header and footer carry the village's name on
@@ -192,8 +203,8 @@ on a surface, on a view, or under `expect.<role>`), as regular expressions over
   or a village that has been through its Birthing.
 - Contrast, focus order, tap-target size and screen-reader names. `contrast.mjs`
   and `sweep.mjs` beside it cover some of that against a deployed site.
-- Surfaces not listed in `surfaces.json`, and states that need more than one
-  button press to reach.
+- Surfaces not listed in `surfaces.json`, and states more than one button
+  press deep that no chain of views reaches.
 - Text drawn in a canvas or an image, and text hidden by CSS: matching reads
   `innerText`, which leaves out whatever is not rendered.
 - A defect that only a slower machine or network shows. Settling waits for the

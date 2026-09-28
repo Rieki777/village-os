@@ -30,7 +30,11 @@
  *     from 1 to 5, one block read twice, and five blocks left empty;
  *   - the season file, when the route exists: the template the platform ships
  *     (docs/seasons/season-two-2026.json), loaded by the pen and read back as a
- *     member.
+ *     member;
+ *   - one open canvas suggestion, when the five frames' routes exist: a member
+ *     who is not the one the walk signs in as suggests words for the Power
+ *     block, with a line on how they serve the purpose, and the walk's member
+ *     reads it back with no pen of their own.
  *
  * Tokens, the generated passwords and the facts the walk checks for are written
  * to <QA_OUT_DIR>/state/tokens.json, outside the repository. Seeding is
@@ -120,6 +124,17 @@ const READINGS = [
 ];
 const EMPTY_BLOCKS = ["stakeholders", "coordination", "learning", "legal", "impact"];
 
+/**
+ * The canvas suggestion (Wave 3b, the five frames): words for the Power block's
+ * "Who decides what" section, from a member the walk does not sign in as, so the
+ * walk's member reads somebody else's suggestion and the founder holds the pen.
+ * Power changes how the village works, so the suggestion carries a purpose line
+ * of at least twelve words once the statement above is written.
+ */
+const SUGGESTER = "member3";
+const SUGGESTION = "We decide by consent at the Saturday circle, and write each decision in the village record the same day.";
+const SUGGESTION_PURPOSE = "Deciding together where everyone can see is part of what this village says it exists to do.";
+
 /** The season template the platform ships (docs/FORK_RUNBOOK.md), loaded as a founder would load it. */
 const SEASON_TEMPLATE = "docs/seasons/season-two-2026.json";
 const LEVEL_WORD = { 1: "Absent", 2: "Forming", 3: "Emerging", 4: "Growing", 5: "Thriving" };
@@ -203,6 +218,8 @@ let canvasRecorded = false;
 let seasonLoaded = null;
 /** Set when the exit policy keeps the conflict door's reply time and outside contact. */
 let conflictDoor = false;
+/** Set when the canvas suggestion is open and reads back: { body, by }. */
+let canvasSuggested = null;
 
 try {
   console.log(`\nseeding ${VILLAGE} on ${BASE} (build ${h.build})`);
@@ -357,6 +374,30 @@ try {
     log(`season "${s.name}" loaded from ${SEASON_TEMPLATE} (${s.weeks.length} weeks); read back by a member, who may not edit it`);
   }
 
+  // 12b. A canvas suggestion, if this build has the five frames' routes (Wave 3b, 2026-09-28):
+  // POST /api/canvas/proposals as a member, the door every member has, then the Power block
+  // read back as the walk's member, who must see it open, first-named, and hold no pen for it.
+  const framesRead = await api(BASE, "GET", "/api/canvas/blocks/power", undefined, byKey.member.token);
+  if (framesRead.status === 404) {
+    skipped.push("canvas suggestion: GET /api/canvas/blocks/power is 404 on this build");
+    log("SKIPPED canvas suggestion: the five frames' routes do not exist on this build");
+  } else {
+    const by = byKey[SUGGESTER];
+    const sent = await must("canvas suggestion", "POST", "/api/canvas/proposals", {
+      blockId: "power", target: "words", sectionId: "decisions", body: SUGGESTION, servesPurpose: SUGGESTION_PURPOSE,
+    }, by.token);
+    const id = sent.json?.proposal?.id;
+    const back = await must("re-read the Power block", "GET", "/api/canvas/blocks/power", undefined, byKey.member.token);
+    const listed = (back.json?.proposals ?? []).find((p) => p.id === id);
+    const first = by.name.split(" ")[0];
+    if (!listed || listed.status !== "open" || listed.body !== SUGGESTION || listed.proposedBy?.name !== first) {
+      throw new Error(`the canvas suggestion reads back differently: ${JSON.stringify(listed ?? back.json?.proposals ?? null).slice(0, 300)}`);
+    }
+    if (listed.pen?.youMayAdopt !== false || listed.youProposedIt !== false) throw new Error("the walk's member reads the suggestion as one they may adopt or made");
+    canvasSuggested = { body: SUGGESTION, by: first };
+    log(`${by.name} suggested words for the Power block (open); read back by ${byKey.member.name}, who holds no pen for it`);
+  }
+
   // 13. Every session works, and says who it is.
   for (const p of people) {
     const r = await must(`profile of ${p.name}`, "GET", "/api/profile", undefined, p.token);
@@ -390,6 +431,8 @@ try {
       ...(conflictDoor
         ? { conflictReplyTime: `${REPLY_HOURS} hours`, outsideContactName: OUTSIDE_CONTACT.name, outsideContactOrganisation: OUTSIDE_CONTACT.organisation }
         : {}),
+      // The open suggestion on the Power block, and its author's first name as the Adopt frame prints it.
+      ...(canvasSuggested ? { canvasSuggestion: canvasSuggested.body, canvasSuggester: canvasSuggested.by } : {}),
     },
     // Which person the walk signs in as, per walk role.
     walkAs: { member: "member", founder: "founder" },
@@ -420,6 +463,7 @@ function printSummary(s) {
   console.log(`  care holder: ${s.facts.careHolderName} in ${s.facts.careRoleName}`);
   if (s.facts.conflictReplyTime) console.log(`  conflict door: a reply within ${s.facts.conflictReplyTime}; outside contact ${s.facts.outsideContactName}`);
   if (s.facts.seasonName) console.log(`  season: ${s.facts.seasonName} (last week: ${s.facts.seasonWeekTitle})`);
+  if (s.facts.canvasSuggestion) console.log(`  canvas suggestion on Power, open, by ${s.facts.canvasSuggester}`);
   console.log(`  skipped: ${s.skipped.length ? s.skipped.join("; ") : "nothing"}`);
   console.log(`  tokens and passwords (test values, outside the repository): ${tokensFile()}`);
 }
