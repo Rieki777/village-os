@@ -54,6 +54,12 @@
  * words of their own under the `import` label, which the generic door keeps
  * for administrators.
  *
+ * Drafting is for a document's owner, and for every member once the village
+ * adopted it (`mayDraftFrom`). The pen reads a document whose share waits so
+ * it can decide, and gets 403 `DRAFT_AFTER_ADOPTION` if it asks to draft: a
+ * filed draft is a suggestion every member reads, which would publish the text
+ * before the village said yes.
+ *
  * A model sees a document only when (1) a key exists, (2) the document is the
  * asker's own, and (3) its owner said yes to the one-line disclosure naming the
  * provider and whose key pays, as it reads TODAY (`modelRoute`). Consent given
@@ -77,6 +83,7 @@ import { servesPurposeProblem, servesPurposeScoped } from "../../shared/canvasFr
 import { draftFromText, type DocumentDraft } from "../../shared/documentDraft";
 import {
   DOCUMENT_FILE_MAX_BYTES,
+  DOCUMENT_STORED_BYTES_PER_MEMBER,
   DOCUMENT_WORDS,
   DOCUMENTS_PER_MEMBER,
   cleanTitle,
@@ -92,15 +99,15 @@ import { brainEtag } from "../lib/villageBrain";
 import { resolveMemberKey } from "../lib/memberSecrets";
 import type { MemberKey } from "../lib/assistant";
 import { draftWithModel, type ModelDraftInput, type ModelDraftOutcome } from "../lib/documentDraftModel";
-import { mayReadDocument, modelRoute, searchDocuments, storedFileProblem, STORED_MIME, summaryOf, type DocumentViewer } from "../lib/villageDocuments";
+import { mayDraftFrom, mayReadDocument, modelRoute, searchDocuments, storedFileProblem, STORED_MIME, summaryOf, type DocumentViewer } from "../lib/villageDocuments";
 import { gatherPackInput, packHash, renderPack } from "../lib/notebookExport";
 import {
   addResourcePick,
-  countDocumentsOwnedBy,
   deleteOwnDocument,
   documentById,
   documentFile,
   documentsByIds,
+  documentsHeldBy,
   documentsOwnedBy,
   EXPORT_ENTITY,
   insertStoredDocument,
@@ -143,7 +150,11 @@ export const VILLAGE_PICK_REFUSAL =
   "The village's own picks are kept by whoever holds the village's story. You can keep a list of your own.";
 
 /** Said when a model draft is asked of somebody else's document. */
-export const MODEL_OWNER_ONLY = "Only the member who added a document can send it to a model. The words-only draft works on any document you can read.";
+export const MODEL_OWNER_ONLY = "Only the member who added a document can send it to a model. The words-only draft works on any document the village shares.";
+
+/** Said to the pen when it asks to draft from a document whose share it has not decided yet. */
+export const DRAFT_AFTER_ADOPTION =
+  "This document is waiting on the village's decision. Once the village adopts it, anyone can draft canvas words from it.";
 
 /** Said when no key is there to use. */
 export const NO_MODEL = "No model is connected here, so the words-only draft is the one there is. It sends nothing anywhere.";
@@ -229,14 +240,19 @@ export function register(app: Express, deps: DocumentRouteDeps): void {
       shared: shared.map((d) => summary(d, me, shares)),
       toDecide: waiting.map((d) => ({ ...summary(d, me, shares), proposalId: shares.get(d.id) ?? null })),
       privateNote: DOCUMENT_WORDS.private,
-      limits: { perMember: DOCUMENTS_PER_MEMBER, fileBytes: DOCUMENT_FILE_MAX_BYTES },
+      limits: { perMember: DOCUMENTS_PER_MEMBER, fileBytes: DOCUMENT_FILE_MAX_BYTES, storedBytes: DOCUMENT_STORED_BYTES_PER_MEMBER },
     });
   });
 
-  /** Whether this member may add one more document, or the refusal. */
-  const roomFor = async (res: Response, userId: string): Promise<boolean> => {
-    if ((await countDocumentsOwnedBy(getPool(), userId)) >= DOCUMENTS_PER_MEMBER) {
+  /** Whether this member may add one more document (a stored file of `fileBytes`), or the refusal. */
+  const roomFor = async (res: Response, userId: string, fileBytes = 0): Promise<boolean> => {
+    const held = await documentsHeldBy(getPool(), userId);
+    if (held.count >= DOCUMENTS_PER_MEMBER) {
       res.status(409).json({ error: DOCUMENT_WORDS.tooMany });
+      return false;
+    }
+    if (fileBytes > 0 && held.storedBytes + fileBytes > DOCUMENT_STORED_BYTES_PER_MEMBER) {
+      res.status(409).json({ error: DOCUMENT_WORDS.storedFull });
       return false;
     }
     return true;
@@ -265,7 +281,14 @@ export function register(app: Express, deps: DocumentRouteDeps): void {
   });
 
   // ── POST /api/documents/file ────────────────────────────────────────────
-  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: DOCUMENT_FILE_MAX_BYTES, files: 1, fields: 4 } });
+  // A browser sends a file's name as raw UTF-8. Read as latin1 (multer's
+  // default), "coöperatie" becomes "coÃ¶peratie", and a title taken from the
+  // name keeps the garble, with no door to rename it.
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    defParamCharset: "utf8",
+    limits: { fileSize: DOCUMENT_FILE_MAX_BYTES, files: 1, fields: 4 },
+  });
   app.post("/api/documents/file", async (req, res) => {
     // Who is asking is settled BEFORE a byte of the file is read.
     const user = await member(req, res);
@@ -293,7 +316,7 @@ export function register(app: Express, deps: DocumentRouteDeps): void {
       if (!kind) return res.status(400).json({ error: DOCUMENT_WORDS.kindUnknown });
       const fromName = cleanTitle(file.originalname.replace(/\.[^.]+$/, ""));
       const title = cleanTitle((req.body as Record<string, unknown> | undefined)?.title) || fromName;
-      if (!(await roomFor(res, me))) return;
+      if (!(await roomFor(res, me, isTextKind(kind) ? 0 : file.buffer.length))) return;
       if (isTextKind(kind)) {
         // A .md or .txt is text: it is read as UTF-8 and held to the same rules as pasted text.
         const parsed = parseTextDocument({ kind, title, body: file.buffer.toString("utf8") });
@@ -437,7 +460,8 @@ export function register(app: Express, deps: DocumentRouteDeps): void {
     if (!user) return;
     const found = await readable(req, res, user);
     if (!found) return;
-    const { doc } = found;
+    const { doc, viewer } = found;
+    if (!mayDraftFrom(doc, viewer)) return res.status(403).json({ error: DRAFT_AFTER_ADOPTION });
     if (!isTextKind(doc.kind) || doc.body === null) return res.status(400).json({ error: DOCUMENT_WORDS.storedNoText });
     const pool = getPool();
     const purposeWritten = hasGoverningPurpose(await governingPurpose(pool));
@@ -472,7 +496,9 @@ export function register(app: Express, deps: DocumentRouteDeps): void {
     if (!user) return;
     const found = await readable(req, res, user);
     if (!found) return;
-    const { doc } = found;
+    const { doc, viewer } = found;
+    // The pen reads a waiting document to decide on it, and never files its text.
+    if (!mayDraftFrom(doc, viewer)) return res.status(403).json({ error: DRAFT_AFTER_ADOPTION });
     if (!isTextKind(doc.kind) || doc.body === null) return res.status(400).json({ error: DOCUMENT_WORDS.storedNoText });
     const me = String(user.id);
     const blocks: unknown[] = Array.isArray(req.body?.blocks) ? req.body.blocks : [];

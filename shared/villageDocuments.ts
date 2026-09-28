@@ -53,6 +53,13 @@ export const DOCUMENT_FILE_MAX_BYTES = 8 * 1024 * 1024;
 /** How many documents one member may keep. A notebook, never a file server. */
 export const DOCUMENTS_PER_MEMBER = 100;
 
+/**
+ * What one member's PDF and Word files may weigh together: five at the
+ * largest size. The bytes live in the village's own database, and a count of
+ * documents alone let one member put 800 MB there (audit of 2026-09-28).
+ */
+export const DOCUMENT_STORED_BYTES_PER_MEMBER = 5 * DOCUMENT_FILE_MAX_BYTES;
+
 /** The file names a picker offers, per kind. */
 export const ACCEPTED_EXTENSIONS: Record<DocumentKind, string | null> = {
   md: ".md",
@@ -85,6 +92,7 @@ export const DOCUMENT_WORDS = {
   fileNotPdf: "That file's name says PDF, and what is inside it is some other kind of file.",
   fileNotDocx: "That file's name says Word document (.docx), and what is inside it is some other kind of file.",
   tooMany: `You keep ${DOCUMENTS_PER_MEMBER} documents already. Delete one to add another.`,
+  storedFull: `Your PDF and Word files can come to ${DOCUMENT_STORED_BYTES_PER_MEMBER / (1024 * 1024)} MB together, and this one would go past that. Delete one to make room.`,
   notFound: "There is no document by that number that you can read.",
   notYours: "Only the member who added a document can do that.",
   alreadyShared: "This document is already shared with the village.",

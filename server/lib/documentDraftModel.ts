@@ -75,9 +75,18 @@ export async function draftWithModel(input: ModelDraftInput): Promise<ModelDraft
   return { ok: true, result: parseModelDraft(call.text) };
 }
 
-/** A guard's refusal, from the member's side of the screen. */
+/**
+ * A guard's refusal, from the member's side of the screen.
+ *
+ * `callAssistant` answers 503 `assistant-unavailable` for a spent day budget,
+ * the platform cap and a member key's own daily cap alike. The route has
+ * already answered `NO_MODEL` when no key exists, so on this path the 503 is
+ * a spent allowance (audit of 2026-09-28: it used to say no model was
+ * connected, to a member whose own key still was).
+ */
 function refusalWords(error: string): string {
-  if (error === "assistant-unavailable") return "No model is connected here any more. The words-only draft still works.";
-  if (/budget|allowance|cap/i.test(error)) return "The model has done all it can for today. The words-only draft still works.";
+  if (error === "assistant-unavailable" || /budget|allowance|cap/i.test(error)) {
+    return "The model has done all it can for today. The words-only draft still works.";
+  }
   return error || "The model could not be asked just now. The words-only draft still works.";
 }

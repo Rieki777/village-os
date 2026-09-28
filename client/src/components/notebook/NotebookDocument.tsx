@@ -1,6 +1,11 @@
 /**
  * ONE OPEN DOCUMENT: read it, and for its owner, share it or delete it; for
- * anybody who may read a text document, draft canvas words from it (plan 5.5).
+ * its owner, or any member once the village shared it, draft canvas words
+ * from it (plan 5.5). The pen reading a document whose share waits sees no
+ * draft: filing one would publish the text before the village said yes.
+ *
+ * Opening one moves the page to it and focus to its title, because it opens
+ * above the lists and on a phone the row tapped can be screens below it.
  *
  * The text renders as text in a pre-wrapped block, never as HTML, so a
  * document cannot put markup on the page.
@@ -10,7 +15,7 @@
  * member leaves ticked. The server files its own copy of the words, so what
  * is filed is exactly what was drafted.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CANVAS_BLOCKS, CANVAS_ORDER, isCanvasBlockId, type CanvasBlockId } from "@shared/governanceCanvas";
 import { servesPurposeScoped } from "@shared/canvasFrames";
 import { KIND_LABELS, STANDING_WORDS } from "@shared/villageDocuments";
@@ -218,6 +223,7 @@ export function NotebookDocument({
   const [open, setOpen] = useState<OpenDocument | null>(null);
   const [said, setSaid] = useState<Said>(null);
   const [confirming, setConfirming] = useState(false);
+  const titleRef = useRef<HTMLHeadingElement>(null);
 
   const load = useCallback(async () => {
     const got = await call<OpenDocument>("GET", `/api/documents/${id}`);
@@ -230,6 +236,11 @@ export function NotebookDocument({
     setConfirming(false);
     void load();
   }, [load]);
+  useEffect(() => {
+    const title = titleRef.current;
+    title?.scrollIntoView?.({ block: "start" });
+    title?.focus({ preventScroll: true });
+  }, [id]);
 
   const remove = async () => {
     const got = await call("DELETE", `/api/documents/${id}`);
@@ -242,7 +253,9 @@ export function NotebookDocument({
     <article className="rounded-lg border border-teal-deep/40 p-4 space-y-3" data-testid="notebook-document" aria-live="polite">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="text-base font-semibold text-stone-900 wrap-anywhere">{doc?.title ?? "Opening the document"}</h3>
+          <h3 ref={titleRef} tabIndex={-1} className="text-base font-semibold text-stone-900 wrap-anywhere">
+            {doc?.title ?? "Opening the document"}
+          </h3>
           {doc && (
             <p className="text-xs text-stone-600">
               {KIND_LABELS[doc.kind]}, added {dayWords(doc.createdAt)}. {doc.yours ? STANDING_WORDS[doc.standing] : doc.standing === "shared" ? STANDING_WORDS.shared : "Its owner asked to share it."}
@@ -279,7 +292,7 @@ export function NotebookDocument({
           }}
         />
       )}
-      {open && open.body !== null && <DraftView id={id} open={open} />}
+      {open && open.body !== null && doc && (doc.yours || doc.standing === "shared") && <DraftView id={id} open={open} />}
       {open && doc?.yours && (
         <div className="flex flex-wrap items-center gap-3">
           {!confirming ? (

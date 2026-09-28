@@ -122,6 +122,45 @@ describe("the notebook", () => {
     await within(doc).findByTestId("notebook-draft");
     expect(sent.find((s) => s.url === "/api/documents/1/draft")?.body).toEqual({ mode: "model", consent: true });
   });
+
+  it("lets the pen read a document waiting on its decision and offers no draft from it", async () => {
+    const waiting = summary({ id: 4, title: "Their plan", standing: "share-asked", yours: false, ownerName: "Bram" });
+    const list = routes["GET /api/documents"];
+    routes["GET /api/documents"] = (b) => {
+      const got = list(b);
+      return { ...got, body: { ...(got.body as object), toDecide: [{ ...waiting, proposalId: 9 }] } };
+    };
+    routes["GET /api/documents/4"] = () => ({
+      status: 200,
+      body: { document: waiting, body: "## Money\nOur plan.", fileName: null, shareProposalId: 9, model: null, purposeWritten: false },
+    });
+    const user = userEvent.setup();
+    render(<NotebookPanel />);
+    await user.click(await screen.findByRole("button", { name: "Open Their plan" }));
+    const doc = await screen.findByTestId("notebook-document");
+    expect(await within(doc).findByTestId("notebook-document-body")).toHaveTextContent("Our plan.");
+    expect(within(doc).queryByText("Draft canvas words from this document")).toBeNull();
+  });
+
+  it("brings the opened document into view and moves focus to its title", async () => {
+    // jsdom has no scrollIntoView, so the page's call is caught here and put back after.
+    const original = Element.prototype.scrollIntoView;
+    const scrolled: Element[] = [];
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+      scrolled.push(this);
+    });
+    try {
+      const user = userEvent.setup();
+      render(<NotebookPanel />);
+      await user.click(await screen.findByRole("button", { name: "Open Well rota" }));
+      const doc = await screen.findByTestId("notebook-document");
+      const title = within(doc).getByRole("heading", { level: 3 });
+      expect(scrolled).toContain(title);
+      expect(document.activeElement).toBe(title);
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
 });
 
 describe("take the canvas with you", () => {

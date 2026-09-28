@@ -24,7 +24,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { capabilityDecision, type Capability, type CapabilityCtx } from "../../shared/capabilities";
-import { DOCUMENT_WORDS } from "../../shared/villageDocuments";
+import { DOCUMENT_STORED_BYTES_PER_MEMBER, DOCUMENT_WORDS } from "../../shared/villageDocuments";
 import { modelFallback, type DocumentDraft } from "../../shared/documentDraft";
 import type { MemberKey } from "../lib/assistant";
 import type { ModelDraftInput } from "../lib/documentDraftModel";
@@ -32,9 +32,10 @@ import { brainEtag, briefWrite } from "../lib/villageBrain";
 import { CANVAS_DATABASE_CSV } from "../lib/notebookExport";
 import { recordCanvasReading } from "../repos/canvasReadings";
 import { canvasProposalById } from "../repos/canvasProposals";
-import { markDocumentShared, notebookForExport } from "../repos/villageDocuments";
+import { markDocumentShared, notebookForExport, resourceFactsFor } from "../repos/villageDocuments";
 import { CANVAS_MEMBERS_ONLY } from "./canvas";
-import { MODEL_OWNER_ONLY, NO_MODEL, VILLAGE_PICK_REFUSAL, register } from "./villageDocuments";
+import { DRAFT_AFTER_ADOPTION, MODEL_OWNER_ONLY, NO_MODEL, VILLAGE_PICK_REFUSAL, register } from "./villageDocuments";
+import { CANVAS_ORDER } from "../../shared/governanceCanvas";
 
 const configured = testDbConfigured();
 if (!configured) console.warn("[villageDocuments.routes] TEST_DATABASE_URL not set - DB-backed tests SKIPPED.");
@@ -248,6 +249,29 @@ describe.skipIf(!configured)("a member's notebook, the picks and the export", ()
       const big = await upload("owner", "big.pdf", Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(8 * 1024 * 1024)]));
       expect(big).toEqual({ status: 413, body: { error: DOCUMENT_WORDS.fileTooBig } });
     });
+
+    it("keeps a title taken from a file's name as the member wrote it, accents and all", async () => {
+      const up = await upload("owner", "Statuten coöperatie Überblick.pdf", PDF);
+      expect(up.status, JSON.stringify(up.body)).toBe(201);
+      expect(up.body.document.title).toBe("Statuten coöperatie Überblick");
+      expect((await q("SELECT title FROM village_documents WHERE id = ?", [up.body.document.id]))[0].title).toBe("Statuten coöperatie Überblick");
+    });
+
+    it("refuses a stored file that would take a member's files past their budget, stores nothing, and still takes text", async () => {
+      // A row standing for files already kept, just under the budget. No bytes sit behind it: the budget reads the sizes.
+      await q(
+        "INSERT INTO village_documents (owner_user_id, title, kind, file_name, file_size, shared_with_village) VALUES (?,?,?,?,?,0)",
+        [PEOPLE.other.id, "Files kept before", "pdf", "kept.pdf", DOCUMENT_STORED_BYTES_PER_MEMBER - 10],
+      );
+      const count = async () => Number((await q("SELECT COUNT(*) AS n FROM village_documents WHERE owner_user_id = ?", [PEOPLE.other.id]))[0].n);
+      const before = await count();
+      expect(await upload("other", "One more.pdf", PDF)).toEqual({ status: 409, body: { error: DOCUMENT_WORDS.storedFull } });
+      expect(await count()).toBe(before);
+      // Text is not a stored file, and is not weighed against it.
+      const md = await upload("other", "fits.md", Buffer.from("# Still fits\n\nText is kept as text."), "Still fits");
+      expect(md.status, JSON.stringify(md.body)).toBe(201);
+      await q("DELETE FROM village_documents WHERE owner_user_id = ? AND title IN ('Files kept before', 'Still fits')", [PEOPLE.other.id]);
+    });
   });
 
   describe("share with the village", () => {
@@ -277,6 +301,21 @@ describe.skipIf(!configured)("a member's notebook, the picks and the export", ()
       }
       expect((await call("GET", `/api/documents/${docId}`, "other")).status).toBe(404);
       expect((await call("GET", "/api/documents", "other")).body.toDecide).toEqual([]);
+    });
+
+    it("lets the pen read a waiting document to decide on it, and never draft from it or file its words", async () => {
+      // Filing a draft writes suggestions every member reads on the block, so a
+      // pen that could draft here would publish the text before the village said yes.
+      const everyBlock = CANVAS_ORDER.map((b) => b.id);
+      for (const as of ["teller", "admin"] as const) {
+        expect(await call("POST", `/api/documents/${docId}/draft`, as, { mode: "words" }), as).toEqual({ status: 403, body: { error: DRAFT_AFTER_ADOPTION } });
+        expect(await call("POST", `/api/documents/${docId}/draft/file`, as, { blocks: everyBlock }), as).toEqual({ status: 403, body: { error: DRAFT_AFTER_ADOPTION } });
+      }
+      expect(await q("SELECT id FROM canvas_proposals WHERE body LIKE ?", ["%SHARE-ASKED-TEXT%"])).toHaveLength(0);
+      expect(await q("SELECT id FROM canvas_proposals WHERE source = 'import' AND proposed_by IN (?, ?)", [PEOPLE.teller.id, PEOPLE.admin.id])).toHaveLength(0);
+      // Still waiting, and still the owner's to draft from.
+      expect((await q("SELECT shared_with_village FROM village_documents WHERE id = ?", [docId]))[0].shared_with_village).toBe(0);
+      expect((await call("POST", `/api/documents/${docId}/draft`, "owner", { mode: "words" })).status).toBe(200);
     });
 
     it("once adopted, every member reads it, and the owner's name travels only as a first name", async () => {
@@ -465,21 +504,37 @@ describe.skipIf(!configured)("a member's notebook, the picks and the export", ()
       expect((await call("GET", "/api/canvas/exports/latest", "admin")).body).toEqual({ lastExportAt: null, changedSince: null });
     });
 
-    it("lists picks by key while the resources table is absent, and by name once it is there", async () => {
+    it("reads a village a release behind, with no resources table, as 'could not be read', and never as no picks", async () => {
+      // Asked of the repo directly, so it holds whichever tree this suite runs
+      // on: this lane's alone, or composed with the canvas-resources lane's 0224.
+      const behind = (code: string) =>
+        ({ query: async () => { throw Object.assign(new Error(code), { code }); } }) as unknown as Pool;
+      expect(await resourceFactsFor(behind("ER_NO_SUCH_TABLE"), ["governance-canvas"])).toBeNull();
+      expect(await resourceFactsFor(behind("ER_BAD_FIELD_ERROR"), ["governance-canvas"])).toBeNull();
+      await expect(resourceFactsFor(behind("ER_ACCESS_DENIED_ERROR"), ["governance-canvas"])).rejects.toThrow("ER_ACCESS_DENIED_ERROR");
+    });
+
+    it("lists picks by key until the resources table names them, and by name once it does", async () => {
+      // 0224 (the canvas-resources lane) creates the table. On this lane's own
+      // tree it is absent, and a stand-in with 0224's required columns is made.
+      const present = Number((await q("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'canvas_resources'"))[0].n) > 0;
       const before = file((await packFor("owner")).body.files, "resources.md");
-      expect(before).toContain("could not be read");
       expect(before).toContain("`governance-canvas`");
       expect(before).toContain("`sociocracy-basics`");
-      // The columns the canvas-resources lane's brief names (0224), in a scratch table.
-      await pool.query( // module-review-ok: a stand-in for 0224's table, in the scratch schema this suite provisioned
-        "CREATE TABLE IF NOT EXISTS canvas_resources (resource_key varchar(191) PRIMARY KEY, name varchar(300), type varchar(80), url varchar(1000) NULL, withdrawn_at datetime NULL)",
-      );
-      await pool.query( // module-review-ok: seeding the stand-in table
-        "INSERT INTO canvas_resources (resource_key, name, type, url, withdrawn_at) VALUES (?,?,?,?,NULL), (?,?,?,NULL,NOW())",
-        ["governance-canvas", "Governance Canvas", "Canvas", "https://example.test/canvas", "sociocracy-basics", "Sociocracy basics", "Guide"],
+      expect(before).toContain(present ? "this village's copy of the database no longer lists it" : "could not be read");
+      if (!present) {
+        await pool.query( // module-review-ok: a stand-in for 0224's table, in the scratch schema this suite provisioned
+          "CREATE TABLE canvas_resources (resource_key char(40) NOT NULL PRIMARY KEY, name_slug varchar(200) NOT NULL, name varchar(500) NOT NULL, " +
+            "type varchar(64) NOT NULL DEFAULT '', url varchar(2048) NULL, withdrawn_at datetime NULL)",
+        );
+      }
+      await pool.query( // module-review-ok: seeding the table (0224's own, or the stand-in) in the scratch schema this suite provisioned
+        "INSERT INTO canvas_resources (resource_key, name_slug, name, type, url, withdrawn_at) VALUES (?,?,?,?,?,NULL), (?,?,?,?,NULL,NOW())",
+        ["governance-canvas", "governance-canvas", "Governance Canvas", "Canvas", "https://example.test/canvas", "sociocracy-basics", "sociocracy-basics", "Sociocracy basics", "Guide"],
       );
       const after = file((await packFor("owner")).body.files, "resources.md");
       expect(after).not.toContain("could not be read");
+      expect(after).not.toContain("no longer lists it");
       expect(after).toContain("**Governance Canvas** (Canvas): https://example.test/canvas");
       expect(after).toContain("**Sociocracy basics** (Guide): withdrawn from the database");
     });

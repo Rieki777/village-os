@@ -49,6 +49,19 @@ export function mayReadDocument(doc: Pick<DocumentRow, "id" | "ownerId" | "share
   return viewer.holdsStoryPen && openShares.has(doc.id);
 }
 
+/**
+ * WHO MAY DRAFT CANVAS WORDS FROM IT: its owner, and every member once the
+ * village adopted it. Narrower than the read rule on purpose. The pen reads a
+ * document while its owner's share waits so that it can decide, and filing a
+ * draft puts the text in suggestions every member reads on the block. Drafting
+ * from a document still waiting would publish it before the village said yes,
+ * and those suggestions would outlive a declined share and a deleted document
+ * (audit of 2026-09-28).
+ */
+export function mayDraftFrom(doc: Pick<DocumentRow, "ownerId" | "shared">, viewer: Pick<DocumentViewer, "id">): boolean {
+  return doc.ownerId === viewer.id || doc.shared;
+}
+
 /** One document as a list shows it. The owner is named, by first name, only on a shared document. */
 export function summaryOf(
   doc: DocumentRow,

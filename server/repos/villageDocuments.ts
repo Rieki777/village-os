@@ -116,10 +116,13 @@ export async function insertStoredDocument(
   }
 }
 
-/** How many documents a member keeps. */
-export async function countDocumentsOwnedBy(pool: Pool, ownerId: string): Promise<number> {
-  const [r] = await pool.query<RowDataPacket[]>("SELECT COUNT(*) AS n FROM village_documents WHERE owner_user_id = ?", [ownerId]);
-  return Number(r[0]?.n ?? 0);
+/** How many documents a member keeps, and what their stored files weigh together (text rows carry no file size). */
+export async function documentsHeldBy(pool: Pool, ownerId: string): Promise<{ count: number; storedBytes: number }> {
+  const [r] = await pool.query<RowDataPacket[]>(
+    "SELECT COUNT(*) AS n, COALESCE(SUM(file_size), 0) AS bytes FROM village_documents WHERE owner_user_id = ?",
+    [ownerId],
+  );
+  return { count: Number(r[0]?.n ?? 0), storedBytes: Number(r[0]?.bytes ?? 0) };
 }
 
 /** One document with its text, whoever owns it. The route decides who may read it. */
