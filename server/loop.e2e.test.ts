@@ -2002,6 +2002,21 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       const made = await api("POST", "/api/admin/circles", own, founderToken);
       expect(made.status, JSON.stringify(made.json)).toBe(200);
     }
+    /*
+     * And the quest the alias check below reads is one the village posts
+     * itself, under a name its new circle answers to. It used to be a
+     * starter quest, but the starter quests carry no circle since 2026-09-27:
+     * a circle name on a quest put a filter chip on the board for a circle the
+     * village had never formed. Nothing about permaculture or gardens is in
+     * it, so the concierge further down cannot pick it.
+     */
+    const aliased = await api(
+      "POST",
+      "/api/admin/quests",
+      { title: "Mend the rain barrels", gratitude: "10", circle: "Land Stewardship" },
+      founderToken,
+    );
+    expect(aliased.status, JSON.stringify(aliased.json)).toBe(200);
     await api("PUT", "/api/admin/modules/map/lifecycle", { lifecycle: "public" }, founderToken);
 
     // Aliases resolve quests.
@@ -2078,8 +2093,9 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const documented = memberRole.holders.find((h: any) => h.kind === "documented");
     expect(documented.name).toBe("Mira");
     expect(documented.userId).toBeNull();
-    // Quests resolve to circles through aliases.
-    expect(anonMap.json.quests.some((q: any) => q.circleId === "permaculture-council")).toBe(true);
+    // Quests resolve to circles through aliases: "Land Stewardship" is one of
+    // the Permaculture Council's.
+    expect(anonMap.json.quests.find((q: any) => q.id === aliased.json.id)?.circleId).toBe("permaculture-council");
 
     /*
      * ── R57: the people are PUBLIC by default, with one lock ─────────────

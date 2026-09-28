@@ -428,6 +428,17 @@ const FOREIGN_STRUCTURE = [
   // The journey ladders' rites.
   "Right of Passage",
   "Prosperity Circle",
+  // The quest board's places, teams, circles and score (2026-09-27): the
+  // starter quests describe a practice and never claim it for the village.
+  "our food forests",
+  "ARI score",
+  "a current watch member",
+  "the village safety rotation",
+  "the governance circle",
+  "the land stewardship circle",
+  "the agriculture circle",
+  "the tech circle",
+  "A core ritual of village life",
 ];
 
 /** Each route with its body and its status, as a stranger receives them. */
@@ -501,6 +512,13 @@ describe.skipIf(!DB_CONFIGURED)("the fresh fork is handed no other village's sto
     for (const journey of ["investor", "steward", "resident", "prosperity"]) {
       expect(listing.sections, `no ${journey} journey is written for the village`).not.toContain(journey);
     }
+    // The quest board builds a filter chip from each quest's circle, so a
+    // starter quest carrying a circle name stands up a circle on the board.
+    const quests = (await call("GET", "/api/quests", undefined, "")).json;
+    expect(
+      quests.filter((q: any) => !q.isExample && String(q.circle ?? "").trim()).map((q: any) => `${q.id}: ${q.circle}`),
+      "no starter quest names a circle the village never formed",
+    ).toEqual([]);
   });
 
   it("states no investment term the village never set", async () => {

@@ -142,10 +142,19 @@ above the size of a gathering, not to the size of one person's usage.
   shows no FAQ (the section hides) and unstated terms. Build yours in Admin,
   Make it yours: FAQs, Build Progress (the roadmap), Visit Program and
   Investor Summary; circles in Org Chart. What still arrives: the four capability
-  roles (`roles-seed.json`, see "The other appointments" below), 13 starter
-  quests and four starter trainings, whose descriptions say what the practice
-  is and never that this village already practises it.
-  `server/forkPublish.e2e.test.ts` holds this.
+  roles (`roles-seed.json`, see "The other appointments" below), and four
+  starter trainings and 13 starter quests whose descriptions say what the
+  practice is and never that this village already practises it. The quests
+  carry no circle, so the quest board shows no filter chip for a circle you
+  never formed (2026-09-27; until then they described one village's food
+  forests, night watch and named circles as if yours had them). They are
+  still real, claimable, payable rows, each with its own reward range: read
+  every one in Admin and edit or delete it before the village opens. A
+  village already running keeps its own quests word for word, because the
+  seed only reaches an empty table. `server/forkPublish.e2e.test.ts` holds the
+  empty seeds, that the starter quests arrive with no circle, and that none of
+  the old board's phrases comes back; `server/lib/questSeed.test.ts` holds the
+  quests' words, and that a board which already exists is left alone.
 - `server/seeds/examples-seed.json` — STANDING EXAMPLES: platform-authored
   worked content revealed when a module is first enabled, so a founder meets a
   working module instead of "No items yet." Inert (every mutation refused) and

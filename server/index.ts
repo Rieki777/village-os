@@ -369,6 +369,7 @@ import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requ
 import { normalizeSeasonConfig, seasonRunningProblem } from "./lib/seasonCalendar";
 import { completionsFor, completionsForMany, gatingModuleIds, trainingIsComplete, trainingProgress } from "./lib/trainingRecord";
 import { starterTrainingModules } from "./lib/trainingStarter";
+import { fillQuestStoriesFromSeed, seedEmptyQuestBoard } from "./lib/questSeed";
 import { respondToTerminalError, installCrashHandlers, installShutdownHandlers, reachedSomebody, reportError, reportErrorWithin, wireErrorReporting } from "./lib/errors";
 import {
   STAY_CREDIT,
@@ -865,7 +866,8 @@ const QUESTS_SEED_FILE = path.join(SEEDS_DIR, "quests-seed.json");
  * would never see the new copy without this one-shot. It walks the CURRENT
  * seed file and fills each matching row's story fields ONLY where the live
  * value is empty: an admin who already wrote their own subtitle or story
- * keeps every word. Same precedent as the voice-sweep passes above.
+ * keeps every word. Same precedent as the voice-sweep passes above. The fill
+ * itself, and its test on a board that already exists: server/lib/questSeed.ts.
  */
 async function backfillQuestStories(jobId: string) {
   // Fail loud on a missing or unreadable seed. Returning quietly let runOnce
@@ -879,34 +881,7 @@ async function backfillQuestStories(jobId: string) {
   const seed = JSON.parse(fs.readFileSync(QUESTS_SEED_FILE, "utf-8"));
   if (!Array.isArray(seed)) throw new Error("quest seed file is not an array");
 
-  const PROSE_FIELDS = ["subtitle", "story", "firstStep", "deliverable", "imageUrl"] as const;
-  const LIST_FIELDS = ["steps", "tips"] as const;
-  const seedHasProse = (v: unknown) => typeof v === "string" && v.trim() !== "";
-  const seedHasList = (v: unknown) => Array.isArray(v) && v.length > 0;
-  const liveProseEmpty = (v: unknown) => String(v ?? "").trim() === "";
-  const liveListEmpty = (v: unknown) => !(Array.isArray(v) && v.length > 0);
-
-  let filled = 0;
-  for (const s of seed) {
-    if (!s?.id) continue;
-    const live: any = await questsRepo.byId(String(s.id));
-    if (!live) continue;
-    // Nothing to fill is not a write. The first version opened a transaction
-    // and ran a full column UPDATE for every seeded quest either way.
-    const wanted =
-      PROSE_FIELDS.some((f) => seedHasProse(s[f]) && liveProseEmpty(live[f])) ||
-      LIST_FIELDS.some((f) => seedHasList(s[f]) && liveListEmpty(live[f]));
-    if (!wanted) continue;
-    await questsRepo.update(live.id, (q: any) => {
-      for (const f of PROSE_FIELDS) {
-        if (seedHasProse(s[f]) && liveProseEmpty(q[f])) q[f] = s[f];
-      }
-      for (const f of LIST_FIELDS) {
-        if (seedHasList(s[f]) && liveListEmpty(q[f])) q[f] = s[f].map((x: any) => String(x));
-      }
-    });
-    filled += 1;
-  }
+  const filled = await fillQuestStoriesFromSeed(questsRepo, seed);
   // Both outcomes get a line, so "filled nothing" and "never ran" stop looking
   // identical in the log.
   console.log(
@@ -6476,19 +6451,16 @@ async function startServer() {
   });
 
   // S10: the quest library seeds into MySQL on an EMPTY table only — the seed
-  // file stays the fork-onboarding source, and a village that deleted quests
-  // on purpose never has them resurrected (INSERT IGNORE + the empty check).
+  // file stays the fork-onboarding source, a village that deleted some quests
+  // never has them resurrected, and one that deletes EVERY quest gets the
+  // seed back on its next boot (the empty check, which server/lib/questSeed.ts
+  // makes again and its test holds).
   {
     const existing = await questsRepo.all();
     if (existing.length === 0 && fs.existsSync(QUESTS_SEED_FILE)) {
       try {
-        const seed = JSON.parse(fs.readFileSync(QUESTS_SEED_FILE, "utf-8"));
-        if (Array.isArray(seed)) {
-          for (const q of seed) {
-            if (q?.id && q?.title) await questsRepo.add({ tags: [], order: 0, status: "open", gratitude: "", ...q });
-          }
-          console.log(`[seed] quests table was empty, seeded ${seed.length} quest(s)`);
-        }
+        const seeded = await seedEmptyQuestBoard(questsRepo, JSON.parse(fs.readFileSync(QUESTS_SEED_FILE, "utf-8")));
+        if (seeded) console.log(`[seed] quests table was empty, seeded ${seeded} quest(s)`);
       } catch (e) {
         console.error("[seed] quests seed failed (continuing)", e);
       }
