@@ -103,6 +103,11 @@ describe("the matrix a member opens", () => {
     render(<DecisionMatrix />);
     open();
     await waitFor(() => expect(screen.getByTestId("matrix-group-votes")).toBeTruthy());
+    // Only the votes are open to begin with; each other heading opens its own rows.
+    for (const group of m.groups) {
+      const heading = within(screen.getByTestId(`matrix-group-${group.id}`)).getByRole("button", { name: group.title });
+      if (heading.getAttribute("aria-expanded") !== "true") fireEvent.click(heading);
+    }
 
     for (const group of m.groups) {
       const section = screen.getByTestId(`matrix-group-${group.id}`);
@@ -158,6 +163,32 @@ describe("the matrix a member opens", () => {
   });
 });
 
+describe("the three groups", () => {
+  it("open with the votes showing, and each heading opens and closes only its own rows", async () => {
+    answers.push({ status: 200, body: matrix() });
+    render(<DecisionMatrix />);
+    open();
+    await waitFor(() => expect(screen.getByTestId("matrix-group-votes")).toBeTruthy());
+    const heading = (id: string, name: string) => within(screen.getByTestId(`matrix-group-${id}`)).getByRole("button", { name });
+    const m = matrix();
+    const [votes, moving, powers] = m.groups;
+    expect(heading("votes", votes!.title).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByTestId("matrix-row-vote:mechanics:routine")).toBeTruthy();
+    expect(heading("moving-power", moving!.title).getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByTestId("matrix-row-move:power_transfer")).toBeNull();
+    expect(screen.queryByTestId("matrix-row-power:dial.set")).toBeNull();
+
+    fireEvent.click(heading("powers", powers!.title));
+    expect(heading("powers", powers!.title).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByTestId("matrix-row-power:dial.set")).toBeTruthy();
+    expect(screen.queryByTestId("matrix-row-move:power_transfer")).toBeNull();
+
+    fireEvent.click(heading("votes", votes!.title));
+    expect(screen.queryByTestId("matrix-row-vote:mechanics:routine")).toBeNull();
+    expect(screen.getByTestId("matrix-row-power:dial.set")).toBeTruthy();
+  });
+});
+
 describe("when the matrix cannot be read", () => {
   it("prints the server's refusal and offers nothing to press", async () => {
     answers.push({ status: 403, body: { error: "The canvas and its season are for the village's members." } });
@@ -196,5 +227,17 @@ describe("where it lives", () => {
     expect(screen.getAllByTestId("decision-matrix")).toHaveLength(1);
     // Rendering the Power block asked for the canvas and nothing else.
     expect(calls.map((c) => c.url)).toEqual(["/api/canvas"]);
+
+    // Open, the Power card takes both columns of the grid; closed, it gives one back.
+    expect(power.className).not.toContain("md:col-span-2");
+    answers.push({ status: 200, body: matrix() });
+    fireEvent.click(within(power).getByRole("button", { name: "Show who decides what" }));
+    await waitFor(() => expect(within(power).getByTestId("matrix-group-votes")).toBeTruthy());
+    expect(power.className).toContain("md:col-span-2");
+    for (const id of CANVAS_BLOCK_IDS) {
+      if (id !== "power") expect(screen.getByTestId(`canvas-block-${id}`).className, id).not.toContain("md:col-span-2");
+    }
+    fireEvent.click(within(power).getByRole("button", { name: "Hide who decides what" }));
+    expect(power.className).not.toContain("md:col-span-2");
   });
 });

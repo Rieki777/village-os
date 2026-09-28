@@ -30,6 +30,7 @@ export function CanvasBlockCard({
   focusLabel,
   season,
   children,
+  wide = false,
 }: {
   block: CanvasBlock;
   view: CanvasBlockView;
@@ -50,6 +51,12 @@ export function CanvasBlockCard({
    * others host nothing yet.
    */
   children?: ReactNode;
+  /**
+   * Take both columns of the grid on a wide screen. The Power block asks for
+   * it while its Decision Matrix is open: five columns need the room, and a
+   * card that tall beside a neighbour would stretch the neighbour with it.
+   */
+  wide?: boolean;
 }) {
   const [writing, setWriting] = useState(false);
   const latest = view.latest;
@@ -60,7 +67,7 @@ export function CanvasBlockCard({
     <article
       id={`canvas-block-${block.id}`}
       data-testid={`canvas-block-${block.id}`}
-      className={`bg-white border rounded-xl p-5 scroll-mt-24 ${focusLabel ? "border-teal-deep" : "border-stone-200"}`}
+      className={`bg-white border rounded-xl p-5 scroll-mt-24 ${focusLabel ? "border-teal-deep" : "border-stone-200"}${wide ? " md:col-span-2" : ""}`}
     >
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">

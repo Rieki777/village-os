@@ -28,11 +28,20 @@
  * numbers with a note saying what they count out of, and never a share of
  * powers handed over.
  *
+ * ── HOW IT STAYS READABLE ──────────────────────────────────────────────────
+ *
+ * Thirty-odd rows of five columns is long on any screen, so each of the three
+ * groups is a heading that opens its own rows, and only the votes are open to
+ * begin with. While the matrix is open, `onOpenChange` tells CanvasBaseline,
+ * which lets the Power card take both columns of its grid: on a laptop that
+ * is what gives the rows the 640px they line up in, and a card that tall
+ * beside a one-column neighbour would stretch the neighbour with it.
+ *
  * The data is fetched when somebody opens the matrix, so a member reading
  * the other eleven blocks costs the server nothing.
  */
 import { useCallback, useState, type ReactNode } from "react";
-import { ExternalLink, Loader2 } from "lucide-react";
+import { ChevronRight, ExternalLink, Loader2 } from "lucide-react";
 import { authToken } from "@/lib/gameApi";
 import { CANVAS_CREDIT, CANVAS_DECISION_MATRIX_COLUMNS } from "@shared/governanceCanvasText";
 import type { DecisionMatrix as Matrix, DecisionMatrixRow } from "@shared/decisionMatrix";
@@ -108,8 +117,13 @@ function MatrixRow({ row }: { row: DecisionMatrixRow }) {
   );
 }
 
-export default function DecisionMatrix() {
+/** The groups shown open when the matrix first opens: the votes, which most readers come for. */
+const FIRST_OPEN: Readonly<Record<string, boolean>> = { votes: true };
+
+export default function DecisionMatrix({ onOpenChange }: { onOpenChange?: (open: boolean) => void } = {}) {
   const [open, setOpen] = useState(false);
+  /** Which groups are showing their rows. Each is a heading that opens and closes its own rows. */
+  const [shown, setShown] = useState<Readonly<Record<string, boolean>>>(FIRST_OPEN);
   const [matrix, setMatrix] = useState<Matrix | null>(null);
   const [failed, setFailed] = useState<{ message: string; retry: boolean } | null>(null);
 
@@ -127,6 +141,7 @@ export default function DecisionMatrix() {
   const toggle = () => {
     const next = !open;
     setOpen(next);
+    onOpenChange?.(next);
     if (next && !matrix) load();
   };
 
@@ -173,23 +188,41 @@ export default function DecisionMatrix() {
             <>
               {matrix.groups.map((group) => (
                 <div key={group.id} data-testid={`matrix-group-${group.id}`}>
-                  <h4 className="font-semibold text-stone-900">{group.title}</h4>
-                  <p className="text-xs text-stone-600 mt-0.5">{group.intro}</p>
-                  <div
-                    aria-hidden="true"
-                    className={`hidden @min-[40rem]:grid ${ROW_GRID} mt-2 text-xs font-semibold uppercase tracking-wide text-stone-500`}
-                  >
-                    {CANVAS_DECISION_MATRIX_COLUMNS.map((column) => (
-                      <span key={column}>{column}</span>
-                    ))}
-                  </div>
-                  <ul className="mt-1">
-                    {group.rows.map((row) => (
-                      <li key={row.key}>
-                        <MatrixRow row={row} />
-                      </li>
-                    ))}
-                  </ul>
+                  <h4 className="font-semibold text-stone-900">
+                    <button
+                      type="button"
+                      aria-expanded={!!shown[group.id]}
+                      aria-controls={`matrix-rows-${group.id}`}
+                      onClick={() => setShown((s) => ({ ...s, [group.id]: !s[group.id] }))}
+                      className="inline-flex items-start gap-1 text-left hover:underline"
+                    >
+                      <ChevronRight
+                        className={`w-4 h-4 mt-0.5 shrink-0 transition-transform ${shown[group.id] ? "rotate-90" : ""}`}
+                        aria-hidden="true"
+                      />
+                      {group.title}
+                    </button>
+                  </h4>
+                  <p className="text-xs text-stone-600 mt-0.5 pl-5">{group.intro}</p>
+                  {shown[group.id] && (
+                    <div id={`matrix-rows-${group.id}`}>
+                      <div
+                        aria-hidden="true"
+                        className={`hidden @min-[40rem]:grid ${ROW_GRID} mt-2 text-xs font-semibold uppercase tracking-wide text-stone-500`}
+                      >
+                        {CANVAS_DECISION_MATRIX_COLUMNS.map((column) => (
+                          <span key={column}>{column}</span>
+                        ))}
+                      </div>
+                      <ul className="mt-1">
+                        {group.rows.map((row) => (
+                          <li key={row.key}>
+                            <MatrixRow row={row} />
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               ))}
 

@@ -129,6 +129,9 @@ export function CanvasBaseline({
     }
   };
 
+  /** The Power block's Decision Matrix is open, so its card takes both columns. */
+  const [matrixOpen, setMatrixOpen] = useState(false);
+
   const blocks = data?.blocks ?? EMPTY;
   const byId = new Map(blocks.map((b) => [b.id, b]));
   const levels = newestLevels(blocks);
@@ -206,7 +209,10 @@ export function CanvasBaseline({
       </section>
 
       {data && (
-        <div className="grid gap-4 md:grid-cols-2">
+        // Dense, so a card that takes both columns (the Power block with its
+        // matrix open) leaves no empty cell behind it. With every card one
+        // column wide, dense changes nothing.
+        <div className="grid gap-4 md:grid-cols-2 md:grid-flow-row-dense">
           {orderBlocks(focus).map((block) => (
             <CanvasBlockCard
               key={block.id}
@@ -216,10 +222,11 @@ export function CanvasBaseline({
               onSave={save}
               focusLabel={inFocus.has(block.id) ? focusLabel : undefined}
               season={season ? { name: season.name, weeks: seasonWeeksOf(season, block.id) } : undefined}
+              wide={block.id === "power" && matrixOpen}
             >
               {block.id === "power" && (
                 <Suspense fallback={null}>
-                  <DecisionMatrix />
+                  <DecisionMatrix onOpenChange={setMatrixOpen} />
                 </Suspense>
               )}
             </CanvasBlockCard>
