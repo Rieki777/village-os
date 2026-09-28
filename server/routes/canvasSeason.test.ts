@@ -31,15 +31,23 @@ import { deleteConfigDocument, readConfigDocument, writeConfigDocument } from ".
 import { anonymizeMember } from "../lib/erasure";
 import { usersRepo } from "../repos/users";
 import { SEASON_PEN_REFUSAL, register } from "./canvasSeason";
+import { CANVAS_MEMBERS_ONLY } from "./canvas";
 
 const configured = testDbConfigured();
 if (!configured) console.warn("[canvasSeason.routes] TEST_DATABASE_URL not set - DB-backed tests SKIPPED.");
 
-/** The people in this village, by the bearer token each one sends. */
-const PEOPLE: Record<string, { id: string; name: string; role: string; roleCapabilities: string[] }> = {
-  pen: { id: "season-pen", name: "Wren Halloway", role: "member", roleCapabilities: ["story.tell"] },
-  member: { id: "season-member", name: "Ash Brook", role: "member", roleCapabilities: [] },
-  admin: { id: "season-admin", name: "Moss Fielding", role: "admin", roleCapabilities: [] },
+/**
+ * The people in this village, by the bearer token each one sends.
+ * `membershipGranted` is what the real `hasMembership` reads. The admin is
+ * deliberately NOT admitted, so the admin door is proved on its own, and the
+ * stranger is signed in and never admitted: an invited account before
+ * admission, or anybody registering on a fork with invite-only off.
+ */
+const PEOPLE: Record<string, { id: string; name: string; role: string; roleCapabilities: string[]; membershipGranted: boolean }> = {
+  pen: { id: "season-pen", name: "Wren Halloway", role: "member", roleCapabilities: ["story.tell"], membershipGranted: true },
+  member: { id: "season-member", name: "Ash Brook", role: "member", roleCapabilities: [], membershipGranted: true },
+  admin: { id: "season-admin", name: "Moss Fielding", role: "admin", roleCapabilities: [], membershipGranted: false },
+  stranger: { id: "season-stranger", name: "Rook Talbot", role: "member", roleCapabilities: [], membershipGranted: false },
 };
 
 let db: TestDb;
@@ -101,6 +109,8 @@ describe.skipIf(!configured)("the canvas season routes", () => {
     app.use(express.json({ limit: "1mb" }));
     register(app, {
       authedUser: async (req) => who(req),
+      isAdmin: async (req) => ["admin", "founder"].includes(who(req)?.role ?? ""),
+      hasMembership: (user) => !!(user as { membershipGranted?: boolean }).membershipGranted,
       capabilityCtx: async (user) => ctxFor(user),
       guardCapability: async (req, res, cap: Capability, refusal) => {
         const user = who(req);
@@ -169,6 +179,20 @@ describe.skipIf(!configured)("the canvas season routes", () => {
       expect(r.body.savedBy).toEqual({ id: "season-pen", name: "Wren" });
       expect(Number.isNaN(Date.parse(r.body.savedAt))).toBe(false);
       expect(r.body.mayEdit).toBe(false);
+    });
+
+    it("refuses a signed-in account the village has not admitted, and names nobody to it", async () => {
+      expect((await call("PUT", "/api/canvas/season", "pen", season())).status).toBe(200);
+      const r = await call("GET", "/api/canvas/season", "stranger");
+      expect(r.status).toBe(403);
+      expect(r.body).toEqual({ error: CANVAS_MEMBERS_ONLY });
+      expect(JSON.stringify(r.body)).not.toContain("Wren");
+      // The same season, to an admitted member and to an admin who was never admitted: both read who loaded it.
+      for (const as of ["member", "admin"] as const) {
+        const read = await call("GET", "/api/canvas/season", as);
+        expect(read.status, as).toBe(200);
+        expect(read.body.savedBy, as).toEqual({ id: "season-pen", name: "Wren" });
+      }
     });
 
     it("tells the pen and a pre-handover admin they may load one, and a plain member they may not", async () => {

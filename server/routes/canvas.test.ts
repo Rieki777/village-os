@@ -26,16 +26,23 @@ import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/
 import { capabilityDecision, type Capability, type CapabilityCtx } from "../../shared/capabilities";
 import { CANVAS_BLOCK_IDS, CANVAS_SENTENCE_MAX } from "../../shared/governanceCanvas";
 import { allCanvasReadings } from "../repos/canvasReadings";
-import { CANVAS_PEN_REFUSAL, register } from "./canvas";
+import { CANVAS_MEMBERS_ONLY, CANVAS_PEN_REFUSAL, register } from "./canvas";
 
 const configured = testDbConfigured();
 if (!configured) console.warn("[canvas.routes] TEST_DATABASE_URL not set - DB-backed tests SKIPPED.");
 
-/** The people in this village, by the bearer token each one sends. */
-const PEOPLE: Record<string, { id: string; name: string; role: string; roleCapabilities: string[] }> = {
-  pen: { id: "canvas-pen", name: "Wren Halloway", role: "member", roleCapabilities: ["story.tell"] },
-  member: { id: "canvas-member", name: "Ash Brook", role: "member", roleCapabilities: [] },
-  admin: { id: "canvas-admin", name: "Moss Fielding", role: "admin", roleCapabilities: [] },
+/**
+ * The people in this village, by the bearer token each one sends.
+ * `membershipGranted` is what the real `hasMembership` reads. The admin is
+ * deliberately NOT admitted, so the admin door is proved on its own, and the
+ * stranger is signed in and never admitted: an invited account before
+ * admission, or anybody registering on a fork with invite-only off.
+ */
+const PEOPLE: Record<string, { id: string; name: string; role: string; roleCapabilities: string[]; membershipGranted: boolean }> = {
+  pen: { id: "canvas-pen", name: "Wren Halloway", role: "member", roleCapabilities: ["story.tell"], membershipGranted: true },
+  member: { id: "canvas-member", name: "Ash Brook", role: "member", roleCapabilities: [], membershipGranted: true },
+  admin: { id: "canvas-admin", name: "Moss Fielding", role: "admin", roleCapabilities: [], membershipGranted: false },
+  stranger: { id: "canvas-stranger", name: "Rook Talbot", role: "member", roleCapabilities: [], membershipGranted: false },
 };
 
 let db: TestDb;
@@ -91,6 +98,8 @@ describe.skipIf(!configured)("the canvas routes", () => {
     app.use(express.json());
     register(app, {
       authedUser: async (req) => who(req),
+      isAdmin: async (req) => ["admin", "founder"].includes(who(req)?.role ?? ""),
+      hasMembership: (user) => !!(user as { membershipGranted?: boolean }).membershipGranted,
       capabilityCtx: async (user) => ctxFor(user),
       guardCapability: async (req, res, cap: Capability, refusal) => {
         const user = who(req);
@@ -136,7 +145,7 @@ describe.skipIf(!configured)("the canvas routes", () => {
       expect(await allCanvasReadings(pool)).toEqual([]);
     });
 
-    it("gives any signed-in member all twelve blocks in canvas order, read or not", async () => {
+    it("gives an admitted member all twelve blocks in canvas order, read or not", async () => {
       const r = await call("GET", "/api/canvas", "member");
       expect(r.status).toBe(200);
       expect(r.body.blocks.map((b: any) => b.id)).toEqual([...CANVAS_BLOCK_IDS]);
@@ -145,6 +154,20 @@ describe.skipIf(!configured)("the canvas routes", () => {
         expect(b.history).toEqual([]);
       }
       expect(r.body.mayRecord).toBe(false);
+    });
+
+    it("refuses a signed-in account the village has not admitted, and names nobody to it", async () => {
+      expect((await call("POST", "/api/canvas/readings", "pen", reading({ blockId: "purpose", level: 3 }))).status).toBe(201);
+      const r = await call("GET", "/api/canvas", "stranger");
+      expect(r.status).toBe(403);
+      expect(r.body).toEqual({ error: CANVAS_MEMBERS_ONLY });
+      expect(JSON.stringify(r.body)).not.toContain("Wren");
+      // The same reading, to an admitted member and to an admin who was never admitted: both read the recorder.
+      for (const as of ["member", "admin"] as const) {
+        const read = await call("GET", "/api/canvas", as);
+        expect(read.status, as).toBe(200);
+        expect(read.body.blocks.find((b: any) => b.id === "purpose").latest.recordedBy.name, as).toBe("Wren");
+      }
     });
 
     it("tells the pen and a pre-handover admin they may record, and a plain member they may not", async () => {

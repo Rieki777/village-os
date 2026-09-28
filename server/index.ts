@@ -25395,8 +25395,8 @@ ${inner}
   registerGovernanceModeRoutes(app, { authedUser, getPool, capabilityCtx, firstName, weightModeNow, buildElectorate });
   registerStewardSlateRoutes(app, { authedUser, isAdmin, getPool, members, firstName });
   registerGoverningPurposeRoutes(app, { authedUser, isAdmin, adminActor, getPool, capabilityCtx, firstName, weightModeNow, buildElectorate, addActivity });
-  registerCanvasRoutes(app, { authedUser, guardCapability, capabilityCtx, getPool, firstName });
-  registerCanvasSeasonRoutes(app, { authedUser, guardCapability, capabilityCtx, getPool, firstName });
+  registerCanvasRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
+  registerCanvasSeasonRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
 
   /**
    * The subset of variables the CLIENT is allowed to know, so the UI can render

@@ -2,7 +2,7 @@
  * THE CANVAS SEASON: the week map a village lays over its governance canvas
  * (2026-09-26).
  *
- *   GET    /api/canvas/season   every member: the season, if one is loaded
+ *   GET    /api/canvas/season   an admitted member or an admin: the season, if one is loaded
  *   PUT    /api/canvas/season   the canvas pen: load a season file, replacing any before it
  *   DELETE /api/canvas/season   the canvas pen: take the season off
  *
@@ -20,9 +20,13 @@
  *
  * ── WHO MAY READ ───────────────────────────────────────────────────────────
  *
- * Signed in and nothing more, the same door as `GET /api/canvas`
- * (server/routes/canvas.ts): the season is how the village works through its
- * own canvas, and every member works through it. A visitor gets 401.
+ * The same door as `GET /api/canvas`, asked through the same function
+ * (`mayReadCanvas`, server/routes/canvas.ts): a member the village has
+ * admitted, or an admin. The season is how the village works through its own
+ * canvas, and it names who loaded it. A signed-in account the village has not
+ * admitted (an invited one before admission, or anybody on a fork with
+ * `membership.invite_only` off) gets 403 and `CANVAS_MEMBERS_ONLY`; a visitor
+ * gets 401.
  *
  * ── WHO MAY WRITE: THE CANVAS PROSE PEN, `story.tell`, ASKED OF THE ONE GATE ─
  *
@@ -40,8 +44,12 @@ import type { AppDeps } from "../lib/appDeps";
 import { capabilityDecision } from "../../shared/capabilities";
 import { parseCanvasSeason, type CanvasSeasonPayload } from "../../shared/canvasSeason";
 import { readCanvasSeason, removeCanvasSeason, saveCanvasSeason } from "../repos/canvasSeason";
+import { CANVAS_MEMBERS_ONLY, mayReadCanvas } from "./canvas";
 
-type Deps = Pick<AppDeps, "authedUser" | "guardCapability" | "capabilityCtx" | "getPool" | "firstName">;
+type Deps = Pick<
+  AppDeps,
+  "authedUser" | "isAdmin" | "hasMembership" | "guardCapability" | "capabilityCtx" | "getPool" | "firstName"
+>;
 
 /** What a signed-in member who does not hold the pen is told. */
 export const SEASON_PEN_REFUSAL =
@@ -53,6 +61,7 @@ export function register(app: Express, deps: Deps): void {
   app.get("/api/canvas/season", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
+    if (!(await mayReadCanvas(deps, req, user))) return res.status(403).json({ error: CANVAS_MEMBERS_ONLY });
     const mayEdit = capabilityDecision("story.tell", await capabilityCtx(user)).allowed;
     const read = await readCanvasSeason(getPool());
     const payload: CanvasSeasonPayload =

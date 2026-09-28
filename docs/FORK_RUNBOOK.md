@@ -1831,5 +1831,5 @@ season sees the blocks in canvas order and loses nothing.
   still loads on an older one.
 - **Over HTTP**, for a script: `PUT /api/canvas/season` with the file as the
   JSON body and a pen holder's bearer token; `DELETE /api/canvas/season`
-  takes it off; `GET /api/canvas/season` reads it back for any signed-in
-  member.
+  takes it off; `GET /api/canvas/season` reads it back for an admitted member
+  or an admin (403 to any other signed-in account).

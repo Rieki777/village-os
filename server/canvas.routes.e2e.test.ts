@@ -12,8 +12,9 @@
  *      an admin before the handover, a role that carries it, and once the
  *      village holds it, its holder and not the admin;
  *   3. the refusals are the route's words: 401 to a visitor, 403 and a
- *      sentence to a member without the pen, and the gate's own 409 hatch to
- *      an admin on a key the village holds.
+ *      sentence to a member without the pen, 403 and the members-only
+ *      sentence to a signed-in account the village has not admitted, and the
+ *      gate's own 409 hatch to an admin on a key the village holds.
  *
  * ── FIXTURE, SAID ONCE ─────────────────────────────────────────────────────
  *
@@ -33,7 +34,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
 import { CANVAS_BLOCK_IDS } from "../shared/governanceCanvas";
-import { CANVAS_PEN_REFUSAL } from "./routes/canvas";
+import { CANVAS_MEMBERS_ONLY, CANVAS_PEN_REFUSAL } from "./routes/canvas";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -54,7 +55,7 @@ let testDb: TestDb | undefined;
 let dataDir = "";
 let pool: Pool;
 let founderToken = "";
-const people = { pen: { token: "", id: "" }, member: { token: "", id: "" } };
+const people = { pen: { token: "", id: "" }, member: { token: "", id: "" }, stranger: { token: "", id: "" } };
 
 async function call(
   method: string,
@@ -138,6 +139,18 @@ beforeAll(async () => {
 
   people.pen = await register("Wren Halloway", "canvas-wren");
   people.member = await register("Ash Brook", "canvas-ash");
+  // Registered and never admitted. The scratch village runs with
+  // membership.invite_only off (server/db/testDb.ts), so registering needs no
+  // invitation and admits nobody: this is anybody at all on such a fork, and
+  // an invited account before its village admits it.
+  people.stranger = await register("Rook Talbot", "canvas-rook");
+  // The pen and the member are MEMBERS: the village admits them, as a steward
+  // does. Registering alone is not membership, and the canvas is members-only.
+  for (const who of [people.pen, people.member]) {
+    const admitted = await call("POST", `/api/members/${who.id}/super-vouch`, {});
+    expect(admitted.status, admitted.text).toBe(200);
+    expect(admitted.json?.admitted).toBe(true);
+  }
   const seated = await call("POST", `/api/admin/roles/${ROLE}/holders`, { userId: people.pen.id, action: "add" });
   expect(seated.status, seated.text).toBe(200);
 }, 300_000);
@@ -150,7 +163,7 @@ afterAll(async () => {
 });
 
 describe.skipIf(!DB_CONFIGURED)("the canvas, through the real gate", () => {
-  it("answers a signed-in member with every block, with no module switched on", async () => {
+  it("answers an admitted member with every block, with no module switched on", async () => {
     const r = await call("GET", "/api/canvas", undefined, people.member.token);
     expect(r.status, r.text).toBe(200);
     expect(r.json.blocks.map((b: any) => b.id)).toEqual([...CANVAS_BLOCK_IDS]);
@@ -217,5 +230,14 @@ describe.skipIf(!DB_CONFIGURED)("the canvas, through the real gate", () => {
     expect(purpose.history.map((h: any) => h.level)).toEqual([4, 3, 2]);
     expect(purpose.latest).toMatchObject({ level: 4, word: "Growing", recordedBy: { name: "Wren" } });
     for (const b of r.json.blocks.filter((x: any) => x.id !== "purpose")) expect(b.latest).toBeNull();
+  });
+
+  it("refuses a registered account the village has not admitted: 403, the members-only sentence, and no recorder's name", async () => {
+    const r = await call("GET", "/api/canvas", undefined, people.stranger.token);
+    expect(r.status, r.text).toBe(403);
+    expect(r.json).toEqual({ error: CANVAS_MEMBERS_ONLY });
+    // The readings above name Wren and the founder; none of it reaches this account.
+    for (const leaked of ["Wren", "Canvas", people.pen.id, "Three of us"]) expect(r.text).not.toContain(leaked);
+    expect((await call("POST", "/api/canvas/readings", reading(), people.stranger.token)).status).toBe(403);
   });
 });

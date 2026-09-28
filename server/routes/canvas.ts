@@ -11,12 +11,18 @@
  * every block must be on record before a village's Birthing, and a gate a
  * village has to pass cannot sit behind a switch it could turn off.
  *
- * ── WHO MAY READ ───────────────────────────────────────────────────────────
+ * ── WHO MAY READ: THE VILLAGE'S MEMBERS, AND ITS ADMINS ────────────────────
  *
- * Signed in and nothing more, the same door the governing purpose statement
- * uses (server/routes/governingPurpose.ts): the canvas is the village's own
- * account of how it governs itself, and every member lives under it. A
- * visitor with no session gets 401.
+ * A member the village has admitted (`hasMembership`), or an admin. The
+ * canvas is the village's own account of how it governs itself, and each
+ * reading names its recorder, so it is members-only and never public (BUILD_PLAN
+ * Q2). Being signed in is NOT enough, for the reason the brain lane drew the
+ * same line on 2026-09-24 (`briefRowsForViewer`, server/lib/villageBrain.ts):
+ * an invited account the village has not admitted yet is signed in, and so is
+ * anybody at all who registers on a fork with `membership.invite_only` off.
+ * Both get 403 and `CANVAS_MEMBERS_ONLY`; a visitor with no session gets 401.
+ * This door used to be "signed in and nothing more", and its e2e test
+ * asserted a registered, never-admitted account reading every recorder's name.
  *
  * ── WHO MAY WRITE: THE PEN IS `story.tell`, ASKED OF THE ONE GATE ──────────
  *
@@ -50,11 +56,34 @@ import { capabilityDecision } from "../../shared/capabilities";
 import { LEVEL_WORDS, MOMENT_LABELS, parseCanvasReading } from "../../shared/governanceCanvas";
 import { allCanvasReadings, readingsByBlock, recordCanvasReading, type CanvasReadingRow } from "../repos/canvasReadings";
 
-type Deps = Pick<AppDeps, "authedUser" | "guardCapability" | "capabilityCtx" | "getPool" | "firstName">;
+type Deps = Pick<
+  AppDeps,
+  "authedUser" | "isAdmin" | "hasMembership" | "guardCapability" | "capabilityCtx" | "getPool" | "firstName"
+>;
 
 /** What a signed-in member who does not hold the pen is told. */
 export const CANVAS_PEN_REFUSAL =
   "Recording a canvas reading is for whoever holds the village's story. You can read every block and its history.";
+
+/**
+ * What a signed-in account the village has not admitted is told, by this door
+ * and by the season's (server/routes/canvasSeason.ts). The page shows it as it
+ * comes.
+ */
+export const CANVAS_MEMBERS_ONLY =
+  "The canvas and its season are for the village's members. They open to you once the village admits you.";
+
+/**
+ * May this signed-in account read the canvas? An admin, or a member the
+ * village has admitted. The season's GET asks the same function.
+ */
+export async function mayReadCanvas(
+  deps: Pick<AppDeps, "isAdmin" | "hasMembership">,
+  req: Parameters<AppDeps["isAdmin"]>[0],
+  user: Parameters<AppDeps["hasMembership"]>[0],
+): Promise<boolean> {
+  return deps.hasMembership(user) || (await deps.isAdmin(req));
+}
 
 export function register(app: Express, deps: Deps): void {
   const { authedUser, guardCapability, capabilityCtx, getPool, firstName } = deps;
@@ -74,6 +103,7 @@ export function register(app: Express, deps: Deps): void {
   app.get("/api/canvas", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
+    if (!(await mayReadCanvas(deps, req, user))) return res.status(403).json({ error: CANVAS_MEMBERS_ONLY });
     const rows = await allCanvasReadings(getPool());
     const mayRecord = capabilityDecision("story.tell", await capabilityCtx(user)).allowed;
     res.json({

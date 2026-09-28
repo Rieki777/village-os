@@ -12,8 +12,9 @@
  *   2. the pen is `story.tell` asked of the ONE gate in its own order: the
  *      founder before the handover, and a member once their role carries it;
  *   3. the refusals are the route's words: 401 to a visitor, 403 and a
- *      sentence to a member without the pen, 400 and the validator's
- *      sentence to a bad file;
+ *      sentence to a member without the pen, 403 and the members-only
+ *      sentence to a signed-in account the village has not admitted, 400 and
+ *      the validator's sentence to a bad file;
  *   4. the Season Two template the platform ships loads through all of it;
  *   5. and, for the same lane's Journey move, the command centre's
  *      `hyphaSpace`, which the "Copy for Hypha" button is shown by.
@@ -30,6 +31,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
 import { SEASON_PEN_REFUSAL } from "./routes/canvasSeason";
+import { CANVAS_MEMBERS_ONLY } from "./routes/canvas";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -50,7 +52,7 @@ let testDb: TestDb | undefined;
 let dataDir = "";
 let pool: Pool;
 let founderToken = "";
-const people = { pen: { token: "", id: "" }, member: { token: "", id: "" } };
+const people = { pen: { token: "", id: "" }, member: { token: "", id: "" }, stranger: { token: "", id: "" } };
 
 async function call(
   method: string,
@@ -129,6 +131,18 @@ beforeAll(async () => {
 
   people.pen = await register("Wren Halloway", "season-wren");
   people.member = await register("Ash Brook", "season-ash");
+  // Registered and never admitted. The scratch village runs with
+  // membership.invite_only off (server/db/testDb.ts), so registering needs no
+  // invitation and admits nobody: this is anybody at all on such a fork, and
+  // an invited account before its village admits it.
+  people.stranger = await register("Rook Talbot", "season-rook");
+  // The pen and the member are MEMBERS: the village admits them, as a steward
+  // does. Registering alone is not membership, and the canvas is members-only.
+  for (const who of [people.pen, people.member]) {
+    const admitted = await call("POST", `/api/members/${who.id}/super-vouch`, {});
+    expect(admitted.status, admitted.text).toBe(200);
+    expect(admitted.json?.admitted).toBe(true);
+  }
   const seated = await call("POST", `/api/admin/roles/${ROLE}/holders`, { userId: people.pen.id, action: "add" });
   expect(seated.status, seated.text).toBe(200);
 }, 300_000);
@@ -141,7 +155,7 @@ afterAll(async () => {
 });
 
 describe.skipIf(!DB_CONFIGURED)("the canvas season, through the real gate", () => {
-  it("answers a signed-in member with no season, and no module switched on", async () => {
+  it("answers an admitted member with no season, and no module switched on", async () => {
     const r = await call("GET", "/api/canvas/season", undefined, people.member.token);
     expect(r.status, r.text).toBe(200);
     expect(r.json).toEqual({ season: null, savedBy: null, savedAt: null, problem: null, mayEdit: false });
@@ -193,6 +207,17 @@ describe.skipIf(!DB_CONFIGURED)("the canvas season, through the real gate", () =
     const again = await call("PUT", "/api/canvas/season", TEMPLATE, people.pen.token);
     expect(again.status, again.text).toBe(200);
     expect((await call("GET", "/api/canvas/season", undefined, people.member.token)).json.savedBy.name).toBe("Wren");
+  });
+
+  it("refuses a registered account the village has not admitted: 403, the members-only sentence, and nobody's name", async () => {
+    // A season is loaded, by Wren (the case above): the answer a member reads names her.
+    expect((await call("GET", "/api/canvas/season", undefined, people.member.token)).json.savedBy.name).toBe("Wren");
+    const r = await call("GET", "/api/canvas/season", undefined, people.stranger.token);
+    expect(r.status, r.text).toBe(403);
+    expect(r.json).toEqual({ error: CANVAS_MEMBERS_ONLY });
+    expect(r.text).not.toContain("Wren");
+    expect(r.text).not.toContain(people.pen.id);
+    expect((await call("PUT", "/api/canvas/season", TEMPLATE, people.stranger.token)).status).toBe(403);
   });
 
   it("hands the founder the gate's 409 once the village holds the pen, and its holder still writes", async () => {
