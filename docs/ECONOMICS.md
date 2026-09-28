@@ -2817,6 +2817,9 @@ forever. Re-running it moves nothing.
 
 ### Who can trigger it
 
+Every route below lives in `server/routes/exits.ts`, moved out of `server/index.ts`
+on 2026-09-27 with no change to what any of them does.
+
 - **A member can open their own exit**: `POST /api/profile/request-exit`,
   password-confirmed, refused if they would strand the village.
 - **An admin can open one** for somebody else, voluntary or involuntary:

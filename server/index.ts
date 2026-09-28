@@ -144,7 +144,7 @@ import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
 import { register as registerPowerAffinityRoutes, powersForClass, withPowerAffinity } from "./routes/powerAffinity";
 import { deferredSeatVote, register as registerPowerHandRoutes, registerSeatVote } from "./routes/powerHands";
 import { register as registerRestorativeIntakeRoutes } from "./routes/restorativeIntake";
-import { intakeRoleNamed } from "./lib/restorativeIntake";
+import { register as registerExitRoutes } from "./routes/exits";
 import { resolveGoogleConfig } from "./lib/oauthGoogle";
 import { makeIdentityGate } from "./lib/identityConfirm";
 import {
@@ -382,21 +382,12 @@ import {
 } from "./lib/stays";
 import { createWalletChallenge, readOnchainBalance, readTokenIdentity, verifyWalletSignature } from "./lib/base-reads";
 import {
-  allExits,
   blockingStates,
-  createExit,
-  exitById,
   exitOpenState,
-  openExitFor,
-  sweepBalances,
 } from "./lib/exit";
 import {
   DEFAULT_EXIT_POLICY,
-  EXIT_POLICY_TERMS,
-  blankTerms,
   exitLeverRefusal,
-  normalizeExitPolicy,
-  platformDefaultTerms, platformDefaultTermKeys,
   withPolicyDefaults,
 } from "./lib/exitPolicy";
 import {
@@ -14623,255 +14614,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     res.json({ success: true, status });
   });
 
-  // â”€â”€ S52: member exit (F12) — enumerate, settle, resolve â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  // Not a module: leaving is core identity, like joining. The policy is
-  // PUBLISHED; the process refuses to tombstone anyone who still owes or is
-  // owed through a blocking domain; the restorative flow's content reaches
-  // only its recipients, never a table.
-
-  /**
-   * The published policy — F12's "publish the exit policy on the site".
-   *
-   * `involuntary.decidingDomainId` and `appealDomainId` are stored ids. They
-   * are resolved to circle NAMES here because a published page naming a slug
-   * publishes nothing: who decides an involuntary exit and who hears an appeal
-   * are the two facts a member most needs from this page.
-   */
-  app.get("/api/exit-policy", async (_req, res) => {
-    const policy: any = readExitPolicy();
-    const namedCircle = (id: unknown) => {
-      const wanted = String(id ?? "");
-      if (!wanted) return null;
-      const c: any = circlesRepo.all().find((x: any) => x.id === wanted);
-      return c ? { id: c.id, name: c.name } : null;
-    };
-    res.json({
-      policy: {
-        ...policy,
-        involuntary: {
-          ...(policy?.involuntary ?? {}),
-          decidingCircle: namedCircle(policy?.involuntary?.decidingDomainId),
-          appealCircle: namedCircle(policy?.involuntary?.appealDomainId),
-        },
-        // Named for the same reason: a member sees who an intake reaches before sending it.
-        restorative: { ...(policy?.restorative ?? {}), intakeRole: intakeRoleNamed(policy?.restorative?.intakeContactRole, rolesRepo.all()) },
-      },
-      configured: exitPolicyRepo.exists(), platformWording: platformDefaultTermKeys(policy),
-    });
-  });
-
-  /**
-   * THE ACKNOWLEDGEMENT IS A CLAIM, SO THE SERVER CHECKS IT.
-   *
-   * `placeholder: false` clears the caution card on /exit-policy and turns the
-   * page into the village's settled exit terms. The editor used to offer that
-   * checkbox while offering no field for three of the five terms the page
-   * prints, so a village could publish the platform's boilerplate under its own
-   * name and never know. The fields now exist above; this refuses to clear the
-   * flag while any rendered term is still word-for-word the platform's, and
-   * names every one of them. Same shape as the `stay.credit_expiry_days`
-   * refusal: a write the platform cannot honour is declined with the reason,
-   * never accepted into a void.
-   */
-  app.put("/api/admin/exit-policy", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const body = req.body ?? {};
-    if (typeof body !== "object" || !body.voluntary || !body.involuntary || !body.restorative) {
-      return res.status(400).json({
-        error: "incomplete_policy",
-        message: "The policy needs voluntary, involuntary and restorative sections",
-      });
-    }
-    if (body.restorative.intakeContactRole && !rolesRepo.all().some((r: any) => r.id === body.restorative.intakeContactRole)) {
-      return res.status(400).json({
-        error: "unknown_role",
-        message: `Unknown intake role "${body.restorative.intakeContactRole}"`,
-      });
-    }
-    for (const [field, label] of [["decidingDomainId", "deciding circle"], ["appealDomainId", "appeal circle"]] as const) {
-      const id = String(body.involuntary?.[field] ?? "");
-      if (id && !circlesRepo.all().some((c: any) => c.id === id)) {
-        return res.status(400).json({ error: "unknown_circle", message: `Unknown ${label} "${id}"` });
-      }
-    }
-    const next = normalizeExitPolicy(body);
-    const blank = blankTerms(next);
-    if (blank.length) {
-      return res.status(400).json({
-        error: "blank_terms",
-        message: `A published policy cannot leave a term empty. Still blank: ${blank.join(", ")}.`,
-      });
-    }
-    if (!next.placeholder) {
-      const stale = platformDefaultTerms(next);
-      if (stale.length) {
-        return res.status(409).json({
-          error: "terms_still_platform_default",
-          fields: stale,
-          message:
-            `These terms are still word for word the platform's: ${stale.join(", ")}. ` +
-            "Recording that the community decided them would publish the platform's boilerplate under the village's name. " +
-            "Write each one in the community's own words, then clear the draft banner.",
-        });
-      }
-    }
-    await exitPolicyRepo.put(next);
-    res.json({ success: true, policy: readExitPolicy() });
-  });
-
-  /** The per-member open-state enumeration, on the admin's desk. */
-  app.get("/api/admin/players/:id/exit-state", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const target = await members.byId(req.params.id);
-    if (!target) return res.status(404).json({ error: "Not found" });
-    const states = await exitOpenState(getPool(), target.id, roleIdsFor(target.id));
-    res.json({
-      states,
-      blocking: blockingStates(states),
-      exit: await openExitFor(getPool(), target.id),
-    });
-  });
-
-  app.get("/api/admin/exits", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const exits = await allExits(getPool());
-    const withNames = [];
-    for (const e of exits) {
-      withNames.push({ ...e, userName: (await members.byId(e.userId))?.name ?? "(anonymized)" });
-    }
-    // `defaults` and `terms` travel with the policy so the editor can mark each
-    // term that is still the platform's without keeping a second copy of the
-    // platform's words in the bundle. One source of truth, checked in one place.
-    res.json({
-      exits: withNames,
-      policy: readExitPolicy(),
-      defaults: DEFAULT_EXIT_POLICY,
-      terms: EXIT_POLICY_TERMS,
-      circles: circlesRepo.all().map((c: any) => ({ id: c.id, name: c.name })),
-    });
-  });
-
-  /** A member opens their own departure. Identity-confirmed (a password, or Google for a member with none), stranding-guarded. */
-  app.post("/api/profile/request-exit", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required" });
-    const { note } = req.body ?? {};
-    const confirmed = await confirmIdentity(req, res, user, "request-exit");
-    if (!confirmed.ok) return res.status(403).json(confirmed.body);
-    const stranding = await departureStrandingRefusal(user, true);
-    if (stranding) return res.status(409).json({ error: stranding });
-    const policy: any = readExitPolicy();
-    const r = await createExit(getPool(), {
-      userId: user.id,
-      kind: "voluntary",
-      openedBy: user.id,
-      noticeDays: Number(policy?.voluntary?.noticePeriodDays) || 0,
-      note: note ? String(note) : null,
-    });
-    if (!r.ok) return res.status(409).json({ error: r.error });
-    await notifyAdmins("exit_opened", `${user.name ?? "A member"} has begun a departure`, `exit:${r.exit.id}:opened`);
-    void recordEvent(getPool(), {
-      kind: "audit", text: "exit:opened:voluntary", actorUserId: user.id,
-      entityType: "user", entityRef: user.id, audience: "admin",
-    });
-    res.json({ success: true, exit: r.exit });
-  });
-
-  /** An admin opens one (on behalf, or involuntary per the published process). */
-  app.post("/api/admin/exits", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const { userId, kind, note } = req.body ?? {};
-    const target = await members.byId(String(userId ?? ""));
-    if (!target) return res.status(404).json({ error: "No such member" });
-    // An example identity is content, not a person who can leave. The exits
-    // row would outlive the identities (retirement deletes users, not exits)
-    // and the notify below is addressed to an account nobody can sign in to.
-    if (isExampleUser(target)) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
-    const stranding = await departureStrandingRefusal(target, false);
-    if (stranding) return res.status(409).json({ error: stranding });
-    const policy: any = readExitPolicy();
-    const r = await createExit(getPool(), {
-      userId: target.id,
-      kind: kind === "involuntary" ? "involuntary" : "voluntary",
-      openedBy: adminActor(req)?.id ?? "admin",
-      noticeDays: Number(policy?.voluntary?.noticePeriodDays) || 0,
-      note: note ? String(note) : null,
-    });
-    if (!r.ok) return res.status(409).json({ error: r.error });
-    await notify({
-      userId: target.id, type: "exit_opened",
-      title: kind === "involuntary" ? "A departure process has been opened with you" : "Your departure process has been opened",
-      body: "The published exit policy describes each step. The stewards will walk it with you.",
-      link: "/exit-policy", dedupeKey: `exit:${r.exit.id}:member`,
-    });
-    res.json({ success: true, exit: r.exit });
-  });
-
-  /**
-   * The ONE settlement move exit owns: sweep positive balances, idempotent
-   * per token. Everything else settles through its own domain's terminals.
-   */
-  app.post("/api/admin/exits/:id/settle-balances", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const exit = await exitById(getPool(), req.params.id);
-    if (!exit) return res.status(404).json({ error: "No such exit" });
-    if (exit.status === "resolved" || exit.status === "cancelled") {
-      return res.status(409).json({ error: `This exit is ${exit.status}` });
-    }
-    const result = await sweepBalances(getPool(), { exitId: exit.id, userId: exit.userId });
-    if (result.refusal) return res.status(409).json({ error: result.refusal });
-    await getPool().query(
-      "UPDATE exits SET status = 'settling', resolution = CONCAT(COALESCE(resolution,''), ?) WHERE id = ?",
-      [result.note, exit.id],
-    );
-    res.json({ success: true, ...result });
-  });
-
-  /**
-   * The terminal act: refuses with the NAMED blocking domains until the
-   * member's open state is clean, then runs the existing tombstone. Exit
-   * never invents a settle path — 2.2 #8 stands.
-   */
-  app.post("/api/admin/exits/:id/resolve", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const exit = await exitById(getPool(), req.params.id);
-    if (!exit) return res.status(404).json({ error: "No such exit" });
-    if (exit.status === "resolved" || exit.status === "cancelled") {
-      return res.status(409).json({ error: `This exit is already ${exit.status}` });
-    }
-    const target = await members.byId(exit.userId);
-    if (!target) return res.status(404).json({ error: "Member not found" });
-    const roleIds = roleIdsFor(target.id);
-    const blocking = blockingStates(await exitOpenState(getPool(), target.id, roleIds));
-    if (blocking.length) {
-      return res.status(409).json({
-        error: "Open state must settle through its own domain first",
-        blocking,
-      });
-    }
-    const { agreementRef } = req.body ?? {};
-    await anonymizeMember(getPool(), target, adminActor(req)?.id ?? null, erasureDeps);
-    await getPool().query(
-      "UPDATE exits SET status = 'resolved', resolved_at = NOW(), agreement_ref = COALESCE(?, agreement_ref) WHERE id = ?",
-      [agreementRef ? String(agreementRef).slice(0, 255) : null, exit.id],
-    );
-    // Seats vacate at the tombstone; the stewards hear which ones.
-    for (const roleId of roleIds) {
-      await notifyAdmins("exit_opened", `A seat opened: ${roleId} (departure resolved)`, `exit:${exit.id}:vacancy:${roleId}`);
-    }
-    res.json({ success: true, vacatedRoles: roleIds });
-  });
-
-  /** A person who stays: the exit closes without a tombstone. */
-  app.post("/api/admin/exits/:id/cancel", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const [r] = await getPool().query<any>(
-      "UPDATE exits SET status = 'cancelled', resolved_at = NOW() WHERE id = ? AND status IN ('open','settling')",
-      [req.params.id],
-    );
-    if (!(r as any).affectedRows) return res.status(404).json({ error: "No open exit with that id" });
-    res.json({ success: true });
-  });
+  // Member exit (S52, F12): the published policy and a departure's steps, in server/routes/exits.ts.
+  registerExitRoutes(app, { isAdmin, authedUser, adminActor, getPool, members, circlesRepo, loadRoles, roleIdsFor, notify, notifyAdmins, readExitPolicy, exitPolicyRepo, confirmIdentity, departureStrandingRefusal, erasureDeps });
 
   // Restorative intake (F12's hard rule as code): server/routes/restorativeIntake.ts.
   registerRestorativeIntakeRoutes(app, { authedUser, notify, overLimit, readExitPolicy, roleHolders: loadRoleHolders });
