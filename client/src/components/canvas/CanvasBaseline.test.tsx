@@ -212,6 +212,22 @@ describe("what a member reads", () => {
   });
 });
 
+describe("one meaning per level on the page", () => {
+  it("offers each level in the pen's form with the legend's own meaning, word for word", async () => {
+    answers.push({ status: 200, body: payload(true) });
+    draw();
+    await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
+    const legend = within(screen.getByTestId("canvas-scale-legend"))
+      .getAllByRole("listitem")
+      .map((li) => li.textContent);
+    const legal = within(screen.getByTestId("canvas-block-legal"));
+    fireEvent.click(legal.getByRole("button", { name: /record a reading/i }));
+    const offered = legal.getAllByRole("radio").map((r) => r.closest("label")?.textContent);
+    expect(offered).toEqual(CANVAS_LEVELS.map((l) => `${CANVAS_SCALE_TEXT[l].word}: ${CANVAS_SCALE_TEXT[l].meaning}`));
+    expect(offered).toEqual(legend);
+  });
+});
+
 describe("what the pen can do", () => {
   it("refuses in the validator's words before sending anything", async () => {
     answers.push({ status: 200, body: payload(true) });

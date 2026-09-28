@@ -9,13 +9,17 @@
  * runs, so a person sees the server's own words before anything is sent and
  * never a second, different refusal after. The network call belongs to the
  * view above; this component only hands it a checked reading.
+ *
+ * Each level is offered with the canvas's own meaning (CANVAS_SCALE_TEXT),
+ * the same words the legend under the radar prints, so a level is recorded
+ * under the definition members read it by. The form used to offer a second
+ * set in this platform's words, one page away from the first.
  */
 import { useState } from "react";
 import {
   CANVAS_LEVELS,
   CANVAS_MOMENTS,
   CANVAS_SENTENCE_MAX,
-  LEVEL_MEANINGS,
   LEVEL_WORDS,
   MOMENT_LABELS,
   parseCanvasReading,
@@ -24,6 +28,7 @@ import {
   type CanvasMoment,
   type CanvasReadingInput,
 } from "@shared/governanceCanvas";
+import { CANVAS_SCALE_TEXT } from "@shared/governanceCanvasText";
 
 export function RecordReadingForm({
   block,
@@ -80,7 +85,7 @@ export function RecordReadingForm({
               />
               <span>
                 <span className="font-medium text-stone-900">{LEVEL_WORDS[l]}</span>
-                <span className="text-stone-600">. {LEVEL_MEANINGS[l]}</span>
+                <span className="text-stone-600">: {CANVAS_SCALE_TEXT[l].meaning}</span>
               </span>
             </label>
           ))}

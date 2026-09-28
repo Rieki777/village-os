@@ -283,14 +283,13 @@ export const LEVEL_WORDS: Record<CanvasLevel, string> = {
   5: "Thriving",
 };
 
-/** What each word means, for the person choosing it. Our words. */
-export const LEVEL_MEANINGS: Record<CanvasLevel, string> = {
-  1: "Nothing is in place yet.",
-  2: "People have started talking about it.",
-  3: "Some practice exists, and it is patchy.",
-  4: "It works most of the time and people rely on it.",
-  5: "It is part of how the village lives, and it keeps getting better.",
-};
+/*
+ * What each level MEANS is the canvas's own text, `CANVAS_SCALE_TEXT` in
+ * shared/governanceCanvasText.ts, and nothing else. This file used to carry a
+ * second set in our words (`LEVEL_MEANINGS`), which the reading form offered
+ * while the legend under the radar printed the canvas's, so one page gave two
+ * definitions of each level. One meaning per word: do not add another here.
+ */
 
 /** The occasion a reading was taken on. The first reading of every block is the baseline. */
 export const CANVAS_MOMENTS = ["baseline", "canvas-moon", "onboarding", "conflict", "funding", "season"] as const;

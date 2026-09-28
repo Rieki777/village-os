@@ -18,7 +18,6 @@ import {
   CANVAS_ORDER,
   CANVAS_SENTENCE_MAX,
   FOUNDATION_LABELS,
-  LEVEL_MEANINGS,
   LEVEL_WORDS,
   MOMENT_LABELS,
   isCanvasLevel,
@@ -127,10 +126,9 @@ describe("the twelve blocks", () => {
 });
 
 describe("the level scale", () => {
-  it("runs one to five, Absent to Thriving, and every level has a meaning", () => {
+  it("runs one to five, Absent to Thriving; each level's meaning is the canvas's own (governanceCanvasText)", () => {
     expect([...CANVAS_LEVELS]).toEqual([1, 2, 3, 4, 5]);
     expect(CANVAS_LEVELS.map((l) => LEVEL_WORDS[l])).toEqual(["Absent", "Forming", "Emerging", "Growing", "Thriving"]);
-    for (const l of CANVAS_LEVELS) expect(LEVEL_MEANINGS[l].length).toBeGreaterThan(10);
   });
 
   it("takes whole numbers only", () => {
