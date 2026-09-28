@@ -28,7 +28,7 @@ import { DOCUMENT_WORDS } from "../../shared/villageDocuments";
 import { modelFallback, type DocumentDraft } from "../../shared/documentDraft";
 import type { MemberKey } from "../lib/assistant";
 import type { ModelDraftInput } from "../lib/documentDraftModel";
-import { briefWrite } from "../lib/villageBrain";
+import { brainEtag, briefWrite } from "../lib/villageBrain";
 import { CANVAS_DATABASE_CSV } from "../lib/notebookExport";
 import { recordCanvasReading } from "../repos/canvasReadings";
 import { canvasProposalById } from "../repos/canvasProposals";
@@ -455,8 +455,10 @@ describe.skipIf(!configured)("a member's notebook, the picks and the export", ()
         "SELECT kind, text, entity_type, entity_ref, audience FROM health_events WHERE actor_user_id = ? AND entity_type = 'canvas_export' ORDER BY at DESC, id DESC",
         [PEOPLE.teller.id],
       );
-      expect(rows[0]).toMatchObject({ kind: "audit", text: `canvas:export:${got.body.hash}`, entity_type: "canvas_export", entity_ref: got.body.brainEtag, audience: "admin" });
-      expect(got.body.brainEtag).toMatch(/^W\/"brain-\d+-\d+-\d+"$/);
+      expect(rows[0]).toMatchObject({ kind: "audit", text: `canvas:export:${got.body.hash}`, entity_type: "canvas_export", entity_ref: await brainEtag(pool), audience: "admin" });
+      expect(rows[0].entity_ref).toMatch(/^W\/"brain-\d+-\d+-\d+"$/);
+      // The etag counts the rows the admins keep, so the member is never handed it.
+      expect("brainEtag" in got.body).toBe(false);
       expect((await call("GET", "/api/canvas/exports/latest", "teller")).body).toMatchObject({ changedSince: false });
       await recordCanvasReading(pool, { blockId: "team", level: 3, sentence: "A newer reading.", moment: "canvas-moon", recordedBy: PEOPLE.teller.id });
       expect((await call("GET", "/api/canvas/exports/latest", "teller")).body).toMatchObject({ changedSince: true });

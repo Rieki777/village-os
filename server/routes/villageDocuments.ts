@@ -598,7 +598,8 @@ export function register(app: Express, deps: DocumentRouteDeps): void {
       kind: "audit", text: `canvas:export:${hash}`, actorUserId: me,
       entityType: EXPORT_ENTITY, entityRef: etag.slice(0, 120), audience: "admin",
     });
-    res.json({ files: renderPack(input, exportedAt), exportedAt: exportedAt.toISOString(), hash, brainEtag: etag });
+    // The etag stays in the audit row: its counts include the rows the admins keep, so a member is not handed it.
+    res.json({ files: renderPack(input, exportedAt), exportedAt: exportedAt.toISOString(), hash });
   });
 
   app.get("/api/canvas/exports/latest", async (req, res) => {

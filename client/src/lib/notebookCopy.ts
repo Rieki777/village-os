@@ -89,7 +89,7 @@ export const NOTEBOOK_WORDS = {
   decideIntro:
     "Their owners asked to share these with the village. You hold the village's story, so you can read them now. Adopt or decline each one on the canvas, in the Adopt frame of the block its owner named.",
   shareIntro:
-    "Sharing puts this document in the village's notebook, where every member can read it, and in the canvas pack a member can take with them. Your ask goes to whoever holds the village's story, who adopts or declines it.",
+    "Sharing puts this document in the village's notebook, where every member can read it, and in the canvas pack a member can take with them. Your ask goes to whoever holds the village's story, who adopts or declines it. While they decide, every member sees its title and your note on the block, and only they read the text.",
   draftIntro:
     "The words-only draft cuts the document at its headings and puts each part on the canvas block whose words it uses. It sends nothing anywhere. Nothing is filed until you choose what to file.",
   exportHeading: "Take the canvas with you",

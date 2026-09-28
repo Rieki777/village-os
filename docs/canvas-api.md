@@ -344,7 +344,7 @@ which before the handover includes the administrators) while the owner's share i
 | `GET /api/canvas/resource-picks` | members and admins | none | `200 { village: string[], mine: string[] }` |
 | `POST /api/canvas/resource-picks` | members; the village's list under `story.tell` | `{ resourceKey, forVillage? }` | `201` added, `200` already there, `403` `VILLAGE_PICK_REFUSAL` |
 | `DELETE /api/canvas/resource-picks/:key` | the same (`?village=1` for the village's) | none | `200 { removed }`, `404` |
-| `POST /api/canvas/exports` | members and admins | none | `200 { files: [{ name, content }], exportedAt, hash, brainEtag }`: four Markdown files named README, canvas, resources and our-documents (`PACK_FILE_NAMES` in `server/lib/notebookExport.ts`). Writes an admin audit event `canvas:export:<hash>` with `entity_type` `canvas_export` and the brain's etag as `entity_ref` |
+| `POST /api/canvas/exports` | members and admins | none | `200 { files: [{ name, content }], exportedAt, hash }`: four Markdown files named README, canvas, resources and our-documents (`PACK_FILE_NAMES` in `server/lib/notebookExport.ts`). Writes an admin audit event `canvas:export:<hash>` with `entity_type` `canvas_export` and the brain's etag as `entity_ref` |
 | `GET /api/canvas/exports/latest` | members and admins | none | `200 { lastExportAt, changedSince }`: both `null` before the first export |
 
 What the pack carries is decided in `server/lib/notebookExport.ts`, which reads the brief through
