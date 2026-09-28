@@ -314,7 +314,7 @@ describe.skipIf(!DB_CONFIGURED)("named, the village may be asked", () => {
   it("the row passes and the launch vote opens", async () => {
     const { item, openBlocking } = await closingRow();
     expect(item.state).toBe("ok");
-    expect(item.detail).toMatch(/^Named: Shared by closing-day balances, adopted \d{4}-\d{2}-\d{2}$/);
+    expect(item.detail).toBe("Named and adopted: Shared by closing-day balances");
     expect(openBlocking).toEqual([]);
 
     const yes = await call("POST", "/api/admin/launch/propose", { body: { slate: [founderId] } });

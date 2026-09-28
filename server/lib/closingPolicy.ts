@@ -111,9 +111,11 @@ export function closingWrite(body: unknown, stored: unknown, by: string | null, 
  */
 export function closingCheckOf(section: unknown): { state: "ok" | "missing"; detail: string } {
   if (closingNamed(section)) {
+    // No date here: this file has no village timezone, and a UTC day read
+    // beside the editor's local one would tell a founder two different days.
     const s = section as ClosingSection;
     const def = closingPolicyDef(s.policyId);
-    return { state: "ok", detail: `Named: ${def?.name ?? s.policyId}, adopted ${String(s.adoptedAt).slice(0, 10)}` };
+    return { state: "ok", detail: `Named and adopted: ${def?.name ?? s.policyId}` };
   }
   if (!section || typeof section !== "object") {
     return {

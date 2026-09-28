@@ -109,9 +109,9 @@ describe("closingCheckOf: the launch row", () => {
     expect(odd.detail).toMatch(/cannot be adopted as it stands/);
   });
 
-  it("reads OK once adopted, naming the policy and the day", () => {
+  it("reads OK once adopted, naming the policy", () => {
     const r = closingCheckOf({ ...DEFAULT_CHOICE, adoptedBy: "user-a", adoptedAt: EARLIER });
-    expect(r).toEqual({ state: "ok", detail: "Named: Shared by closing-day balances, adopted 2026-09-30" });
+    expect(r).toEqual({ state: "ok", detail: "Named and adopted: Shared by closing-day balances" });
   });
 });
 

@@ -109,6 +109,15 @@ describe("the door to propose a change", () => {
     render(<ClosingPolicyCard closing={ADOPTED} />);
     expect(await screen.findByText(/this\s+account does not open those yet/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Propose a change" })).toBeNull();
+    // The forum is named only where the village runs one.
+    expect(screen.queryByText(/in the forum/)).toBeNull();
+  });
+
+  it("points at the forum as a place to say it, when the village runs one", async () => {
+    gov.facts = { ok: true, data: { mayOpenAdvisory: false } };
+    catalog.modules = [GOVERNANCE_ON, { ...GOVERNANCE_ON, id: "forum", name: "Forum" }];
+    render(<ClosingPolicyCard closing={ADOPTED} />);
+    expect(await screen.findByText(/whoever keeps the exit\s+policy, or in the forum\./)).toBeInTheDocument();
   });
 
   it("stays quiet when the read did not answer, and invents nothing about the reader", async () => {

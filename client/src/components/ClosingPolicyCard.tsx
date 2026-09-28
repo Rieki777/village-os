@@ -91,6 +91,7 @@ export function ClosingProposeDoor() {
   const { user, loading } = useAuth();
   const modules = useModules();
   const governance = useModule("governance");
+  const forum = useModule("forum");
   const [, navigate] = useLocation();
   const [mayOpen, setMayOpen] = useState<boolean | null>(null);
   const [running, setRunning] = useState<string | null>(null);
@@ -142,7 +143,7 @@ export function ClosingProposeDoor() {
       <p className={line}>
         Putting a change to the whole village opens a vote every member is rung about, and this
         account does not open those yet. Say what you would change to whoever keeps the exit
-        policy, or in the forum.
+        policy{forum ? ", or in the forum" : ""}.
       </p>
     );
   }
