@@ -427,7 +427,7 @@ nothing had ever read the column).
 ## Integrations
 
 - Organisational Memory module (`saberra`, the first `connected`-tier listing;
-  `drizzle/0221` adds `module_entity_facts`). Ships OFF. A village holds its OWN
+  `drizzle/0221_a_seat_carries_what_a_module_knows.sql` adds `module_entity_facts`). Ships OFF. A village holds its OWN
   connection, so there is nothing shared between two villages here and nothing to
   provision centrally. Two things per village:
   - **Secret** `sera_api_secret`, set in the admin secrets panel. Environment fallback

@@ -111,7 +111,7 @@ Absent `module_settings` row means off. Off unmounts the routes, so nothing is f
 and nothing is shown.
 
 Every row this module wrote is findable by its module id alone, which is why
-`module_entity_facts.module_id` is a plain string and not a foreign key (`drizzle/0221`),
+`module_entity_facts.module_id` is a plain string and not a foreign key (`drizzle/0221_a_seat_carries_what_a_module_knows.sql`),
 and `forgetModuleFacts` removes all of them.
 
 **That function is not yet called by anything.** Turning the module off leaves its rows in
