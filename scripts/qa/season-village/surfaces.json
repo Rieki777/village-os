@@ -11,6 +11,7 @@
     "Wave 3a (2026-09-28), the conflict agreement: /exit-policy names the outside contact to anybody who is not a member by organisation alone ($outsideContactOrganisation), and by name only to members. /governance gives a member the ombuds door and the agreement's frames to read, and the founder the editor.",
     "Wave 3a public-lines (2026-09-28): /governance is \"How we work together\"; a visitor reads the public lines and the public matrix only, a member also the note that blocks open members' words, the founder the pen's controls; the seed's canvas reading ($canvasReading) must never render there.",
     "Wave 3a audit fix (2026-09-28): Departures tells the founder the truth about the outside contact, whose name and way of reaching them show to members only, and no longer says every field is public.",
+    "Wave 4 canvas-resources (2026-09-28): Power's Learn frame lists the Governance Canvas Database's resources from the shipped snapshot (the walk's server runs with the scheduler off, so nothing reads the database), credits the database, dates the copy, offers no suggestion link (canvas.suggest_url ships blank), and gives the founder, who holds the pen before the handover, the placing form a member does not see.",
     "Wave 3b canvas-frames-client (2026-09-28): each canvas block opens its five frames behind \"Open this block: <name>\". Views on the same page run in order and do not reset, so journey's canvas-power-* views open Power, then press each frame's button (Sense, See, Learn, Say, the matrix, Adopt). The Decision Matrix moved from the closed Power card into Power's Say frame, so decision-matrix opens Power and presses Say before the matrix button. $canvasSuggestion and $canvasSuggester are the seed's member suggestion on Power, made by a member the walk does not sign in as: the walk's member reads it with nothing to press, the founder with the pen's Adopt and Decline."
   ],
   "version": 1,
@@ -130,8 +131,22 @@
           "id": "canvas-power-learn",
           "click": "Learn",
           "roles": ["member", "founder"],
-          "text": ["a way to ask a question about it, are not built yet", "The canvas's own article", "Print the canvas workbook"],
-          "forbidden": ["%", "could not be read"]
+          "text": [
+            "From the Governance Canvas Database",
+            "Consent decision making",
+            "Article, by Sociocracyforall",
+            "Governance Canvas Database, Bioregional Weaving Labs Collective and Commonland",
+            "A copy of the database taken on",
+            "This village has not read the database itself yet",
+            "A way to ask a question about Power is not built yet",
+            "The canvas's own article",
+            "Print the canvas workbook"
+          ],
+          "forbidden": ["%", "could not be read", "Reading the resources for Power", "suggest it to the Governance Canvas Database"],
+          "expect": {
+            "member": { "forbidden": ["Choose where this shows"] },
+            "founder": { "text": ["Choose where this shows"] }
+          }
         },
         {
           "id": "canvas-power-say",
