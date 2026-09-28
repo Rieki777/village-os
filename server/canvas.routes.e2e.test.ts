@@ -378,4 +378,45 @@ describe.skipIf(!DB_CONFIGURED)("the canvas, through the real gate", () => {
     expect(row("power:story.tell").approval.text).toContain("with Storytellers");
     for (const person of ["Wren", "Ash", "Canvas Founder", "Juniper", "Linden", people.pen.id]) expect(r.text).not.toContain(person);
   });
+
+  /*
+   * THE NOTEBOOK AND THE EXPORT (0226), through the registration in
+   * server/index.ts and the real gate. By this point the village holds
+   * `story.tell` and Wren's role carries it, so Wren is the pen and the
+   * founder is not.
+   */
+  it("keeps a member's document private, lets the pen read it once they ask to share it, and not the founder", async () => {
+    const added = await call("POST", "/api/documents", { kind: "paste", title: "Circle notes", body: "We decide by consent. E2E-NOTEBOOK-TEXT" }, people.member.token);
+    expect(added.status, added.text).toBe(201);
+    const id = added.json.document.id;
+    expect((await call("GET", "/api/documents", undefined, people.stranger.token)).json).toEqual({ error: CANVAS_MEMBERS_ONLY });
+    expect((await call("GET", `/api/documents/${id}`, undefined, people.pen.token)).status).toBe(404);
+
+    const asked = await call("POST", `/api/documents/${id}/share`, { blockId: "power" }, people.member.token);
+    expect(asked.status, asked.text).toBe(201);
+    const read = await call("GET", `/api/documents/${id}`, undefined, people.pen.token);
+    expect(read.status, read.text).toBe(200);
+    expect(read.json.body).toContain("E2E-NOTEBOOK-TEXT");
+    // The village holds the pen now, so being the founder opens nothing.
+    expect((await call("GET", `/api/documents/${id}`)).status).toBe(404);
+
+    const adopted = await call("POST", `/api/canvas/proposals/${asked.json.proposalId}/adopt`, {}, people.pen.token);
+    expect(adopted.status, adopted.text).toBe(200);
+    expect(adopted.json.outcome).toEqual({ wrote: "document-shared", documentId: id });
+    expect((await call("GET", `/api/documents/${id}`)).json.document.standing).toBe("shared");
+  });
+
+  it("hands a member the four files of the pack and writes the audit row", async () => {
+    const r = await call("POST", "/api/canvas/exports", {}, people.member.token);
+    expect(r.status, r.text).toBe(200);
+    expect(r.json.files.map((f: any) => f.name)).toEqual(["README.md", "canvas.md", "resources.md", "our-documents.md"]);
+    expect(r.json.files.find((f: any) => f.name === "our-documents.md").content).toContain("E2E-NOTEBOOK-TEXT");
+    for (const person of ["Wren", "Ash", "Canvas Founder", "Rook"]) expect(r.text).not.toContain(person);
+    const [rows] = await pool.query<any[]>( // module-review-ok: reading back the audit row the built server wrote to the scratch schema
+      "SELECT text, entity_ref FROM health_events WHERE kind = 'audit' AND entity_type = 'canvas_export' AND actor_user_id = ?",
+      [people.member.id],
+    );
+    expect(rows.map((x: any) => x.text)).toEqual([`canvas:export:${r.json.hash}`]);
+    expect((await call("GET", "/api/canvas/exports/latest", undefined, people.member.token)).json.changedSince).toBe(false);
+  });
 });

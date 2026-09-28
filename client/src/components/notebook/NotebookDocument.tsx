@@ -17,7 +17,7 @@ import { KIND_LABELS, STANDING_WORDS } from "@shared/villageDocuments";
 import { NOTEBOOK_WORDS, call, dayWords, downloadStored, type DraftAnswer, type OpenDocument } from "@/lib/notebookCopy";
 
 const quiet = "text-sm font-medium rounded-lg px-3 py-1.5 text-teal-deep border border-teal-deep hover:bg-stone-50 disabled:opacity-40";
-const solid = "text-sm font-medium rounded-lg px-3 py-1.5 text-white bg-teal-deep hover:opacity-90 disabled:opacity-40";
+const solid = "text-sm font-medium rounded-lg px-3 py-1.5 text-white bg-teal-deep hover:bg-teal-deep-dark disabled:opacity-40";
 const field = "mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2 text-sm";
 
 type Said = { ok: boolean; text: string } | null;
@@ -287,7 +287,7 @@ export function NotebookDocument({
             </button>
           ) : (
             <>
-              <button type="button" className="text-sm font-medium rounded-lg px-3 py-1.5 text-white bg-red-700 hover:opacity-90" onClick={() => void remove()}>
+              <button type="button" className="text-sm font-medium rounded-lg px-3 py-1.5 text-white bg-red-700 hover:bg-red-800" onClick={() => void remove()}>
                 Delete it for good
               </button>
               <button type="button" className={quiet} onClick={() => setConfirming(false)}>

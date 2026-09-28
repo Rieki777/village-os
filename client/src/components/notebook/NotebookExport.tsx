@@ -22,7 +22,7 @@ import {
 } from "@/lib/notebookCopy";
 
 const quiet = "text-sm font-medium rounded-lg px-3 py-1.5 text-teal-deep border border-teal-deep hover:bg-stone-50 disabled:opacity-40";
-const solid = "text-sm font-medium rounded-lg px-3 py-1.5 text-white bg-teal-deep hover:opacity-90 disabled:opacity-40";
+const solid = "text-sm font-medium rounded-lg px-3 py-1.5 text-white bg-teal-deep hover:bg-teal-deep-dark disabled:opacity-40";
 
 export function NotebookExport() {
   const [status, setStatus] = useState<ExportStatus | null>(null);

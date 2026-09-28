@@ -16,7 +16,7 @@ import {
 import { call } from "@/lib/notebookCopy";
 
 const button =
-  "text-sm font-medium rounded-lg px-3 py-1.5 text-white bg-teal-deep hover:opacity-90 disabled:opacity-40";
+  "text-sm font-medium rounded-lg px-3 py-1.5 text-white bg-teal-deep hover:bg-teal-deep-dark disabled:opacity-40";
 const input = "mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2 text-sm";
 
 export function NotebookAdd({ onAdded }: { onAdded: () => void | Promise<void> }) {
