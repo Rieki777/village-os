@@ -136,6 +136,8 @@ beforeEach(() => {
   auth.current = { user: null, loading: false };
   me.current = { membership: true };
   me.asked = 0;
+  // The open view is read from the address, so every test starts on the page's own.
+  window.history.replaceState({}, "", "/journey-to-launch");
   answer({});
 });
 
@@ -265,6 +267,37 @@ describe("the canvas view", () => {
     for (const c of calls) expect(c.init.headers.Authorization, c.url).toBe("Bearer a-token");
     expect(screen.getByText("How this village governs itself")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /run the test/i }), "the test run steps aside").toBeNull();
+  });
+
+  it("keeps the open tab in the address, so Back from the workbook or a reload lands on it again", async () => {
+    auth.current = { user: { id: "u2", name: "Wren", role: "member" }, loading: false };
+    answer({
+      "/api/canvas": { status: 200, body: EMPTY_CANVAS },
+      "/api/canvas/season": { status: 200, body: NO_SEASON },
+    });
+    const first = draw();
+    const depth = window.history.length;
+    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    expect(window.location.pathname + window.location.search).toBe("/journey-to-launch?view=canvas");
+    expect(window.history.length, "a tab is not a page in the history").toBe(depth);
+    await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
+    first.unmount();
+
+    // What Back and a reload do: the page mounts again at the same address.
+    draw();
+    expect(screen.getByText("How this village governs itself")).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Test run" }));
+    expect(window.location.search, "the page's own view needs no parameter").toBe("");
+    expect(screen.getByText("See what these settings would do")).toBeTruthy();
+  });
+
+  it("opens on the page's own view when the address names no view it has", () => {
+    auth.current = { user: { id: "u2", name: "Wren", role: "member" }, loading: false };
+    window.history.replaceState({}, "", "/journey-to-launch?view=nonsense");
+    draw();
+    expect(screen.getByText("See what these settings would do")).toBeTruthy();
+    expect(calls, "the canvas is not asked for").toEqual([]);
   });
 
   it("is not offered to a signed-in account the village has not admitted, which gets the test run alone", async () => {

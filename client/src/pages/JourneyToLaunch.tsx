@@ -257,13 +257,45 @@ function StartTheGame({
   );
 }
 
+type JourneyView = "launch" | "economics" | "canvas";
+const JOURNEY_VIEWS: readonly string[] = ["launch", "economics", "canvas"] satisfies JourneyView[];
+
+/**
+ * The open view lives in the address (`?view=canvas`), so Back from the canvas
+ * workbook, a reload and a shared link all land on the tab they left. It is
+ * REPLACED, never pushed: moving between tabs is not a page in the history.
+ */
+function viewFromAddress(): JourneyView {
+  try {
+    const wanted = new URLSearchParams(window.location.search).get("view") ?? "";
+    return JOURNEY_VIEWS.includes(wanted) ? (wanted as JourneyView) : "launch";
+  } catch {
+    return "launch";
+  }
+}
+
+function writeViewToAddress(view: JourneyView): void {
+  try {
+    const url = new URL(window.location.href);
+    if (view === "launch") url.searchParams.delete("view");
+    else url.searchParams.set("view", view);
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  } catch {
+    // The address is a convenience; the view has already changed.
+  }
+}
+
 export default function JourneyToLaunch() {
   const { user, loading } = useAuth();
   const isAdmin = !!user && (user.role === "admin" || user.role === "founder");
   const [status, setStatus] = useState<any>(null);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState("");
-  const [view, setView] = useState<"launch" | "economics" | "canvas">("launch");
+  const [view, setViewState] = useState<JourneyView>(viewFromAddress);
+  const setView = (next: JourneyView) => {
+    setViewState(next);
+    writeViewToAddress(next);
+  };
   /**
    * Has the village admitted this signed-in member? The canvas is for members
    * (server/routes/canvas.ts answers an account it has not admitted with 403),
