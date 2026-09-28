@@ -64,6 +64,7 @@ import ContentEditorTab from "@/components/admin/ContentEditorTab";
 import WorkWithUsTab from "@/components/admin/WorkWithUsTab";
 import { StepListEditor, stalePolicyTerms } from "@/components/admin/exitPolicyEditing";
 import { ConflictDoorFields } from "@/components/admin/ConflictDoorFields";
+import { RestorativeInAgreement } from "@/components/admin/RestorativeInAgreement";
 import ClosingPolicyEditor from "@/components/admin/ClosingPolicyEditor";
 import { CONNECTIONS_GROUP_TITLE, MODULES_GROUP_TITLE, navGroups, type NavGroup } from "@/components/admin/adminNavGroups";
 import { IDENTITY_WIZARD_FIELDS, SETUP_STEPS, measureSetup, setupIsComplete } from "@/components/admin/setupProgress";
@@ -7183,6 +7184,7 @@ export function ExitsAdminTab({ password }: { password: string }) {
             </label>
           </div>
 
+          {data?.conflictAgreementStored ? <RestorativeInAgreement steps={policyDraft.restorative?.steps} /> : (<>
           <StepListEditor
             label="The restorative path"
             hint="Printed under Repair before departure. Its content reaches only the people in the room; these are the steps, never the content."
@@ -7191,6 +7193,7 @@ export function ExitsAdminTab({ password }: { password: string }) {
           />
           <p className="text-[11px] mb-4 -mt-2">{mark(stale.includes("The restorative path"))}</p>
           <ConflictDoorFields restorative={policyDraft.restorative} roles={roles} onChange={setRes} inputCls={inputCls} />
+          </>)}
 
           {/*
             THE ACKNOWLEDGEMENT.

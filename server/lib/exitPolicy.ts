@@ -28,6 +28,7 @@ import { faucetFor } from "./economy";
 import { isListedForTrade } from "./exchange";
 import { allTokens } from "./ledger";
 import { closingForReaders, type ClosingSection, type ClosingSectionForReaders } from "../../shared/closingPolicies";
+import { AGREEMENT_NAME_MAX, AGREEMENT_REACH_MAX, AGREEMENT_REPLY_HOURS_MAX } from "../../shared/conflictAgreement";
 
 export interface ExitPolicyVoluntary {
   noticePeriodDays: number;
@@ -275,13 +276,13 @@ export function normalizeExitPolicy(body: any, stored?: any): ExitPolicy {
  */
 
 /** The longest promised reply the editor accepts: thirty days, in hours. */
-export const REPLY_HOURS_MAX = 720;
+export const REPLY_HOURS_MAX = AGREEMENT_REPLY_HOURS_MAX;
 
 /** The longest a contact's name or organisation may be. */
-export const CONTACT_FIELD_MAX = 120;
+export const CONTACT_FIELD_MAX = AGREEMENT_NAME_MAX;
 
 /** The longest a way of reaching the contact may be. */
-export const CONTACT_REACH_MAX = 300;
+export const CONTACT_REACH_MAX = AGREEMENT_REACH_MAX;
 
 /**
  * A promised reply time, as whole hours from 1 to `REPLY_HOURS_MAX`, or null.

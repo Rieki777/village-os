@@ -102,6 +102,7 @@ import {
 } from "./governanceKinds";
 import { ringOf, VARIABLES, VARIABLES_BY_KEY } from "./gameVariables";
 import { GPS_CHANGE } from "./governingPurpose";
+import { CONFLICT_AGREEMENT } from "./conflictAgreement";
 import { CYCLE_SETTLEMENT, type SettlementMode } from "./moonSettlement";
 
 // ── The shape ──────────────────────────────────────────────────────────────
@@ -278,6 +279,7 @@ export const SUBJECT_DECISIONS: Readonly<Record<string, string>> = {
   [GOVERNANCE_MODE]: "Changing how votes are weighed",
   [CYCLE_SETTLEMENT]: "Settling a moon and releasing its pool",
   [GPS_CHANGE]: "Changing the governing purpose statement",
+  [CONFLICT_AGREEMENT]: "Changing the conflict agreement",
 };
 
 /** The votes that move a power or a seat, which carry no floor of their own. */
@@ -689,6 +691,12 @@ function voteRow(
     approval = {
       who: "founder",
       text: "The founder, who writes the statement until every transferable power has left the founding seat. Until then this vote cannot be opened.",
+    };
+  } else if (subject === CONFLICT_AGREEMENT && !inp.gameStarted) {
+    // The consequence pen (plan 2.3): the founders write it until the Birthing.
+    approval = {
+      who: "founder",
+      text: "The founders, who write the conflict agreement until the Game starts. Until then this vote cannot be opened.",
     };
   } else if (!inp.governanceOnForMembers) {
     approval = {

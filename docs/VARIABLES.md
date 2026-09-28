@@ -3877,6 +3877,7 @@ The generator reads these and fails loudly if any of them moves:
 
 - `shared/ballotSubjects.ts`
 - `shared/capabilities.ts`
+- `shared/conflictAgreement.ts`
 - `shared/gameConfig.ts`
 - `shared/gameVariables.ts`
 - `shared/governanceEngine.ts`

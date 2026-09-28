@@ -57,8 +57,14 @@ const COMPILED = [
 
 const fetchMock = vi.fn();
 
-function answerWith(body: unknown, ok = true) {
+/**
+ * The page asks for the village's conflict agreement first, and prints the
+ * exit policy's steps while there is none, which is every case in this file
+ * but the last describe. `agreement` is what the public agreement read answers.
+ */
+function answerWith(body: unknown, ok = true, agreement: unknown = { stored: false, agreement: null }) {
   fetchMock.mockImplementation(async (url: string) => {
+    if (url === "/api/conflict-agreement/public") return { ok: true, status: 200, json: async () => agreement };
     if (url !== "/api/exit-policy") throw new Error(`unexpected fetch ${url}`);
     return { ok, status: ok ? 200 : 500, json: async () => body };
   });
@@ -164,5 +170,51 @@ describe("readConflictSteps, the rule under the section", () => {
 
   it("keeps the village's words and drops blank lines", () => {
     expect(readConflictSteps(policy(["One", " ", "Two"]))).toEqual({ state: "written", steps: ["One", "Two"], draft: false });
+  });
+});
+
+describe("the Governance page once the village has a conflict agreement", () => {
+  const AGREEMENT = {
+    steps: [
+      { what: "Talk it through over tea within the week", whoInRoom: "the two of us" },
+      { what: null, whoInRoom: null },
+    ],
+    careRole: { id: "care", name: "Hearth Keeper" },
+    coverRole: { id: "cover", name: "Hearth Cover" },
+    replyHours: 48,
+    outsideContacts: [{ id: "oc-1", label: "Ombuds at Cohort Care" }],
+    whenPowerInvolved: { role: "Stewards", outsideContact: "", words: "" },
+    consequencesLadder: { rungs: [{ rung: 1, words: "We ask for a change." }], appeal: "" },
+    practices: [],
+    version: 2,
+    adoptedHow: "founders",
+    adoptedAt: "2026-09-20T10:00:00.000Z",
+    reviewDate: "2027-01-15",
+    withheld: true,
+  };
+
+  it("prints the agreement with roles, says what was held back, and never the exit policy's steps instead", async () => {
+    answerWith(policy(VILLAGE_STEPS), true, { stored: true, agreement: AGREEMENT });
+    renderPage();
+
+    expect(await screen.findByText("Talk it through over tea within the week")).toBeTruthy();
+    expect(screen.getByText(/In the room: the two of us/)).toBeTruthy();
+    expect(screen.getByText(/Hearth Keeper/)).toBeTruthy();
+    expect(screen.getByText(/hears back within 48 hours/)).toBeTruthy();
+    expect(screen.getByText(/Ombuds at Cohort Care/)).toBeTruthy();
+    expect(screen.getAllByText("Names a person, so members only.")).toHaveLength(2);
+    expect(screen.getByText(/Parts of this agreement name people/)).toBeTruthy();
+    expect(screen.queryByText(VILLAGE_STEPS[1])).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/exit-policy");
+    noCompiledCopy();
+  });
+
+  it("falls back to the exit policy's steps when the agreement cannot be read", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/api/conflict-agreement/public") return { ok: false, status: 500, json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => policy(VILLAGE_STEPS) };
+    });
+    renderPage();
+    expect(await screen.findByText(VILLAGE_STEPS[0])).toBeTruthy();
   });
 });

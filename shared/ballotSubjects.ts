@@ -68,6 +68,7 @@ import {
 } from "./governanceEngine";
 import { CYCLE_SETTLEMENT } from "./moonSettlement";
 import { GPS_CHANGE } from "./governingPurpose";
+import { CONFLICT_AGREEMENT } from "./conflictAgreement";
 
 export interface SubjectThresholds {
   /**
@@ -420,6 +421,28 @@ export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
     minQuorumPct: 50,
     minElectorate: 0,
     why: "This one changes the statement every later change is judged against, so it asks for more than half the village's voting weight to take part. How much of that has to agree is the village's own setting.",
+  },
+  /*
+   * THE CONFLICT AGREEMENT, ONCE THE GAME HAS STARTED (plan section 2.3, the
+   * consequence pen). Before the Birthing the founders write it; after it a
+   * change is a ballot, and the plan puts that ballot at the STRUCTURAL tier
+   * because no transferable power covers the exit policy the agreement
+   * answers. So this names the tier and no number of its own: the tier's
+   * floor is the village's own structural setting, raised to at least
+   * TIER_FLOORS.structural, and it moves with that setting.
+   */
+  [CONFLICT_AGREEMENT]: {
+    ...tierFloors("structural"),
+    minElectorate: 0,
+    criticality: "structural",
+    /*
+     * `custom` because the tier's ruling IS a pair of numbers, 80 and 50, and
+     * `majority` and `consent` never read a unity dial: a floor of 80 frozen
+     * onto either would be printed and never applied. Same reason as
+     * GOVERNANCE_MODE above.
+     */
+    method: "custom",
+    why: "This one changes how the village holds conflict and what a consequence can be, so it is decided at the structural tier: the village's own setting for changes to how it is organised.",
   },
 };
 

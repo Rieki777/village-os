@@ -286,7 +286,9 @@ try {
     },
     restorative: { intakeContactRole: CARE_ROLE, steps: RESTORATIVE_STEPS, replyHours: REPLY_HOURS, outsideContact: OUTSIDE_CONTACT },
   }, founder.token);
-  const pol2 = await must("re-read exit policy", "GET", "/api/exit-policy");
+  // Read back as the founder: since the conflict agreement (Wave 3a) the public
+  // read names the outside contact by organisation only, and a member reads it whole.
+  const pol2 = await must("re-read exit policy", "GET", "/api/exit-policy", undefined, founder.token);
   const wording = pol2.json.platformWording ?? [];
   if (pol2.json.policy?.restorative?.intakeContactRole !== CARE_ROLE) throw new Error("the exit policy did not keep the intake role");
   if (wording.includes("restorativeSteps")) throw new Error("the restorative steps still read as the platform's words");
@@ -385,7 +387,9 @@ try {
       // today's date is, so this holds all season long and after it.
       ...(seasonLoaded ? { seasonName: seasonLoaded.name, seasonWeekTitle: seasonLoaded.lastWeekTitle } : {}),
       // The conflict door as /exit-policy and the launch checklist word it.
-      ...(conflictDoor ? { conflictReplyTime: `${REPLY_HOURS} hours`, outsideContactName: OUTSIDE_CONTACT.name } : {}),
+      ...(conflictDoor
+        ? { conflictReplyTime: `${REPLY_HOURS} hours`, outsideContactName: OUTSIDE_CONTACT.name, outsideContactOrganisation: OUTSIDE_CONTACT.organisation }
+        : {}),
     },
     // Which person the walk signs in as, per walk role.
     walkAs: { member: "member", founder: "founder" },

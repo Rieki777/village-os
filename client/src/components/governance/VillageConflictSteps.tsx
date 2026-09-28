@@ -34,6 +34,7 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ArrowRight } from "lucide-react";
 import { useIsAdmin } from "@/contexts/AuthContext";
+import { authToken } from "@/lib/gameApi";
 
 interface ExitPolicyAnswer {
   policy?: {
@@ -75,7 +76,10 @@ export default function VillageConflictSteps() {
 
   useEffect(() => {
     let alive = true;
-    fetch("/api/exit-policy")
+    // Signed in, the token goes along: a member reads the steps whole, and
+    // anybody else has a step that names a member withheld by the server.
+    const token = authToken();
+    (token ? fetch("/api/exit-policy", { headers: { Authorization: `Bearer ${token}` } }) : fetch("/api/exit-policy"))
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((answer: ExitPolicyAnswer) => {
         if (alive) setReading(readConflictSteps(answer));
