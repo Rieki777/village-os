@@ -147,7 +147,7 @@
           "forbidden": ["%", "of 12", "could not be read", "Reading the village's rows"],
           "expect": {
             "founder": { "text": ["Add a row"] },
-            "member": { "text": ["To add or change a row, suggest it below"], "forbidden": ["Add a row"] }
+            "member": { "text": ["To suggest a new row, use the box below"], "forbidden": ["Add a row", "To add or change a row"] }
           }
         },
         {
@@ -171,7 +171,8 @@
             "Who adopts on this block",
             "Words for Who decides what", "Suggested by $canvasSuggester on", "$canvasSuggestion",
             "How it serves the purpose:",
-            "Adopting writes these words into Who decides what as the village's adopted answer"
+            "Adopting writes these words into Who decides what as the village's adopted answer",
+            "Decided lately", "Declined by $canvasDecider on", "The note: $canvasDeclineNote"
           ],
           "forbidden": ["%", "of 12", "could not be read", "No suggestions are open on Power"],
           "expect": {

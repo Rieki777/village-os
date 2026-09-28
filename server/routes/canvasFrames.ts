@@ -72,6 +72,16 @@
  * structural tier) has no machinery yet, so those answer 409 and say so; the
  * purpose statement's vote already has its own route and the answer names it.
  *
+ * ── A DECISION IS READ BACK ────────────────────────────────────────────────
+ *
+ * The pen's note is public (Rye, 2026-09-23). GET /api/canvas/blocks/:id lists
+ * the block's decided suggestions (`decided`) beside the open ones, each with
+ * who decided it, when, and the note, under the same reading rule as the open
+ * list; and the member who made a suggestion is told when somebody else
+ * decides it (a `governance` notice, one per suggestion and outcome). Until
+ * this existed a decided suggestion left the only list there was, and the page
+ * promised a note nobody could read (audit of Wave 3b, 2026-09-28).
+ *
  * ── ONE DECISION AT A TIME ─────────────────────────────────────────────────
  *
  * Adopting and declining run under a named lock on the suggestion, so two pens
@@ -86,6 +96,7 @@ import {
   doorsForBlock,
   isCanvasDoorId,
   isAdminOnlySection,
+  MODULE_LIFECYCLE_WORDS,
   parseCanvasProposal,
   parseMatrixRow,
   penForProposal,
@@ -96,6 +107,7 @@ import {
   type MatrixRowChange,
   type RestorativeChange,
 } from "../../shared/canvasFrames";
+import { validateVariable, VARIABLES_BY_KEY } from "../../shared/gameVariables";
 import { CANVAS_BLOCKS, isCanvasBlockId, LEVEL_WORDS, MOMENT_LABELS, type CanvasBlockId } from "../../shared/governanceCanvas";
 import { CANVAS_BLOCK_TEXT, CANVAS_CREDIT } from "../../shared/governanceCanvasText";
 import { hasGoverningPurpose } from "../../shared/governingPurpose";
@@ -119,11 +131,13 @@ import { EXECUTABLE_ITEM_KINDS } from "../lib/mechanics";
 import { openMechanicsProposal, type MechanicsProposeDeps } from "../lib/mechanicsPropose";
 import { setModuleLifecycle } from "../lib/modules";
 import type { IntakeHolding } from "../lib/restorativeIntake";
+import { rawValue } from "../lib/variables";
 import { briefAll, briefWrite, type BriefRow } from "../lib/villageBrain";
 import { allCanvasReadings, type CanvasReadingRow } from "../repos/canvasReadings";
 import {
   canvasProposalById,
   decideCanvasProposal,
+  decidedProposalsForBlock,
   insertCanvasProposal,
   openProposalCountBy,
   openProposalsForBlock,
@@ -143,7 +157,7 @@ import { saveExitPolicy, type ExitPolicySaveDeps } from "./exits";
 export interface CanvasFrameDeps
   extends Pick<
     AppDeps,
-    "authedUser" | "isAdmin" | "hasMembership" | "guardCapability" | "capabilityCtx" | "getPool" | "firstName" | "loadRoles"
+    "authedUser" | "isAdmin" | "hasMembership" | "guardCapability" | "capabilityCtx" | "getPool" | "firstName" | "loadRoles" | "notify"
   > {
   /** Every role_holders row, for the See frame's care role and seat terms. */
   roleHolders(): ReadonlyArray<IntakeHolding>;
@@ -200,6 +214,19 @@ export const CARE_DOOR_IS_THE_AGREEMENT_VOTE =
 /** Before the Birthing, once an agreement is stored, the care door's words live in it. */
 export const CARE_DOOR_IN_AGREEMENT =
   "Nothing was adopted. The care door now comes from the village's conflict agreement, so change it there, on the governance page, /governance#conflict-agreement.";
+
+/**
+ * Said on a care-door suggestion's card, before the Birthing, while the
+ * village's conflict agreement holds the restorative block: `saveExitPolicy`
+ * refuses the write, so the card says so and offers no Adopt that is certain
+ * to be refused. The pen can still decline it with a note (audit of Wave 3b,
+ * 2026-09-28).
+ */
+export const CARE_DOOR_HELD_BY_AGREEMENT =
+  "The village's conflict agreement holds the care door now, so adopting cannot write this into the exit policy. The change belongs in the agreement, under Say on this block.";
+
+/** The note a withdrawal carries when its author wrote none. Not listed back: "Withdrawn" already says it. */
+const WITHDRAWN_NOTE = "Withdrawn by the member who suggested it.";
 
 /** A suggestion somebody else is deciding at this moment. */
 export const BEING_DECIDED = "Somebody is deciding this suggestion right now. Look again in a moment.";
@@ -261,6 +288,56 @@ function matrixRowView(r: DecisionMatrixRow, firstName: (n: string) => string) {
     updatedBy: { id: r.updatedBy, name: firstName(r.updatedByName ?? "") },
     updatedAt: r.updatedAt,
   };
+}
+
+/**
+ * A dial door's dial, from the registry and the live value, for the
+ * suggestion box: its label, what it takes and what it reads today. Served
+ * here WHATEVER the owning module's lifecycle (the ruling of 2026-09-25:
+ * villagers see every dial and may propose a change to any of them). The box
+ * used to read these from GET /api/game/mechanics, which hides the dials of a
+ * module below members, so on a new fork the Power block's only dial became a
+ * blank text box whose every answer the dial refused (audit of Wave 3b,
+ * 2026-09-28).
+ */
+function dialFacts(key: string) {
+  const def = VARIABLES_BY_KEY[key];
+  if (!def) return null;
+  return {
+    key: def.key,
+    label: def.label,
+    type: def.type,
+    unit: def.unit ?? null,
+    min: def.min ?? null,
+    max: def.max ?? null,
+    choices: def.choices ? def.choices.map((c) => ({ value: c.value, label: c.label, ...(c.hint ? { hint: c.hint } : {}) })) : null,
+    value: rawValue(key),
+  };
+}
+
+/**
+ * Why a dial will never take this value, in the dial's own terms, or null. A
+ * choice is named by its label, never its code, since the box offers labels.
+ */
+function dialValueProblem(key: string, value: string): string | null {
+  const def = VARIABLES_BY_KEY[key];
+  if (!def) return null;
+  const problem = validateVariable(def, value);
+  if (!problem) return null;
+  if (def.type === "choice" && def.choices) {
+    return `${def.label} takes one of these: ${def.choices.map((c) => c.label).join(", ")}.`;
+  }
+  return `${def.label}: ${problem}`;
+}
+
+/**
+ * Who reads a suggestion. Every suggestion is read by the village's readers,
+ * except one to the four administrators' sections (plan 2.3), which is read by
+ * the administrators and the member who wrote it. The same rule for the open
+ * list and the decided one.
+ */
+function readableSuggestion(p: CanvasProposalRow, admin: boolean, userId: string): boolean {
+  return admin || p.target !== "words" || !isAdminOnlySection(String(p.sectionId ?? "")) || p.proposedBy === userId;
 }
 
 export function register(app: Express, deps: CanvasFrameDeps): void {
@@ -330,6 +407,9 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
   /** A suggestion as the page renders it. The purpose line is absent where the field does not exist. */
   const proposalView = async (req: Request, user: any, p: CanvasProposalRow, facts: CanvasPenFacts) => {
     const rule = ruleFor(p, facts);
+    // Before the Birthing the care door is written by the exit-policy save,
+    // which refuses it outright while a conflict agreement is stored.
+    const careDoorHeld = p.status === "open" && p.door === "exit:restorative" && rule.how === "act" && deps.exitPolicy.agreementStored();
     return {
       id: p.id,
       blockId: p.blockId,
@@ -344,11 +424,77 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
       createdAt: p.createdAt,
       status: p.status,
       ...(p.status !== "open"
-        ? { decidedBy: p.decidedBy, decisionNote: p.decisionNote, decidedAt: p.decidedAt, outcome: p.outcome }
+        ? {
+            decidedBy: p.decidedBy,
+            decidedByName: firstName(p.deciderName ?? ""),
+            decisionNote: p.decisionNote,
+            decidedAt: p.decidedAt,
+            outcome: p.outcome,
+          }
         : {}),
+      ...(careDoorHeld ? { cannotAdopt: CARE_DOOR_HELD_BY_AGREEMENT } : {}),
       pen: await penView(req, user, rule, p.proposedBy),
       youProposedIt: String(user.id) === p.proposedBy,
     };
+  };
+
+  /**
+   * A decided suggestion as Adopt lists it under "Decided lately": what it
+   * said, who decided and when, how, and the note. No pen, since nothing is
+   * left to press.
+   */
+  const decidedView = (user: any, p: CanvasProposalRow) => ({
+    id: p.id,
+    blockId: p.blockId,
+    target: p.target,
+    sectionId: p.sectionId,
+    door: p.door,
+    change: p.change,
+    body: p.body,
+    ...(servesPurposeScoped(p.blockId, p.target) ? { servesPurpose: p.servesPurpose } : {}),
+    source: p.source,
+    proposedBy: { id: p.proposedBy, name: firstName(p.proposerName ?? "") },
+    createdAt: p.createdAt,
+    status: p.status,
+    withdrawn: p.outcome?.withdrawn === true,
+    filed: p.outcome?.filed === "mechanics-proposal",
+    decidedBy: { id: p.decidedBy ?? "", name: firstName(p.deciderName ?? "") },
+    decisionNote: p.outcome?.withdrawn === true && p.decisionNote === WITHDRAWN_NOTE ? null : p.decisionNote,
+    decidedAt: p.decidedAt,
+    youProposedIt: String(user.id) === p.proposedBy,
+  });
+
+  /**
+   * Tell the member who made a suggestion that it was decided, and how, once
+   * per suggestion and outcome. Nobody is told of their own act: a withdrawal,
+   * or an author filing their own suggestion as a proposal, which only the
+   * author may do. The pen's note travels with it, except on a suggestion to
+   * the four administrators' sections, whose words stay in the app. A notice
+   * is a trace and never the deed: a failure here changes nothing already
+   * decided.
+   */
+  const tellAuthor = async (p: CanvasProposalRow, outcome: "adopted" | "declined", deciderId: string, note: string) => {
+    if (p.proposedBy === deciderId) return;
+    const title = `Your suggestion on the canvas's ${CANVAS_BLOCKS[p.blockId].name} block was ${outcome}`;
+    const kept = p.target === "words" && isAdminOnlySection(String(p.sectionId ?? ""));
+    const body = !note
+      ? "It is listed under Decided lately on the block's Adopt frame."
+      : kept
+        ? "Its note is under Decided lately on the block's Adopt frame."
+        : `The note with it: ${note}`;
+    try {
+      await deps.notify({
+        userId: p.proposedBy,
+        type: "governance",
+        title,
+        body,
+        link: "/journey-to-launch?view=canvas",
+        actorUserId: deciderId,
+        dedupeKey: `canvas-proposal:${p.id}:${outcome}`,
+      });
+    } catch {
+      // The spine never throws into a producer; this guards a host that might.
+    }
   };
 
   /** Signed in and in the village, or the answer that says why not. Null means carry on. */
@@ -420,18 +566,25 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
       seasonNow: deps.seasonNow,
     });
 
-    // ADOPT: the open suggestions, each with its pen. A suggestion for a
-    // section only administrators read is shown to administrators and to the
-    // member who wrote it.
+    // ADOPT: the open suggestions, each with its pen, and the decided ones
+    // with their notes. A suggestion for a section only administrators read
+    // is shown to administrators and to the member who wrote it.
     const facts = await penFacts();
-    const open = (await openProposalsForBlock(pool, id)).filter(
-      (p) => admin || p.target !== "words" || !isAdminOnlySection(String(p.sectionId ?? "")) || p.proposedBy === String(user.id),
-    );
+    const viewer = String(user.id);
+    const open = (await openProposalsForBlock(pool, id)).filter((p) => readableSuggestion(p, admin, viewer));
     const proposals = [];
     for (const p of open) proposals.push(await proposalView(req, user, p, facts));
+    const decided = (await decidedProposalsForBlock(pool, id)).filter((p) => readableSuggestion(p, admin, viewer)).map((p) => decidedView(user, p));
 
     const doors = [
-      ...doorsForBlock(id).map((d) => ({ id: d.id, label: d.label, href: d.href, kind: d.kind, wired: true })),
+      ...doorsForBlock(id).map((d) => ({
+        id: d.id,
+        label: d.label,
+        href: d.href,
+        kind: d.kind,
+        wired: true,
+        ...(d.kind === "dial" && d.dialKey ? { dial: dialFacts(d.dialKey) } : {}),
+      })),
       ...UNWIRED_DOORS.filter((d) => d.block === id).map((d) => ({ label: d.label, href: d.href, why: d.why, wired: false })),
     ];
 
@@ -459,9 +612,13 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
       reading: latest ? readingView(latest, firstName) : null,
       observed,
       proposals,
+      decided,
       doors,
       pens,
       birthed: facts.birthed,
+      // Before the Birthing, a stored conflict agreement holds the care door,
+      // and the exit-policy save refuses a canvas write to it.
+      careDoorInAgreement: !facts.birthed && doorsForBlock(id).some((d) => d.id === "exit:restorative") && deps.exitPolicy.agreementStored(),
       servesPurpose: {
         scoped: servesPurposeScoped(id, "words"),
         matrixScoped: id === "power",
@@ -489,6 +646,14 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
     const hasStatement = hasGoverningPurpose(await governingPurpose(pool));
     const lineProblem = servesPurposeProblem(scoped, req.body?.servesPurpose, hasStatement);
     if (lineProblem) return res.status(400).json({ error: lineProblem });
+    // A dial value the dial itself will never take is refused now, in the
+    // dial's own terms, so nobody files a suggestion that no pen can adopt.
+    // Whether the value may be written TODAY (the gate, the ring floor) is
+    // still the dial write's question, asked at adoption.
+    if (input.target === "setting" && input.door && CANVAS_DOORS[input.door].kind === "dial") {
+      const problem = dialValueProblem(String(CANVAS_DOORS[input.door].dialKey), String((input.change as { value?: unknown } | null)?.value ?? ""));
+      if (problem) return res.status(400).json({ error: problem });
+    }
     if ((await openProposalCountBy(pool, String(user.id))) >= OPEN_PROPOSALS_PER_MEMBER) {
       return res.status(429).json({
         error: `You have ${OPEN_PROPOSALS_PER_MEMBER} suggestions open already. Once some are adopted or declined you can add more.`,
@@ -668,7 +833,8 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
         return {
           ok: true,
           outcome: { wrote: "module-lifecycle", module: door.moduleId, lifecycle: result.lifecycle },
-          message: `Adopted. ${door.label}: ${result.lifecycle}.`,
+          // In the lifecycle's words, never its code ("preview" is nowhere on the page).
+          message: `Adopted. ${door.label}: ${MODULE_LIFECYCLE_WORDS[result.lifecycle as keyof typeof MODULE_LIFECYCLE_WORDS] ?? result.lifecycle}.`,
         };
       }
       // After the Birthing: the proposal that would change it, filed by its
@@ -696,8 +862,12 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
     if (p.target === "matrix") {
       const parsed = parseMatrixRow(p.change);
       if (!parsed.ok) return { ok: false, status: 400, body: { error: parsed.error } };
-      const rowId = await writeDecisionMatrixRow(pool, parsed.row as MatrixRowChange, String(user.id));
-      if (!rowId) return { ok: false, status: 404, body: { error: "The matrix row this suggestion changes is no longer there." } };
+      // A suggestion only ever adds a row: `parseCanvasProposal` refuses a
+      // `rowId`, and one on a stored row is not honoured, because the card
+      // never showed which row it would overwrite.
+      const { rowId: _notHonoured, ...row } = parsed.row;
+      const rowId = await writeDecisionMatrixRow(pool, row as MatrixRowChange, String(user.id));
+      if (!rowId) return { ok: false, status: 500, body: { error: "The row could not be written." } };
       return { ok: true, outcome: { wrote: "matrix-row", rowId }, message: "Adopted. The Decision Matrix carries this row." };
     }
     const answer = await saveExitPolicy(deps.exitPolicy, req, exitBodyWith(String(p.door), p.change ?? {}));
@@ -744,6 +914,8 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
     });
     if (!run.ran) return res.status(409).json({ error: BEING_DECIDED });
     if (run.value === "answered") return;
+    // Told once the lock is released, so a slow mailer never holds it.
+    if (run.value.status === 200) await tellAuthor(first, "adopted", String(user.id), note);
     res.status(run.value.status).json(run.value.body);
   });
 
@@ -779,7 +951,7 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
         id: p.id,
         status: "declined",
         decidedBy: String(user.id),
-        note: withdrawing ? note || "Withdrawn by the member who suggested it." : note,
+        note: withdrawing ? note || WITHDRAWN_NOTE : note,
         outcome: withdrawing ? { withdrawn: true } : null,
       });
       if (!moved) return { status: 409, body: { error: "This suggestion was decided by somebody else at the same moment." } };
@@ -792,6 +964,8 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
     });
     if (!run.ran) return res.status(409).json({ error: BEING_DECIDED });
     if (run.value === "answered") return;
+    // A withdrawal is the author's own act, and `tellAuthor` skips it.
+    if (run.value.status === 200) await tellAuthor(first, "declined", String(user.id), note);
     res.status(run.value.status).json(run.value.body);
   });
 

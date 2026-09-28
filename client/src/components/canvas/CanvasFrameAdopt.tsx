@@ -22,7 +22,12 @@
  * asks the real guard, and a refusal is printed in the server's own words.
  *
  * NOTES ARE PUBLIC (Rye, 2026-09-23), and the note box says so above itself,
- * before anybody types.
+ * before anybody types (for the four administrators' sections, who reads it
+ * instead: `noteReaders`). A DECIDED suggestion stays readable: "Decided
+ * lately" lists the block's decided suggestions with who decided each, when,
+ * and the note, and the member who made one is told by a notice. Before that
+ * list existed the note box promised readers the server never served (audit
+ * of Wave 3b, 2026-09-28).
  */
 import { useState } from "react";
 import { Link } from "wouter";
@@ -32,8 +37,11 @@ import {
   adoptIntro,
   adoptLabel,
   changeLines,
+  decidedLine,
+  dialOf,
   mayAdopt as mayAdoptHere,
   mayDecline,
+  noteReaders,
   opensPurposeVote,
   penSentences,
   proposalHeadline,
@@ -41,6 +49,7 @@ import {
   sectionTitlesOf,
   suggestedLine,
   type BlockFramesPayload,
+  type DecidedView,
   type FrameId,
   type ProposalView,
 } from "@/lib/canvasFramesCopy";
@@ -100,7 +109,48 @@ export function CanvasFrameAdopt({
           </button>
         </div>
       )}
+
+      {payload.decided.length > 0 && (
+        <div className="space-y-2 border-t border-stone-200 pt-3">
+          <h4 className="font-semibold text-stone-900">Decided lately</h4>
+          <p className="text-xs text-stone-600">The newest decisions on {payload.block.name}, with the note each was decided with, where one was written.</p>
+          <ul className="space-y-3" data-testid="canvas-adopt-decided">
+            {payload.decided.map((d) => (
+              <li key={d.id}>
+                <DecidedCard d={d} payload={payload} titles={titles} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </section>
+  );
+}
+
+function DecidedCard({ d, payload, titles }: { d: DecidedView; payload: BlockFramesPayload; titles: Record<string, string> }) {
+  const lines = changeLines(d, dialOf(d, payload.doors));
+  return (
+    <article className="rounded-lg border border-stone-200 bg-stone-50 p-3 space-y-1" data-testid={`canvas-decided-${d.id}`}>
+      <h5 className="font-medium text-stone-900">{proposalHeadline(d, titles)}</h5>
+      <p className="text-xs text-stone-600">{suggestedLine(d)}</p>
+      <p className="text-stone-800">{decidedLine(d)}</p>
+      {d.decisionNote && (
+        <p className="text-stone-800">
+          <span className="font-medium">The note:</span> {d.decisionNote}
+        </p>
+      )}
+      <details className="text-stone-800">
+        <summary className="cursor-pointer min-h-[32px] text-sm text-teal-deep">What it said</summary>
+        {lines.length > 0 && (
+          <ul className="mt-1 space-y-0.5">
+            {lines.map((l) => (
+              <li key={l}>{l}</li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-1 whitespace-pre-wrap border-l-2 border-stone-300 pl-3">{d.body}</p>
+      </details>
+    </article>
   );
 }
 
@@ -123,7 +173,8 @@ function ProposalCard({
   const declines = mayDecline(p);
   const withdraws = p.youProposedIt;
   const acts = mayAdopt || declines || withdraws;
-  const lines = changeLines(p);
+  const dial = dialOf(p, payload.doors);
+  const lines = changeLines(p, dial);
 
   const decide = async (what: "adopt" | "decline" | "withdraw") => {
     setError(null);
@@ -148,8 +199,8 @@ function ProposalCard({
         what === "adopt"
           ? String(d?.message ?? "Adopted.")
           : what === "withdraw"
-            ? "Your suggestion is withdrawn. It stays on the record as withdrawn."
-            : "Declined. The note is on the record beside the suggestion.",
+            ? "Your suggestion is withdrawn. It is listed under Decided lately on this block."
+            : "Declined. The suggestion and your note are listed under Decided lately on this block, and the member who made it is told.",
       );
     } catch {
       setError({ text: "That did not reach the server, so nothing was decided.", toProposals: false });
@@ -176,7 +227,7 @@ function ProposalCard({
         </p>
       )}
       <p className="text-stone-800" data-testid={`canvas-proposal-effect-${p.id}`}>
-        {adoptEffect(p, payload.birthed, titles)}
+        {adoptEffect(p, payload.birthed, titles, dial)}
       </p>
       <p className="text-xs text-stone-600">Who decides: {p.pen.sentence}</p>
       {opensPurposeVote(p) && (
@@ -191,7 +242,7 @@ function ProposalCard({
             <span className="font-medium text-stone-900">
               {declines ? (mayAdopt ? "Your note (optional to adopt, needed to decline)" : "Your note (needed to decline)") : "Your note (optional)"}
             </span>
-            <span className="block text-xs text-stone-600">{payload.notesArePublic}</span>
+            <span className="block text-xs text-stone-600">{noteReaders(p, payload.notesArePublic)}</span>
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}

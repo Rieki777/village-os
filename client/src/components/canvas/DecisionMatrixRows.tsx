@@ -227,7 +227,9 @@ export function DecisionMatrixRows({
             <p className="text-stone-700" data-testid="matrix-human-rows-pen">
               {data.pen.how === "ballot"
                 ? "The Game has started, so these rows change by a vote of the whole village, which is not built yet. You can still suggest a row below, and it waits for that vote."
-                : `${data.pen.sentence} To add or change a row, suggest it below.`}
+                : // A suggestion only ever adds a row (the box cannot name one to overwrite),
+                  // so the line promises what the box can carry (audit of Wave 3b, 2026-09-28).
+                  `${data.pen.sentence} To suggest a new row, use the box below. To change a row, suggest it as it should read and say which row it replaces.`}
             </p>
           )}
         </>

@@ -51,6 +51,7 @@ import { governingPurpose, writeGoverningPurpose } from "../lib/governingPurpose
 import { confirmManual } from "../lib/launch";
 import { proposalById, proposalsOpenedSince } from "../lib/mechanics";
 import { effectiveLifecycle, loadModuleSettings } from "../lib/modules";
+import type { NotifyInput } from "../lib/notify";
 import type { IntakeHolding } from "../lib/restorativeIntake";
 import { loadVariables, numberVar, setVariable, stringVar } from "../lib/variables";
 import { briefGet, briefWrite } from "../lib/villageBrain";
@@ -59,6 +60,7 @@ import { allDecisionMatrixRows } from "../repos/decisionMatrixRows";
 import { dbDocument } from "../repos/store-db";
 import { CANVAS_MEMBERS_ONLY } from "./canvas";
 import {
+  CARE_DOOR_HELD_BY_AGREEMENT,
   CARE_DOOR_IN_AGREEMENT,
   CARE_DOOR_IS_THE_AGREEMENT_VOTE,
   CONSEQUENCE_VOTE_NOT_BUILT,
@@ -103,6 +105,8 @@ let HOLDERS: IntakeHolding[] = [];
 let QUALIFIED = true;
 /** Whether the village has saved a conflict agreement, which then holds the restorative block. False unless a test says so. */
 let AGREEMENT_STORED = false;
+/** Every notice the routes send, as `notify` receives it. */
+const NOTICES: NotifyInput[] = [];
 
 const who = (req: express.Request) => {
   const token = String(req.headers.authorization ?? "").replace(/^Bearer /, "");
@@ -183,6 +187,10 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       getPool: () => pool,
       firstName: (name: string) => String(name ?? "").trim().split(/\s+/)[0] ?? "",
       loadRoles: () => ROLES as any,
+      notify: async (input) => {
+        NOTICES.push(input);
+        return { fresh: true };
+      },
       roleHolders: () => HOLDERS,
       exitPolicy: {
         isAdmin,
@@ -425,6 +433,47 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       expect(kept.body).toBe(long);
     });
 
+    it("sends a dial door's choices and today's value with the governance module off, where the mechanics list hides them", async () => {
+      // The platform default: governance ships off, and GET /api/game/mechanics
+      // hides a dial of a module below members. The block must not.
+      expect(effectiveLifecycle("governance")).toBe("off");
+      for (const as of ["member", "founder"] as const) {
+        const door = (await block(as, "power")).body.doors.find((d: any) => d.id === "dial:governance.default_method");
+        expect(door.dial, as).toMatchObject({ key: "governance.default_method", type: "choice", value: stringVar("governance.default_method") });
+        expect(door.dial.choices.map((c: any) => c.value), as).toEqual(VARIABLES_BY_KEY["governance.default_method"]!.choices!.map((c) => c.value));
+      }
+      const vouches = (await block("member", "team")).body.doors.find((d: any) => d.id === "dial:membership.vouches_required");
+      expect(vouches.dial).toMatchObject({ type: "integer", unit: "vouches", min: 0, choices: null });
+      // The other doors carry no dial.
+      expect((await block("member", "power")).body.doors.find((d: any) => d.id === "module:governance").dial).toBeUndefined();
+    });
+
+    it("refuses a dial value the dial never takes when it is suggested, naming the choices by their labels, and keeps nothing", async () => {
+      const before = (await block("admin", "power")).body.proposals.map((p: any) => p.id);
+      const labels = VARIABLES_BY_KEY["governance.default_method"]!.choices!.map((c) => c.label);
+      // "Consent" is the word the See frame shows; the dial's value is "consent".
+      const r = await propose("member", {
+        blockId: "power", target: "setting", door: "dial:governance.default_method", change: { value: "Consent" }, body: "Decide by consent.",
+      });
+      expect(r.status).toBe(400);
+      expect(r.body.error).toBe(`How village-wide ballots decide takes one of these: ${labels.join(", ")}.`);
+      const tooMany = await propose("member", {
+        blockId: "team", target: "setting", door: "dial:membership.vouches_required", change: { value: "400" }, body: "Everybody should know a newcomer.",
+      });
+      expect(tooMany.status).toBe(400);
+      expect(tooMany.body.error).toContain("at most 20");
+      expect((await block("admin", "power")).body.proposals.map((p: any) => p.id)).toEqual(before);
+    });
+
+    it("refuses a matrix suggestion that names a row to overwrite: a suggestion only ever adds a row", async () => {
+      const r = await propose("member", {
+        blockId: "power", target: "matrix", body: "Change who decides spending.",
+        change: { rowId: 1, subject: "Spending", approval: "Nobody yet", consultation: "Nobody yet", information: "Everyone" },
+      });
+      expect(r.status).toBe(400);
+      expect(r.body.error).toContain("A suggestion adds a new row to the Decision Matrix");
+    });
+
     it("lets only an administrator mark a suggestion as drafted from the live system", async () => {
       expect((await propose("member", { blockId: "team", sectionId: "membership", body: "Drafted words.", source: "derived" })).status).toBe(403);
       const r = await propose("admin", { blockId: "team", sectionId: "membership", body: "Drafted words.", source: "derived" });
@@ -479,6 +528,13 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       expect(row?.status).toBe("confirmed");
       expect(row?.confirmedBy).toBe("cf-teller");
 
+      // The member who made it is told, once, with the note.
+      const told = NOTICES.filter((n) => n.dedupeKey === `canvas-proposal:${p.id}:adopted`);
+      expect(told).toHaveLength(1);
+      expect(told[0]).toMatchObject({ userId: "cf-member", type: "governance", actorUserId: "cf-teller", link: "/journey-to-launch?view=canvas" });
+      expect(told[0].title).toBe("Your suggestion on the canvas's Team block was adopted");
+      expect(told[0].body).toBe("The note with it: Agreed at the moon.");
+
       expect((await adopt("teller", p.id)).status).toBe(409);
     });
 
@@ -502,7 +558,7 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       expect((await governingPurpose(pool)).statement).toBe(statement);
     });
 
-    it("a dial: whoever may turn the dials adopts it, through the dial write and its own refusals", async () => {
+    it("a dial: whoever may turn the dials adopts it, through the dial write", async () => {
       const p = (await propose("member", {
         blockId: "team", target: "setting", door: "dial:membership.vouches_required", change: { value: "4" }, body: "Four people should know a newcomer.",
       })).body.proposal;
@@ -513,15 +569,35 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       expect(r.body.outcome).toMatchObject({ wrote: "dial", key: "membership.vouches_required", value: "4" });
       expect(numberVar("membership.vouches_required")).toBe(4);
 
-      // The dial's own validator answers, and the suggestion stays open.
-      const bad = (await propose("member", {
+      // A value the dial never takes is refused when suggested (the
+      // "suggesting" cases), so nothing nobody can adopt is left open.
+      const bad = await propose("member", {
         blockId: "power", target: "setting", door: "dial:governance.default_method", change: { value: "lottery" }, body: "Draw lots.", servesPurpose: LINE,
-      })).body.proposal;
-      const refused = await adopt("admin", bad.id);
-      expect(refused.status).toBe(400);
-      expect(refused.body.error).toContain("Must be one of");
+      });
+      expect(bad.status).toBe(400);
       expect(stringVar("governance.default_method")).not.toBe("lottery");
-      expect((await block("admin", "power")).body.proposals.map((x: any) => x.id)).toContain(bad.id);
+    });
+
+    it("an administrators' section: a suggestion to it, and the note it is decided with, are read by the administrators and its author only", async () => {
+      const p = (await propose("member", { blockId: "legal", sectionId: "land", body: "The lease names the neighbours on the east boundary." })).body.proposal;
+      const listed = async (as: Who, key: "proposals" | "decided") => (await block(as, "legal")).body[key].map((x: any) => x.id);
+      expect(await listed("teller", "proposals")).not.toContain(p.id);
+      expect(await listed("founder", "proposals")).toContain(p.id);
+      expect(await listed("member", "proposals")).toContain(p.id);
+      // A suggestion to one of the other nine sections is read by everyone, whatever its section's audience.
+      const open = (await propose("member", { blockId: "team", sectionId: "membership", body: "Two vouches and a meal." })).body.proposal;
+      expect((await block("teller", "team")).body.proposals.map((x: any) => x.id)).toContain(open.id);
+
+      const note = "The lease is the trust's to describe.";
+      expect((await decline("admin", p.id, note)).status).toBe(200);
+      expect(await listed("teller", "decided")).not.toContain(p.id);
+      const byAuthor = (await block("member", "legal")).body.decided.find((x: any) => x.id === p.id);
+      expect(byAuthor).toMatchObject({ status: "declined", decisionNote: note, withdrawn: false, youProposedIt: true });
+      expect(await listed("founder", "decided")).toContain(p.id);
+      // The author is told, and the note on an administrators' section stays in the app.
+      const told = NOTICES.find((n) => n.dedupeKey === `canvas-proposal:${p.id}:declined`);
+      expect(told).toMatchObject({ userId: "cf-member", type: "governance", actorUserId: "cf-admin" });
+      expect(told?.body).toBe("Its note is under Decided lately on the block's Adopt frame.");
     });
 
     it("the care door: the founders adopt it through the exit-policy save, which refuses what it always refused", async () => {
@@ -558,14 +634,22 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       })).body.proposal;
       await exitPolicyRepo().load();
       const before = JSON.stringify((exitPolicyRepo().get() as any).restorative);
+      expect((await block("member", "conflict")).body.careDoorInAgreement).toBe(false);
       AGREEMENT_STORED = true;
       try {
+        // The block says so before anybody presses: the member's box, and the
+        // pen's card, which offers no Adopt that is certain to be refused.
+        expect((await block("member", "conflict")).body.careDoorInAgreement).toBe(true);
+        const card = (await block("admin", "conflict")).body.proposals.find((x: any) => x.id === p.id);
+        expect(card.cannotAdopt).toBe(CARE_DOOR_HELD_BY_AGREEMENT);
+        expect(card.pen).toMatchObject({ how: "act", youMayAdopt: true });
         const r = await adopt("admin", p.id);
         expect(r.status).toBe(409);
         expect(r.body).toEqual({ error: "restorative_in_agreement", message: CARE_DOOR_IN_AGREEMENT });
       } finally {
         AGREEMENT_STORED = false;
       }
+      expect((await block("admin", "conflict")).body.proposals.find((x: any) => x.id === p.id).cannotAdopt).toBeUndefined();
       await exitPolicyRepo().load();
       expect(JSON.stringify((exitPolicyRepo().get() as any).restorative)).toBe(before);
       // The suggestion stays open for the pen, with nothing recorded as adopted.
@@ -595,6 +679,8 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       const r = await adopt("admin", p.id);
       expect(r.status).toBe(200);
       expect(r.body.outcome).toEqual({ wrote: "module-lifecycle", module: "governance", lifecycle: "members" });
+      // Said in the lifecycle's words, never its code.
+      expect(r.body.message).toBe("Adopted. How widely governance is switched on: on for members.");
       expect(effectiveLifecycle("governance")).toBe("members");
       const fact = (await block("member", "power")).body.observed.find((f: any) => f.id === "governance-on").text;
       expect(fact).toBe("Governance is on for members, so the village can vote here.");
@@ -608,6 +694,21 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       expect(declined.body.proposal).toMatchObject({ status: "declined", decisionNote: "We keep the vouches." });
       expect((await adopt("teller", words.id)).status).toBe(409);
 
+      // The note is public, like the suggestion: every reader of the block
+      // reads the decided suggestion with it, and its author is told.
+      for (const as of ["member", "founder", "admin"] as const) {
+        const d = (await block(as, "team")).body.decided.find((x: any) => x.id === words.id);
+        expect(d, as).toMatchObject({
+          status: "declined", withdrawn: false, filed: false, decisionNote: "We keep the vouches.",
+          decidedBy: { id: "cf-teller", name: "Wren" }, proposedBy: { id: "cf-member", name: "Ash" }, body: "Anybody may join.",
+        });
+        expect(d.decidedAt, as).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      }
+      expect((await block("member", "team")).body.proposals.map((x: any) => x.id)).not.toContain(words.id);
+      const told = NOTICES.filter((n) => n.dedupeKey === `canvas-proposal:${words.id}:declined`);
+      expect(told).toHaveLength(1);
+      expect(told[0]).toMatchObject({ userId: "cf-member", title: "Your suggestion on the canvas's Team block was declined", body: "The note with it: We keep the vouches." });
+
       const dial = (await propose("teller", {
         blockId: "team", target: "setting", door: "dial:membership.vouches_required", change: { value: "1" }, body: "One vouch is enough.",
       })).body.proposal;
@@ -615,6 +716,9 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       const withdrawn = await decline("teller", dial.id);
       expect(withdrawn.status).toBe(200);
       expect(withdrawn.body.proposal).toMatchObject({ status: "declined", outcome: { withdrawn: true } });
+      // A withdrawal is listed as one, carries no stand-in note, and tells nobody.
+      expect((await block("member", "team")).body.decided.find((x: any) => x.id === dial.id)).toMatchObject({ withdrawn: true, decisionNote: null });
+      expect(NOTICES.some((n) => n.dedupeKey.startsWith(`canvas-proposal:${dial.id}:`))).toBe(false);
     });
 
     it("the matrix's human rows: the founders write them, members read them", async () => {
@@ -658,6 +762,9 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       expect(filed?.proposerUserId).toBe("cf-member");
       expect(filed?.changeSet).toEqual([{ key: "membership.vouches_required", from: "4", to: "5" }]);
       expect(numberVar("membership.vouches_required")).toBe(4);
+      // Filed by its own author: nobody is told of their own act, and it is listed as filed.
+      expect(NOTICES.some((n) => n.dedupeKey.startsWith(`canvas-proposal:${p.id}:`))).toBe(false);
+      expect((await block("teller", "team")).body.decided.find((x: any) => x.id === p.id)).toMatchObject({ status: "adopted", filed: true });
     });
 
     it("only the member who wrote a dial suggestion files it, in their own name, and a draft says it is a draft", async () => {

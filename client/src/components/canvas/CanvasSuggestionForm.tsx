@@ -11,13 +11,23 @@
  *
  * THE FORM CHECKS WITH THE ROUTE'S OWN VALIDATORS (`parseCanvasProposal` and
  * `servesPurposeProblem`, shared/canvasFrames.ts), so a refusal here reads
- * exactly like the server's, before anything is sent. A setting's value is
- * judged by the setting itself when the suggestion is adopted, which is where
- * the server judges it too; the box shows what the dial reads today and the
- * choices it takes, read from GET /api/game/mechanics, which every visitor may
- * read (the ruling of 2026-09-25: every dial is visible).
+ * exactly like the server's, before anything is sent. A dial's value is
+ * checked against the dial itself when the suggestion is sent, and whether it
+ * may be written today when it is adopted. The box shows what the dial reads
+ * today and the choices it takes from the block's own dial door, which the
+ * server fills whatever the owning module's lifecycle (the ruling of
+ * 2026-09-25: every dial is visible). It used to read GET /api/game/mechanics,
+ * which hides a module's dials below members, so on a new fork the Power
+ * block's only dial was a blank text box (audit of Wave 3b, 2026-09-28).
  *
- * NOTES ARE PUBLIC, and the box says so above its first field.
+ * WHO READS A SUGGESTION is said above the first field, before anybody types
+ * (`suggestionReaders`): the whole village, or for the four administrators'
+ * sections the administrators and its author. A section whose own words are
+ * closed to members says so, since a suggestion to it is not.
+ *
+ * WHAT IS TYPED STAYS TYPED while the aim is changed: each aim's fields are
+ * its own, and the one field two aims share (a dial's value or a module's
+ * lifecycle) is kept per aim.
  *
  * WHERE A SUGGESTION CANNOT BE CARRIED, the box says so before anybody writes
  * (`suggestionFate`): after the Birthing the exit terms and the matrix wait for
@@ -42,8 +52,8 @@ import {
   suggestionBody,
   suggestionFate,
   suggestionOptions,
+  suggestionReaders,
   type BlockFramesPayload,
-  type DialFacts,
   type SuggestionFields,
 } from "@/lib/canvasFramesCopy";
 import { CANVAS_DOORS, parseCanvasProposal, servesPurposeProblem, servesPurposeScoped } from "@shared/canvasFrames";
@@ -64,28 +74,14 @@ export function CanvasSuggestionForm({ payload, onSent }: { payload: BlockFrames
   const titles = useMemo(() => sectionTitlesOf(payload.answer.sections), [payload]);
   const [key, setKey] = useState(options[0]?.key ?? "");
   const [f, setF] = useState<SuggestionFields>(EMPTY_FIELDS);
+  /** The shared field (a dial's value, a module's lifecycle) as typed under each aim, kept while another aim is open. */
+  const [values, setValues] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [dials, setDials] = useState<DialFacts[] | null>(null);
   const [roles, setRoles] = useState<Array<{ id: string; name: string }> | null>(null);
 
   const option = options.find((o) => o.key === key) ?? options[0];
   const door = option?.door ? CANVAS_DOORS[option.door] : null;
-
-  // The dial's current value and its choices, read once, when a dial is chosen.
-  useEffect(() => {
-    if (door?.kind !== "dial" || dials) return;
-    let live = true;
-    fetch("/api/game/mechanics", { headers: headers() })
-      .then(async (r) => {
-        const d = await r.json().catch(() => ({}));
-        if (live) setDials(r.ok && Array.isArray(d?.variables) ? (d.variables as DialFacts[]) : []);
-      })
-      .catch(() => live && setDials([]));
-    return () => {
-      live = false;
-    };
-  }, [door?.kind, dials]);
 
   // The roles a care door can name, read once, when the care door is chosen.
   useEffect(() => {
@@ -106,8 +102,8 @@ export function CanvasSuggestionForm({ payload, onSent }: { payload: BlockFrames
 
   const scoped = servesPurposeScoped(payload.block.id, option.target);
   const pen = payload.pens[penKeyFor(option)];
-  const fate = suggestionFate(option, pen);
-  const dial = door?.kind === "dial" && option.door && dials ? dialFor(option.door, dials) : null;
+  const fate = suggestionFate(option, pen, payload.careDoorInAgreement);
+  const dial = door?.kind === "dial" && option.door ? dialFor(option.door, payload.doors) : null;
   const set = (patch: Partial<SuggestionFields>) => {
     setF({ ...f, ...patch });
     setError(null);
@@ -129,6 +125,7 @@ export function CanvasSuggestionForm({ payload, onSent }: { payload: BlockFrames
         return;
       }
       setF(EMPTY_FIELDS);
+      setValues({});
       onSent();
     } catch {
       setError("That suggestion did not reach the server, so nothing was kept.");
@@ -148,7 +145,7 @@ export function CanvasSuggestionForm({ payload, onSent }: { payload: BlockFrames
     >
       <h4 className="font-semibold text-stone-900">Suggest a change</h4>
       <p className="text-xs text-stone-700" data-testid="canvas-notes-public">
-        {payload.notesArePublic} Your first name and today's date go with it.
+        {suggestionReaders(option, payload.answer.sections, payload.notesArePublic)}
       </p>
 
       {options.length > 1 ? (
@@ -163,8 +160,12 @@ export function CanvasSuggestionForm({ payload, onSent }: { payload: BlockFrames
                   value={o.key}
                   checked={o.key === option.key}
                   onChange={() => {
+                    // Every other field belongs to one aim and is kept as typed
+                    // (audit of Wave 3b, 2026-09-28: a stray tap wiped a
+                    // matrix row's columns without a word).
+                    setValues({ ...values, [option.key]: f.value });
                     setKey(o.key);
-                    setF({ ...EMPTY_FIELDS, body: f.body, servesPurpose: f.servesPurpose });
+                    setF({ ...f, value: values[o.key] ?? "" });
                     setError(null);
                   }}
                   className="mt-1"
@@ -265,7 +266,10 @@ export function CanvasSuggestionForm({ payload, onSent }: { payload: BlockFrames
             <textarea value={f.steps} onChange={(e) => set({ steps: e.target.value })} className={area} />
           </label>
           <RolePicker label="The care role, which hears a conflict first" value={f.intakeContactRole} roles={roles} onChange={(v) => set({ intakeContactRole: v })} />
-          <RolePicker label="The cover role, for when the care role is part of it" value={f.coverRole} roles={roles} onChange={(v) => set({ coverRole: v })} />
+          {/* The agreement's own meaning of the cover role. A conflict that involves
+              the care holder is the agreement's "When power is involved", which the
+              cover role does not take (audit of Wave 3b, 2026-09-28). */}
+          <RolePicker label="The cover role, which hears a request when the care role cannot" value={f.coverRole} roles={roles} onChange={(v) => set({ coverRole: v })} />
           <label className="block">
             <span className={labelText}>The promised reply time, in hours</span>
             <input type="number" inputMode="numeric" min={1} value={f.replyHours} onChange={(e) => set({ replyHours: e.target.value })} className={field} />

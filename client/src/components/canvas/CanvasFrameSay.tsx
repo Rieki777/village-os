@@ -9,7 +9,10 @@
  *                    them to this viewer: adopted, a draft, nothing written,
  *                    written and not opened to members, or kept with the
  *                    administrators. A section the viewer may not read shows
- *                    its state and never its words.
+ *                    its state and never its words. An administrator reading
+ *                    words members do not is told so beside them
+ *                    (`sectionClosedLine`), since the box below is read by
+ *                    everyone.
  *   Purpose (1)      the governing purpose statement above the sections.
  *   Power (7)        the Decision Matrix: the platform's generated half
  *                    (DecisionMatrix, its own lazy chunk) and the village's
@@ -28,7 +31,7 @@
 import { lazy, Suspense, useState } from "react";
 import { Link } from "wouter";
 import { readingDate } from "@/lib/canvasCopy";
-import { SECTION_STATUS_WORDS, type BlockFramesPayload, type FrameId } from "@/lib/canvasFramesCopy";
+import { SECTION_STATUS_WORDS, sectionClosedLine, type BlockFramesPayload, type FrameId } from "@/lib/canvasFramesCopy";
 import { CanvasSuggestionForm } from "./CanvasSuggestionForm";
 import { DecisionMatrixRows } from "./DecisionMatrixRows";
 
@@ -74,6 +77,11 @@ export function CanvasFrameSay({
                 <h4 className="font-semibold text-stone-900">{s.title}</h4>
                 <span className="text-xs font-medium text-stone-600">{SECTION_STATUS_WORDS[s.status]}</span>
               </div>
+              {sectionClosedLine(s) && (
+                <p className="mt-1 text-xs font-medium text-stone-800" data-testid={`canvas-say-closed-${s.id}`}>
+                  {sectionClosedLine(s)}
+                </p>
+              )}
               {s.body && <p className="mt-1 whitespace-pre-wrap text-stone-800">{s.body}</p>}
               {s.body && s.updatedAt && <p className="mt-1 text-xs text-stone-600">Last changed on {readingDate(s.updatedAt)}</p>}
             </li>

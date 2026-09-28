@@ -25,6 +25,7 @@ import {
   isAdminOnlySection,
   isCanvasDoorId,
   MODULE_DOOR_LIFECYCLES,
+  MODULE_LIFECYCLE_WORDS,
   penForProposal,
   type CanvasDoorId,
   type DialChange,
@@ -98,10 +99,42 @@ export interface ProposalView {
   createdAt: string;
   status: ProposalStatus;
   decidedBy?: string | null;
+  decidedByName?: string;
   decisionNote?: string | null;
   decidedAt?: string | null;
   outcome?: Record<string, unknown> | null;
+  /**
+   * Present when adopting is certain to be refused today, as the sentence
+   * that says why (the care door, while a conflict agreement holds it before
+   * the Birthing). The pen can still decline it.
+   */
+  cannotAdopt?: string;
   pen: PenView;
+  youProposedIt: boolean;
+}
+
+/** A decided suggestion, as Adopt lists it under "Decided lately". */
+export interface DecidedView {
+  id: number;
+  blockId: CanvasBlockId;
+  target: ProposalTarget;
+  sectionId: string | null;
+  door: string | null;
+  change: SuggestionChange | null;
+  body: string;
+  servesPurpose?: string | null;
+  source: ProposalSource;
+  proposedBy: { id: string; name: string };
+  createdAt: string;
+  status: ProposalStatus;
+  /** Declined by the member who made it. */
+  withdrawn: boolean;
+  /** Adopted by filing it as a proposal the village votes on. */
+  filed: boolean;
+  decidedBy: { id: string; name: string };
+  /** The pen's note. Null when none was written. */
+  decisionNote: string | null;
+  decidedAt: string | null;
   youProposedIt: boolean;
 }
 
@@ -132,6 +165,8 @@ export interface DoorView {
   kind?: "dial" | "exit-policy" | "module";
   why?: string;
   wired: boolean;
+  /** A dial door's dial: what it takes and what it reads today, whatever its module's lifecycle. */
+  dial?: DialFacts | null;
 }
 
 /** The keys a block's `pens` may carry. */
@@ -152,9 +187,13 @@ export interface BlockFramesPayload {
   };
   observed: ObservedFact[];
   proposals: ProposalView[];
+  /** The block's decided suggestions, newest decision first, with their notes. */
+  decided: DecidedView[];
   doors: DoorView[];
   pens: Partial<Record<PenKey, PenView>>;
   birthed: boolean;
+  /** Before the Birthing: a stored conflict agreement holds the care door, so the canvas cannot write it. */
+  careDoorInAgreement: boolean;
   servesPurpose: { scoped: boolean; matrixScoped: boolean; requiredToday: boolean };
   notesArePublic: string;
 }
@@ -212,6 +251,52 @@ export const SECTION_STATUS_WORDS: Record<SectionStatus, string> = {
   "admin-only": "Kept with the administrators",
 };
 
+/**
+ * A mark beside a section's state, for a viewer who reads words members do
+ * not: the four administrators' sections, and a section whose words are not
+ * opened to members. Only an administrator is ever sent those words, and the
+ * Say frame used to show them exactly as it shows shared ones, right above a
+ * box whose suggestions every member reads (audit of Wave 3b, 2026-09-28).
+ */
+export function sectionClosedLine(s: Pick<AnswerSection, "id" | "readable" | "audience" | "body">): string | null {
+  if (!s.readable || !s.body) return null;
+  if (isAdminOnlySection(s.id)) return "Kept with the administrators: members never read these words.";
+  if (s.audience === "admin") return "Only the administrators read these words today.";
+  return null;
+}
+
+/** Whether a section's written words are closed to members today, said from either side of the screen. */
+function closedToMembers(s: AnswerSection | undefined): boolean {
+  return !!s && !isAdminOnlySection(s.id) && (s.status === "not-shared" || (s.readable && s.audience === "admin" && !!s.body));
+}
+
+/**
+ * Who reads a suggestion sent from the box, said above its first field. A
+ * suggestion to one of the four administrators' sections is read by the
+ * administrators and its author; every other suggestion by the whole village,
+ * including one to a section whose own words are closed to members, which the
+ * line then says in so many words.
+ */
+export function suggestionReaders(option: Pick<SuggestionOption, "target" | "sectionId">, sections: readonly AnswerSection[], notesArePublic: string): string {
+  const first = "Your first name and today's date go with it.";
+  if (option.target !== "words") return `${notesArePublic} ${first}`;
+  if (isAdminOnlySection(String(option.sectionId))) {
+    return `A suggestion to this section is read by the administrators and by you. ${first}`;
+  }
+  const section = sections.find((s) => s.id === option.sectionId);
+  if (closedToMembers(section)) {
+    return `${notesArePublic} The words under this section are closed to members today, and a suggestion to it is read by everyone in the village. ${first}`;
+  }
+  return `${notesArePublic} ${first}`;
+}
+
+/** Who reads the pen's note on a suggestion: the village, or the administrators and its author. */
+export function noteReaders(p: Pick<ProposalView, "target" | "sectionId">, notesArePublic: string): string {
+  return p.target === "words" && isAdminOnlySection(String(p.sectionId))
+    ? "The administrators and the member who made this suggestion can read what you write here."
+    : notesArePublic;
+}
+
 /** "Suggested by Sage on 3 October 2026", with where it came from when that was not a member. */
 export function suggestedLine(p: Pick<ProposalView, "proposedBy" | "createdAt" | "source" | "youProposedIt">, locale?: string): string {
   const who = p.youProposedIt ? "you" : p.proposedBy.name || "a member";
@@ -219,13 +304,17 @@ export function suggestedLine(p: Pick<ProposalView, "proposedBy" | "createdAt" |
   return `${by} on ${readingDate(p.createdAt, locale)}`;
 }
 
-/** The words a module lifecycle is shown in. */
-export const LIFECYCLE_WORDS: Record<ModuleChange["to"], string> = {
-  off: "off",
-  preview: "on for the administrators only",
-  members: "on for members",
-  public: "on for everybody, visitors included",
-};
+/** "Declined by Ivy on 5 October 2026." How a decided suggestion was decided, and by whom. */
+export function decidedLine(d: Pick<DecidedView, "status" | "withdrawn" | "filed" | "decidedBy" | "decidedAt" | "youProposedIt">, locale?: string): string {
+  const on = d.decidedAt ? ` on ${readingDate(d.decidedAt, locale)}` : "";
+  if (d.withdrawn) return `Withdrawn by ${d.youProposedIt ? "you" : "the member who made it"}${on}.`;
+  const who = d.decidedBy.name || "the pen";
+  if (d.filed) return `Filed${on} as a proposal to change the Game's rules, in its author's name. The village decides it.`;
+  return d.status === "adopted" ? `Adopted by ${who}${on}.` : `Declined by ${who}${on}.`;
+}
+
+/** The words a module lifecycle is shown in: the same words the adopt route answers in. */
+export const LIFECYCLE_WORDS: Record<ModuleChange["to"], string> = MODULE_LIFECYCLE_WORDS;
 
 export const MODULE_LIFECYCLES = MODULE_DOOR_LIFECYCLES;
 
@@ -235,15 +324,26 @@ const doorOf = (door: string | null) => (door && isCanvasDoorId(door) ? CANVAS_D
 export function proposalHeadline(p: Pick<ProposalView, "target" | "sectionId" | "door" | "change">, sectionTitles: Record<string, string>): string {
   if (p.target === "words") return `Words for ${sectionTitles[String(p.sectionId)] ?? String(p.sectionId)}`;
   if (p.target === "purpose") return "The governing purpose statement";
-  if (p.target === "matrix") {
-    const row = p.change as MatrixRowChange | null;
-    return row?.rowId ? `A change to a row of the Decision Matrix: ${row.subject}` : `A new row for the Decision Matrix: ${row?.subject ?? ""}`;
-  }
+  // A suggestion only ever adds a row: the server refuses one that names a
+  // row to overwrite, and never honours one stored.
+  if (p.target === "matrix") return `A new row for the Decision Matrix: ${(p.change as MatrixRowChange | null)?.subject ?? ""}`;
   return doorOf(p.door)?.label ?? "A setting";
 }
 
+/** A dial value in the dial's own words: a choice by its label, a number with its unit. */
+export function dialValueWords(raw: string, dial: DialFacts | null | undefined): string {
+  const choice = dial?.choices?.find((c) => c.value === raw);
+  if (choice) return choice.label;
+  return dial?.unit && raw ? `${raw} ${dial.unit}` : raw;
+}
+
+/** The dial a suggestion's door names, as the block sent it, or null for any other suggestion. */
+export function dialOf(p: Pick<ProposalView, "door">, doors: readonly DoorView[]): DialFacts | null {
+  return p.door && isCanvasDoorId(p.door) ? dialFor(p.door, doors) : null;
+}
+
 /** The change a suggestion carries, one line per field, in words. Empty for words and the purpose statement. */
-export function changeLines(p: Pick<ProposalView, "target" | "door" | "change">): string[] {
+export function changeLines(p: Pick<ProposalView, "target" | "door" | "change">, dial?: DialFacts | null): string[] {
   const c = (p.change ?? {}) as Record<string, unknown>;
   if (p.target === "matrix") {
     const row = c as unknown as MatrixRowChange;
@@ -257,7 +357,7 @@ export function changeLines(p: Pick<ProposalView, "target" | "door" | "change">)
   }
   if (p.target !== "setting") return [];
   const door = doorOf(p.door);
-  if (door?.kind === "dial") return [`New value: ${String((c as unknown as DialChange).value ?? "")}`];
+  if (door?.kind === "dial") return [`New value: ${dialValueWords(String((c as unknown as DialChange).value ?? ""), dial)}`];
   if (door?.kind === "module") {
     const to = (c as unknown as ModuleChange).to;
     return [`Switched ${LIFECYCLE_WORDS[to] ?? to}`];
@@ -285,9 +385,16 @@ export function changeLines(p: Pick<ProposalView, "target" | "door" | "change">)
  * What adopting this suggestion would do, today, said plainly. `birthed` is
  * the Birthing (the Game started), read by the server on this request.
  */
-export function adoptEffect(p: Pick<ProposalView, "target" | "sectionId" | "door" | "change" | "pen" | "proposedBy" | "youProposedIt">, birthed: boolean, sectionTitles: Record<string, string>): string {
+export function adoptEffect(
+  p: Pick<ProposalView, "target" | "sectionId" | "door" | "change" | "pen" | "proposedBy" | "youProposedIt" | "cannotAdopt">,
+  birthed: boolean,
+  sectionTitles: Record<string, string>,
+  dial?: DialFacts | null,
+): string {
   const pen = p.pen;
   const notBuilt = "That vote is not built yet, so this suggestion stays open until it is.";
+  // The server's own sentence, where adopting is certain to be refused today.
+  if (p.cannotAdopt) return p.cannotAdopt;
   if (p.target === "words") {
     return `Adopting writes these words into ${sectionTitles[String(p.sectionId)] ?? String(p.sectionId)} as the village's adopted answer.`;
   }
@@ -299,7 +406,7 @@ export function adoptEffect(p: Pick<ProposalView, "target" | "sectionId" | "door
   const door = doorOf(p.door);
   if (p.target === "setting" && door?.kind === "dial") {
     if (pen.how === "act") {
-      return `The Game has not started, so adopting sets ${lowerFirst(door.label)} to ${String((p.change as DialChange | null)?.value ?? "")} straight away.`;
+      return `The Game has not started, so adopting sets ${lowerFirst(door.label)} to ${dialValueWords(String((p.change as DialChange | null)?.value ?? ""), dial)} straight away.`;
     }
     const whose = p.youProposedIt ? "your" : `${p.proposedBy.name || "its author"}'s`;
     return `The Game has started, so adopting files this as a proposal to change the Game's rules, in ${whose} name, and the village votes on it. Only the member who suggested it can file it.`;
@@ -322,13 +429,9 @@ export function adoptEffect(p: Pick<ProposalView, "target" | "sectionId" | "door
     }
     return `The Game has started, so this goes to a vote of the whole village at the structural tier. ${notBuilt}`;
   }
-  if (p.target === "matrix") {
-    return (p.change as MatrixRowChange | null)?.rowId
-      ? "The Game has not started, so adopting changes this row of the Decision Matrix straight away."
-      : "The Game has not started, so adopting adds this row to the Decision Matrix straight away.";
-  }
+  if (p.target === "matrix") return "The Game has not started, so adopting adds this row to the Decision Matrix straight away.";
   return door?.id === "exit:restorative"
-    ? "The Game has not started, so adopting writes this into the exit policy's care door straight away, unless a conflict agreement already holds it."
+    ? "The Game has not started, so adopting writes this into the exit policy's care door straight away."
     : "The Game has not started, so adopting writes this into the exit policy straight away.";
 }
 
@@ -349,8 +452,8 @@ export function adoptLabel(p: Pick<ProposalView, "target" | "door" | "pen">): st
  * and never from here (the adopt route answers 409 with its door), so the page
  * links there instead of offering a button that is refused.
  */
-export function mayAdopt(p: Pick<ProposalView, "target" | "pen">): boolean {
-  return p.pen.youMayAdopt && !(p.target === "purpose" && p.pen.how === "ballot");
+export function mayAdopt(p: Pick<ProposalView, "target" | "pen" | "cannotAdopt">): boolean {
+  return p.pen.youMayAdopt && !p.cannotAdopt && !(p.target === "purpose" && p.pen.how === "ballot");
 }
 
 /** The purpose statement goes to a vote from the proposal wizard: offered where adopting cannot carry it. */
@@ -421,10 +524,11 @@ export function gapFacts(payload: Pick<BlockFramesPayload, "block" | "answer" | 
   const wired = payload.doors.filter((d) => d.wired);
   const readable = payload.answer.sections.filter((s) => s.readable);
   // The doors are NOT named here. A door's label is the setting's name, and
-  // one of them ("Governance switched on for members") reads as a state:
+  // one of them once read as a state ("Governance switched on for members"):
   // listed after "already apply", it told a member governance was on while
   // the fact above said it was off, which is the default (audit of Wave 3b,
-  // 2026-09-28). The doors are listed by name below the gaps.
+  // 2026-09-28; the label is now "How widely governance is switched on"). The
+  // doors are listed by name below the gaps.
   if (wired.length > 0) {
     for (const s of readable) {
       if (s.status === "blank") {
@@ -496,7 +600,12 @@ export function suggestionOptions(payload: Pick<BlockFramesPayload, "block" | "a
   const out: SuggestionOption[] = [];
   if (payload.block.id === "purpose") out.push({ key: "purpose", target: "purpose", label: "The governing purpose statement" });
   for (const id of payload.block.briefSections) {
-    out.push({ key: `words:${id}`, target: "words", sectionId: id, label: `Words for ${titles[id] ?? id}${isAdminOnlySection(id) ? " (kept with the administrators)" : ""}` });
+    const mark = isAdminOnlySection(id)
+      ? " (kept with the administrators)"
+      : closedToMembers(payload.answer.sections.find((s) => s.id === id))
+        ? " (its words are closed to members today)"
+        : "";
+    out.push({ key: `words:${id}`, target: "words", sectionId: id, label: `Words for ${titles[id] ?? id}${mark}` });
   }
   for (const d of payload.doors) {
     if (d.wired && d.id) out.push({ key: `setting:${d.id}`, target: "setting", door: d.id, label: `A setting: ${lowerFirst(d.label)}` });
@@ -512,7 +621,20 @@ export function suggestionOptions(payload: Pick<BlockFramesPayload, "block" | "a
  * learn it from the Adopt card after filing (audit of Wave 3b, 2026-09-28).
  * The same three cases the adopt route refuses with 409 after the Birthing.
  */
-export function suggestionFate(option: Pick<SuggestionOption, "target" | "door">, pen: PenView | undefined): { text: string; href?: string; label?: string } | null {
+export function suggestionFate(
+  option: Pick<SuggestionOption, "target" | "door">,
+  pen: PenView | undefined,
+  careDoorInAgreement = false,
+): { text: string; href?: string; label?: string } | null {
+  // Before the Birthing, once a conflict agreement is saved (a draft counts),
+  // the exit-policy save refuses every canvas write to the care door, and the
+  // agreement's editor sits right above this box (audit of Wave 3b,
+  // 2026-09-28).
+  if (careDoorInAgreement && option.target === "setting" && option.door === "exit:restorative") {
+    return {
+      text: "The village's conflict agreement holds the care door now, so a suggestion here cannot be adopted from the canvas. The change belongs in the agreement above.",
+    };
+  }
   if (!pen || pen.how !== "ballot") return null;
   if (option.target === "setting" && option.door === "exit:restorative") {
     return {
@@ -633,7 +755,7 @@ export function bodyLabel(option: SuggestionOption, sectionTitles: Record<string
   return "Why this change, in a sentence or more";
 }
 
-/** A dial's current state, as GET /api/game/mechanics lists it, for the box. */
+/** A dial's definition and current value, as the block's dial door carries it, for the box. */
 export interface DialFacts {
   key: string;
   label: string;
@@ -645,10 +767,16 @@ export interface DialFacts {
   value: unknown;
 }
 
-/** The dial a door names, out of the mechanics list, or null when it is not listed to this viewer. */
-export function dialFor(door: CanvasDoorId, variables: readonly DialFacts[]): DialFacts | null {
+/**
+ * The dial a door names, as GET /api/canvas/blocks/:id sent it on that door.
+ * Read from the block and never from GET /api/game/mechanics, which hides the
+ * dials of a module below members: on a new fork that turned the Power
+ * block's only dial into a blank text box (audit of Wave 3b, 2026-09-28).
+ */
+export function dialFor(door: CanvasDoorId, doors: readonly DoorView[]): DialFacts | null {
   const key = CANVAS_DOORS[door].dialKey;
-  return variables.find((v) => v.key === key) ?? null;
+  const dial = doors.find((d) => d.id === door)?.dial ?? null;
+  return dial && dial.key === key ? dial : null;
 }
 
 /** "Today: 3 vouches" or "Today: Consent". */

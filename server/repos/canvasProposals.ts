@@ -58,6 +58,8 @@ export interface CanvasProposalRow {
   proposerName: string | null;
   status: ProposalStatus;
   decidedBy: string | null;
+  /** The decider's name as the users table holds it, or null while open or if the account is gone. */
+  deciderName: string | null;
   decisionNote: string | null;
   /** What adopting it did, as the route recorded it. Null until adopted. */
   outcome: Record<string, unknown> | null;
@@ -71,7 +73,10 @@ const COLUMNS =
   "p.id, p.block_id, p.target, p.section_id, p.door, p.change_json, p.body, p.serves_purpose, p.source, " +
   "p.proposed_by, p.status, p.decided_by, p.decision_note, p.outcome_json, " +
   "UNIX_TIMESTAMP(p.created_at) AS created_epoch, UNIX_TIMESTAMP(p.decided_at) AS decided_epoch, " +
-  "u.name AS proposer_name";
+  "u.name AS proposer_name, d.name AS decider_name";
+
+/** Every read names the proposer and the decider through the users table. */
+const FROM = "FROM canvas_proposals p LEFT JOIN users u ON u.id = p.proposed_by LEFT JOIN users d ON d.id = p.decided_by";
 
 function parseJson(raw: unknown): Record<string, unknown> | null {
   if (raw === null || raw === undefined || raw === "") return null;
@@ -114,6 +119,7 @@ function toRow(r: RowDataPacket): CanvasProposalRow | null {
     proposerName: r.proposer_name === null || r.proposer_name === undefined ? null : String(r.proposer_name),
     status,
     decidedBy: r.decided_by === null || r.decided_by === undefined ? null : String(r.decided_by),
+    deciderName: r.decider_name === null || r.decider_name === undefined ? null : String(r.decider_name),
     decisionNote: r.decision_note === null || r.decision_note === undefined ? null : String(r.decision_note),
     outcome: parseJson(r.outcome_json),
     createdAt: new Date(Number(r.created_epoch) * 1000).toISOString(),
@@ -147,7 +153,7 @@ export async function insertCanvasProposal(
 /** One suggestion by id, whatever its status, or null. */
 export async function canvasProposalById(pool: Pool, id: number): Promise<CanvasProposalRow | null> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT ${COLUMNS} FROM canvas_proposals p LEFT JOIN users u ON u.id = p.proposed_by WHERE p.id = ?`,
+    `SELECT ${COLUMNS} ${FROM} WHERE p.id = ?`,
     [id],
   );
   return rows[0] ? toRow(rows[0]) : null;
@@ -156,9 +162,26 @@ export async function canvasProposalById(pool: Pool, id: number): Promise<Canvas
 /** A block's open suggestions, newest first. */
 export async function openProposalsForBlock(pool: Pool, blockId: CanvasBlockId): Promise<CanvasProposalRow[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT ${COLUMNS} FROM canvas_proposals p LEFT JOIN users u ON u.id = p.proposed_by ` +
-      "WHERE p.block_id = ? AND p.status = 'open' ORDER BY p.created_at DESC, p.id DESC",
+    `SELECT ${COLUMNS} ${FROM} WHERE p.block_id = ? AND p.status = 'open' ORDER BY p.created_at DESC, p.id DESC`,
     [blockId],
+  );
+  return rows.map(toRow).filter((r): r is CanvasProposalRow => r !== null);
+}
+
+/** How many decided suggestions a block lists under Adopt, newest decision first. */
+export const DECIDED_LISTED = 25;
+
+/**
+ * A block's decided suggestions, newest decision first: adopted, declined and
+ * withdrawn, each with the note it was decided with. The pen's note is public
+ * (Rye, 2026-09-23), and this is where it is read back; before this reader
+ * existed a decided suggestion left the only list there was, and its note
+ * with it (audit of Wave 3b, 2026-09-28).
+ */
+export async function decidedProposalsForBlock(pool: Pool, blockId: CanvasBlockId, limit = DECIDED_LISTED): Promise<CanvasProposalRow[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT ${COLUMNS} ${FROM} WHERE p.block_id = ? AND p.status <> 'open' ORDER BY p.decided_at DESC, p.id DESC LIMIT ?`,
+    [blockId, limit],
   );
   return rows.map(toRow).filter((r): r is CanvasProposalRow => r !== null);
 }

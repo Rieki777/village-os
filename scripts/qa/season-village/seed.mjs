@@ -134,6 +134,13 @@ const EMPTY_BLOCKS = ["stakeholders", "coordination", "learning", "legal", "impa
 const SUGGESTER = "member3";
 const SUGGESTION = "We decide by consent at the Saturday circle, and write each decision in the village record the same day.";
 const SUGGESTION_PURPOSE = "Deciding together where everyone can see is part of what this village says it exists to do.";
+/**
+ * A second suggestion from the same member, which the walk's founder declines
+ * with a note: a decided suggestion and its note stay readable under "Decided
+ * lately", and its author is told (audit of Wave 3b, 2026-09-28).
+ */
+const DECLINED_SUGGESTION = "Every decision waits for a full moon, so nobody decides in a hurry.";
+const DECLINE_NOTE = "A month is too long for small things; we keep the Saturday circle.";
 
 /** The season template the platform ships (docs/FORK_RUNBOOK.md), loaded as a founder would load it. */
 const SEASON_TEMPLATE = "docs/seasons/season-two-2026.json";
@@ -396,6 +403,29 @@ try {
     if (listed.pen?.youMayAdopt !== false || listed.youProposedIt !== false) throw new Error("the walk's member reads the suggestion as one they may adopt or made");
     canvasSuggested = { body: SUGGESTION, by: first };
     log(`${by.name} suggested words for the Power block (open); read back by ${byKey.member.name}, who holds no pen for it`);
+
+    // 12c. A decided suggestion: the founder declines a second one with a note, which every
+    // reader of the block reads back under "Decided lately", and its author is told.
+    const second = await must("second canvas suggestion", "POST", "/api/canvas/proposals", {
+      blockId: "power", target: "words", sectionId: "decisions", body: DECLINED_SUGGESTION, servesPurpose: SUGGESTION_PURPOSE,
+    }, by.token);
+    const secondId = second.json?.proposal?.id;
+    await must("decline the second canvas suggestion", "POST", `/api/canvas/proposals/${secondId}/decline`, { note: DECLINE_NOTE }, byKey.founder.token);
+    const after = await must("re-read the Power block after the decline", "GET", "/api/canvas/blocks/power", undefined, byKey.member.token);
+    const decided = (after.json?.decided ?? []).find((p) => p.id === secondId);
+    const decider = byKey.founder.name.split(" ")[0];
+    if (!decided || decided.status !== "declined" || decided.decisionNote !== DECLINE_NOTE || decided.decidedBy?.name !== decider) {
+      throw new Error(`the declined suggestion reads back differently: ${JSON.stringify(decided ?? after.json?.decided ?? null).slice(0, 300)}`);
+    }
+    if ((after.json?.proposals ?? []).some((p) => p.id === secondId)) throw new Error("the declined suggestion is still listed as open");
+    const bell = await must("the suggester's notifications", "GET", "/api/notifications", undefined, by.token);
+    const rows = Array.isArray(bell.json) ? bell.json : bell.json?.notifications ?? bell.json?.items ?? [];
+    if (!rows.some((n) => String(n.title ?? "").includes("Power block was declined"))) {
+      throw new Error(`the suggester was not told of the decline: ${JSON.stringify(rows).slice(0, 300)}`);
+    }
+    canvasSuggested.declineNote = DECLINE_NOTE;
+    canvasSuggested.decider = decider;
+    log(`${byKey.founder.name} declined a second suggestion with a note; ${byKey.member.name} reads it under Decided lately, and ${by.name} was told`);
   }
 
   // 13. Every session works, and says who it is.
@@ -433,6 +463,8 @@ try {
         : {}),
       // The open suggestion on the Power block, and its author's first name as the Adopt frame prints it.
       ...(canvasSuggested ? { canvasSuggestion: canvasSuggested.body, canvasSuggester: canvasSuggested.by } : {}),
+      // The declined one, its note, and who declined it, as "Decided lately" prints them.
+      ...(canvasSuggested?.declineNote ? { canvasDeclineNote: canvasSuggested.declineNote, canvasDecider: canvasSuggested.decider } : {}),
     },
     // Which person the walk signs in as, per walk role.
     walkAs: { member: "member", founder: "founder" },

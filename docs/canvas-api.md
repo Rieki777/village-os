@@ -123,12 +123,16 @@ One block, everything its five frames need. `404` for an id that is not a canvas
     { "id": "vouches", "text": "A newcomer becomes a member after 2 vouches.", "href": "/game-mechanics", "label": "How members are admitted" }
   ],
   "proposals": [ /* ProposalView, open ones, newest first */ ],
+  "decided": [ /* DecidedView, decided ones, newest decision first, at most 25 */ ],
   "doors": [
-    { "id": "dial:membership.vouches_required", "label": "...", "href": "/game-mechanics", "kind": "dial", "wired": true },
+    { "id": "dial:membership.vouches_required", "label": "...", "href": "/game-mechanics", "kind": "dial", "wired": true,
+      "dial": { "key": "membership.vouches_required", "label": "...", "type": "integer", "unit": "vouches",
+                "min": 0, "max": 20, "choices": null, "value": "2" } },   // dial doors only
     { "label": "The term on each seat", "href": "/roles", "why": "...", "wired": false }
   ],
   "pens": { "words": PenView, "adminWords": PenView, "purpose": PenView, "dial": PenView, "module": PenView, "consequence": PenView },
   "birthed": false,
+  "careDoorInAgreement": false,        // Conflict only: before the Birthing, a stored agreement holds the care door
   "servesPurpose": { "scoped": false, "matrixScoped": false, "requiredToday": true },
   "notesArePublic": "Everyone in the village can read what you write here."
 }
@@ -142,8 +146,16 @@ One block, everything its five frames need. `404` for an id that is not a canvas
   absent. A read that failed says `"This could not be read just now."` with its link. The facts per
   block are listed in the header of `server/lib/canvasObserved.ts`.
 - `pens` carries only the keys that apply to the block.
+- `doors[].dial` is the dial a dial door names, from the registry, with its value today, WHATEVER
+  the owning module's lifecycle (the ruling of 2026-09-25: every dial is visible). The suggestion
+  box reads it from here and never from `GET /api/game/mechanics`, which hides a module's dials
+  below members.
+- `decided` lists the block's decided suggestions under the same reading rule as `proposals`: who
+  decided each, when, how, and the note. A decision note is public (Rye, 2026-09-23), and this is
+  where it is read back.
 - `notesArePublic` is shown above the suggestion box before anybody types (Rye's ruling that notes
-  are public, 2026-09-23).
+  are public, 2026-09-23). On a suggestion to one of the four administrators' sections the page
+  says who reads it instead: the administrators and its author.
 
 ## POST /api/canvas/proposals
 
@@ -169,7 +181,9 @@ Responses:
 
 - `201 { "proposal": ProposalView }`
 - `400` the shape, the section, the door, the value's form, the purpose line, or a purpose statement
-  too short to ever be adopted, each with its sentence
+  too short to ever be adopted, each with its sentence. A dial value the dial itself never takes is
+  refused here in the dial's own terms (a choice dial names its choices by label). A matrix
+  suggestion that names a `rowId` is refused: a suggestion only ever adds a row.
 - `403` a non-administrator marking a suggestion `derived` or `import`
 - `429` twenty suggestions already open from this member (`OPEN_PROPOSALS_PER_MEMBER`)
 
@@ -184,14 +198,32 @@ Responses:
   "proposedBy": { "id": "u1", "name": "Ash" },   // first name, as every public line
   "createdAt": "ISO",
   "status": "open",
-  "decidedBy": "u2", "decisionNote": "...", "decidedAt": "ISO", "outcome": { },   // once decided only
+  "decidedBy": "u2", "decidedByName": "Moss", "decisionNote": "...", "decidedAt": "ISO", "outcome": { },   // once decided only
+  "cannotAdopt": "...",                // present when adopting is certain to be refused today, as the sentence why
   "pen": PenView,
   "youProposedIt": true
 }
+
+// DecidedView
+{
+  "id": 9, "blockId": "power", "target": "words", "sectionId": "decisions", "door": null, "change": null,
+  "body": "...", "servesPurpose": "...", "source": "member",
+  "proposedBy": { "id": "u1", "name": "Ash" }, "createdAt": "ISO",
+  "status": "declined",
+  "withdrawn": false,                  // declined by its own author
+  "filed": false,                      // adopted by filing a mechanics proposal
+  "decidedBy": { "id": "u2", "name": "Moss" }, "decidedAt": "ISO",
+  "decisionNote": "...",               // null when none was written
+  "youProposedIt": false
+}
 ```
 
-A suggestion to one of the four administrators' sections is listed only to administrators and to
-the member who wrote it.
+A suggestion to one of the four administrators' sections is listed, open or decided, only to
+administrators and to the member who wrote it.
+
+`cannotAdopt` is set today on one case: a care-door suggestion before the Birthing while a conflict
+agreement is stored, which `saveExitPolicy` refuses. The page offers no Adopt there; the pen can
+still decline it.
 
 ## POST /api/canvas/proposals/:id/adopt
 
@@ -206,11 +238,14 @@ What adopting does, by pen and moment:
 | `dial`, before the Birthing | `writeDial` (the body of `PUT /api/admin/variables/:key`) | `{ "wrote": "dial", "key", "value", "previous" }` |
 | `dial`, after the Birthing | `openMechanicsProposal` (the body of `POST /api/game/mechanics/proposals`), filed by the suggestion's author and nobody else | `{ "filed": "mechanics-proposal", "id", "status" }`; `status` is `open`, or `draft` when the author is below the proposer bar, and `message` then says it waits for a sponsor |
 | `module` (administrators) | `setModuleLifecycle`, the write behind `PUT /api/admin/modules/:id/lifecycle`, with its shared-password posture; no example content is seeded | `{ "wrote": "module-lifecycle", "module", "lifecycle" }` |
-| `consequence`, before the Birthing | `saveExitPolicy` (the body of `PUT /api/admin/exit-policy`) with the suggestion's fields laid over the policy, or `writeDecisionMatrixRow` | `{ "wrote": "exit-policy", "door", "fields" }` or `{ "wrote": "matrix-row", "rowId" }` |
+| `consequence`, before the Birthing | `saveExitPolicy` (the body of `PUT /api/admin/exit-policy`) with the suggestion's fields laid over the policy, or `writeDecisionMatrixRow` (always a new row) | `{ "wrote": "exit-policy", "door", "fields" }` or `{ "wrote": "matrix-row", "rowId" }` |
 
 Responses:
 
-- `200 { "proposal": ProposalView, "outcome": {...}, "message": "Adopted. ..." }`
+- `200 { "proposal": ProposalView, "outcome": {...}, "message": "Adopted. ..." }`. A module's
+  lifecycle is said in words ("on for members"), never its code. The member who made the
+  suggestion is told (a `governance` notice, dedupe key `canvas-proposal:<id>:adopted`), unless
+  they adopted it themselves.
 - `403 { "error": PEN_REFUSALS[pen] }` the person does not hold the pen. On the `prose` pen the
   refusal comes from the gate itself, so an admin on a key the village holds meets the gate's `409`
   override answer instead.
@@ -238,7 +273,10 @@ Body: `{ "note"?: string }`.
 - The member who wrote the suggestion may withdraw it at any time, with or without a note. It is
   recorded as `declined` with `outcome: { "withdrawn": true }`.
 - Anybody else needs the suggestion's pen (the same pen as adopting) and a note of at least two
-  characters (`400` without one). The note is public, like the suggestion.
+  characters (`400` without one). The note is public, like the suggestion: it is listed with it
+  under `decided`, and the member who made it is told (a `governance` notice, dedupe key
+  `canvas-proposal:<id>:declined`; the note travels in it except on the four administrators'
+  sections).
 - Where the pen is a vote (`how: "ballot"`), nobody declines alone: `409`, and only the proposer can
   withdraw.
 - `200 { "proposal": ProposalView }`; `403`, `404` and `409` as for adopt.
@@ -273,6 +311,7 @@ After the Birthing every write answers `409` and says to suggest the row on the 
 - Twenty open suggestions per member across the whole canvas.
 - A suggestion body is 2 to 40000 characters; a matrix cell up to 2000; a subject up to 200; up to
   12 risk tags of up to 40 characters each, no commas.
-- Nothing here sends a notification or writes to the public pulse, except adopting a purpose
-  statement, which writes the same pulse line `PUT /api/admin/purpose` writes. Every adopt, decline,
-  withdraw and matrix write leaves an admin audit event.
+- The one notification is to a suggestion's author when somebody else adopts or declines it. Nothing
+  here writes to the public pulse, except adopting a purpose statement, which writes the same pulse
+  line `PUT /api/admin/purpose` writes. Every adopt, decline, withdraw and matrix write leaves an
+  admin audit event.

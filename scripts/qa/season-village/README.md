@@ -114,7 +114,9 @@ writes nothing except through HTTP routes:
   canvas suggestion when `/api/canvas/blocks/power` exists (a member the walk
   does not sign in as suggests words for the Power block, with a purpose line,
   through `POST /api/canvas/proposals`, and the walk's member reads it back
-  holding no pen for it).
+  holding no pen for it), and a second one from the same member that the
+  walk's founder declines with a note, which the walk's member reads back
+  under "Decided lately" and whose author finds the decline in the bell.
 
 Tokens and the generated passwords go to `QA_OUT_DIR/state/tokens.json` with the
 facts the walk checks for. Run twice on the same village (a plain restart keeps

@@ -89,21 +89,32 @@ const suggestion = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+/** The Power block's dial, as its door carries it: whatever the governance module's lifecycle. */
+const METHOD_DIAL = {
+  key: "governance.default_method", label: "How village-wide ballots decide", type: "choice", unit: null, min: null, max: null, value: "custom",
+  choices: [{ value: "custom", label: "This village's own dials" }, { value: "consent", label: "Consent" }],
+};
+
 /** GET /api/canvas/blocks/power, for a member or for the pen, before or after the Birthing. */
-const powerBlock = ({ pen = false, birthed = false, proposals = [suggestion()] }: { pen?: boolean; birthed?: boolean; proposals?: unknown[] } = {}) => ({
+const powerBlock = ({
+  pen = false,
+  birthed = false,
+  proposals = [suggestion()],
+  decided = [],
+  sections = [{ id: "decisions", title: "Decisions", readable: true, status: "blank" }],
+}: { pen?: boolean; birthed?: boolean; proposals?: unknown[]; decided?: unknown[]; sections?: unknown[] } = {}) => ({
   block: { id: "power", number: 7, name: "Power", briefSections: ["decisions"] },
-  answer: {
-    sections: [{ id: "decisions", title: "Decisions", readable: true, status: "blank" }],
-  },
+  answer: { sections },
   reading: reading(),
   observed: [
     { id: "default-method", text: "Village-wide ballots decide by this village's own dials.", href: "/game-mechanics", label: "How ballots decide" },
     { id: "birthing", text: "The Game has not started yet.", href: "/journey-to-launch", label: "The launch checklist" },
   ],
   proposals,
+  decided,
   doors: [
-    { id: "dial:governance.default_method", label: "How village-wide ballots decide", href: "/game-mechanics", kind: "dial", wired: true },
-    { id: "module:governance", label: "Governance switched on for members", href: "/admin?tab=modules&module=governance", kind: "module", wired: true },
+    { id: "dial:governance.default_method", label: "How village-wide ballots decide", href: "/game-mechanics", kind: "dial", wired: true, dial: METHOD_DIAL },
+    { id: "module:governance", label: "How widely governance is switched on", href: "/admin?tab=modules&module=governance", kind: "module", wired: true },
   ],
   pens: {
     words: penView({ youMayAdopt: pen }),
@@ -111,21 +122,25 @@ const powerBlock = ({ pen = false, birthed = false, proposals = [suggestion()] }
     consequence: penView({ pen: "consequence", how: birthed ? "ballot" : "act", who: birthed ? "any-member" : "admins", sentence: "The founders adopt this before the Game starts.", ballotBuilt: !birthed, youMayAdopt: pen && !birthed }),
   },
   birthed,
+  careDoorInAgreement: false,
   servesPurpose: { scoped: true, matrixScoped: true, requiredToday: true },
   notesArePublic: NOTE_IS_PUBLIC,
 });
 
-const conflictBlock = () => ({
+const conflictBlock = (over: Record<string, unknown> = {}) => ({
   block: { id: "conflict", number: 8, name: "Conflict", briefSections: [], elsewhere: { note: "Conflict lives in its own agreement.", href: "/governance", label: "How we work together" } },
   answer: { sections: [] },
   reading: null,
   observed: [{ id: "reply-time", text: "A member who raises a conflict hears back within 48 hours.", href: "/exit-policy", label: "Leaving Well" }],
   proposals: [],
+  decided: [],
   doors: [{ id: "exit:restorative", label: "The restorative steps, the care role, its cover and the promised reply time", href: "/exit-policy", kind: "exit-policy", wired: true }],
   pens: { consequence: penView({ pen: "consequence", who: "admins", sentence: "The founders adopt this before the Game starts." }) },
   birthed: false,
+  careDoorInAgreement: false,
   servesPurpose: { scoped: true, matrixScoped: false, requiredToday: true },
   notesArePublic: NOTE_IS_PUBLIC,
+  ...over,
 });
 
 const rows = (pen: boolean, birthed = false) => ({
@@ -339,22 +354,18 @@ describe("Say: a member suggests", () => {
     expect(asked("GET /api/canvas/blocks/power")).toHaveLength(2);
   });
 
-  it("offers each setting behind the block, with what the dial reads today and the choices it takes", async () => {
+  it("offers each setting behind the block, with what the dial reads today and the choices it takes, from the block itself", async () => {
     answer("GET", "/api/canvas", 200, canvas(false));
     answer("GET", "/api/canvas/blocks/power", 200, powerBlock({ proposals: [] }));
     answer("GET", "/api/canvas/decision-matrix/rows", 200, rows(false));
-    answer("GET", "/api/game/mechanics", 200, {
-      variables: [
-        {
-          key: "governance.default_method", label: "How village-wide ballots decide", type: "choice", unit: null, min: null, max: null, value: "custom",
-          choices: [{ value: "custom", label: "This village's own dials" }, { value: "consent", label: "Consent" }],
-        },
-      ],
-    });
     const frames = await openPower("Say");
     const form = within(await frames.findByRole("form", { name: "Suggest a change to Power" }));
     fireEvent.click(form.getByLabelText("A setting: how village-wide ballots decide"));
     expect(await form.findByText("Today: This village's own dials")).toBeTruthy();
+    // A choice dial is a choice, never a free text box, and it is never read
+    // from the mechanics list, which hides it while governance is off.
+    expect((form.getByLabelText(/What it should be/) as HTMLElement).tagName).toBe("SELECT");
+    expect(asked("GET /api/game/mechanics")).toHaveLength(0);
     expect(form.getByText(/Who decides: Whoever may turn the village's dials/)).toBeTruthy();
     fireEvent.change(form.getByLabelText(/What it should be/), { target: { value: "consent" } });
     fireEvent.change(form.getByLabelText("Why this change, in a sentence or more"), { target: { value: "Consent suits how we already talk." } });
@@ -366,6 +377,24 @@ describe("Say: a member suggests", () => {
     await waitFor(() => expect(asked("POST /api/canvas/proposals")).toHaveLength(1));
     const body = JSON.parse(asked("POST /api/canvas/proposals")[0].init.body);
     expect(body).toMatchObject({ target: "setting", door: "dial:governance.default_method", change: { value: "consent" } });
+  });
+
+  it("tells an administrator which words are closed to members, right where a suggestion to them is read by everyone", async () => {
+    auth.admin = true;
+    answer("GET", "/api/canvas", 200, canvas(true));
+    answer("GET", "/api/canvas/blocks/power", 200, powerBlock({
+      pen: true,
+      proposals: [],
+      sections: [{ id: "decisions", title: "Decisions", readable: true, status: "confirmed", body: "The funders sign off anything over a thousand.", audience: "admin" }],
+    }));
+    answer("GET", "/api/canvas/decision-matrix/rows", 200, rows(true));
+    const frames = await openPower("Say");
+    expect((await frames.findByTestId("canvas-say-closed-decisions")).textContent).toBe("Only the administrators read these words today.");
+    const form = within(frames.getByRole("form", { name: "Suggest a change to Power" }));
+    expect(form.getByLabelText("Words for Decisions (its words are closed to members today)")).toBeTruthy();
+    expect(form.getByTestId("canvas-notes-public").textContent).toBe(
+      `${NOTE_IS_PUBLIC} The words under this section are closed to members today, and a suggestion to it is read by everyone in the village. Your first name and today's date go with it.`,
+    );
   });
 
   it("prints the server's refusal when it says no after all", async () => {
@@ -410,9 +439,47 @@ describe("Adopt", () => {
     answer("POST", "/api/canvas/proposals/41/decline", 200, { proposal: { ...suggestion(), status: "declined" } });
     answer("GET", "/api/canvas/blocks/power", 200, powerBlock({ proposals: [] }));
     fireEvent.click(card.getByRole("button", { name: "Withdraw my suggestion" }));
-    await waitFor(() => expect(frames.getByRole("status").textContent).toMatch(/Your suggestion is withdrawn/));
+    await waitFor(() => expect(frames.getByRole("status").textContent).toBe("Your suggestion is withdrawn. It is listed under Decided lately on this block."));
     expect(JSON.parse(asked("POST /api/canvas/proposals/41/decline")[0].init.body)).toEqual({});
     expect(await frames.findByText("No suggestions are open on Power.")).toBeTruthy();
+  });
+
+  it("lists decided suggestions with who decided each, when, and the note, to everyone who reads the block", async () => {
+    const declined = {
+      ...suggestion({ id: 38, status: "declined" }),
+      withdrawn: false, filed: false, decidedBy: { id: "u1", name: "Ada" }, decidedAt: "2026-10-05T10:00:00.000Z",
+      decisionNote: "We keep deciding at the moon circle.",
+    };
+    const withdrawn = { ...declined, id: 37, withdrawn: true, decisionNote: null, youProposedIt: true };
+    answer("GET", "/api/canvas", 200, canvas(false));
+    answer("GET", "/api/canvas/blocks/power", 200, powerBlock({ proposals: [], decided: [declined, withdrawn] }));
+    const frames = await openPower("Adopt");
+    const list = within(await frames.findByTestId("canvas-adopt-decided"));
+    const first = within(list.getByTestId("canvas-decided-38"));
+    expect(first.getByText("Words for Decisions")).toBeTruthy();
+    expect(first.getByText(/^Declined by Ada on /)).toBeTruthy();
+    expect(first.getByText(/We keep deciding at the moon circle\./).textContent).toBe("The note: We keep deciding at the moon circle.");
+    const second = within(list.getByTestId("canvas-decided-37"));
+    expect(second.getByText(/^Withdrawn by you on /)).toBeTruthy();
+    expect(second.queryByText(/The note:/)).toBeNull();
+    // Nothing is left to press on a decided suggestion.
+    expect(list.queryByRole("button")).toBeNull();
+  });
+
+  it("says after a decline where the note can be read, and that the author is told", async () => {
+    answer("GET", "/api/canvas", 200, canvas(true));
+    answer("GET", "/api/canvas/blocks/power", 200, powerBlock({ pen: true, proposals: [suggestion({ pen: penView({ youMayAdopt: true }) })] }));
+    const frames = await openPower("Adopt");
+    const card = within(await frames.findByTestId("canvas-proposal-41"));
+    fireEvent.change(card.getByLabelText(/Your note/), { target: { value: "We keep the moon circle." } });
+    answer("POST", "/api/canvas/proposals/41/decline", 200, { proposal: { ...suggestion(), status: "declined" } });
+    answer("GET", "/api/canvas/blocks/power", 200, powerBlock({ pen: true, proposals: [] }));
+    fireEvent.click(card.getByRole("button", { name: "Decline" }));
+    await waitFor(() =>
+      expect(frames.getByRole("status").textContent).toBe(
+        "Declined. The suggestion and your note are listed under Decided lately on this block, and the member who made it is told.",
+      ),
+    );
   });
 
   it("gives the pen Adopt and Decline, says the note is public before the box, and refuses a decline with no note before sending", async () => {
@@ -472,8 +539,9 @@ describe("before the Birthing and after it", () => {
     const frames = await openPower("Adopt");
     expect((await frames.findByTestId("canvas-adopt-moment")).textContent).toMatch(/^The Game has not started, so adopting a suggestion that names a setting writes the setting straight away/);
     expect(frames.getByTestId("canvas-proposal-effect-41").textContent).toBe(
-      "The Game has not started, so adopting sets how village-wide ballots decide to consent straight away.",
+      "The Game has not started, so adopting sets how village-wide ballots decide to Consent straight away.",
     );
+    expect(within(frames.getByTestId("canvas-proposal-41")).getByText("New value: Consent")).toBeTruthy();
     expect(frames.getByRole("button", { name: "Adopt and change the setting" })).toBeTruthy();
   });
 
@@ -543,7 +611,7 @@ describe("the blocks that host an editor", () => {
     const frames = await openPower("Say");
     const human = within(await frames.findByTestId("matrix-human-rows"));
     expect((await human.findByTestId("matrix-human-rows-pen")).textContent).toBe(
-      "The founders adopt this before the Game starts. To add or change a row, suggest it below.",
+      "The founders adopt this before the Game starts. To suggest a new row, use the box below. To change a row, suggest it as it should read and say which row it replaces.",
     );
     expect(human.queryByRole("button", { name: "Add a row" })).toBeNull();
     expect(human.queryByRole("button", { name: "Change this row" })).toBeNull();
@@ -577,6 +645,36 @@ describe("the blocks that host an editor", () => {
     // The care roles are read only once the care door is on screen, and offered by name.
     await waitFor(() => expect(asked("GET /api/roles")).toHaveLength(1));
     expect(await form.findAllByRole("option", { name: "Trained Practitioners" })).toHaveLength(2);
+    // The cover role in the agreement's own meaning: who hears a request when
+    // the care role cannot. A conflict involving the care holder is the
+    // agreement's "When power is involved", which the cover role does not take.
+    expect(form.getByLabelText("The cover role, which hears a request when the care role cannot")).toBeTruthy();
+    expect(form.queryByText(/for when the care role is part of it/)).toBeNull();
+  });
+
+  it("Conflict, before the Birthing, once an agreement is saved: the box says the care door is the agreement's, and the pen's card offers Decline and no Adopt", async () => {
+    const held = "The village's conflict agreement holds the care door now, so adopting cannot write this into the exit policy. The change belongs in the agreement, under Say on this block.";
+    const care = suggestion({
+      blockId: "conflict", target: "setting", sectionId: null, door: "exit:restorative", change: { replyHours: 24 }, cannotAdopt: held,
+      pen: penView({ pen: "consequence", who: "admins", sentence: "The founders adopt this before the Game starts.", youMayAdopt: true }),
+    });
+    auth.admin = true;
+    answer("GET", "/api/canvas", 200, canvas(true));
+    answer("GET", "/api/canvas/blocks/conflict", 200, conflictBlock({ careDoorInAgreement: true, proposals: [care] }));
+    answer("GET", "/api/roles", 200, []);
+    draw();
+    fireEvent.click(within(await screen.findByTestId("canvas-block-conflict")).getByRole("button", { name: "Open this block: Conflict" }));
+    const frames = within(await screen.findByTestId("canvas-frames-conflict"));
+    fireEvent.click(frames.getByRole("button", { name: "Say" }));
+    const form = within(await frames.findByRole("form", { name: "Suggest a change to Conflict" }));
+    expect(form.getByTestId("canvas-suggestion-fate").textContent).toBe(
+      "The village's conflict agreement holds the care door now, so a suggestion here cannot be adopted from the canvas. The change belongs in the agreement above.",
+    );
+    fireEvent.click(frames.getByRole("button", { name: "Adopt" }));
+    const card = within(await frames.findByTestId("canvas-proposal-41"));
+    expect(card.getByTestId("canvas-proposal-effect-41").textContent).toBe(held);
+    expect(card.queryByRole("button", { name: "Adopt and write it into the exit policy" })).toBeNull();
+    expect(card.getByRole("button", { name: "Decline" })).toBeTruthy();
   });
 });
 
@@ -598,6 +696,32 @@ describe("what somebody typed stays while they look at another frame", () => {
     expect(asked("GET /api/canvas/blocks/power")).toHaveLength(1);
   });
 
+  it("a matrix row's columns and a dial's value survive a tap on another aim of the suggestion box", async () => {
+    answer("GET", "/api/canvas", 200, canvas(false));
+    answer("GET", "/api/canvas/blocks/power", 200, powerBlock({ proposals: [] }));
+    answer("GET", "/api/canvas/decision-matrix/rows", 200, rows(false));
+    const frames = await openPower("Say");
+    const form = within(await frames.findByRole("form", { name: "Suggest a change to Power" }));
+    fireEvent.click(form.getByLabelText("A row of the Decision Matrix"));
+    const typed: Array<[string, string]> = [
+      ["The kind of decision", "Spending under 500"],
+      ["Who approves it", "The treasurer"],
+      ["Who is asked first", "The finance circle"],
+      ["Who is told", "Everyone"],
+    ];
+    for (const [label, value] of typed) fireEvent.change(form.getByLabelText(label), { target: { value } });
+    fireEvent.click(form.getByLabelText("A setting: how village-wide ballots decide"));
+    fireEvent.change(form.getByLabelText(/What it should be/), { target: { value: "consent" } });
+    fireEvent.click(form.getByLabelText("Words for Decisions"));
+    fireEvent.click(form.getByLabelText("A row of the Decision Matrix"));
+    for (const [label, value] of typed) expect((form.getByLabelText(label) as HTMLInputElement).value, label).toBe(value);
+    fireEvent.click(form.getByLabelText("A setting: how village-wide ballots decide"));
+    expect((form.getByLabelText(/What it should be/) as HTMLSelectElement).value).toBe("consent");
+    // The one field two aims share is kept per aim: the module's lifecycle starts empty.
+    fireEvent.click(form.getByLabelText("A setting: how widely governance is switched on"));
+    expect((form.getByLabelText("How widely it should be switched on") as HTMLSelectElement).value).toBe("");
+  });
+
   it("the pen's half-recorded reading under Sense survives a look at See", async () => {
     answer("GET", "/api/canvas", 200, canvas(true));
     answer("GET", "/api/canvas/blocks/legal", 200, {
@@ -606,9 +730,11 @@ describe("what somebody typed stays while they look at another frame", () => {
       reading: null,
       observed: [],
       proposals: [],
+      decided: [],
       doors: [],
       pens: {},
       birthed: false,
+      careDoorInAgreement: false,
       servesPurpose: { scoped: false, matrixScoped: false, requiredToday: false },
       notesArePublic: NOTE_IS_PUBLIC,
     });

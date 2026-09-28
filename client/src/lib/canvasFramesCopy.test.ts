@@ -7,30 +7,38 @@
  * (`parseCanvasProposal`), so a body this file builds is one the server takes.
  */
 import { describe, expect, it } from "vitest";
-import { parseCanvasProposal } from "@shared/canvasFrames";
+import { CANVAS_DOORS, parseCanvasProposal } from "@shared/canvasFrames";
 import {
   adoptEffect,
   adoptIntro,
   adoptLabel,
   ADMIN_PAGES_LINE,
   changeLines,
+  decidedLine,
+  dialFor,
+  dialValueWords,
   EMPTY_FIELDS,
   followableHref,
   gapFacts,
   KEEP,
   mayAdopt,
   mayDecline,
+  noteReaders,
   opensPurposeVote,
   penKeyFor,
   penSentences,
   proposalHeadline,
   readFailure,
   refusalText,
+  sectionClosedLine,
   suggestedLine,
   suggestionBody,
   suggestionFate,
   suggestionOptions,
+  suggestionReaders,
   type BlockFramesPayload,
+  type DecidedView,
+  type DialFacts,
   type PenView,
   type ProposalView,
 } from "./canvasFramesCopy";
@@ -96,15 +104,43 @@ describe("what adopting does, before the Birthing and after it", () => {
   it("sends the care door to the conflict agreement's own vote after the Birthing", () => {
     const care = proposal({ blockId: "conflict", target: "setting", sectionId: null, door: "exit:restorative", change: { replyHours: 48 }, pen: pen({ pen: "consequence", how: "ballot", who: "any-member", ballotBuilt: false }) });
     expect(adoptEffect(care, true, titles)).toContain("only by a vote on the village's conflict agreement");
-    expect(adoptEffect({ ...care, pen: pen({ pen: "consequence", who: "admins" }) }, false, titles)).toContain("unless a conflict agreement already holds it");
+    const before = { ...care, pen: pen({ pen: "consequence", who: "admins" }) };
+    expect(adoptEffect(before, false, titles)).toBe("The Game has not started, so adopting writes this into the exit policy's care door straight away.");
+    // While a conflict agreement holds the care door the server says so on the
+    // card, and the page offers no Adopt (the pen may still decline).
+    const held = { ...before, cannotAdopt: "The village's conflict agreement holds the care door now." };
+    expect(adoptEffect(held, false, titles)).toBe("The village's conflict agreement holds the care door now.");
+    expect(mayAdopt({ ...held, pen: pen({ pen: "consequence", who: "admins", youMayAdopt: true }) })).toBe(false);
+    expect(mayAdopt({ ...before, pen: pen({ pen: "consequence", who: "admins", youMayAdopt: true }) })).toBe(true);
+    expect(mayDecline({ ...held, pen: pen({ pen: "consequence", who: "admins", youMayAdopt: true }), youProposedIt: false })).toBe(true);
   });
 
-  it("adds or changes a matrix row before the Birthing", () => {
+  it("only ever adds a matrix row before the Birthing, and never reads a row id as a change", () => {
     const row = { subject: "Spending under a hundred", approval: "The treasurer", consultation: "Nobody yet", information: "The circle", method: "", riskTags: [] };
     const add = proposal({ target: "matrix", sectionId: null, change: row, pen: pen({ pen: "consequence", who: "admins" }) });
     expect(adoptEffect(add, false, titles)).toBe("The Game has not started, so adopting adds this row to the Decision Matrix straight away.");
-    expect(adoptEffect({ ...add, change: { ...row, rowId: 3 } }, false, titles)).toContain("changes this row");
     expect(proposalHeadline(add, titles)).toBe("A new row for the Decision Matrix: Spending under a hundred");
+    // The server refuses a row id on a suggestion and never honours a stored one.
+    const smuggled = { ...add, change: { ...row, rowId: 3 } };
+    expect(adoptEffect(smuggled, false, titles)).toBe(adoptEffect(add, false, titles));
+    expect(proposalHeadline(smuggled, titles)).toBe(proposalHeadline(add, titles));
+    expect(parseCanvasProposal({ blockId: "power", target: "matrix", body: "Change it.", change: smuggled.change })).toEqual({
+      ok: false,
+      error: "A suggestion adds a new row to the Decision Matrix. To change a row, suggest it as it should read and say in your reason which row it replaces.",
+    });
+  });
+
+  it("names a dial's new value by its label, and a number with its unit", () => {
+    const method: DialFacts = {
+      key: "governance.default_method", label: "How village-wide ballots decide", type: "choice", unit: null, min: null, max: null, value: "custom",
+      choices: [{ value: "custom", label: "This village's own dials" }, { value: "consent", label: "Consent" }],
+    };
+    const dial = proposal({ target: "setting", sectionId: null, door: "dial:governance.default_method", change: { value: "consent" }, pen: pen({ pen: "dial" }) });
+    expect(changeLines(dial, method)).toEqual(["New value: Consent"]);
+    expect(adoptEffect(dial, false, titles, method)).toBe("The Game has not started, so adopting sets how village-wide ballots decide to Consent straight away.");
+    expect(dialValueWords("4", { ...method, type: "integer", unit: "vouches", choices: null })).toBe("4 vouches");
+    // With no dial to hand the value is shown as it was sent.
+    expect(changeLines(dial)).toEqual(["New value: consent"]);
   });
 
   it("keeps the governance module with the administrators after the Birthing, and says why", () => {
@@ -213,7 +249,7 @@ describe("the See frame's gaps between the words and the settings", () => {
     ]);
   });
 
-  it("never names a door as a state that applies: governance is off by default, and its door is called \"switched on\"", () => {
+  it("never names a door as a state that applies: governance is off by default", () => {
     // The Power block on a fresh village: Decisions is blank and governance is
     // off, which the server's own fact says. The gap line may not say otherwise.
     const gaps = gapFacts({
@@ -221,7 +257,7 @@ describe("the See frame's gaps between the words and the settings", () => {
       answer: { sections: [{ id: "decisions", title: "Decisions", readable: true, status: "blank" }] },
       doors: [
         { id: "dial:governance.default_method", label: "How village-wide ballots decide", href: "/game-mechanics", kind: "dial", wired: true },
-        { id: "module:governance", label: "Governance switched on for members", href: "/admin?tab=modules&module=governance", kind: "module", wired: true },
+        { id: "module:governance", label: CANVAS_DOORS["module:governance"].label, href: "/admin?tab=modules&module=governance", kind: "module", wired: true },
       ],
       proposals: [],
     });
@@ -229,6 +265,24 @@ describe("the See frame's gaps between the words and the settings", () => {
     expect(text).toContain("Nothing is written yet under Decisions");
     expect(text).not.toMatch(/switched on/i);
     expect(text).not.toMatch(/how village-wide ballots decide/i);
+  });
+
+  it("names the governance door as a setting everywhere it is shown: the door list, the option, a card's heading and an open suggestion", () => {
+    // It read "Governance switched on for members", a sentence that is false
+    // in every village at the platform default, and it is listed under a See
+    // fact saying governance is off (audit of Wave 3b, 2026-09-28).
+    const label = CANVAS_DOORS["module:governance"].label;
+    expect(label).toBe("How widely governance is switched on");
+    const door = { id: "module:governance" as const, label, href: "/admin", kind: "module" as const, wired: true };
+    const off = proposal({ target: "setting", sectionId: null, door: "module:governance", change: { to: "off" }, pen: pen({ pen: "module", who: "admins" }) });
+    expect(proposalHeadline(off, {})).toBe("How widely governance is switched on");
+    expect(changeLines(off)).toEqual(["Switched off"]);
+    expect(suggestionOptions({ block: block("power", []), answer: { sections: [] }, doors: [door] }).map((o) => o.label)).toEqual([
+      "A setting: how widely governance is switched on",
+      "A row of the Decision Matrix",
+    ]);
+    const open = gapFacts({ block: block("power", []), answer: { sections: [] }, doors: [door], proposals: [off] });
+    expect(open.map((g) => g.text)).toEqual(["Sage suggested a change to how widely governance is switched on. Until it is decided, the setting stays as it is."]);
   });
 
   it("names a draft, words kept from members, an open setting suggestion and a setting the canvas cannot reach", () => {
@@ -303,7 +357,7 @@ describe("the suggestion box", () => {
     answer: { sections: [{ id: "decisions", title: "Decisions", readable: true, status: "blank" }] },
     doors: [
       { id: "dial:governance.default_method", label: "How village-wide ballots decide", href: "/game-mechanics", kind: "dial", wired: true },
-      { id: "module:governance", label: "Governance switched on for members", href: "/admin", kind: "module", wired: true },
+      { id: "module:governance", label: "How widely governance is switched on", href: "/admin", kind: "module", wired: true },
     ],
   };
 
@@ -420,5 +474,88 @@ describe("what the suggestion box says will become of a suggestion", () => {
     const fate = suggestionFate({ target: "purpose" }, pen({ pen: "purpose", how: "ballot", who: "any-member", youMayAdopt: true }));
     expect(fate).toMatchObject({ href: "/propose", label: "Start a proposal" });
     expect(fate?.text).toContain("cannot be adopted from the canvas");
+  });
+
+  it("before the Birthing, once a conflict agreement is saved, says the care door is the agreement's, and nothing else changes", () => {
+    const fate = suggestionFate({ target: "setting", door: "exit:restorative" }, consequence(false), true);
+    expect(fate?.text).toBe(
+      "The village's conflict agreement holds the care door now, so a suggestion here cannot be adopted from the canvas. The change belongs in the agreement above.",
+    );
+    expect(suggestionFate({ target: "setting", door: "exit:terms" }, consequence(false), true)).toBeNull();
+    expect(suggestionFate({ target: "setting", door: "exit:restorative" }, consequence(false), false)).toBeNull();
+  });
+});
+
+describe("who reads what, said from the reader's side", () => {
+  const sections: BlockFramesPayload["answer"]["sections"] = [
+    { id: "decisions", title: "Decisions", readable: true, status: "confirmed", body: "We decide by consent.", audience: "admin" },
+    { id: "membership", title: "Membership", readable: true, status: "confirmed", body: "Two vouches.", audience: "member" },
+    { id: "legal", title: "Legal", readable: true, status: "confirmed", body: "The trust holds the title.", audience: "member" },
+    { id: "economy", title: "Economy", readable: false, status: "not-shared" },
+  ];
+
+  it("marks words an administrator reads and members do not, beside them", () => {
+    expect(sectionClosedLine(sections[0])).toBe("Only the administrators read these words today.");
+    expect(sectionClosedLine(sections[1])).toBeNull();
+    // The four administrators' sections are closed whatever their audience column says.
+    expect(sectionClosedLine(sections[2])).toBe("Kept with the administrators: members never read these words.");
+    expect(sectionClosedLine(sections[3])).toBeNull();
+  });
+
+  it("says above the box who reads a suggestion, and that it is read by all even where the section's words are closed", () => {
+    const pub = "Everyone in the village can read what you write here.";
+    const first = "Your first name and today's date go with it.";
+    expect(suggestionReaders({ target: "words", sectionId: "membership" }, sections, pub)).toBe(`${pub} ${first}`);
+    const closed = `${pub} The words under this section are closed to members today, and a suggestion to it is read by everyone in the village. ${first}`;
+    // From the administrator's side (the words are sent, marked admin) and the member's (not shared).
+    expect(suggestionReaders({ target: "words", sectionId: "decisions" }, sections, pub)).toBe(closed);
+    expect(suggestionReaders({ target: "words", sectionId: "economy" }, sections, pub)).toBe(closed);
+    expect(suggestionReaders({ target: "words", sectionId: "legal" }, sections, pub)).toBe(`A suggestion to this section is read by the administrators and by you. ${first}`);
+    expect(suggestionReaders({ target: "matrix" }, sections, pub)).toBe(`${pub} ${first}`);
+  });
+
+  it("marks the aim itself where the section's words are closed", () => {
+    const labels = suggestionOptions({ block: block("power", ["decisions", "membership", "economy", "legal"]), answer: { sections }, doors: [] }).map((o) => o.label);
+    expect(labels).toEqual([
+      "Words for Decisions (its words are closed to members today)",
+      "Words for Membership",
+      "Words for Economy (its words are closed to members today)",
+      "Words for Legal (kept with the administrators)",
+      "A row of the Decision Matrix",
+    ]);
+  });
+
+  it("says who reads the pen's note", () => {
+    const pub = "Everyone in the village can read what you write here.";
+    expect(noteReaders(proposal(), pub)).toBe(pub);
+    expect(noteReaders(proposal({ sectionId: "land" }), pub)).toBe("The administrators and the member who made this suggestion can read what you write here.");
+  });
+});
+
+describe("a decided suggestion, read back", () => {
+  const decided = (over: Partial<DecidedView> = {}): DecidedView => ({
+    id: 9, blockId: "team", target: "words", sectionId: "membership", door: null, change: null, body: "Anybody may join.",
+    source: "member", proposedBy: { id: "u2", name: "Sage" }, createdAt: "2026-10-03T10:00:00.000Z", status: "declined",
+    withdrawn: false, filed: false, decidedBy: { id: "u1", name: "Wren" }, decisionNote: "We keep the vouches.",
+    decidedAt: "2026-10-05T10:00:00.000Z", youProposedIt: false, ...over,
+  });
+
+  it("says how, by whom and when", () => {
+    expect(decidedLine(decided(), "en-GB")).toBe("Declined by Wren on 5 October 2026.");
+    expect(decidedLine(decided({ status: "adopted" }), "en-GB")).toBe("Adopted by Wren on 5 October 2026.");
+    expect(decidedLine(decided({ withdrawn: true }), "en-GB")).toBe("Withdrawn by the member who made it on 5 October 2026.");
+    expect(decidedLine(decided({ withdrawn: true, youProposedIt: true }), "en-GB")).toBe("Withdrawn by you on 5 October 2026.");
+    expect(decidedLine(decided({ status: "adopted", filed: true }), "en-GB")).toBe(
+      "Filed on 5 October 2026 as a proposal to change the Game's rules, in its author's name. The village decides it.",
+    );
+  });
+});
+
+describe("the dial a door names", () => {
+  it("comes from the block's own door, never the mechanics list", () => {
+    const dial: DialFacts = { key: "governance.default_method", label: "How village-wide ballots decide", type: "choice", unit: null, min: null, max: null, choices: [{ value: "consent", label: "Consent" }], value: "custom" };
+    const doors: BlockFramesPayload["doors"] = [{ id: "dial:governance.default_method", label: "How village-wide ballots decide", href: "/game-mechanics", kind: "dial", wired: true, dial }];
+    expect(dialFor("dial:governance.default_method", doors)).toBe(dial);
+    expect(dialFor("dial:membership.vouches_required", doors)).toBeNull();
   });
 });

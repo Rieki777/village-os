@@ -17,7 +17,7 @@
  *   words    a brief section the block draws on (`CANVAS_BLOCKS[b].briefSections`)
  *   purpose  the governing purpose statement, on the Purpose block only
  *   setting  a setting the block maps to, through a door below
- *   matrix   a human row of the Decision Matrix, on the Power block only
+ *   matrix   a new human row of the Decision Matrix, on the Power block only
  *
  * ── THE DOORS ARE "MAKE IT REAL", AND ONLY THE WIRED ONES ARE HERE ─────────
  *
@@ -125,7 +125,10 @@ export const CANVAS_DOORS: Record<CanvasDoorId, CanvasDoor> = {
     id: "module:governance",
     block: "power",
     kind: "module",
-    label: "Governance switched on for members",
+    // The setting's NAME, never a state. It read "Governance switched on for
+    // members", and under a See fact saying governance was off (the default)
+    // that told a member the opposite (audit of Wave 3b, 2026-09-28).
+    label: "How widely governance is switched on",
     moduleId: "governance",
     href: "/admin?tab=modules&module=governance",
   },
@@ -230,6 +233,14 @@ export interface ModuleChange {
   to: (typeof MODULE_DOOR_LIFECYCLES)[number];
 }
 
+/** The words a module lifecycle is said in, on the page and in the adopt route's answer alike. */
+export const MODULE_LIFECYCLE_WORDS: Record<ModuleChange["to"], string> = {
+  off: "off",
+  preview: "on for the administrators only",
+  members: "on for members",
+  public: "on for everybody, visitors included",
+};
+
 /** The exit terms a Team suggestion can set. Every field optional; at least one present. */
 export interface ExitTermsChange {
   noticePeriodDays?: number;
@@ -246,7 +257,13 @@ export interface RestorativeChange {
   replyHours?: number | null;
 }
 
-/** One human row of the Decision Matrix. `rowId` present means "change this row". */
+/**
+ * One human row of the Decision Matrix. `rowId` present means "change this
+ * row", which only the pen's own write sends (PUT .../rows/:id). A member's
+ * suggestion always proposes a new row: `parseCanvasProposal` refuses a
+ * `rowId`, because the Adopt card cannot show which row it would overwrite
+ * and the overwrite keeps no copy (audit of Wave 3b, 2026-09-28).
+ */
 export interface MatrixRowChange {
   rowId?: number;
   subject: string;
@@ -431,6 +448,12 @@ export function parseCanvasProposal(body: unknown): { ok: true; proposal: Canvas
     if (blockId !== "power") return { ok: false, error: "The Decision Matrix is suggested on the Power block." };
     const row = parseMatrixRow(b.change);
     if (!row.ok) return row;
+    if (row.row.rowId !== undefined) {
+      return {
+        ok: false,
+        error: "A suggestion adds a new row to the Decision Matrix. To change a row, suggest it as it should read and say in your reason which row it replaces.",
+      };
+    }
     return { ok: true, proposal: { ...base, target, sectionId: null, door: null, change: row.row } };
   }
   // target === "setting"
