@@ -98,6 +98,7 @@ import { register as registerGovernanceModeRoutes } from "./routes/governanceMod
 import { register as registerGoverningPurposeRoutes } from "./routes/governingPurpose";
 import { register as registerCanvasRoutes } from "./routes/canvas";
 import { register as registerCanvasSeasonRoutes } from "./routes/canvasSeason";
+import { register as registerDecisionMatrixRoutes } from "./routes/decisionMatrix";
 import { register as registerCapabilityExplainerRoutes } from "./routes/capabilityExplainer";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
 import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
@@ -25352,6 +25353,7 @@ ${inner}
   registerGoverningPurposeRoutes(app, { authedUser, isAdmin, adminActor, getPool, capabilityCtx, firstName, weightModeNow, buildElectorate, addActivity });
   registerCanvasRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
   registerCanvasSeasonRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
+  registerDecisionMatrixRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying });
 
   /**
    * The subset of variables the CLIENT is allowed to know, so the UI can render

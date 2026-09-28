@@ -240,4 +240,28 @@ describe.skipIf(!DB_CONFIGURED)("the canvas, through the real gate", () => {
     for (const leaked of ["Wren", "Canvas", people.pen.id, "Three of us"]) expect(r.text).not.toContain(leaked);
     expect((await call("POST", "/api/canvas/readings", reading(), people.stranger.token)).status).toBe(403);
   });
+
+  /*
+   * THE DECISION MATRIX'S DOOR, through the real wiring (plan 2.3, 2026-09-27).
+   * server/routes/decisionMatrix.test.ts proves the route with the two holder
+   * readers modelled; this asks the ones server/index.ts hands it, after the
+   * case above left `story.tell` held by the village with Wren seated.
+   */
+  it("serves the Decision Matrix to members, from the village's live holdings, naming roles and never people", async () => {
+    expect((await call("GET", "/api/canvas/decision-matrix", undefined, "")).status).toBe(401);
+    const stranger = await call("GET", "/api/canvas/decision-matrix", undefined, people.stranger.token);
+    expect(stranger.status, stranger.text).toBe(403);
+    expect(stranger.json).toEqual({ error: CANVAS_MEMBERS_ONLY });
+
+    const r = await call("GET", "/api/canvas/decision-matrix", undefined, people.member.token);
+    expect(r.status, r.text).toBe(200);
+    const row = (key: string) => r.json.groups.flatMap((g: any) => g.rows).find((x: any) => x.key === key);
+    expect(row("power:story.tell").approval.who).toBe("holder");
+    expect(row("power:story.tell").approval.text).toContain("with Storytellers");
+    expect(row("power:dial.set").approval.who).toBe("admin-panel");
+    // A scratch village ships governance off, so no vote can be held on it yet.
+    expect(row("vote:village_launch").approval.who).toBe("not-yet");
+    expect(r.json.vetoOverrideAvailable).toBe(false);
+    for (const person of ["Wren", "Ash", "Canvas Founder", people.pen.id]) expect(r.text).not.toContain(person);
+  });
 });

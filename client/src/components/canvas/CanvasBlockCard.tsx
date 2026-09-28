@@ -14,7 +14,7 @@
  * and a numeral here would invite adding the twelve up, which R55 forbids.
  * The earlier readings are listed without a count for the same reason.
  */
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { ChevronRight } from "lucide-react";
 import { type CanvasBlock, type CanvasReadingInput } from "@shared/governanceCanvas";
@@ -29,6 +29,8 @@ export function CanvasBlockCard({
   onSave,
   focusLabel,
   season,
+  children,
+  wide = false,
 }: {
   block: CanvasBlock;
   view: CanvasBlockView;
@@ -43,6 +45,18 @@ export function CanvasBlockCard({
    * no weeks, and another programme's calendar is not this village's.
    */
   season?: { name: string; weeks: readonly number[] };
+  /**
+   * What a block hosts beneath its own words. The Power block hosts the
+   * platform's half of the Decision Matrix (CanvasBaseline hands it in); the
+   * others host nothing yet.
+   */
+  children?: ReactNode;
+  /**
+   * Take both columns of the grid on a wide screen. The Power block asks for
+   * it while its Decision Matrix is open: five columns need the room, and a
+   * card that tall beside a neighbour would stretch the neighbour with it.
+   */
+  wide?: boolean;
 }) {
   const [writing, setWriting] = useState(false);
   const latest = view.latest;
@@ -53,7 +67,7 @@ export function CanvasBlockCard({
     <article
       id={`canvas-block-${block.id}`}
       data-testid={`canvas-block-${block.id}`}
-      className={`bg-white border rounded-xl p-5 scroll-mt-24 ${focusLabel ? "border-teal-deep" : "border-stone-200"}`}
+      className={`bg-white border rounded-xl p-5 scroll-mt-24 ${focusLabel ? "border-teal-deep" : "border-stone-200"}${wide ? " md:col-span-2" : ""}`}
     >
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -116,6 +130,8 @@ export function CanvasBlockCard({
           </Link>
         </p>
       )}
+
+      {children}
 
       {earlier.length > 0 && (
         <details className="mt-3 text-sm">
