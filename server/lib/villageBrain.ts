@@ -385,10 +385,31 @@ export async function briefIndexForPrompt(
 }
 
 /**
+ * THE ONLY BRIEF SECTIONS A STRANGER'S PROMPT MAY EVER CARRY, by name.
+ *
+ * `audience = member` means "a signed-in member may read this", and that is a
+ * different promise from "a stranger on /work-with-us may be told this". Until
+ * 2026-09-24 the public guide read every member-audience row, so the two were
+ * the same promise by accident: it held only while every member-default
+ * section happened to be one a village would say to anybody. The moment an
+ * admin opens `economy`, `decisions` or `membership` to members (which is what
+ * the canvas is for), an audience-only reader hands dues, rents and who
+ * decides what to whoever types into the public guide.
+ *
+ * So this is an ALLOWLIST and not a derivation from `BRIEF_SECTIONS`. A section
+ * added to the registry, or a row an admin opens, never reaches a stranger
+ * until somebody adds its id HERE, on purpose, in review. It narrows and never
+ * widens: a row must still be member-audience and confirmed, so an admin who
+ * closes `values` takes it off the public prompt as well.
+ */
+export const STRANGER_READABLE_SECTIONS: ReadonlySet<string> = new Set(["aims", "vision", "values", "language"]);
+
+/**
  * The village's own words about itself, for a prompt a STRANGER reaches.
  *
- * Member-audience sections only, confirmed only, capped. Two rules ride with
- * that and both are about honesty rather than secrecy:
+ * Allowlisted sections only (`STRANGER_READABLE_SECTIONS`), member-audience
+ * only, confirmed only, capped. Two rules ride with that and both are about
+ * honesty rather than secrecy:
  *
  *  - `status = proposed` is the guide's draft guess at what the village would
  *    say. Reading a guess back to a stranger as the village's own words is the
@@ -400,7 +421,9 @@ export async function briefIndexForPrompt(
  * callers append nothing rather than saying the village stands for anything.
  */
 export async function briefForPublicPrompt(pool: Pool, maxTokens = 700): Promise<string> {
-  const rows = (await briefAll(pool, "member")).filter((b) => b.status === "confirmed" && b.body.trim());
+  const rows = (await briefAll(pool, "member")).filter(
+    (b) => STRANGER_READABLE_SECTIONS.has(b.section) && b.status === "confirmed" && b.body.trim(),
+  );
   if (!rows.length) return "";
   const body = rows
     .map((b) => `### ${b.title}\n${b.body.trim()}`)
@@ -408,12 +431,46 @@ export async function briefForPublicPrompt(pool: Pool, maxTokens = 700): Promise
   return capMarkdown(body, maxTokens);
 }
 
+/**
+ * The brief rows `GET /api/village/brain` may hand one signed-in viewer.
+ *
+ * The route picked "admin" or "member" and nothing else, so EVERY signed-in
+ * account read the member view: an invited account the village has not yet
+ * admitted, and anybody at all on a fork with `membership.invite_only` off.
+ * While an opened section closed itself on its next save that exposure was
+ * brief; with the audience sticky (2026-09-24) an opened `economy` stays open,
+ * so an account without membership reads what a stranger's guide may say (the
+ * allowlist above) and nothing more. It only narrows: an admin or a member
+ * gets exactly the rows their audience query returned.
+ */
+export function briefRowsForViewer(rows: BriefRow[], viewer: { admin: boolean; member: boolean }): BriefRow[] {
+  if (viewer.admin || viewer.member) return rows;
+  return rows.filter((r) => STRANGER_READABLE_SECTIONS.has(r.section));
+}
+
 // ── Writes ───────────────────────────────────────────────────────────────────
+
+/**
+ * The audience a request body asked for, or `undefined` for "leave it".
+ *
+ * Both values are accepted because opening a section and closing it again are
+ * the same act in two directions; a route that could only ever widen would
+ * make a mistaken open permanent. Anything else, including a missing field,
+ * reads as "leave it", which `briefWrite` now honours by keeping the stored
+ * audience, so an unknown value can never widen anything.
+ */
+export function briefAudienceFromBody(v: unknown): BriefAudience | undefined {
+  return v === "admin" || v === "member" ? v : undefined;
+}
 
 export interface BriefWrite {
   section: string;
   body: string;
   title?: string;
+  /**
+   * Omitted means KEEP the stored audience; only a new row takes the
+   * registry default. Pass it only when somebody chose to open or close.
+   */
   audience?: BriefAudience;
   source?: "intake" | "session0" | "conversation" | "admin";
   /** Confirming actor. Present means the row lands confirmed. */
@@ -439,7 +496,13 @@ export async function briefWrite(pool: Pool, input: BriefWrite): Promise<BriefRo
     );
     const existing = existingRows[0] ? toBrief(existingRows[0]) : null;
     const status = input.confirmedBy ? "confirmed" : "proposed";
-    const audience = input.audience ?? spec.audience;
+    // STICKY. This read `input.audience ?? spec.audience` until 2026-09-24, so
+    // every text-only save put the registry default back: a section an admin
+    // had opened to members closed itself on the next edit, and the day a
+    // default becomes "member" the same line reopens a row an admin had closed,
+    // on its next save, with nobody choosing to. The stored choice wins unless
+    // a new one is passed; the default only names a row that does not exist yet.
+    const audience = input.audience ?? existing?.audience ?? spec.audience;
     const title = input.title ?? spec.title;
 
     if (existing) {
