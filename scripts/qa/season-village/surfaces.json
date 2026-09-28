@@ -92,7 +92,8 @@
         "Leaving Well", "$restorativeStep",
         "Bring it to the $careRoleName role and you hear back within $conflictReplyTime",
         "You can also bring it to somebody outside the village: $outsideContactName"
-      ]
+      ],
+      "forbidden": ["Nobody holds the"]
     },
     {
       "id": "love-letter",

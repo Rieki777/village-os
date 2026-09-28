@@ -19,6 +19,12 @@
  *
  * Read signed out, because the page is public and these lines are printed to
  * anybody. `Layout` is a passthrough; the subject is the restorative card.
+ *
+ * A FIFTH SETUP (Wave 2 audit, 2026-09-28): an intake role nobody holds today.
+ * The page promised a reply from it, and offered a form that the server then
+ * refused, because it read the stored role id. It now reads `heldToday` off
+ * GET /api/exit-policy. The cases about the form are read SIGNED IN, since the
+ * form is only ever offered to a member.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
@@ -27,7 +33,8 @@ import type { ReactNode } from "react";
 vi.mock("@/components/Layout", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: null, loading: false }) }));
+const auth = vi.hoisted(() => ({ user: null as null | { id: string; name: string } }));
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: auth.user, loading: false }) }));
 vi.mock("@/lib/gameApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/gameApi")>()),
   authToken: () => null,
@@ -59,11 +66,15 @@ async function card(): Promise<string> {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  auth.user = null;
 });
+
+const HELD = { id: "care", name: "Care", heldToday: true };
+const UNHELD = { id: "care", name: "Care", heldToday: false };
 
 describe("ExitPolicy, the conflict door", () => {
   it("ties the reply to the intake role, and offers the outside contact as well", async () => {
-    serve({ intakeContactRole: "care", intakeRole: { id: "care", name: "Care" }, replyHours: 48, outsideContact: CONTACT });
+    serve({ intakeContactRole: "care", intakeRole: HELD, replyHours: 48, outsideContact: CONTACT });
     render(<ExitPolicy />);
     const text = await card();
     expect(text).toContain("Bring it to the Care role and you hear back within 48 hours.");
@@ -92,10 +103,47 @@ describe("ExitPolicy, the conflict door", () => {
   });
 
   it("prints neither line before the village has stated them", async () => {
-    serve({ intakeContactRole: "care", intakeRole: { id: "care", name: "Care" } });
+    serve({ intakeContactRole: "care", intakeRole: HELD });
     render(<ExitPolicy />);
     const text = await card();
     expect(text).not.toContain("hear back");
     expect(text).not.toContain("outside the village");
+  });
+});
+
+describe("ExitPolicy, an intake role nobody holds today", () => {
+  it("promises no reply from it, offers no form, and says nobody holds it", async () => {
+    auth.user = { id: "u-member", name: "Wren" };
+    serve({ intakeContactRole: "care", intakeRole: UNHELD, replyHours: 48 });
+    render(<ExitPolicy />);
+    const text = await card();
+    expect(text).toContain("Nobody holds the Care role today, so a private intake would reach nobody.");
+    expect(text).not.toContain("hear back");
+    expect(text).not.toContain("48 hours");
+    expect(screen.queryByRole("button", { name: "Send privately" })).toBeNull();
+  });
+
+  it("with an outside contact named, sends a member there with the reply, and never says also", async () => {
+    auth.user = { id: "u-member", name: "Wren" };
+    serve({ intakeContactRole: "care", intakeRole: UNHELD, replyHours: 48, outsideContact: CONTACT });
+    render(<ExitPolicy />);
+    const text = await card();
+    expect(text).toContain(
+      "Bring it to somebody outside the village: Jo Bell, Cohort Care. ombuds@example.test You hear back within 48 hours.",
+    );
+    expect(text).not.toContain("also");
+    expect(text).not.toContain("Bring it to the Care role");
+  });
+
+  // The control for the two cases above: a role somebody holds offers the form,
+  // so "no form" is about the role and never about a form this render cannot show.
+  it("a role somebody holds today keeps the promise and the form", async () => {
+    auth.user = { id: "u-member", name: "Wren" };
+    serve({ intakeContactRole: "care", intakeRole: HELD, replyHours: 48 });
+    render(<ExitPolicy />);
+    const text = await card();
+    expect(text).toContain("Bring it to the Care role and you hear back within 48 hours.");
+    expect(text).not.toContain("Nobody holds");
+    expect(screen.getByRole("button", { name: "Send privately" })).toBeInTheDocument();
   });
 });

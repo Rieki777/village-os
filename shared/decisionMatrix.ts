@@ -841,7 +841,19 @@ function powerRow(cap: Capability, p: PowerHolding | undefined, inp: DecisionMat
     "Moving it is a village vote, to a role or back to the admin panel, on the village's own dials with no tier floor.",
   ];
   if (cap === STEWARD_VETO_CAP) {
-    lines.push("The steward's seat is filled only by a village vote, and it empties by a vote or when its term ends. No admin route moves it.");
+    // THE THIRD WAY IT EMPTIES (Wave 2 audit, 2026-09-28). This line said the
+    // seat empties "by a vote or when its term ends" and that "no admin route
+    // moves it". A steward who leaves the village loses every holding they have
+    // (server/lib/erasure.ts, the role-holdings step), and an administrator can
+    // bring that about alone: removing the member (DELETE
+    // /api/admin/players/:id) or resolving an exit (server/routes/exits.ts),
+    // neither of which is a vote. What stays true is that no admin route SEATS
+    // anybody there (`stewardSeatRefusal` in server/lib/roleGrants.ts).
+    lines.push(
+      "The steward's seat is filled only by a village vote, and no admin route seats anybody in it. " +
+        "It empties by a vote, when its term ends, or when the steward leaves the village, " +
+        "and an administrator can remove them from the village without a vote.",
+    );
   } else {
     lines.push("An administrator can also give it to another role directly from the admin panel, with no vote, and the village's pulse says so.");
   }

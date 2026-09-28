@@ -100,6 +100,10 @@ const logs: string[] = [];
 let founderToken = "";
 let founderId = "";
 let wrenToken = "";
+let wrenId = "";
+
+/** An intake role nobody holds until the last case seats Wren in it. Written before boot, so the role cache loads it. */
+const CARE_ROLE = "closing-care";
 
 interface Answer { status: number; json: any; text: string }
 
@@ -139,6 +143,18 @@ const storedPolicy = async (): Promise<any | null> => {
   );
   if (!rows[0]) return null;
   return typeof rows[0].value === "string" ? JSON.parse(rows[0].value) : rows[0].value;
+};
+
+/**
+ * The records a closing write leaves, read raw: the admin audit rows and the
+ * pulse lines members read (Wave 2 audit, 2026-09-28).
+ */
+const closingEvents = async (audience: "admin" | "public"): Promise<{ text: string; actor: string | null }[]> => {
+  const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    "SELECT text, actor_user_id FROM health_events WHERE entity_type = 'exit_policy' AND entity_ref = 'closing' AND audience = ?",
+    [audience],
+  );
+  return rows.map((r) => ({ text: String(r.text), actor: r.actor_user_id == null ? null : String(r.actor_user_id) }));
 };
 
 /** How many launch ballots exist, read raw: a refused ask must leave none. */
@@ -207,6 +223,10 @@ beforeAll(async () => {
   testDb = await provisionTestDb({ gameStarted: false });
   pool = testPool(testDb, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
 
+  await pool.query( // module-review-ok: a fixture on the scratch schema this suite provisioned
+    "INSERT INTO roles (id, name, description, capabilities, sort_order) VALUES (?,?,?,?,?)",
+    [CARE_ROLE, "Care", "Hears a conflict first.", JSON.stringify([]), 99],
+  );
   await waitForPortFree(PORT);
   child = spawn(process.execPath, [DIST], {
     env: {
@@ -245,6 +265,7 @@ beforeAll(async () => {
   // the row under test.
   const wren = await register("Wren Ashby", "wren");
   wrenToken = wren.token;
+  wrenId = wren.id;
   const ida = await register("Ida Kestrel", "ida");
   for (const id of [founderId, wren.id, ida.id]) {
     expect((await call("PUT", `/api/admin/players/${id}/stage`, { body: { stageId: "member" } })).status).toBe(200);
@@ -346,6 +367,12 @@ describe.skipIf(!DB_CONFIGURED)("the default is a suggestion until the village a
     // A drafted default promises nothing yet, so a member about to redeem is told nothing.
     expect((await call("PUT", "/api/admin/modules/redemption/lifecycle", { body: { lifecycle: "members" } })).status).toBe(200);
     expect(await notice()).toBeNull();
+
+    // A draft is recorded for the admins and is not news for the village.
+    expect(await closingEvents("admin")).toEqual([
+      { text: "closing-policy:draft:none->proportional-closing-balance", actor: founderId },
+    ]);
+    expect(await closingEvents("public")).toEqual([]);
   });
 
   it("adopting names it, stamped with the admin who did it", async () => {
@@ -359,6 +386,18 @@ describe.skipIf(!DB_CONFIGURED)("the default is a suggestion until the village a
     expect(Number.isFinite(Date.parse(stored?.adoptedAt))).toBe(true);
     // The terms beside it are exactly as they were.
     expect((await storedPolicy())?.voluntary?.valuationMethod).toBe(TERMS.voluntary.valuationMethod);
+
+    // Wave 2 audit, 2026-09-28: an adoption used to leave no record and tell
+    // nobody. It is on the admin audit trail and on the pulse members read.
+    expect((await closingEvents("admin")).map((e) => e.text)).toContain(
+      "closing-policy:adopted:proportional-closing-balance->proportional-closing-balance",
+    );
+    expect(await closingEvents("public")).toEqual([
+      {
+        text: "Closing Founder adopted what closing this village means: Shared by closing-day balances. The words are on the exit policy page.",
+        actor: founderId,
+      },
+    ]);
   });
 
   it("every reader sees it, signed in or not, and nobody learns who adopted it", async () => {
@@ -438,6 +477,20 @@ describe.skipIf(!DB_CONFIGURED)("the redemption screen says what redeeming gives
     expect(await notice()).toBe(CLOSING_REDEMPTION_NOTICE);
   });
 
+  /*
+   * THE NOTICE SITS BESIDE "THIS ONE GOES TO A VILLAGE VOTE" (Wave 2 audit,
+   * 2026-09-28). Nobody in this village holds `redemption.confirm`, so the
+   * panel tells the member a vote decides, and the notice under it used to say
+   * "once a steward confirms". Read off the same payload the panel renders.
+   */
+  it("where a village vote confirms a redemption, the notice does not say a steward does", async () => {
+    const r = await call("GET", "/api/redemptions", { token: wrenToken });
+    expect(r.status, r.text).toBe(200);
+    expect(r.json?.confirmedBy, "nobody holds the redemption key here").toBe("vote");
+    expect(r.json?.closingNotice).toBe(CLOSING_REDEMPTION_NOTICE);
+    expect(String(r.json?.closingNotice)).not.toMatch(/steward/i);
+  });
+
   it("with the village's own words, the platform claims nothing about redeemed tokens", async () => {
     expect((await call("PUT", "/api/admin/exit-policy/closing", {
       body: { policyId: "own-words", statement: OWN_WORDS, adopt: true },
@@ -458,5 +511,35 @@ describe.skipIf(!DB_CONFIGURED)("the redemption screen says what redeeming gives
     expect((await storedPolicy())?.closing).toEqual(before);
     expect((await closingRow()).item.state).toBe("ok");
     expect(await notice(), "still the village's own words, so still nothing claimed").toBeNull();
+  });
+});
+
+/*
+ * THE REPLY PROMISE NEEDS SOMEBODY BEHIND IT (Wave 2 audit, 2026-09-28).
+ *
+ * /exit-policy printed "Bring it to the <role> and you hear back within N
+ * hours" whenever an intake role id was stored, and an intake sent to a role
+ * nobody holds is refused. The page now reads `heldToday` off this route and
+ * promises the reply, and offers the form, only when it is true. This drives
+ * the route's half through the real wiring: the role holders handed to the
+ * exits module in server/index.ts, read by the intake's own reach rule.
+ */
+describe.skipIf(!DB_CONFIGURED)("the exit policy says whether anybody holds the intake role today", () => {
+  it("an intake role nobody holds reads as not held, to anybody, and reads as held once somebody is seated", async () => {
+    const saved = await call("PUT", "/api/admin/exit-policy", {
+      body: { ...TERMS, restorative: { ...TERMS.restorative, intakeContactRole: CARE_ROLE } },
+    });
+    expect(saved.status, saved.text).toBe(200);
+
+    for (const token of [null, wrenToken]) {
+      const read = await call("GET", "/api/exit-policy", { token });
+      expect(read.status, read.text).toBe(200);
+      expect(read.json?.policy?.restorative?.intakeRole).toEqual({ id: CARE_ROLE, name: "Care", heldToday: false });
+    }
+
+    const seated = await call("POST", `/api/admin/roles/${CARE_ROLE}/holders`, { body: { userId: wrenId, action: "add" } });
+    expect(seated.status, seated.text).toBe(200);
+    const read = await call("GET", "/api/exit-policy", { token: null });
+    expect(read.json?.policy?.restorative?.intakeRole).toEqual({ id: CARE_ROLE, name: "Care", heldToday: true });
   });
 });

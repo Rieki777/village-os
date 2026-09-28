@@ -46,7 +46,16 @@ export default function ExitPolicy() {
   // that is its holders. With none, the outside contact is the only way in, so
   // the page says so plainly, and never "also" beside a door that is not there.
   // A reply time with no door at all promises nothing, and is not printed.
-  const hasIntake = !!policy?.restorative?.intakeContactRole;
+  //
+  // HELD TODAY, NOT MERELY CHOSEN (Wave 2 audit, 2026-09-28). This read the
+  // stored role id, so a role nobody was ever seated in, or one whose every
+  // term had run out, printed "you hear back within N hours" above a form that
+  // then refused with "The intake role has no holders right now". The server
+  // says whether an intake sent now would reach anybody (`heldToday`,
+  // server/lib/restorativeIntake.ts), and the promise and the form follow it.
+  const intakeRole = policy?.restorative?.intakeRole;
+  const hasIntake = !!intakeRole?.heldToday;
+  const intakeUnheld = !!intakeRole && !intakeRole.heldToday;
 
   const requestExit = () => {
     setError(""); setMsg("");
@@ -167,6 +176,11 @@ export default function ExitPolicy() {
                 Bring it to the {intakeRoleLabel} and you hear back within {within}.
               </p>
             )}
+            {intakeUnheld && (
+              <p className="text-sm text-muted-foreground mb-2">
+                Nobody holds the {intakeRoleLabel} today, so a private intake would reach nobody.
+              </p>
+            )}
             {outsideNamed && (
               <p className="text-sm text-muted-foreground mb-3">
                 {hasIntake ? "You can also bring it to somebody outside the village" : "Bring it to somebody outside the village"}: {outside.name}
@@ -174,7 +188,7 @@ export default function ExitPolicy() {
                 {!hasIntake && replyHours > 0 ? ` You hear back within ${within}.` : ""}
               </p>
             )}
-            {user && policy?.restorative?.intakeContactRole && (
+            {user && hasIntake && (
               <div className="border-t border-border pt-3 space-y-2">
                 <p className="text-xs text-muted-foreground">
                   Start a private intake. It reaches only the people holding

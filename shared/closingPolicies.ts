@@ -267,10 +267,18 @@ export function closingForReaders(section: unknown): ClosingSectionForReaders | 
  * sentence claiming to would be the platform presuming a formula.
  *
  * Written so it is true of any token being redeemed: a redeemed token is
- * destroyed once a steward confirms, so it counts for nothing on closing day
- * whether or not the village would have counted it. "The share these tokens
- * would carry" is the ruling's point said plainly, and it is zero for a token
- * the village does not count, so the sentence never overstates.
+ * destroyed once the redemption is confirmed, so it counts for nothing on
+ * closing day whether or not the village would have counted it. "The share
+ * these tokens would carry" is the ruling's point said plainly, and it is zero
+ * for a token the village does not count, so the sentence never overstates.
+ *
+ * IT NAMES NOBODY AS THE ONE WHO CONFIRMS (Wave 2 audit, 2026-09-28). It used
+ * to say "once a steward confirms you were paid", and a village where nobody
+ * holds `redemption.confirm` decides each redemption by a village vote
+ * (`confirmModeFor` in server/lib/redemption.ts), which is every fresh
+ * village. The panel then showed "this one goes to a village vote" and "once
+ * a steward confirms" a few lines apart. The confirmation, by a steward or by
+ * the vote, is what destroys the tokens, so the sentence says that and stops.
  */
 export function redemptionClosingNotice(section: unknown): string | null {
   if (!closingNamed(section)) return null;
@@ -283,4 +291,4 @@ export function redemptionClosingNotice(section: unknown): string | null {
 export const CLOSING_REDEMPTION_NOTICE =
   "This village's closing policy shares what is left, if the village ever closes, among contribution-token " +
   "holders in proportion to what they hold on closing day. Redeeming gives up the share these tokens would " +
-  "carry then: once a steward confirms you were paid, they are destroyed and count for nothing on closing day.";
+  "carry then: once your redemption is confirmed, they are destroyed and count for nothing on closing day.";

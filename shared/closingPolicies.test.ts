@@ -172,6 +172,15 @@ describe("redemptionClosingNotice: only when it applies", () => {
     expect(CLOSING_REDEMPTION_NOTICE).toContain("closing day");
   });
 
+  // Wave 2 audit, 2026-09-28. A village where nobody holds `redemption.confirm`
+  // decides each redemption by a village vote, and the panel says so just above
+  // this notice. So the notice names nobody as the one who confirms: it is shown
+  // in both modes, and "a steward confirms" was false in one of them.
+  it("names nobody as the one who confirms, because a village vote confirms where nobody holds the key", () => {
+    expect(CLOSING_REDEMPTION_NOTICE).toContain("once your redemption is confirmed, they are destroyed");
+    expect(CLOSING_REDEMPTION_NOTICE).not.toMatch(/steward/i);
+  });
+
   it("stays silent on a draft, on the village's own words, and on nothing", () => {
     expect(redemptionClosingNotice(draft("proportional-closing-balance", PROPORTIONAL_CLOSING_STATEMENT))).toBeNull();
     expect(redemptionClosingNotice(adopted("own-words", OWN_WORDS))).toBeNull();

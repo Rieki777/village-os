@@ -119,11 +119,15 @@ export function ClosingProposeDoor() {
 
   const line = "mt-4 pt-3 border-t border-border text-sm text-muted-foreground";
   if (loading || !user) return null;
+  // Wave 2 audit, 2026-09-28: this said "A change to this goes to a village
+  // vote", and no vote writes the closing section. Whoever keeps the exit
+  // policy can adopt new words at any time (PUT /api/admin/exit-policy/closing),
+  // so only a PROPOSED change goes to a vote, and the line says so.
   if (modules.loaded && !governance) {
     return (
       <p className={line}>
-        A change to this goes to a village vote, and this village has not turned governance on yet.
-        Say what you would change to whoever keeps the exit policy.
+        Proposing a change puts it to a village vote, and this village has not turned governance on yet.
+        Whoever keeps the exit policy can change these words, so say what you would change to them.
       </p>
     );
   }

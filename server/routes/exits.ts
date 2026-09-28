@@ -58,7 +58,7 @@ import {
   restorativeDoorProblem,
 } from "../lib/exitPolicy";
 import type { makeIdentityGate } from "../lib/identityConfirm";
-import { intakeRoleNamed } from "../lib/restorativeIntake";
+import { intakeRoleForReaders, type IntakeHolding } from "../lib/restorativeIntake";
 import type { DbDocument } from "../repos/store-db";
 import { cancelOpenExit, markExitResolved, markExitSettling } from "../repos/exits";
 
@@ -90,6 +90,8 @@ export type ExitDeps = Pick<
    * fields out, and storing it back would freeze the one and erase the other.
    */
   exitPolicyRepo: Pick<DbDocument<any>, "exists" | "get" | "put">;
+  /** Every role_holders row, for whether the intake role is held today (`intakeRoleForReaders`). */
+  roleHolders(): ReadonlyArray<IntakeHolding>;
   /** A password, or a fresh Google sign-in for a member with none (server/lib/identityConfirm.ts). */
   confirmIdentity: ReturnType<typeof makeIdentityGate>;
   /** The refusal that stops a departure leaving the village with nobody who can administer it, or null. */
@@ -123,8 +125,13 @@ export function register(app: Express, deps: ExitDeps): void {
           decidingCircle: namedCircle(policy?.involuntary?.decidingDomainId),
           appealCircle: namedCircle(policy?.involuntary?.appealDomainId),
         },
-        // Named for the same reason: a member sees who an intake reaches before sending it.
-        restorative: { ...(policy?.restorative ?? {}), intakeRole: intakeRoleNamed(policy?.restorative?.intakeContactRole, deps.loadRoles()) },
+        // Named for the same reason: a member sees who an intake reaches before
+        // sending it. `heldToday` says whether anybody would: the page promises a
+        // reply and offers the form only then (server/lib/restorativeIntake.ts).
+        restorative: {
+          ...(policy?.restorative ?? {}),
+          intakeRole: intakeRoleForReaders(policy?.restorative?.intakeContactRole, deps.loadRoles(), deps.roleHolders()),
+        },
       },
       configured: deps.exitPolicyRepo.exists(), platformWording: platformDefaultTermKeys(policy),
     });

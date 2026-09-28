@@ -589,10 +589,21 @@ describe("the steward's veto names who can really stop a carried decision", () =
 
   it("its seat empties at the end of its term as well as by a vote, and no other power's row says so", () => {
     const m = generateDecisionMatrix(inputs());
-    expect(row(m, "power:steward.veto").method.lines).toContain(
-      "The steward's seat is filled only by a village vote, and it empties by a vote or when its term ends. No admin route moves it.",
-    );
+    const said = row(m, "power:steward.veto").method.lines.join(" ");
+    expect(said).toContain("The steward's seat is filled only by a village vote, and no admin route seats anybody in it.");
+    expect(said).toContain("It empties by a vote, when its term ends, or when the steward leaves the village");
     expect(row(m, "power:dial.set").method.lines.join(" ")).not.toContain("steward's seat");
+  });
+
+  // Wave 2 audit, 2026-09-28: the row said "No admin route moves it" and listed
+  // only a vote and the term's end. An administrator removing the steward from
+  // the village, or closing their departure, empties the seat with no ballot
+  // (server/lib/erasure.ts drops every holding they had), so a member reading
+  // the matrix was told the one check on an admin was out of any admin's reach.
+  it("tells members an administrator can empty the steward's seat by removing the steward, with no vote", () => {
+    const said = row(generateDecisionMatrix(inputs()), "power:steward.veto").method.lines.join(" ");
+    expect(said).toContain("an administrator can remove them from the village without a vote");
+    expect(said).not.toContain("No admin route moves it");
   });
 });
 

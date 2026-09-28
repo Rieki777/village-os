@@ -91,6 +91,29 @@ export function intakeRoleNamed(
 }
 
 /**
+ * THE INTAKE ROLE AS THE PUBLISHED PAGE READS IT, with whether anybody holds
+ * it today.
+ *
+ * /exit-policy printed "Bring it to the <role> and you hear back within N
+ * hours" whenever a role id was stored (Wave 2 audit, 2026-09-28). A role
+ * nobody was ever seated in, or one whose every term has run out, which is
+ * the default course of a seat with a term, made that a promise nobody would
+ * keep: an intake sent there is refused with "The intake role has no holders
+ * right now". `heldToday` is the intake's own reach rule, `liveIntakeRecipients`,
+ * so the page promises a reply and offers the form exactly when an intake sent
+ * now would reach somebody. Null when no role is set or the id names no role.
+ */
+export function intakeRoleForReaders(
+  roleId: unknown,
+  roles: ReadonlyArray<{ id: string; name?: string | null }>,
+  holders: ReadonlyArray<IntakeHolding>,
+  now: Date = new Date(),
+): { id: string; name: string; heldToday: boolean } | null {
+  const role = intakeRoleNamed(roleId, roles);
+  return role ? { ...role, heldToday: liveIntakeRecipients(holders, role.id, now).length > 0 } : null;
+}
+
+/**
  * One recipient's notice. The title and the link carry nothing about the
  * sender. The body carries the sender's name and their words, for the
  * recipient's eyes in the app, and the email for this kind leaves the body out.

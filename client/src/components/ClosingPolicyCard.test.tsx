@@ -104,6 +104,18 @@ describe("the door to propose a change", () => {
     expect(screen.queryByRole("button", { name: "Propose a change" })).toBeNull();
   });
 
+  // Wave 2 audit, 2026-09-28: the line said "A change to this goes to a village
+  // vote", while PUT /api/admin/exit-policy/closing lets whoever keeps the exit
+  // policy adopt new words with no ballot. Only a proposal goes to a vote.
+  it("does not tell a member every change goes to a vote, because whoever keeps the policy can change it", () => {
+    catalog.modules = [];
+    render(<ClosingPolicyCard closing={ADOPTED} />);
+    const said = screen.getByText(/has not turned governance on yet/).textContent ?? "";
+    expect(said).toContain("Proposing a change puts it to a village vote");
+    expect(said).toContain("Whoever keeps the exit policy can change these words");
+    expect(said).not.toContain("A change to this goes to a village vote");
+  });
+
   it("says so, without a button, to an account that does not open votes", async () => {
     gov.facts = { ok: true, data: { mayOpenAdvisory: false } };
     render(<ClosingPolicyCard closing={ADOPTED} />);

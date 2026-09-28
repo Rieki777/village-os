@@ -14598,7 +14598,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   });
 
   // Member exit (S52, F12): the published policy and a departure's steps, in server/routes/exits.ts.
-  registerExitRoutes(app, { isAdmin, authedUser, adminActor, getPool, members, circlesRepo, loadRoles, roleIdsFor, notify, notifyAdmins, readExitPolicy, exitPolicyRepo, confirmIdentity, departureStrandingRefusal, erasureDeps });
+  registerExitRoutes(app, { isAdmin, authedUser, adminActor, getPool, members, circlesRepo, loadRoles, roleIdsFor, notify, notifyAdmins, readExitPolicy, exitPolicyRepo, roleHolders: loadRoleHolders, confirmIdentity, departureStrandingRefusal, erasureDeps });
 
   // Restorative intake (F12's hard rule as code): server/routes/restorativeIntake.ts.
   registerRestorativeIntakeRoutes(app, { authedUser, notify, overLimit, readExitPolicy, roleHolders: loadRoleHolders });
@@ -18577,7 +18577,7 @@ ${inner}
     return out.ok ? { ok: true } : { ok: false, error: out.error };
   };
   registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify, openRedemptionBallot: (id: string) => openRedemptionVote(id), overLimit, projectCurrency: () => mergedConfig().project.fiatCurrency, redemptionKeyHolders: () => liveHoldersOf("redemption.confirm") });
-  registerClosingPolicyRoutes(app, { isAdmin, adminActor, exitPolicy: exitPolicyRepo });
+  registerClosingPolicyRoutes(app, { isAdmin, adminActor, getPool, exitPolicy: exitPolicyRepo });
 
   // â”€â”€ Project Settings (village dues + other editable numbers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 

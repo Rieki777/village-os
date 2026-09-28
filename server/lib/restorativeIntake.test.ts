@@ -19,6 +19,7 @@ import {
   INTAKE_MAX_CHARS,
   INTAKE_TITLE,
   intakeNotice,
+  intakeRoleForReaders,
   intakeRoleNamed,
   liveIntakeRecipients,
   sendRestorativeIntake,
@@ -87,6 +88,24 @@ describe("the role a member sees before sending", () => {
 
   it("falls back to the id when a role has no name", () => {
     expect(intakeRoleNamed("bare", roles)).toEqual({ id: "bare", name: "bare" });
+  });
+
+  /*
+   * WHETHER ANYBODY HOLDS IT TODAY (Wave 2 audit, 2026-09-28). /exit-policy
+   * promised a reply from the intake role whenever an id was stored, so a role
+   * nobody held, or one whose every term had run out, promised a reply nobody
+   * would send. The page now prints the promise and the form only when
+   * `heldToday` is true, and `heldToday` is the intake's own reach rule.
+   */
+  it("says the role is held today exactly when an intake sent now would reach somebody", () => {
+    expect(intakeRoleForReaders("care", roles, HOLDERS, NOW)).toEqual({ id: "care", name: "Care Circle", heldToday: true });
+    const lapsedOnly = HOLDERS.filter((h) => h.userId === "u-lapsed" || h.roleId === "other");
+    expect(intakeRoleForReaders("care", roles, lapsedOnly, NOW)).toEqual({ id: "care", name: "Care Circle", heldToday: false });
+    expect(intakeRoleForReaders("care", roles, [], NOW)?.heldToday).toBe(false);
+    // Held in another role is not held in this one.
+    expect(intakeRoleForReaders("bare", roles, HOLDERS, NOW)).toEqual({ id: "bare", name: "bare", heldToday: false });
+    expect(intakeRoleForReaders("gone", roles, HOLDERS, NOW)).toBeNull();
+    expect(intakeRoleForReaders("", roles, HOLDERS, NOW)).toBeNull();
   });
 });
 
