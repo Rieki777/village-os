@@ -244,6 +244,30 @@ export function conflictAgreementWrite(
   };
 }
 
+/**
+ * The agreement an open change ballot would adopt, as members read it, or null
+ * when nothing is recorded against that ballot. Read without trusting the row,
+ * like the stored agreement: a proposal that fails the shape check reads as none.
+ */
+export function proposedAgreement(storedRaw: unknown, ballotId: string, roleIds: readonly string[]): ConflictAgreementContent | null {
+  const s = storedRaw && typeof storedRaw === "object" ? (storedRaw as { ballotId?: unknown; agreement?: unknown }) : null;
+  if (!s || String(s.ballotId ?? "") !== ballotId) return null;
+  const a = agreementOf(s.agreement, roleIds);
+  if (!a) return null;
+  return {
+    steps: a.steps,
+    careRole: a.careRole,
+    coverRole: a.coverRole,
+    replyHours: a.replyHours,
+    outsideContacts: a.outsideContacts,
+    whenPowerInvolved: a.whenPowerInvolved,
+    safetyContacts: a.safetyContacts,
+    consequencesLadder: a.consequencesLadder,
+    practices: a.practices,
+    reviewDate: a.reviewDate,
+  };
+}
+
 /** The document a carried ballot stores. */
 export function adoptedByBallot(content: ConflictAgreementContent, standing: ConflictAgreement | null, ballotId: string, now: Date): ConflictAgreement {
   const at = now.toISOString();
@@ -261,32 +285,58 @@ export function adoptedByBallot(content: ConflictAgreementContent, standing: Con
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+// Built with the constructor: the root tsconfig's target refuses a /u literal.
+const MARKS = new RegExp("\\p{M}+", "gu");
+const LETTER = new RegExp("\\p{L}", "u");
+const EDGE_NON_LETTERS = new RegExp("^[^\\p{L}]+|[^\\p{L}]+$", "gu");
+
+/** Accents off, so "José" and "Jose" are one name on both sides of the match. */
+const foldAccents = (s: string) => s.normalize("NFD").replace(MARKS, "");
+
+/** Titles a display name can start with, which are never the name a step calls someone by. */
+const HONORIFICS = new Set(["dr", "mr", "mrs", "ms", "mx", "miss", "prof", "sir", "dame", "rev", "fr", "sr", "br"]);
+
 /**
  * Does this text name a member of the village? Built once per request from
- * every account's display name.
+ * every account's display name, with accents folded on both sides.
  *
- * A full display name matches in any case. A first name matches only as
- * written, capitalised, so a member called May does not withhold "we may
- * talk". Both match whole words only. Anything shorter than two letters is
- * ignored. The mistakes this makes go one way: it can withhold text that only
- * looks like a name, and it does not print one.
+ * A full display name matches in any case. The first name and the surname
+ * (the first and last words, after any title such as "Dr.", and each half of a
+ * hyphenated one) match as the member typed them, Capitalised and in CAPITALS,
+ * whatever case the member typed. Lower case is left out on purpose, so a
+ * member called May does not withhold "we may talk". Whole words only, and
+ * anything shorter than two letters is ignored.
+ *
+ * What it cannot see: a nickname, a middle name, or a first name written in
+ * lower case inside the text ("ask mara"). The frames tell the writer to name
+ * roles, and this is the backstop to that. Its other mistake goes the safe
+ * way: a word that only looks like a member's name is withheld.
  */
 export function memberNameMatcher(names: ReadonlyArray<string | null | undefined>): (text: string) => boolean {
   const full = new Set<string>();
-  const first = new Set<string>();
+  const words = new Set<string>();
   for (const raw of names) {
-    const name = String(raw ?? "").trim().replace(/\s+/g, " ");
+    const name = foldAccents(String(raw ?? "")).trim().replace(/\s+/g, " ");
     if (name.length < 2) continue;
     full.add(name.toLowerCase());
-    const f = name.split(" ")[0];
-    if (f.length >= 2) first.add(f);
+    const tokens = name.split(" ").filter((t) => LETTER.test(t) && !HONORIFICS.has(t.replace(/\.$/, "").toLowerCase()));
+    if (!tokens.length) continue;
+    for (const token of Array.from(new Set([tokens[0], tokens[tokens.length - 1]]))) {
+      for (const part of [token, ...token.split("-")]) {
+        const w = part.replace(EDGE_NON_LETTERS, "");
+        if (w.length < 2) continue;
+        words.add(w);
+        words.add(w[0].toUpperCase() + w.slice(1).toLowerCase());
+        words.add(w.toUpperCase());
+      }
+    }
   }
   const boundary = (s: string) => `(?<![\\p{L}\\p{N}])${escape(s)}(?![\\p{L}\\p{N}])`;
   const fullRe = full.size ? new RegExp(Array.from(full).map(boundary).join("|"), "iu") : null;
-  const firstRe = first.size ? new RegExp(Array.from(first).map(boundary).join("|"), "u") : null;
+  const wordRe = words.size ? new RegExp(Array.from(words).map(boundary).join("|"), "u") : null;
   return (text: string) => {
-    const t = String(text ?? "");
-    return !!t && ((fullRe?.test(t) ?? false) || (firstRe?.test(t) ?? false));
+    const t = foldAccents(String(text ?? ""));
+    return !!t && ((fullRe?.test(t) ?? false) || (wordRe?.test(t) ?? false));
   };
 }
 

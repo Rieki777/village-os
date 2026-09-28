@@ -39,6 +39,7 @@ import {
   adoptionProblem,
   parseAgreementContent,
   type AgreementFrameId,
+  type ConflictAgreementContent,
   type ConflictAgreementForReaders,
   type LadderRungNumber,
 } from "@shared/conflictAgreement";
@@ -56,7 +57,8 @@ export interface AgreementPayload {
   roles: RoleOption[];
   platformSteps: boolean;
   pen: { how: "founders" | "ballot"; mayWrite: boolean; mayPropose: boolean };
-  openBallot: { id: string; title: string; closesAt: string } | null;
+  /** An open change vote, with what it would adopt as members read it (the vote's own page holds back names and the members-only parts). */
+  openBallot: { id: string; title: string; closesAt: string; proposal: ConflictAgreementContent | null } | null;
 }
 
 /** The editable part: what the village writes. */

@@ -46,7 +46,11 @@
  *      reach them. Members read it whole.
  *   2. The policy's own save leaves the block alone while the agreement holds
  *      it, and refuses a body that tries to change it, naming where it lives.
- *      Storing it would be a change no reader ever sees.
+ *      Storing it would be a change no reader ever sees. For the same reason
+ *      the save judges its terms (blank, or still the platform's words) as
+ *      readers are served them: a village whose stored block still holds the
+ *      platform's starting steps can clear its draft banner once the agreement
+ *      answers them.
  */
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
@@ -205,7 +209,14 @@ export function register(app: Express, deps: ExitDeps): void {
     // The RAW stored document, never readExitPolicy(): the closing section is
     // carried as stored, adoptedBy included (server/lib/exitPolicy.ts).
     const next = normalizeExitPolicy(body2, deps.exitPolicyRepo.get());
-    const blank = blankTerms(next);
+    // The terms are judged as readers will be served them. While the agreement
+    // holds the restorative block, that is the agreement's path: the stored
+    // block it answers is printed nowhere, so its words cannot be what keeps
+    // the draft banner up.
+    const served = deps.agreementStored()
+      ? { ...next, restorative: { ...next.restorative, ...(deps.readExitPolicy()?.restorative ?? {}) } }
+      : next;
+    const blank = blankTerms(served);
     if (blank.length) {
       return res.status(400).json({
         error: "blank_terms",
@@ -213,7 +224,7 @@ export function register(app: Express, deps: ExitDeps): void {
       });
     }
     if (!next.placeholder) {
-      const stale = platformDefaultTerms(next);
+      const stale = platformDefaultTerms(served);
       if (stale.length) {
         return res.status(409).json({
           error: "terms_still_platform_default",

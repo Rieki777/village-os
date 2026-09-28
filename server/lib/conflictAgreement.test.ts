@@ -184,6 +184,27 @@ describe("names: the public view refuses to print a member", () => {
     expect(names("")).toBe(false);
   });
 
+  it("matches a first name or surname Capitalised or in CAPITALS however the member typed it, past a title, a hyphen or an accent", () => {
+    const m = memberNameMatcher(["mara lopez", "Dr. Nia Okafor", "Rhea-Jane Moss", "José García"]);
+    // A display name typed in lower case.
+    expect(m("then we ask Mara")).toBe(true);
+    expect(m("THEN WE ASK MARA")).toBe(true);
+    // The surname.
+    expect(m("Then Lopez joins us")).toBe(true);
+    expect(m("Moss sits in")).toBe(true);
+    // Past the title, which is never the name itself.
+    expect(m("ask Nia")).toBe(true);
+    expect(m("Dr. on call sits in")).toBe(false);
+    // Each half of a hyphenated first name.
+    expect(m("ask Rhea")).toBe(true);
+    // Accents folded on both sides.
+    expect(m("ask Jose")).toBe(true);
+    expect(m("then Garcia")).toBe(true);
+    // Whole words, and never lower case.
+    expect(m("Mossy banks")).toBe(false);
+    expect(m("we sit on the moss")).toBe(false);
+  });
+
   it("withholds every string that names a member, and says so", () => {
     const doc = storedDoc({
       steps: [

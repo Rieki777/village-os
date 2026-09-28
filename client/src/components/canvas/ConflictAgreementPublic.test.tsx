@@ -128,6 +128,55 @@ describe("ConflictAgreementPublic", () => {
     expect(screen.getByText(/nothing was sent/)).toBeTruthy();
   });
 
+  it("a member reads a step naming a person, where a visitor reads that it is for members", async () => {
+    const withheldPublic = { ...PUBLIC, steps: [...PUBLIC.steps, { what: null, whoInRoom: "the two of us" }], withheld: true };
+    const named = { ...MEMBERS, agreement: { ...MEMBERS.agreement, steps: [...MEMBERS.agreement.steps, { what: "Then we ask Mara", whoInRoom: "the two of us" }] } };
+    const serveWith = (members: unknown | null) =>
+      fetchMock.mockImplementation(async (url: string) => {
+        if (url === "/api/conflict-agreement/public") return { ok: true, status: 200, json: async () => ({ stored: true, agreement: withheldPublic }) };
+        if (url === "/api/conflict-agreement") return { ok: true, status: 200, json: async () => members };
+        throw new Error(`unexpected fetch ${url}`);
+      });
+
+    token = null;
+    serveWith(named);
+    const visitor = renderCard();
+    expect(await screen.findByText("Names a person, so members only.")).toBeTruthy();
+    expect(screen.queryByText(/Mara/)).toBeNull();
+    visitor.unmount();
+
+    token = "a-token";
+    serveWith(named);
+    renderCard();
+    expect(await screen.findByText("Then we ask Mara")).toBeTruthy();
+    expect(screen.queryByText("Names a person, so members only.")).toBeNull();
+    expect(screen.queryByText(/Parts of this agreement name people/)).toBeNull();
+  });
+
+  it("keeps showing how to reach a contact the member has asked, with no second ask", async () => {
+    serve({ ...MEMBERS, yourAsks: [{ id: "oa-1", contactId: "oc-1", contactLabel: "Ombuds at Cohort Care", askedAt: "2026-09-27T10:00:00.000Z" }] });
+    renderCard();
+    expect((await screen.findByText(/Reach Ada Quill here/)).textContent).toContain("ada@example.invalid");
+    expect(screen.queryByRole("button", { name: "Ask to talk" })).toBeNull();
+    expect(posts).toHaveLength(0);
+  });
+
+  it("shows a member the whole agreement an open vote would adopt, the members-only parts included", async () => {
+    const proposal = {
+      ...MEMBERS.agreement,
+      steps: [{ what: "We talk it out, then ask Mara", whoInRoom: "the two of us" }],
+      outsideContacts: [{ id: "oc-1", name: "Ada Quill", organisation: "Cohort Care", role: "Ombuds", howToReach: "ada@new.invalid" }],
+      safetyContacts: [{ name: "Day crisis line", howToReach: "0800 111 111", when: "" }],
+    };
+    serve({ ...MEMBERS, openBallot: { id: "b-7", title: "The village asks to change its conflict agreement", closesAt: "2026-10-05T10:00:00.000Z", proposal } });
+    renderCard();
+    expect(await screen.findByText("A vote to change this agreement is open")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Read the vote and cast yours" }).getAttribute("href")).toBe("/decisions/b-7");
+    expect(screen.getByText("We talk it out, then ask Mara")).toBeTruthy();
+    expect(screen.getByText(/Day crisis line/)).toBeTruthy();
+    expect(screen.getByText(/ada@new\.invalid/)).toBeTruthy();
+  });
+
   it("an account the server does not count as a member sees only the public card", async () => {
     serve(null);
     renderCard();

@@ -59,6 +59,7 @@ import {
   memberNameMatcher,
   ombudsAskProblem,
   ombudsPointer,
+  proposedAgreement,
   publicAgreementView,
 } from "../lib/conflictAgreement";
 import { recordEvent } from "../lib/events";
@@ -120,29 +121,67 @@ type Deps = Pick<
 /** The platform's starting steps, which an adoption may not claim as the village's words. */
 const PLATFORM_STEPS = DEFAULT_EXIT_POLICY.restorative.steps;
 
-/** The ballot document members read while they vote. Labels only for outside contacts: a ballot is read widely. */
-function ballotDocument(c: ConflictAgreementContent, roleName: (id: string) => string | null, askedBy: string): string {
+/** What the ballot document prints where a piece of the proposal names a member. */
+export const BALLOT_NAME_WITHHELD = "This part names a person, so members read it on the governance page.";
+
+/**
+ * THE BALLOT DOCUMENT: every part of what the vote would adopt.
+ *
+ * A ballot can be read by more people than the membership (the governance
+ * module's lifecycle decides who), so it keeps the public view's rules: text
+ * naming a member is withheld, outside contacts are their organisation or
+ * role, and the members-only parts (the safety contacts, and who each outside
+ * contact is and how to reach them) say only whether the vote changes them.
+ * Members read all of it in full on the governance page, beside the vote
+ * (`openBallot.proposal` on GET /api/conflict-agreement). Nothing the vote
+ * would adopt is left off this page, so no part of it can change unseen.
+ */
+function ballotDocument(
+  c: ConflictAgreementContent,
+  standing: ConflictAgreementContent,
+  roleName: (id: string) => string | null,
+  namesMember: (text: string) => boolean,
+  askedBy: string,
+): string {
+  const g = (text: string) => (namesMember(text) ? BALLOT_NAME_WITHHELD : text);
+  const role = (id: string) => g(roleName(id) ?? id);
+  const same = (x: unknown, y: unknown) => JSON.stringify(x) === JSON.stringify(y);
+  const people = (list: ConflictAgreementContent["outsideContacts"]) => list.map((o) => [o.id, o.name, o.howToReach]);
   const lines: string[] = ["# The village asks to change its conflict agreement", "", "## The steps", ""];
-  c.steps.forEach((s, i) => lines.push(`${i + 1}. ${stepLine(s)}`));
+  c.steps.forEach((s, i) => lines.push(`${i + 1}. ${stepLine({ what: g(s.what), whoInRoom: s.whoInRoom ? g(s.whoInRoom) : "" })}`));
   lines.push("", "## Who hears it first", "");
-  lines.push(c.careRole ? `The ${roleName(c.careRole) ?? c.careRole} role.` : "No care role.");
-  if (c.coverRole) lines.push(`Cover: the ${roleName(c.coverRole) ?? c.coverRole} role.`);
-  for (const o of c.outsideContacts) lines.push(`Outside the village: ${contactLabel(o)}.`);
+  lines.push(c.careRole ? `The ${role(c.careRole)} role.` : "No care role.");
+  if (c.coverRole) lines.push(`Cover: the ${role(c.coverRole)} role.`);
+  for (const o of c.outsideContacts) lines.push(`Outside the village: ${g(contactLabel(o))}.`);
   lines.push("", "## The reply time", "", c.replyHours === null ? "Not promised." : `Within ${c.replyHours} hours.`);
+  const p = c.whenPowerInvolved;
+  const powerContact = c.outsideContacts.find((o) => o.id === p.outsideContactId);
+  lines.push("", "## When it involves someone who holds power here", "");
+  lines.push(
+    p.roleId ? `It goes to the ${role(p.roleId)} role instead.` : powerContact ? `It goes to ${g(contactLabel(powerContact))} instead.` : "Nobody is named to hold it instead.",
+  );
+  if (p.words) lines.push("", g(p.words));
   if (c.consequencesLadder.rungs.length) {
     lines.push("", "## Consequences and appeal", "");
-    for (const r of c.consequencesLadder.rungs) lines.push(`- ${LADDER_RUNGS[r.rung].name}: ${r.words}`);
-    if (c.consequencesLadder.appeal) lines.push("", `Appeal: ${c.consequencesLadder.appeal}`);
+    for (const r of c.consequencesLadder.rungs) lines.push(`- ${LADDER_RUNGS[r.rung].name}: ${g(r.words)}`);
+    if (c.consequencesLadder.appeal) lines.push("", `Appeal: ${g(c.consequencesLadder.appeal)}`);
   }
   if (c.practices.length) {
     lines.push("", "## Practices", "");
-    for (const p of c.practices) lines.push(`- ${p.name}${p.when ? `: ${p.when}` : ""}`);
+    for (const pr of c.practices) lines.push(`- ${g(pr.name)}${pr.when ? `: ${g(pr.when)}` : ""}`);
   }
   lines.push(
     "",
+    "## The parts members read in full",
+    "",
+    "Anyone who can open this vote can read this page, so these parts show here only as changed or the same. Members read them in full on the governance page, beside this vote.",
+    "",
+    `- The safety contacts: ${same(c.safetyContacts, standing.safetyContacts) ? "the same as today" : "changed"}.`,
+    `- Who each outside contact is, and how to reach them: ${same(people(c.outsideContacts), people(standing.outsideContacts)) ? "the same as today" : "changed"}.`,
+    "",
     "## What changes if this carries",
     "",
-    `The agreement reads this way from the day it lands, and so does the restorative path on the exit policy. It comes back for review on ${c.reviewDate}.`,
+    `The whole agreement above becomes the village's from the day it lands, the parts members read in full included, and the restorative path on the exit policy reads from it. It comes back for review on ${c.reviewDate}.`,
     "",
     `Asked by ${askedBy} on ${new Date().toISOString().slice(0, 10)}.`,
     "",
@@ -190,7 +229,15 @@ export function register(app: Express, deps: Deps): void {
         mayWrite: !started && admin,
         mayPropose: started && capabilityDecision("proposal.open", { ...ctx, isAdmin: false }).allowed,
       },
-      openBallot: open ? { id: open.id, title: open.title, closesAt: open.closesAt } : null,
+      // What the open vote would adopt, whole: the ballot's own page holds back names and the members-only parts.
+      openBallot: open
+        ? {
+            id: open.id,
+            title: open.title,
+            closesAt: open.closesAt,
+            proposal: proposedAgreement(await readConfigDocument(pool, CONFLICT_AGREEMENT_PROPOSAL_KEY), open.id, roleIds()),
+          }
+        : null,
       yourAsks: asksBy(await readConfigDocument(pool, OMBUDS_ASKS_KEY), String(user.id)),
     });
   });
@@ -291,7 +338,7 @@ export function register(app: Express, deps: Deps): void {
       subjectType: CONFLICT_AGREEMENT,
       subjectRef: AGREEMENT_BALLOT_REF,
       title,
-      docMarkdown: ballotDocument(checked.content, roleName, deps.firstName(user.name)),
+      docMarkdown: ballotDocument(checked.content, standing.agreement, roleName, await namesMember(), deps.firstName(user.name)),
       method: conducts,
       weightMode: snapshot.mode,
       weightToken: snapshot.token,
@@ -340,18 +387,23 @@ export function register(app: Express, deps: Deps): void {
    * THE OMBUDS DOOR. `{ contactId }`, and nothing else.
    *
    * Keeps a pointer (who asked, when, which contact) and answers with how to
-   * reach them. Three a day per member, like the restorative intake.
+   * reach them. Three a day per member, like the restorative intake, counted
+   * only for asks that are kept: a refused one records nothing and costs
+   * nothing. A contact the member has asked keeps showing how to reach them on
+   * the page (from `yourAsks`), so looking again never takes another ask.
    */
   app.post("/api/conflict-agreement/ombuds-asks", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
     if (!(await mayRead(req, user))) return res.status(403).json({ error: AGREEMENT_MEMBERS_ONLY });
-    if (await deps.overLimit(`ombuds:${user.id}`, 3, 24 * 60 * 60 * 1000)) {
-      return res.status(429).json({ error: "Three asks a day. The ones you made are recorded, and the contact's details are below them." });
-    }
     const { agreement } = current();
     const problem = ombudsAskProblem(req.body, agreement);
     if (problem) return res.status(problem.status).json({ error: problem.error });
+    if (await deps.overLimit(`ombuds:${user.id}`, 3, 24 * 60 * 60 * 1000)) {
+      return res.status(429).json({
+        error: "You have asked three times today, the most for one day. Each ask is recorded, and every contact you asked shows how to reach them on this page.",
+      });
+    }
     const now = new Date();
     const pointer = ombudsPointer(
       agreement,

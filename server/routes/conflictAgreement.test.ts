@@ -27,7 +27,7 @@ import { CONFLICT_AGREEMENT, CONFLICT_AGREEMENT_KEY } from "../../shared/conflic
 import { dbDocument } from "../repos/store-db";
 import { appendToConfigList, readConfigDocument, writeConfigDocument } from "../repos/appConfigDocs";
 import { recordGameStart } from "../lib/gameStart";
-import { withPolicyDefaults } from "../lib/exitPolicy";
+import { DEFAULT_EXIT_POLICY, withPolicyDefaults } from "../lib/exitPolicy";
 import {
   AGREEMENT_BALLOT_NOW,
   AGREEMENT_FOUNDERS_NOW,
@@ -41,7 +41,7 @@ import {
 import { conflictAgreementCloser } from "../lib/conflictAgreementCloser";
 import { ballotById } from "../lib/ballots";
 import { conflictDoorFacts } from "../lib/launchGovernance";
-import { register } from "./conflictAgreement";
+import { BALLOT_NAME_WITHHELD, register } from "./conflictAgreement";
 import { register as registerExits } from "./exits";
 
 const configured = testDbConfigured();
@@ -305,6 +305,31 @@ describe.skipIf(!configured)("the conflict agreement's doors", () => {
       const changed = await call("PUT", "/api/admin/exit-policy", "admin", { ...served, restorative: { ...served.restorative, replyHours: 2 } });
       expect(changed).toEqual({ status: 409, body: { error: "restorative_in_agreement", message: RESTORATIVE_IN_AGREEMENT } });
     });
+
+    it("judges the terms as readers are served them, so the platform's steps left in the stored block never keep the draft banner up", async () => {
+      // A village that wrote its other terms and never touched the restorative path.
+      await writeConfigDocument(pool, "exit-policy", {
+        ...OLD_POLICY,
+        restorative: { intakeContactRole: "ca-care", steps: [...DEFAULT_EXIT_POLICY.restorative.steps] },
+      });
+      await exitPolicyRepo.load();
+      // With no agreement the platform's words are what readers see, so the banner stays.
+      const before = readExitPolicy() as any;
+      const refused = await call("PUT", "/api/admin/exit-policy", "admin", { ...before, placeholder: false });
+      expect(refused.status).toBe(409);
+      expect(refused.body).toMatchObject({ error: "terms_still_platform_default", fields: ["The restorative path"] });
+
+      // Once the agreement answers the block, readers see the agreement's steps, and the banner clears.
+      await call("PUT", "/api/admin/conflict-agreement", "admin", { agreement: agreement(), adopt: true });
+      const served = readExitPolicy() as any;
+      const cleared = await call("PUT", "/api/admin/exit-policy", "admin", { ...served, placeholder: false });
+      expect(cleared.status).toBe(200);
+      expect((readExitPolicy() as any).placeholder).toBe(false);
+      const stored = await readConfigDocument<any>(pool, "exit-policy");
+      expect(stored.placeholder).toBe(false);
+      // The stored block is carried as it was, never rewritten.
+      expect(stored.restorative.steps).toEqual(DEFAULT_EXIT_POLICY.restorative.steps);
+    });
   });
 
   describe("the consequence pen", () => {
@@ -350,6 +375,9 @@ describe.skipIf(!configured)("the conflict agreement's doors", () => {
       const proposal = await readConfigDocument<any>(pool, CONFLICT_AGREEMENT_PROPOSAL_KEY);
       expect(proposal.ballotId).toBe(ballot!.id);
       expect(proposal.agreement.replyHours).toBe(12);
+      expect(ballot!.docMarkdown).toContain("It goes to the Stewards role instead.");
+      expect(ballot!.docMarkdown).toContain("- The safety contacts: the same as today.");
+      expect(ballot!.docMarkdown).toContain("- Who each outside contact is, and how to reach them: the same as today.");
       expect(notices.filter((n) => n.type === "ballot_opened").map((n) => n.userId).sort()).toEqual(["ca-admin", "ca-member"]);
       expect(activity).toContain("The village is deciding whether to change its conflict agreement.");
       // The agreement itself has not moved yet.
@@ -358,6 +386,38 @@ describe.skipIf(!configured)("the conflict agreement's doors", () => {
       const second = await call("POST", "/api/governance/conflict-agreement-changes", "proposer", { agreement: agreement({ replyHours: 6 }) });
       expect(second.status).toBe(409);
       expect(second.body.ballotId).toBe(ballot!.id);
+    });
+
+    it("the vote's page carries every part it would adopt, and members read the whole proposal beside it", async () => {
+      await call("PUT", "/api/admin/conflict-agreement", "admin", { agreement: agreement(), adopt: true });
+      await recordGameStart(pool, { ballotId: "b-birth", startedBy: "ca-admin", note: "The village began." });
+      // A change that touches only the power clause and the members-only safety contacts.
+      const asked = agreement({
+        whenPowerInvolved: { roleId: "", outsideContactId: "oc-1", words: "They hear it with us." },
+        safetyContacts: [{ name: "Day crisis line", howToReach: "0800 111 111", when: "" }],
+      });
+      const opened = await call("POST", "/api/governance/conflict-agreement-changes", "proposer", { agreement: asked });
+      expect(opened.status).toBe(200);
+
+      const doc = (await ballotById(pool, opened.body.ballot.id))!.docMarkdown;
+      expect(doc).toContain("## When it involves someone who holds power here");
+      expect(doc).toContain("It goes to Ombuds at Cohort Care instead.");
+      expect(doc).toContain("They hear it with us.");
+      expect(doc).toContain("- The safety contacts: changed.");
+      expect(doc).toContain("- Who each outside contact is, and how to reach them: the same as today.");
+      // The vote's page keeps the public view's rule: no member named, nothing members-only.
+      expect(doc).toContain(`2. ${BALLOT_NAME_WITHHELD}`);
+      for (const hidden of ["Mara", "Ada Quill", "ada@example.invalid", "Day crisis line", "Night crisis line", "0800"]) expect(doc, hidden).not.toContain(hidden);
+
+      // Members read the whole of it beside the vote.
+      const seen = (await call("GET", "/api/conflict-agreement", "member")).body.openBallot;
+      expect(seen.id).toBe(opened.body.ballot.id);
+      expect(seen.proposal.safetyContacts).toEqual([{ name: "Day crisis line", howToReach: "0800 111 111", when: "" }]);
+      expect(seen.proposal.whenPowerInvolved).toEqual({ roleId: "", outsideContactId: "oc-1", words: "They hear it with us." });
+      expect(seen.proposal.steps[1].what).toBe("Then we ask Mara to sit with us");
+      expect(seen.proposal.outsideContacts[0].howToReach).toBe("ada@example.invalid");
+      // Nobody the village has not admitted does.
+      expect((await call("GET", "/api/conflict-agreement", "stranger")).status).toBe(403);
     });
 
     it("a carried ballot lands the agreement through the cached handle, and a failed one changes nothing", async () => {
@@ -435,10 +495,18 @@ describe.skipIf(!configured)("the conflict agreement's doors", () => {
       expect(agreementRepo.exists()).toBe(false);
     });
 
-    it("takes three asks a day from one member", async () => {
+    it("takes three asks a day from one member, and a refused ask costs none of them", async () => {
       await call("PUT", "/api/admin/conflict-agreement", "admin", { agreement: agreement(), adopt: true });
+      expect((await call("POST", "/api/conflict-agreement/ombuds-asks", "member", { contactId: "oc-1", message: "words" })).status).toBe(400);
+      expect((await call("POST", "/api/conflict-agreement/ombuds-asks", "member", { contactId: "oc-9" })).status).toBe(400);
       for (let i = 0; i < 3; i++) expect((await call("POST", "/api/conflict-agreement/ombuds-asks", "member", { contactId: "oc-1" })).status).toBe(201);
-      expect((await call("POST", "/api/conflict-agreement/ombuds-asks", "member", { contactId: "oc-1" })).status).toBe(429);
+      const fourth = await call("POST", "/api/conflict-agreement/ombuds-asks", "member", { contactId: "oc-1" });
+      expect(fourth.status).toBe(429);
+      expect(fourth.body.error).toContain("every contact you asked shows how to reach them on this page");
+      // Which is so: the member's own asks name the contact, and the members' copy carries how to reach them.
+      const mine = (await call("GET", "/api/conflict-agreement", "member")).body;
+      expect(mine.yourAsks.map((a: any) => a.contactId)).toEqual(["oc-1", "oc-1", "oc-1"]);
+      expect(mine.agreement.outsideContacts[0].howToReach).toBe("ada@example.invalid");
     });
 
     it("loses no pointer when many asks land at once", async () => {
