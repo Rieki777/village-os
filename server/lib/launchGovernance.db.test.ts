@@ -25,6 +25,7 @@ import { normalizeExitPolicy } from "./exitPolicy";
 import { LAUNCH_REQUIREMENTS } from "../../shared/launchRequirements";
 import { CANVAS_BLOCK_IDS } from "../../shared/governanceCanvas";
 import { PURPOSE_EXAMPLE } from "../../shared/governingPurpose";
+import { PROPORTIONAL_CLOSING_STATEMENT } from "../../shared/closingPolicies";
 import { recordCanvasReading } from "../repos/canvasReadings";
 import { writeConfigDocument } from "../repos/appConfigDocs";
 import { insertRoleIfAbsent } from "../repos/stewardRoles";
@@ -78,7 +79,21 @@ const policy = (restorative: Record<string, unknown> = {}) =>
     restorative: { intakeContactRole: "care", steps: ["Somebody who was not involved hears both people"], replyHours: 48, ...restorative },
   });
 
-const writePolicy = async (doc: Record<string, unknown>) => writeConfigDocument(pool, "exit-policy", doc);
+/**
+ * Every policy written here carries an ADOPTED closing section, because
+ * `closing-policy-named` is a blocking row too (Rye, 2026-09-25) and it
+ * resolves from this stored document, never from the stubbed `deps.checks`.
+ * Without it every refusal below would name two rows.
+ */
+const ADOPTED_CLOSING = {
+  policyId: "proportional-closing-balance",
+  statement: PROPORTIONAL_CLOSING_STATEMENT,
+  adoptedBy: "usr-founder",
+  adoptedAt: new Date().toISOString(),
+};
+
+const writePolicy = async (doc: Record<string, unknown>) =>
+  writeConfigDocument(pool, "exit-policy", { ...doc, closing: ADOPTED_CLOSING });
 
 const readBlock = (blockId: (typeof CANVAS_BLOCK_IDS)[number]) =>
   recordCanvasReading(pool, {

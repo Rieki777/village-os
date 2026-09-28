@@ -44,6 +44,7 @@ import { provisionTestDb, testDbConfigured, testPool, type TestDb, waitForPortFr
 import { waitForHealth } from "./db/e2eBoot";
 import { PURPOSE_EXAMPLE } from "../shared/governingPurpose";
 import { CLOSING_REDEMPTION_NOTICE, PROPORTIONAL_CLOSING_STATEMENT } from "../shared/closingPolicies";
+import { CONFLICT_DOOR_READY, recordEveryCanvasBlock } from "./db/launchGovernanceFixture";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -76,6 +77,11 @@ const ROWS_THIS_FILE_CLEARS = [
   "session-secret",
   "exit-policy-terms",
   "backups-drilled",
+  // The launch-gate lane's governance rows, cleared since the Wave 2 composition
+  // (server/db/launchGovernanceFixture.ts), so the last case is a real "yes".
+  "canvas-on-record",
+  "conflict-door",
+  "governance-on-for-members",
 ];
 
 /** The other blocking rows open at the start, measured by the first case: none on this branch. */
@@ -186,6 +192,8 @@ const TERMS = {
       "The village agrees what would put it right",
       "Whoever asked for this says whether it did",
     ],
+    // The conflict door, which blocks the vote: server/db/launchGovernanceFixture.ts.
+    ...CONFLICT_DOOR_READY,
   },
 };
 
@@ -254,6 +262,8 @@ beforeAll(async () => {
   expect((await call("POST", "/api/admin/launch/confirm", { body: { id: "backups-drilled", done: true } })).status).toBe(200);
   expect((await call("POST", "/api/admin/launch/confirm", { body: { id: "issuance-cap", done: "declined" } })).status).toBe(200);
   expect((await call("PUT", "/api/admin/purpose", { body: { statement: PURPOSE_EXAMPLE } })).status).toBe(200);
+  // Every canvas block on record, which blocks the vote: server/db/launchGovernanceFixture.ts.
+  await recordEveryCanvasBlock(call);
 }, 240_000);
 
 afterAll(async () => {
@@ -370,6 +380,38 @@ describe.skipIf(!DB_CONFIGURED)("the default is a suggestion until the village a
     });
     expect(resaved.status, resaved.text).toBe(200);
     expect((await storedPolicy())?.closing).toEqual(before);
+  });
+
+  /*
+   * THE SAME SAVE REFUSES A CONFLICT DOOR IT CANNOT HONOUR, at the route.
+   *
+   * Wave 2 composition: the exits-extract lane moved `PUT /api/admin/exit-policy`
+   * into server/routes/exits.ts while the launch-gate lane changed its role
+   * check into `restorativeDoorProblem`, and the integrator ported that swap by
+   * hand. Only unit tests pinned the function, so a port that dropped it would
+   * have saved an unknown cover role, a cover role that is the intake role, or
+   * a reply time nobody can keep, with CI green. Each refusal stores nothing.
+   */
+  it("refuses an unknown cover role, a cover role that is the intake role, and a bad reply time, storing nothing", async () => {
+    const roles = await call("GET", "/api/roles", { token: null });
+    expect(roles.status, roles.text).toBe(200);
+    const roleId = String((roles.json ?? [])[0]?.id ?? "");
+    expect(roleId, "a fresh village carries at least one seeded role").toBeTruthy();
+    const before = await storedPolicy();
+
+    const refusals: [Record<string, unknown>, string][] = [
+      [{ coverRole: "no-such-role" }, "unknown_role"],
+      [{ intakeContactRole: roleId, coverRole: roleId }, "cover_is_intake"],
+      [{ replyHours: -3 }, "bad_reply_hours"],
+    ];
+    for (const [door, error] of refusals) {
+      const r = await call("PUT", "/api/admin/exit-policy", {
+        body: { ...TERMS, restorative: { ...TERMS.restorative, ...door } },
+      });
+      expect(r.status, `${error}: ${r.text}`).toBe(400);
+      expect(r.json?.error).toBe(error);
+      expect(await storedPolicy(), `${error} stored nothing`).toEqual(before);
+    }
   });
 });
 
