@@ -75,13 +75,20 @@ export type ExitDeps = Pick<
   | "notifyAdmins"
 > & {
   /**
-   * The policy with the platform defaults read through. Every read here goes
-   * through it, never through `exitPolicyRepo.get()`: see its note in
-   * server/index.ts for the field that proved why.
+   * The policy with the platform defaults read through: the copy every READER
+   * is served, so every response here builds on it and never on
+   * `exitPolicyRepo.get()`. See its note in server/index.ts for the field that
+   * proved why.
    */
   readExitPolicy(): any;
-  /** The stored document, for the two things a read-through cannot answer: whether a row exists, and the write. */
-  exitPolicyRepo: Pick<DbDocument<any>, "exists" | "put">;
+  /**
+   * The stored document itself, for what the reader's copy cannot answer:
+   * whether a row exists, the write, and `get` for a save that must carry a
+   * stored section it does not itself write. That save reads the RAW document,
+   * never `readExitPolicy()`: the reader's copy adds defaults and may leave
+   * fields out, and storing it back would freeze the one and erase the other.
+   */
+  exitPolicyRepo: Pick<DbDocument<any>, "exists" | "get" | "put">;
   /** A password, or a fresh Google sign-in for a member with none (server/lib/identityConfirm.ts). */
   confirmIdentity: ReturnType<typeof makeIdentityGate>;
   /** The refusal that stops a departure leaving the village with nobody who can administer it, or null. */
