@@ -51,6 +51,9 @@
  *   statement   same `isAdmin` test `PUT /api/admin/purpose` applies
  *   a matrix    `writeDecisionMatrixRow`, behind the consequence pen
  *   row
+ *   a document  `markDocumentShared` (server/repos/villageDocuments.ts), after
+ *               `story.tell` is asked of the gate: "Share with the village",
+ *               filed only by the documents route for the document's owner
  *   a module    `setModuleLifecycle` (server/lib/modules.ts), the write behind
  *               `PUT /api/admin/modules/:id/lifecycle`, behind that route's
  *               own `isAdmin` and its shared-password posture. The route's
@@ -151,6 +154,7 @@ import {
   type DecisionMatrixRow,
 } from "../repos/decisionMatrixRows";
 import { withNamedLock } from "../repos/namedLock";
+import { documentById, markDocumentShared } from "../repos/villageDocuments";
 import { CANVAS_MEMBERS_ONLY, mayReadCanvas } from "./canvas";
 import { saveExitPolicy, type ExitPolicySaveDeps } from "./exits";
 
@@ -743,6 +747,26 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
     const pen = penForProposal(p);
     const rule = ruleFor(p, facts);
     const block = CANVAS_BLOCKS[p.blockId];
+
+    // "Share with the village" (0226): the prose pen puts a member's document
+    // in the village's notebook. The one statement that shares moves only a
+    // private document still owned by the member who asked.
+    if (p.target === "document") {
+      if (!(await guardCapability(req, res, "story.tell", { status: 403, body: { error: PEN_REFUSALS.prose } }))) return "answered";
+      const documentId = Number((p.change as { documentId?: unknown } | null)?.documentId);
+      const doc = Number.isInteger(documentId) && documentId > 0 ? await documentById(pool, documentId) : null;
+      if (!doc || doc.ownerId !== p.proposedBy) {
+        return { ok: false, status: 409, body: { error: "That document is no longer in its owner's notebook, so there is nothing to share. Decline this with a note." } };
+      }
+      if (!(await markDocumentShared(pool, doc.id, p.proposedBy)) && !doc.shared) {
+        return { ok: false, status: 409, body: { error: "That document could not be shared just now. Nothing changed." } };
+      }
+      return {
+        ok: true,
+        outcome: { wrote: "document-shared", documentId: doc.id },
+        message: `Adopted. "${doc.title}" is in the village's notebook now, and every member can read it.`,
+      };
+    }
 
     if (pen === "prose" || pen === "admin") {
       if (pen === "prose") {

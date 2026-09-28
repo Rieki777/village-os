@@ -14,11 +14,17 @@
  * admitted yet) prints the server's own sentence and offers nothing, because
  * asking again gets the same answer.
  */
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { authToken } from "@/lib/gameApi";
 import { seasonFocus, seasonMoment, type CanvasSeason as Season, type CanvasSeasonPayload } from "@shared/canvasSeason";
 import { CanvasBaseline } from "./CanvasBaseline";
 import { CanvasSeason } from "./CanvasSeason";
+
+/**
+ * The member's notebook and "Take the canvas with you" (plan 5.5 and 5.6),
+ * under the baseline. Lazy, so the main bundle pays nothing for it.
+ */
+const NotebookPanel = lazy(() => import("@/components/notebook/NotebookPanel"));
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -102,6 +108,9 @@ export function CanvasView() {
         onRemove={remove}
       />
       <CanvasBaseline focus={focus} focusLabel={phase === "before" ? "First up" : "This week"} season={season} />
+      <Suspense fallback={null}>
+        <NotebookPanel />
+      </Suspense>
     </div>
   );
 }

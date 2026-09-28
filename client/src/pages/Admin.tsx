@@ -4355,7 +4355,7 @@ function VillageBrainTab({ password }: { password: string }) {
         <p className="text-sm text-gray-600 mt-1">
           Your guide reads this before she suggests anything. She ranks it above the shipped
           literature and below what is live in the game, and she names which section she drew on.
-          None of it leaves this village.
+          A member may export the canvas: that copy carries the confirmed sections open to members that a canvas block reads, never people, legal, land or red lines, and nothing kept to admins leaves this village.
         </p>
         {blanks.length > 0 && (
           <p className="text-sm text-gray-600 mt-2">

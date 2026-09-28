@@ -105,6 +105,7 @@ import { register as registerDecisionMatrixRoutes } from "./routes/decisionMatri
 import { register as registerCanvasFrameRoutes } from "./routes/canvasFrames";
 import { register as registerConflictAgreementRoutes } from "./routes/conflictAgreement";
 import { CANVAS_PUBLIC_SECTION, CANVAS_SECTION_DOOR, register as registerCanvasPublicRoutes } from "./routes/canvasPublic";
+import { register as registerVillageDocumentRoutes } from "./routes/villageDocuments";
 import { register as registerCapabilityExplainerRoutes } from "./routes/capabilityExplainer";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
 import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
@@ -24942,6 +24943,7 @@ ${inner}
   registerCanvasFrameRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName, loadRoles, notify, roleHolders: loadRoleHolders, exitPolicy: { isAdmin, getPool, loadRoles, circlesRepo, exitPolicyRepo, readExitPolicy, agreementStored: () => conflictAgreementRepo.exists() }, dialWrite: dialWriteDeps, mechanicsPropose: mechanicsProposeDeps, sharedPasswordPosture: sharedPasswordPostureNow, addActivity, tools: () => toolsRepo.all() as any[], submissions: () => submissionsRepo.all() as any[], legalEntityLabel: () => String((contentRepo.get() as any)?.legal?.membership?.entityLabel ?? ""), seasonNow: () => { const c: any = seasonState().current; return c ? { name: String(c.name ?? ""), endsOn: c.endsOn ?? null } : null; } });
   registerConflictAgreementRoutes(app, { authedUser, isAdmin, adminActor, hasMembership, getPool, capabilityCtx, firstName, members, loadRoles, notify, overLimit, weightModeNow, agreement: conflictAgreementRepo, readExitPolicy, roleHolders: loadRoleHolders, buildElectorate, addActivity });
   registerCanvasPublicRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying, guardCapability, members, contentRepo });
+  registerVillageDocumentRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName, overLimit, clientIp, villageName: () => String(mergedConfig().project.name ?? "") });
 
   /**
    * The subset of variables the CLIENT is allowed to know, so the UI can render

@@ -79,6 +79,23 @@ const block = (id: BlockFramesPayload["block"]["id"], briefSections: string[] = 
   briefSections,
 });
 
+describe("a member's document offered to the village (0226)", () => {
+  const doc = proposal({ target: "document", sectionId: null, change: { documentId: 4, title: "Circle notes" } });
+  it("says what it is, what adopting it does, and never that it writes a setting", () => {
+    expect(proposalHeadline(doc, titles)).toBe("A document for the village's notebook: Circle notes");
+    expect(adoptLabel(doc)).toBe("Share it with the village");
+    const effect = adoptEffect(doc, false, titles);
+    expect(effect).toContain("Adopting shares this document with the village");
+    expect(effect).not.toMatch(/exit policy|setting/);
+    expect(adoptEffect(doc, true, titles)).toBe(effect);
+    expect(changeLines(doc)).toEqual([]);
+    expect(penKeyFor(doc)).toBe("words");
+  });
+  it("cannot be filed through the suggestion box", () => {
+    expect(parseCanvasProposal({ blockId: "power", target: "document", body: "Share it", change: { documentId: 4 } }).ok).toBe(false);
+  });
+});
+
 describe("what adopting does, before the Birthing and after it", () => {
   it("writes a dial straight away before the Game starts, and files it in its author's name after", () => {
     const dial = proposal({ target: "setting", sectionId: null, door: "dial:governance.default_method", change: { value: "consent" }, pen: pen({ pen: "dial" }) });

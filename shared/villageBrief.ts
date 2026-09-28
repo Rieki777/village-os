@@ -8,8 +8,12 @@
  * is missing, because seats come from work that has to be held and nothing
  * recorded the work.
  *
- * One row per section, human-confirmed, fork-local, and never published. This
- * registry is the shape; `server/lib/villageBrain.ts` is the data layer.
+ * One row per section, human-confirmed, fork-local, and never published. One
+ * copy does leave, by a member's own hand: the canvas export (plan 5.6), which
+ * carries the confirmed member-audience answers the canvas already shows them
+ * and never `people`, `legal`, `land` or `constraints`
+ * (`memberCanvasAnswers`, server/lib/villageBrain.ts). This registry is the
+ * shape; `server/lib/villageBrain.ts` is the data layer.
  *
  * Audience is a column and not a convention: `people` names members and `legal`
  * names title holders, so neither may render to a member because a markdown

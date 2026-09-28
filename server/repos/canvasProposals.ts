@@ -186,6 +186,25 @@ export async function decidedProposalsForBlock(pool: Pool, blockId: CanvasBlockI
   return rows.map(toRow).filter((r): r is CanvasProposalRow => r !== null);
 }
 
+/**
+ * Every open "Share with the village" suggestion, as document id to
+ * suggestion id (target `document`, 0226). The notebook reads it to say a
+ * document is waiting, and to let the pen that decides it read it first. The
+ * change is parsed here rather than by a JSON path in SQL, because MySQL and
+ * MariaDB read a JSON path out of a text column differently.
+ */
+export async function openDocumentShares(pool: Pool): Promise<Map<number, number>> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT id, change_json FROM canvas_proposals WHERE target = 'document' AND status = 'open' ORDER BY id",
+  );
+  const out = new Map<number, number>();
+  for (const r of rows) {
+    const documentId = Number(parseJson(r.change_json)?.documentId);
+    if (Number.isInteger(documentId) && documentId > 0 && !out.has(documentId)) out.set(documentId, Number(r.id));
+  }
+  return out;
+}
+
 /** How many suggestions this member has open across the whole canvas. */
 export async function openProposalCountBy(pool: Pool, userId: string): Promise<number> {
   const [rows] = await pool.query<RowDataPacket[]>(

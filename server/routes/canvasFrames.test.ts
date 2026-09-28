@@ -38,7 +38,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { capabilityDecision, HANDOVER_SET, type Capability, type CapabilityCtx } from "../../shared/capabilities";
 import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
-import { PROPOSAL_BODY_MAX } from "../../shared/canvasFrames";
+import { DOCUMENT_SHARE_DOOR, PROPOSAL_BODY_MAX } from "../../shared/canvasFrames";
 import { CANVAS_BLOCK_IDS } from "../../shared/governanceCanvas";
 import { PURPOSE_EXAMPLE } from "../../shared/governingPurpose";
 import { NOTE_IS_PUBLIC } from "../../shared/powerHands";
@@ -57,6 +57,8 @@ import { loadVariables, numberVar, setVariable, stringVar } from "../lib/variabl
 import { briefGet, briefWrite } from "../lib/villageBrain";
 import { wireReaders } from "../lib/villageReaders";
 import { allDecisionMatrixRows } from "../repos/decisionMatrixRows";
+import { canvasProposalById, insertCanvasProposal } from "../repos/canvasProposals";
+import { documentById, insertTextDocument } from "../repos/villageDocuments";
 import { dbDocument } from "../repos/store-db";
 import { CANVAS_MEMBERS_ONLY } from "./canvas";
 import {
@@ -506,6 +508,61 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
         change: { subject: "A new building", approval: "The whole village", consultation: "Neighbours", information: "Everyone" },
       });
       expect(matrix.status).toBe(400);
+    });
+  });
+
+  describe("share with the village: a member's document (0226)", () => {
+    /** A document and its owner's ask, filed the way the documents route files one. */
+    const askToShare = async (ownerId: string, title: string) => {
+      const documentId = await insertTextDocument(pool, ownerId, { title, kind: "paste", body: `${title}: the words.` });
+      const proposalId = await insertCanvasProposal(pool, {
+        blockId: "power", target: "document", sectionId: null, door: null,
+        change: { documentId, title }, body: `"${title}", offered to the village's notebook.`,
+        source: "member", proposedBy: ownerId, servesPurpose: null,
+      });
+      return { documentId, proposalId };
+    };
+    const sharedFlag = async (id: number) => Number((await documentById(pool, id))?.shared);
+
+    it("is never taken through the generic suggestion door, which would let anybody name somebody else's document", async () => {
+      const r = await propose("member", { blockId: "power", target: "document", change: { documentId: 1, title: "x" }, body: "Share it." });
+      expect(r).toEqual({ status: 400, body: { error: DOCUMENT_SHARE_DOOR } });
+    });
+
+    it("is adopted by whoever holds the story, which shares it, and by nobody else", async () => {
+      const { documentId, proposalId } = await askToShare("cf-member", "Circle notes");
+      const card = (await block("teller", "power")).body.proposals.find((p: any) => p.id === proposalId);
+      expect(card).toMatchObject({ target: "document", change: { documentId, title: "Circle notes" }, pen: { pen: "prose", youMayAdopt: true } });
+      expect("servesPurpose" in card).toBe(false);
+
+      expect(await adopt("member", proposalId)).toEqual({ status: 403, body: { error: PEN_REFUSALS.prose } });
+      expect(await sharedFlag(documentId)).toBe(0);
+
+      const r = await adopt("teller", proposalId, "Useful for everyone.");
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      expect(r.body.outcome).toEqual({ wrote: "document-shared", documentId });
+      expect(r.body.message).toContain('"Circle notes" is in the village\'s notebook now');
+      expect(await sharedFlag(documentId)).toBe(1);
+      expect((await canvasProposalById(pool, proposalId))?.status).toBe("adopted");
+    });
+
+    it("shares nothing when the document is gone or belongs to somebody else, and the suggestion stays open", async () => {
+      const { documentId, proposalId } = await askToShare("cf-member", "Gone soon");
+      await pool.query("DELETE FROM village_documents WHERE id = ?", [documentId]); // module-review-ok: removing the fixture's document behind the route's back, which is the case under test
+      const gone = await adopt("teller", proposalId);
+      expect(gone.status).toBe(409);
+      expect((await canvasProposalById(pool, proposalId))?.status).toBe("open");
+
+      // An ask that names a document its proposer does not own: written straight
+      // to the table, since no route would file it.
+      const theirs = await insertTextDocument(pool, "cf-founder", { title: "Founder's private notes", kind: "paste", body: "Private." });
+      const forged = await insertCanvasProposal(pool, {
+        blockId: "power", target: "document", sectionId: null, door: null,
+        change: { documentId: theirs, title: "Founder's private notes" }, body: "Share it.",
+        source: "member", proposedBy: "cf-member", servesPurpose: null,
+      });
+      expect((await adopt("teller", forged)).status).toBe(409);
+      expect(await sharedFlag(theirs)).toBe(0);
     });
   });
 

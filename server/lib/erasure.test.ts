@@ -51,6 +51,15 @@ import { saveMemberNeed } from "./needs";
 import * as portraits from "../repos/characterPortraits";
 import { charactersForMember } from "../repos/playerCharacters";
 import { landPublicSubmission } from "./publicForms";
+import {
+  addResourcePick,
+  insertStoredDocument,
+  insertTextDocument,
+  markDocumentShared,
+  notebookRowsRemaining,
+  resourcePicksFor,
+  VILLAGE_PICK,
+} from "../repos/villageDocuments";
 
 const configured = testDbConfigured();
 const VILLAGE = "local";
@@ -389,9 +398,9 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
 
     const out = await resumeErasure(pool, id, deps());
     expect(out.finished).toBe(true);
-    // The needs deletion sits after the tombstone, so a break AT the tombstone
-    // leaves it undone and the resume runs it.
-    expect(out.ran).toEqual(["tombstone", "needs-after-tombstone", "audit", "external-stores"]);
+    // The needs and notebook deletions sit after the tombstone, so a break AT
+    // the tombstone leaves them undone and the resume runs them.
+    expect(out.ran).toEqual(["tombstone", "needs-after-tombstone", "notebook-after-tombstone", "audit", "external-stores"]);
     expect((await usersRepo(pool).byId(id))!.name).toBe("A departed member");
   });
 
@@ -479,6 +488,27 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
     // Still outstanding, because it is. A resume that reported success here
     // would clear the one row that says somebody is owed something.
     expect((await unfinishedErasures(pool)).map((r) => r.userId)).toContain(id);
+  });
+
+  it("takes the member's private documents, their stored bytes and their own picks, and leaves what the village adopted (0226)", async () => {
+    const id = "er-notebook-1";
+    const target = await seedMember(id);
+    const kept = await insertTextDocument(pool, id, { title: "Shared notes", kind: "paste", body: "The village adopted these." });
+    await markDocumentShared(pool, kept, id);
+    await insertTextDocument(pool, id, { title: "My diary", kind: "paste", body: "Private words." });
+    await insertStoredDocument(pool, id, { title: "Deeds", kind: "pdf", fileName: "deeds.pdf", mime: "application/pdf", bytes: Buffer.from("%PDF-1.4 private") });
+    await addResourcePick(pool, id, "sociocracy-basics");
+    await addResourcePick(pool, VILLAGE_PICK, "governance-canvas");
+    // A fixture that put nothing there would let the assertion below pass over nothing.
+    expect(await notebookRowsRemaining(pool, id)).toEqual({ private: 2, shared: 1, files: 1, picks: 1 });
+
+    await anonymizeMember(pool, target, "admin-1", deps());
+
+    expect(await notebookRowsRemaining(pool, id)).toEqual({ private: 0, shared: 1, files: 0, picks: 0 });
+    expect((await q("SELECT COUNT(*) AS n FROM village_document_files f LEFT JOIN village_documents d ON d.id = f.document_id WHERE d.id IS NULL"))[0].n).toBe(0);
+    // The village's own pick is never a member's.
+    expect(await resourcePicksFor(pool, VILLAGE_PICK)).toContain("governance-canvas");
+    expect((await erasureRecord(pool, id))?.stepsDone).toContain("notebook-after-tombstone");
   });
 
   it("takes the member's own agent with them: inbox, queue, key and drafts", async () => {

@@ -18,6 +18,10 @@
  *   purpose  the governing purpose statement, on the Purpose block only
  *   setting  a setting the block maps to, through a door below
  *   matrix   a new human row of the Decision Matrix, on the Power block only
+ *   document a member's own document, into the village's notebook ("Share
+ *            with the village", plan 5.5; 0226). Filed ONLY by the documents
+ *            route, for the document's owner, never through
+ *            `POST /api/canvas/proposals`, and adopted by the prose pen
  *
  * ── THE DOORS ARE "MAKE IT REAL", AND ONLY THE WIRED ONES ARE HERE ─────────
  *
@@ -37,7 +41,7 @@ import { ISSUANCE_CAP_KEY } from "./issuanceCap";
 import type { CanvasPen } from "./powerHands";
 import type { BriefSectionId } from "./villageBrief";
 
-export const PROPOSAL_TARGETS = ["words", "purpose", "setting", "matrix"] as const;
+export const PROPOSAL_TARGETS = ["words", "purpose", "setting", "matrix", "document"] as const;
 export type ProposalTarget = (typeof PROPOSAL_TARGETS)[number];
 
 export const PROPOSAL_SOURCES = ["member", "derived", "import"] as const;
@@ -174,6 +178,9 @@ export function doorsForBlock(block: CanvasBlockId): CanvasDoor[] {
 export const SERVES_PURPOSE_BLOCKS: readonly CanvasBlockId[] = ["power", "conflict", "roles", "resourcing"];
 
 export function servesPurposeScoped(block: CanvasBlockId, target: ProposalTarget): boolean {
+  // Sharing a document changes nothing about how the village works, so it
+  // carries no purpose line on any block.
+  if (target === "document") return false;
   return target === "matrix" || (SERVES_PURPOSE_BLOCKS as readonly string[]).includes(block);
 }
 
@@ -211,6 +218,9 @@ export function servesPurposeProblem(scoped: boolean, raw: unknown, hasStatement
 export function penForProposal(p: { target: ProposalTarget; sectionId?: string | null; door?: string | null }): CanvasPen {
   if (p.target === "purpose") return "purpose";
   if (p.target === "matrix") return "consequence";
+  // A shared document joins the village's own material, which is the story's
+  // to keep: whoever holds `story.tell` adopts it, as they adopt words.
+  if (p.target === "document") return "prose";
   if (p.target === "setting") {
     const kind = p.door && isCanvasDoorId(p.door) ? CANVAS_DOORS[p.door].kind : null;
     return kind === "dial" ? "dial" : kind === "module" ? "module" : "consequence";
@@ -273,6 +283,19 @@ export interface MatrixRowChange {
   method: string;
   riskTags: string[];
 }
+
+/**
+ * "Share with the village": which of the owner's documents, and its title as
+ * it read when the owner asked, so the card still names it if it is deleted.
+ */
+export interface DocumentShareChange {
+  documentId: number;
+  title: string;
+}
+
+/** Said to anybody who sends a document suggestion to the generic suggestion door. */
+export const DOCUMENT_SHARE_DOOR =
+  "A document is shared from your notebook, below the canvas, where only its owner can ask. It is not suggested here.";
 
 export const MATRIX_SUBJECT_MAX = 200;
 export const MATRIX_CELL_MAX = 2000;
@@ -387,7 +410,7 @@ export interface CanvasProposalInput {
   target: ProposalTarget;
   sectionId: BriefSectionId | null;
   door: CanvasDoorId | null;
-  change: DialChange | ModuleChange | ExitTermsChange | RestorativeChange | MatrixRowChange | null;
+  change: DialChange | ModuleChange | ExitTermsChange | RestorativeChange | MatrixRowChange | DocumentShareChange | null;
   body: string;
   source: ProposalSource;
 }
@@ -414,6 +437,10 @@ export function parseCanvasProposal(body: unknown): { ok: true; proposal: Canvas
   if (!(PROPOSAL_TARGETS as readonly unknown[]).includes(target)) {
     return { ok: false, error: "A suggestion changes words, the purpose statement, a setting or a row of the matrix." };
   }
+  // Only the documents route files one, for the document's owner, after it
+  // has checked the document is theirs. Taking it here would let anybody name
+  // another member's private document for the pen to share.
+  if (target === "document") return { ok: false, error: DOCUMENT_SHARE_DOOR };
   const source = b.source === undefined || b.source === null || b.source === "" ? "member" : b.source;
   if (!(PROPOSAL_SOURCES as readonly unknown[]).includes(source)) {
     return { ok: false, error: "A suggestion comes from a member, is drafted from the live system, or is imported." };

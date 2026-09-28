@@ -29,6 +29,7 @@ import {
   penForProposal,
   type CanvasDoorId,
   type DialChange,
+  type DocumentShareChange,
   type ExitTermsChange,
   type MatrixRowChange,
   type ModuleChange,
@@ -82,7 +83,7 @@ export interface PenView {
   youMayAdopt: boolean;
 }
 
-export type SuggestionChange = DialChange | ModuleChange | ExitTermsChange | RestorativeChange | MatrixRowChange;
+export type SuggestionChange = DialChange | ModuleChange | ExitTermsChange | RestorativeChange | MatrixRowChange | DocumentShareChange;
 
 export interface ProposalView {
   id: number;
@@ -327,6 +328,7 @@ export function proposalHeadline(p: Pick<ProposalView, "target" | "sectionId" | 
   // A suggestion only ever adds a row: the server refuses one that names a
   // row to overwrite, and never honours one stored.
   if (p.target === "matrix") return `A new row for the Decision Matrix: ${(p.change as MatrixRowChange | null)?.subject ?? ""}`;
+  if (p.target === "document") return `A document for the village's notebook: ${(p.change as DocumentShareChange | null)?.title ?? ""}`;
   return doorOf(p.door)?.label ?? "A setting";
 }
 
@@ -398,6 +400,9 @@ export function adoptEffect(
   if (p.target === "words") {
     return `Adopting writes these words into ${sectionTitles[String(p.sectionId)] ?? String(p.sectionId)} as the village's adopted answer.`;
   }
+  if (p.target === "document") {
+    return "Adopting shares this document with the village: every member can read it in the notebook under the canvas, and it goes into the canvas pack a member takes with them. Read it first in that notebook, under Waiting for your decision.";
+  }
   if (p.target === "purpose") {
     return pen.how === "act"
       ? "Adopting writes this as the governing purpose statement."
@@ -440,6 +445,7 @@ export function adoptLabel(p: Pick<ProposalView, "target" | "door" | "pen">): st
   if (p.target === "words") return "Adopt these words";
   if (p.target === "purpose") return "Adopt this statement";
   if (p.target === "matrix") return "Adopt this row";
+  if (p.target === "document") return "Share it with the village";
   const door = doorOf(p.door);
   if (door?.kind === "dial" || door?.kind === "module") return p.pen.how === "ballot" ? "File it as a proposal" : "Adopt and change the setting";
   return "Adopt and write it into the exit policy";

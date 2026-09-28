@@ -7,9 +7,12 @@
  * list already names for the org-chart JSON. Rows carry provenance per section,
  * so "you told me this on the 3rd, and the game says otherwise" is answerable.
  *
- * Nothing here ever leaves the fork. It is excluded by name from the feedback
- * relay, the network publish surface and the platform handshake, and a test
- * enforces that instead of a comment.
+ * Nothing here leaves the fork on its own. It is excluded by name from the
+ * feedback relay, the network publish surface and the platform handshake, and
+ * a test enforces that instead of a comment. The one way out is a member's
+ * canvas export (plan 5.6, Rye's ask), which a member downloads for
+ * themselves and which reads only `memberCanvasAnswers` below: what a member
+ * already reads on the canvas, and never an admin-audience row.
  *
  * The blanks are load-bearing. An index that says `membership: not yet written`
  * is what lets the assistant raise it unprompted six weeks later.
@@ -17,6 +20,8 @@
 import { randomUUID } from "crypto";
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { BRIEF_BY_ID, BRIEF_SECTIONS, type BriefAudience, type RecordSource } from "../../shared/villageBrief";
+import { memberAnswersFrom, type CanvasMemberAnswer } from "../../shared/canvasPublicLines";
+import type { CanvasBlockId } from "../../shared/governanceCanvas";
 
 export interface BriefRow {
   id: string;
@@ -429,6 +434,27 @@ export async function briefForPublicPrompt(pool: Pool, maxTokens = 700): Promise
     .map((b) => `### ${b.title}\n${b.body.trim()}`)
     .join("\n\n");
   return capMarkdown(body, maxTokens);
+}
+
+/**
+ * THE ONE BRIEF READER THE CANVAS EXPORT MAY CALL (plan 5.6).
+ *
+ * Each canvas block's answers in the village's own words, at the MEMBER
+ * audience, confirmed rows only, and never `people`, `legal`, `land` or
+ * `constraints` whatever their audience says (`memberAnswersFrom`,
+ * shared/canvasPublicLines.ts). It is what a member already reads on the
+ * canvas, and the export takes nothing more.
+ *
+ * Two locks, so one mistake is not enough: the query asks for member rows
+ * only, and the rows that come back are filtered to member rows AGAIN before
+ * anything reads them. server/lib/villageBrain.test.ts hands it a pool that
+ * ignores the WHERE and returns admin rows anyway, and nothing admin reaches
+ * the answer. server/lib/notebookExport.ts imports this function and no
+ * other reader of the brief, and the same test file holds it to that.
+ */
+export async function memberCanvasAnswers(pool: Pool): Promise<Record<CanvasBlockId, CanvasMemberAnswer[]>> {
+  const rows = (await briefAll(pool, "member")).filter((r) => r.audience === "member");
+  return memberAnswersFrom(rows);
 }
 
 /**
