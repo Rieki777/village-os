@@ -32,6 +32,7 @@ import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from 
 import { waitForHealth } from "./db/e2eBoot";
 import { HANDOVER_SET } from "../shared/capabilities";
 import { PURPOSE_EXAMPLE } from "../shared/governingPurpose";
+import { CONFLICT_DOOR_READY, recordEveryCanvasBlock } from "./db/launchGovernanceFixture";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -292,6 +293,8 @@ beforeAll(async () => {
           "The village agrees what would put it right",
           "Whoever asked for this says whether it did",
         ],
+        // The conflict door, which blocks the vote: server/db/launchGovernanceFixture.ts.
+        ...CONFLICT_DOOR_READY,
       },
     },
   });
@@ -334,6 +337,11 @@ beforeAll(async () => {
   expect((await call("PUT", "/api/admin/purpose", {
     body: { statement: PURPOSE_EXAMPLE },
   })).status).toBe(200);
+
+  // EVERY CANVAS BLOCK ON RECORD, which blocks the vote (2026-09-27). One reading
+  // each, at Absent with its sentence, through the real route. The refusal is
+  // driven row by row in server/lib/launchGovernance.db.test.ts.
+  await recordEveryCanvasBlock(call);
 }, 240_000);
 
 afterAll(async () => {

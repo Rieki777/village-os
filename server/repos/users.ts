@@ -348,6 +348,31 @@ export async function lockUserRowForUpdate(conn: PoolConnection, id: string): Pr
 }
 
 /**
+ * How many members the village has admitted who are not founders.
+ *
+ * The launch checklist's `conflict-door` row asks it (server/lib/launchGovernance.ts):
+ * below three, a named contact outside the village is required, because every
+ * person inside is somebody a conflict could be about.
+ *
+ * ADMITTED IS `membership_granted`, the same field `hasMembership` reads in
+ * server/index.ts, so this counts exactly the people that gate lets in. An
+ * anonymised account has it cleared by the erasure (server/lib/erasure.ts), and
+ * an example row is a standing demonstration and never a person.
+ *
+ * An account a founder placed at Member by a stage grant alone, with no
+ * membership record, is NOT counted. That can only make the count smaller, and
+ * a smaller count asks for the outside contact sooner, which is the safe side
+ * of this question to be wrong on.
+ */
+export async function admittedNonFounderCount(pool: Pool): Promise<number> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT COUNT(*) AS n FROM users WHERE membership_granted = 1 AND is_example = 0 " +
+      "AND (role IS NULL OR role <> 'founder')",
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
+/**
  * The ids of every real member: not anonymised, not an example row.
  *
  * The roster the health snapshot's allowance total is taken over

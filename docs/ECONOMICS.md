@@ -2860,6 +2860,13 @@ and say the village has not written its steps otherwise. Nothing about value,
 settlement or any balance reads it: it decides which words a public page may call
 the village's own.
 
+The restorative block also carries the conflict door (2026-09-27): a cover role,
+a promised reply time in hours with no platform default, and a named contact
+outside the village. The launch checklist's `conflict-door` row reads them
+(`server/lib/launchGovernance.ts`), and `restorativeDoorProblem` refuses a
+malformed save. None of the three is a term the publish gate compares, and none
+of them touches a value, a settlement or a balance.
+
 So the state today is exact, **and the sentence that used to stand here is not,
 because the levers landed under it.** It read: no code pays them out, converts
 them, values them, or returns them. Three of those four are now things the code

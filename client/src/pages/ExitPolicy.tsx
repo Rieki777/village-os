@@ -35,6 +35,11 @@ export default function ExitPolicy() {
   // The role an intake reaches, named by the published policy, so a member
   // knows who will read their words before they send them.
   const intakeRoleLabel = policy?.restorative?.intakeRole?.name ? `${policy.restorative.intakeRole.name} role` : "intake role";
+  // The conflict door's promise and its outside contact, printed only once the
+  // village has stated them: a blank here is a promise nobody made yet.
+  const replyHours = Number(policy?.restorative?.replyHours) || 0;
+  const outside = policy?.restorative?.outsideContact;
+  const outsideNamed = !!(outside?.name && outside?.howToReach);
 
   const requestExit = () => {
     setError(""); setMsg("");
@@ -150,6 +155,17 @@ export default function ExitPolicy() {
                 <li key={i} className="text-sm text-foreground">{s}</li>
               ))}
             </ol>
+            {replyHours > 0 && (
+              <p className="text-sm text-muted-foreground mb-2">
+                The village promises you a reply within {replyHours === 1 ? "1 hour" : `${replyHours} hours`}.
+              </p>
+            )}
+            {outsideNamed && (
+              <p className="text-sm text-muted-foreground mb-3">
+                You can also bring it to somebody outside the village: {outside.name}
+                {outside.organisation ? `, ${outside.organisation}` : ""}. {outside.howToReach}
+              </p>
+            )}
             {user && policy?.restorative?.intakeContactRole && (
               <div className="border-t border-border pt-3 space-y-2">
                 <p className="text-xs text-muted-foreground">

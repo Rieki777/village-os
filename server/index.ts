@@ -396,7 +396,7 @@ import {
   blankTerms,
   exitLeverRefusal,
   normalizeExitPolicy,
-  platformDefaultTerms, platformDefaultTermKeys,
+  platformDefaultTerms, platformDefaultTermKeys, restorativeDoorProblem,
   withPolicyDefaults,
 } from "./lib/exitPolicy";
 import {
@@ -14124,28 +14124,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
       return res.status(409).json({ error: "This village has already started its Game." });
     }
 
-    /*
-     * CAN THIS VILLAGE HOLD A VOTE AT ALL, asked before anything else.
-     *
-     * The governance module ships OFF and is what mounts every voting route,
-     * so with it off a launch ballot would open, every member would get a 404
-     * trying to answer it, and the vote would sit unanswerable until somebody
-     * closed it. `ballot.vote` unlocks by STAGE and knows nothing about module
-     * lifecycles, so the electorate would look healthy the whole time.
-     *
-     * The rank test and not an off test, for the same reason `requireModule`
-     * uses one: at `preview` the voting routes answer admins and give every
-     * member the same 404, which is a ballot only the scaffolding can vote in.
-     */
-    if (LIFECYCLE_RANK[effectiveLifecycle("governance")] < LIFECYCLE_RANK.members) {
-      return res.status(409).json({
-        error:
-          "This village has not turned governance on for its members, so there is no vote to open here. Turn the governance module on for members first, and the village can hold this vote itself.",
-      });
-    }
-
-    // The journey gates the QUESTION and never the answer: a village whose
-    // exit policy is still a placeholder is not ready to be asked.
+    // The journey gates the QUESTION and never the answer. Governance open to
+    // members is one of its rows (`governance-on-for-members`), so a vote no
+    // member could answer is refused here by name: server/lib/launchGovernance.ts.
     const blocked = await launchVoteBlocked(getPool(), launchDeps);
     if (blocked) return res.status(409).json({ error: blocked.error, open: blocked.open });
 
@@ -14682,12 +14663,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
         message: "The policy needs voluntary, involuntary and restorative sections",
       });
     }
-    if (body.restorative.intakeContactRole && !rolesRepo.all().some((r: any) => r.id === body.restorative.intakeContactRole)) {
-      return res.status(400).json({
-        error: "unknown_role",
-        message: `Unknown intake role "${body.restorative.intakeContactRole}"`,
-      });
-    }
+    // The intake and cover roles, the reply time and the outside contact: server/lib/exitPolicy.ts.
+    const door = restorativeDoorProblem(body.restorative, rolesRepo.all().map((r: any) => String(r.id)));
+    if (door) return res.status(400).json(door);
     for (const [field, label] of [["decidingDomainId", "deciding circle"], ["appealDomainId", "appeal circle"]] as const) {
       const id = String(body.involuntary?.[field] ?? "");
       if (id && !circlesRepo.all().some((c: any) => c.id === id)) {

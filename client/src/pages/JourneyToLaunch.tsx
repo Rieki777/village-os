@@ -63,9 +63,13 @@ const GROUP_META: Record<LaunchGroup, { title: string; blurb: string }> = {
   brand: { title: "Make it yours", blurb: "The name, the words, the images. A fork stops being a template here." },
   integrations: { title: "Connections", blurb: "Third-party keys, each honest about what stops without it." },
   modules: { title: "What your village runs", blurb: "Everything ships off; opening each part is a decision." },
+  governance: {
+    title: "How the village decides and cares",
+    blurb: "The canvas on record, the terms of leaving, a door for a conflict, and a vote members can answer.",
+  },
   reach: { title: "Being reachable", blurb: "Domain, deliverability, and the drills only a human can do." },
 };
-const GROUP_ORDER: LaunchGroup[] = ["identity", "brand", "integrations", "modules", "reach"];
+const GROUP_ORDER: LaunchGroup[] = ["identity", "brand", "governance", "integrations", "modules", "reach"];
 
 /** A section for a group this build has not been taught, named as itself. */
 const groupMeta = (g: string): { title: string; blurb: string } =>
@@ -285,6 +289,20 @@ function writeViewToAddress(view: JourneyView): void {
   }
 }
 
+/**
+ * A row whose fix is another view of THIS page (the canvas row links to
+ * `?view=canvas`). The view is read from the address once, on arrival, so a
+ * link to the page it is already on would change the address and leave the
+ * screen where it was. Such a row switches the view in place instead. From any
+ * other page the same address opens the view, which is what the link says.
+ */
+const JOURNEY_PATH = "/journey-to-launch";
+function viewOfFixAt(fixAt: string): JourneyView | null {
+  if (!fixAt.startsWith(`${JOURNEY_PATH}?`)) return null;
+  const wanted = new URLSearchParams(fixAt.slice(JOURNEY_PATH.length + 1)).get("view") ?? "";
+  return JOURNEY_VIEWS.includes(wanted) ? (wanted as JourneyView) : null;
+}
+
 export default function JourneyToLaunch() {
   const { user, loading } = useAuth();
   const isAdmin = !!user && (user.role === "admin" || user.role === "founder");
@@ -404,7 +422,7 @@ export default function JourneyToLaunch() {
    * may suggest upgrades and will need to run models and tests." The checklist,
    * the manual confirmations and the launch ballot stay with the founding team,
    * because every one of them is a WRITE that /api/admin/launch* gates, and the
-   * readiness bar above is built from a payload a member cannot read. So the
+   * counts in the header are built from a payload a member cannot read. So the
    * member's page is the one card they can honestly use, and it is the same
    * card the admin sees below.
    *
@@ -468,8 +486,6 @@ export default function JourneyToLaunch() {
   }
 
   const items: any[] = status?.items ?? [];
-  const done = items.filter((i) => i.state === "ok").length;
-  const pct = items.length ? Math.round((done / items.length) * 100) : 0;
   const launched = !!status?.launchedAt;
   const vote: LaunchVote | null = status?.vote ?? null;
 
@@ -493,18 +509,18 @@ export default function JourneyToLaunch() {
               : "Live status, not a to-do list someone forgot to update: every item below is either observed by the server right now, or confirmed by a named admin."}
           </p>
 
-          <div className={`flex items-center gap-3 flex-wrap ${view === "canvas" ? "hidden" : ""}`}>
-            <span className="text-white text-xs">Readiness</span>
-            <div className="flex-1 max-w-xs bg-white/20 rounded-full h-2 min-w-24">
-              <div className="bg-amber h-2 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
-            </div>
-            <span className="text-amber-on-band text-sm font-semibold">{pct}%</span>
-            {status && !launched && (
-              <span className="text-white text-xs">
-                {status.blockingOpen} blocking · {status.recommendedOpen} recommended remaining
-              </span>
-            )}
-          </div>
+          {/*
+            * WHAT IS LEFT, SAID AS TWO COUNTS AND NEVER AS A SCORE (R55). A
+            * readiness percentage and a bar sat here, a composite number over
+            * rows of different weight, which is the scorecard R55 rules out:
+            * the handover is a journey, never a grade. The two counts say what
+            * a founder can act on, and the rows below say which.
+            */}
+          {status && !launched && (
+            <p data-testid="journey-remaining" className={`text-white text-xs ${view === "canvas" ? "hidden" : ""}`}>
+              {status.blockingOpen} blocking · {status.recommendedOpen} recommended remaining
+            </p>
+          )}
 
           <div className="flex flex-wrap gap-2 mt-5">
             <button
@@ -582,7 +598,12 @@ export default function JourneyToLaunch() {
                               {i.declinedAt && ` · ${new Date(i.declinedAt).toLocaleDateString()}`}
                             </p>
                             <div className="flex items-center gap-3 mt-2">
-                              {i.fixAt.startsWith("http") ? (
+                              {viewOfFixAt(i.fixAt) ? (
+                                <button type="button" onClick={() => setView(viewOfFixAt(i.fixAt)!)}
+                                  className="inline-flex items-center gap-1 text-xs font-medium text-teal-deep hover:underline">
+                                  {i.fixLabel} <ChevronRight className="w-3 h-3" />
+                                </button>
+                              ) : i.fixAt.startsWith("http") ? (
                                 <a href={i.fixAt} target="_blank" rel="noreferrer"
                                   className="inline-flex items-center gap-1 text-xs font-medium text-teal-deep hover:underline">
                                   {i.fixLabel} <ExternalLink className="w-3 h-3" />
