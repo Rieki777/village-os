@@ -10627,8 +10627,11 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
         const picked = scored.find((c) => c.id === parsed?.matchId);
         if (picked) winner = picked; // evidence or drop
       }
-      if (!winner) winner = scored[0].score >= 2 ? scored[0] : null;
     }
+    // The fallback answer, for a lone candidate as much as for one with a
+    // runner-up. It sat inside the tie-break above, so "permaculture" matched
+    // the Permaculture Council only while some quest also said "gardens".
+    if (!winner && (scored[0]?.score ?? 0) >= 2) winner = scored[0];
 
     const queryId = await logConciergeQuery(getPool(), {
       userId: user.id,
