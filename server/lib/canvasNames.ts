@@ -36,6 +36,11 @@
  * JavaScript regular expression only knows the ASCII letters and would call
  * "Zoë" two words. The refusal quotes the matching words back from the
  * writer's own line, so it tells them nothing they did not type.
+ *
+ * A script written without spaces between words (Chinese, Japanese, Thai,
+ * Lao, Khmer, Burmese) has no word edge to find, so a name written in one is
+ * matched anywhere in the line: 王伟 is named in 王伟负责钥匙, where a
+ * boundary rule would find a letter touching each side and let it through.
  */
 import { isExampleUser } from "./examples";
 import { isTombstone } from "./oauthAccounts";
@@ -47,6 +52,11 @@ import { FORMAT_CHARACTERS } from "../../shared/canvasPublicLines";
  */
 const MARKS = new RegExp("\\p{M}", "gu");
 const LETTER = new RegExp("\\p{L}", "gu");
+/** A letter from a script that writes words with no space between them. */
+const UNSPACED_SCRIPT = new RegExp(
+  "[\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\p{Script=Thai}\\p{Script=Lao}\\p{Script=Khmer}\\p{Script=Myanmar}]",
+  "u",
+);
 
 /** The member fields this reads. Any member record satisfies it. */
 export interface NameFacts {
@@ -130,7 +140,9 @@ export function nameInLine(line: string, names: readonly string[]): string | nul
   const longestFirst = Array.from(names).sort((a, b) => b.length - a.length);
   for (const name of longestFirst) {
     const body = name.split(" ").map(escapeRegExp).join("\\s+");
-    const pattern = new RegExp(`(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`, "u");
+    const pattern = UNSPACED_SCRIPT.test(name)
+      ? new RegExp(body, "u")
+      : new RegExp(`(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`, "u");
     const hit = pattern.exec(folded.text);
     if (!hit) continue;
     const start = folded.from[hit.index];

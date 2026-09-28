@@ -181,8 +181,8 @@ function BlockLine({
 
       {withheld && mayWrite && (
         <p className="mt-2 text-xs text-stone-700" data-testid={`public-line-withheld-${block.id}`}>
-          The line holds the name of someone the village has admitted, so the public page hides it. Write it again with
-          the role in place of the name.
+          The line holds the name of someone in this village, so the public page hides it. Write it again with the role
+          in place of the name.
         </p>
       )}
 

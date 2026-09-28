@@ -88,6 +88,28 @@ describe("nameInLine", () => {
   });
 });
 
+describe("a name in a script written without spaces", () => {
+  const names = namesToProtect(
+    [
+      { name: "王伟", email: "wang@example.test", role: "member", membershipGranted: true },
+      { name: "สมชาย ใจดี", email: "somchai@example.test", role: "member", membershipGranted: true },
+    ] as (NameFacts & { membershipGranted?: boolean })[],
+    admitted,
+  );
+
+  it("is found inside a run of text with no word edge around it", () => {
+    expect(nameInLine("王伟负责钥匙。", names)).toBe("王伟");
+    expect(nameInLine("ถามสมชายก่อน", names)).toBe("สมชาย");
+  });
+
+  it("is still not found where it is not written (controls)", () => {
+    expect(nameInLine("钥匙由照料者保管。", names)).toBeNull();
+    expect(nameInLine("ถามผู้ดูแลก่อน", names)).toBeNull();
+    // A Latin name keeps its word edge beside them.
+    expect(nameInLine("Ashford keeps the keys.", namesToProtect([{ name: "Ash", role: "admin" }], admitted))).toBeNull();
+  });
+});
+
 describe("nameRefusal", () => {
   it("quotes back only what the writer typed, and says what to write instead", () => {
     const said = nameRefusal("Ash");
